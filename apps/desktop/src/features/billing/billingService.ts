@@ -1,7 +1,13 @@
 import { supabase } from "../../lib/supabase/client";
 import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
 import type { CloudDeviceAccess, CloudDeviceRecord } from "../cloud-devices/cloudDeviceService";
-import { INDIVIDUAL_PRICING } from "./individualPricing";
+import {
+  INDIVIDUAL_PRICING,
+  readIndividualPricingQuote,
+  resolveIndividualPricingDeviceContext,
+  type IndividualPricingDeviceContext,
+  type IndividualPricingQuote,
+} from "./individualPricing";
 
 export type BillingEntitlementOrganizationRole = "owner" | "admin" | "member";
 export type BillingEntitlementOrganization = {
@@ -36,7 +42,7 @@ export type BillingResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-export type CheckoutFailureCode = "checkout_maintenance" | "pricing_revision_mismatch";
+export type CheckoutFailureCode = "checkout_maintenance" | "pricing_revision_mismatch" | "pricing_quote_mismatch";
 
 export type CheckoutResult<T> =
   | { success: true; data: T }
@@ -76,6 +82,7 @@ type BillingEntitlementResponse = {
 
 type CheckoutResponse = {
   url?: string;
+  quote?: unknown;
   code?: unknown;
   error?: string;
 };
@@ -190,18 +197,24 @@ function isMissingBillingEndpoint(error: unknown): boolean {
 
 export async function createIndividualCheckout(
   billingInterval: BillingInterval,
+  pricingQuoteOrClient: IndividualPricingQuote | BillingClient = null,
   client: BillingClient = supabase,
 ): Promise<CheckoutResult<{ url: string }>> {
-  if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
+  // Preserve the existing `(interval, client)` test/integration seam while the
+  // app uses `(interval, quote)` for the regional assignment.
+  const pricingQuote = isBillingClient(pricingQuoteOrClient) ? null : pricingQuoteOrClient;
+  const resolvedClient = isBillingClient(pricingQuoteOrClient) ? pricingQuoteOrClient : client;
+  if (!resolvedClient) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
 
   try {
-    const { data, error } = await client.functions.invoke<CheckoutResponse>("create-polar-checkout", {
+    const { data, error } = await resolvedClient.functions.invoke<CheckoutResponse>("create-polar-checkout", {
       timeout: 30_000,
       body: {
         plan: "individual",
         billingInterval,
         pricingRevision: INDIVIDUAL_PRICING.revision,
         trialActivation: "explicit-v1",
+        ...(pricingQuote?.assignmentId ? { pricingAssignmentId: pricingQuote.assignmentId } : {}),
       },
     });
 
@@ -226,8 +239,44 @@ export async function createIndividualCheckout(
   }
 }
 
+export async function fetchIndividualPricingQuote(
+  deviceContext: IndividualPricingDeviceContext = resolveIndividualPricingDeviceContext(),
+  client: BillingClient = supabase,
+): Promise<BillingResult<IndividualPricingQuote>> {
+  if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
+
+  try {
+    const { data, error } = await client.functions.invoke<CheckoutResponse>("create-polar-checkout", {
+      timeout: 30_000,
+      body: {
+        action: "quote",
+        plan: "individual",
+        billingInterval: "monthly",
+        pricingRevision: INDIVIDUAL_PRICING.revision,
+        trialActivation: "explicit-v1",
+        deviceRegion: deviceContext.deviceRegion,
+        deviceTimeZone: deviceContext.deviceTimeZone,
+      },
+    });
+    if (error) return { success: false, error: await readFunctionError(error, "Unable to confirm current pricing.") };
+    if (data?.error) return { success: false, error: data.error };
+    const quote = readIndividualPricingQuote(data?.quote);
+    if (!quote) return { success: false, error: "Pricing returned an invalid response." };
+    return { success: true, data: quote };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error && error.message ? error.message : "Unable to confirm current pricing.",
+    };
+  }
+}
+
 function readCheckoutFailureCode(value: unknown): CheckoutFailureCode | null {
-  return value === "checkout_maintenance" || value === "pricing_revision_mismatch" ? value : null;
+  return value === "checkout_maintenance"
+    || value === "pricing_revision_mismatch"
+    || value === "pricing_quote_mismatch"
+    ? value
+    : null;
 }
 
 export async function createBillingPortalSession(client: BillingClient = supabase): Promise<BillingResult<{ url: string }>> {
@@ -404,6 +453,10 @@ function readNonEmptyString(value: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isBillingClient(value: IndividualPricingQuote | BillingClient): value is NonNullable<BillingClient> {
+  return isRecord(value) && "functions" in value;
 }
 
 function isBillingEntitlement(value: unknown): value is BillingEntitlement {

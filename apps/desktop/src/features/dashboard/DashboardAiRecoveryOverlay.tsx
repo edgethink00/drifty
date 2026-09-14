@@ -3,6 +3,7 @@ import { useRef } from "react";
 import type { BillingInterval } from "../billing/billingService";
 import { IndividualPlanCards } from "../billing/IndividualPlanCards";
 import { UpgradeDecisionPanel } from "../billing/UpgradeDecisionPanel";
+import type { IndividualPricingQuote } from "../billing/individualPricing";
 import {
   type DashboardAiUnavailableState,
 } from "./dashboardAiUnavailableState";
@@ -16,6 +17,7 @@ type DashboardAiRecoveryOverlayProps = {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingPlansDisabled?: boolean;
   readonly billingPortalLoading?: boolean;
+  readonly individualPricingQuote?: IndividualPricingQuote | null;
   readonly state: DashboardAiUnavailableState;
   readonly onClose: () => void;
   readonly onManageCloudBilling?: () => void;
@@ -28,6 +30,7 @@ export function DashboardAiRecoveryOverlay({
   billingCheckoutLoadingInterval,
   billingPlansDisabled = false,
   billingPortalLoading = false,
+  individualPricingQuote = null,
   state,
   onClose,
   onManageCloudBilling,
@@ -84,6 +87,7 @@ export function DashboardAiRecoveryOverlay({
               loadingInterval={billingCheckoutLoadingInterval}
               onContinueLocal={onOpenAiSetup}
               onSelectPlan={onSelectBillingPlan}
+              pricingQuote={individualPricingQuote}
             />
           </div>
         ) : (
@@ -94,6 +98,7 @@ export function DashboardAiRecoveryOverlay({
               mode="checkout"
               onSelectFreePlan={onOpenAiSetup}
               onSelectPlan={onSelectBillingPlan}
+              pricingQuote={individualPricingQuote}
             />
           </div>
         )}

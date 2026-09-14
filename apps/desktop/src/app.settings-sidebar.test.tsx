@@ -92,6 +92,7 @@ vi.mock("./features/billing/billingService", () => ({
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
+  fetchIndividualPricingQuote: vi.fn().mockResolvedValue({ success: false, error: "Pricing unavailable in this test." }),
 }));
 vi.mock("./features/leaderboard/leaderboardService", () => ({
   DEFAULT_LEADERBOARD_PERIOD: "weekly",

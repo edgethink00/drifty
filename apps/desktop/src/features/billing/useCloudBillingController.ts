@@ -8,6 +8,7 @@ import {
   createIndividualCheckout,
   fetchBillingEntitlement,
   startCloudTrial,
+  fetchIndividualPricingQuote,
   redeemTrialCoupon,
   type BillingEntitlement,
   type BillingInterval,
@@ -15,6 +16,7 @@ import {
   type CouponRedemption,
   type CouponRedemptionFailureCode,
 } from "./billingService";
+import type { IndividualPricingQuote } from "./individualPricing";
 import {
   claimCloudTrialStartedNotice,
   type CloudTrialStartedNoticeModel,
@@ -43,6 +45,8 @@ type UseCloudBillingControllerResult = {
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
   readonly billingPortalLoading: boolean;
+  readonly individualPricingQuote: IndividualPricingQuote | null;
+  readonly individualPricingQuoteLoading: boolean;
   readonly couponRedemption: CouponRedemption | null;
   readonly couponRedemptionErrorCode: CouponRedemptionFailureCode | null;
   readonly couponRedemptionLoading: boolean;
@@ -107,6 +111,8 @@ export function useCloudBillingController({
   const [billingActionErrorCode, setBillingActionErrorCode] = useState<CheckoutFailureCode | null>(null);
   const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
+  const [individualPricingQuote, setIndividualPricingQuote] = useState<IndividualPricingQuote | null>(null);
+  const [individualPricingQuoteLoading, setIndividualPricingQuoteLoading] = useState(false);
   const [couponRedemption, setCouponRedemption] = useState<CouponRedemption | null>(null);
   const [couponRedemptionErrorCode, setCouponRedemptionErrorCode] = useState<CouponRedemptionFailureCode | null>(null);
   const [couponRedemptionLoading, setCouponRedemptionLoading] = useState(false);
@@ -119,6 +125,7 @@ export function useCloudBillingController({
   const [cloudTrialError, setCloudTrialError] = useState<string | null>(null);
   const cloudTrialRequestRef = useRef<Promise<BillingEntitlement> | null>(null);
   const billingEntitlementRequestRef = useRef(0);
+  const individualPricingQuoteRequestRef = useRef(0);
   const cloudCheckoutPendingRef = useRef(false);
   const cloudCheckoutConfirmationInFlightRef = useRef(false);
   const couponRedemptionRequestRef = useRef(0);
@@ -134,6 +141,9 @@ export function useCloudBillingController({
     cloudTrialRequestRef.current = null;
     setCloudTrialStarting(false);
     setCloudTrialError(null);
+    individualPricingQuoteRequestRef.current += 1;
+    setIndividualPricingQuote(null);
+    setIndividualPricingQuoteLoading(false);
     billingPortalPendingRef.current = false;
     cloudCheckoutPendingRef.current = false;
     cloudCheckoutConfirmationInFlightRef.current = false;
@@ -182,6 +192,37 @@ export function useCloudBillingController({
     cloudTrialRequestRef.current = request;
     return request;
   }, [hasRequiredAccountAuth, isSupabaseConfigured, t, user]);
+
+  const refreshIndividualPricingQuote = useCallback(async (): Promise<IndividualPricingQuote | null> => {
+    if (!shouldCheckBillingEntitlement || !user || !hasRequiredAccountAuth
+      || !canStartIndividualCheckout(billingEntitlement)) {
+      individualPricingQuoteRequestRef.current += 1;
+      setIndividualPricingQuote(null);
+      setIndividualPricingQuoteLoading(false);
+      return null;
+    }
+
+    const requestId = ++individualPricingQuoteRequestRef.current;
+    setIndividualPricingQuoteLoading(true);
+    const result = await fetchIndividualPricingQuote();
+    if (requestId !== individualPricingQuoteRequestRef.current) return null;
+    setIndividualPricingQuoteLoading(false);
+    if (!result.success) {
+      // A quote failure safely falls back to the visible standard USD price.
+      // Checkout receives no assignment id and therefore cannot charge a
+      // regional amount the app did not show.
+      setIndividualPricingQuote(null);
+      return null;
+    }
+    setIndividualPricingQuote(result.data);
+    return result.data;
+  }, [
+    billingEntitlement?.lockedReason,
+    billingEntitlement?.status,
+    hasRequiredAccountAuth,
+    shouldCheckBillingEntitlement,
+    user,
+  ]);
 
   const refreshBillingEntitlement = useCallback(async (): Promise<BillingEntitlement | null> => {
     if (!shouldCheckBillingEntitlement) {
@@ -345,14 +386,18 @@ export function useCloudBillingController({
     let openedCheckout = false;
     setBillingCheckoutLoadingInterval(billingInterval);
     try {
-      const checkoutResult = await createIndividualCheckout(billingInterval);
+      const checkoutResult = individualPricingQuote
+        ? await createIndividualCheckout(billingInterval, individualPricingQuote)
+        : await createIndividualCheckout(billingInterval);
       if (!isCurrentRequest()) return;
       if (!checkoutResult.success) {
         const checkoutError = checkoutResult.code === "checkout_maintenance"
           ? t("billing.checkout.maintenance")
           : checkoutResult.code === "pricing_revision_mismatch"
             ? t("billing.checkout.updateRequired")
-            : checkoutResult.error;
+            : checkoutResult.code === "pricing_quote_mismatch"
+              ? t("billing.checkout.priceChanged")
+              : checkoutResult.error;
         setBillingActionError(checkoutError);
         setBillingActionErrorCode(checkoutResult.code ?? null);
         capturePostHogEvent("billing_action", {
@@ -363,8 +408,11 @@ export function useCloudBillingController({
             ? "unavailable"
             : checkoutResult.code === "pricing_revision_mismatch"
               ? "validation"
+              : checkoutResult.code === "pricing_quote_mismatch"
+                ? "validation"
               : toAnalyticsErrorKind(checkoutResult.error),
         });
+        if (checkoutResult.code === "pricing_quote_mismatch") void refreshIndividualPricingQuote();
         return;
       }
 
@@ -409,7 +457,9 @@ export function useCloudBillingController({
     handleManageCloudBilling,
     hasRequiredAccountAuth,
     isSupabaseConfigured,
+    individualPricingQuote,
     onAuthRequired,
+    refreshIndividualPricingQuote,
     refreshBillingEntitlement,
     t,
     user,
@@ -548,6 +598,11 @@ export function useCloudBillingController({
   }, [shouldCheckBillingEntitlement, user?.id]);
 
   useEffect(() => {
+    void refreshIndividualPricingQuote();
+    return () => { individualPricingQuoteRequestRef.current += 1; };
+  }, [refreshIndividualPricingQuote]);
+
+  useEffect(() => {
     const userId = user?.id;
     if (!userId) {
       setCloudTrialStartedNotice(null);
@@ -642,6 +697,8 @@ export function useCloudBillingController({
     billingEntitlementError,
     billingEntitlementLoading,
     billingPortalLoading,
+    individualPricingQuote,
+    individualPricingQuoteLoading,
     couponRedemption,
     couponRedemptionErrorCode,
     couponRedemptionLoading,

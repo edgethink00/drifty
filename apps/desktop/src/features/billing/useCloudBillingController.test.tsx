@@ -19,6 +19,7 @@ const billingMocks = vi.hoisted(() => ({
   createIndividualCheckout: vi.fn(),
   fetchBillingEntitlement: vi.fn(),
   startCloudTrial: vi.fn(),
+  fetchIndividualPricingQuote: vi.fn(),
   redeemTrialCoupon: vi.fn(),
 }));
 
@@ -31,6 +32,7 @@ vi.mock("./billingService", () => ({
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   startCloudTrial: billingMocks.startCloudTrial,
+  fetchIndividualPricingQuote: billingMocks.fetchIndividualPricingQuote,
   redeemTrialCoupon: billingMocks.redeemTrialCoupon,
 }));
 
@@ -59,6 +61,10 @@ describe("useCloudBillingController", () => {
     billingMocks.createIndividualCheckout.mockReset();
     billingMocks.fetchBillingEntitlement.mockReset();
     billingMocks.startCloudTrial.mockReset();
+    billingMocks.fetchIndividualPricingQuote.mockReset().mockResolvedValue({
+      success: false,
+      error: "Pricing unavailable in this test.",
+    });
     billingMocks.redeemTrialCoupon.mockReset();
     cloudDeviceMocks.revokeCloudDevice.mockReset();
     vi.mocked(openUrl).mockReset().mockResolvedValue(undefined);
@@ -344,6 +350,40 @@ describe("useCloudBillingController", () => {
     expect(billingMocks.createIndividualCheckout).toHaveBeenCalledWith("yearly");
     expect(openUrl).toHaveBeenCalledWith("https://checkout.example.test");
     expect(recordProFunnelStep).toHaveBeenCalledWith({ step: "checkout_opened", billing_interval: "yearly" });
+  });
+
+  it("uses the same server assignment for the visible price and checkout", async () => {
+    const quote = {
+      assignmentId: "4f708408-1e56-4dad-8f45-2f02d755ae24",
+      pricingRevision: "pro-regional-pilot-2026-09",
+      market: "IN",
+      variant: "regional",
+      currency: "INR",
+      monthlyAmountMinor: 29_900,
+      yearlyAmountMinor: 249_000,
+    } as const;
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: {
+      plan: "individual", status: "locked", canUseApp: false, trialEndsAt: null,
+      currentPeriodEnd: null, lockedReason: "trial_expired",
+    } });
+    billingMocks.fetchIndividualPricingQuote.mockResolvedValue({ success: true, data: quote });
+    billingMocks.createIndividualCheckout.mockResolvedValue({
+      success: true,
+      data: { url: "https://checkout.example.test" },
+    });
+
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+      onOpenAiSetup: vi.fn(),
+    }));
+    await waitFor(() => expect(result.current.individualPricingQuote).toEqual(quote));
+    await act(async () => { await result.current.startCloudCheckout("monthly"); });
+
+    expect(billingMocks.createIndividualCheckout).toHaveBeenCalledWith("monthly", quote);
   });
 
   it.each(["creation", "native_open"] as const)("does not record checkout exposure after %s failure", async (failure) => {

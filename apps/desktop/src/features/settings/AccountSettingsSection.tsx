@@ -20,6 +20,7 @@ import type {
   CouponRedemption,
   CouponRedemptionFailureCode,
 } from "../billing/billingService";
+import type { IndividualPricingQuote } from "../billing/individualPricing";
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
@@ -39,6 +40,7 @@ export type AccountSettingsSectionProps = {
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
   readonly billingPortalLoading: boolean;
+  readonly individualPricingQuote?: IndividualPricingQuote | null;
   readonly couponRedemption: CouponRedemption | null;
   readonly couponRedemptionErrorCode: CouponRedemptionFailureCode | null;
   readonly couponRedemptionLoading: boolean;
@@ -87,6 +89,7 @@ export function AccountSettingsSection({
   billingEntitlementStatus,
   billingPlansDisabled,
   billingPortalLoading,
+  individualPricingQuote = null,
   couponRedemption,
   couponRedemptionErrorCode,
   couponRedemptionLoading,
@@ -263,6 +266,7 @@ export function AccountSettingsSection({
         manageCurrentPlanLoading={billingPortalLoading}
         mode="display"
         planState={planState}
+        pricingQuote={individualPricingQuote}
         onManageCurrentPlan={canManageCurrentPlan ? () => void runBillingAction(onManageCloudBilling) : undefined}
         onSelectFreePlan={onOpenAiSetup ? () => {
           setPlanModalOpen(false);

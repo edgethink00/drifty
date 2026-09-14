@@ -10,6 +10,7 @@ import { UpgradeDecisionPanel, type UpgradeDecisionContext } from "./UpgradeDeci
 import { resolvePlanCardState } from "./planCardState";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { BillingEntitlement, BillingInterval, CheckoutFailureCode } from "./billingService";
+import type { IndividualPricingQuote } from "./individualPricing";
 
 export function UpgradePlanModal({
   funnelEnabled = false,
@@ -18,6 +19,7 @@ export function UpgradePlanModal({
   billingCheckoutLoadingInterval,
   billingEntitlement = null,
   billingPlansDisabled = false,
+  individualPricingQuote = null,
   localAiConfigured = false,
   onClose,
   onContinueLocal,
@@ -31,6 +33,7 @@ export function UpgradePlanModal({
   /** The account's live entitlement; a trial must not be described as Free. */
   readonly billingEntitlement?: BillingEntitlement | null;
   readonly billingPlansDisabled?: boolean;
+  readonly individualPricingQuote?: IndividualPricingQuote | null;
   /** Whether the user already has a working Local AI setup. */
   readonly localAiConfigured?: boolean;
   readonly onClose: () => void;
@@ -106,6 +109,7 @@ export function UpgradePlanModal({
             disabled={billingPlansDisabled}
             loadingInterval={billingCheckoutLoadingInterval}
             onContinueLocal={onContinueLocal}
+            pricingQuote={individualPricingQuote}
             onSelectPlan={(interval) => {
               setCheckoutRequested(true);
               onSelectBillingPlan(interval);

@@ -5,6 +5,7 @@ import {
   createBillingPortalSession,
   createIndividualCheckout,
   fetchBillingEntitlement,
+  fetchIndividualPricingQuote,
   redeemTrialCoupon,
 } from "./billingService";
 
@@ -27,7 +28,75 @@ describe("billingService", () => {
     expect(result).toEqual({ success: true, data: { url: "https://checkout.example.test" } });
     expect(invoke).toHaveBeenCalledWith("create-polar-checkout", {
       timeout: 30_000,
-      body: { plan: "individual", billingInterval, pricingRevision: "pro-usd-2026-09", trialActivation: "explicit-v1" },
+      body: {
+        plan: "individual",
+        billingInterval,
+        pricingRevision: "pro-regional-pilot-2026-09",
+        trialActivation: "explicit-v1",
+      },
+    });
+  });
+
+  it("requests and validates a regional price quote with device context", async () => {
+    const quote = {
+      assignmentId: "4f708408-1e56-4dad-8f45-2f02d755ae24",
+      pricingRevision: "pro-regional-pilot-2026-09",
+      market: "IN",
+      variant: "regional",
+      currency: "INR",
+      monthlyAmountMinor: 29_900,
+      yearlyAmountMinor: 249_000,
+    } as const;
+    const invoke = vi.fn().mockResolvedValue({ data: { quote }, error: null });
+    const client: MockBillingClient = { functions: { invoke } };
+
+    await expect(fetchIndividualPricingQuote({
+      deviceRegion: "IN",
+      deviceTimeZone: "Asia/Kolkata",
+    }, client)).resolves.toEqual({ success: true, data: quote });
+    expect(invoke).toHaveBeenCalledWith("create-polar-checkout", {
+      timeout: 30_000,
+      body: {
+        action: "quote",
+        plan: "individual",
+        billingInterval: "monthly",
+        pricingRevision: "pro-regional-pilot-2026-09",
+        trialActivation: "explicit-v1",
+        deviceRegion: "IN",
+        deviceTimeZone: "Asia/Kolkata",
+      },
+    });
+  });
+
+  it("pins checkout to the assignment that supplied the visible price", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      data: { url: "https://checkout.example.test" },
+      error: null,
+    });
+    const client: MockBillingClient = { functions: { invoke } };
+    const quote = {
+      assignmentId: "4f708408-1e56-4dad-8f45-2f02d755ae24",
+      pricingRevision: "pro-regional-pilot-2026-09",
+      market: "IN",
+      variant: "regional",
+      currency: "INR",
+      monthlyAmountMinor: 29_900,
+      yearlyAmountMinor: 249_000,
+    } as const;
+
+    await expect(createIndividualCheckout("yearly", quote, client)).resolves.toEqual({
+      success: true,
+      data: { url: "https://checkout.example.test" },
+    });
+    expect(invoke).toHaveBeenCalledWith("create-polar-checkout", {
+      timeout: 30_000,
+      body: {
+        plan: "individual",
+        billingInterval: "yearly",
+        pricingRevision: "pro-regional-pilot-2026-09",
+        trialActivation: "explicit-v1",
+        pricingAssignmentId: quote.assignmentId,
+      },
     });
   });
 

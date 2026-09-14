@@ -100,6 +100,31 @@ describe("IndividualPlanCards", () => {
     expect(within(proPlan).getByText("/ month · $60 billed yearly")).toBeTruthy();
   });
 
+  it("shows the server-confirmed regional currency and matching yearly savings", () => {
+    render(
+      <IndividualPlanCards
+        loadingInterval={null}
+        onSelectPlan={vi.fn()}
+        pricingQuote={{
+          assignmentId: "4f708408-1e56-4dad-8f45-2f02d755ae24",
+          pricingRevision: "pro-regional-pilot-2026-09",
+          market: "IN",
+          variant: "regional",
+          currency: "INR",
+          monthlyAmountMinor: 29_900,
+          yearlyAmountMinor: 249_000,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("₹299")).toBeTruthy();
+    expect(screen.getByText("Regional price · charged in INR")).toBeTruthy();
+    expect(screen.getByText("Save 30%")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: /yearly/i }));
+    expect(screen.getByText("₹207.50")).toBeTruthy();
+    expect(screen.getByText("/ month · ₹2,490 billed yearly")).toBeTruthy();
+  });
+
   it("starts Pro setup from the card when shown in display mode with a select handler", () => {
     const onSelectPlan = vi.fn();
 

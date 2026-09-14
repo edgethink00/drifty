@@ -138,6 +138,7 @@ vi.mock("./features/share/focusCardService", () => ({
 
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
+  fetchIndividualPricingQuote: vi.fn().mockResolvedValue({ success: false, error: "Pricing unavailable in this test." }),
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));

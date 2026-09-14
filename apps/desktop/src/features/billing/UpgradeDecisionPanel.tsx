@@ -2,9 +2,12 @@ import { useState } from "react";
 
 import type { BillingInterval } from "./billingService";
 import {
-  INDIVIDUAL_PRICING,
-  INDIVIDUAL_YEARLY_SAVINGS_PERCENT,
+  STANDARD_INDIVIDUAL_PRICING_QUOTE,
+  formatIndividualPrice,
   individualMonthlyDisplayAmount,
+  individualYearlyDisplayAmount,
+  individualYearlySavingsPercent,
+  type IndividualPricingQuote,
   type VisibleBillingInterval,
 } from "./individualPricing";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -19,19 +22,30 @@ export function UpgradeDecisionPanel({
   loadingInterval,
   onContinueLocal,
   onSelectPlan,
+  pricingQuote = null,
 }: {
   readonly context: UpgradeDecisionContext;
   readonly disabled?: boolean;
   readonly loadingInterval: BillingInterval | null;
   readonly onContinueLocal?: () => void;
   readonly onSelectPlan: (interval: VisibleBillingInterval) => void;
+  readonly pricingQuote?: IndividualPricingQuote | null;
 }) {
   const { t } = useLocalization();
   const [billingInterval, setBillingInterval] = useState<VisibleBillingInterval>("monthly");
-  const price = `$${individualMonthlyDisplayAmount(billingInterval)}`;
+  const displayedPricing = pricingQuote ?? STANDARD_INDIVIDUAL_PRICING_QUOTE;
+  const price = formatIndividualPrice(
+    individualMonthlyDisplayAmount(billingInterval, displayedPricing),
+    displayedPricing.currency,
+  );
+  const yearlyPrice = formatIndividualPrice(
+    individualYearlyDisplayAmount(displayedPricing),
+    displayedPricing.currency,
+  );
   const cadence = billingInterval === "monthly"
     ? t("billing.plan.cadenceMonthly")
-    : t("billing.plan.cadenceYearly", { amount: INDIVIDUAL_PRICING.yearly.amount });
+    : t("billing.plan.cadenceYearly", { amount: yearlyPrice });
+  const yearlySavingsPercent = individualYearlySavingsPercent(displayedPricing);
   const checkoutOpening = loadingInterval !== null;
   const badgeKey = context === "trial-active"
     ? "billing.decision.activeBadge"
@@ -75,7 +89,7 @@ export function UpgradeDecisionPanel({
           onClick={() => setBillingInterval("yearly")}
         >
           <span>{t("billing.plan.intervalYearly")}</span>
-          <small>{t("billing.plan.intervalSavings", { percent: INDIVIDUAL_YEARLY_SAVINGS_PERCENT })}</small>
+          <small>{t("billing.plan.intervalSavings", { percent: yearlySavingsPercent })}</small>
         </button>
       </div>
 
@@ -91,8 +105,15 @@ export function UpgradeDecisionPanel({
               <p>{t(bodyKey)}</p>
             </div>
             <div className="upgrade-decision__price" aria-label={`${price} ${cadence}`}>
-              <strong>{price}</strong>
-              <span>{cadence}</span>
+              <div className="upgrade-decision__price-main">
+                <strong>{price}</strong>
+                <span>{cadence}</span>
+              </div>
+              {displayedPricing.variant === "regional" ? (
+                <span className="upgrade-decision__price-region">
+                  {t("billing.plan.regionalPrice", { currency: displayedPricing.currency })}
+                </span>
+              ) : null}
             </div>
           </div>
           <ul className="upgrade-decision__benefits">

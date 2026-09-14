@@ -1579,6 +1579,8 @@ export default function App() {
     billingEntitlementError,
     billingEntitlementLoading,
     billingPortalLoading,
+    individualPricingQuote,
+    individualPricingQuoteLoading,
     couponRedemption,
     couponRedemptionErrorCode,
     couponRedemptionLoading,
@@ -9723,8 +9725,9 @@ export default function App() {
             appIcons={appIcons}
             appTheme={theme}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-            billingPlansDisabled={billingCheckoutAwaitingConfirmation}
+            billingPlansDisabled={billingCheckoutAwaitingConfirmation || individualPricingQuoteLoading}
             billingPortalLoading={billingPortalLoading}
+            individualPricingQuote={individualPricingQuote}
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={upgradePlanModalOpen ? null : dashboardAiRecoveryState}
             dashboardAppUsage={stickyDashboardAppUsage}
@@ -10106,8 +10109,9 @@ export default function App() {
                     billingEntitlement={effectiveBillingEntitlement}
                     billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
-                    billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation}
+                    billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation || individualPricingQuoteLoading}
                     billingPortalLoading={billingPortalLoading}
+                    individualPricingQuote={individualPricingQuote}
                     couponRedemption={couponRedemption}
                     couponRedemptionErrorCode={couponRedemptionErrorCode}
                     couponRedemptionLoading={couponRedemptionLoading}
@@ -10434,7 +10438,8 @@ export default function App() {
           billingActionErrorCode={billingActionErrorCode}
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
           billingEntitlement={effectiveBillingEntitlement}
-          billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || isSidebarCtaPreviewActive}
+          billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || individualPricingQuoteLoading || isSidebarCtaPreviewActive}
+          individualPricingQuote={individualPricingQuote}
           localAiConfigured={sidebarCtaPreviewInput?.localAiConfigured ?? localAiConnectionFingerprint !== null}
           onClose={() => setUpgradePlanModalOpen(false)}
           onContinueLocal={() => {

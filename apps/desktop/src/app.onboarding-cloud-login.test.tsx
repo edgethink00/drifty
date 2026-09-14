@@ -136,6 +136,7 @@ vi.mock("./lib/api/trackerClient", () => ({
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   startCloudTrial: billingMocks.startCloudTrial,
+  fetchIndividualPricingQuote: vi.fn().mockResolvedValue({ success: false, error: "Pricing unavailable in this test." }),
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));

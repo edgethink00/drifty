@@ -2410,6 +2410,12 @@ button.individual-plan-card:focus-visible {
   padding-bottom: 0.22rem;
 }
 
+.individual-plan-card__price-cadence--regional {
+  grid-column: 1 / -1;
+  margin-top: 0.1rem;
+  padding-bottom: 0;
+}
+
 .individual-plan-card__price-row strong {
   font-family: var(--font-display);
   font-size: inherit;

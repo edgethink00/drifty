@@ -123,6 +123,7 @@ vi.mock("./features/feedback/feedbackService", () => ({
 
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
+  fetchIndividualPricingQuote: vi.fn().mockResolvedValue({ success: false, error: "Pricing unavailable in this test." }),
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));

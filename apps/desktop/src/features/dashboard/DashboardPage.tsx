@@ -35,6 +35,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
+import type { IndividualPricingQuote } from "../billing/individualPricing";
 
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
@@ -47,6 +48,7 @@ type DashboardPageProps = {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingPlansDisabled?: boolean;
   readonly billingPortalLoading?: boolean;
+  readonly individualPricingQuote?: IndividualPricingQuote | null;
   readonly currentMinuteOfDay: number | null;
   readonly dashboardAiRecoveryState: DashboardAiUnavailableState | null;
   readonly dashboardAppUsage: AppUsagePanelItem[];
@@ -124,6 +126,7 @@ export function DashboardPage({
   billingCheckoutLoadingInterval,
   billingPlansDisabled = false,
   billingPortalLoading = false,
+  individualPricingQuote = null,
   currentMinuteOfDay,
   dashboardAiRecoveryState,
   dashboardAppUsage,
@@ -305,6 +308,7 @@ export function DashboardPage({
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
           billingPlansDisabled={billingPlansDisabled}
           billingPortalLoading={billingPortalLoading}
+          individualPricingQuote={individualPricingQuote}
           state={dashboardAiRecoveryState}
           onClose={onDismissDashboardAiRecovery}
           onManageCloudBilling={onManageCloudBilling}

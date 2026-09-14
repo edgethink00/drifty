@@ -80,6 +80,10 @@ function summaryItemsForFlow(
   return [
     {
       label: t("onboarding.ready.cloudSelected"),
+      details: [
+        t("onboarding.ready.cloudPricing"),
+        t("onboarding.ready.cloudData"),
+      ],
       sub: canStartCloudTrial(flow.billingEntitlement)
         ? t("billing.trialActivation.available")
         : flow.promotionActive
