@@ -478,3 +478,29 @@ function chooseOption(container: HTMLElement, comboName: RegExp, optionName: Reg
   fireEvent.click(within(container).getByRole("combobox", { name: comboName }));
   fireEvent.click(within(container).getByRole("option", { name: optionName }));
 }
+
+describe("unused Cloud trial activation", () => {
+  it("requires an explicit start and switches the classification provider only after success", async () => {
+    let finish!: (success: boolean) => void;
+    const onStartCloudTrial = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    renderPanel({ cloudTrialAvailable: true, onStartCloudTrial, currentBillingPlan: "free", billingEntitlementStatus: "locked",
+      initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "openrouter_byok", openRouterApiKey: "sk-or-test" } });
+    expect(onStartCloudTrial).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
+    const summary = screen.getByRole("region", { name: "Model being used" });
+    expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("OpenRouter");
+    finish(true);
+    await waitFor(() => expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("Drifty"));
+    expect(onStartCloudTrial).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the current local/BYOK provider after activation failure", async () => {
+    const onStartCloudTrial = vi.fn().mockResolvedValue(false);
+    renderPanel({ cloudTrialAvailable: true, onStartCloudTrial, currentBillingPlan: "free", billingEntitlementStatus: "locked",
+      initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "openrouter_byok", openRouterApiKey: "sk-or-test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
+    await waitFor(() => expect(onStartCloudTrial).toHaveBeenCalledOnce());
+    const summary = screen.getByRole("region", { name: "Model being used" });
+    expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("OpenRouter");
+  });
+});

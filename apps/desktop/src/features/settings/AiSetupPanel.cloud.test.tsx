@@ -1,17 +1,22 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+import { ANALYSIS_AI_SETUP_STORAGE_KEY, DEFAULT_ANALYSIS_AI_SETUP } from "./analysisModelSetup";
+import { DEFAULT_LOCAL_AI_SETUP, LOCAL_AI_SETUP_STORAGE_KEY } from "./localAiSetup";
 
 describe("AiSetupPanel Cloud setup", () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    window.localStorage.clear();
   });
 
   beforeEach(() => {
     invokeMock.mockClear();
     resetManagedStatusMock();
     revealItemInDirMock.mockClear();
+    window.localStorage.clear();
   });
 
   it("locks the Drifty cloud model behind upgrade for non-subscribers", () => {
@@ -105,4 +110,90 @@ describe("AiSetupPanel Cloud setup", () => {
     fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Upgrade to Drifty Pro$/i }));
     expect(onStartCloudSetup).toHaveBeenCalledWith();
   });
+
+  it("does not commit Classification Cloud after the panel unmounts", async () => {
+    let finishActivation!: (success: boolean) => void;
+    const onStartCloudTrial = vi.fn(() => new Promise<boolean>((resolve) => { finishActivation = resolve; }));
+    const onLocalAiSetupChange = vi.fn();
+    const rendered = renderPanel({ cloudTrialAvailable: true, currentBillingPlan: "free", billingEntitlementStatus: "locked", onStartCloudTrial, onLocalAiSetupChange });
+
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
+    expect(onStartCloudTrial).toHaveBeenCalledOnce();
+    rendered.unmount();
+    await act(async () => finishActivation(true));
+
+    expect(onLocalAiSetupChange).not.toHaveBeenCalled();
+  });
+
+  it("does not commit Intelligence Cloud after the panel unmounts", async () => {
+    let finishActivation!: (success: boolean) => void;
+    const onStartCloudTrial = vi.fn(() => new Promise<boolean>((resolve) => { finishActivation = resolve; }));
+    const onAnalysisChange = vi.fn();
+    const rendered = renderPanel({ cloudTrialAvailable: true, currentBillingPlan: "free", billingEntitlementStatus: "locked", onStartCloudTrial, onAnalysisChange });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Intelligence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
+    expect(onStartCloudTrial).toHaveBeenCalledOnce();
+    rendered.unmount();
+    await act(async () => finishActivation(true));
+
+    expect(onAnalysisChange).not.toHaveBeenCalled();
+  });
+
+  it("reports Classification persistence failure and retries the durable Cloud transition", async () => {
+    const onStartCloudTrial = vi.fn().mockResolvedValue(true);
+    const onLocalAiSetupChange = vi.fn();
+    let storageAvailable = false;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      if (key === LOCAL_AI_SETUP_STORAGE_KEY && !storageAvailable) {
+        throw new DOMException("Storage unavailable", "QuotaExceededError");
+      }
+      return originalSetItem.call(window.localStorage, key, value);
+    });
+    renderPanel({
+      cloudTrialAvailable: true,
+      currentBillingPlan: "free",
+      billingEntitlementStatus: "locked",
+      initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "openrouter_byok" },
+      onStartCloudTrial,
+      onLocalAiSetupChange,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
+    await screen.findByRole("alert");
+    expect(onStartCloudTrial).not.toHaveBeenCalled();
+    expect(onLocalAiSetupChange).not.toHaveBeenCalled();
+    storageAvailable = true;
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
+    await waitFor(() => expect(onLocalAiSetupChange).toHaveBeenCalledOnce());
+
+    expect(onStartCloudTrial).toHaveBeenCalledOnce();
+    expect(JSON.parse(window.localStorage.getItem(LOCAL_AI_SETUP_STORAGE_KEY) ?? "{}")).toMatchObject({ provider: "managed_local", driftyRoute: "cloud" });
+  });
+
+  it("reports Intelligence persistence failure without committing Cloud in memory", async () => {
+    const onStartCloudTrial = vi.fn().mockResolvedValue(true);
+    const onAnalysisChange = vi.fn();
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      if (key === ANALYSIS_AI_SETUP_STORAGE_KEY) throw new DOMException("Storage unavailable", "QuotaExceededError");
+      return originalSetItem.call(window.localStorage, key, value);
+    });
+    renderPanel({
+      cloudTrialAvailable: true,
+      currentBillingPlan: "free",
+      billingEntitlementStatus: "locked",
+      onStartCloudTrial,
+      onAnalysisChange,
+      initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openrouter" },
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Intelligence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
+
+    await screen.findByRole("alert");
+    expect(onStartCloudTrial).not.toHaveBeenCalled();
+    expect(onAnalysisChange).not.toHaveBeenCalled();
+  });
 });
+
+const originalSetItem = Storage.prototype.setItem;

@@ -5,7 +5,7 @@ import { vi } from "vitest";
 import { AiSetupPanel } from "./AiSetupPanel";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
-import { DEFAULT_ANALYSIS_AI_SETUP } from "./analysisModelSetup";
+import { DEFAULT_ANALYSIS_AI_SETUP, type AnalysisAiSetupState } from "./analysisModelSetup";
 import type { ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { useAiConnectionTestRunner } from "./useAiConnectionTestRunner";
 
@@ -148,12 +148,22 @@ export function renderPanel({
   billingEntitlementStatus = "active",
   initialSetup = DEFAULT_LOCAL_AI_SETUP,
   workProfileUserId = "local",
+  cloudTrialAvailable = false,
+  onStartCloudTrial,
+  onLocalAiSetupChange,
+  onAnalysisChange = vi.fn(),
+  initialAnalysisSetup = DEFAULT_ANALYSIS_AI_SETUP,
 }: {
   readonly connectionStatus?: AiConnectionStatus;
   readonly currentBillingPlan?: "free" | "individual";
   readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
   readonly initialSetup?: LocalAiSetupState;
   readonly workProfileUserId?: string;
+  readonly cloudTrialAvailable?: boolean;
+  readonly onStartCloudTrial?: () => Promise<boolean>;
+  readonly onLocalAiSetupChange?: Dispatch<SetStateAction<LocalAiSetupState>>;
+  readonly onAnalysisChange?: (next: AnalysisAiSetupState) => void;
+  readonly initialAnalysisSetup?: AnalysisAiSetupState;
 } = {}) {
   const onStartCloudSetup = vi.fn();
   const onManageCloudBilling = vi.fn();
@@ -172,6 +182,8 @@ export function renderPanel({
 
     return (
       <AiSetupPanel
+        cloudTrialAvailable={cloudTrialAvailable}
+        {...(onStartCloudTrial ? { onStartCloudTrial } : {})}
         billingCheckoutLoadingInterval={null}
         billingEntitlementStatus={billingEntitlementStatus}
         billingPlansDisabled={false}
@@ -182,24 +194,25 @@ export function renderPanel({
         localAiSetup={localAiSetup}
         shouldShowCloudCheckoutPlans={false}
         workProfileUserId={workProfileUserId}
-        analysisSetup={DEFAULT_ANALYSIS_AI_SETUP}
+        analysisSetup={initialAnalysisSetup}
         analysisOpenRouterConnected={false}
         showIntelligenceTab
-        onAnalysisChange={vi.fn()}
+        onAnalysisChange={onAnalysisChange}
         onDialogOpenChange={vi.fn()}
-        onLocalAiSetupChange={setLocalAiSetup}
+        onLocalAiSetupChange={onLocalAiSetupChange ?? setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}
         onStartCloudSetup={onStartCloudSetup}
       />
     );
   }
 
-  render(<Harness />);
+  const rendered = render(<Harness />);
   return {
     onLocalAiConnectionTestResult,
     onManageCloudBilling,
     onManageCloudDevices,
     onStartCloudSetup,
+    unmount: rendered.unmount,
     setConnectionStatus: (nextConnectionStatus: AiConnectionStatus) => {
       if (!setConnectionStatus) throw new AiSetupPanelTestHarnessError("AI setup panel test harness is not mounted.");
       setConnectionStatus(nextConnectionStatus);

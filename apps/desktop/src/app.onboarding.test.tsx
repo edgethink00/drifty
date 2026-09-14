@@ -4,6 +4,7 @@ import type { TrackerStatus } from "@drifty/domain";
 import { StrictMode, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
+import { getOnboardingProgressStorageKey } from "./features/onboarding/onboardingProgress";
 import {
   parsePostOnboardingSidebarGuideRecord,
   postOnboardingSidebarGuideStorageKey,
@@ -13,6 +14,27 @@ import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiCli
 import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
 
 const NUDGES_DIALOG_NAME = /what should drifty do when you drift/i;
+const FINAL_ONBOARDING_ACTION = /start tracking|continue with cloud|start 7-day free trial/i;
+const AVAILABLE_CLOUD_TRIAL = {
+  plan: "individual" as const,
+  status: "locked" as const,
+  canUseApp: false,
+  trialEndsAt: null,
+  currentPeriodEnd: null,
+  lockedReason: "billing_missing" as const,
+  trialActivation: { state: "available" as const, startedAt: null, endsAt: null },
+};
+const GRANTED_CLOUD_TRIAL = {
+  ...AVAILABLE_CLOUD_TRIAL,
+  status: "trialing" as const,
+  canUseApp: true,
+  trialEndsAt: "2026-09-21T00:00:00.000Z",
+  trialActivation: {
+    state: "started" as const,
+    startedAt: "2026-09-14T00:00:00.000Z",
+    endsAt: "2026-09-21T00:00:00.000Z",
+  },
+};
 
 const {
   authState,
@@ -90,6 +112,7 @@ const {
   browserHistoryBootstrapReset: vi.fn(),
   billingMocks: {
     fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
+    startCloudTrial: vi.fn(),
     createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
     createBillingPortalSession: vi.fn().mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } }),
   },
@@ -229,6 +252,7 @@ vi.mock("./lib/api/trackerClient", () => ({
 
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
+  startCloudTrial: billingMocks.startCloudTrial,
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));
@@ -479,6 +503,11 @@ describe("App onboarding", () => {
     billingMocks.fetchBillingEntitlement.mockResolvedValue({
       success: true,
       data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null },
+    });
+    billingMocks.startCloudTrial.mockResolvedValue({
+      success: true,
+      data: { plan: "individual", status: "trialing", canUseApp: true, trialEndsAt: "2026-09-21T00:00:00.000Z", currentPeriodEnd: null,
+        trialActivation: { state: "started", startedAt: "2026-09-14T00:00:00.000Z", endsAt: "2026-09-21T00:00:00.000Z" } },
     });
     billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
     billingMocks.createBillingPortalSession.mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } });
@@ -1098,7 +1127,7 @@ describe("App onboarding", () => {
     });
     await screen.findByRole("dialog", { name: /you're ready to go/i });
 
-    fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+    fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
@@ -1126,12 +1155,102 @@ describe("App onboarding", () => {
     expect(saveOwnProfile).not.toHaveBeenCalled();
   }, 15_000);
 
+  it("grants an available Cloud trial only from the final action after tracking is ready", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: AVAILABLE_CLOUD_TRIAL });
+    billingMocks.startCloudTrial.mockResolvedValue({ success: true, data: GRANTED_CLOUD_TRIAL });
+    const pendingTrackerStart = createDeferred<TrackerStatus>();
+    trackerStart.mockReturnValue(pendingTrackerStart.promise);
+
+    render(<App />);
+
+    await advanceThroughSharedBasics({ activity: "Coding" });
+    const setupDialog = await screen.findByRole("dialog", { name: /choose your setup/i });
+    expect(within(setupDialog).getByText(/7-day free trial/i)).toBeTruthy();
+    expect(billingMocks.startCloudTrial).not.toHaveBeenCalled();
+
+    fireEvent.click(within(setupDialog).getByRole("button", { name: /drifty cloud/i }));
+    await clickEnabledAction(/^continue$/i);
+    expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
+    expect(billingMocks.startCloudTrial).not.toHaveBeenCalled();
+    await clickEnabledNext();
+    await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME });
+    await clickEnabledAction(/^continue$/i);
+
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    const grantButton = within(readyDialog).getByRole("button", { name: /^start 7-day free trial$/i });
+    expect(billingMocks.startCloudTrial).not.toHaveBeenCalled();
+    fireEvent.click(grantButton);
+    fireEvent.click(grantButton);
+    expect(billingMocks.startCloudTrial).not.toHaveBeenCalled();
+    await waitFor(() => expect(trackerStart).toHaveBeenCalledTimes(1));
+    expect(billingMocks.startCloudTrial).not.toHaveBeenCalled();
+
+    await act(async () => {
+      pendingTrackerStart.resolve(makeTrackerStatus());
+      await pendingTrackerStart.promise;
+    });
+    await waitFor(() => expect(billingMocks.startCloudTrial).toHaveBeenCalledTimes(1));
+    expect(billingMocks.startCloudTrial).toHaveBeenCalledWith(undefined, "user-1");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+    });
+  }, 15_000);
+
+  it("keeps available Cloud onboarding open when the explicit final grant fails", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: AVAILABLE_CLOUD_TRIAL });
+    billingMocks.startCloudTrial.mockResolvedValue({ success: false, error: "Trial grant failed." });
+
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    expect(billingMocks.startCloudTrial).not.toHaveBeenCalled();
+    fireEvent.click(within(readyDialog).getByRole("button", { name: /^start 7-day free trial$/i }));
+
+    expect((await within(readyDialog).findByRole("alert")).textContent).toContain("Trial grant failed.");
+    expect(billingMocks.startCloudTrial).toHaveBeenCalledTimes(1);
+    expect(trackerStart).toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
+    expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeNull();
+  }, 15_000);
+
+  it.each([false, true])("resets another account's draft and ignores its pending grant (pending=%s)", async (pending) => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: AVAILABLE_CLOUD_TRIAL });
+    const grant = createDeferred<{ success: true; data: typeof GRANTED_CLOUD_TRIAL }>();
+    billingMocks.startCloudTrial.mockReturnValue(grant.promise);
+    const view = render(<App />);
+    await advanceToReadyStep({ activity: "Coding", workDescription: "Account A private draft" });
+    if (pending) {
+      fireEvent.click(await screen.findByRole("button", { name: /^start 7-day free trial$/i }));
+      await waitFor(() => expect(billingMocks.startCloudTrial).toHaveBeenCalledOnce());
+    }
+    await act(async () => {
+      authState.user = { id: "user-2", email: "second@example.com" };
+      view.rerender(<App />);
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull());
+    await act(async () => {
+      grant.resolve({ success: true, data: GRANTED_CLOUD_TRIAL });
+      await grant.promise;
+    });
+    expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+    expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-2"))).toBeNull();
+    expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeNull();
+    const progress = JSON.parse(window.localStorage.getItem(getOnboardingProgressStorageKey("user-2")) ?? "{}");
+    expect(progress.step).toBe("welcome");
+    expect(progress.workDescription).not.toBe("Account A private draft");
+    // Cloud is the fresh form's default; it still starts at Welcome and
+    // requires a new final action from this account.
+    expect(progress.setupChoice).toBe("simple");
+    expect(billingMocks.startCloudTrial).toHaveBeenCalledTimes(pending ? 1 : 0);
+  }, 15_000);
+
   it("submits final onboarding only once while tracker startup is pending", async () => {
     render(<App />);
 
     await advanceToReadyStep({ activity: "Coding" });
     const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
-    const startButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+    const startButton = within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }) as HTMLButtonElement;
     const readyForm = startButton.closest("form");
     const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
     const pendingTrackerStart = createDeferred<TrackerStatus>();
@@ -1145,7 +1264,7 @@ describe("App onboarding", () => {
 
     if (!readyForm) throw new Error("Expected final onboarding button to belong to the onboarding form.");
     fireEvent.submit(readyForm);
-    expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 1);
+    await waitFor(() => expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 1));
 
     await act(async () => {
       pendingTrackerStart.resolve(makeTrackerStatus());
@@ -1157,6 +1276,34 @@ describe("App onboarding", () => {
     expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(1);
   }, 15_000);
 
+  it.each(["before", "after"])("recovers AI setup storage failure %s the grant without a duplicate trial", async (failureAt) => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: AVAILABLE_CLOUD_TRIAL });
+    let failStorage = failureAt === "before";
+    billingMocks.startCloudTrial.mockImplementation(async () => {
+      billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: GRANTED_CLOUD_TRIAL });
+      if (failureAt === "after") failStorage = true;
+      return { success: true, data: GRANTED_CLOUD_TRIAL };
+    });
+    render(<App />);
+    await advanceToReadyStep({ activity: "Coding" });
+    const originalSetItem = Storage.prototype.setItem;
+    const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === "drifty.aiSetup.v1" && failStorage) throw new DOMException("Storage full", "QuotaExceededError");
+      return originalSetItem.call(this, key, value);
+    });
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
+      expect((await screen.findByRole("alert")).textContent).toContain("Unable to save AI setup locally");
+      expect(billingMocks.startCloudTrial).toHaveBeenCalledTimes(failureAt === "before" ? 0 : 1);
+      expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeNull();
+      failStorage = false;
+      fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull());
+      expect(billingMocks.startCloudTrial).toHaveBeenCalledOnce();
+      expect(JSON.parse(window.localStorage.getItem("drifty.aiSetup.v1") ?? "{}")).toMatchObject({ provider: "managed_local", driftyRoute: "cloud" });
+    } finally { storage.mockRestore(); }
+  }, 15_000);
+
   it("allows final onboarding to be retried after tracker startup fails", async () => {
     render(<App />);
 
@@ -1165,10 +1312,10 @@ describe("App onboarding", () => {
     const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
     trackerStart.mockRejectedValueOnce(new Error("Tracker start failed"));
 
-    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+    fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     expect((await within(readyDialog).findByRole("alert")).textContent).toContain("Tracker start failed");
-    const retryButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+    const retryButton = within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }) as HTMLButtonElement;
     expect(retryButton.disabled).toBe(false);
     expect((within(readyDialog).getByRole("button", { name: /^back$/i }) as HTMLButtonElement).disabled).toBe(false);
     expect((within(readyDialog).getByRole("button", { name: /start drifty at login/i }) as HTMLButtonElement).disabled).toBe(false);
@@ -1198,7 +1345,7 @@ describe("App onboarding", () => {
 
     await advanceToReadyStep({ activity: "Coding" });
     const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
-    const startButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+    const startButton = within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }) as HTMLButtonElement;
     const readyForm = startButton.closest("form");
     const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
 
@@ -1227,6 +1374,11 @@ describe("App onboarding", () => {
   }, 15_000);
 
   it("unlocks every final control after local completion storage fails and then retries", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: AVAILABLE_CLOUD_TRIAL });
+    billingMocks.startCloudTrial.mockImplementation(async () => {
+      billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: GRANTED_CLOUD_TRIAL });
+      return { success: true, data: GRANTED_CLOUD_TRIAL };
+    });
     render(<App />);
 
     await advanceToReadyStep({ activity: "Coding" });
@@ -1240,16 +1392,17 @@ describe("App onboarding", () => {
     const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
 
     try {
-      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+      fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
       expect((await within(readyDialog).findByRole("alert")).textContent).toContain("Unable to save setup locally");
-      const retryButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+      const retryButton = within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }) as HTMLButtonElement;
       expect(retryButton.disabled).toBe(false);
       expect((within(readyDialog).getByRole("button", { name: /^back$/i }) as HTMLButtonElement).disabled).toBe(false);
       expect((within(readyDialog).getByRole("button", { name: /start drifty at login/i }) as HTMLButtonElement).disabled).toBe(false);
       expect((within(readyDialog).getByRole("checkbox", { name: /import from browser history/i }) as HTMLInputElement).disabled).toBe(false);
       expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 1);
       expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(0);
+      expect(billingMocks.startCloudTrial).toHaveBeenCalledOnce();
 
       setItemSpy.mockRestore();
       fireEvent.click(retryButton);
@@ -1259,6 +1412,7 @@ describe("App onboarding", () => {
       });
       expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 2);
       expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(1);
+      expect(billingMocks.startCloudTrial).toHaveBeenCalledOnce();
     } finally {
       setItemSpy.mockRestore();
     }
@@ -1274,7 +1428,7 @@ describe("App onboarding", () => {
       render(<App />);
       await advanceToReadyStep({ activity: "Coding" });
       const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
-      const startButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+      const startButton = within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }) as HTMLButtonElement;
       const readyForm = startButton.closest("form");
       const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
 
@@ -1319,7 +1473,7 @@ describe("App onboarding", () => {
     expect(within(readyDialog).queryByText(/open today to review your timeline/i)).toBeNull();
     expect(within(readyDialog).queryByText(/7-day free trial started/i)).toBeNull();
 
-    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+    fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
@@ -1421,7 +1575,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+    fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
@@ -1476,7 +1630,7 @@ describe("App onboarding", () => {
       const startupToggle = within(readyDialog).getByRole("button", { name: /start drifty at login/i });
 
       expect(startupToggle.getAttribute("aria-pressed")).toBe("true");
-      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+      fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
       await waitFor(() => {
         expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true);
@@ -1511,7 +1665,7 @@ describe("App onboarding", () => {
       const startupToggle = within(readyDialog).getByRole("button", { name: /start drifty at login/i });
       fireEvent.click(startupToggle);
       expect(startupToggle.getAttribute("aria-pressed")).toBe("false");
-      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+      fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
       await waitFor(() => {
         expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(false);
@@ -1541,7 +1695,7 @@ describe("App onboarding", () => {
     fireEvent.click(browserHistoryCheckbox);
     expect((browserHistoryCheckbox as HTMLInputElement).checked).toBe(false);
 
-    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+    fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
@@ -1593,7 +1747,7 @@ describe("App onboarding", () => {
 
     await advanceToReadyStep({ activity: "Coding" });
     const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
-    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+    fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     // The dashboard is gated behind the preparation screen while the 48h import runs.
     expect(await screen.findByText(/getting your day ready/i)).toBeTruthy();
@@ -1617,7 +1771,7 @@ describe("App onboarding", () => {
 
       await advanceToReadyStep({ activity: "Coding" });
       const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
-      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+      fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
       await waitFor(() => {
         expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
@@ -1639,7 +1793,7 @@ describe("App onboarding", () => {
     render(<App />);
 
     await advanceToReadyStep();
-    fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+    fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
@@ -1681,7 +1835,7 @@ describe("App onboarding", () => {
       render(<App />);
 
       await advanceToReadyStep();
-      fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+      fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
       const storageError = await screen.findByRole("alert");
       expect(storageError.textContent).toMatch(/unable to save setup locally/i);
@@ -1959,7 +2113,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
     expect(screen.getByText(/local model downloading/i)).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+    fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to start/i })).toBeNull();
@@ -2315,7 +2469,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
-    fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+    fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => {
       expect(JSON.parse(window.localStorage.getItem("drifty.aiSetup.v1") ?? "{}")).toMatchObject({

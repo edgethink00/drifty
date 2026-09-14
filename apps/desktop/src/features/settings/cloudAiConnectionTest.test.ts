@@ -15,7 +15,7 @@ describe("testCloudAiConnection", () => {
 
     expect(result).toEqual({ kind: "success", message: "Cloud AI connected via OpenRouter in 88 ms." });
     expect(invoke).toHaveBeenCalledWith("test-ai-connection", {
-      body: { clientVersion: "0.9.0", contractVersion: "cloud-api-v1" },
+      body: { clientVersion: "0.9.0", contractVersion: "cloud-api-v1", trialActivation: "explicit-v1" },
     });
   });
 

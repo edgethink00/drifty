@@ -3,7 +3,7 @@ import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { ToggleButton } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
 import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
-import { INDIVIDUAL_PRICING } from "../../../billing/individualPricing";
+import { canStartCloudTrial } from "../../../billing/billingEligibility";
 
 export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { effectiveLanguage, t } = useLocalization();
@@ -12,6 +12,15 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   return (
     <>
       <p className="dc-onb-copy dc-onb-ready-copy">{t("onboarding.ready.intro")}</p>
+      {flow.setupChoice === "simple" && !flow.accountSkippedForDev
+        && !flow.billingEntitlement?.canUseApp && !canStartCloudTrial(flow.billingEntitlement) ? (
+          <div className="dc-onb-inline-status" role="status">
+            <p>{t("billing.trialActivation.unavailable")}</p>
+            <button type="button" className="dc-onb-back" disabled={flow.isCompleting} onClick={flow.returnToSetupChoice}>
+              {t("onboarding.title.chooseSetup")}
+            </button>
+          </div>
+        ) : null}
       <ul className="dc-onb-ready-list">
         {summaryItems.map((item) => (
           <li className="dc-onb-ready-item" key={item.label}>
@@ -71,14 +80,9 @@ function summaryItemsForFlow(
   return [
     {
       label: t("onboarding.ready.cloudSelected"),
-      details: [
-        t("onboarding.ready.cloudPricing", {
-          monthly: INDIVIDUAL_PRICING.monthly.amount,
-          yearly: INDIVIDUAL_PRICING.yearly.amount,
-        }),
-        t("onboarding.ready.cloudData"),
-      ],
-      sub: flow.promotionActive
+      sub: canStartCloudTrial(flow.billingEntitlement)
+        ? t("billing.trialActivation.available")
+        : flow.promotionActive
         ? t("onboarding.ready.promoAccessUntil", {
           date: formatBillingAccessEndDate(flow.promotionEndsAt, language)
             ?? t("onboarding.promo.activePeriod"),

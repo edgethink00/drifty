@@ -11,3 +11,11 @@ export function canStartIndividualCheckout(entitlement: BillingEntitlement | nul
       && (entitlement.lockedReason === "trial_expired"
         || entitlement.lockedReason === "billing_missing"));
 }
+
+export function canStartCloudTrial(entitlement: BillingEntitlement | null | undefined): boolean {
+  return entitlement?.trialActivation?.state === "available"
+    && entitlement.status === "locked"
+    && !entitlement.canUseApp
+    && entitlement.entitlementOwner !== "organization"
+    && (entitlement.lockedReason === "billing_missing" || entitlement.lockedReason === undefined);
+}

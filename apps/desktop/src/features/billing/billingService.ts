@@ -11,7 +11,14 @@ export type BillingEntitlementOrganization = {
   seatId: string;
 };
 
+export type CloudTrialActivation = {
+  readonly state: "available" | "started" | "unavailable";
+  readonly startedAt: string | null;
+  readonly endsAt: string | null;
+};
+
 export type BillingEntitlement = {
+  trialActivation?: CloudTrialActivation;
   plan: "individual";
   status: "trialing" | "active" | "locked";
   canUseApp: boolean;
@@ -105,15 +112,44 @@ const GENERIC_BILLING_ERROR = "Unable to check billing status.";
 // desktop budget above their combined ceiling so a successful database commit
 // is not routinely reported as a client timeout.
 export const COUPON_REDEMPTION_TIMEOUT_MS = 20_000;
+export const BILLING_ENTITLEMENT_TIMEOUT_MS = 20_000;
+
+async function invokeEntitlement(
+  client: NonNullable<BillingClient>,
+  functionName: string,
+  body: unknown,
+): Promise<{ data: BillingEntitlementResponse | null; error: unknown }> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("Cloud entitlement timed out. Try again."));
+    }, BILLING_ENTITLEMENT_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([
+      client.functions.invoke<BillingEntitlementResponse>(functionName, {
+        body, signal: controller.signal, timeout: BILLING_ENTITLEMENT_TIMEOUT_MS,
+      }),
+      timeout,
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 export async function fetchBillingEntitlement(client: BillingClient = supabase): Promise<BillingResult<BillingEntitlement>> {
   if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
 
   try {
     const body = await withCloudDevicePayload({});
-    const { data, error } = await client.functions.invoke<BillingEntitlementResponse>("get-billing-entitlement", {
-      body,
-    });
+    let { data, error } = await invokeEntitlement(client, "get-cloud-trial-entitlement", body);
+    // Only an absent endpoint is permission to use the legacy getter, which can
+    // grant a trial. A timeout or service failure must never silently start one.
+    if (isMissingBillingEndpoint(error)) {
+      ({ data, error } = await invokeEntitlement(client, "get-billing-entitlement", body));
+    }
 
     if (error) return { success: false, error: await readFunctionError(error, GENERIC_BILLING_ERROR) };
     if (data?.error) return { success: false, error: data.error };
@@ -124,6 +160,32 @@ export async function fetchBillingEntitlement(client: BillingClient = supabase):
   } catch (error) {
     return { success: false, error: error instanceof Error && error.message ? error.message : GENERIC_BILLING_ERROR };
   }
+}
+
+export { canStartCloudTrial } from "./billingEligibility";
+
+export async function startCloudTrial(client: BillingClient = supabase, expectedAccountId?: string): Promise<BillingResult<BillingEntitlement>> {
+  if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
+  try {
+    const body = await withCloudDevicePayload({ activation: "explicit-v1", ...(expectedAccountId ? { expectedAccountId } : {}) });
+    const { data, error } = await invokeEntitlement(client, "start-cloud-trial", body);
+    if (error) return { success: false, error: await readFunctionError(error, "Unable to start the trial. Try again.") };
+    if (data?.error) return { success: false, error: data.error };
+    if (!isCloudDeviceAccess(data?.deviceAccess) || !data.deviceAccess.allowed || !data.deviceAccess.deviceId?.trim()) {
+      return { success: false, error: "Trial activation did not confirm access for this device. Try again." };
+    }
+    const entitlement = enrichBillingEntitlement(data);
+    if (!isBillingEntitlement(entitlement) || !entitlement.trialActivation || entitlement.trialActivation.state === "available") {
+      return { success: false, error: "Trial activation returned an invalid response." };
+    }
+    return { success: true, data: entitlement };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Unable to start the trial. Try again." };
+  }
+}
+
+function isMissingBillingEndpoint(error: unknown): boolean {
+  return isRecord(error) && isRecord(error.context) && error.context.status === 404;
 }
 
 export async function createIndividualCheckout(
@@ -139,6 +201,7 @@ export async function createIndividualCheckout(
         plan: "individual",
         billingInterval,
         pricingRevision: INDIVIDUAL_PRICING.revision,
+        trialActivation: "explicit-v1",
       },
     });
 
@@ -243,7 +306,7 @@ async function invokeCouponWithTimeout(
   try {
     return await Promise.race([
       client.functions.invoke<CouponRedemptionResponse>("redeem-coupon", {
-        body: { code },
+        body: { code, trialActivation: "explicit-v1" },
         signal: controller.signal,
         timeout: COUPON_REDEMPTION_TIMEOUT_MS,
       }),
@@ -352,8 +415,18 @@ function isBillingEntitlement(value: unknown): value is BillingEntitlement {
       || entitlement.accessSource === "standard_trial"
       || entitlement.accessSource === "promotion"
       || entitlement.accessSource === "subscription")
+    && (entitlement.trialActivation === undefined || isCloudTrialActivation(entitlement.trialActivation))
     && typeof entitlement.canUseApp === "boolean"
     && hasValidBillingEntitlementOwnership(value);
+}
+
+function isCloudTrialActivation(value: unknown): value is CloudTrialActivation {
+  if (!isRecord(value) || !["available", "started", "unavailable"].includes(String(value.state))) return false;
+  const isTimestamp = (candidate: unknown) => candidate === null || (typeof candidate === "string" && Number.isFinite(Date.parse(candidate)));
+  if (!isTimestamp(value.startedAt) || !isTimestamp(value.endsAt)) return false;
+  if (value.state === "available") return value.startedAt === null && value.endsAt === null;
+  if (value.state === "started") return typeof value.startedAt === "string" && typeof value.endsAt === "string" && Date.parse(value.endsAt) > Date.parse(value.startedAt);
+  return true;
 }
 
 const LOWERCASE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -402,6 +475,9 @@ function hasControlCharacters(value: string): boolean {
 function enrichBillingEntitlement(data: BillingEntitlementResponse | null | undefined): BillingEntitlement | undefined {
   const entitlement = data?.entitlement;
   if (!isBillingEntitlement(entitlement)) return entitlement;
+  const deviceAccess = data?.deviceAccess ?? entitlement.deviceAccess;
+  if (deviceAccess !== undefined && (!isCloudDeviceAccess(deviceAccess)
+    || (!deviceAccess.allowed && entitlement.canUseApp))) return undefined;
   return {
     ...entitlement,
     ...(isCloudDeviceAccess(data?.deviceAccess) ? { deviceAccess: data.deviceAccess } : {}),

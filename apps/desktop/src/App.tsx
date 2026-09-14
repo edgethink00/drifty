@@ -1,3 +1,4 @@
+import { canStartCloudTrial } from "./features/billing/billingEligibility";
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
 import { SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -1592,6 +1593,9 @@ export default function App() {
     openCloudTrialStartedNoticeAiSetup,
     refreshBillingEntitlement,
     startCloudCheckout,
+    activateCloudTrial,
+    cloudTrialStarting,
+    cloudTrialError,
   } = useCloudBillingController({
     hasRequiredAccountAuth,
     isSupabaseConfigured,
@@ -2360,6 +2364,10 @@ export default function App() {
     && !sidebarUpgradeDismissed;
   const billingEntitlementSupportsUpgrade = canStartIndividualCheckout(billingEntitlement);
   const handleOpenUpgradePlanModal = useCallback(() => {
+    if (!isSidebarCtaPreviewActive && canStartCloudTrial(billingEntitlement)) {
+      openAiSetupSettings();
+      return;
+    }
     if (!isSupabaseConfigured) {
       requestCloudBillingAuth();
       return;
@@ -2372,6 +2380,8 @@ export default function App() {
     if (!isSidebarCtaPreviewActive && (billingEntitlementLoading || !billingEntitlementSupportsUpgrade)) return;
     setUpgradePlanModalOpen(true);
   }, [
+    billingEntitlement,
+    openAiSetupSettings,
     billingEntitlementLoading,
     billingEntitlementSupportsUpgrade,
     hasRequiredAccountAuth,
@@ -9129,6 +9139,8 @@ export default function App() {
       accessibilityGranted={accessibilityGranted}
       accessibilityRequired={accessibilityRequired}
       onStartTracking={handleStartTrackingFromOnboarding}
+      onActivateCloudTrial={activateCloudTrial}
+      onRefreshBillingEntitlement={refreshBillingEntitlement}
       onEarlyTrackingStart={() => {
         // Opportunistic: capture the rest of onboarding in the first day. Failures
         // stay silent — the completion-time start still surfaces real errors.
@@ -10179,6 +10191,13 @@ export default function App() {
                 )}
                 {settingsSection === "aiSetup" && (
                   <AiSetupSettingsSection
+                    cloudTrialAvailable={canStartCloudTrial(effectiveBillingEntitlement)}
+                    cloudTrialStarting={cloudTrialStarting}
+                    cloudTrialError={cloudTrialError}
+                    onStartCloudTrial={async () => {
+                      if (isDashboardAiUnavailablePreviewActive) return false;
+                      try { await activateCloudTrial(); return true; } catch { return false; }
+                    }}
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation}

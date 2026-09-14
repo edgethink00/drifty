@@ -56,6 +56,7 @@ describe("device sync API purge", () => {
         bodyJson: {
           action: "purge",
           accountId: "user-1",
+          trialActivation: "explicit-v1",
         },
       }),
     });

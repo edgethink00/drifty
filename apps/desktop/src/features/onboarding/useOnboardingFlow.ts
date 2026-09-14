@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,9 +12,12 @@ import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { DEV_ONBOARDING_AUTH_BYPASS_ENABLED, DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
+import { canStartCloudTrial } from "../billing/billingEligibility";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
+import { persistLocalAiSetup } from "../settings/useAiSetupController";
 import { completeOnboardingAction } from "./onboardingCompleteAction";
+import { prepareOnboardingAccess } from "./prepareOnboardingAccess";
 import { getOnboardingSteps, remapOnboardingStepForSetupChoice, type OnboardingStep, type SetupChoice } from "./onboardingFlow";
 import {
   blockedHintForStep,
@@ -48,6 +52,8 @@ type UseOnboardingFlowOptions = {
   readonly accessibilityGranted: boolean;
   readonly accessibilityRequired: boolean;
   readonly onStartTracking: () => Promise<void>;
+  readonly onActivateCloudTrial?: () => Promise<BillingEntitlement>;
+  readonly onRefreshBillingEntitlement?: () => Promise<BillingEntitlement | null>;
   readonly onEarlyTrackingStart: () => void;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
@@ -72,6 +78,8 @@ export function useOnboardingFlow({
   accessibilityGranted: accessibilityGrantedFromApp,
   accessibilityRequired,
   onStartTracking,
+  onActivateCloudTrial,
+  onRefreshBillingEntitlement,
   onEarlyTrackingStart,
   onCheckAccessibility,
   onRequestAccessibility,
@@ -136,6 +144,15 @@ export function useOnboardingFlow({
   const [storageError, setStorageError] = useState<string | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
   const completionInFlightRef = useRef(false);
+  const currentUserRef = useRef(userId);
+  currentUserRef.current = userId;
+  const latestAiSetupRef = useRef(localAiSetup);
+  latestAiSetupRef.current = localAiSetup;
+  const mountedRef = useRef(true);
+  useLayoutEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const [isCompleting, setIsCompleting] = useState(false);
 
   const { screenRef, stepBodyRef, titleRef } = useOnboardingModalA11y(step);
@@ -299,6 +316,10 @@ export function useOnboardingFlow({
     completionInFlightRef.current = true;
     setIsCompleting(true);
     let committedState: UserOnboardingState | null = null;
+    const completingUserId = userId;
+    const assertCurrentAccount = () => {
+      if (!mountedRef.current || currentUserRef.current !== completingUserId) throw new Error(t("onboarding.block.account"));
+    };
     try {
       await completeOnboardingAction({
         cloudTrialStartedNoticePresent: Boolean(cloudTrialStartedNotice),
@@ -316,7 +337,31 @@ export function useOnboardingFlow({
           committedState = state;
         },
         onComplete,
-        onStartTracking,
+        assertCurrentAccount,
+        onStartTracking: async () => {
+          assertCurrentAccount();
+          const storageFailure = "Unable to save AI setup locally. Check storage permissions and try again.";
+          if (connection.setupChoice === "simple" && !persistLocalAiSetup(latestAiSetupRef.current)) {
+            throw new Error(storageFailure);
+          }
+          await prepareOnboardingAccess({
+            setupChoice: connection.setupChoice,
+            entitlement: billingEntitlement,
+            skipCloudAccessCheck: accountSkippedForDev || DEV_ONBOARDING_AUTH_BYPASS_ENABLED,
+            assertCurrentAccount,
+            startTracking: onStartTracking,
+            ...(onActivateCloudTrial ? { activateCloudTrial: onActivateCloudTrial } : {}),
+            ...(onRefreshBillingEntitlement ? { refreshEntitlement: onRefreshBillingEntitlement } : {}),
+            unavailableMessage: t("billing.trialActivation.unavailable"),
+          });
+          assertCurrentAccount();
+          if (connection.setupChoice === "simple") {
+            const nextSetup = { ...latestAiSetupRef.current, provider: "managed_local" as const, driftyRoute: "cloud" as const };
+            const persisted = persistLocalAiSetup(nextSetup);
+            onLocalAiSetupChange(nextSetup);
+            if (!persisted) throw new Error(storageFailure);
+          }
+        },
         openAtLoginEnabled,
         setSetupError,
         setStorageError,
@@ -327,7 +372,10 @@ export function useOnboardingFlow({
         workTypeOther,
       });
     } catch (error) {
-      if (!committedState) throw error;
+      if (!committedState) {
+        setSetupError(error instanceof Error ? error.message : t("billing.trialActivation.failed"));
+        return;
+      }
       console.error("Onboarding presentation failed after local completion was saved.", error);
     } finally {
       if (committedState) {
@@ -368,6 +416,7 @@ export function useOnboardingFlow({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isFinalStep && connection.setupChoice === "simple" && billingEntitlementLoading) return;
     if (!isFinalStep) {
       setStorageError(null);
       setSetupError(null);
@@ -377,6 +426,11 @@ export function useOnboardingFlow({
         return;
       }
       goToNextStep();
+      return;
+    }
+    if (connection.setupChoice === "simple" && !accountSkippedForDev
+      && (!billingEntitlement || billingEntitlementError) && onRefreshBillingEntitlement) {
+      void onRefreshBillingEntitlement();
       return;
     }
     void completeOnboarding();
@@ -407,17 +461,24 @@ export function useOnboardingFlow({
     addMainActivity,
     browserHistoryBootstrapEnabled,
     blockedHint,
-    canAdvance,
+    canAdvance: canAdvance && !(step === "ready" && connection.setupChoice === "simple" && billingEntitlementLoading),
     cloudTrialStartedNotice,
+    billingEntitlement,
     promotionActive,
     promotionEndsAt: promotionActive ? billingEntitlement?.trialEndsAt ?? null : null,
     expectsPromotion,
     driftAlarmEnabled,
     extremeNudgeEnabled,
     petModeEnabled,
-    footerLabel,
+    footerLabel: step === "ready" && connection.setupChoice === "simple"
+      ? billingEntitlementLoading ? t("billing.trialActivation.checking")
+        : !accountSkippedForDev && (!billingEntitlement || billingEntitlementError)
+        ? t("common.retry")
+        : canStartCloudTrial(billingEntitlement) ? t("billing.trialActivation.start") : t("billing.trialActivation.continue")
+      : footerLabel,
     isCompleting,
     goToPreviousStep,
+    returnToSetupChoice: () => { if (!isCompleting) { setSetupError(null); setStep("choose_setup"); } },
     handleSubmit,
     mainActivities,
     mainActivityOther,

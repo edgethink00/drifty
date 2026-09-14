@@ -2,6 +2,7 @@ import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import type { CSSProperties } from "react";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { aiFailureResolvesWithoutUser } from "../ai-connection/aiFailureGuidance";
+import { canStartCloudTrial } from "../billing/billingEligibility";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { ClassificationAvailability } from "../classification/classificationAvailability";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -165,6 +166,11 @@ export function resolveSidebarCtaSlot({
     }
   }
 
+  if (canStartCloudTrial(billingEntitlement)) return {
+    actionLabelKey: "sidebar.cta.ai.action", alert: null,
+    copyKey: "billing.trialActivation.availableBody", direction: "forward", disabled: billingCheckoutLoading,
+    kind: "upgrade", titleKey: "billing.trialActivation.available", titleEmphasisCount: null, tone: "trial",
+  };
   if (billingEntitlement?.status === "locked") {
     if (billingEntitlement.lockedReason === "device_limit_reached") {
       return {

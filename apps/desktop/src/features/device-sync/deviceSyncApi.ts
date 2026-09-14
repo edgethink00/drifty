@@ -70,6 +70,7 @@ async function postSyncAction<TResponse>(
         ...extra,
         action,
         accountId: expectedAccountId,
+        trialActivation: "explicit-v1",
         ...(cloudDevice ? { cloudDevice } : {}),
       },
       timeoutMs: SYNC_HTTP_TIMEOUT_MS,

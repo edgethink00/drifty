@@ -130,3 +130,11 @@ describe("buildDashboardAiUnavailablePreviewInput", () => {
     expect(devices.find((device) => device.label === "Studio Mac")?.isCurrent).toBe(true);
   });
 });
+
+it("routes an unused trial to AI setup without selling a plan or calling it expired", () => {
+  expect(resolveDashboardAiUnavailableState({
+    billingEntitlement: { ...trialExpiredEntitlement, lockedReason: "billing_missing", trialActivation: { state: "available", startedAt: null, endsAt: null } },
+    billingEntitlementError: null, billingEntitlementLoading: false, canUseCloudAiClassification: false,
+    hasRequiredAccountAuth: true, isSupabaseConfigured: true, localAiReady: false,
+  })).toMatchObject({ variant: "connect-ai", titleKey: "billing.trialActivation.available" });
+});

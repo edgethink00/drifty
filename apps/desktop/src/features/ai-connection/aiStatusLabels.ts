@@ -1,3 +1,4 @@
+import { canStartCloudTrial } from "../billing/billingEligibility";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { AiClassificationUsageSummary } from "../classification/aiClassificationService";
 import { isManagedLocalAiRoute, type LocalAiSetupState } from "../settings/localAiSetup";
@@ -41,6 +42,7 @@ export function driftyCloudStatusLabel(
   if (!isConfigured) return "Cloud off";
   if (!hasAccount) return "Sign-in needed";
   if (loading) return "Checking cloud";
+  if (canStartCloudTrial(entitlement)) return "Cloud trial available";
   if (entitlement?.status === "locked") return "Drifty Cloud needs attention";
   return "Drifty Cloud is connected";
 }
@@ -54,6 +56,7 @@ export function aiServerStatusLabelForCloud(
   if (!isConfigured) return "Not configured";
   if (!hasAccount) return "Sign-in needed";
   if (loading) return "Checking";
+  if (canStartCloudTrial(entitlement)) return "Trial available";
   if (entitlement?.status === "locked") return "Needs attention";
   return "Available";
 }

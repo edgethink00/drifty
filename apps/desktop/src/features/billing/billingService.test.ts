@@ -27,7 +27,7 @@ describe("billingService", () => {
     expect(result).toEqual({ success: true, data: { url: "https://checkout.example.test" } });
     expect(invoke).toHaveBeenCalledWith("create-polar-checkout", {
       timeout: 30_000,
-      body: { plan: "individual", billingInterval, pricingRevision: "pro-usd-2026-09" },
+      body: { plan: "individual", billingInterval, pricingRevision: "pro-usd-2026-09", trialActivation: "explicit-v1" },
     });
   });
 
@@ -131,7 +131,7 @@ describe("billingService", () => {
       },
     });
     expect(invoke).toHaveBeenCalledWith("redeem-coupon", {
-      body: { code: "DRFT-TEST-2026" },
+      body: { code: "DRFT-TEST-2026", trialActivation: "explicit-v1" },
       signal: expect.any(AbortSignal),
       timeout: COUPON_REDEMPTION_TIMEOUT_MS,
     });

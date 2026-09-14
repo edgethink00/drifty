@@ -100,4 +100,19 @@ describe("useAiSetupController OpenRouter key gating", () => {
 
     await waitFor(() => expect(storeMocks.loadOpenRouterApiKey).toHaveBeenCalledTimes(1));
   });
+
+  it("keeps setup usable when local persistence throws", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage unavailable", "QuotaExceededError");
+    });
+    const { result } = renderHook(() => useAiSetupController());
+
+    act(() => result.current.setLocalAiSetup((current) => ({
+      ...current,
+      provider: "managed_local",
+      driftyRoute: "cloud",
+    })));
+
+    expect(result.current.localAiSetup.driftyRoute).toBe("cloud");
+  });
 });

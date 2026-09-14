@@ -20,6 +20,7 @@ type CompleteOnboardingInput = {
   readonly onCommitted: (state: UserOnboardingState) => void;
   readonly onComplete: (state: UserOnboardingState) => void;
   readonly onStartTracking: () => Promise<void>;
+  readonly assertCurrentAccount?: () => void;
   readonly openAtLoginEnabled: boolean;
   readonly setSetupError: (error: string | null) => void;
   readonly setStorageError: (error: string | null) => void;
@@ -45,6 +46,7 @@ export async function completeOnboardingAction({
   onCommitted,
   onComplete,
   onStartTracking,
+  assertCurrentAccount,
   openAtLoginEnabled,
   setSetupError,
   setStorageError,
@@ -86,6 +88,7 @@ export async function completeOnboardingAction({
   }
   try {
     await onStartTracking();
+    assertCurrentAccount?.();
   } catch (error) {
     setSetupError(error instanceof Error ? error.message : "Unable to start tracking.");
     return;

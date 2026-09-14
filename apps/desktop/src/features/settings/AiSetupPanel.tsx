@@ -17,12 +17,22 @@ import {
 import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
-import { normalizeOpenAiCompatibleBaseUrl, type DriftyAiRoute, type LocalAiSetupState } from "./localAiSetup";
+import {
+  LOCAL_AI_SETUP_STORAGE_KEY,
+  normalizeOpenAiCompatibleBaseUrl,
+  type DriftyAiRoute,
+  type LocalAiSetupState,
+} from "./localAiSetup";
 import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
 import { IntelligenceSetupPanel } from "./IntelligenceSetupPanel";
-import type { AnalysisAiSetupState } from "./analysisModelSetup";
+import {
+  ANALYSIS_AI_SETUP_STORAGE_KEY,
+  toPersistedAnalysisAiSetup,
+  type AnalysisAiSetupState,
+} from "./analysisModelSetup";
+import { persistLocalAiSetup } from "./useAiSetupController";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { useWorkProfileSettings } from "./useWorkProfileSettings";
@@ -32,6 +42,10 @@ import { useLocalization } from "../localization/LocalizationContext";
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
 export type AiSetupPanelProps = {
+  readonly cloudTrialAvailable?: boolean;
+  readonly cloudTrialStarting?: boolean;
+  readonly cloudTrialError?: string | null;
+  readonly onStartCloudTrial?: () => Promise<boolean>;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
@@ -57,6 +71,10 @@ export type AiSetupPanelProps = {
 };
 
 export function AiSetupPanel({
+  cloudTrialAvailable = false,
+  cloudTrialStarting = false,
+  cloudTrialError = null,
+  onStartCloudTrial,
   billingCheckoutLoadingInterval,
   billingEntitlementStatus,
   billingPlansDisabled,
@@ -106,17 +124,70 @@ export function AiSetupPanel({
   // (device limit reached, payment required, …). Those states must route to Manage
   // billing (Stripe portal) to recover — never to a fresh checkout, which would sell
   // them a second subscription.
-  const cloudLocked = billingEntitlementStatus === "locked" && currentBillingPlan === "individual";
+  const cloudLocked = !cloudTrialAvailable && billingEntitlementStatus === "locked" && currentBillingPlan === "individual";
   // Manage-billing states = fully active (secondary, hover action) OR locked (primary
   // recovery action). Upgrade/checkout states = trialing (convert the trial) OR a
   // genuine no-subscription. `canManageBilling` covers active + locked; the Upgrade
   // label is shown only for the trialing / no-sub states.
   const cloudCanManageBilling = (canUseCloudModel && !cloudIsTrialing) || cloudLocked;
   const cloudShowsUpgrade = cloudIsTrialing || (!canUseCloudModel && !cloudLocked);
-  const cloudSubscribeActionLabel = cloudShowsUpgrade
+  const cloudSubscribeActionLabel = cloudTrialAvailable
+    ? t(cloudTrialStarting ? "billing.trialActivation.starting" : "billing.trialActivation.start")
+    : cloudShowsUpgrade
     ? (billingCheckoutLoadingInterval === null ? t("settings.ai.upgrade") : t("settings.ai.opening"))
     : null;
-  const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null;
+  const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || cloudTrialStarting || billingCheckoutLoadingInterval !== null;
+  const trialRequestRef = useRef(false);
+  const trialRequestGenerationRef = useRef(0);
+  const mountedRef = useRef(true);
+  const latestSelection = useRef({ workProfileUserId, localAiSetup, analysisSetup });
+  latestSelection.current = { workProfileUserId, localAiSetup, analysisSetup };
+  const [trialRequestError, setTrialRequestError] = useState<string | null>(null);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      trialRequestGenerationRef.current += 1;
+    };
+  }, []);
+  async function handleCloudSetup(target: "classification" | "intelligence") {
+    if (!cloudTrialAvailable) { await onStartCloudSetup(); return; }
+    if (trialRequestRef.current || cloudSubscribeActionDisabled || !onStartCloudTrial) return;
+    const snapshot = latestSelection.current;
+    const requestGeneration = ++trialRequestGenerationRef.current;
+    trialRequestRef.current = true;
+    setTrialRequestError(null);
+    try {
+      if (target === "classification") {
+        if (!persistLocalAiSetup(snapshot.localAiSetup)) throw new CloudSetupPersistenceError(LOCAL_AI_SETUP_STORAGE_KEY);
+      } else if (!persistAnalysisAiSetup(snapshot.analysisSetup)) {
+        throw new CloudSetupPersistenceError(ANALYSIS_AI_SETUP_STORAGE_KEY);
+      }
+      if (!await onStartCloudTrial()) return;
+      if (!mountedRef.current || trialRequestGenerationRef.current !== requestGeneration) return;
+      const current = latestSelection.current;
+      if (current.workProfileUserId !== snapshot.workProfileUserId) return;
+      if (target === "classification" && current.localAiSetup === snapshot.localAiSetup) {
+        const nextSetup = { ...current.localAiSetup, provider: "managed_local" as const, driftyRoute: "cloud" as const };
+        const persisted = persistLocalAiSetup(nextSetup);
+        onLocalAiSetupChange(nextSetup);
+        if (!persisted) throw new CloudSetupPersistenceError(LOCAL_AI_SETUP_STORAGE_KEY);
+      } else if (target === "intelligence" && current.analysisSetup === snapshot.analysisSetup) {
+        const nextSetup = { ...current.analysisSetup, provider: "cloud" as const };
+        const persisted = persistAnalysisAiSetup(nextSetup);
+        onAnalysisChange(nextSetup);
+        if (!persisted) throw new CloudSetupPersistenceError(ANALYSIS_AI_SETUP_STORAGE_KEY);
+      }
+    } catch {
+      if (mountedRef.current
+        && trialRequestGenerationRef.current === requestGeneration
+        && latestSelection.current.workProfileUserId === snapshot.workProfileUserId) {
+        setTrialRequestError(t("billing.trialActivation.failed"));
+      }
+    } finally {
+      if (trialRequestGenerationRef.current === requestGeneration) trialRequestRef.current = false;
+    }
+  }
   const connectionTestKind = connectionTest.result?.kind ?? null;
   const isCloudRouteSelected = localAiSetup.provider === "managed_local" && driftyRoute === "cloud";
   const preserveCloudProbeErrorRef = useRef(false);
@@ -203,6 +274,14 @@ export function AiSetupPanel({
         <h3>{t("settings.section.aiSetup")}</h3>
       </div>
 
+      {cloudTrialAvailable ? <div className="settings-row">
+        <div><div className="lbl">{t("billing.trialActivation.available")}</div><div className="desc">{t("billing.trialActivation.availableBody")}</div></div>
+        <button type="button" className="settings-btn primary" disabled={cloudSubscribeActionDisabled || !onStartCloudTrial}
+          aria-busy={cloudTrialStarting} onClick={() => void handleCloudSetup(activePanelTab === "intelligence" ? "intelligence" : "classification")}>
+          {cloudSubscribeActionLabel}
+        </button>
+      </div> : null}
+      {cloudTrialError || trialRequestError ? <p role="alert" className="account-plan-notice__error">{cloudTrialError || trialRequestError}</p> : null}
       <AiSetupPanelTabs activeTab={activePanelTab} onChange={setActivePanelTab} showIntelligenceTab={showIntelligenceTab} />
 
       {activePanelTab === "providers" ? (
@@ -234,7 +313,7 @@ export function AiSetupPanel({
             onManageCloudBilling={onManageCloudBilling}
             onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
             onProviderChange={handleProviderChange}
-            onStartCloudSetup={onStartCloudSetup}
+            onStartCloudSetup={() => handleCloudSetup("classification")}
             onTestConnection={handleTestConnection}
           />
 
@@ -280,7 +359,7 @@ export function AiSetupPanel({
             cloudSubscribeActionLabel={cloudSubscribeActionLabel}
             cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
             canManageBilling={cloudCanManageBilling}
-            onStartCloudSetup={onStartCloudSetup}
+            onStartCloudSetup={() => handleCloudSetup("intelligence")}
             onManageCloudBilling={onManageCloudBilling}
           />
         </section>
@@ -318,4 +397,20 @@ export function AiSetupPanel({
       </ModalPresence>
     </div>
   );
+}
+
+class CloudSetupPersistenceError extends Error {
+  constructor(readonly storageKey: string) {
+    super(`Unable to persist Cloud setup in ${storageKey}.`);
+    this.name = "CloudSetupPersistenceError";
+  }
+}
+
+function persistAnalysisAiSetup(setup: AnalysisAiSetupState): boolean {
+  try {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedAnalysisAiSetup(setup)));
+    return true;
+  } catch {
+    return false;
+  }
 }

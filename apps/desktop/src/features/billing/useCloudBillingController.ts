@@ -7,6 +7,7 @@ import {
   createBillingPortalSession,
   createIndividualCheckout,
   fetchBillingEntitlement,
+  startCloudTrial,
   redeemTrialCoupon,
   type BillingEntitlement,
   type BillingInterval,
@@ -48,6 +49,9 @@ type UseCloudBillingControllerResult = {
   readonly cloudDeviceActionError: string | null;
   readonly cloudDeviceRevokingId: string | null;
   readonly cloudDevices: readonly CloudDeviceRecord[];
+  readonly cloudTrialStarting: boolean;
+  readonly cloudTrialError: string | null;
+  readonly activateCloudTrial: () => Promise<BillingEntitlement>;
   readonly cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   readonly dismissCloudTrialStartedNotice: () => void;
   readonly handleManageCloudBilling: () => Promise<void>;
@@ -111,6 +115,9 @@ export function useCloudBillingController({
   const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
   const [cloudCheckoutAwaitingBrowser, setCloudCheckoutAwaitingBrowser] = useState(false);
   const [billingPortalAwaitingBrowser, setBillingPortalAwaitingBrowser] = useState(false);
+  const [cloudTrialStarting, setCloudTrialStarting] = useState(false);
+  const [cloudTrialError, setCloudTrialError] = useState<string | null>(null);
+  const cloudTrialRequestRef = useRef<Promise<BillingEntitlement> | null>(null);
   const billingEntitlementRequestRef = useRef(0);
   const cloudCheckoutPendingRef = useRef(false);
   const cloudCheckoutConfirmationInFlightRef = useRef(false);
@@ -122,7 +129,11 @@ export function useCloudBillingController({
   // open a billing URL or clear the current account's request state.
   useEffect(() => {
     billingActionGenerationRef.current += 1;
+    billingEntitlementRequestRef.current += 1;
     setBillingEntitlement(null);
+    cloudTrialRequestRef.current = null;
+    setCloudTrialStarting(false);
+    setCloudTrialError(null);
     billingPortalPendingRef.current = false;
     cloudCheckoutPendingRef.current = false;
     cloudCheckoutConfirmationInFlightRef.current = false;
@@ -134,6 +145,43 @@ export function useCloudBillingController({
     setBillingActionErrorCode(null);
     return () => { billingActionGenerationRef.current += 1; };
   }, [user?.id, hasRequiredAccountAuth, isSupabaseConfigured, shouldCheckBillingEntitlement]);
+
+  const activateCloudTrial = useCallback((): Promise<BillingEntitlement> => {
+    if (cloudTrialRequestRef.current) return cloudTrialRequestRef.current;
+    if (!user || !hasRequiredAccountAuth || !isSupabaseConfigured) {
+      return Promise.reject(new Error(t("onboarding.block.account")));
+    }
+    const generation = billingActionGenerationRef.current;
+    const current = () => generation === billingActionGenerationRef.current;
+    setCloudTrialStarting(true);
+    setCloudTrialError(null);
+    setBillingEntitlementLoading(false);
+    // Invalidate a pre-activation read so it cannot overwrite the granted access.
+    billingEntitlementRequestRef.current += 1;
+    const request = (async () => {
+      try {
+        const result = await startCloudTrial(undefined, user.id);
+        if (!current()) throw new Error(t("onboarding.block.account"));
+        if (!result.success) throw new Error(result.error);
+        billingEntitlementRequestRef.current += 1;
+        setBillingEntitlement(result.data);
+        setBillingEntitlementLoading(false);
+        setBillingEntitlementError(null);
+        if (!result.data.canUseApp) throw new Error(t("billing.trialActivation.failed"));
+        return result.data;
+      } catch (error) {
+        if (current()) setCloudTrialError(toErrorMessage(error));
+        throw error;
+      } finally {
+        if (current()) {
+          setCloudTrialStarting(false);
+          cloudTrialRequestRef.current = null;
+        }
+      }
+    })();
+    cloudTrialRequestRef.current = request;
+    return request;
+  }, [hasRequiredAccountAuth, isSupabaseConfigured, t, user]);
 
   const refreshBillingEntitlement = useCallback(async (): Promise<BillingEntitlement | null> => {
     if (!shouldCheckBillingEntitlement) {
@@ -601,6 +649,9 @@ export function useCloudBillingController({
     cloudDeviceRevokingId,
     cloudDevices: billingEntitlement?.cloudDevices ?? [],
     cloudTrialStartedNotice,
+    cloudTrialStarting,
+    cloudTrialError,
+    activateCloudTrial,
     dismissCloudTrialStartedNotice,
     handleManageCloudBilling,
     handleRedeemTrialCoupon,

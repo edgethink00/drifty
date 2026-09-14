@@ -22,9 +22,9 @@ export async function readCloudDevicePayload(): Promise<CloudDevicePayload | nul
   return cachedCloudDevicePayload;
 }
 
-export async function withCloudDevicePayload<TBody extends Record<string, unknown>>(body: TBody): Promise<TBody & { readonly cloudDevice?: CloudDevicePayload }> {
+export async function withCloudDevicePayload<TBody extends Record<string, unknown>>(body: TBody): Promise<TBody & { readonly cloudDevice?: CloudDevicePayload; readonly trialActivation: "explicit-v1" }> {
   const cloudDevice = await readCloudDevicePayload();
-  return cloudDevice ? { ...body, cloudDevice } : body;
+  return cloudDevice ? { ...body, trialActivation: "explicit-v1", cloudDevice } : { ...body, trialActivation: "explicit-v1" };
 }
 
 async function readNativeCloudDevicePayload(): Promise<CloudDevicePayload | null> {

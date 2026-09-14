@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { canStartCloudTrial } from "../billing/billingEligibility";
 import { AccountPlanModal } from "./AccountPlanModal";
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
 import { Toggle } from "../../components/Toggle";
@@ -233,6 +234,7 @@ export function AccountSettingsSection({
       },
   );
   const isTrialing = planState === "pro_trial";
+  const trialAvailable = canStartCloudTrial(billingEntitlement);
   const planCardsCurrentPlan: BillingPlanId | null = isTrialing ? null : billingEntitlementStatus === "locked" && !isDeviceLimitLocked && !isPaymentRequiredLocked ? "free" : currentBillingPlan;
   // Keep billing recovery directly accessible even when comparison is closed.
   const canManageCurrentPlan = isCurrentCloudPlan || isDeviceLimitLocked || isPaymentRequiredLocked;
@@ -288,8 +290,8 @@ export function AccountSettingsSection({
         ) : null}
         <div className="settings-row account-plan-summary">
           <div>
-            <div className="lbl">{organizationSeatCopy ? organizationSeatCopy.title : planStatusUnknown ? t(cloudStatusRefreshing ? "settings.account.planChecking" : "settings.account.planUnavailable") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
-            <div className="desc">{organizationSeat && organizationSeatCopy
+            <div className="lbl">{trialAvailable ? t("billing.trialActivation.available") : organizationSeatCopy ? organizationSeatCopy.title : planStatusUnknown ? t(cloudStatusRefreshing ? "settings.account.planChecking" : "settings.account.planUnavailable") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
+            <div className="desc">{trialAvailable ? t("billing.trialActivation.availableBody") : organizationSeat && organizationSeatCopy
               ? [organizationSeatCopy.summary, t("settings.account.organizationRole", { role: organizationRoleLabel(organizationSeat.role, t) })].join(" ")
               : planStatusUnknown ? t("settings.account.planUnknownDescription") : isTrialing
                 ? t("billing.plan.trialBadge")
@@ -300,7 +302,8 @@ export function AccountSettingsSection({
                     : t("settings.account.freeSummary")}</div>
           </div>
           <div className="ctrl account-plan-summary__actions">
-            <button type="button" className="settings-btn primary" aria-haspopup="dialog"
+            {trialAvailable && onOpenAiSetup ? <button type="button" className="settings-btn primary" onClick={onOpenAiSetup}>{t("sidebar.cta.ai.action")}</button> : null}
+            <button type="button" className={trialAvailable ? "settings-btn" : "settings-btn primary"} aria-haspopup="dialog"
               onClick={(event) => { event.currentTarget.focus(); setPlanModalOpen(true); }}>
               {t("settings.account.changePlan")}
             </button>

@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, type ComponentProps, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import type { OAuthCallbackStatus } from "../auth/AuthContext";
@@ -20,7 +20,19 @@ export {
 export { hasCompletedUserOnboarding, saveUserOnboardingState } from "./onboardingCompletion";
 export type { OnboardingStep as OnboardingStepId } from "./onboardingFlow";
 
-export function OnboardingModal({
+export function OnboardingModal(props: ComponentProps<typeof OnboardingSession>) {
+  const accountId = props.accountConnected ? props.userId : null;
+  const scope = useRef({ accountId, epoch: 0 });
+  if (scope.current.accountId !== accountId) {
+    // Keep the first sign-in handoff, but never carry an authenticated user's
+    // draft into another account (including a sign-out followed by sign-in).
+    if (scope.current.accountId !== null) scope.current.epoch += 1;
+    scope.current.accountId = accountId;
+  }
+  return <OnboardingSession key={scope.current.epoch} {...props} />;
+}
+
+function OnboardingSession({
   userId,
   accountConnected,
   initialDisplayName,
@@ -28,6 +40,8 @@ export function OnboardingModal({
   accessibilityGranted,
   accessibilityRequired,
   onStartTracking,
+  onActivateCloudTrial,
+  onRefreshBillingEntitlement,
   onEarlyTrackingStart,
   onCheckAccessibility,
   onRequestAccessibility,
@@ -55,6 +69,8 @@ export function OnboardingModal({
   accessibilityGranted: boolean;
   accessibilityRequired: boolean;
   onStartTracking: () => Promise<void>;
+  onActivateCloudTrial?: () => Promise<BillingEntitlement>;
+  onRefreshBillingEntitlement?: () => Promise<BillingEntitlement | null>;
   onEarlyTrackingStart: () => void;
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
@@ -90,6 +106,8 @@ export function OnboardingModal({
     accessibilityGranted,
     accessibilityRequired,
     onStartTracking,
+    ...(onActivateCloudTrial ? { onActivateCloudTrial } : {}),
+    ...(onRefreshBillingEntitlement ? { onRefreshBillingEntitlement } : {}),
     onEarlyTrackingStart,
     onCheckAccessibility,
     onRequestAccessibility,

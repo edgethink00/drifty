@@ -217,7 +217,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   }, [localAiProviderStatusKind, runAutoConnectionTest]);
 
   useEffect(() => {
-    window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedPreviewSafeLocalAiSetup(localAiSetup)));
+    persistLocalAiSetup(localAiSetup);
   }, [localAiSetup]);
 
   // Only touch the Keychain when the OpenRouter key is actually needed: the BYOK
@@ -352,6 +352,17 @@ export function toPersistedPreviewSafeLocalAiSetup(setup: LocalAiSetupState): Pe
       ? ""
       : setup.selfHostedModel,
   });
+}
+
+export function persistLocalAiSetup(setup: LocalAiSetupState): boolean {
+  try {
+    window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedPreviewSafeLocalAiSetup(setup)));
+    return true;
+  } catch {
+    // Keep the in-memory selection usable when storage is temporarily unavailable.
+    // Callers that need a durable transition can use the result to surface recovery.
+    return false;
+  }
 }
 
 function actualManagedLocalMemoryUsageBytes(status: ManagedLocalAiStatus, selectedModelId: string): number | null {

@@ -1,3 +1,4 @@
+import { canStartCloudTrial } from "../billing/billingEligibility";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { TranslationKey } from "../localization/translations";
 import type { ClassificationAvailability } from "../classification/classificationAvailability";
@@ -70,6 +71,10 @@ export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailable
   }
   if (input.localAiReady) return null;
   if (input.canUseCloudAiClassification) return null;
+  if (canStartCloudTrial(input.billingEntitlement)) return {
+    variant: "connect-ai", titleKey: "billing.trialActivation.available",
+    bodyKey: "billing.trialActivation.availableBody", ctaLabelKey: "sidebar.cta.ai.action",
+  };
   if (input.billingEntitlement?.status === "locked") {
     if (input.billingEntitlement.lockedReason === "device_limit_reached") return DEVICE_LIMIT_STATE;
     if (input.billingEntitlement.lockedReason === "trial_expired") return TRIAL_ENDED_STATE;

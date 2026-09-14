@@ -61,6 +61,7 @@ const {
   openSystemSettingsPane: vi.fn(),
   billingMocks: {
     fetchBillingEntitlement: vi.fn(),
+    startCloudTrial: vi.fn(),
     createIndividualCheckout: vi.fn(),
     createBillingPortalSession: vi.fn(),
   },
@@ -134,6 +135,7 @@ vi.mock("./lib/api/trackerClient", () => ({
 
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
+  startCloudTrial: billingMocks.startCloudTrial,
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));
@@ -241,6 +243,11 @@ describe("App onboarding cloud login", () => {
     billingMocks.fetchBillingEntitlement.mockResolvedValue({
       success: true,
       data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null },
+    });
+    billingMocks.startCloudTrial.mockResolvedValue({
+      success: true,
+      data: { plan: "individual", status: "trialing", canUseApp: true, trialEndsAt: "2026-09-21T00:00:00.000Z", currentPeriodEnd: null,
+        trialActivation: { state: "started", startedAt: "2026-09-14T00:00:00.000Z", endsAt: "2026-09-21T00:00:00.000Z" } },
     });
     billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
     billingMocks.createBillingPortalSession.mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } });

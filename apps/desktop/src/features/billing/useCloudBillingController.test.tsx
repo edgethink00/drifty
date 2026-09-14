@@ -18,6 +18,7 @@ const billingMocks = vi.hoisted(() => ({
   createBillingPortalSession: vi.fn(),
   createIndividualCheckout: vi.fn(),
   fetchBillingEntitlement: vi.fn(),
+  startCloudTrial: vi.fn(),
   redeemTrialCoupon: vi.fn(),
 }));
 
@@ -29,6 +30,7 @@ vi.mock("./billingService", () => ({
   createBillingPortalSession: billingMocks.createBillingPortalSession,
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
+  startCloudTrial: billingMocks.startCloudTrial,
   redeemTrialCoupon: billingMocks.redeemTrialCoupon,
 }));
 
@@ -56,6 +58,7 @@ describe("useCloudBillingController", () => {
     billingMocks.createBillingPortalSession.mockReset();
     billingMocks.createIndividualCheckout.mockReset();
     billingMocks.fetchBillingEntitlement.mockReset();
+    billingMocks.startCloudTrial.mockReset();
     billingMocks.redeemTrialCoupon.mockReset();
     cloudDeviceMocks.revokeCloudDevice.mockReset();
     vi.mocked(openUrl).mockReset().mockResolvedValue(undefined);
@@ -849,5 +852,67 @@ describe("useCloudBillingController", () => {
 
     expect(result.current.couponRedemption?.status).toBe("already_redeemed");
     expect(result.current.billingEntitlement).toEqual(paidLikeLockedEntitlement);
+  });
+});
+
+
+describe("explicit Cloud trial activation", () => {
+  const available: BillingEntitlement = {
+    plan: "individual", status: "locked", canUseApp: false, trialEndsAt: null, currentPeriodEnd: null,
+    lockedReason: "billing_missing", trialActivation: { state: "available", startedAt: null, endsAt: null },
+  };
+  const granted: BillingEntitlement = {
+    ...available, status: "trialing", canUseApp: true, trialEndsAt: "2026-09-22T03:00:00Z",
+    trialActivation: { state: "started", startedAt: "2026-09-15T03:00:00Z", endsAt: "2026-09-22T03:00:00Z" },
+  };
+  beforeEach(() => {
+    billingMocks.fetchBillingEntitlement.mockReset().mockResolvedValue({ success: true, data: available });
+    billingMocks.startCloudTrial.mockReset();
+  });
+  afterEach(cleanup);
+  function setup() {
+    return renderHook(({ user }) => useCloudBillingController({
+      user, hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+    }), { initialProps: { user: signedInUser } });
+  }
+  it("does not activate on a read, and joins two simultaneous explicit clicks", async () => {
+    let finish!: (value: { success: true; data: BillingEntitlement }) => void;
+    billingMocks.startCloudTrial.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const { result } = setup();
+    await waitFor(() => expect(result.current.billingEntitlement).toEqual(available));
+    expect(billingMocks.startCloudTrial).not.toHaveBeenCalled();
+    let first!: Promise<BillingEntitlement>;
+    let second!: Promise<BillingEntitlement>;
+    act(() => { first = result.current.activateCloudTrial(); second = result.current.activateCloudTrial(); });
+    expect(first).toBe(second);
+    expect(billingMocks.startCloudTrial).toHaveBeenCalledTimes(1);
+    await act(async () => { finish({ success: true, data: granted }); await first; });
+    expect(result.current.billingEntitlement).toEqual(granted);
+    expect(result.current.cloudTrialStarting).toBe(false);
+  });
+  it("keeps an activation failure retryable without claiming a grant", async () => {
+    billingMocks.startCloudTrial.mockResolvedValueOnce({ success: false, error: "Connection interrupted" })
+      .mockResolvedValueOnce({ success: true, data: granted });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.billingEntitlement).toEqual(available));
+    await act(async () => { await expect(result.current.activateCloudTrial()).rejects.toThrow("Connection interrupted"); });
+    expect(result.current.billingEntitlement).toEqual(available);
+    expect(result.current.cloudTrialStarting).toBe(false);
+    await act(async () => { await result.current.activateCloudTrial(); });
+    expect(result.current.billingEntitlement).toEqual(granted);
+    expect(result.current.cloudTrialError).toBeNull();
+  });
+  it("does not apply the previous account's grant after switching accounts", async () => {
+    let finish!: (value: { success: true; data: BillingEntitlement }) => void;
+    billingMocks.startCloudTrial.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const { result, rerender } = setup();
+    await waitFor(() => expect(result.current.billingEntitlement).toEqual(available));
+    let pending!: Promise<BillingEntitlement>;
+    act(() => { pending = result.current.activateCloudTrial(); });
+    rerender({ user: { ...signedInUser, id: "user-2" } });
+    await act(async () => { finish({ success: true, data: granted }); await expect(pending).rejects.toThrow(); });
+    expect(result.current.billingEntitlement).toEqual(available);
+    expect(result.current.cloudTrialError).toBeNull();
   });
 });
