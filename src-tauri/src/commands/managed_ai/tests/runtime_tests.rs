@@ -38,7 +38,7 @@ fn start_requires_runtime_assets() {
     let _memory = SufficientMemoryForTests::pin();
     let root = tempfile::tempdir().expect("create temp root");
     let status =
-        start_model_at_root(root.path(), "drifty-qwen3-5-4b-default").expect("start status");
+        start_model_at_root(root.path(), "drifty-qwen3-5-4b-default", None).expect("start status");
 
     assert!(matches!(status.state, ManagedAiInstallState::Error));
     assert!(matches!(
@@ -59,7 +59,7 @@ fn start_spawns_runtime_for_downloaded_model() {
     write_fake_runtime(root.path(), &args_path).expect("write fake runtime");
 
     let status =
-        start_model_at_root(root.path(), "drifty-qwen3-5-4b-default").expect("start status");
+        start_model_at_root(root.path(), "drifty-qwen3-5-4b-default", None).expect("start status");
     let recorded = wait_for_runtime_record(&args_path);
     runtime::stop_runtime_for_tests();
     recorded.expect("runtime records complete arguments before shutdown");
@@ -96,8 +96,8 @@ fn repeated_start_reuses_the_same_in_flight_runtime_child() {
     let starts_path = root.path().join("runtime-starts.txt");
     write_counting_fake_runtime(root.path(), &starts_path).expect("write fake runtime");
 
-    let first = start_model_at_root(root.path(), spec.id).expect("first start status");
-    let second = start_model_at_root(root.path(), spec.id).expect("second start status");
+    let first = start_model_at_root(root.path(), spec.id, None).expect("first start status");
+    let second = start_model_at_root(root.path(), spec.id, None).expect("second start status");
     let recorded = wait_for_runtime_record(&starts_path);
     runtime::stop_runtime_for_tests();
     recorded.expect("runtime records startup before shutdown");
@@ -166,11 +166,15 @@ fn runtime_that_never_becomes_ready_fails_after_two_minutes() {
     write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
         .expect("write fake runtime");
 
-    let started = start_model_at_root(root.path(), spec.id).expect("start status");
+    let started = start_model_at_root(root.path(), spec.id, None).expect("start status");
     assert!(matches!(started.state, ManagedAiInstallState::Starting));
     runtime::age_tracked_child_for_tests(Duration::from_secs(121));
 
-    let status = read_status(root.path()).expect("read timed-out runtime status");
+    let observed = read_status(root.path()).expect("read aged runtime status");
+
+    assert!(matches!(observed.state, ManagedAiInstallState::Starting));
+    let status = super::super::status::reconcile_status(root.path())
+        .expect("reconcile timed-out runtime status");
 
     assert!(matches!(status.state, ManagedAiInstallState::Error));
     assert!(matches!(
@@ -194,7 +198,7 @@ fn delete_model_reaps_adopted_runtime_server() {
     let mut adopted = spawn_adopted_runtime(root.path());
 
     runtime::set_runtime_listener_pids_for_tests(Some(vec![adopted.id()]));
-    let result = super::super::delete_model_at_root(root.path(), "drifty-gemma-4-12b-local");
+    let result = super::super::delete_model_at_root(root.path(), "drifty-gemma-4-12b-local", None);
     runtime::set_runtime_listener_pids_for_tests(None);
 
     let status = result.expect("delete status");
@@ -339,7 +343,8 @@ fn qa_starts_real_runtime_from_existing_managed_ai_root() {
     let root = std::env::var("DRIFTY_MANAGED_AI_QA_ROOT")
         .map(PathBuf::from)
         .expect("set DRIFTY_MANAGED_AI_QA_ROOT to the app managed-ai directory");
-    let started = start_model_at_root(&root, "drifty-qwen3-5-2b-economy").expect("start runtime");
+    let started =
+        start_model_at_root(&root, "drifty-qwen3-5-2b-economy", None).expect("start runtime");
 
     assert!(matches!(
         started.state,

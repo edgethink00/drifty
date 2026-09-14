@@ -160,12 +160,23 @@ pub(super) fn status_for_download_progress(
 }
 
 pub(super) fn read_status(root: &Path) -> Result<ManagedAiStatus, ManagedAiError> {
+    read_status_with_runtime_reconciliation(root, false)
+}
+
+pub(super) fn reconcile_status(root: &Path) -> Result<ManagedAiStatus, ManagedAiError> {
+    read_status_with_runtime_reconciliation(root, true)
+}
+
+fn read_status_with_runtime_reconciliation(
+    root: &Path,
+    reconcile_runtime: bool,
+) -> Result<ManagedAiStatus, ManagedAiError> {
     let status_path = root.join(STATUS_FILE_NAME);
     if !status_path.exists() {
         return status_with_installed_models(root, default_status());
     }
     let status = serde_json::from_str(&fs::read_to_string(status_path)?)?;
-    normalize_status_artifact_dir(root, status)
+    normalize_status_artifact_dir(root, status, reconcile_runtime)
 }
 
 pub(super) fn write_status(root: &Path, status: &ManagedAiStatus) -> Result<(), ManagedAiError> {
@@ -205,14 +216,30 @@ pub(super) fn status_with_installed_models(
 fn normalize_status_artifact_dir(
     root: &Path,
     status: ManagedAiStatus,
+    reconcile_runtime: bool,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
-    normalize_status_with_artifact_lookup(root, status, status_artifact_dir)
+    normalize_status_with_artifact_lookup_and_runtime_mode(
+        root,
+        status,
+        status_artifact_dir,
+        reconcile_runtime,
+    )
 }
 
+#[cfg(test)]
 pub(super) fn normalize_status_with_artifact_lookup(
+    root: &Path,
+    status: ManagedAiStatus,
+    artifact_lookup: impl FnOnce(&Path, ManagedAiModelSpec) -> Result<Option<PathBuf>, ManagedAiError>,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    normalize_status_with_artifact_lookup_and_runtime_mode(root, status, artifact_lookup, false)
+}
+
+fn normalize_status_with_artifact_lookup_and_runtime_mode(
     root: &Path,
     mut status: ManagedAiStatus,
     artifact_lookup: impl FnOnce(&Path, ManagedAiModelSpec) -> Result<Option<PathBuf>, ManagedAiError>,
+    reconcile_runtime: bool,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
     if let Some(model_id) = status.selected_model_id.as_deref() {
         let spec = require_model(model_id)?;
@@ -253,7 +280,11 @@ pub(super) fn normalize_status_with_artifact_lookup(
             status.state,
             ManagedAiInstallState::Starting | ManagedAiInstallState::Running
         ) {
-            status = runtime::normalize_runtime_status(root, spec, artifact_dir, status)?;
+            status = if reconcile_runtime {
+                runtime::reconcile_runtime_status(root, spec, artifact_dir, status)?
+            } else {
+                runtime::normalize_runtime_status(root, spec, artifact_dir, status)?
+            };
         }
     } else {
         status.artifact_dir = None;

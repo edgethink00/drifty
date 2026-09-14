@@ -53,6 +53,7 @@ import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
+import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "./features/ai-connection/managedLocalAiRuntimeStatus";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
 import { UpgradePlanModal } from "./features/billing/UpgradePlanModal";
 import { canStartIndividualCheckout } from "./features/billing/billingEligibility";
@@ -398,7 +399,6 @@ import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedLocalAiStatusObserver";
-import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
 import { AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
@@ -528,29 +528,6 @@ function isRendererFocused(): boolean {
 
 function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
-}
-
-function managedLocalAiTopbarLabel(status: ManagedLocalAiStatus | null): string | null {
-  if (status?.state !== "error") return null;
-
-  switch (status.errorKind) {
-    case "download_failed":
-      return "Download failed";
-    case "model_artifact_missing":
-      return "Model missing";
-    case "insufficient_memory":
-      return "Memory needed";
-    case "insufficient_storage":
-      return "Storage needed";
-    case "runtime_missing":
-      return "Runtime missing";
-    case "runtime_failed":
-      return "Start failed";
-    case null:
-      return "Issue";
-    default:
-      return assertNever(status.errorKind);
-  }
 }
 
 export default function App() {
@@ -2342,7 +2319,12 @@ export default function App() {
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
   }, [aiClassificationProviderKey]);
   const isSettingsTab = activeTab === "settings";
-  const managedLocalAiStatus = useManagedLocalAiStatusObserver(!onboardingOpen && !isSettingsTab);
+  // This observer is app-scoped. Entering Settings must not clear a runtime
+  // failure and reveal an unrelated connection-probe result underneath it.
+  const managedLocalAiStatus = useManagedLocalAiStatusObserver(!onboardingOpen);
+  const selectedManagedLocalAiStatus = isManagedLocalAiRoute(localAiSetup)
+    ? managedLocalAiStatusForModel(managedLocalAiStatus, localAiSetup.managedLocalModelId)
+    : null;
   const isSidebarVisuallyCollapsed = !isSettingsTab && sidebarCollapsed;
   // Dev preview feeds the same resolver a synthetic input instead of swapping in
   // a canned state, so what you see is the production branching.
@@ -2350,22 +2332,16 @@ export default function App() {
   const sidebarCtaPreviewInput = isSidebarCtaPreviewActive && sidebarCtaPreviewCase
     ? buildSidebarCtaPreviewInput(sidebarCtaPreviewCase, Date.now())
     : null;
-  const managedLocalTopbarLabel = sidebarCtaPreviewInput
-    ? managedLocalAiTopbarLabel(sidebarCtaPreviewInput.managedLocalAiStatus)
-    : isManagedLocalAiRoute(localAiSetup)
-      ? managedLocalAiTopbarLabel(managedLocalAiStatus)
-      : null;
-  const effectiveAiConnectionStatus = managedLocalTopbarLabel
-    ? {
-      tone: "error" as const,
-      label: managedLocalTopbarLabel,
-      providerLabel: "Local AI",
-      memoryLabel: sidebarCtaPreviewInput ? null : aiConnectionStatus.memoryLabel,
-      issueKind: "provider" as const,
-    }
-    : sidebarCtaPreviewInput
-      ? { ...sidebarCtaPreviewInput.aiStatus, memoryLabel: null }
-      : aiConnectionStatus;
+  const runtimeAwareAiConnectionStatus = applyManagedLocalAiRuntimeStatus(
+    aiConnectionStatus,
+    selectedManagedLocalAiStatus,
+  );
+  const effectiveAiConnectionStatus = sidebarCtaPreviewInput
+    ? applyManagedLocalAiRuntimeStatus(
+      { ...sidebarCtaPreviewInput.aiStatus, memoryLabel: null },
+      sidebarCtaPreviewInput.managedLocalAiStatus,
+    )
+    : runtimeAwareAiConnectionStatus;
   const sidebarCtaSlot = resolveSidebarCtaSlot(
     sidebarCtaPreviewInput
       ? sidebarCtaPreviewInput
@@ -2378,7 +2354,7 @@ export default function App() {
         localAiProvider: localAiSetup.provider,
         localAiConfigured: localAiConnectionFingerprint !== null,
         localAiDisconnectConfirmed: localAiConnectionPersistentFailure,
-        managedLocalAiStatus: isManagedLocalAiRoute(localAiSetup) ? managedLocalAiStatus : null,
+        managedLocalAiStatus: selectedManagedLocalAiStatus,
         classificationAvailability: classificationAvailabilityGateEnabled ? classificationAvailability : undefined,
       },
   );
@@ -10213,7 +10189,7 @@ export default function App() {
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
-                    connectionStatus={aiConnectionStatus}
+                    connectionStatus={runtimeAwareAiConnectionStatus}
                     connectionTest={aiConnectionTest}
                     currentBillingPlan={currentBillingPlan}
                     localAiSetup={localAiSetup}

@@ -80,6 +80,25 @@ pub(super) fn normalize_runtime_status(
     artifact_dir: Option<PathBuf>,
     status: ManagedAiStatus,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
+    observed_runtime_status(root, spec, artifact_dir, status, false)
+}
+
+pub(super) fn reconcile_runtime_status(
+    root: &Path,
+    spec: ManagedAiModelSpec,
+    artifact_dir: Option<PathBuf>,
+    status: ManagedAiStatus,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    observed_runtime_status(root, spec, artifact_dir, status, true)
+}
+
+fn observed_runtime_status(
+    root: &Path,
+    spec: ManagedAiModelSpec,
+    artifact_dir: Option<PathBuf>,
+    status: ManagedAiStatus,
+    enforce_start_timeout: bool,
+) -> Result<ManagedAiStatus, ManagedAiError> {
     let runtime_path = install::expected_runtime_path(root);
     if process::server_has_model(&runtime_path, spec) {
         let mut running = status_for_spec(
@@ -92,7 +111,10 @@ pub(super) fn normalize_runtime_status(
         return Ok(running);
     }
 
-    if process::stop_child_if_start_timed_out(spec.id)? {
+    // Ordinary status reads are observations and must never kill a process.
+    // The native lifecycle monitor is the single owner that enforces the
+    // cold-start deadline and publishes the resulting terminal state.
+    if enforce_start_timeout && process::stop_child_if_start_timed_out(spec.id)? {
         return Ok(status_for_model_error(
             spec,
             artifact_dir,

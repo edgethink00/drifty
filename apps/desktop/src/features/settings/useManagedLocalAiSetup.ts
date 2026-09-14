@@ -51,6 +51,7 @@ export function useManagedLocalAiSetup(
   const [loading, setLoading] = useState(false);
   const [actionModelId, setActionModelId] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const statusRequestRef = useRef(0);
   const pendingReadyNotificationModelIdsRef = useRef(new Set<string>());
 
   const syncManagedSetup = useCallback((nextStatus: ManagedLocalAiStatus, options: SyncManagedSetupOptions) => {
@@ -99,10 +100,13 @@ export function useManagedLocalAiSetup(
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      statusRequestRef.current += 1;
     };
   }, []);
 
   const refresh = useCallback(async () => {
+    const statusRequest = statusRequestRef.current + 1;
+    statusRequestRef.current = statusRequest;
     setLoading(true);
     void listManagedLocalAiModels()
       .then((nextCatalog) => {
@@ -115,22 +119,24 @@ export function useManagedLocalAiSetup(
       });
     try {
       const nextStatus = await getManagedLocalAiStatus();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || statusRequest !== statusRequestRef.current) return;
       setStatus(nextStatus);
       syncManagedSetup(nextStatus, { activateProvider: false });
     } catch (error) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || statusRequest !== statusRequestRef.current) return;
       setCatalog(MANAGED_LOCAL_AI_FALLBACK_CATALOG);
       setStatus(fallbackManagedLocalAiStatus(messageFromError(error)));
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && statusRequest === statusRequestRef.current) setLoading(false);
     }
   }, [syncManagedSetup]);
 
   const refreshStatusOnly = useCallback(async () => {
+    const statusRequest = statusRequestRef.current + 1;
+    statusRequestRef.current = statusRequest;
     try {
       const nextStatus = await getManagedLocalAiStatus();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || statusRequest !== statusRequestRef.current) return;
       // While an install is in flight, a poll can still report a *different*
       // (previously-loaded) model as "installed"/"running"; applying it would flash the
       // UI back to "ready" for the wrong model. Only statuses about a model we are
@@ -155,7 +161,11 @@ export function useManagedLocalAiSetup(
     let unlisten: TauriEventUnlisten | null = null;
     let cancelled = false;
     void listen<unknown>(MANAGED_LOCAL_AI_STATUS_EVENT, ({ payload }) => {
+      if (cancelled || !mountedRef.current) return;
       const nextStatus = parseManagedLocalAiStatus(payload);
+      // Native push is newer than every status request currently in flight.
+      statusRequestRef.current += 1;
+      setLoading(false);
       setStatus(nextStatus);
       syncManagedSetup(nextStatus, { activateProvider: false });
       notifyReadyOnce(nextStatus);

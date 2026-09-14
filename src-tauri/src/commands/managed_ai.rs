@@ -1,7 +1,12 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    LazyLock, Mutex,
+};
+use std::thread;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{async_runtime, AppHandle, Emitter, Manager};
@@ -21,9 +26,9 @@ use catalog::{
 };
 use download::download_model_artifact;
 use status::{
-    default_status, read_status, status_for_download_progress, status_for_global_error,
-    status_for_model_error, status_for_spec, status_with_installed_models, write_status,
-    ManagedAiStatusErrorKind,
+    default_status, read_status, reconcile_status, status_for_download_progress,
+    status_for_global_error, status_for_model_error, status_for_spec, status_with_installed_models,
+    write_status, ManagedAiStatusErrorKind,
 };
 pub use status::{ManagedAiDownloadProgress, ManagedAiStatus};
 
@@ -31,9 +36,14 @@ const MANAGED_BASE_URL: &str = "http://127.0.0.1:39217/v1";
 const MANAGED_ASSETS_MISSING_MESSAGE: &str =
     "Managed local model files are missing. Download again when model assets are available.";
 const MANAGED_AI_STATUS_EVENT: &str = "managed-ai-status";
+const RUNTIME_STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 static ACTIVE_INSTALLS: LazyLock<Mutex<HashMap<PathBuf, ActiveInstall>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+static ACTIVE_RUNTIME_MONITORS: LazyLock<Mutex<HashMap<PathBuf, u64>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static RUNTIME_LIFECYCLE_LOCK: Mutex<()> = Mutex::new(());
+static NEXT_RUNTIME_MONITOR_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -106,10 +116,40 @@ pub async fn managed_ai_install(
 pub async fn managed_ai_start(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
     let model_id = model_id.trim().to_string();
-    async_runtime::spawn_blocking(move || start_model_at_root(&root, &model_id))
-        .await
-        .map_err(|error| error.to_string())?
-        .map_err(error_message)
+    require_model(&model_id).map_err(error_message)?;
+    // Claim lifecycle ownership before the blocking start begins, so the
+    // previous model's monitor cannot publish over this newer start attempt.
+    let monitor_generation = begin_runtime_status_monitor(&root);
+    let start_root = root.clone();
+    let start_model_id = model_id.clone();
+    let start_app = app.clone();
+    let start_result = async_runtime::spawn_blocking(move || {
+        start_model_at_root_for_generation(
+            &start_root,
+            &start_model_id,
+            Some(&start_app),
+            Some(monitor_generation),
+        )
+    })
+    .await;
+    let status = match start_result {
+        Ok(Ok(status)) => status,
+        Ok(Err(error)) => {
+            finish_runtime_status_monitor(&root, monitor_generation);
+            return Err(error_message(error));
+        }
+        Err(error) => {
+            finish_runtime_status_monitor(&root, monitor_generation);
+            return Err(error.to_string());
+        }
+    };
+
+    if matches!(status.state, ManagedAiInstallState::Starting) {
+        spawn_runtime_status_monitor(root, model_id, monitor_generation, app);
+    } else {
+        finish_runtime_status_monitor(&root, monitor_generation);
+    }
+    Ok(status)
 }
 
 #[tauri::command]
@@ -119,14 +159,20 @@ pub async fn managed_ai_delete(
 ) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
     let model_id = model_id.trim().to_string();
-    async_runtime::spawn_blocking(move || delete_model_at_root(&root, &model_id))
+    require_model(&model_id).map_err(error_message)?;
+    invalidate_runtime_status_monitor(&root);
+    async_runtime::spawn_blocking(move || delete_model_at_root(&root, &model_id, Some(&app)))
         .await
         .map_err(|error| error.to_string())?
         .map_err(error_message)
 }
 
 pub(crate) fn managed_ai_stop_runtime_for_app_exit(app: &AppHandle) {
-    let _ = runtime::stop_runtime(managed_ai_root(app).ok().as_deref());
+    let root = managed_ai_root(app).ok();
+    if let Some(root) = root.as_deref() {
+        invalidate_runtime_status_monitor(root);
+    }
+    let _ = runtime::stop_runtime(root.as_deref());
 }
 
 fn install_model_at_root(
@@ -344,9 +390,38 @@ impl DownloadProgressWriteGate {
     }
 }
 
-fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
+#[cfg(test)]
+fn start_model_at_root(
+    root: &Path,
+    model_id: &str,
+    app: Option<&AppHandle>,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    start_model_at_root_for_generation(root, model_id, app, None)
+}
+
+fn start_model_at_root_for_generation(
+    root: &Path,
+    model_id: &str,
+    app: Option<&AppHandle>,
+    monitor_generation: Option<u64>,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    // Serialize the whole start/status transaction. The process slot itself is
+    // protected in runtime::process, but without this outer lock two different
+    // models can finish their readiness waits out of order and persist a stale
+    // model as the active status after the newer start already won.
+    let _lifecycle_guard = RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    // Generation is claimed before entering the blocking pool. Re-check it
+    // after acquiring the lifecycle lock so scheduling cannot let an older
+    // queued start run after and overwrite the newer request.
+    if monitor_generation
+        .is_some_and(|generation| !runtime_status_monitor_is_current(root, generation))
+    {
+        return read_status(root);
+    }
     let spec = require_model(model_id)?;
-    if let Some(status) = model_resource_error_status(root, spec, false, None)? {
+    if let Some(status) = model_resource_error_status(root, spec, false, app)? {
         return Ok(status);
     }
     let artifact_dir = status_artifact_dir(root, spec)?;
@@ -360,7 +435,7 @@ fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, M
                 ManagedAiStatusErrorKind::ModelArtifactMissing,
             ),
         )?;
-        write_status(root, &status)?;
+        write_and_emit_status(root, &status, app)?;
         return Ok(status);
     };
 
@@ -373,8 +448,75 @@ fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, M
         }
     };
     let status = status_with_installed_models(root, status)?;
-    write_status(root, &status)?;
+    write_and_emit_status(root, &status, app)?;
     Ok(status)
+}
+
+fn spawn_runtime_status_monitor(root: PathBuf, model_id: String, generation: u64, app: AppHandle) {
+    async_runtime::spawn_blocking(move || loop {
+        thread::sleep(RUNTIME_STATUS_POLL_INTERVAL);
+        if !runtime_status_monitor_is_current(&root, generation) {
+            return;
+        }
+
+        let status = match reconcile_status(&root) {
+            Ok(status) => status,
+            Err(_) => {
+                finish_runtime_status_monitor(&root, generation);
+                return;
+            }
+        };
+        if !runtime_status_monitor_is_current(&root, generation) {
+            return;
+        }
+        if status.selected_model_id.as_deref() != Some(model_id.as_str()) {
+            finish_runtime_status_monitor(&root, generation);
+            return;
+        }
+        if matches!(status.state, ManagedAiInstallState::Starting) {
+            continue;
+        }
+
+        let _ = write_and_emit_status(&root, &status, Some(&app));
+        finish_runtime_status_monitor(&root, generation);
+        return;
+    });
+}
+
+fn begin_runtime_status_monitor(root: &Path) -> u64 {
+    let generation = NEXT_RUNTIME_MONITOR_GENERATION.fetch_add(1, Ordering::Relaxed);
+    ACTIVE_RUNTIME_MONITORS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .insert(root.to_path_buf(), generation);
+    generation
+}
+
+fn runtime_status_monitor_is_current(root: &Path, generation: u64) -> bool {
+    ACTIVE_RUNTIME_MONITORS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .get(root)
+        .is_some_and(|current| *current == generation)
+}
+
+fn finish_runtime_status_monitor(root: &Path, generation: u64) {
+    let mut monitors = ACTIVE_RUNTIME_MONITORS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if monitors
+        .get(root)
+        .is_some_and(|current| *current == generation)
+    {
+        monitors.remove(root);
+    }
+}
+
+fn invalidate_runtime_status_monitor(root: &Path) {
+    ACTIVE_RUNTIME_MONITORS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .remove(root);
 }
 
 fn model_resource_error_status(
@@ -434,7 +576,17 @@ fn model_resource_failure(
     None
 }
 
-fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
+fn delete_model_at_root(
+    root: &Path,
+    model_id: &str,
+    app: Option<&AppHandle>,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    // Deletion and startup both own the process slot and persisted runtime
+    // status. Keeping them in one transaction prevents an older start from
+    // restoring `starting` after a newer delete has removed the artifact.
+    let _lifecycle_guard = RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let spec = require_model(model_id)?;
     runtime::stop_runtime_for_model(root, spec.id)?;
     let model_path = model_dir(root, spec.id);
@@ -442,7 +594,7 @@ fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, 
         fs::remove_dir_all(model_path)?;
     }
     let status = status_with_installed_models(root, default_status())?;
-    write_status(root, &status)?;
+    write_and_emit_status(root, &status, app)?;
     Ok(status)
 }
 

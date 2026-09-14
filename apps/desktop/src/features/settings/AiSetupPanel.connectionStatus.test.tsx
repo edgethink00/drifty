@@ -2,7 +2,14 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
+import {
+  invokeMock,
+  renderPanel,
+  resetManagedStatusMock,
+  revealItemInDirMock,
+  setManagedStatusMock,
+} from "./AiSetupPanel.testHarness";
 
 const { testCloudAiConnectionMock } = vi.hoisted(() => ({
   testCloudAiConnectionMock: vi.fn(),
@@ -84,5 +91,54 @@ describe("AiSetupPanel connection status", () => {
 
     expect(within(modelBeingUsed).getByRole("status", { name: /AI status: Connected, Cloud AI/i })).toBeTruthy();
     await waitFor(() => expect(within(modelBeingUsed).queryByText(/Old provider error/i)).toBeNull());
+  });
+
+  it("replaces a stale successful local probe with the current runtime failure", async () => {
+    const modelId = "drifty-qwen3-5-2b-economy";
+    setManagedStatusMock({
+      state: "running",
+      selectedModelId: modelId,
+      installedModels: [{ id: modelId, artifactDir: "/tmp/qwen-2b" }],
+      baseUrl: "http://127.0.0.1:39217/v1",
+      model: "drifty-qwen3.5-2b-local",
+      message: "Managed local AI runtime is running.",
+      artifactDir: "/tmp/qwen-2b",
+      progress: null,
+      errorKind: null,
+      memoryUsageBytes: 1_500_000_000,
+    });
+    const { setConnectionStatus } = renderPanel({
+      connectionStatus: {
+        tone: "ok",
+        label: "Connected",
+        providerLabel: "Qwen 3.5 2B",
+        memoryLabel: "1.4 GB RAM",
+        issueKind: null,
+      },
+      initialSetup: {
+        ...DEFAULT_LOCAL_AI_SETUP,
+        driftyRoute: "local",
+        managedLocalModelId: modelId,
+        managedLocalBaseUrl: "http://127.0.0.1:39217/v1",
+        managedLocalModel: "drifty-qwen3.5-2b-local",
+      },
+    });
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /test ai connection/i }));
+    expect(await within(modelBeingUsed).findByText(/connected in 42 ms/i)).toBeTruthy();
+
+    act(() => {
+      setConnectionStatus({
+        tone: "error",
+        label: "Start failed",
+        providerLabel: "Local AI",
+        memoryLabel: "1.4 GB RAM",
+        issueKind: "provider",
+      });
+    });
+
+    await waitFor(() => expect(within(modelBeingUsed).queryByText(/connected in 42 ms/i)).toBeNull());
+    expect(modelBeingUsed.querySelector(".ai-setup-current-model__status")?.textContent).toBe("Start failed");
   });
 });

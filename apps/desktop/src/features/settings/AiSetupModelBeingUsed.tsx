@@ -103,6 +103,12 @@ export function AiSetupModelBeingUsed({
     label: localizeAiStatusLabel(connectionStatus.label, t),
     providerLabel: localizeAiStatusLabel(connectionStatus.providerLabel, t),
   };
+  const managedRuntimeOwnsStatusMessage = selectedProvider === "drifty"
+    && driftyRoute === "local"
+    && connectionStatus.tone !== "ok";
+  const localizedConnectionTestMessage = connectionTestMessage && connectionTestKind
+    ? localizeAiConnectionTestMessage(connectionTestMessage, connectionTestKind, effectiveLanguage, t)
+    : connectionTestMessage;
   // Same estimate and wording the onboarding download and the sidebar use, so a
   // single transfer never reads differently depending on where you watch it.
   const downloadRemainingLabel = remainingLabelText(
@@ -237,10 +243,12 @@ export function AiSetupModelBeingUsed({
       modelValue={selectedModelValue}
       modelOptions={modelOptions}
       onModelChange={handleModelChange}
-      statusMessage={connectionTestMessage && connectionTestKind
-        ? localizeAiConnectionTestMessage(connectionTestMessage, connectionTestKind, effectiveLanguage, t)
-        : connectionTestMessage}
-      statusMessageKind={connectionTestKind}
+      statusMessage={managedRuntimeOwnsStatusMessage
+        ? localizedConnectionStatus.label
+        : localizedConnectionTestMessage}
+      statusMessageKind={managedRuntimeOwnsStatusMessage
+        ? (connectionStatus.tone === "error" ? "error" : null)
+        : connectionTestKind}
     />
     {selectedProvider === "drifty" && driftyRoute === "local" ? (
       <div className="ai-model-resource-summary">

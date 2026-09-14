@@ -12,9 +12,13 @@ import {
 } from "./managedLocalAiClient";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 
+type StatusEventHandler = (event: { readonly payload: unknown }) => void;
+
 const clientMocks = vi.hoisted(() => ({
   getManagedLocalAiStatus: vi.fn(),
   listManagedLocalAiModels: vi.fn(),
+  listen: vi.fn(),
+  unlisten: vi.fn(),
 }));
 
 vi.mock("./managedLocalAiClient", async (importOriginal) => {
@@ -26,16 +30,28 @@ vi.mock("./managedLocalAiClient", async (importOriginal) => {
   };
 });
 
+vi.mock("@tauri-apps/api/event", () => ({ listen: clientMocks.listen }));
+
 const setLocalAiSetup = vi.fn<Dispatch<SetStateAction<LocalAiSetupState>>>();
 
 describe("useManagedLocalAiSetup background failures", () => {
+  let statusHandler: StatusEventHandler | null = null;
+
   beforeEach(() => {
+    statusHandler = null;
     clientMocks.getManagedLocalAiStatus.mockReset();
     clientMocks.listManagedLocalAiModels.mockReset();
+    clientMocks.listen.mockReset();
+    clientMocks.unlisten.mockReset();
+    clientMocks.listen.mockImplementation((_eventName: string, handler: StatusEventHandler) => {
+      statusHandler = handler;
+      return Promise.resolve(clientMocks.unlisten);
+    });
     setLocalAiSetup.mockClear();
   });
 
   afterEach(() => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     vi.useRealTimers();
   });
 
@@ -95,4 +111,38 @@ describe("useManagedLocalAiSetup background failures", () => {
     expect(clientMocks.getManagedLocalAiStatus).toHaveBeenCalledTimes(3);
     expect(result.current.status?.state).toBe("running");
   });
+
+  it("does not let an initial status read overwrite a newer native event", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    const initialStatus = deferred<ReturnType<typeof fallbackManagedLocalAiStatus>>();
+    clientMocks.listManagedLocalAiModels.mockResolvedValue(MANAGED_LOCAL_AI_FALLBACK_CATALOG);
+    clientMocks.getManagedLocalAiStatus.mockReturnValue(initialStatus.promise);
+    const running = {
+      ...installingManagedLocalAiStatus("drifty-qwen3-5-2b-economy"),
+      state: "running" as const,
+      baseUrl: "http://127.0.0.1:39217/v1",
+      model: "drifty-qwen3.5-2b-local",
+      message: "Managed local AI runtime is running.",
+    };
+
+    const { result } = renderHook(() => useManagedLocalAiSetup(true, setLocalAiSetup));
+    await waitFor(() => expect(statusHandler).not.toBeNull());
+
+    act(() => statusHandler?.({ payload: running }));
+    expect(result.current.status?.state).toBe("running");
+
+    await act(async () => {
+      initialStatus.resolve(fallbackManagedLocalAiStatus("Stale start failure."));
+      await initialStatus.promise;
+    });
+    expect(result.current.status?.state).toBe("running");
+  });
 });
+
+function deferred<T>() {
+  let resolvePromise!: (value: T) => void;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
+}

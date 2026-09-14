@@ -1,10 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use super::{
+    begin_runtime_status_monitor, finish_runtime_status_monitor,
     install_model_at_root_with_downloader, managed_ai_catalog, model_dir, model_resource_failure,
-    read_status, require_model, runtime, start_model_at_root, status_for_spec, write_status,
-    DownloadProgressWriteGate, ManagedAiDownloadProgress, ManagedAiError, ManagedAiInstallState,
-    ManagedAiModelSpec, ManagedAiStatusErrorKind, MANAGED_ASSETS_MISSING_MESSAGE,
+    read_status, require_model, runtime, runtime_status_monitor_is_current, start_model_at_root,
+    start_model_at_root_for_generation, status_for_spec, write_status, DownloadProgressWriteGate,
+    ManagedAiDownloadProgress, ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec,
+    ManagedAiStatusErrorKind, MANAGED_ASSETS_MISSING_MESSAGE,
 };
 
 mod runtime_tests;
@@ -25,6 +27,42 @@ fn catalog_uses_current_local_models() {
         labels,
         vec!["Qwen 3.5 2B", "Qwen 3.5 4B", "Gemma 4 12B", "Qwen 3.6 27B"]
     );
+}
+
+#[test]
+fn newer_runtime_monitor_generation_supersedes_stale_completion() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let first = begin_runtime_status_monitor(root.path());
+    let second = begin_runtime_status_monitor(root.path());
+
+    assert!(!runtime_status_monitor_is_current(root.path(), first));
+    assert!(runtime_status_monitor_is_current(root.path(), second));
+
+    finish_runtime_status_monitor(root.path(), first);
+    assert!(runtime_status_monitor_is_current(root.path(), second));
+
+    finish_runtime_status_monitor(root.path(), second);
+    assert!(!runtime_status_monitor_is_current(root.path(), second));
+}
+
+#[test]
+fn stale_queued_start_cannot_overwrite_the_newer_lifecycle_owner() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let stale = begin_runtime_status_monitor(root.path());
+    let current = begin_runtime_status_monitor(root.path());
+
+    let status = start_model_at_root_for_generation(
+        root.path(),
+        "drifty-qwen3-5-2b-economy",
+        None,
+        Some(stale),
+    )
+    .expect("return current status for superseded start");
+
+    assert!(matches!(status.state, ManagedAiInstallState::NotInstalled));
+    assert!(status.selected_model_id.is_none());
+    assert!(runtime_status_monitor_is_current(root.path(), current));
+    finish_runtime_status_monitor(root.path(), current);
 }
 
 #[test]
@@ -566,10 +604,8 @@ fn status_read_during_install_completion_does_not_report_interruption() {
     let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
     let active = super::ActiveInstallGuard::acquire(root.path(), spec.id)
         .unwrap_or_else(|_| panic!("acquire install ownership"));
-    let installing = super::status_for_download_progress(
-        spec,
-        ManagedAiDownloadProgress::from_counts(90, 100),
-    );
+    let installing =
+        super::status_for_download_progress(spec, ManagedAiDownloadProgress::from_counts(90, 100));
 
     let status = super::status::normalize_status_with_artifact_lookup(
         root.path(),

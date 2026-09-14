@@ -23,13 +23,15 @@ const AI_STATUS_TRANSLATION_KEYS = {
   "Model unavailable": "settings.ai.status.modelUnavailable",
   "Rate limited": "settings.ai.status.rateLimited",
   "Provider unavailable": "settings.ai.status.providerUnavailable",
+  Starting: "settings.ai.status.starting",
+  Downloading: "settings.ai.status.downloading",
   "Download failed": "settings.ai.status.downloadFailed",
   "Model missing": "settings.ai.status.modelMissing",
   "Memory needed": "settings.ai.status.memoryNeeded",
   "Storage needed": "settings.ai.status.storageNeeded",
   "Runtime missing": "settings.ai.status.runtimeMissing",
   "Start failed": "settings.ai.status.startFailed",
-  // Two independent producers reach this table. `managedLocalAiTopbarLabel`
+  // Two independent producers reach this table. The managed runtime resolver
   // emits "Issue" for an unclassified managed-local runtime error, while
   // `labelForIssueKind` emits "Provider error" for a provider HTTP failure.
   // They are different conditions and must not share a key.

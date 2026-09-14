@@ -9,7 +9,8 @@ import {
 } from "./managedLocalAiClient";
 
 const MANAGED_LOCAL_AI_STATUS_EVENT = "managed-ai-status";
-const DOWNLOAD_STATUS_POLL_MS = 500;
+const TRANSIENT_STATUS_POLL_MS = 500;
+const RUNNING_STATUS_POLL_MS = 5_000;
 
 /**
  * App-level view of the managed-local runtime.
@@ -76,10 +77,11 @@ export function useManagedLocalAiStatusObserver(enabled: boolean): ManagedLocalA
   }, [enabled, refresh]);
 
   useEffect(() => {
-    if (!enabled || status?.state !== "installing") return;
+    if (!enabled || !status || !isObservedRuntimeState(status.state)) return;
+    const pollMs = status.state === "running" ? RUNNING_STATUS_POLL_MS : TRANSIENT_STATUS_POLL_MS;
     const intervalId = window.setInterval(() => {
       void refresh();
-    }, DOWNLOAD_STATUS_POLL_MS);
+    }, pollMs);
     return () => window.clearInterval(intervalId);
   }, [enabled, refresh, status?.state]);
 
@@ -88,4 +90,8 @@ export function useManagedLocalAiStatusObserver(enabled: boolean): ManagedLocalA
 
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function isObservedRuntimeState(state: ManagedLocalAiStatus["state"]): boolean {
+  return state === "installing" || state === "starting" || state === "running";
 }

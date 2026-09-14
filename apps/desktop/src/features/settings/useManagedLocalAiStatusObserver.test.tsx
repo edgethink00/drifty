@@ -106,6 +106,30 @@ describe("useManagedLocalAiStatusObserver", () => {
     expect(result.current?.state).toBe("installed");
   });
 
+  it("keeps observing a runtime start until native status becomes running", async () => {
+    const starting = {
+      ...installingManagedLocalAiStatus("drifty-qwen3-5-2b-economy"),
+      state: "starting" as const,
+      baseUrl: "http://127.0.0.1:39217/v1",
+      model: "drifty-qwen3.5-2b-local",
+      message: "Managed local AI runtime is starting.",
+    };
+    const running = {
+      ...starting,
+      state: "running" as const,
+      message: "Managed local AI runtime is running.",
+    };
+    mocks.getManagedLocalAiStatus
+      .mockResolvedValueOnce(starting)
+      .mockResolvedValue(running);
+
+    const { result } = renderHook(() => useManagedLocalAiStatusObserver(true));
+
+    await waitFor(() => expect(result.current?.state).toBe("starting"));
+    await waitFor(() => expect(result.current?.state).toBe("running"), { timeout: 1_500 });
+    expect(mocks.getManagedLocalAiStatus).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores an initial status response after the observer is disabled", async () => {
     const initialStatus = deferred<ReturnType<typeof installingManagedLocalAiStatus>>();
     mocks.getManagedLocalAiStatus.mockReturnValueOnce(initialStatus.promise);
