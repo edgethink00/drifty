@@ -1071,10 +1071,11 @@
   text-align: center;
 }
 
-/* Use the same text box on both sides of the selected-row transition. */
+/* Use the same text box on both sides of the selected-row transition, with
+   enough leading for SF Mono's descenders inside the ellipsis clip. */
 .settings-select-control[data-placement="selected"] [data-select-label] {
   display: inline-block;
-  line-height: 1;
+  line-height: 1.2;
 }
 
 .settings-select-control[data-placement="selected"] .settings-select-control__option:has(.settings-select-control__option-description) {

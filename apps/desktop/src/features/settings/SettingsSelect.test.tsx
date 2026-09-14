@@ -223,6 +223,24 @@ describe("SettingsSelect selected-row placement", () => {
 
 
 describe("SettingsSelect popup integration", () => {
+  it("renders no partial control when the option list is empty", () => {
+    render(<SettingsSelect ariaLabel="Empty" value="" options={[]} onChange={vi.fn()} />);
+    expect(screen.queryByRole("combobox", { name: "Empty" })).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("dismisses an open popup when the control becomes disabled", () => {
+    const options = [{ value: "today", label: "Today" }];
+    const view = render(<SettingsSelect ariaLabel="Range" value="today" options={options} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("combobox", { name: "Range" }));
+    expect(screen.getByRole("listbox")).toBeTruthy();
+
+    view.rerender(<SettingsSelect ariaLabel="Range" value="today" options={options} disabled onChange={vi.fn()} />);
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Range" }).hasAttribute("disabled")).toBe(true);
+  });
+
   it("consumes Escape before it reaches a parent dialog", () => {
     const onParentKey = vi.fn();
     render(<div onKeyDown={onParentKey}><SettingsSelect ariaLabel="Range" value="today" options={[{ value: "today", label: "Today" }]} onChange={vi.fn()} /></div>);

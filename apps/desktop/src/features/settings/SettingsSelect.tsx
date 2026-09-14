@@ -184,7 +184,19 @@ export function SettingsSelect<TValue extends string>({
       // Measure the longest option including its check slot, independently of
       // the current trigger label and of the previous opening's inline width.
       menu.style.width = "max-content";
-      const width = Math.min(Math.max(anchor.width + 12, menu.getBoundingClientRect().width), Math.min(480, window.innerWidth - 16));
+      const measuredWidth = menu.getBoundingClientRect().width;
+      // WebKit can omit the trailing check slot from a percentage-width flex
+      // row's max-content contribution. The label then receives a box that is
+      // narrower than its own scroll width even though the popup has room.
+      // Recover that hidden width and round up fractional layout measurements.
+      const hiddenLabelOverflow = Array.from(
+        menu.querySelectorAll<HTMLElement>(".settings-select-control__option-label"),
+      ).reduce((largest, label) => Math.max(largest, label.scrollWidth - label.clientWidth), 0);
+      const naturalWidth = measuredWidth + Math.max(0, hiddenLabelOverflow);
+      const width = Math.min(
+        Math.ceil(Math.max(anchor.width + 12, naturalWidth)),
+        Math.min(480, window.innerWidth - 16),
+      );
       menu.style.width = `${width}px`;
       let height = menu.getBoundingClientRect().height;
       // Match rendered text rather than row centers: borders, padding and
