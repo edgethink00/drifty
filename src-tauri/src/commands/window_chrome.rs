@@ -14,6 +14,75 @@ const ONBOARDING_CARD_HEIGHT: f64 = 540.0;
 /// Minimum window size from tauri.conf.json, restored once onboarding exits.
 const DEFAULT_MIN_WIDTH: f64 = 960.0;
 const DEFAULT_MIN_HEIGHT: f64 = 680.0;
+/// Default sizes on either side of the dashboard's 804px compact boundary.
+const DEFAULT_MAIN_WINDOW_WIDTH: f64 = 1254.0;
+const DEFAULT_MAIN_WINDOW_COMPACT_HEIGHT: f64 = 800.0;
+const DEFAULT_MAIN_WINDOW_ROOMY_HEIGHT: f64 = 809.0;
+/// A roomy default should not merely fit: it should leave about 80 logical
+/// pixels on both sides of each axis when centered. This separates spacious
+/// work areas from tighter ones without relying on model names or physical
+/// diagonal size.
+const DEFAULT_MAIN_WINDOW_ROOMY_HEADROOM: f64 = 160.0;
+
+fn work_area_supports_roomy_default(work_area_width: f64, work_area_height: f64) -> bool {
+    work_area_width >= DEFAULT_MAIN_WINDOW_WIDTH + DEFAULT_MAIN_WINDOW_ROOMY_HEADROOM
+        && work_area_height >= DEFAULT_MAIN_WINDOW_ROOMY_HEIGHT + DEFAULT_MAIN_WINDOW_ROOMY_HEADROOM
+}
+
+fn calibrated_main_window_size(work_area_width: f64, work_area_height: f64) -> LogicalSize<f64> {
+    let preferred_height = if work_area_supports_roomy_default(work_area_width, work_area_height) {
+        DEFAULT_MAIN_WINDOW_ROOMY_HEIGHT
+    } else {
+        DEFAULT_MAIN_WINDOW_COMPACT_HEIGHT
+    };
+
+    LogicalSize::new(
+        DEFAULT_MAIN_WINDOW_WIDTH.min(work_area_width.max(DEFAULT_MIN_WIDTH)),
+        preferred_height.min(work_area_height.max(DEFAULT_MIN_HEIGHT)),
+    )
+}
+
+/// Fit the hidden main window to the monitor's current safe work area before
+/// it is revealed. This is intentionally a launch-time default, not a listener:
+/// moving displays or resizing the window remains fully under user control.
+pub(crate) fn calibrate_main_window_to_work_area(app: &AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+            return Ok(());
+        };
+        let monitor = match window.current_monitor() {
+            Ok(Some(monitor)) => Some(monitor),
+            Ok(None) | Err(_) => window
+                .primary_monitor()
+                .map_err(|error| error.to_string())?,
+        };
+        let Some(monitor) = monitor else {
+            return Ok(());
+        };
+        let work_area = monitor
+            .work_area()
+            .size
+            .to_logical::<f64>(monitor.scale_factor());
+        let target = calibrated_main_window_size(work_area.width, work_area.height);
+        let scale = window.scale_factor().map_err(|error| error.to_string())?;
+        let current = window
+            .inner_size()
+            .map_err(|error| error.to_string())?
+            .to_logical::<f64>(scale);
+
+        if (current.width - target.width).abs() > 0.5
+            || (current.height - target.height).abs() > 0.5
+        {
+            window.set_size(target).map_err(|error| error.to_string())?;
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+
+    Ok(())
+}
 
 /// Remembers the window size from before compact onboarding so it can be
 /// restored afterwards.
@@ -133,4 +202,40 @@ pub fn window_set_theme_appearance(app: AppHandle, dark: bool) -> Result<(), Str
         let _ = window.set_theme(Some(if dark { Theme::Dark } else { Theme::Light }));
     })
     .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_size(actual: LogicalSize<f64>, width: f64, height: f64) {
+        assert_eq!(actual.width, width);
+        assert_eq!(actual.height, height);
+    }
+
+    #[test]
+    fn roomy_work_areas_use_the_six_rank_default() {
+        assert_size(calibrated_main_window_size(1680.0, 1084.0), 1254.0, 809.0);
+        assert_size(calibrated_main_window_size(1920.0, 1080.0), 1254.0, 809.0);
+        assert_size(calibrated_main_window_size(1414.0, 969.0), 1254.0, 809.0);
+    }
+
+    #[test]
+    fn either_missing_headroom_keeps_the_five_rank_default() {
+        assert_size(calibrated_main_window_size(1413.0, 1084.0), 1254.0, 800.0);
+        assert_size(calibrated_main_window_size(1680.0, 968.0), 1254.0, 800.0);
+    }
+
+    #[test]
+    fn compact_work_areas_use_the_safe_area_without_creating_avoidable_scroll() {
+        assert_size(calibrated_main_window_size(1280.0, 800.0), 1254.0, 800.0);
+        assert_size(calibrated_main_window_size(1100.0, 760.0), 1100.0, 760.0);
+    }
+
+    #[test]
+    fn undersized_work_areas_never_break_the_existing_minimum() {
+        assert_size(calibrated_main_window_size(980.0, 700.0), 980.0, 700.0);
+        assert_size(calibrated_main_window_size(900.0, 640.0), 960.0, 680.0);
+        assert_size(calibrated_main_window_size(0.0, 0.0), 960.0, 680.0);
+    }
 }

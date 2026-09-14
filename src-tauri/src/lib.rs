@@ -94,7 +94,8 @@ use commands::{
     watcher_peek_end_of_day_review_action, watcher_peek_end_of_day_review_displayed,
     watcher_peek_extreme_nudge_action, watcher_peek_hide, watcher_peek_respond,
     watcher_peek_set_interactive, watcher_peek_show,
-    window_set_onboarding_presentation, window_set_theme_appearance,
+    calibrate_main_window_to_work_area, window_set_onboarding_presentation,
+    window_set_theme_appearance,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
@@ -590,6 +591,11 @@ pub fn run() {
     let app_result = builder
         .setup(|app| {
             setup_app_menu(app.handle())?;
+            if let Err(error) = calibrate_main_window_to_work_area(app.handle()) {
+                // The configured 1254×800 fallback is already usable. Monitor
+                // discovery is a launch refinement and must not block startup.
+                eprintln!("could not calibrate initial main-window size: {error}");
+            }
             setup_watcher_window(app)?;
             setup_companion_pill_window(app)?;
             setup_pet_mode_window(app)?;
