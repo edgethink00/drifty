@@ -710,7 +710,7 @@ describe("App auth modal", () => {
     await openAuthModalFromAccountMenu();
 
     const dialog = screen.getByRole("dialog", { name: /sign in to drifty/i });
-    expect((within(dialog).getByRole("button", { name: /continue with google/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(dialog).getByRole("button", { name: /opening/i }) as HTMLButtonElement).disabled).toBe(true);
 
     authState.callbackStatus = {
       phase: "waiting",
@@ -756,7 +756,8 @@ describe("App auth modal", () => {
 
     expect(screen.queryByText(/sign-in link was incomplete or expired/i)).toBeNull();
     const dialog = screen.getByRole("dialog", { name: /sign in to drifty/i });
-    expect(within(dialog).getByRole("status").textContent).toMatch(/browser opened/i);
+    // In-flight progress is carried by the button label, not a notice box.
+    expect(within(dialog).queryByRole("status")).toBeNull();
     expect(screen.queryByRole("button", { name: /dismiss callback notice/i })).toBeNull();
   });
 });

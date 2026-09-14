@@ -376,7 +376,8 @@ describe("App onboarding cloud login", () => {
 
     await advanceToAccountStep();
 
-    expect(screen.getByRole("status").textContent).toContain("Browser opened. Waiting for sign-in to return to Drifty.");
+    // Progress is carried by the button itself; no notice box appears.
+    expect(screen.queryByRole("status")).toBeNull();
     const reopenButton = screen.getByRole("button", { name: /open google sign-in again/i }) as HTMLButtonElement;
     expect(reopenButton.disabled).toBe(false);
   });
@@ -392,7 +393,7 @@ describe("App onboarding cloud login", () => {
     const { rerender } = render(<App />);
     await advanceToAccountStep();
 
-    expect((screen.getByRole("button", { name: /continue with google/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /opening/i }) as HTMLButtonElement).disabled).toBe(true);
 
     authState.callbackStatus = {
       phase: "received",
@@ -400,7 +401,7 @@ describe("App onboarding cloud login", () => {
       method: "google",
     };
     rerender(<App />);
-    expect((screen.getByRole("button", { name: /continue with google/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /opening/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows Google browser handoff failures on the account onboarding step", async () => {

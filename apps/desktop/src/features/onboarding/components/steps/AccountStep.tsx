@@ -49,16 +49,20 @@ export function AccountStep({
     || authCallbackStatus?.phase === "received"
     || authCallbackStatus?.phase === "exchanging"
     || authCallbackStatus?.phase === "completed";
-  const googleButtonLabel = authCallbackStatus?.googleAction === "reopen"
-    ? t("onboarding.account.reopenGoogle")
-    : authCallbackStatus?.googleAction === "retry"
-      ? t("onboarding.account.retryGoogle")
-      : t("onboarding.account.google");
-  const callbackNoticeRole = authCallbackStatus?.phase === "failed" ? "alert" : "status";
-  const callbackNoticeClassName = [
-    "dc-onb-account__callback",
-    authCallbackStatus?.phase === "failed" ? "dc-onb-account__callback--failed" : "",
-  ].filter(Boolean).join(" ");
+  // Progress lives inside the button (spinner + label) so the layout never
+  // shifts; the notice box below the buttons is reserved for failures, where
+  // the message carries a recovery action.
+  const isGoogleOpening = authCallbackStatus?.googleAction === "opening"
+    || authCallbackStatus?.phase === "received"
+    || authCallbackStatus?.phase === "exchanging";
+  const googleButtonLabel = isGoogleOpening
+    ? t("onboarding.account.opening")
+    : authCallbackStatus?.googleAction === "reopen"
+      ? t("onboarding.account.reopenGoogle")
+      : authCallbackStatus?.googleAction === "retry"
+        ? t("onboarding.account.retryGoogle")
+        : t("onboarding.account.google");
+  const showCallbackNotice = authCallbackStatus?.phase === "failed";
   const showPromoEntry = expectsPromotion && !accountConnected && onStartCloudTrialWithWebsite !== undefined;
   const showCheckingState = accountAccessState === "checking";
   const showDeferredState = accountAccessState === "verification-deferred";
@@ -131,7 +135,7 @@ export function AccountStep({
               onClick={onStartCloudTrialWithGoogle}
               disabled={isGoogleHandoffBusy || isCloudUnavailable}
             >
-              <GoogleMark />
+              {isGoogleOpening ? <SpinnerIcon /> : <GoogleMark />}
               <span>{googleButtonLabel}</span>
             </button>
           )}
@@ -147,7 +151,7 @@ export function AccountStep({
               onClick={onStartCloudTrialWithGoogle}
               disabled={isGoogleHandoffBusy || isCloudUnavailable}
             >
-              <GoogleMark />
+              {isGoogleOpening ? <SpinnerIcon /> : <GoogleMark />}
               <span>{googleButtonLabel}</span>
             </button>
           ) : null}
@@ -161,8 +165,8 @@ export function AccountStep({
           </button>
         </div>
       )}
-      {!accountConnected && authCallbackStatus ? (
-        <div className={callbackNoticeClassName} role={callbackNoticeRole}>
+      {!accountConnected && showCallbackNotice && authCallbackStatus ? (
+        <div className="dc-onb-account__callback dc-onb-account__callback--failed" role="alert">
           {authCallbackStatus.message}
         </div>
       ) : null}

@@ -272,11 +272,20 @@ export function AuthModal({
     || callbackStatus?.phase === "received"
     || callbackStatus?.phase === "exchanging"
     || callbackStatus?.phase === "completed";
-  const googleButtonLabel = callbackStatus?.googleAction === "reopen"
-    ? t("auth.modal.reopenGoogle")
-    : callbackStatus?.googleAction === "retry"
-      ? t("auth.modal.retryGoogle")
-      : t("auth.modal.continueGoogle");
+  // While the OAuth handoff is in flight the button carries the progress
+  // itself; the notice is kept for failures only, so a normal sign-in never
+  // pushes the form down.
+  const isGoogleHandoffInFlight = isGoogleSubmitting
+    || callbackStatus?.googleAction === "opening"
+    || callbackStatus?.phase === "received"
+    || callbackStatus?.phase === "exchanging";
+  const googleButtonLabel = isGoogleHandoffInFlight
+    ? t("auth.modal.opening")
+    : callbackStatus?.googleAction === "reopen"
+      ? t("auth.modal.reopenGoogle")
+      : callbackStatus?.googleAction === "retry"
+        ? t("auth.modal.retryGoogle")
+        : t("auth.modal.continueGoogle");
   const title = isRecoveryView
     ? t("auth.modal.recoveryTitle")
     : intent === "promo"
@@ -299,26 +308,20 @@ export function AuthModal({
   const successNotice = notice && !isRecoveryAwaiting ? (
     <div className="auth-modal__success" role="status">{notice}</div>
   ) : null;
-  const callbackNotice = callbackStatus ? (
-    callbackStatus.phase === "failed" ? (
-      <div className="auth-modal__callback-notice" role="status">
-        <span>{callbackStatus.errorCode === "password-recovery-cancel-failed"
-          ? t("auth.modal.recoveryCancelCleanupError")
-          : callbackStatus.message}</span>
-        <button
-          type="button"
-          className="auth-modal__callback-dismiss"
-          onClick={clearCallbackStatus}
-          aria-label={t("auth.modal.dismissCallback")}
-        >
-          {t("auth.modal.dismiss")}
-        </button>
-      </div>
-    ) : (
-      <div className="auth-modal__success" role="status">
-        {callbackStatus.message}
-      </div>
-    )
+  const callbackNotice = callbackStatus?.phase === "failed" ? (
+    <div className="auth-modal__callback-notice" role="status">
+      <span>{callbackStatus.errorCode === "password-recovery-cancel-failed"
+        ? t("auth.modal.recoveryCancelCleanupError")
+        : callbackStatus.message}</span>
+      <button
+        type="button"
+        className="auth-modal__callback-dismiss"
+        onClick={clearCallbackStatus}
+        aria-label={t("auth.modal.dismissCallback")}
+      >
+        {t("auth.modal.dismiss")}
+      </button>
+    </div>
   ) : null;
   const activePasswordVisible = isRecoveryAwaiting ? recoveryPasswordVisible : passwordVisible;
   const passwordToggleLabel = activePasswordVisible
@@ -568,8 +571,8 @@ export function AuthModal({
                         onClick={() => void handleGoogleSignIn()}
                         disabled={isBusy || isGoogleCallbackBusy || isCloudUnavailable}
                       >
-                        <GoogleMark />
-                        {isGoogleSubmitting ? t("auth.modal.opening") : googleButtonLabel}
+                        {isGoogleHandoffInFlight ? <span className="dc-onb-spinner" aria-hidden="true" /> : <GoogleMark />}
+                        {googleButtonLabel}
                       </button>
                     ) : null}
 
@@ -656,8 +659,8 @@ export function AuthModal({
               onClick={() => void handleGoogleSignIn()}
               disabled={isBusy || isGoogleCallbackBusy || isCloudUnavailable}
             >
-              <GoogleMark />
-              {isGoogleSubmitting ? t("auth.modal.opening") : googleButtonLabel}
+              {isGoogleHandoffInFlight ? <span className="dc-onb-spinner" aria-hidden="true" /> : <GoogleMark />}
+              {googleButtonLabel}
             </button>
           </>
         ) : null}

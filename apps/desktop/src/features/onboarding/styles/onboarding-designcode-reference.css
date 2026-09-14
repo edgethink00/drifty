@@ -327,6 +327,14 @@
   font-weight: 600;
 }
 
+/* The Google button swaps its mark for a spinner while the browser handoff is
+   in flight. The base spinner token is tuned for light surfaces, so the track
+   ring is re-keyed to the button's own foreground colour. */
+.dc-onb-account__google .dc-onb-spinner {
+  border-color: color-mix(in srgb, currentColor 34%, transparent);
+  border-top-color: currentColor;
+}
+
 .dc-onb-account__google:disabled,
 .dc-onb-account__email:disabled {
   cursor: default;
