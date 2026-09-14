@@ -2755,9 +2755,17 @@
     grid-template-rows: auto minmax(12rem, 1fr) auto;
   }
   .insights-fit-window .insights-stacked__patterns:not(:has(.alarm-follow-through)) {
-    grid-template-rows: minmax(12rem, 1fr) auto;
+    /* With no alarm result, keep the rhythm useful without letting it absorb
+       the entire height of the right rail. The source lists then follow at
+       their natural height, preserving the selected balanced composition. */
+    align-self: start;
+    grid-template-rows: auto auto;
   }
   .insights-fit-window #insights-weekly-attention-rhythm { height: 100%; }
+  .insights-fit-window .insights-stacked__patterns:not(:has(.alarm-follow-through)) #insights-weekly-attention-rhythm {
+    height: 15rem;
+    min-height: 15rem;
+  }
   .insights-fit-window .insights-stacked__columns { align-items: stretch; }
   .insights-fit-window[data-calendar-placement="right-bottom"] .insights-stacked__breakdown {
     grid-template-rows: auto minmax(0, 1fr);
