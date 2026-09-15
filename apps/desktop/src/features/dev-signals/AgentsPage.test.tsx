@@ -619,6 +619,19 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(scroller.scrollTop).toBe(123);
   });
 
+  it("keeps weekday labels outside the vertical week scroller", () => {
+    renderAgentsPage();
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+
+    const calendar = document.querySelector(".agents-week-calendar");
+    const board = calendar?.querySelector(".week-v2-calendar__board");
+    const scroller = calendar?.querySelector(".week-v2-calendar__scroller");
+    const dayHead = calendar?.querySelector(".week-v2-calendar__day-head");
+
+    expect(board?.contains(dayHead ?? null)).toBe(true);
+    expect(scroller?.contains(dayHead ?? null)).toBe(false);
+  });
+
   it("rotates Day and Week from the configured day start and shows the live time", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 7, 28, 9, 17, 0));

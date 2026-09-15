@@ -18,6 +18,7 @@ import {
 import { buildWeekActivityInspectorEvent } from "./weekActivityInspectorEvent";
 import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
+import { WeekCalendarBoard } from "./weekCalendarBoard";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
@@ -647,7 +648,7 @@ export function WeekDashboard({
               <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
             ) : null}
           </div>
-          <div ref={calendarScrollerRef} className="week-v2-calendar__scroller">
+          <WeekCalendarBoard scrollerRef={calendarScrollerRef}>
             <div className="week-v2-calendar__day-head" aria-hidden={onSelectDay ? undefined : true}>
               <span aria-hidden="true" />
               {calendarRows.map((row) => {
@@ -674,7 +675,8 @@ export function WeekDashboard({
                 );
               })}
             </div>
-            <div ref={setCalendarBody} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
+            <div ref={calendarScrollerRef} className="week-v2-calendar__scroller">
+              <div ref={setCalendarBody} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
               <div className="week-v2-calendar__time-rail">
                 {calendarHours.map((hour) => (
                   <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }}>{formatLocalizedHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes), effectiveLanguage)}</span>
@@ -814,8 +816,9 @@ export function WeekDashboard({
                   <span className="week-v2-calendar__now-label">{currentCalendarLabel}</span>
                 </div>
               ) : null}
+              </div>
             </div>
-          </div>
+          </WeekCalendarBoard>
         </section>
         <WeekCalendarHoverLayer
           appIcons={appIcons}

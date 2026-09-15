@@ -193,6 +193,7 @@
   background: color-mix(in srgb, var(--text-soft) 14%, var(--surface));
 }
 
+.dashboard-loading-skeleton--week .week-v2-calendar__board,
 .dashboard-loading-skeleton--week .week-v2-calendar__scroller {
   pointer-events: none;
 }

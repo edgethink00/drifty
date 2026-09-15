@@ -46,6 +46,7 @@ import {
 import { BreakdownSidePanel } from "../dashboard/BreakdownSidePanelChrome";
 import { getDashboardPeriodRange, shiftDashboardPeriodDay } from "../dashboard/dashboardPeriods";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "../dashboard/weekDashboardAxisScale";
+import { WeekCalendarBoard } from "../dashboard/weekCalendarBoard";
 import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type StartOfWeek } from "../settings/settingsStorage";
 import { FlowDetailSelect } from "../flow-chart/FlowDetailSelect";
 import { FlowChartGrid } from "../flow-chart/FlowChartGrid";
@@ -916,7 +917,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
             <AgentsTimelineLegend entries={legendEntries} />
           </div>
         </div>
-        <div className="week-v2-calendar__scroller" ref={calendarScrollerRef}>
+        <WeekCalendarBoard scrollerRef={calendarScrollerRef}>
           <div className="week-v2-calendar__day-head" aria-hidden="true">
             <span />
             {week.days.map((day) => {
@@ -931,6 +932,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
               );
             })}
           </div>
+          <div className="week-v2-calendar__scroller" ref={calendarScrollerRef}>
           <div className="week-v2-calendar__body" ref={setCalendarBodyElement} style={{ height: formatWeekDashboardAxisPixelValue(24 * AGENTS_WEEK_HOUR_HEIGHT) }}>
             <div className="week-v2-calendar__time-rail">
               {Array.from({ length: 24 }, (_, hour) => (
@@ -1030,7 +1032,8 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
               </div>
             ) : null}
           </div>
-        </div>
+          </div>
+        </WeekCalendarBoard>
       </section>
       <AgentsHoverLayer bodyElement={calendarBodyElement} detailsById={hoverDetailsById} />
     </>

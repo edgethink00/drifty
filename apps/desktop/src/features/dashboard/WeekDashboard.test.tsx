@@ -242,6 +242,47 @@ describe("WeekDashboard day navigation", () => {
   });
 });
 
+describe("WeekDashboard calendar board", () => {
+  it("keeps weekday labels outside the vertical timeline scroller", () => {
+    const { container } = renderWeekDashboard();
+    const board = container.querySelector(".week-v2-calendar__board");
+    const scroller = container.querySelector(".week-v2-calendar__scroller");
+    const dayHead = container.querySelector(".week-v2-calendar__day-head");
+    const body = container.querySelector(".week-v2-calendar__body");
+
+    expect(board).toBeTruthy();
+    expect(scroller).toBeTruthy();
+    expect(dayHead).toBeTruthy();
+    expect(body).toBeTruthy();
+    expect(board?.contains(dayHead)).toBe(true);
+    expect(board?.contains(scroller)).toBe(true);
+    expect(scroller?.contains(dayHead)).toBe(false);
+    expect(scroller?.contains(body)).toBe(true);
+  });
+
+  it("splits overflow so only the timeline can rubber-band vertically", () => {
+    const boardRules = Array.from(
+      styles.matchAll(/\.week-v2-calendar__board\s*\{(?<body>[^}]*)\}/g),
+      (match) => match.groups?.body ?? "",
+    );
+    const scrollerRules = Array.from(
+      styles.matchAll(/\.week-v2-calendar__scroller\s*\{(?<body>[^}]*)\}/g),
+      (match) => match.groups?.body ?? "",
+    );
+    const dayHeadRules = Array.from(
+      styles.matchAll(/\.week-v2-calendar__day-head\s*\{(?<body>[^}]*)\}/g),
+      (match) => match.groups?.body ?? "",
+    );
+
+    expect(boardRules.some((rule) => /overflow-x:\s*auto;/.test(rule) && /overflow-y:\s*hidden;/.test(rule))).toBe(true);
+    expect(scrollerRules.some((rule) => /overflow-x:\s*hidden;/.test(rule) && /overflow-y:\s*auto;/.test(rule))).toBe(true);
+    expect(dayHeadRules.every((rule) => !/position:\s*sticky;/.test(rule))).toBe(true);
+    expect(scrollerRules.every((rule) => !/overflow-x:\s*auto;/.test(rule))).toBe(true);
+    expect(scrollerRules.some((rule) => /overscroll-behavior-y:\s*auto;/.test(rule))).toBe(true);
+    expect(boardRules.every((rule) => !/overscroll-behavior-y:\s*none;/.test(rule))).toBe(true);
+  });
+});
+
 describe("WeekDashboard axis scale", () => {
   it("renders planned Calendar time as an outlined layer separate from captured activity", () => {
     const googleCalendarEvents = new Map<string, GoogleCalendarWeekEvent[]>([[
