@@ -144,6 +144,7 @@ type WeekDashboardRenderOverrides = {
   readonly startDay?: string;
   readonly endDay?: string;
   readonly onSaveActivityValues?: ActivityInspectorSaveHandler;
+  readonly onSelectDay?: (day: string) => void;
   readonly onToggleSide?: () => void;
   readonly onAssignProject?: (
     segments: readonly ActivitySegment[],
@@ -210,6 +211,34 @@ describe("WeekDashboard virtual current marker", () => {
 
     expect(screen.queryByLabelText(/Current time/)).toBeNull();
     expect(container.querySelector(".week-v2-calendar__now-marker--line")).toBeNull();
+  });
+});
+
+describe("WeekDashboard day navigation", () => {
+  it("keeps the legacy noninteractive day header out of the accessibility tree", () => {
+    const { container } = renderWeekDashboard();
+
+    expect(container.querySelector(".week-v2-calendar__day-head")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("opens past day headers and disables future dates", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2024, 0, 3, 12, 0, 0, 0));
+    const onSelectDay = vi.fn();
+
+    try {
+      renderWeekDashboard({ onSelectDay });
+
+      expect(document.querySelector(".week-v2-calendar__day-head")?.hasAttribute("aria-hidden")).toBe(false);
+      const monday = screen.getByRole("button", { name: "Open Mon, Jan 1 in Day view" });
+      const thursday = screen.getByRole("button", { name: "Open Thu, Jan 4 in Day view" });
+      fireEvent.click(monday);
+
+      expect(onSelectDay).toHaveBeenCalledWith("2024-01-01");
+      expect((thursday as HTMLButtonElement).disabled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -1527,6 +1556,7 @@ describe("WeekDashboard breakdown panel", () => {
         startDay="2024-01-01"
         startOfDayMinutes={0}
         totalSeconds={1200}
+        onSelectDay={vi.fn()}
       />,
     );
     const tiedTiles = container.querySelectorAll<HTMLElement>('[aria-label="Week summary metrics"] .metric-tile');

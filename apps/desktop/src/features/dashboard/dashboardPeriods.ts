@@ -58,6 +58,14 @@ export function shiftDashboardPeriodDay(day: string, period: DashboardPeriod, di
   return shiftIsoDate(day, direction);
 }
 
+export function resolveDashboardPeriodAnchorDay(
+  selectedDay: string,
+  todayDay: string,
+  period: "Today" | "Week",
+): string {
+  return period === "Today" && selectedDay > todayDay ? todayDay : selectedDay;
+}
+
 export function getSafeClassificationNavigationDay(
   day: string,
   range: ClassificationRange,

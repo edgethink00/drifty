@@ -198,6 +198,11 @@
   min-width: 0;
 }
 
+.sidebar--collapsed .sidebar-nav-divider {
+  width: 24px;
+  margin: 8px auto 6px;
+}
+
 .sidebar--collapsed .brand,
 .sidebar--collapsed .nav-label,
 .sidebar--collapsed .sidebar-nav,

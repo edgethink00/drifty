@@ -16,6 +16,8 @@ export const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
 
 export const DASHBOARD_BREAKDOWN_OPEN_STORAGE_KEY = "drifty.dashboard.breakdownOpen";
 
+export const DASHBOARD_PERIOD_STORAGE_KEY = "drifty.dashboard.period.v1";
+
 export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
 export const AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY = "drifty.dev.disableAiAvailabilityGate";
 export const BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY = "drifty.classification.builtInHeuristicsUnavailableSince.v1";
@@ -29,6 +31,7 @@ export const WEB_ACCOUNT_PREVIEW_STORAGE_KEY = "drifty.dev.webAccountPreview";
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
 export const AGENTS_BETA_STORAGE_KEY = "drifty.dev.agentsBeta";
+export const NAVIGATION_REFRESH_STORAGE_KEY = "drifty.dev.navigationRefresh";
 export const FLOATING_COMPANION_DEV_STORAGE_KEY = "drifty.dev.floatingCompanion";
 export const ENHANCED_CONTEXT_ENABLED_STORAGE_KEY = "drifty.dev.enhancedContext.enabled";
 export const ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY = "drifty.dev.enhancedContext.captureLocal";
@@ -434,7 +437,7 @@ export function resolveInitialSidebarCollapsed(): boolean {
   return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
 }
 
-// One preference shared by Your Day and Your Week: the Breakdown side panel
+// One preference shared by Calendar Day and Week: the Breakdown side panel
 // reads as a single surface across both dashboards, so collapsing it anywhere
 // collapses it everywhere, including across relaunches. Open by default.
 export function resolveInitialDashboardBreakdownOpen(): boolean {
@@ -445,6 +448,24 @@ export function resolveInitialDashboardBreakdownOpen(): boolean {
 export function persistDashboardBreakdownOpen(open: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(DASHBOARD_BREAKDOWN_OPEN_STORAGE_KEY, open ? "1" : "0");
+}
+
+export function resolveInitialDashboardPeriod(): "Today" | "Week" {
+  if (typeof window === "undefined") return "Today";
+  try {
+    return window.localStorage.getItem(DASHBOARD_PERIOD_STORAGE_KEY) === "Week" ? "Week" : "Today";
+  } catch {
+    return "Today";
+  }
+}
+
+export function persistDashboardPeriod(period: "Today" | "Week"): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DASHBOARD_PERIOD_STORAGE_KEY, period);
+  } catch {
+    // Persistence is optional; a blocked storage API must not block navigation.
+  }
 }
 
 export function resolveInitialAiClassificationVisibility(): boolean {
@@ -532,8 +553,13 @@ export function resolveInitialProfileBetaEnabled(): boolean {
   return window.localStorage.getItem(PROFILE_BETA_STORAGE_KEY) === "1";
 }
 
-/** Your Agents stays a Dev preview: it reads local agent session logs and git
- *  history, so it only appears once a developer opts in. */
+/** The navigation refresh ships dark: only Dev mode can opt into the new IA. */
+export function resolveInitialNavigationRefreshEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(NAVIGATION_REFRESH_STORAGE_KEY) === "1";
+}
+
+/** Your Agents remains independently available in the legacy navigation. */
 export function resolveInitialAgentsBetaEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(AGENTS_BETA_STORAGE_KEY) === "1";

@@ -7,12 +7,13 @@ import type { UseTeamControllerResult } from "./useTeamController";
 import type { TeamProjectsSubView } from "./useTeamProjects";
 
 export type TeamsBetaSurfaceProps = {
+  readonly navigationRefreshEnabled: boolean;
   readonly hasRequiredAccountAuth: boolean;
   readonly isPolicySignedIn: boolean;
   readonly isSupabaseConfigured: boolean;
   readonly startOfDayMinutes: number;
   readonly user: AuthState["user"];
-  /** Owned by App so the sidebar team nav can share the same team list. */
+  /** Owned by App so route gating and team invite deep links share one controller. */
   readonly controller: UseTeamControllerResult;
   readonly teamSubView: TeamProjectsSubView;
   readonly onTeamSubViewChange: (subView: TeamProjectsSubView) => void;
@@ -24,6 +25,7 @@ export type TeamsBetaSurfaceProps = {
 };
 
 export function TeamsBetaSurface({
+  navigationRefreshEnabled,
   hasRequiredAccountAuth,
   isPolicySignedIn,
   isSupabaseConfigured,
@@ -46,6 +48,7 @@ export function TeamsBetaSurface({
   return (
     <div className="page content content--team">
       <TeamWorkspace
+        navigationRefreshEnabled={navigationRefreshEnabled}
         isSupabaseEnabled={isSupabaseConfigured}
         hasRequiredAccountAuth={hasRequiredAccountAuth}
         isSignedIn={isPolicySignedIn}

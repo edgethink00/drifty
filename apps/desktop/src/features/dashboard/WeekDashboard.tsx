@@ -3,7 +3,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
-import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
+import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedDuration, formatLocalizedHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
@@ -207,6 +207,7 @@ type WeekDashboardProps = {
    *  one preference; standalone renders (tests) fall back to open. */
   readonly sideOpen?: boolean;
   readonly onToggleSide?: () => void;
+  readonly onSelectDay?: (day: string) => void;
   readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly activityActionsEnabled?: boolean;
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
@@ -269,6 +270,7 @@ export function WeekDashboard({
   axisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
   sideOpen: controlledSideOpen,
   onToggleSide,
+  onSelectDay,
   deviceLabelById,
   activityActionsEnabled = false,
   projectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
@@ -646,12 +648,25 @@ export function WeekDashboard({
             ) : null}
           </div>
           <div ref={calendarScrollerRef} className="week-v2-calendar__scroller">
-            <div className="week-v2-calendar__day-head" aria-hidden="true">
-              <span />
+            <div className="week-v2-calendar__day-head" aria-hidden={onSelectDay ? undefined : true}>
+              <span aria-hidden="true" />
               {calendarRows.map((row) => {
                 const weekday = new Date(`${row.day}T12:00:00`).getDay();
                 const isWeekend = weekday === 0 || weekday === 6;
-                return (
+                const dayLabel = formatLocalizedDayLabel(row.day, effectiveLanguage);
+                return onSelectDay ? (
+                  <button
+                    type="button"
+                    className={`${isWeekend ? "is-weekend" : ""}${row.day === markerCalendarDay ? " is-today" : ""}`.trim()}
+                    key={row.day}
+                    disabled={row.day > todayDay}
+                    aria-label={t("dashboard.week.openDay", { date: dayLabel })}
+                    onClick={() => onSelectDay(row.day)}
+                  >
+                    <strong>{new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${row.day}T12:00:00`))}</strong>
+                    <small>{row.dayNumber}</small>
+                  </button>
+                ) : (
                   <span className={`${isWeekend ? "is-weekend" : ""}${row.day === markerCalendarDay ? " is-today" : ""}`.trim()} key={row.day}>
                     <strong>{new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${row.day}T12:00:00`))}</strong>
                     <small>{row.dayNumber}</small>

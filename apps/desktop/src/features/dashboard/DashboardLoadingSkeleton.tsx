@@ -1,24 +1,27 @@
+import type { ReactNode } from "react";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { useLocalization } from "../localization/LocalizationContext";
 import { MonthDashboardLoadingSkeleton } from "./DashboardPeriodLoadingSkeletons";
 
 type DashboardLoadingSkeletonProps = {
   readonly dashPeriod: Exclude<DashboardPeriod, "Week">;
+  readonly header?: ReactNode;
 };
 
-export function DashboardLoadingSkeleton({ dashPeriod }: DashboardLoadingSkeletonProps) {
+export function DashboardLoadingSkeleton({ dashPeriod, header }: DashboardLoadingSkeletonProps) {
   if (dashPeriod === "Month") {
     return <MonthDashboardLoadingSkeleton />;
   }
 
-  return <TodayDashboardLoadingSkeleton />;
+  return <TodayDashboardLoadingSkeleton header={header} />;
 }
 
-function TodayDashboardLoadingSkeleton() {
+function TodayDashboardLoadingSkeleton({ header }: { readonly header?: ReactNode }) {
   const { t } = useLocalization();
 
   return (
     <>
+      {header}
       <div
         className="flow-breakdown-layout dashboard-loading-skeleton dashboard-loading-skeleton--today"
         role="status"

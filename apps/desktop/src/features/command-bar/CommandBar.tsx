@@ -6,6 +6,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 
 export interface CommandBarProps {
   readonly includeProjects: boolean;
+  readonly navigationRefreshEnabled?: boolean;
   readonly onDismiss: () => void;
   readonly onNavigate: (tabId: TabId) => void;
   readonly onToggleTracking?: () => void;
@@ -36,6 +37,22 @@ function renderCommandIcon(icon: string): ReactNode {
           <rect x="14" y="3" width="7" height="7" rx="1.5" />
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      );
+    case "calendar":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M8 3v4M16 3v4M4 10h16" />
+          <path d="M8 14h2M14 14h2M8 17h2" />
+        </svg>
+      );
+    case "agents":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m7 9 3 3-3 3" />
+          <path d="M12.5 15H17" />
         </svg>
       );
     case "classification":
@@ -145,6 +162,7 @@ function renderCommandIcon(icon: string): ReactNode {
 
 export function CommandBar({
   includeProjects,
+  navigationRefreshEnabled = false,
   onDismiss,
   onNavigate,
   onToggleTracking,
@@ -168,14 +186,28 @@ export function CommandBar({
       {
         id: "nav-dashboard",
         section: "navigation",
-        label: t("nav.group.dashboard"),
+        label: t(navigationRefreshEnabled ? "nav.calendar" : "nav.group.dashboard"),
         sub: t("command.dashboardSub"),
         shortcut: "⌘1",
-        icon: "dashboard",
-        keywords: ["today", "dashboard", "overview", "home", "오늘", "대시보드", "홈"],
+        icon: navigationRefreshEnabled ? "calendar" : "dashboard",
+        keywords: ["today", "calendar", "dashboard", "overview", "home", "오늘", "캘린더", "대시보드", "홈"],
         onSelect: () => onNavigate("dashboard"),
       },
-      {
+    ];
+
+    if (navigationRefreshEnabled) {
+      items.push({
+        id: "nav-agents",
+        section: "navigation",
+        label: t("nav.agents"),
+        sub: t("command.agentsSub"),
+        shortcut: "⌘2",
+        icon: "agents",
+        keywords: ["agents", "cli", "sessions", "에이전트", "세션"],
+        onSelect: () => onNavigate("agents"),
+      });
+    } else {
+      items.push({
         id: "nav-classification",
         section: "navigation",
         label: t("nav.classification"),
@@ -184,8 +216,8 @@ export function CommandBar({
         icon: "classification",
         keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
         onSelect: () => onNavigate("classification"),
-      },
-    ];
+      });
+    }
 
     if (includeProjects) {
       items.push({
@@ -211,12 +243,24 @@ export function CommandBar({
         keywords: ["insights", "focus", "trends", "stats", "chart", "트렌드", "인사이트", "통계"],
         onSelect: () => onNavigate("trends"),
       },
+      ...(navigationRefreshEnabled ? [{
+        id: "nav-classification",
+        section: "navigation" as const,
+        label: t("nav.classification"),
+        sub: t("command.classificationSub"),
+        shortcut: includeProjects ? "⌘5" : "⌘4",
+        icon: "classification",
+        keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
+        onSelect: () => onNavigate("classification"),
+      }] : []),
       {
         id: "nav-history",
         section: "navigation",
         label: t("nav.history"),
         sub: t("command.historySub"),
-        shortcut: includeProjects ? "⌘5" : "⌘4",
+        shortcut: navigationRefreshEnabled
+          ? (includeProjects ? "⌘6" : "⌘5")
+          : (includeProjects ? "⌘5" : "⌘4"),
         icon: "history",
         keywords: ["records", "history", "timeline", "log", "기록", "로그", "히스토리"],
         onSelect: () => onNavigate("history"),
@@ -224,9 +268,11 @@ export function CommandBar({
       {
         id: "nav-leaderboard",
         section: "navigation",
-        label: t("nav.group.social"),
+        label: t(navigationRefreshEnabled ? "nav.leaderboard" : "nav.group.social"),
         sub: t("command.socialSub"),
-        shortcut: includeProjects ? "⌘6" : "⌘5",
+        shortcut: navigationRefreshEnabled
+          ? (includeProjects ? "⌘7" : "⌘6")
+          : (includeProjects ? "⌘6" : "⌘5"),
         icon: "leaderboard",
         keywords: ["social", "rank", "leaderboard", "global", "리더보드", "소셜", "랭킹", "순위"],
         onSelect: () => onNavigate("leaderboard"),
@@ -316,6 +362,7 @@ export function CommandBar({
     return items;
   }, [
     includeProjects,
+    navigationRefreshEnabled,
     isTrackingRunning,
     onNavigate,
     onNewProject,

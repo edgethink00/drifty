@@ -474,6 +474,16 @@
   align-content: start;
 }
 
+.sidebar-nav--primary .sidebar-guide-section {
+  gap: 0.12rem;
+}
+
+.sidebar-nav-divider {
+  height: 1px;
+  margin: 10px var(--sidebar-row-inline-padding) 7px;
+  background: var(--line);
+}
+
 .nav-button {
   display: flex;
   align-items: center;

@@ -138,9 +138,11 @@ type DevSettingsSectionProps = {
   readonly teamsBetaEnabled: boolean;
   readonly profileBetaEnabled: boolean;
   readonly agentsBetaEnabled: boolean;
+  readonly navigationRefreshEnabled: boolean;
   readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onAgentsBetaChange: (enabled: boolean) => void;
+  readonly onNavigationRefreshChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
   readonly onResetDemoDashboardReplaySettings?: () => void;
@@ -216,9 +218,11 @@ export function DevSettingsSection({
   teamsBetaEnabled,
   profileBetaEnabled,
   agentsBetaEnabled,
+  navigationRefreshEnabled,
   onTeamsBetaChange,
   onProfileBetaChange,
   onAgentsBetaChange,
+  onNavigationRefreshChange,
   onPreviewDashboardAiUnavailableCase,
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
@@ -710,6 +714,15 @@ export function DevSettingsSection({
           />
         <div className="settings-row">
           <div>
+            <div className="lbl">Navigation refresh</div>
+            <div className="desc">Preview Calendar with its Day/Week control, promoted Agents, and the simplified Teams workspace. Off keeps the current navigation unchanged.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={navigationRefreshEnabled} onChange={onNavigationRefreshChange} ariaLabel="Toggle navigation refresh" />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
             <div className="lbl">Team preview (beta)</div>
             <div className="desc">Show the Team section in the sidebar for the internal aggregate team focus surface. Dev-mode opt-in.</div>
           </div>
@@ -719,20 +732,20 @@ export function DevSettingsSection({
         </div>
         <div className="settings-row">
           <div>
+            <div className="lbl">Your Agents (beta)</div>
+            <div className="desc">Show Your Agents under Dashboard when the navigation refresh is off. The refreshed navigation promotes Agents automatically.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={agentsBetaEnabled} onChange={onAgentsBetaChange} ariaLabel="Toggle Your Agents beta" />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
             <div className="lbl">Profile (beta)</div>
             <div className="desc">Show the public Profile tab in the Social section. Dev-mode opt-in; the leaderboard stays available either way.</div>
           </div>
           <div className="ctrl">
             <Toggle checked={profileBetaEnabled} onChange={onProfileBetaChange} ariaLabel="Toggle Profile beta" />
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Your Agents (beta)</div>
-            <div className="desc">Show the Your Agents tab under the Dashboard section: agent session time from local logs on this Mac (Codex, Claude Code, Aside, OpenCode, Gemini CLI, Pi, Droid, Amp, Copilot CLI, Qwen CLI, Kiro, Cursor CLI, and other supported tools), paired with git commit activity. Reads only local files and keeps them local. Dev-mode opt-in.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={agentsBetaEnabled} onChange={onAgentsBetaChange} ariaLabel="Toggle Your Agents beta" />
           </div>
         </div>
         <div className="settings-row">

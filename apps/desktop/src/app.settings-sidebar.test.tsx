@@ -227,6 +227,52 @@ describe("App settings sidebar", () => {
     expect(classificationButton.getAttribute("aria-current")).toBeNull();
   });
 
+  it("keeps the navigation refresh off by default", async () => {
+    render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /dashboard views/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Your Day$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Your Week$/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Calendar$/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /calendar view/i })).toBeNull();
+  });
+
+  it("activates and persists the complete navigation refresh only in Dev mode", async () => {
+    window.localStorage.setItem("drifty.dev.mode", "1");
+    window.localStorage.setItem("drifty.dev.navigationRefresh", "1");
+
+    const first = render(<App />);
+    const primaryNav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    expect(within(primaryNav).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Calendar",
+      "Agents",
+      "Projects",
+      "Insights",
+      "Classification",
+      "History",
+    ]);
+    const calendarRange = await screen.findByRole("group", { name: /calendar view/i });
+    await act(async () => {
+      fireEvent.click(within(calendarRange).getByRole("button", { name: /^Week$/i }));
+    });
+    expect(window.localStorage.getItem("drifty.dashboard.period.v1")).toBe("Week");
+
+    first.unmount();
+    render(<App />);
+    const restoredRange = await screen.findByRole("group", { name: /calendar view/i });
+    expect(within(restoredRange).getByRole("button", { name: /^Week$/i }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("clears a stale navigation refresh preference when Dev mode is off", async () => {
+    window.localStorage.setItem("drifty.dev.mode", "0");
+    window.localStorage.setItem("drifty.dev.navigationRefresh", "1");
+
+    render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /dashboard views/i })).toBeTruthy();
+    await waitFor(() => expect(window.localStorage.getItem("drifty.dev.navigationRefresh")).toBe("0"));
+  });
+
   it("keeps the web-account publisher disabled when persisted preview state outlives Dev mode", async () => {
     window.localStorage.setItem("drifty.dev.mode", "0");
     window.localStorage.setItem("drifty.dev.webAccountPreview", "1");

@@ -21,8 +21,6 @@
   line-height: 1.25;
 }
 
-/* ── period toggle (ported from studyhall's dashboard-period-toggle) ──────── */
-
 /* studyhall solved the in-page Day/Week switch on this same design system: a
    soft inset track with a raised active pill. Ported verbatim with drifty's
    tokens so the two apps' toggles read as the same control. */

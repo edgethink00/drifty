@@ -30,6 +30,7 @@ import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
 import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel } from "./BrowserHistoryBootstrapPrompt";
 import { DashboardPageHeader } from "./DashboardPageHeader";
+import { DayWeekToggle, type DayWeekPeriod } from "../../components/DayWeekToggle";
 import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } from "./WeekActivityInspector";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
@@ -104,6 +105,8 @@ type DashboardPageProps = {
   readonly onJoinLeaderboard?: () => Promise<void>;
   readonly onManageCloudBilling?: () => void;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
+  readonly navigationRefreshEnabled?: boolean;
+  readonly onPeriodChange: (period: DayWeekPeriod) => void;
   readonly onSelectDay: (day: string) => void;
   readonly onSaveDashboardActivityValues?: ActivityInspectorSaveHandler;
   readonly onClassifyDashboardActivity?: (
@@ -178,6 +181,8 @@ export function DashboardPage({
   onJoinLeaderboard,
   onManageCloudBilling,
   onSelectBillingPlan,
+  navigationRefreshEnabled = false,
+  onPeriodChange,
   onSelectDay,
   onSaveDashboardActivityValues,
   onAssignDashboardProject,
@@ -231,10 +236,11 @@ export function DashboardPage({
   }));
   const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardProductivityTotals);
   const showProjectDonut = flowColorMode === "project" && (flowProjectRingEntries?.length ?? 0) > 0;
-  // Week keeps the same integrated calendar header while loading so the shell
-  // does not jump between the legacy top placement and the populated frame.
-  // Day still uses its compact standalone loading composition.
-  const headInsideBlock = dashPeriod === "Week" || (!initialDataLoading && dashPeriod === "Today");
+  // Week keeps the integrated calendar header while Day keeps its standalone
+  // header. Both remain interactive during loading so view changes never wait
+  // on tracker data.
+  const headInsideBlock = dashPeriod === "Week"
+    || (dashPeriod === "Today" && (navigationRefreshEnabled || !initialDataLoading));
   const showShareButton = !initialDataLoading && !isDashboardReplayActive && (
     (dashPeriod === "Today" && hasMeasuredActivity)
     || (dashPeriod === "Week" && totalSeconds > 0)
@@ -284,6 +290,15 @@ export function DashboardPage({
       dashPeriod={dashPeriod}
       initialDataLoading={initialDataLoading}
       dateNavigator={dashboardDateNavigator}
+      periodToggle={navigationRefreshEnabled && dashPeriod !== "Month" ? (
+        <DayWeekToggle
+          ariaLabel={t("dashboard.range.aria")}
+          dayLabel={t("common.day")}
+          period={dashPeriod}
+          weekLabel={t("common.week")}
+          onChange={onPeriodChange}
+        />
+      ) : null}
       focusDuration={focusDuration}
       headerAction={showShareButton ? (
         <button
@@ -376,6 +391,10 @@ export function DashboardPage({
           axisScalePercent={WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT}
           sideOpen={breakdownOpen}
           onToggleSide={toggleBreakdown}
+          onSelectDay={navigationRefreshEnabled ? (day) => {
+            onPeriodChange("Today");
+            onSelectDay(day);
+          } : undefined}
           deviceLabelById={deviceLabelById}
           activityActionsEnabled={dashboardActivityActionsEnabled && !isDashboardReplayActive}
           projectOptions={activityInspectorProjectOptions}
@@ -386,7 +405,10 @@ export function DashboardPage({
           onDeleteActivity={onDeleteDashboardActivity}
         />
       ) : initialDataLoading ? (
-        <DashboardLoadingSkeleton dashPeriod={dashPeriod} />
+        <DashboardLoadingSkeleton
+          dashPeriod={dashPeriod}
+          header={navigationRefreshEnabled ? pageHead : undefined}
+        />
       ) : dashPeriod === "Month" ? (
         <HistoryCalendarPanel
           segments={historySegments}

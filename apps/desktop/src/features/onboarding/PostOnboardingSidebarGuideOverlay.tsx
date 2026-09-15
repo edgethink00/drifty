@@ -69,7 +69,15 @@ export function computePostOnboardingSidebarGuideLayout({
   return { anchor, panelLeft, panelTop };
 }
 
-function copyKeys(step: PostOnboardingSidebarGuideStep) {
+function copyKeys(step: PostOnboardingSidebarGuideStep, navigationRefreshEnabled: boolean) {
+  if (navigationRefreshEnabled && (step === "dashboard" || step === "activity")) {
+    const capitalizedStep = step === "dashboard" ? "Dashboard" : "Activity";
+    return {
+      section: `postOnboarding.sidebarGuide.refresh${capitalizedStep}Section`,
+      title: `postOnboarding.sidebarGuide.refresh${capitalizedStep}Title`,
+      body: `postOnboarding.sidebarGuide.refresh${capitalizedStep}Body`,
+    } as const;
+  }
   return {
     section: `postOnboarding.sidebarGuide.${step}Section`,
     title: `postOnboarding.sidebarGuide.${step}Title`,
@@ -82,11 +90,13 @@ export function PostOnboardingSidebarGuide({
   onAdvance,
   onBack,
   onDismiss,
+  navigationRefreshEnabled = false,
 }: {
   readonly step: PostOnboardingSidebarGuideStep;
   readonly onAdvance: () => void;
   readonly onBack: () => void;
   readonly onDismiss: () => void;
+  readonly navigationRefreshEnabled?: boolean;
 }) {
   const { t } = useLocalization();
   const panelRef = useRef<HTMLElement>(null);
@@ -94,7 +104,7 @@ export function PostOnboardingSidebarGuide({
   const stepIndex = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS.indexOf(step);
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === POST_ONBOARDING_SIDEBAR_GUIDE_STEPS.length - 1;
-  const keys = copyKeys(step);
+  const keys = copyKeys(step, navigationRefreshEnabled);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

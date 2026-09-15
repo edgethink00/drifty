@@ -174,6 +174,8 @@
   height: 17px;
 }
 
+/* Teams workspace surface. Global navigation uses the shared app-shell rules. */
+
 /* ── Page scaffolding ── */
 
 /* Full-width like every other tab (.page has max-width: none); empty/onboard
@@ -193,6 +195,117 @@
   justify-content: space-between;
   gap: var(--space-3);
   flex-wrap: wrap;
+}
+
+.content--team .team-page-title {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.content--team .team-switcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.content--team .team-switcher select {
+  min-width: 0;
+  max-width: 15rem;
+  height: 1.9rem;
+  padding: 0 1.75rem 0 0.65rem;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font: 500 0.75rem/1 var(--font-sans);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.content--team .team-switcher svg {
+  position: absolute;
+  right: 0.55rem;
+  width: 11px;
+  height: 11px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.content--team .team-workspace-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: -0.15rem 0 var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.content--team .team-view-tabs,
+.content--team .team-workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.content--team .team-view-tabs button {
+  position: relative;
+  min-height: 2.4rem;
+  padding: 0 0.72rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: 600 0.79rem/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.content--team .team-view-tabs button::after {
+  content: "";
+  position: absolute;
+  right: 0.45rem;
+  bottom: -1px;
+  left: 0.45rem;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  background: transparent;
+}
+
+.content--team .team-view-tabs button:hover {
+  color: var(--text-soft);
+}
+
+.content--team .team-view-tabs button.is-active {
+  color: var(--text);
+}
+
+.content--team .team-view-tabs button.is-active::after {
+  background: var(--accent);
+}
+
+.content--team .team-workspace-actions {
+  padding-bottom: 0.28rem;
+}
+
+.content--team .team-workspace-actions .app-btn {
+  min-height: 1.9rem;
+  padding: 0 0.58rem;
+  font-size: 0.74rem;
+}
+
+.content--team .team-workspace-actions .team-workspace-add {
+  width: 1.9rem;
+  padding: 0;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 760px) {
+  .content--team .team-workspace-nav {
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
 }
 
 /* ── Buttons ──

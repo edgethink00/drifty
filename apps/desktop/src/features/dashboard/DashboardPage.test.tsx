@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, FlowBlock } from "@drifty/domain";
@@ -38,7 +38,11 @@ type DashboardPageFixtureOptions = {
   readonly flowBlocks?: FlowBlock[];
   readonly summaryFlowBlocks?: FlowBlock[];
   readonly totalSeconds?: number;
+  readonly weekRows?: ComponentProps<typeof DashboardPage>["weekRows"];
   readonly language?: DisplayLanguage;
+  readonly onPeriodChange?: ComponentProps<typeof DashboardPage>["onPeriodChange"];
+  readonly onSelectDay?: ComponentProps<typeof DashboardPage>["onSelectDay"];
+  readonly navigationRefreshEnabled?: boolean;
 };
 
 function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
@@ -82,13 +86,15 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       weekCurrentMinuteOfDay={null}
       weekFocusDeltaSeconds={null}
       weekRefreshStatus={options.weekRefreshStatus ?? "idle"}
-      weekRows={[]}
+      weekRows={options.weekRows ?? []}
       onDismissDashboardAiRecovery={noop}
       onFlowIntervalChange={noop}
       onOpenDashboardAiSetup={noop}
       onManageCloudBilling={noop}
       onSelectBillingPlan={noop}
-      onSelectDay={noop}
+      navigationRefreshEnabled={options.navigationRefreshEnabled}
+      onPeriodChange={options.onPeriodChange ?? noop}
+      onSelectDay={options.onSelectDay ?? noop}
     />
     </LocalizationTestProvider>,
   );
@@ -135,6 +141,57 @@ describe("DashboardPage date navigator", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse week breakdown" }));
     expect(document.querySelector(".week-v2-grid")?.classList.contains("week-v2-grid--side-open")).toBe(false);
+  });
+});
+
+describe("DashboardPage calendar view toggle", () => {
+  it("shows the selected Day view and requests Week", () => {
+    const onPeriodChange = vi.fn();
+    renderDashboardWithNoData({ navigationRefreshEnabled: true, onPeriodChange });
+
+    const range = screen.getByRole("group", { name: "Calendar view" });
+    expect(within(range).getByRole("button", { name: "Day" }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(within(range).getByRole("button", { name: "Week" }));
+
+    expect(onPeriodChange).toHaveBeenCalledWith("Week");
+  });
+
+  it("keeps the Day and Week controls available while Day data loads", () => {
+    renderDashboardWithNoData({
+      initialDataLoading: true,
+      navigationRefreshEnabled: true,
+      dashboardReplay: null,
+      dashboardDateNavigator: <button type="button">Previous day</button>,
+    });
+
+    expect(screen.getByRole("group", { name: "Calendar view" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Previous day" })).toBeTruthy();
+  });
+
+  it("switches to Day before applying the selected Week date", () => {
+    const calls: string[] = [];
+    renderDashboardWithNoData({
+      dashPeriod: "Week",
+      navigationRefreshEnabled: true,
+      dashboardReplay: null,
+      onPeriodChange: (period) => calls.push(`period:${period}`),
+      onSelectDay: (day) => calls.push(`day:${day}`),
+      weekRows: [{
+        day: "2026-06-29",
+        dayName: "Mon",
+        dayNumber: "29",
+        focusScore: 0,
+        focusSeconds: 0,
+        productivitySlices: [],
+        slices: [],
+        totalSeconds: 0,
+      }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Mon, Jun 29 in Day view" }));
+
+    expect(calls).toEqual(["period:Today", "day:2026-06-29"]);
   });
 });
 describe("DashboardPage demo replay empty data", () => {
@@ -444,6 +501,7 @@ describe("DashboardPage billing recovery overlay", () => {
         onOpenDashboardAiSetup={noop}
         onManageCloudBilling={onManageCloudBilling}
         onSelectBillingPlan={onSelectBillingPlan}
+        onPeriodChange={noop}
         onSelectDay={noop}
       />,
     );

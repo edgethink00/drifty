@@ -441,8 +441,17 @@ describe("DevSettingsSection", () => {
     expect(screen.getByRole("tab", { name: "Flags" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("heading", { name: "Product preview flags" })).toBeTruthy();
     expect(screen.getByText("Team preview (beta)")).toBeTruthy();
+    expect(screen.getByText("Navigation refresh")).toBeTruthy();
     expect(screen.getByText("Your Agents (beta)")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Debug logs$/ })).toBeNull();
+  });
+
+  it("changes the navigation refresh through its Dev flag", () => {
+    const props = renderProductionDevSettings({ activeSubsection: "flags" });
+
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle navigation refresh" }));
+
+    expect(props.onNavigationRefreshChange).toHaveBeenCalledWith(true);
   });
 
   it("moves between Dev tabs with standard tablist arrow keys", () => {

@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { formatDashboardPeriodLabel, getInsightPeriodRange, shiftInsightPeriodDay } from "./dashboardPeriods";
+import { formatDashboardPeriodLabel, getInsightPeriodRange, resolveDashboardPeriodAnchorDay, shiftInsightPeriodDay } from "./dashboardPeriods";
+
+describe("dashboard period anchor", () => {
+  it("clamps a future week anchor when opening Day", () => {
+    expect(resolveDashboardPeriodAnchorDay("2026-06-14", "2026-06-12", "Today")).toBe("2026-06-12");
+  });
+
+  it("preserves historical days and future week anchors", () => {
+    expect(resolveDashboardPeriodAnchorDay("2026-06-10", "2026-06-12", "Today")).toBe("2026-06-10");
+    expect(resolveDashboardPeriodAnchorDay("2026-06-14", "2026-06-12", "Week")).toBe("2026-06-14");
+  });
+});
 
 describe("insight period ranges", () => {
   it("builds rolling Week, Month, and 90-day ranges ending on the selected day", () => {

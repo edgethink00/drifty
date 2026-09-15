@@ -1,9 +1,8 @@
 import { canStartCloudTrial } from "./features/billing/billingEligibility";
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
 import { SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
-import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ModalPresence } from "./components/ModalPresence";
-import { AnchoredPresence } from "./components/AnchoredPresence";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
@@ -48,9 +47,9 @@ import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
 import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
 import { isTeamQaMockEnabled, useTeamQaMockController } from "./features/team/teamQaMock";
-import type { TeamWorkspaceAction } from "./features/team/TeamWorkspace";
 import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
+import type { TeamWorkspaceAction } from "./features/team/TeamWorkspace";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
@@ -379,7 +378,7 @@ import {
   type AutomaticCloseOverrideKind,
 } from "./features/companion/automaticCloseOverride";
 import { buildPetModeHidePause } from "./features/pet-mode/petModeHidePause";
-import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
+import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, resolveDashboardPeriodAnchorDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
@@ -405,14 +404,15 @@ import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalM
 import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedLocalAiStatusObserver";
 import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, NAVIGATION_REFRESH_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
-import { activityNav, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
+import { replaceNavigationHistoryTab, type NavigationHistoryState, type TabId } from "./app/navigation";
+import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
 import {
   captureAiClassificationRun,
@@ -536,7 +536,13 @@ function assertNever(value: never): never {
 
 export default function App() {
   const localization = useLocalizationController();
+  const sidebarTeamReviewVariant = resolveSidebarTeamReviewVariant();
   const devSettingsReviewSubsection = resolveDevSettingsReviewSubsection(window.location.search);
+  const initialDevModeEnabled = devSettingsReviewSubsection !== null
+    || isDevOnboardingBypassEnabled()
+    || resolveInitialDevModeEnabled();
+  const initialNavigationRefreshEnabled = initialDevModeEnabled
+    && resolveInitialNavigationRefreshEnabled();
   useEffect(() => {
     readContextualGuardAuditEvents();
   }, []);
@@ -554,7 +560,7 @@ export default function App() {
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>(() => ({
     entries: [{
       tabId: devSettingsReviewSubsection ? "settings" : "dashboard",
-      dashPeriod: "Today",
+      dashPeriod: initialNavigationRefreshEnabled ? resolveInitialDashboardPeriod() : "Today",
     }],
     index: 0,
   }));
@@ -696,30 +702,28 @@ export default function App() {
   const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
   const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
-  const [devModeEnabled, setDevModeEnabled] = useState(
-    () => devSettingsReviewSubsection !== null || isDevOnboardingBypassEnabled() || resolveInitialDevModeEnabled(),
-  );
+  const [devModeEnabled, setDevModeEnabled] = useState(initialDevModeEnabled);
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
+  const [navigationRefreshEnabled, setNavigationRefreshEnabled] = useState(initialNavigationRefreshEnabled);
   const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(resolveInitialFloatingCompanionDevEnabled);
   const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   const [pendingTeamAction, setPendingTeamAction] = useState<TeamWorkspaceAction | null>(null);
   const [teamNavMenuOpen, setTeamNavMenuOpen] = useState(false);
-  // Viewport coordinates for the fixed team-options popover (opens to the right
-  // of the rail so it never joins the sidebar scroll area or hides the foot).
   const [teamNavMenuPos, setTeamNavMenuPos] = useState<{ readonly left: number; readonly top: number } | null>(null);
-  // undefined = follow the selected team (auto-expanded); null = user collapsed it.
   const [teamNavExpandedId, setTeamNavExpandedId] = useState<string | null | undefined>(undefined);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
   const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
+  const canUseNavigationRefresh = DEV_SETTINGS_ENABLED && devModeEnabled && navigationRefreshEnabled;
   const canOpenAgentsBeta = DEV_SETTINGS_ENABLED && devModeEnabled && agentsBetaEnabled;
+  const canOpenAgents = canUseNavigationRefresh || canOpenAgentsBeta;
   const sshAgentSourceSync = useSshAgentSourceSyncController({
-    enabled: canOpenAgentsBeta && isTauriRuntime(),
+    enabled: canOpenAgents && isTauriRuntime(),
   });
   const [companionSurfacePolicy, setCompanionSurfacePolicy] = useState(resolveInitialCompanionSurfacePolicy);
   const [companionHiddenUntil, setCompanionHiddenUntil] = useState(resolveInitialCompanionHiddenUntil);
@@ -2135,7 +2139,7 @@ export default function App() {
   }, []);
   const requestLeaderboardAuth = openDefaultAuthModal;
   const requestTeamAuth = openDefaultAuthModal;
-  // Owned here (not inside the Team surface) so the sidebar team nav can list teams.
+  // Owned here so route gating and team invite deep links share one controller.
   const realTeamController = useTeamController({
     activeTab,
     hasRequiredAccountAuth,
@@ -2148,27 +2152,35 @@ export default function App() {
   const teamQaMockController = useTeamQaMockController();
   const teamController = isTeamQaMockEnabled() ? teamQaMockController : realTeamController;
   const openTeamAction = useCallback((action: TeamWorkspaceAction) => {
-    setTeamNavMenuOpen(false);
     setPendingTeamAction(action);
+    setTeamNavMenuOpen(false);
     navigateToTab("team");
   }, [navigateToTab]);
   useEffect(() => {
     if (!teamNavMenuOpen) return;
-    const onMouseDown = (event: MouseEvent) => {
-      const target = event.target as Element | null;
-      if (target?.closest(".team-nav-menu") || target?.closest(".team-nav-more")) return;
+    const closeMenu = (event: MouseEvent) => {
+      if ((event.target as Element | null)?.closest(".team-nav-more, .team-nav-menu")) return;
       setTeamNavMenuOpen(false);
     };
-    // The popover is fixed-positioned, so any scroll would detach it from its
-    // anchor row — just dismiss it.
-    const onScroll = () => setTeamNavMenuOpen(false);
-    document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("scroll", onScroll, true);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTeamNavMenuOpen(false);
+    };
+    const closeOnScroll = () => setTeamNavMenuOpen(false);
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("scroll", closeOnScroll, true);
     return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("scroll", onScroll, true);
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("scroll", closeOnScroll, true);
     };
   }, [teamNavMenuOpen]);
+  useEffect(() => {
+    if (!canUseNavigationRefresh) return;
+    setTeamNavMenuOpen(false);
+    setTeamNavMenuPos(null);
+    setPendingTeamAction(null);
+  }, [canUseNavigationRefresh]);
   const {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
@@ -2855,6 +2867,15 @@ export default function App() {
   function shiftDashboardPeriod(direction: -1 | 1) {
     if (direction === 1 && !canShiftDashboardForward) return;
     selectDay((currentDay) => shiftDashboardPeriodDay(currentDay, dashPeriod, direction));
+  }
+
+  function selectDashboardPeriod(period: "Today" | "Week") {
+    if (period === dashPeriod) return;
+    const currentTodayDay = logicalTodayIsoDate(startOfDayMinutes);
+    const nextSelectedDay = resolveDashboardPeriodAnchorDay(selectedDay, currentTodayDay, period);
+    if (nextSelectedDay !== selectedDay) selectDay(nextSelectedDay);
+    persistDashboardPeriod(period);
+    navigateToTab("dashboard", period);
   }
 
   function previewDashboardAiUnavailableCase() {
@@ -4517,6 +4538,7 @@ export default function App() {
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
     if (agentsBetaEnabled) setAgentsBetaEnabled(false);
+    if (navigationRefreshEnabled) setNavigationRefreshEnabled(false);
     if (floatingCompanionDevEnabled) setFloatingCompanionDevEnabled(false);
     if (devWebAccountPreviewEnabled) setDevWebAccountPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
@@ -4526,7 +4548,7 @@ export default function App() {
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, agentsBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [agentsBetaEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(FLOATING_COMPANION_DEV_STORAGE_KEY, floatingCompanionDevActive ? "1" : "0");
@@ -4545,12 +4567,18 @@ export default function App() {
     window.localStorage.setItem(AGENTS_BETA_STORAGE_KEY, canOpenAgentsBeta ? "1" : "0");
   }, [canOpenAgentsBeta]);
 
-  // Leaving the agents tab open when the toggle goes off would strand the user
-  // on a surface the sidebar no longer offers, so send them back to the day.
   useEffect(() => {
-    if (activeTab !== "agents" || canOpenAgentsBeta) return;
-    navigateToTab("dashboard", "Today");
-  }, [activeTab, canOpenAgentsBeta, navigateToTab]);
+    window.localStorage.setItem(NAVIGATION_REFRESH_STORAGE_KEY, canUseNavigationRefresh ? "1" : "0");
+  }, [canUseNavigationRefresh]);
+
+  useLayoutEffect(() => {
+    if (canOpenAgents) return;
+    setNavigationHistory((current) => replaceNavigationHistoryTab(
+      current,
+      "agents",
+      { tabId: "dashboard", dashPeriod: "Today" },
+    ));
+  }, [canOpenAgents]);
 
   // Profile is a Dev-mode beta surface; without the gate, profile requests land
   // on the leaderboard (replacing the history entry so back/forward stays sane).
@@ -9194,6 +9222,7 @@ export default function App() {
     shouldShowPostOnboardingSidebarGuide ? "app-shell--sidebar-guide" : null,
   ].filter(Boolean).join(" ");
 
+
   if (onboardingOpen) {
     const promoAuthOnboardingOpen = authModalOpen && authModalIntent === "promo";
     return (
@@ -9344,231 +9373,32 @@ export default function App() {
         </div>
 
         <div className="sidebar-scroll">
-          <div className="sidebar-guide-section" data-sidebar-guide-anchor="dashboard">
-            <div className="nav-label">{localization.t("nav.group.dashboard")}</div>
-            <nav className="sidebar-nav sidebar-nav--periods" aria-label={localization.t("nav.dashboardViews")}>
-              {dashboardPeriodOptions.map((item) => {
-                const itemLabel = localization.t(item.period === "Week" ? "nav.yourWeek" : "nav.yourDay");
-                return (
-                  <button
-                    key={item.period}
-                    type="button"
-                    className={activeTab === "dashboard" && dashPeriod === item.period ? "nav-item nav-item--period active" : "nav-item nav-item--period"}
-                    aria-current={activeTab === "dashboard" && dashPeriod === item.period ? "page" : undefined}
-                    onClick={() => navigateToTab("dashboard", item.period)}
-                  >
-                    <NavIcon type={item.period === "Week" ? "calendar" : "home"} />
-                    <span>{itemLabel}</span>
-                    {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{itemLabel}</span> : null}
-                  </button>
-                );
-              })}
-              {canOpenAgentsBeta ? (
-                <button
-                  type="button"
-                  className={activeTab === "agents" ? "nav-item nav-item--period active" : "nav-item nav-item--period"}
-                  aria-current={activeTab === "agents" ? "page" : undefined}
-                  onClick={() => navigateToTab("agents")}
-                >
-                  <NavIcon type="agents" />
-                  <span>{localization.t("nav.yourAgents")}</span>
-                  {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("nav.yourAgents")}</span> : null}
-                </button>
-              ) : null}
-            </nav>
-          </div>
-
-          <div className="sidebar-guide-section" data-sidebar-guide-anchor="activity">
-            <div className="nav-label">{localization.t("nav.group.activity")}</div>
-            <nav className="sidebar-nav" aria-label={localization.t("nav.primaryNavigation")}>
-              {activityNav.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => {
-                const itemLabel = localization.t(item.labelKey);
-                return (
-                  <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} aria-current={activeTab === item.id ? "page" : undefined} onClick={() => navigateToTab(item.id)}>
-                    <NavIcon type={item.icon} /><span>{itemLabel}</span>
-                    {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{itemLabel}</span> : null}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-        <div className="nav-label">{localization.t("nav.group.social")}</div>
-        <nav className="sidebar-nav sidebar-nav--social" aria-label={localization.t("nav.socialNavigation")}>
-          {canOpenProfileBeta ? (
-            <button
-              type="button"
-              className={activeTab === "leaderboard" && socialSection === "profile" ? "nav-item active" : "nav-item"}
-              aria-current={activeTab === "leaderboard" && socialSection === "profile" ? "page" : undefined}
-              onClick={() => navigateToTab("profile")}
-            >
-              <NavIcon type="profile" /><span>{localization.t("nav.profile")}</span>
-              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("nav.profile")}</span> : null}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={activeTab === "leaderboard" && socialSection === "leaderboard" ? "nav-item active" : "nav-item"}
-            aria-current={activeTab === "leaderboard" && socialSection === "leaderboard" ? "page" : undefined}
-            onClick={() => navigateToTab("leaderboard")}
-          >
-            <NavIcon type="leaderboard" /><span>{localization.t("nav.leaderboard")}</span>
-            {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("nav.leaderboard")}</span> : null}
-          </button>
-        </nav>
-
-        {canOpenTeamsBeta ? (
-          <>
-            <div className="nav-label nav-label--teams">
-              <span>{localization.t("team.nav.yourTeams")}</span>
-              {!isSidebarVisuallyCollapsed ? (
-                <button
-                  type="button"
-                  className="nav-label__add"
-                  aria-label={localization.t("team.nav.createOrJoin")}
-                  title={localization.t("team.nav.createOrJoin")}
-                  onClick={() => openTeamAction("add")}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                </button>
-              ) : null}
-            </div>
-            <nav className="sidebar-nav sidebar-nav--teams" aria-label={localization.t("team.nav.yourTeams")}>
-              {teamController.teams.length === 0 ? (
-                <button type="button" className={activeTab === "team" ? "nav-item active" : "nav-item"} aria-current={activeTab === "team" ? "page" : undefined} onClick={() => navigateToTab("team")}>
-                  <NavIcon type="team" /><span>{localization.t("team.nav.teams")}</span>
-                  {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("team.nav.teams")}</span> : null}
-                </button>
-              ) : (
-                teamController.teams.map((team) => {
-                  const isSelectedTeam = teamController.selectedTeam?.organization_id === team.organization_id;
-                  const expandedTeamId = teamNavExpandedId === undefined
-                    ? teamController.selectedTeam?.organization_id ?? null
-                    : teamNavExpandedId;
-                  const isExpandedTeam = expandedTeamId === team.organization_id;
-                  // The team row is only an expander — selection highlight lives on the sub-items.
-                  const toggleTeam = () => {
-                    if (isSidebarVisuallyCollapsed) {
-                      teamController.selectTeam(team.organization_id);
-                      navigateToTab("team");
-                      return;
-                    }
-                    teamController.selectTeam(team.organization_id);
-                    setTeamNavExpandedId(isExpandedTeam ? null : team.organization_id);
-                  };
-                  return (
-                    <Fragment key={team.organization_id}>
-                      <div
-                        className="nav-item nav-item--team"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={team.organization_name}
-                        aria-expanded={isExpandedTeam}
-                        onClick={toggleTeam}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            toggleTeam();
-                          }
-                        }}
-                      >
-                        <NavIcon type="team" />
-                        <span className="nav-item--team__name">{team.organization_name}</span>
-                        {isSidebarVisuallyCollapsed ? (
-                          <span className="nav-item__hover-label" aria-hidden="true">{team.organization_name}</span>
-                        ) : (
-                          <>
-                            <svg
-                              className={isExpandedTeam ? "team-nav-caret team-nav-caret--open" : "team-nav-caret"}
-                              viewBox="0 0 16 16"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.7"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                            >
-                              <path d="M6 3.5 10.5 8 6 12.5" />
-                            </svg>
-                            {isSelectedTeam ? (
-                              <button
-                                type="button"
-                                className="team-nav-more"
-                                aria-label={localization.t("team.nav.options")}
-                                aria-haspopup="menu"
-                                aria-expanded={teamNavMenuOpen}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  const anchorRect = event.currentTarget.getBoundingClientRect();
-                                  const sidebarRect = event.currentTarget.closest(".sidebar")?.getBoundingClientRect();
-                                  setTeamNavMenuPos({
-                                    left: Math.max(anchorRect.right, sidebarRect?.right ?? 0) + 8,
-                                    top: Math.max(8, anchorRect.top - 6),
-                                  });
-                                  setTeamNavMenuOpen((open) => !open);
-                                }}
-                              >
-                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="18.5" cy="12" r="1.6" /></svg>
-                              </button>
-                            ) : null}
-                          </>
-                        )}
-                      </div>
-                      {isExpandedTeam && !isSidebarVisuallyCollapsed ? (
-                        <div className="sidebar-subnav">
-                          <button
-                            type="button"
-                            aria-label={localization.t("team.nav.dashboardsAria")}
-                            className={activeTab === "team" && isSelectedTeam && teamSubView === "dashboards" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"}
-                            aria-current={activeTab === "team" && isSelectedTeam && teamSubView === "dashboards" ? "page" : undefined}
-                            onClick={() => {
-                              teamController.selectTeam(team.organization_id);
-                              setTeamSubView("dashboards");
-                              navigateToTab("team");
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="7.5" height="9" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="1.5" /><rect x="13.5" y="12" width="7.5" height="9" rx="1.5" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="1.5" /></svg>
-                            <span>{localization.t("team.nav.dashboards")}</span>
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={localization.t("team.nav.projectsAria")}
-                            className={activeTab === "team" && isSelectedTeam && teamSubView === "projects" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"}
-                            aria-current={activeTab === "team" && isSelectedTeam && teamSubView === "projects" ? "page" : undefined}
-                            onClick={() => {
-                              teamController.selectTeam(team.organization_id);
-                              setTeamSubView("projects");
-                              navigateToTab("team");
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /></svg>
-                            <span>{localization.t("team.nav.projects")}</span>
-                          </button>
-                        </div>
-                      ) : null}
-                    </Fragment>
-                  );
-                })
-              )}
-              <AnchoredPresence>{teamNavMenuOpen && teamNavMenuPos && !isSidebarVisuallyCollapsed ? (
-                <div className="team-nav-menu" role="menu" aria-label={localization.t("team.nav.options")} style={{ left: teamNavMenuPos.left, top: teamNavMenuPos.top }}>
-                  <button type="button" role="menuitem" onClick={() => openTeamAction("invite")}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19.5v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.1a3.6 3.6 0 0 0-3.6 3.6v1.4" /><circle cx="8.8" cy="7.6" r="3.3" /><path d="M18.5 8v6M15.5 11h6" /></svg>
-                    {localization.t("team.nav.inviteTeammate")}
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => openTeamAction("settings")}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>
-                    {localization.t("team.nav.settings")}
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => openTeamAction("add")}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                    {localization.t("team.nav.createOrJoin")}
-                  </button>
-                </div>
-              ) : null}</AnchoredPresence>
-            </nav>
-          </>
-        ) : null}
+          <SidebarNavigation
+            activeTab={activeTab}
+            canOpenAgentsBeta={canOpenAgentsBeta}
+            canOpenProfileBeta={canOpenProfileBeta}
+            canOpenTeamsBeta={canOpenTeamsBeta}
+            dashPeriod={dashPeriod}
+            isCollapsed={isSidebarVisuallyCollapsed}
+            navigationRefreshEnabled={canUseNavigationRefresh}
+            projectClassificationFeatureEnabled={projectClassificationFeatureEnabled}
+            selectedTeam={teamController.selectedTeam}
+            socialSection={socialSection}
+            teamNavExpandedId={teamNavExpandedId}
+            teamNavMenuOpen={teamNavMenuOpen}
+            teamNavMenuPos={teamNavMenuPos}
+            teamReviewVariant={sidebarTeamReviewVariant}
+            teams={teamController.teams}
+            teamSubView={teamSubView}
+            t={localization.t}
+            onNavigate={navigateToTab}
+            onOpenTeamAction={openTeamAction}
+            onSelectTeam={teamController.selectTeam}
+            onTeamNavExpandedIdChange={setTeamNavExpandedId}
+            onTeamNavMenuOpenChange={setTeamNavMenuOpen}
+            onTeamNavMenuPosChange={setTeamNavMenuPos}
+            onTeamSubViewChange={setTeamSubView}
+          />
         </div>
 
         <div className="sidebar-foot">
@@ -9707,6 +9537,7 @@ export default function App() {
       {shouldShowPostOnboardingSidebarGuide && postOnboardingSidebarGuideStep ? (
         <PostOnboardingSidebarGuide
           step={postOnboardingSidebarGuideStep}
+          navigationRefreshEnabled={canUseNavigationRefresh}
           onAdvance={advancePostOnboardingSidebarGuide}
           onBack={retreatPostOnboardingSidebarGuide}
           onDismiss={dismissPostOnboardingSidebarGuide}
@@ -9789,17 +9620,18 @@ export default function App() {
               if (dashboardAiUnavailablePreview) return;
               void startCloudCheckout(billingInterval);
             }}
+            navigationRefreshEnabled={canUseNavigationRefresh}
+            onPeriodChange={selectDashboardPeriod}
             onSaveDashboardActivityValues={handleSaveDashboardActivityValues}
             onDeleteDashboardActivity={handleDeleteDashboardActivity}
             onSelectDay={selectDay}
           />
         ) : null}
 
-        {/* Your Agents: agent time and commit output, sibling of the dashboard
-            views. Dev-mode beta preview, so the surface is gated too — not just
-            its sidebar entry. */}
-        {activeTab === "agents" && canOpenAgentsBeta ? (
+        {/* Agents: local agent time and commit output. */}
+        {activeTab === "agents" && canOpenAgents ? (
           <LazyAgentsPage
+            navigationRefreshEnabled={canUseNavigationRefresh}
             flowIntervalMinutes={flowIntervalMinutes}
             onFlowIntervalChange={handleFlowIntervalChange}
             onSelectDay={selectDay}
@@ -10026,6 +9858,7 @@ export default function App() {
 
         {activeTab === "team" && canOpenTeamsBeta ? (
           <LazyTeamsBetaSurface
+            navigationRefreshEnabled={canUseNavigationRefresh}
             hasRequiredAccountAuth={hasRequiredAccountAuth}
             isPolicySignedIn={isPolicySignedIn}
             isSupabaseConfigured={isSupabaseConfigured}
@@ -10035,7 +9868,7 @@ export default function App() {
             teamSubView={teamSubView}
             onTeamSubViewChange={setTeamSubView}
             pendingInvite={pendingTeamInvite}
-            pendingAction={pendingTeamAction}
+            pendingAction={canUseNavigationRefresh ? null : pendingTeamAction}
             onPendingActionConsumed={() => setPendingTeamAction(null)}
             onAuthRequired={requestTeamAuth}
             onPendingInviteClear={() => setPendingTeamInvite(null)}
@@ -10363,9 +10196,11 @@ export default function App() {
                     teamsBetaEnabled={teamsBetaEnabled}
                     profileBetaEnabled={profileBetaEnabled}
                     agentsBetaEnabled={agentsBetaEnabled}
+                    navigationRefreshEnabled={navigationRefreshEnabled}
                     onTeamsBetaChange={setTeamsBetaEnabled}
                     onProfileBetaChange={setProfileBetaEnabled}
                     onAgentsBetaChange={setAgentsBetaEnabled}
+                    onNavigationRefreshChange={setNavigationRefreshEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}
                     onResetDemoDashboardReplaySettings={handleResetDemoDashboardReplaySettings}
@@ -10404,6 +10239,7 @@ export default function App() {
       <ModalPresence>{cmdOpen ? (
         <CommandBar
           includeProjects={projectClassificationFeatureEnabled}
+          navigationRefreshEnabled={canUseNavigationRefresh}
           onDismiss={() => setCmdOpen(false)}
           onNavigate={handleCmdNav}
           onToggleTracking={() => {

@@ -491,6 +491,11 @@
   align-items: center;
 }
 
+.dashboard-page-head__side--period-toggle {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
 .dashboard-page-head--today .day-nav__current {
   min-width: 0;
   width: max-content;
@@ -519,6 +524,15 @@
 
   .dashboard-page-head__primary {
     gap: var(--space-2);
+  }
+
+  .dashboard-page-head--today:has(.dashboard-page-head__side--period-toggle) .dashboard-page-head__row {
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+  }
+
+  .dashboard-page-head--today .dashboard-page-head__side--period-toggle {
+    margin-left: auto;
   }
 }
 

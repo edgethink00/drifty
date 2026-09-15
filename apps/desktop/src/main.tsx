@@ -12,6 +12,7 @@ import {
   type ResolvedBootstrapSurface,
 } from "./lib/bootstrap/rejectionAction";
 import "./styles.css";
+import "./components/day-week-toggle.css";
 import "./features/dashboard/dashboard.css";
 import "./styles/hover-metadata-chip.css";
 import "./features/dashboard/compact-charts.css";

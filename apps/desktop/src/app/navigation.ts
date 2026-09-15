@@ -13,15 +13,27 @@ export type NavigationHistoryState = {
   index: number;
 };
 
-export const commandBarTabs = [
-  { id: "dashboard", labelKey: "nav.group.dashboard", subKey: "command.dashboardSub" },
-  { id: "classification", labelKey: "nav.classification", subKey: "command.classificationSub" },
-  { id: "projects", labelKey: "nav.projects", subKey: "command.projectsSub" },
-  { id: "trends", labelKey: "nav.trends", subKey: "command.trendsSub" },
-  { id: "history", labelKey: "nav.history", subKey: "command.historySub" },
-  { id: "leaderboard", labelKey: "nav.group.social", subKey: "command.socialSub" },
-  { id: "settings", labelKey: "common.settings", subKey: "command.settingsSub" },
-] satisfies ReadonlyArray<{ id: TabId; labelKey: TranslationKey; subKey: TranslationKey }>;
+export function replaceNavigationHistoryTab(
+  history: NavigationHistoryState,
+  hiddenTab: TabId,
+  replacement: NavigationSnapshot,
+): NavigationHistoryState {
+  const entries: NavigationSnapshot[] = [];
+  let index = 0;
+  let changed = false;
+
+  history.entries.forEach((entry, entryIndex) => {
+    const nextEntry = entry.tabId === hiddenTab ? replacement : entry;
+    if (nextEntry !== entry) changed = true;
+    const previous = entries[entries.length - 1];
+    const duplicate = previous?.tabId === nextEntry.tabId && previous.dashPeriod === nextEntry.dashPeriod;
+    if (!duplicate) entries.push(nextEntry);
+    else changed = true;
+    if (entryIndex <= history.index) index = Math.max(0, entries.length - 1);
+  });
+
+  return changed ? { entries: entries.length > 0 ? entries : [replacement], index } : history;
+}
 
 export type NavIconType = "home" | "calendar" | "agents" | "classification" | "projects" | "history" | "trends" | "leaderboard" | "profile" | "social" | "team" | "settings";
 
@@ -30,6 +42,15 @@ export type NavItem = {
   labelKey: TranslationKey;
   icon: NavIconType;
 };
+
+export const primaryNav: NavItem[] = [
+  { id: "dashboard", labelKey: "nav.calendar", icon: "calendar" },
+  { id: "agents", labelKey: "nav.agents", icon: "agents" },
+  { id: "projects", labelKey: "nav.projects", icon: "projects" },
+  { id: "trends", labelKey: "nav.trends", icon: "trends" },
+  { id: "classification", labelKey: "nav.classification", icon: "classification" },
+  { id: "history", labelKey: "nav.history", icon: "history" },
+];
 
 export const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },

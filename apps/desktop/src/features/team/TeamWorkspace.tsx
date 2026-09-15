@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import type { AuthState } from "../auth/AuthContext";
 import TeamDashboardsView from "./TeamDashboardsView";
@@ -17,10 +17,10 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import type { DisplayLanguage } from "../localization/languagePreference";
 import "./team.css";
 
-/** Sidebar-initiated actions that open a workspace modal (see App's team nav menu). */
 export type TeamWorkspaceAction = "invite" | "settings" | "add";
 
 export type TeamWorkspaceProps = {
+  readonly navigationRefreshEnabled: boolean;
   readonly isSupabaseEnabled: boolean;
   readonly hasRequiredAccountAuth: boolean;
   readonly isSignedIn: boolean;
@@ -85,6 +85,7 @@ function TeamBadgeIcon(): JSX.Element {
 }
 
 export function TeamWorkspace({
+  navigationRefreshEnabled,
   isSupabaseEnabled,
   hasRequiredAccountAuth,
   isSignedIn,
@@ -92,6 +93,7 @@ export function TeamWorkspace({
   user,
   controller,
   subView,
+  onSubViewChange,
   pendingInvite = null,
   pendingAction = null,
   onPendingActionConsumed,
@@ -126,6 +128,7 @@ export function TeamWorkspace({
     handleAcceptInvite,
     handleCreateInvite,
     handleRevokeInvite,
+    selectTeam,
   } = controller;
 
   // QA mock (dev-server-only): swaps in local fixture data so the surface can be
@@ -152,7 +155,6 @@ export function TeamWorkspace({
   const activeInvite = useMemo(() => invites.find((invite) => invite.status === "pending") ?? null, [invites]);
   const hasTeam = teams.length > 0 && Boolean(selectedTeam);
 
-  // Sidebar menu actions land here as a one-shot prop.
   useEffect(() => {
     if (!pendingAction) return;
     if (pendingAction === "add") {
@@ -234,19 +236,47 @@ export function TeamWorkspace({
   };
 
   const isPopulated = canUse && hasTeam && !pendingInvite;
-  const pageTitle = !isPopulated
+  const pageTitle = navigationRefreshEnabled
     ? t("team.page.teams")
-    : subView === "projects"
-      ? t("team.page.projects")
-      : t("team.page.dashboards");
+    : !isPopulated
+      ? t("team.page.teams")
+      : subView === "projects"
+        ? t("team.page.projects")
+        : t("team.page.dashboards");
   const windowLabel = formatLocalizedDateRangeLabel(projects.window.start_date, projects.window.end_date, effectiveLanguage);
   const atLatestWindow = windowOffset === 0;
+  const moveTeamViewTab = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextSubView = event.key === "Home"
+      ? "dashboards"
+      : event.key === "End"
+        ? "projects"
+        : subView === "dashboards" ? "projects" : "dashboards";
+    onSubViewChange(nextSubView);
+    document.getElementById(`team-view-${nextSubView}`)?.focus();
+  };
 
   return (
     <>
       <div className="pg-head team-page-head">
-        <div>
+        <div className={navigationRefreshEnabled ? "team-page-title" : undefined}>
           <h1>{pageTitle}</h1>
+          {navigationRefreshEnabled && isPopulated && selectedTeam ? (
+            <label className="team-switcher">
+              <span className="sr-only">{t("team.nav.yourTeams")}</span>
+              <select
+                aria-label={t("team.nav.yourTeams")}
+                value={selectedTeam.organization_id}
+                onChange={(event) => selectTeam(event.currentTarget.value)}
+              >
+                {teams.map((team) => (
+                  <option key={team.organization_id} value={team.organization_id}>{team.organization_name}</option>
+                ))}
+              </select>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+            </label>
+          ) : null}
         </div>
         {/* Both sub-views read the same window (chart + the table's Team time column). */}
         {isPopulated ? (
@@ -290,8 +320,52 @@ export function TeamWorkspace({
         ) : null}
       </div>
 
+      {navigationRefreshEnabled && isPopulated ? (
+        <div className="team-workspace-nav">
+          <div className="team-view-tabs" role="tablist" aria-label={t("team.page.teams")}>
+            <button
+              id="team-view-dashboards"
+              type="button"
+              role="tab"
+              aria-selected={subView === "dashboards"}
+              aria-controls="team-workspace-panel"
+              tabIndex={subView === "dashboards" ? 0 : -1}
+              className={subView === "dashboards" ? "is-active" : undefined}
+              onClick={() => onSubViewChange("dashboards")}
+              onKeyDown={moveTeamViewTab}
+            >
+              {t("team.nav.dashboards")}
+            </button>
+            <button
+              id="team-view-projects"
+              type="button"
+              role="tab"
+              aria-selected={subView === "projects"}
+              aria-controls="team-workspace-panel"
+              tabIndex={subView === "projects" ? 0 : -1}
+              className={subView === "projects" ? "is-active" : undefined}
+              onClick={() => onSubViewChange("projects")}
+              onKeyDown={moveTeamViewTab}
+            >
+              {t("team.nav.projects")}
+            </button>
+          </div>
+          <div className="team-workspace-actions">
+            <button type="button" className="app-btn app-btn--quiet" onClick={() => setInviteOpen(true)}>{t("team.nav.inviteTeammate")}</button>
+            <button type="button" className="app-btn app-btn--quiet" onClick={() => setSettingsOpen(true)}>{t("team.nav.settings")}</button>
+            <button type="button" className="app-btn app-btn--quiet team-workspace-add" aria-label={t("team.nav.createOrJoin")} title={t("team.nav.createOrJoin")} onClick={() => openAdd("create")}>+</button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="team-page-layout">
-        <section className="team-panel" aria-label={t("team.panel.sharedProjects")}>
+        <section
+          id="team-workspace-panel"
+          className="team-panel"
+          role={navigationRefreshEnabled && isPopulated ? "tabpanel" : undefined}
+          aria-labelledby={navigationRefreshEnabled && isPopulated ? (subView === "projects" ? "team-view-projects" : "team-view-dashboards") : undefined}
+          aria-label={navigationRefreshEnabled && isPopulated ? undefined : t("team.panel.sharedProjects")}
+        >
           {renderBody()}
         </section>
       </div>
