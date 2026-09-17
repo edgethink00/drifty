@@ -292,6 +292,7 @@ import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
 import { buildDriftAlarmCandidateProbe } from "./features/companion/driftAlarmCandidateProbe";
 import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents, recordDriftAlarmDebugEvent, summarizeDriftAlarmCandidate, summarizeDriftAlarmEvent, summarizeDriftAlarmSegment, summarizeDriftAlarmSnapshot, summarizeDriftAlarmTrayResult, summarizeLiveAiClassificationResult, summarizeYouTubeDriftAlarmGateResult } from "./features/companion/driftAlarmDebugLog";
+import { buildInterventionLedgerDebugInput } from "./features/companion/interventionLedger";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult, type DriftAlarmTrayState } from "./features/companion/driftAlarmTrayStatus";
 import { getUnconfirmedDriftAlarmReason, resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
 import { resolveLiveDriftAlarmAiCandidate } from "./features/companion/liveDriftAlarmAiCandidate";
@@ -8922,6 +8923,7 @@ export default function App() {
       currentSnapshot: snapshotForDebug,
       driftAlarm: driftAlarmTrayStatus,
       driftAlarmDebugEvents: readRecentDriftAlarmDebugEvents(),
+      interventionLedger: buildInterventionLedgerDebugInput(),
       contextualGuardAuditEvents: readContextualGuardAuditEvents(),
       segments,
       historySegments,

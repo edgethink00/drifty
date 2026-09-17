@@ -1,5 +1,6 @@
 import { DevVersionSwitchBlock } from "./DevVersionSwitchBlock";
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -20,7 +21,8 @@ import { PreReleaseUpdatesSettingsRow } from "./PreReleaseUpdatesSettingsRow";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { DevSettingsDeviceSyncBlock } from "./DevSettingsDeviceSyncBlock";
 import { DevSettingsCompanionPillBlock } from "./DevSettingsCompanionPillBlock";
-import { DevSettingsAxFallbackCard, DevSettingsDebugLogsBlock } from "./DevSettingsDiagnosticsBlock";
+import { DevSettingsAxFallbackCard, DevSettingsDebugLogsBlock, DevSettingsInterventionLedgerBlock } from "./DevSettingsDiagnosticsBlock";
+import { readInterventionLedger, summarizeInterventionLedger } from "../companion/interventionLedger";
 import { DevSettingsEnhancedContextBlock } from "./DevSettingsEnhancedContextBlock";
 import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClassificationBlock";
 import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
@@ -260,6 +262,14 @@ export function DevSettingsSection({
   };
   const { t } = useLocalization();
   const fastRunId = useId().replace(/:/g, "");
+  const buildInterventionLedgerSummaries = useCallback(() => {
+    const entries = readInterventionLedger();
+    return [summarizeInterventionLedger(entries, 7), summarizeInterventionLedger(entries, 30)];
+  }, []);
+  const [interventionLedgerSummaries, setInterventionLedgerSummaries] = useState(buildInterventionLedgerSummaries);
+  const refreshInterventionLedger = useCallback(() => {
+    setInterventionLedgerSummaries(buildInterventionLedgerSummaries());
+  }, [buildInterventionLedgerSummaries]);
   const fastRunLabelId = `pet-run-beta-label-${fastRunId}`;
   const fastRunDescriptionId = `pet-run-beta-desc-${fastRunId}`;
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
@@ -393,6 +403,7 @@ export function DevSettingsSection({
       {activeSubsection === "diagnostics" ? (
         <>
           <DevSettingsDebugLogsBlock onOpenDebugLogs={onOpenDebugLogs} />
+          <DevSettingsInterventionLedgerBlock summaries={interventionLedgerSummaries} onRefresh={refreshInterventionLedger} />
           <SentrySmokeDiagnostics />
           <div className="settings-block settings-block--dev-preview">
             <h3>Pre-release updates</h3>

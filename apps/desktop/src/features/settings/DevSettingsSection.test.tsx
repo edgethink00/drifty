@@ -18,6 +18,7 @@ import {
   resolveInitialEnhancedContextSettings,
 } from "./settingsStorage";
 import { renderProductionDevSettings } from "./DevSettingsSection.testHarness";
+import { INTERVENTION_LEDGER_STORAGE_KEY } from "../companion/interventionLedger";
 import {
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY,
@@ -460,6 +461,27 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText("Navigation refresh")).toBeTruthy();
     expect(screen.getByText("Your Agents (beta)")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Debug logs$/ })).toBeNull();
+  });
+
+it("shows the local automatic close ledger in Diagnostics and refreshes it", () => {
+    window.localStorage.setItem(INTERVENTION_LEDGER_STORAGE_KEY, JSON.stringify([
+      { id: "e1", recordedAt: new Date().toISOString(), kind: "extreme_nudge_started", alertKey: "a", result: null, reason: null, message: null, browserName: "Aside", category: null, siteSource: null, hasSiteContext: null, deliveryMode: null },
+      { id: "e2", recordedAt: new Date().toISOString(), kind: "extreme_nudge_result", alertKey: "a", result: "not_applied", reason: "pet_intercepted", message: null, browserName: "Aside", category: null, siteSource: null, hasSiteContext: null, deliveryMode: null },
+    ]));
+    try {
+      renderProductionDevSettings();
+      expect(screen.getByRole("heading", { name: /^Automatic close ledger$/ })).toBeTruthy();
+      expect(screen.getAllByText(/Close attempts 1: applied 0/).length).toBe(2);
+      expect(screen.getAllByText(/Not applied: pet_intercepted ×1/).length).toBe(2);
+      expect(screen.getAllByText(/By browser: Aside 0\/1/).length).toBe(2);
+
+      window.localStorage.removeItem(INTERVENTION_LEDGER_STORAGE_KEY);
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(screen.getAllByText(/Close attempts 0: applied 0/).length).toBe(2);
+      expect(screen.queryByText(/pet_intercepted/)).toBeNull();
+    } finally {
+      window.localStorage.removeItem(INTERVENTION_LEDGER_STORAGE_KEY);
+    }
   });
 
   it("changes the navigation refresh through its Dev flag", () => {

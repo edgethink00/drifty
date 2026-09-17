@@ -10,6 +10,7 @@ import type { DriftAlarmEvent } from "./driftAlarmEvent";
 import { DRIFT_ALARM_CANDIDATE_PROBE_REASONS, type DriftAlarmCandidateProbeReason, type DriftAlarmCandidateProbeSummary } from "./driftAlarmCandidateProbeTypes";
 import type { DriftAlarmCandidate } from "./driftAlarmData";
 import type { DriftAlarmTrayResult } from "./driftAlarmTrayStatus";
+import { appendInterventionLedgerEvent } from "./interventionLedger";
 import type { YouTubeDriftAlarmGateResult } from "./youtubeDriftAlarmGate";
 
 export const DRIFT_ALARM_DEBUG_LOG_STORAGE_KEY = "drifty.notifications.driftAlarmDebugEvents.v1";
@@ -209,6 +210,7 @@ export function recordDriftAlarmDebugEvent(
 
   const event = normalizeDriftAlarmDebugEvent(input, now);
   const nextEvents = pruneRecentEvents([...readStoredDriftAlarmDebugEvents(storage), event], now.getTime()).slice(-DRIFT_ALARM_DEBUG_LOG_LIMIT);
+  appendInterventionLedgerEvent(event, storage, now);
 
   try {
     storage.setItem(DRIFT_ALARM_DEBUG_LOG_STORAGE_KEY, JSON.stringify(nextEvents));

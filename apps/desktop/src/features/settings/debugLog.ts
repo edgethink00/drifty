@@ -6,6 +6,7 @@ import type { AiClassificationSummary, AiClassificationUsageSummary } from "../c
 import type { ContentContextDropReason } from "../classification/contentContextEgressPolicy";
 import type { ContextualGuardAuditEvent } from "../classification/contextualGuardAuditLog";
 import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
+import type { InterventionLedgerEntry, InterventionLedgerSummary } from "../companion/interventionLedger";
 import { getDeviceSyncNextAutomaticAttemptAt, type DeviceSyncCycleRecord } from "../device-sync/deviceSyncState";
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS } from "./settingsStorage";
@@ -234,6 +235,12 @@ type BuildDebugLogPayloadInput = {
   readonly currentSnapshot: CurrentActivitySnapshot | null;
   readonly driftAlarm: DriftAlarmTrayStatus;
   readonly driftAlarmDebugEvents: readonly DriftAlarmDebugEvent[];
+  readonly interventionLedger?: {
+    readonly retentionDays: number;
+    readonly last7Days: InterventionLedgerSummary;
+    readonly last30Days: InterventionLedgerSummary;
+    readonly entries: readonly InterventionLedgerEntry[];
+  } | null;
   readonly contextualGuardAuditEvents?: readonly ContextualGuardAuditEvent[];
   readonly segments: readonly ActivitySegment[];
   readonly historySegments: readonly ActivitySegment[];
@@ -381,6 +388,7 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
     driftAlarm: {
       ...input.driftAlarm,
       recentDebugEvents: input.driftAlarmDebugEvents,
+      interventionLedger: input.interventionLedger ?? null,
     },
     contextualGuard: {
       retentionDays: 14,
