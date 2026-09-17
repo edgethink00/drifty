@@ -116,7 +116,11 @@ vi.mock("./features/billing/billingService", () => ({
   createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));
 
-vi.mock("./features/classification/aiClassificationService", () => {
+vi.mock("./features/classification/aiClassificationService", async () => {
+  // Keep every real export App.tsx may call (for example
+  // describeLocalAiClassificationFailure); override only what these tests
+  // control. See appMockCoverage.test.ts.
+  const actual = await vi.importActual<typeof import("./features/classification/aiClassificationService")>("./features/classification/aiClassificationService");
   function projectAiClassificationCost(
     usage: { itemsRequested: number; estimatedCostUsd: number } | null | undefined,
     metrics: { totalSegments: number } | null | undefined,
@@ -175,6 +179,7 @@ vi.mock("./features/classification/aiClassificationService", () => {
   }
 
   return {
+    ...actual,
     AI_CLASSIFICATION_BACKGROUND_THRESHOLD: 20,
     AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD: 5,
     AI_CLASSIFICATION_FOCUSED_IDLE_MS: 20 * 60 * 1000,
