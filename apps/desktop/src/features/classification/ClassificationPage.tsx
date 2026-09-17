@@ -306,8 +306,8 @@ export function ClassificationPage({
           <DateNavigator
             ariaLabel={t("classification.dateSelector", { range: t(classificationRange === "Day" ? "common.day" : "common.week") })}
             label={classificationDateLabel}
-            todayLabel={t("classification.today")}
-            todayActionLabel={effectiveLanguage === "ko" ? t("classification.goToday") : undefined}
+            todayLabel={t("common.now")}
+            todayActionLabel={effectiveLanguage === "ko" ? t(classificationRange === "Week" ? "classification.goCurrent" : "classification.goToday") : undefined}
             isTodayDisabled={isCurrentClassificationRange}
             isNextDisabled={!canShiftClassificationForward}
             onPrevious={onPreviousClassificationRange}

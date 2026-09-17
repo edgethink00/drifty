@@ -9055,7 +9055,7 @@ export default function App() {
     <DateNavigator
       ariaLabel={dashPeriod === "Today" ? localization.t("dashboard.today.dateSelector") : localization.t("dashboard.week.dateSelector")}
       label={dashboardDateLabel}
-      todayLabel={dashPeriod === "Today" ? localization.t("dashboard.today.today") : localization.t("dashboard.week.current")}
+      todayLabel={localization.t("common.now")}
       todayActionLabel={localization.effectiveLanguage === "ko"
         ? localization.t(dashPeriod === "Today" ? "dashboard.today.goToday" : "dashboard.week.goCurrent")
         : undefined}

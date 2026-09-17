@@ -1191,7 +1191,7 @@
 .day-nav {
   display: flex;
   align-items: center;
-  gap: 0.08rem;
+  gap: 2px;
   background: transparent;
 }
 

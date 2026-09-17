@@ -497,10 +497,16 @@
 }
 
 .dashboard-page-head--today .day-nav__current {
-  min-width: 0;
+  /* Floor to the wider of the common day/week captions ("Thu, Sep 17" vs
+     "Sep 14–20", "9월 14일–20일") so toggling the period does not shift the
+     date column or its gap to the chevron. Longer captions, including
+     month-boundary weeks, still grow. Extra room sits on the leading edge. */
+  min-width: 6rem;
   width: max-content;
   gap: 2px;
   padding: 0 8px;
+  text-align: end;
+  align-items: end;
 }
 
 .dashboard-page-head--today .day-nav__current .eyebrow,

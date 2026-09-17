@@ -577,7 +577,10 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 .day-nav {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  /* Tightened from the prototype's 6px: the step glyph already carries ~7px
+     of inset inside its square hit area, so 2px keeps the cluster reading as
+     one control without shrinking any target. */
+  gap: 2px;
   flex-wrap: wrap;
 }
 /* The prototype's own mono/bordered step-button styling used to live here. It
