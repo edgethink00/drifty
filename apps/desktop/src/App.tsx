@@ -287,7 +287,7 @@ import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
-import { buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToSurface, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
+import { DRIFT_ALARM_GATE_EXEMPT_SOURCES, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToSurface, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
 import { buildDriftAlarmCandidateProbe } from "./features/companion/driftAlarmCandidateProbe";
@@ -2437,10 +2437,18 @@ export default function App() {
   const petInterceptionGraceRef = useRef<PetInterceptionGrace | null>(null);
   const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const pendingDriftAlarmGateGenerationRef = useRef(0);
+  // Alert key whose latest outcome is an AI-gate suppression or gate error,
+  // not a delivered alarm. `lastDriftAlertSegmentRef` alone cannot tell the
+  // two apart, and a user rule, manual correction, or the sustained social
+  // dwell hard rule must be able to reopen such an episode
+  // (docs/product-decisions.md, 2026-09-12). `reminder` remembers whether that
+  // attempt was a reminder, so a reopen never turns into a second close.
+  const gateSuppressedDriftAlarmRef = useRef<{ alertKey: string; reminder: boolean } | null>(null);
   const unavailableYouTubeDriftAlarmGateRef = useRef<{
     alertKey: string;
     videoId: string;
     reason: string;
+    reminder: boolean;
   } | null>(null);
   const lastEligibleDriftCandidateRef = useRef<DriftAlarmCandidate | null>(null);
   const pendingDriftAlarmTransientRef = useRef<DriftAlarmTransientPending | null>(null);
@@ -5856,7 +5864,24 @@ export default function App() {
 
     if (lastDriftAlertSegmentRef.current === alertKey && !pendingBreakReturnAlarmRef.current) {
       const reminderState = driftAlarmReminderRef.current;
-      if (reminderState && isDriftAlarmReminderDue(reminderState, episodeKey, Date.now())) {
+      const gateSuppressed = gateSuppressedDriftAlarmRef.current;
+      if (gateSuppressed?.alertKey === alertKey
+        && DRIFT_ALARM_GATE_EXEMPT_SOURCES.has(latestDrift.classification.source)) {
+        // The earlier suppression came from the AI gate, not from a delivered
+        // alarm, and the verdict has since become one the gate never applies
+        // to. Reopen the delivery path; a suppressed reminder stays a
+        // reminder so automatic close is not attempted again.
+        gateSuppressedDriftAlarmRef.current = null;
+        lastDriftAlertSegmentRef.current = null;
+        reminderDelivery = gateSuppressed.reminder;
+        recordDriftAlarmDebugEvent({
+          kind: "youtube_gate_started",
+          alertKey,
+          reason: `gate-suppression-released:${latestDrift.classification.source}`,
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+      } else if (reminderState && isDriftAlarmReminderDue(reminderState, episodeKey, Date.now())) {
         // The card for this episode is long gone and the drift is still
         // going. Re-open the delivery path as if this were a first delivery,
         // except automatic close stays off: a reminder is a quiet card, not
@@ -5888,8 +5913,10 @@ export default function App() {
     }
 
     const unavailableGate = unavailableYouTubeDriftAlarmGateRef.current;
-    if (unavailableGate?.alertKey === alertKey
-      && (unavailableGate.videoId !== segment.youtubeVideoId || !selectedYouTubeDriftReason(segment))) {
+    if (unavailableGate?.alertKey === alertKey) {
+      const exemptSource = DRIFT_ALARM_GATE_EXEMPT_SOURCES.has(latestDrift.classification.source);
+      if (!exemptSource
+        && (unavailableGate.videoId !== segment.youtubeVideoId || !selectedYouTubeDriftReason(segment))) {
       // A quota/availability failure is not a delivered alarm. Keep it quiet
       // until this same video gains metadata eligible for the AI-free gate;
       // ordinary polls must not retry AI or override an explicit AI verdict.
@@ -5904,6 +5931,10 @@ export default function App() {
         kind: "suppressed", reason: unavailableGate.reason, candidateDetail,
       }, checkedAt);
       return;
+      }
+      // Retrying the same episode keeps its reminder status: a reminder never
+      // becomes a second automatic close.
+      reminderDelivery = unavailableGate.reminder;
     }
 
     if (pendingDriftAlarmGateRef.current === alertKey) {
@@ -5922,6 +5953,7 @@ export default function App() {
     }
 
     unavailableYouTubeDriftAlarmGateRef.current = null;
+    gateSuppressedDriftAlarmRef.current = null;
     pendingDriftAlarmGateRef.current = alertKey;
     const gateGeneration = pendingDriftAlarmGateGenerationRef.current;
     const isCurrentGateAttempt = () => (
@@ -5939,6 +5971,7 @@ export default function App() {
     void evaluateYouTubeDriftAlarmGate({
       segment,
       category,
+      classificationSource: latestDrift.classification.source,
       allowAiClassification: classificationAvailability.state === "ready",
       aiOptions: {
         ...(selectedLocalAiClassificationOptions ?? {}),
@@ -5963,10 +5996,11 @@ export default function App() {
             && segment.youtubeVideoId
             && !selectedYouTubeDriftReason(segment)) {
             unavailableYouTubeDriftAlarmGateRef.current = {
-              alertKey, videoId: segment.youtubeVideoId, reason: settledResult.reason,
+              alertKey, videoId: segment.youtubeVideoId, reason: settledResult.reason, reminder: reminderDelivery,
             };
           } else {
             lastDriftAlertSegmentRef.current = alertKey;
+            gateSuppressedDriftAlarmRef.current = { alertKey, reminder: reminderDelivery };
           }
           recordDriftAlarmDebugEvent({
             kind: "delivery_suppressed",
@@ -6036,6 +6070,7 @@ export default function App() {
           pendingDriftAlarmGateRef.current = null;
           pendingDriftAlarmGateGenerationRef.current += 1;
           lastDriftAlertSegmentRef.current = alertKey;
+          gateSuppressedDriftAlarmRef.current = { alertKey, reminder: reminderDelivery };
           recordDriftAlarmDebugEvent({
             kind: "youtube_gate_error",
             alertKey,
@@ -6070,6 +6105,7 @@ export default function App() {
       pendingDriftAlarmGateRef.current = null;
       pendingDriftAlarmGateGenerationRef.current += 1;
       lastDriftAlertSegmentRef.current = alertKey;
+      gateSuppressedDriftAlarmRef.current = { alertKey, reminder: reminderDelivery };
       recordDriftAlarmDebugEvent({
         kind: "youtube_gate_error",
         alertKey,

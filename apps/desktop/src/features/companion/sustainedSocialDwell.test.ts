@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildDriftAlarmCandidates, canApplyExtremeNudgeToSurface } from "./driftAlarmData";
+import { evaluateYouTubeDriftAlarmGate } from "./youtubeDriftAlarmGate";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
+
+const { classifyLiveActivityWithAi } = vi.hoisted(() => ({
+  classifyLiveActivityWithAi: vi.fn(),
+}));
+
+vi.mock("../classification/aiClassificationService", () => ({
+  classifyLiveActivityWithAi,
+}));
 
 function segment(id: string, startOffsetSeconds: number, durationSeconds: number, overrides?: Partial<ActivitySegment>): ActivitySegment {
   const start = new Date("2026-09-12T10:00:00.000Z");
@@ -127,6 +136,63 @@ describe("sustained social dwell hard rule", () => {
       category: "social_media",
       aiConfirmedDrift: false,
       classificationSource: "sustained-social-dwell",
+    })).toBe(true);
+  });
+
+  it("reaches automatic close without AI: candidate → delivery gate → surface check", async () => {
+    // Product decision 2026-09-12 (docs/product-decisions.md): four consecutive
+    // social segments totalling ≥ 60s close the tab whether or not AI is
+    // available. PR #1321 covered only the candidate stage; the delivery gate
+    // in App.tsx kept suppressing this as ai-unavailable:classification-gate.
+    const segments = [
+      segment("s1", 0, 15),
+      segment("s2", 15, 15),
+      segment("s3", 30, 15),
+      segment("s4", 45, 20),
+    ];
+    const [candidate] = buildCandidatesFromSegments(segments);
+    expect(candidate?.classification.source).toBe("sustained-social-dwell");
+
+    const gate = await evaluateYouTubeDriftAlarmGate({
+      segment: candidate.segment,
+      category: candidate.category,
+      classificationSource: candidate.classification.source,
+      allowAiClassification: false,
+    });
+    expect(gate).toEqual({ kind: "skipped", reason: "resolved-drift-source:sustained-social-dwell" });
+    expect(classifyLiveActivityWithAi).not.toHaveBeenCalled();
+
+    expect(canApplyExtremeNudgeToSurface({
+      segment: candidate.segment,
+      category: candidate.category,
+      aiConfirmedDrift: false,
+      classificationSource: candidate.classification.source,
+    })).toBe(true);
+  });
+
+  it("reaches automatic close without AI for a user rule on an unresolved social surface", async () => {
+    const [candidate] = buildDriftAlarmCandidates({
+      segments: [segment("s1", 0, 70)],
+      currentSnapshot: null,
+      classificationOptions: {
+        rules: [{ targetKind: "site", targetValue: "instagram.com", category: "social_media", productivity: "drift" }],
+      },
+      minimumDurationSeconds: 60,
+    });
+    expect(candidate?.classification.source).toBe("rule");
+
+    const gate = await evaluateYouTubeDriftAlarmGate({
+      segment: candidate.segment,
+      category: candidate.category,
+      classificationSource: candidate.classification.source,
+      allowAiClassification: false,
+    });
+    expect(gate).toEqual({ kind: "skipped", reason: "resolved-drift-source:rule" });
+    expect(canApplyExtremeNudgeToSurface({
+      segment: candidate.segment,
+      category: candidate.category,
+      aiConfirmedDrift: false,
+      classificationSource: candidate.classification.source,
     })).toBe(true);
   });
 
@@ -282,4 +348,3 @@ describe("sustained social dwell hard rule", () => {
     expect(candidates[0].classification.source).not.toBe("sustained-social-dwell");
   });
 });
-

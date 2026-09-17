@@ -156,6 +156,57 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
     expect(classifyLiveActivityWithAi).toHaveBeenCalledTimes(1);
   });
 
+  function unresolvedSocialSegment(): ActivitySegment {
+    // No captured URL path: exactly the surface that #1023 routes to AI.
+    return createYouTubeVideoSegment({
+      id: "tiktok-1",
+      siteDomain: "tiktok.com",
+      siteTitle: "TikTok",
+      siteUrl: undefined,
+      youtubeVideoId: undefined,
+    });
+  }
+
+  it.each([
+    "sustained-social-dwell",
+    "rule",
+    "manual",
+  ] as const)("skips the AI gate for a %s drift verdict even when AI is unavailable", async (classificationSource) => {
+    const result = await evaluateYouTubeDriftAlarmGate({
+      segment: unresolvedSocialSegment(),
+      category: "social_media",
+      classificationSource,
+      allowAiClassification: false,
+    });
+    expect(result).toEqual({ kind: "skipped", reason: `resolved-drift-source:${classificationSource}` });
+    expect(classifyLiveActivityWithAi).not.toHaveBeenCalled();
+  });
+
+  it("skips the AI gate for the sustained social dwell hard rule even when AI is available", async () => {
+    classifyLiveActivityWithAi.mockResolvedValue({
+      kind: "classified",
+      classification: createAiClassification({ category: "communication", productivity: "focus" }),
+    });
+    const result = await evaluateYouTubeDriftAlarmGate({
+      segment: unresolvedSocialSegment(),
+      category: "social_media",
+      classificationSource: "sustained-social-dwell",
+      allowAiClassification: true,
+    });
+    expect(result).toEqual({ kind: "skipped", reason: "resolved-drift-source:sustained-social-dwell" });
+    expect(classifyLiveActivityWithAi).not.toHaveBeenCalled();
+  });
+
+  it("still gates a stored AI verdict on an unresolved social surface", async () => {
+    const result = await evaluateYouTubeDriftAlarmGate({
+      segment: unresolvedSocialSegment(),
+      category: "social_media",
+      classificationSource: "llm",
+      allowAiClassification: false,
+    });
+    expect(result).toEqual({ kind: "suppress", reason: "ai-unavailable:classification-gate" });
+  });
+
   it("allows a non-Shorts YouTube drift video when AI confirms drift", async () => {
     classifyLiveActivityWithAi.mockResolvedValue({
       kind: "classified",

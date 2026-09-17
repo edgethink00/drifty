@@ -10,6 +10,8 @@ import type {
   ActivitySegment,
   ProductivityLabel,
 } from "@drifty/domain";
+import type { ActivityClassificationDetail } from "@drifty/domain";
+import { DRIFT_ALARM_GATE_EXEMPT_SOURCES } from "./driftAlarmData";
 import {
   classifyLiveActivityWithAi,
   type AiClassificationRunOptions,
@@ -37,6 +39,8 @@ export type YouTubeDriftAlarmGateResult =
 export type YouTubeDriftAlarmGateInput = {
   readonly segment: ActivitySegment;
   readonly category: ActivityCategory;
+  /** Source of the drift verdict that produced this candidate, when known. */
+  readonly classificationSource?: ActivityClassificationDetail["source"] | null;
   readonly allowAiClassification?: boolean;
   readonly aiOptions?: AiClassificationRunOptions | null;
   readonly timeoutMs?: number;
@@ -44,6 +48,11 @@ export type YouTubeDriftAlarmGateInput = {
 };
 
 export async function evaluateYouTubeDriftAlarmGate(input: YouTubeDriftAlarmGateInput): Promise<YouTubeDriftAlarmGateResult> {
+  // Exempt verdicts (docs/product-decisions.md, 2026-09-12) never wait for a
+  // live AI confirmation, whether or not AI is available.
+  if (input.classificationSource && DRIFT_ALARM_GATE_EXEMPT_SOURCES.has(input.classificationSource)) {
+    return { kind: "skipped", reason: `resolved-drift-source:${input.classificationSource}` };
+  }
   const subject = resolveDriftAlarmGateSubject(input.segment);
   if (subject.kind === "skip") return { kind: "skipped", reason: subject.reason };
   if (input.allowAiClassification === false) {
@@ -97,6 +106,13 @@ function youtubeGateSkipReason(segment: ActivitySegment): string | null {
  * gate can close the tab. Social consumption surfaces (reels, explore, a
  * settled home feed) carry their own evidence and skip the gate, the same way
  * a resolved YouTube video does.
+ *
+ * This only applies to bare heuristic verdicts. Candidates whose verdict came
+ * from a user rule, a manual correction, or the sustained social dwell hard
+ * rule are exempted before this subject is resolved (see
+ * DRIFT_ALARM_GATE_EXEMPT_SOURCES); they must reach delivery with or without
+ * AI. Regression history: PR #1321 added the hard rule but this gate kept
+ * suppressing it as `ai-unavailable:classification-gate`.
  */
 type DriftAlarmGateSubject =
   | { readonly kind: "check" }

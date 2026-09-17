@@ -533,6 +533,22 @@ const RESOLVED_DRIFT_SOURCES: ReadonlySet<ActivityClassificationDetail["source"]
   "sustained-social-dwell",
 ]);
 
+/**
+ * Drift verdicts that never need a live AI confirmation before delivery,
+ * whether or not AI is currently available. A user rule or manual correction
+ * is the user's own instruction; the sustained social dwell hard rule was
+ * decided precisely so that doomscrolling is caught without AI
+ * (docs/product-decisions.md, 2026-09-12). A stored `llm` verdict is not
+ * exempt: the live gate exists to revalidate AI verdicts on these surfaces.
+ * Lives here rather than in the gate module so App.tsx can consult it even
+ * where tests mock the gate.
+ */
+export const DRIFT_ALARM_GATE_EXEMPT_SOURCES: ReadonlySet<ActivityClassificationDetail["source"]> = new Set([
+  "manual",
+  "rule",
+  "sustained-social-dwell",
+]);
+
 export function formatFocusTargetDetail({
   appName,
   siteDomain,
