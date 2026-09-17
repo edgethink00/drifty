@@ -3,10 +3,10 @@
 
 .share-card-modal {
   max-height: min(920px, calc(100vh - 32px));
-  max-width: 720px;
+  max-width: 690px;
   overflow-y: auto;
   position: relative;
-  width: min(720px, calc(100vw - 32px));
+  width: min(690px, calc(100vw - 32px));
 }
 
 .share-card-modal__body {

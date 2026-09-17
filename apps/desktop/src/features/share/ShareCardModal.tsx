@@ -225,7 +225,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
     <>
       <div className="auth-modal__overlay" onClick={onClose}>
         <section
-          className="auth-modal profile-modal share-card-modal"
+          className="auth-modal share-card-modal"
           role="dialog"
           data-modal-motion-panel
           aria-modal="true"

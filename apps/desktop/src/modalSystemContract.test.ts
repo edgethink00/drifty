@@ -85,7 +85,7 @@ const purposeBuiltDialogSurfaces = [
   ["Onboarding", "./features/onboarding/OnboardingModal.tsx", /className="onboarding-screen dc-onboarding-screen"\s+role="dialog"/],
   ["First-day preparation failure", "./features/onboarding/FirstDayPreparationScreen.tsx", /className="first-day-prep__panel"\s+role="alertdialog"/],
   ["Week activity inspector", "./features/dashboard/WeekActivityInspector.tsx", /className="week-activity-inspector"\s+style=\{layout\.style\}\s+role="dialog"/],
-  ["Share card", "./features/share/ShareCardModal.tsx", /className="auth-modal profile-modal share-card-modal"\s+role="dialog"/],
+  ["Share card", "./features/share/ShareCardModal.tsx", /className="auth-modal share-card-modal"\s+role="dialog"/],
   ["Companion drift alarm", "./features/companion/CompanionDriftAlarmCard.tsx", /function CompanionDriftAlarmCard[\s\S]*role=\{isPreview \? "group" : moment\.correctionStatus \? undefined : "alertdialog"\}/],
   ["Companion automatic close", "./features/companion/CompanionDriftAlarmCard.tsx", /function CompanionAutomaticCloseCard[\s\S]*role=\{isPreview \? "group" : "alertdialog"\}/],
 ] as const;
