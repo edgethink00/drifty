@@ -140,6 +140,7 @@ fn main() {
             "pet_mode_preview_intervention",
             "pet_mode_preview_action",
             "pet_mode_cancel_motion",
+            "pet_mode_set_dance_headroom",
             "pet_mode_move_to_target",
             "pet_mode_align_contact",
             "pet_mode_report_contact",

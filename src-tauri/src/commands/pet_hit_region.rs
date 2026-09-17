@@ -53,10 +53,31 @@ static HIT_REGION_PRESS: Mutex<PressState> = Mutex::new(PressState {
     active: false,
     owned_by_pet: false,
 });
+/// Fraction of the panel height that is dance headroom above the 144×99
+/// artwork canvas. The authored hit regions describe only that canvas, so the
+/// pointer test skips the extra strip and maps the remainder onto the canvas.
+static HIT_REGION_TOP_INSET_RATIO: Mutex<f64> = Mutex::new(0.0);
+
+pub fn set_pet_hit_region_top_inset_ratio(ratio: f64) {
+    if let Ok(mut current) = HIT_REGION_TOP_INSET_RATIO.lock() {
+        *current = if ratio.is_finite() { ratio.clamp(0.0, 0.9) } else { 0.0 };
+    }
+    HIT_REGION_NATIVE_REFRESH_PENDING.store(true, Ordering::Release);
+}
+
+fn hit_region_top_inset_ratio() -> f64 {
+    HIT_REGION_TOP_INSET_RATIO
+        .lock()
+        .map(|ratio| *ratio)
+        .unwrap_or(0.0)
+}
 
 pub fn reset_pet_hit_region() {
     if let Ok(mut state) = HIT_REGION.lock() {
         clear_hit_region_input(&mut state);
+        if let Ok(mut ratio) = HIT_REGION_TOP_INSET_RATIO.lock() {
+            *ratio = 0.0;
+        }
         HIT_REGION_NATIVE_REFRESH_PENDING.store(true, Ordering::Release);
     }
     if let Ok(mut press) = HIT_REGION_PRESS.lock() {
@@ -191,6 +212,7 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
                     pointer.y - position.y as f64,
                     size.width as f64,
                     size.height as f64,
+                    hit_region_top_inset_ratio(),
                 )
             })
             .unwrap_or(false);
@@ -459,6 +481,7 @@ fn refresh_pet_hit_region_on_main_thread(window: &WebviewWindow) -> Result<(), S
                 local_y,
                 bounds.size.width,
                 bounds.size.height,
+                hit_region_top_inset_ratio(),
             );
         // Keep the state lock across the AppKit mutation. A renderer update
         // cannot interleave between the decision and the NSWindow property.
@@ -542,7 +565,13 @@ fn hit_test_physical(
     local_y: f64,
     physical_width: f64,
     physical_height: f64,
+    top_inset_ratio: f64,
 ) -> bool {
+    // Dance headroom sits above the artwork canvas; pointer rows inside it are
+    // click-through and the canvas mapping uses only the remaining height.
+    let inset = physical_height * top_inset_ratio.clamp(0.0, 0.9);
+    let local_y = local_y - inset;
+    let physical_height = physical_height - inset;
     if state.version != HIT_REGION_VERSION
         || state.spans.is_empty()
         || physical_width <= 0.0
@@ -712,30 +741,45 @@ mod tests {
     #[test]
     fn hit_test_respects_span_boundaries() {
         let region = state(false);
-        assert!(hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0));
-        assert!(hit_test_physical(&region, 29.5, 10.0, 144.0, 99.0));
-        assert!(!hit_test_physical(&region, 30.0, 10.0, 144.0, 99.0));
-        assert!(!hit_test_physical(&region, 20.0, 10.5, 144.0, 99.0));
+        assert!(hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0, 0.0));
+        assert!(hit_test_physical(&region, 29.5, 10.0, 144.0, 99.0, 0.0));
+        assert!(!hit_test_physical(&region, 30.0, 10.0, 144.0, 99.0, 0.0));
+        assert!(!hit_test_physical(&region, 20.0, 10.5, 144.0, 99.0, 0.0));
     }
 
     #[test]
     fn hit_test_scales_physical_pixels() {
         let region = state(false);
-        assert!(hit_test_physical(&region, 40.0, 20.0, 288.0, 198.0));
-        assert!(!hit_test_physical(&region, 10.0, 20.0, 288.0, 198.0));
+        assert!(hit_test_physical(&region, 40.0, 20.0, 288.0, 198.0, 0.0));
+        assert!(!hit_test_physical(&region, 10.0, 20.0, 288.0, 198.0, 0.0));
+    }
+
+    #[test]
+    fn hit_test_skips_dance_headroom_above_the_canvas() {
+        let region = state(false);
+        // A 36-point strip above the 99-point canvas: 135 total, ratio 36/135.
+        let ratio = 36.0 / 135.0;
+        // Rows inside the headroom never hit, even over the canvas' span.
+        assert!(!hit_test_physical(&region, 20.0, 10.0, 144.0, 135.0, ratio));
+        // The same canvas row as before now lives 36 points lower.
+        assert!(hit_test_physical(&region, 20.0, 46.0, 144.0, 135.0, ratio));
+        assert!(!hit_test_physical(&region, 20.0, 46.5, 144.0, 135.0, ratio));
+        // At 2× the strip is 72 physical pixels tall.
+        assert!(hit_test_physical(&region, 40.0, 92.0, 288.0, 270.0, ratio));
+        assert!(!hit_test_physical(&region, 40.0, 20.0, 288.0, 270.0, ratio));
     }
 
     #[test]
     fn hit_test_mirrors_canonical_x() {
         let region = state(true);
-        assert!(hit_test_physical(&region, 114.5, 10.0, 144.0, 99.0));
-        assert!(!hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0));
+        assert!(hit_test_physical(&region, 114.5, 10.0, 144.0, 99.0, 0.0));
+        assert!(!hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0, 0.0));
     }
 
     #[test]
     fn invalid_or_empty_region_is_click_through() {
         let mut region = state(false);
         region.spans.clear();
-        assert!(!hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0));
+        assert!(!hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0, 0.0));
     }
 }

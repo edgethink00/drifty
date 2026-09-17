@@ -23,6 +23,7 @@ import {
   PET_MODE_PAW_GROUND_OFFSET_Y_PX,
   PET_MODE_INTERVENTION_PAW_LEAD_MS,
   PET_MODE_INTERVENTION_RUN_LANDING_FRAME,
+  PET_MODE_RUN_CYCLE_DURATION_MS,
   PET_MODE_RUN_FRAME_COUNT,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   getPetModeGaitFramesPerSecond,
@@ -495,6 +496,7 @@ export function PetModeCat({
           sizeScale,
           landingFrame: PET_MODE_INTERVENTION_RUN_LANDING_FRAME,
           handoffLeadMs: PET_MODE_INTERVENTION_PAW_LEAD_MS,
+          cycleDurationMs: PET_MODE_RUN_CYCLE_DURATION_MS,
         })
         : getPetModeRunFrameIndex(now - startedAt);
       if (nextFrame !== displayedFrame && !stagingFrame) {

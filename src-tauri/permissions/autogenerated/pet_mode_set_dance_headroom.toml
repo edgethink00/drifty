@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-set-dance-headroom"
+description = "Enables the pet_mode_set_dance_headroom command without any pre-configured scope."
+commands.allow = ["pet_mode_set_dance_headroom"]
+
+[[permission]]
+identifier = "deny-pet-mode-set-dance-headroom"
+description = "Denies the pet_mode_set_dance_headroom command without any pre-configured scope."
+commands.deny = ["pet_mode_set_dance_headroom"]

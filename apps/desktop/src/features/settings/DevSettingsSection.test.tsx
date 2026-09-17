@@ -204,7 +204,7 @@ describe("DevSettingsSection", () => {
     expect(onProps.onPetModeRunBetaEnabledChange).toHaveBeenCalledWith(true);
   });
 
-  it("shows the real pet phase and prevents overlapping Lab actions", async () => {
+  it("shows the real pet phase and keeps Lab actions available while the cat is busy", async () => {
     renderProductionDevSettings({ activeSubsection: "lab", petModeEnabled: true });
     await act(async () => undefined);
 
@@ -214,8 +214,13 @@ describe("DevSettingsSection", () => {
 
     expect(screen.getByText("Tail flick", { selector: ".pet-mode-lab__status" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Tail flick/ }).classList.contains("is-active")).toBe(true);
-    expect(screen.getByRole("button", { name: /Tail flick/ }).getAttribute("disabled")).toBe("");
-    expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
+    // Lab actions are commands that preempt the current activity, so a busy
+    // cat never locks the panel.
+    expect(screen.getByRole("button", { name: /Tail flick/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Dance 4-beat hip sway/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Wake Return to idle/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Intervention/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /Browser tab X/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /Drifty window X/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /Stop/ }).getAttribute("disabled")).toBeNull();
@@ -237,6 +242,17 @@ describe("DevSettingsSection", () => {
       petModeLabEvents.listener?.({ phase: "run", activeAction: "intervention", lifeLoopEnabled: false });
     });
     expect(screen.getByRole("button", { name: /Browser tab X/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Intervention/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Dance 4-beat hip sway/ }).getAttribute("disabled")).toBeNull();
+
+    // The user's own drag is the one thing a command does not take over.
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "drag", activeAction: null, lifeLoopEnabled: false });
+    });
+    expect(screen.getByRole("button", { name: /Dance 4-beat hip sway/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Stop/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Music note Manual 760 ms preview/ }).getAttribute("disabled")).toBeNull();
   });
 
   it("previews left and right facing only while the pet is resting", async () => {
@@ -280,7 +296,7 @@ describe("DevSettingsSection", () => {
     expect(screen.getByRole("button", { name: /단발 사냥 재생/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /전체 사냥 재생 · 여유 2초/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /Music note Manual 760 ms preview/ }).getAttribute("disabled")).toBeNull();
-    expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBeNull();
 
     act(() => {
       petModeLabEvents.listener?.({ phase: "sit", activeAction: "music_note", lifeLoopEnabled: false });

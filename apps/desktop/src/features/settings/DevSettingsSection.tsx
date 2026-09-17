@@ -305,36 +305,23 @@ export function DevSettingsSection({
     };
   }, [activeSubsection]);
 
-  const isPetModeLabActionDisabled = (action: PetModeLabAction) => {
-    if (!petModeEnabled) return true;
-    if (action === "stop") return false;
-    if (action === "wake") return petModeLabState?.phase !== "sleep";
-    if (action === "life_loop" && petModeLabState?.lifeLoopEnabled) return true;
-    if (action === "music_note") {
-      return petModeLabState !== null
-        && petModeLabState.activeAction !== null;
-    }
-    if (action === "sleep_drift_notice" || action === "sleep_drift_full_preview") {
-      return petModeLabState !== null
-        && (petModeLabState.activeAction !== null
-          || (petModeLabState.phase !== "idle"
-            && petModeLabState.phase !== "sit"
-            && petModeLabState.phase !== "sleep"));
-    }
-    if (action === "cursor_hunt_single" || action === "cursor_hunt_chase") {
-      return petModeLabState !== null
-        && (petModeLabState.activeAction !== null
-          || (petModeLabState.phase !== "idle" && petModeLabState.phase !== "sit"));
-    }
-    return petModeLabState !== null
-      && (petModeLabState.activeAction !== null || petModeLabState.phase !== "idle");
-  };
+  // The pet renderer treats Lab actions as commands that preempt whatever the
+  // cat is doing, so a busy cat never locks these buttons. The only thing a
+  // command cannot take over is the user's own drag gesture.
+  const petModeLabPointerOwned = petModeLabState !== null
+    && (petModeLabState.phase === "drag" || petModeLabState.phase === "release");
   const petModeLabTargetBusy = !petModeEnabled
     || (petModeLabState !== null
       && (petModeLabState.activeAction === "intervention"
         || petModeLabState.phase === "entry"
-        || petModeLabState.phase === "drag"
-        || petModeLabState.phase === "release"));
+        || petModeLabPointerOwned));
+  const isPetModeLabActionDisabled = (action: PetModeLabAction) => {
+    if (!petModeEnabled) return true;
+    if (action === "stop" || action === "music_note") return false;
+    if (action === "life_loop") return petModeLabState?.lifeLoopEnabled === true;
+    if (action === "intervention") return petModeLabTargetBusy;
+    return petModeLabPointerOwned;
+  };
   const petModeLabStatus = !petModeEnabled
     ? "Off"
     : petModeLabState?.activeAction === "music_note"
@@ -344,6 +331,8 @@ export function DevSettingsSection({
         : petModeLabState?.lifeLoopEnabled
           ? "Loop on"
           : "Ready";
+  // Facing follows travel direction while the cat moves, so a preview flip
+  // only means something on a resting cat.
   const petFacingBusy = !petModeEnabled
     || petModeLabState === null
     || petModeLabState.activeAction !== null
@@ -1006,6 +995,7 @@ function formatPetModeLabPhase(phase: string): string {
     case "blink": return "Blinking";
     case "stretch": return "Stretching";
     case "tail": return "Tail flick";
+    case "dance": return "Dancing";
     case "sleep": return "Sleeping";
     case "sit": return "Sitting";
     case "happy": return "Reacting";

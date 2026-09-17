@@ -44,6 +44,7 @@ import {
   listenToNativePetQuickControlsHold,
   listenToNativePetQuickControlsMenuState,
   setNativePetQuickControlsVisible,
+  setNativePetDanceHeadroom,
   setNativePetPresence,
   stalkNativePetCursor,
   returnWithNativePetCursor,
@@ -451,6 +452,67 @@ export function PetModeWindowApp() {
     }
     setMusicNoteVisible(false);
   }, []);
+
+  /**
+   * The dance frames stand the cat taller than the panel at its 1:1 body
+   * scale, so the panel borrows headroom above itself for exactly the dance
+   * phase. Callers raise it before committing the pose and lower it before the
+   * next pose; the phase effect below lowers it after any interruption. Native
+   * also drops it on its own before motion, drag, resize, or hide, so a stale
+   * lower here is a harmless no-op.
+   */
+  const danceHeadroomRef = useRef(false);
+  const danceHeadroomGenerationRef = useRef(0);
+  const invalidateDanceHeadroom = useCallback(() => {
+    danceHeadroomGenerationRef.current += 1;
+    const wasRaised = danceHeadroomRef.current;
+    danceHeadroomRef.current = false;
+    if (wasRaised) void setNativePetDanceHeadroom(false).catch(() => undefined);
+  }, []);
+  /**
+   * A Lab action is a command, not a suggestion. Whatever the cat is doing —
+   * an earlier preview, an autonomous life action, a native walk, an outing,
+   * a cursor hunt, an intervention — drops here so the requested action can
+   * start at once. Every in-flight sequence checks the action token, so
+   * advancing it is the cancellation; the rest clears renderer-owned cues the
+   * cancelled sequence would otherwise leave behind. Native travel is stopped
+   * by the command itself before this event arrives.
+   */
+  const interruptForLabCommand = useCallback(() => {
+    actionTokenRef.current += 1;
+    activeOutingTokenRef.current = null;
+    sleepTouchRef.current = 0;
+    stopMusicNote();
+    clearHuntAlert();
+    if (driftCueTokenRef.current !== null) {
+      driftCueTokenRef.current = null;
+      setDriftCue("none");
+    }
+    setSleepDriftPreviewExpression(false);
+    invalidateDanceHeadroom();
+  }, [clearHuntAlert, invalidateDanceHeadroom, stopMusicNote]);
+  const raiseDanceHeadroom = useCallback(async () => {
+    const generation = ++danceHeadroomGenerationRef.current;
+    try {
+      await setNativePetDanceHeadroom(true);
+    } catch {
+      return;
+    }
+    if (generation !== danceHeadroomGenerationRef.current) {
+      await setNativePetDanceHeadroom(false).catch(() => undefined);
+      return;
+    }
+    danceHeadroomRef.current = true;
+  }, []);
+  const lowerDanceHeadroom = useCallback(async () => {
+    danceHeadroomGenerationRef.current += 1;
+    if (!danceHeadroomRef.current) return;
+    danceHeadroomRef.current = false;
+    await setNativePetDanceHeadroom(false).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (phase !== "dance") void lowerDanceHeadroom();
+  }, [lowerDanceHeadroom, phase]);
 
   useEffect(() => () => {
     if (musicNoteTimerRef.current !== null) {
@@ -1581,8 +1643,14 @@ export function PetModeWindowApp() {
       if (token !== actionTokenRef.current) return;
       if (movedToTarget && !fullscreenReturnHandled) {
         if (contacted && danceOnCloseBetaEnabledRef.current && token === actionTokenRef.current) {
+          await raiseDanceHeadroom();
+          if (token !== actionTokenRef.current) return;
           commitPhase("dance");
           await delay(prefersReducedMotion() ? 40 : PET_MODE_DANCE_DURATION_MS);
+          if (token !== actionTokenRef.current) return;
+          // Lower before the walk home so the return trip starts from the
+          // base-height panel instead of the taller dance frame.
+          await lowerDanceHeadroom();
           if (token !== actionTokenRef.current) return;
         }
         // Every real successful close earns the E04 face for the walk home.
@@ -1601,7 +1669,7 @@ export function PetModeWindowApp() {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
       }
     }
-  }, [commitFacing, commitPhase, endWatchForVisit, fastRunBetaEnabled, revealForAction, stopMusicNote]);
+  }, [commitFacing, commitPhase, endWatchForVisit, fastRunBetaEnabled, lowerDanceHeadroom, raiseDanceHeadroom, revealForAction, stopMusicNote]);
 
   const playOuting = useCallback(async (awayMilliseconds: number) => {
     if (!petOutingsEnabledRef.current) return;
@@ -1702,9 +1770,7 @@ export function PetModeWindowApp() {
 
   const playLifeAction = useCallback(async (action: LifeAction, preview = true) => {
     if (action === "stop") {
-      actionTokenRef.current += 1;
-      sleepTouchRef.current = 0;
-      stopMusicNote();
+      interruptForLabCommand();
       setLifeLoopEnabled(false);
       commitVisibility(true);
       commitPhase(focusRestingRef.current ? "sit" : "idle");
@@ -1799,6 +1865,10 @@ export function PetModeWindowApp() {
         dance: PET_MODE_DANCE_DURATION_MS,
         pet: 1_200,
       };
+      if (action === "dance") {
+        await raiseDanceHeadroom();
+        if (token !== actionTokenRef.current) return;
+      }
       commitPhase(phaseByAction[action]);
       const guaranteedOutcomes = guaranteedOutcomesEnabled();
       if (
@@ -1807,12 +1877,15 @@ export function PetModeWindowApp() {
           || shouldShowPetModeMusicNote(action, Math.random()))
       ) playMusicNote();
       await delay(prefersReducedMotion() ? 40 : durationByAction[action]);
+      if (action === "dance" && token === actionTokenRef.current) {
+        await lowerDanceHeadroom();
+      }
     }
 
     if (token === actionTokenRef.current) {
       commitPhase(focusRestingRef.current ? "sit" : "idle");
     }
-  }, [commitPhase, commitVisibility, playMusicNote, playOuting, revealForAction, setLifeLoopEnabled, stopMusicNote]);
+  }, [commitPhase, commitVisibility, interruptForLabCommand, lowerDanceHeadroom, playMusicNote, playOuting, raiseDanceHeadroom, revealForAction, setLifeLoopEnabled]);
 
   const wakeSleepingPet = useCallback(async () => {
     const token = ++actionTokenRef.current;
@@ -2174,25 +2247,19 @@ export function PetModeWindowApp() {
         const isSleepDriftFullPreview = previewAction === "sleep_drift_full_preview";
         const isCursorHuntPreview = previewAction === "cursor_hunt_single"
           || previewAction === "cursor_hunt_chase";
-        const canStartFromCurrentRestPose =
-          ((isSleepDriftNoticePreview || isSleepDriftFullPreview)
-            && (phaseRef.current === "sit" || phaseRef.current === "sleep"))
-          || (isCursorHuntPreview && phaseRef.current === "sit");
-        // Lab previews are deliberately single-flight. A walk moves the native
-        // overlay independently, so letting another pose start during that trip
-        // makes the cat look as if it is stretching or sleeping while walking.
-        // Wake is the intentional interruption that clears the persistent
-        // sleep pose immediately.
+        const isAdditiveAction = previewAction === "music_note" || previewAction === "life_loop";
+        // The user's own hand outranks a Lab command: a cat being dragged or
+        // just released stays with the pointer until that gesture finishes.
+        // Everything else the cat might be doing is preempted below.
         if (
-          phaseRef.current !== "idle"
-          && !canStartFromCurrentRestPose
-          && previewAction !== "music_note"
-          && previewAction !== "wake"
+          (phaseRef.current === "drag" || phaseRef.current === "release" || manualDragRef.current)
+          && !isAdditiveAction
           && previewAction !== "stop"
         ) {
           reportLabState();
           return;
         }
+        if (!isAdditiveAction && previewAction !== "stop") interruptForLabCommand();
         if (isSleepDriftNoticePreview) {
           void (async () => {
             const actionRevision = setActiveLabAction(previewAction);
@@ -2375,7 +2442,7 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [beginSleepwalk, clearActiveLabAction, clearDriftCue, commitFacing, commitPhase, commitVisibility, endWatchForVisit, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, revealForAction, setActiveLabAction, showDriftCue]);
+  }, [beginSleepwalk, clearActiveLabAction, clearDriftCue, commitFacing, commitPhase, commitVisibility, endWatchForVisit, interruptForLabCommand, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, revealForAction, setActiveLabAction, showDriftCue]);
 
   useEffect(() => {
     const resting = snapshot?.productivity === "focus";

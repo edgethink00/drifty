@@ -117,11 +117,15 @@
 .pet-mode-scale {
   position: absolute;
   left: 0;
-  top: 0;
+  /* Anchored to the bottom, not the top: the dance pose grows the native
+     panel upward from its bottom edge, and a bottom-anchored canvas stays put
+     while the extra height opens above it. At the base height the two
+     anchors are identical. */
+  bottom: 0;
   width: 144px;
   height: 99px;
   transform: scale(var(--pet-size-scale, 1));
-  transform-origin: 0 0;
+  transform-origin: 0 100%;
 }
 
 .pet-mode-hit-target {
@@ -598,6 +602,18 @@
 /* Tail V2-B uses the larger comparison canvas that preserved its complete
    Flow contour. These values are the approved review geometry scaled exactly
    50% into the native 60% pet panel, keeping every frame inside 144 × 99 px. */
+.pet-mode-cat--tail .pet-mode-cat__raster--life-motion {
+  left: -18.2484px;
+  top: -13.1835px;
+  width: 142.4896px;
+  height: 106.6011px;
+}
+
+/* The dance frames stand the cat on its hind legs at the same 1:1 body scale
+   as the seated and running poses, which puts the head about 33 px above the
+   99 px panel. The renderer asks native for 36 px of headroom above the panel
+   for exactly the dance phase, so this geometry stays 1:1 and the paws stay
+   on the shared ground line instead of the frame being shrunk to fit. */
 .pet-mode-cat__raster--dance {
   position: absolute;
   inset: auto;
@@ -607,13 +623,6 @@
   height: 144.3px;
   object-fit: fill;
   pointer-events: none;
-}
-
-.pet-mode-cat--tail .pet-mode-cat__raster--life-motion {
-  left: -18.2484px;
-  top: -13.1835px;
-  width: 142.4896px;
-  height: 106.6011px;
 }
 
 .pet-mode-cat__face-erase {

@@ -106,6 +106,7 @@ const bridge = vi.hoisted(() => ({
     endY: 80,
   }),
   cancelNativePetMotion: vi.fn().mockResolvedValue(undefined),
+  setNativePetDanceHeadroom: vi.fn().mockResolvedValue(true),
   dragEndHandler: null as ((result: {
     moved: boolean;
     shakeDetected?: boolean;
@@ -211,6 +212,7 @@ vi.mock("./petModeBridge", () => ({
   alignNativePetContact: bridge.alignNativePetContact,
   beginNativePetDrag: bridge.beginNativePetDrag,
   cancelNativePetMotion: bridge.cancelNativePetMotion,
+  setNativePetDanceHeadroom: bridge.setNativePetDanceHeadroom,
   listenToNativePetDragEnd: bridge.listenToNativePetDragEnd,
   listenToNativePetDragStart: bridge.listenToNativePetDragStart,
   listenToNativePetStrokeDetected: bridge.listenToNativePetStrokeDetected,
@@ -287,6 +289,7 @@ describe("PetModeWindowApp", () => {
     bridge.isNativePetQuickControlsCursorInside.mockReset().mockResolvedValue(false);
     bridge.setNativePetQuickControlsVisible.mockReset().mockImplementation(async (visible: boolean) => visible);
     bridge.stagePetModeHitRegionTransition.mockReset().mockResolvedValue(undefined);
+    bridge.setNativePetDanceHeadroom.mockReset().mockResolvedValue(true);
     bridge.dragEndHandler = null;
     bridge.dragStartHandler = null;
     bridge.strokeDetectedHandler = null;
@@ -4345,7 +4348,8 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
-  it("keeps Lab preview actions single-flight while native walking is still in progress", async () => {
+  it("lets a Lab action preempt a native walk that is still in progress", async () => {
+    vi.useFakeTimers();
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -4362,13 +4366,101 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("walk");
 
+    // A Lab action is a command: the walk drops and the stretch starts now.
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "stretch" });
     });
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("walk");
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("stretch");
 
+    // The superseded walk finishing later must not steal the pose back.
     await act(async () => { finishWalk?.(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("stretch");
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_LIFE_MOTION_DURATION_MS); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("lets a Lab action interrupt a running life action, and plays the dance from the Lab", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    await renderResidentPet();
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "tail_flick" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("tail");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(cat.getAttribute("data-phase")).toBe("tail");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "dance" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("dance");
+    expect(cat.querySelector("img")?.getAttribute("src")).toBe("/pet-mode/dance/f001.png");
+
+    // The cancelled tail flick's own timer (3.1 s from its start) fires while
+    // the 2.4 s dance is still playing and must not end it early.
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_TAIL_FLICK_DURATION_MS - 1_000 + 1); });
+    expect(PET_MODE_TAIL_FLICK_DURATION_MS - 1_000 + 1).toBeLessThan(PET_MODE_DANCE_DURATION_MS);
+    expect(cat.getAttribute("data-phase")).toBe("dance");
+
+    // Only the remaining dance hold. Advancing a full extra cycle overshoots
+    // into the idle blink scheduler (4.4–7.3 s) and flakes as `blink`.
+    const remainingDanceMs = PET_MODE_DANCE_DURATION_MS
+      - (PET_MODE_TAIL_FLICK_DURATION_MS - 1_000 + 1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(remainingDanceMs + 50);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("keeps the user's drag ahead of Lab commands", async () => {
+    vi.useFakeTimers();
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        strokeDetected: false,
+        startX: 120,
+        startY: 80,
+        endX: 240,
+        endY: 80,
+      });
+    }));
+    await renderResidentPet();
+    const cat = screen.getByLabelText("Drifty pet cat");
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 43, clientX: 12, clientY: 12 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("drag");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "dance" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("drag");
+
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); await Promise.resolve(); });
   });
 
   it("runs the Lab life loop at a reviewable QA cadence and Stop cancels it", async () => {
@@ -4470,6 +4562,89 @@ describe("PetModeWindowApp", () => {
     // Advancing past 40ms dance hold triggers returnNativePetHome!
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
     expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
+    // The panel borrowed headroom for the 1:1 upright pose and gave it back
+    // before the walk home started.
+    expect(bridge.setNativePetDanceHeadroom.mock.calls).toEqual([[true], [false]]);
+    const raiseOrder = bridge.setNativePetDanceHeadroom.mock.invocationCallOrder[1];
+    const returnOrder = bridge.returnNativePetHome.mock.invocationCallOrder[0];
+    expect(raiseOrder).toBeLessThan(returnOrder);
+  });
+
+  it("raises dance headroom before the Lab dance pose and lowers it when the pose ends or is interrupted", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    await renderResidentPet();
+    const cat = screen.getByLabelText("Drifty pet cat");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "dance" });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("dance");
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenCalledTimes(1);
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenLastCalledWith(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DANCE_DURATION_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenLastCalledWith(false);
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenCalledTimes(2);
+
+    // Interrupting a dance with another Lab action lowers the headroom too.
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "dance" });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("dance");
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenCalledTimes(3);
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "blink" });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("blink");
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenLastCalledWith(false);
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenCalledTimes(4);
+    // The cancelled dance's own timer must not lower it again later.
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DANCE_DURATION_MS); });
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not keep dance headroom if the native raise loses the pose mid-flight", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    let finishRaise: ((value: boolean) => void) | null = null;
+    bridge.setNativePetDanceHeadroom.mockImplementation((active: boolean) => {
+      if (active) {
+        return new Promise<boolean>((resolve) => { finishRaise = resolve; });
+      }
+      return Promise.resolve(true);
+    });
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    await renderResidentPet();
+    const cat = screen.getByLabelText("Drifty pet cat");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "dance" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).not.toBe("dance");
+    expect(finishRaise).not.toBeNull();
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "blink" });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("blink");
+
+    await act(async () => { finishRaise?.(true); await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("blink");
+    expect(bridge.setNativePetDanceHeadroom).toHaveBeenLastCalledWith(false);
   });
 
   it("never reports paw contact when native target travel was cancelled", async () => {

@@ -465,6 +465,25 @@ export function getPetModeInterventionRunProgress(
   startDelayMs = PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
 ): number {
   if (!Number.isFinite(durationMs) || durationMs <= 0) return 0;
+  const { accelerationDuration, decelerationDuration } = getPetModeInterventionRunProfile(durationMs);
+  return getPetModeTravelProgress(
+    Math.max(0, elapsedMilliseconds - Math.max(0, startDelayMs)),
+    durationMs,
+    accelerationDuration,
+    decelerationDuration,
+  );
+}
+
+function getPetModeInterventionRunProfile(durationMs: number): {
+  readonly accelerationDuration: number;
+  readonly decelerationDuration: number;
+  /**
+   * Average speed as a fraction of cruise speed: the area under the unit
+   * velocity profile. Progress advances 1 / cruiseShare times faster than
+   * linear time while the cat is at full speed.
+   */
+  readonly cruiseShare: number;
+} {
   const accelerationDuration = Math.min(
     PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO,
     PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_MS / durationMs,
@@ -473,12 +492,38 @@ export function getPetModeInterventionRunProgress(
     PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO,
     PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_MS / durationMs,
   );
-  return getPetModeTravelProgress(
-    Math.max(0, elapsedMilliseconds - Math.max(0, startDelayMs)),
-    durationMs,
+  const cruiseDuration = 1 - decelerationDuration - accelerationDuration;
+  return {
     accelerationDuration,
     decelerationDuration,
-  );
+    cruiseShare: accelerationDuration / 2 + cruiseDuration + decelerationDuration / 2,
+  };
+}
+
+/**
+ * How many gait frames the authored run plays across one intervention.
+ *
+ * The reviewed Loop 5 run was approved as a fixed 616 ms cycle, so the raster
+ * gait keeps that cadence at cruise speed and only follows the native
+ * acceleration and deceleration ramps at the ends. Deriving the cadence from
+ * the 80 px vector stride instead made the 17 frames cycle every ~280 ms at
+ * 285 px/s, more than twice the approved speed, which read as frantic legs
+ * that no longer matched the panel's travel. Without a cycle duration the
+ * cadence stays distance-driven, which is what the vector fallback gait uses.
+ */
+function getPetModeInterventionRunTotalFrames(
+  frameCount: number,
+  travelDistance: number,
+  durationMs: number,
+  sizeScale: number,
+  cycleDurationMs: number | undefined,
+): number {
+  if (typeof cycleDurationMs === "number" && Number.isFinite(cycleDurationMs) && cycleDurationMs > 0) {
+    const { cruiseShare } = getPetModeInterventionRunProfile(durationMs);
+    return durationMs * cruiseShare / cycleDurationMs * frameCount;
+  }
+  const stride = getPetModeGaitStride("run") * sizeScale;
+  return travelDistance / stride * frameCount;
 }
 
 export function getPetModeGaitFrameIndex(
@@ -528,6 +573,8 @@ export function getPetModeInterventionFrameIndex(
     readonly sizeScale?: number;
     readonly landingFrame?: number;
     readonly handoffLeadMs?: number;
+    /** Fixed gait cycle length at cruise speed; omit for a distance-driven cadence. */
+    readonly cycleDurationMs?: number;
   },
 ): number {
   if (!Number.isInteger(frameCount) || frameCount < 1) return 0;
@@ -542,8 +589,13 @@ export function getPetModeInterventionFrameIndex(
     || durationMs <= 0
   ) return 0;
   const sizeScale = options?.sizeScale && options.sizeScale > 0 ? options.sizeScale : 1;
-  const stride = getPetModeGaitStride("run") * sizeScale;
-  const totalFrames = travelDistance / stride * frameCount;
+  const totalFrames = getPetModeInterventionRunTotalFrames(
+    frameCount,
+    travelDistance,
+    durationMs,
+    sizeScale,
+    options?.cycleDurationMs,
+  );
   const landingFrame = (
     (Math.trunc(options?.landingFrame ?? PET_MODE_INTERVENTION_RUN_LANDING_FRAME) % frameCount)
     + frameCount

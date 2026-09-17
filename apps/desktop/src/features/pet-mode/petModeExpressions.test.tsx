@@ -31,6 +31,7 @@ vi.mock("./petModeBridge", () => ({
   alignNativePetContact: vi.fn().mockResolvedValue(undefined),
   beginNativePetDrag: bridge.beginNativePetDrag,
   cancelNativePetMotion: vi.fn().mockResolvedValue(undefined),
+  setNativePetDanceHeadroom: vi.fn().mockResolvedValue(true),
   listenToNativePetDragEnd: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetDragStart: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetStrokeDetected: vi.fn().mockResolvedValue(vi.fn()),

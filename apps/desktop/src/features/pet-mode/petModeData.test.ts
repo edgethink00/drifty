@@ -267,6 +267,53 @@ describe("petModeData", () => {
     expect(getPetModeInterventionRunProgress(offset + durationMs, durationMs, offset)).toBe(1);
   });
 
+  it("plays the authored run at its approved 616 ms cycle while cruising and still lands on the planted frame", () => {
+    expect(PET_MODE_RUN_CYCLE_DURATION_MS).toBe(616);
+    for (const sizeScale of [0.5, 1, 1.25]) {
+      for (const travelDistance of [152, 400, 900]) {
+        const durationMs = travelDistance / PET_MODE_INTERVENTION_RUN_SPEED * 1000;
+        const options = {
+          travelDistance,
+          durationMs,
+          startDelayMs: PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
+          sizeScale,
+          handoffLeadMs: PET_MODE_INTERVENTION_PAW_LEAD_MS,
+          cycleDurationMs: PET_MODE_RUN_CYCLE_DURATION_MS,
+        };
+        // Sample the cruise plateau: one full cycle must advance exactly 17
+        // frames (the same frame again), and half a cycle the opposite leg
+        // phase, independent of distance and pet size. The old distance
+        // stride cycled every ~280 ms here.
+        const cruiseStartMs = PET_MODE_INTERVENTION_RUN_START_DELAY_MS + durationMs * 0.3;
+        const at = (elapsedMs: number) => getPetModeInterventionFrameIndex(elapsedMs, 17, options);
+        const frameAdvance = (ms: number) => {
+          let advanced = 0;
+          let previous = at(cruiseStartMs);
+          for (let step = 1; step <= 200; step += 1) {
+            const next = at(cruiseStartMs + ms * step / 200);
+            advanced += ((next - previous) % 17 + 17) % 17;
+            previous = next;
+          }
+          return advanced;
+        };
+        if (durationMs * 0.3 + PET_MODE_RUN_CYCLE_DURATION_MS < durationMs * 0.8) {
+          expect(frameAdvance(PET_MODE_RUN_CYCLE_DURATION_MS)).toBe(17);
+        }
+        expect(getPetModeInterventionFrameIndex(
+          PET_MODE_INTERVENTION_RUN_START_DELAY_MS
+            + durationMs
+            - PET_MODE_INTERVENTION_PAW_LEAD_MS,
+          17,
+          options,
+        )).toBe(PET_MODE_INTERVENTION_RUN_LANDING_FRAME);
+      }
+    }
+    // The vector fallback keeps its distance-driven cadence when no cycle is given.
+    const vectorOptions = { travelDistance: 900, durationMs: 900 / PET_MODE_INTERVENTION_RUN_SPEED * 1000, sizeScale: 1 };
+    expect(getPetModeInterventionFrameIndex(0, 30, vectorOptions))
+      .not.toBe(getPetModeInterventionFrameIndex(0, 30, { ...vectorOptions, cycleDurationMs: PET_MODE_RUN_CYCLE_DURATION_MS }));
+  });
+
   it("compresses only the near-static paw preparation while preserving the authored arc", () => {
     expect(PET_MODE_PAW_CONTACT_FRAME).toBe(14);
     expect(PET_MODE_PAW_PREP_FRAME_COUNT).toBe(7);

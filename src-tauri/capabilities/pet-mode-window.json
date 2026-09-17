@@ -24,6 +24,7 @@
     "allow-pet-mode-set-interactive",
     "allow-pet-mode-update-hit-region",
     "allow-pet-mode-cancel-motion",
+    "allow-pet-mode-set-dance-headroom",
     "allow-pet-mode-begin-drag",
     "allow-pet-mode-report-drag-error",
     "allow-pet-mode-cursor-inside",
