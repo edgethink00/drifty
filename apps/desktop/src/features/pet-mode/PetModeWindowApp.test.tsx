@@ -663,7 +663,13 @@ describe("PetModeWindowApp", () => {
     expect(bridge.reconcileNativePetPosition).toHaveBeenLastCalledWith(false, true);
     bridge.reconcileNativePetPosition.mockClear();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 60_000); });
+    // Automatic deadline expiry is covered by the preceding test. Advance the
+    // wall clock and use the foreground refresh here so this seat-policy check
+    // does not batch 150 periodic native scans into the same fake-timer tick.
+    await act(async () => {
+      vi.setSystemTime(Date.now() + 15 * 60_000);
+      window.dispatchEvent(new Event("focus"));
+    });
     expect(cat.getAttribute("data-phase")).toBe("idle");
     await act(async () => { await vi.advanceTimersByTimeAsync(150); });
     expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false, false);
