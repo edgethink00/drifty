@@ -3,13 +3,13 @@ export const DARK_PALETTE_PREVIEW_STORAGE_KEY = "drifty.dev.darkPalettePreview";
 export const DARK_PALETTE_PREVIEW_OPTIONS = [
   {
     id: "current",
-    label: "Current",
-    detail: "Shipping palette",
+    label: "Default (V1)",
+    detail: "Refined charcoal",
   },
   {
-    id: "v1",
-    label: "V1",
-    detail: "Subtle lift",
+    id: "classic",
+    label: "Classic",
+    detail: "Deep black",
   },
   {
     id: "v21",
@@ -21,6 +21,7 @@ export const DARK_PALETTE_PREVIEW_OPTIONS = [
 export type DarkPalettePreview = (typeof DARK_PALETTE_PREVIEW_OPTIONS)[number]["id"];
 
 function resolveDarkPalettePreview(value: string | null): DarkPalettePreview {
+  if (value === "v1") return "current";
   for (const option of DARK_PALETTE_PREVIEW_OPTIONS) {
     if (option.id === value) return option.id;
   }

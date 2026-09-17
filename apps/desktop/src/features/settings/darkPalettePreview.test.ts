@@ -30,6 +30,12 @@ describe("dark palette preview", () => {
     expect(resolveInitialDarkPalettePreview()).toBe("current");
   });
 
+  it("resolves legacy v1 preview to current shipping palette", () => {
+    window.localStorage.setItem(DARK_PALETTE_PREVIEW_STORAGE_KEY, "v1");
+
+    expect(resolveInitialDarkPalettePreview()).toBe("current");
+  });
+
   it("removes the preview when Current is selected or Dev mode is inactive", () => {
     const root = document.documentElement;
 
@@ -39,14 +45,14 @@ describe("dark palette preview", () => {
     applyDarkPalettePreview(root, "current", true);
     expect(root.dataset.darkPalettePreview).toBeUndefined();
 
-    applyDarkPalettePreview(root, "v1", true);
-    applyDarkPalettePreview(root, "v1", false);
+    applyDarkPalettePreview(root, "classic", true);
+    applyDarkPalettePreview(root, "classic", false);
     expect(root.dataset.darkPalettePreview).toBeUndefined();
   });
 
   it("keeps secondary webviews synchronized with palette and Dev-mode storage", () => {
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(DARK_PALETTE_PREVIEW_STORAGE_KEY, "v1");
+    window.localStorage.setItem(DARK_PALETTE_PREVIEW_STORAGE_KEY, "classic");
     const stopSync = installDarkPalettePreviewStorageSync(
       window,
       document.documentElement,
@@ -54,7 +60,7 @@ describe("dark palette preview", () => {
       DEV_MODE_STORAGE_KEY,
     );
 
-    expect(document.documentElement.dataset.darkPalettePreview).toBe("v1");
+    expect(document.documentElement.dataset.darkPalettePreview).toBe("classic");
 
     window.localStorage.setItem(DARK_PALETTE_PREVIEW_STORAGE_KEY, "v21");
     window.dispatchEvent(new StorageEvent("storage", {

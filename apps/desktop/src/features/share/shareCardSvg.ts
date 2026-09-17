@@ -73,10 +73,10 @@ type ShareCardPalette = {
 };
 
 const DARK_PALETTE: ShareCardPalette = {
-  canvas: "#10100e",
+  canvas: "#141412",
   canvasGlow: "#1c2213",
-  text: "#e8e6df",
-  soft: "#8a8780",
+  text: "#dcd9d0",
+  soft: "#96938a",
   accent: "#b7d96b",
 };
 

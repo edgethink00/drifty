@@ -494,22 +494,22 @@ describe("DevSettingsSection", () => {
   it("switches the app-wide dark palette preview from the Previews tab", () => {
     const props = renderProductionDevSettings({ activeSubsection: "previews" });
 
-    const current = screen.getByRole("radio", { name: /Current/ });
-    const v1 = screen.getByRole("radio", { name: /^V1/ });
+    const current = screen.getByRole("radio", { name: /Default/ });
+    const classic = screen.getByRole("radio", { name: /Classic/ });
     const v21 = screen.getByRole("radio", { name: /V2\.1/ });
     expect(current.getAttribute("aria-checked")).toBe("true");
     expect(current.getAttribute("tabindex")).toBe("0");
-    expect(v1.getAttribute("tabindex")).toBe("-1");
+    expect(classic.getAttribute("tabindex")).toBe("-1");
     fireEvent.click(v21);
 
     expect(props.onDarkPalettePreviewChange).toHaveBeenCalledWith("v21");
 
     current.focus();
     fireEvent.keyDown(current, { key: "ArrowRight" });
-    expect(props.onDarkPalettePreviewChange).toHaveBeenLastCalledWith("v1");
-    expect(document.activeElement).toBe(v1);
+    expect(props.onDarkPalettePreviewChange).toHaveBeenLastCalledWith("classic");
+    expect(document.activeElement).toBe(classic);
 
-    fireEvent.keyDown(v1, { key: "End" });
+    fireEvent.keyDown(classic, { key: "End" });
     expect(props.onDarkPalettePreviewChange).toHaveBeenLastCalledWith("v21");
     expect(document.activeElement).toBe(v21);
 

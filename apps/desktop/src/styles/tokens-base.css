@@ -302,28 +302,28 @@ html {
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --canvas: #10100e;
-  --bg-2: #1b1b18;
-  --surface: #151513;
-  --surface-strong: #1f1f1c;
-  --dashboard-plot-surface: #171715;
-  --flow-chart-plot-surface: #191917;
+  --canvas: #141412;
+  --bg-2: #20201c;
+  --surface: #1a1a17;
+  --surface-strong: #22221e;
+  --dashboard-plot-surface: #1b1b18;
+  --flow-chart-plot-surface: #1d1d1a;
   --flow-chart-empty-cell-surface: transparent;
   --flow-chart-empty-cell-opacity: 1;
-  --line: rgba(232,230,223,.085);
-  --line-strong: rgba(232,230,223,.165);
-  --text: #e8e6df;
+  --line: rgba(232,230,223,.13);
+  --line-strong: rgba(232,230,223,.20);
+  --text: #dcd9d0;
   --text-muted: #c8c5bc;
-  --text-soft: #8a8780;
+  --text-soft: #96938a;
   --window-chrome-icon: #f1efe7;
   --window-chrome-icon-hover: #fffaf0;
   /* See the light-theme note: the material carries the frost here too. */
   --shell-glass-bg: rgba(38, 40, 35, 0.64);
-  --shell-glass-control: #151513;
-  --shell-glass-control-strong: #171715;
-  --shell-floating-surface: rgba(21,21,19,.62);
-  --shell-floating-surface-strong: rgba(23,23,21,.78);
-  --pet-quick-controls-surface: rgba(23,23,21,.88);
+  --shell-glass-control: #1a1a17;
+  --shell-glass-control-strong: #1c1c19;
+  --shell-floating-surface: rgba(26,26,23,.62);
+  --shell-floating-surface-strong: rgba(28,28,25,.78);
+  --pet-quick-controls-surface: rgba(28,28,25,.88);
   --accent: #9bbf5a;
   --accent-mid: #abc96d;
   --accent-soft: #26321d;
@@ -379,17 +379,22 @@ html {
 
 /* Dev-only palette studies. The data attribute is applied only while Dev mode
    is active, so disabling Dev immediately restores the shipping palette. */
-:root[data-theme="dark"][data-dark-palette-preview="v1"] {
-  --canvas: #141412;
-  --bg-2: #20201c;
-  --surface: #1a1a17;
-  --surface-strong: #22221e;
-  --dashboard-plot-surface: #1b1b18;
-  --flow-chart-plot-surface: #1d1d1a;
-  --line: rgba(232,230,223,.13);
-  --line-strong: rgba(232,230,223,.20);
-  --text: #dcd9d0;
-  --text-soft: #96938a;
+:root[data-theme="dark"][data-dark-palette-preview="classic"] {
+  --canvas: #10100e;
+  --bg-2: #1b1b18;
+  --surface: #151513;
+  --surface-strong: #1f1f1c;
+  --dashboard-plot-surface: #171715;
+  --flow-chart-plot-surface: #191917;
+  --line: rgba(232,230,223,.085);
+  --line-strong: rgba(232,230,223,.165);
+  --text: #e8e6df;
+  --text-soft: #8a8780;
+  --shell-glass-control: #151513;
+  --shell-glass-control-strong: #171715;
+  --shell-floating-surface: rgba(21,21,19,.62);
+  --shell-floating-surface-strong: rgba(23,23,21,.78);
+  --pet-quick-controls-surface: rgba(23,23,21,.88);
 }
 
 :root[data-theme="dark"][data-dark-palette-preview="v21"] {
