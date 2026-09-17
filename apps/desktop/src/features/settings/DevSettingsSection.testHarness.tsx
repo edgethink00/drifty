@@ -82,6 +82,8 @@ export function renderProductionDevSettings(
     onProfileBetaChange: vi.fn(),
     onAgentsBetaChange: vi.fn(),
     onNavigationRefreshChange: vi.fn(),
+    leaderboardGraphStyle: "off",
+    onLeaderboardGraphStyleChange: vi.fn(),
     onAiAvailabilityGateDevDisabledChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onReplayDashboardDemo: vi.fn(),

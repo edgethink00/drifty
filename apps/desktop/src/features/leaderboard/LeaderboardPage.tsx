@@ -1,6 +1,7 @@
 import { LeaderboardView } from "./LeaderboardView";
 import type { LeaderboardPublicProfileControls } from "./LeaderboardView";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
+import type { LeaderboardGraphStyle } from "./leaderboardGraphStyle";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export type LeaderboardPageProps = {
@@ -30,6 +31,7 @@ export type LeaderboardPageProps = {
   onPeriodChange: (period: LeaderboardPeriod) => void;
   onSelectProfile: (row: LeaderboardRow) => void;
   onSignIn: () => void;
+  graphStyle?: LeaderboardGraphStyle;
 };
 
 export function LeaderboardPage({
@@ -59,6 +61,7 @@ export function LeaderboardPage({
   onPeriodChange,
   onSelectProfile,
   onSignIn,
+  graphStyle,
 }: LeaderboardPageProps) {
   const { t } = useLocalization();
   return (
@@ -97,6 +100,7 @@ export function LeaderboardPage({
           onOptOut={onOptOut}
           onPeriodChange={onPeriodChange}
           onSelectProfile={onSelectProfile}
+          graphStyle={graphStyle}
         />
       </div>
     </div>

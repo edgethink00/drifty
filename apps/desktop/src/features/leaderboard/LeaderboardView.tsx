@@ -10,6 +10,8 @@ import { RankEmbedsModal } from "./RankEmbedsModal";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { LeaderboardSparkline } from "./LeaderboardSparkline";
+import { DEFAULT_LEADERBOARD_GRAPH_STYLE, type LeaderboardGraphStyle } from "./leaderboardGraphStyle";
 
 export type LeaderboardPublicProfileControls = {
   readonly card: FocusCardControls;
@@ -63,6 +65,8 @@ export type LeaderboardViewProps = {
   onOptOut?: (options?: { readonly makeProfilePrivate?: boolean }) => void;
   onPeriodChange?: (period: LeaderboardPeriod) => void;
   onSelectProfile?: (row: LeaderboardRow) => void;
+  /** Dev-only sparkline. Production callers leave this unset / "off". */
+  graphStyle?: LeaderboardGraphStyle;
 };
 
 export function LeaderboardView({
@@ -92,6 +96,7 @@ export function LeaderboardView({
   onOptOut,
   onPeriodChange,
   onSelectProfile,
+  graphStyle = DEFAULT_LEADERBOARD_GRAPH_STYLE,
 }: LeaderboardViewProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [searchQuery, setSearchQuery] = useState("");
@@ -123,6 +128,11 @@ export function LeaderboardView({
   const weekFocusSeconds = publicProfile?.focusSeconds7d ?? 0;
   const dailyAverageSeconds = Math.round(weekFocusSeconds / 7);
   const dailyProductivity = publicProfile?.dailyProductivity ?? null;
+  const sparklinePoints = useMemo(
+    () => (dailyProductivity ?? []).slice(-7).map((point) => ({ day: point.day, focus: point.focus })),
+    [dailyProductivity],
+  );
+  const showSparkline = graphStyle !== "off" && sparklinePoints.length >= 2;
   const last30FocusSeconds = (dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
   const localMetricsStatus = publicProfile?.localMetricsStatus ?? "ready";
   const localMetricsStatusMessage = localMetricsStatus === "loading"
@@ -218,7 +228,7 @@ export function LeaderboardView({
                 <>
                   <div
                     aria-label={t("leaderboard.focusTotalsAria")}
-                    className="leaderboard-hero__totals-row"
+                    className={!isLoading && showSparkline ? "leaderboard-hero__totals-row leaderboard-hero__totals-row--sparkline" : "leaderboard-hero__totals-row"}
                   >
                     {isLoading ? (
                       <>
@@ -228,7 +238,21 @@ export function LeaderboardView({
                       </>
                     ) : (
                       <>
-                        <HeroStat label={t("leaderboard.focusThisWeek")} value={localMetricsStatus === "ready" ? formatLocalizedDuration(weekFocusSeconds, effectiveLanguage) : "—"} accent />
+                        <HeroStat
+                          label={t("leaderboard.focusThisWeek")}
+                          value={localMetricsStatus === "ready" ? formatLocalizedDuration(weekFocusSeconds, effectiveLanguage) : "—"}
+                          accent
+                          className={showSparkline ? "leaderboard-hero__focus-stat--sparkline" : undefined}
+                        >
+                          {showSparkline ? (
+                            <LeaderboardSparkline
+                              points={sparklinePoints}
+                              variant={graphStyle}
+                              language={effectiveLanguage}
+                              ariaLabel={t("leaderboard.weekSparklineAria")}
+                            />
+                          ) : null}
+                        </HeroStat>
                         <HeroStat label={t("leaderboard.dailyAverage")} value={localMetricsStatus === "ready" ? formatLocalizedDuration(dailyAverageSeconds, effectiveLanguage) : "—"} />
                         <HeroStat label={t("leaderboard.lastThirtyDays")} value={dailyProductivity !== null ? formatLocalizedDuration(last30FocusSeconds, effectiveLanguage) : "—"} />
                       </>
@@ -531,15 +555,19 @@ function HeroStat({
   value,
   accent = false,
   loading = false,
+  children,
+  className,
 }: {
   readonly label: string;
   readonly value: string;
   readonly accent?: boolean;
   readonly loading?: boolean;
+  readonly children?: ReactNode;
+  readonly className?: string;
 }) {
   const color = accent ? "var(--accent-strong)" : "var(--text)";
   return (
-    <div className="leaderboard-hero__focus-stat" style={{ display: "grid", gap: "0.4rem" }}>
+    <div className={["leaderboard-hero__focus-stat", className].filter(Boolean).join(" ")} style={{ display: "grid", gap: "0.4rem" }}>
       <span className="label-mono" style={{ fontSize: "0.56rem", color: accent ? "var(--accent-strong)" : undefined }}>{label}</span>
       <strong style={{ fontSize: "1.5rem", fontWeight: 700, lineHeight: 1, color, whiteSpace: "nowrap" }}>
         {loading ? (
@@ -548,6 +576,7 @@ function HeroStat({
           </span>
         ) : value}
       </strong>
+      {children}
     </div>
   );
 }

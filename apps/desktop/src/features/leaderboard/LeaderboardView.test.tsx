@@ -1066,4 +1066,27 @@ describe("LeaderboardView", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^leave leaderboard$/i }));
     expect(onOptOut).toHaveBeenCalledWith({ makeProfilePrivate: false });
   });
+
+  it("hides the week sparkline unless a graph style is opted in", () => {
+    const days = [
+      { day: "2026-09-14", focus: 3200, drift: 0, neutral: 0 },
+      { day: "2026-09-15", focus: 2800, drift: 0, neutral: 0 },
+      { day: "2026-09-16", focus: 4100, drift: 0, neutral: 0 },
+      { day: "2026-09-17", focus: 3500, drift: 0, neutral: 0 },
+      { day: "2026-09-18", focus: 4800, drift: 0, neutral: 0 },
+      { day: "2026-09-19", focus: 3000, drift: 0, neutral: 0 },
+      { day: "2026-09-20", focus: 3600, drift: 0, neutral: 0 },
+    ];
+    const { unmount } = renderView({
+      publicProfile: makePublicProfile({ dailyProductivity: days }),
+    });
+    expect(screen.queryByRole("img", { name: /daily focus for the last 7 days/i })).toBeNull();
+    unmount();
+
+    renderView({
+      graphStyle: "default",
+      publicProfile: makePublicProfile({ dailyProductivity: days }),
+    });
+    expect(screen.getByRole("img", { name: /daily focus for the last 7 days/i })).toBeTruthy();
+  });
 });

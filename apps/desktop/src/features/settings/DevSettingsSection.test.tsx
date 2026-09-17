@@ -454,6 +454,16 @@ describe("DevSettingsSection", () => {
     expect(props.onNavigationRefreshChange).toHaveBeenCalledWith(true);
   });
 
+  it("changes the leaderboard week graph style from Feature flags", () => {
+    const props = renderProductionDevSettings({ activeSubsection: "flags" });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Leaderboard week graph style" }), {
+      target: { value: "default" },
+    });
+
+    expect(props.onLeaderboardGraphStyleChange).toHaveBeenCalledWith("default");
+  });
+
   it("moves between Dev tabs with standard tablist arrow keys", () => {
     const props = renderProductionDevSettings();
     const diagnosticsTab = screen.getByRole("tab", { name: "Diagnostics" });

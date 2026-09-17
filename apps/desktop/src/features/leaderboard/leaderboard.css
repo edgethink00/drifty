@@ -3200,6 +3200,39 @@
   min-width: 0;
 }
 
+.leaderboard-hero__totals-row--sparkline {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.leaderboard-hero__focus-stat--sparkline {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.leaderboard-sparkline {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.leaderboard-sparkline__plot {
+  display: block;
+  width: 100%;
+  height: 38px;
+  overflow: visible;
+}
+
+.leaderboard-sparkline__axis {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  opacity: 0.75;
+}
+
 @container leaderboard-profile (max-width: 42rem) {
   .leaderboard-hero__summary-row {
     grid-template-columns: minmax(0, 1fr);
