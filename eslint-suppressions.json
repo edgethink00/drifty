@@ -1,0 +1,275 @@
+{
+  "apps/desktop/src/App.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 31
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 29
+    }
+  },
+  "apps/desktop/src/app.onboarding.test.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/app.sidebarMotionStyles.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 5
+    }
+  },
+  "apps/desktop/src/components/AnchoredPresence.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/components/ModalPresence.tsx": {
+    "@typescript-eslint/no-unused-expressions": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/auth/AuthContext.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/billing/createPolarCheckoutFunction.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/billing/enterpriseCheckoutFunction.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/billing/useCloudBillingController.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 3
+    }
+  },
+  "apps/desktop/src/features/classification/aiClassificationService.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/classification/aiClassificationService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/classification/managedLocalAiChat.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/classification/useProjectClassification.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "apps/desktop/src/features/companion/CompanionPill.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/companion/companionPillSettings.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/companion/endOfDayReviewModel.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/dashboard/WeekActivityInspector.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/dashboard/WeekCalendarHoverLayer.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/dashboard/WeekDashboard.test.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/dashboard/focusDriftChart.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/dev-signals/AgentsPage.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "apps/desktop/src/features/dev-signals/agentsPageModel.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/device-sync/deviceSyncEngine.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/insights/InsightCards.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 11
+    }
+  },
+  "apps/desktop/src/features/leaderboard/LeaderboardBoard.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/leaderboard/RankEmbedsModal.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "apps/desktop/src/features/leaderboard/useLeaderboardProfileController.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/leaderboard/useLeaderboardProfileController.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 4
+    }
+  },
+  "apps/desktop/src/features/localization/LocalizationContext.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/onboarding/components/steps/ConnectServerStep.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/onboarding/useFirstDayPreparation.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/onboarding/useFirstDayPreparation.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/onboarding/useOnboardingConnectionFlow.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/onboarding/useOnboardingFlow.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/pet-mode/PetModeCat.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "apps/desktop/src/features/pet-mode/PetModeSuspension.test.tsx": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/pet-mode/PetModeWindowApp.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "apps/desktop/src/features/pet-mode/petModeProudFace.test.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/projects/ProjectsPage.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/settings/AiSetupPanel.test.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/settings/AiSetupPanel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/settings/aiConnectionTest.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/settings/useAnalysisModelSetup.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/settings/useManagedLocalAiStatusObserver.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/features/share/shareCardUnifiedSvg.ts": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 24
+    },
+    "prefer-const": {
+      "count": 5
+    }
+  },
+  "apps/desktop/src/features/share/useFocusCard.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/lib/analytics/posthogClient.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/lib/analytics/useProFunnelExposure.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/desktop/src/lib/api/trackerClient.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 18
+    }
+  },
+  "apps/desktop/src/lib/supabase/client.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/domain/src/commands.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  }
+}
