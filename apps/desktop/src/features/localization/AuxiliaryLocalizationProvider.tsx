@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LocalizationProvider, type LocalizationController } from "./LocalizationContext";
 import { DISPLAY_LANGUAGE_STORAGE_KEY, resolveInitialDisplayLanguage } from "./languagePreference";
-import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS } from "./translations";
+import { translateFor } from "./translate";
 
 /** Auxiliary windows follow the main window's preference without writing it back. */
 export function AuxiliaryLocalizationProvider({ children }: { readonly children: ReactNode }) {
@@ -22,12 +22,7 @@ export function AuxiliaryLocalizationProvider({ children }: { readonly children:
   const controller = useMemo<LocalizationController>(() => ({
     effectiveLanguage: language,
     setDisplayLanguage: () => undefined,
-    t: (key, params) => {
-      const template = (language === "ko" ? KOREAN_TRANSLATIONS : ENGLISH_TRANSLATIONS)[key];
-      return template.replace(/\{\{(\w+)\}\}/gu, (match, name: string) => (
-        params?.[name] === undefined ? match : String(params[name])
-      ));
-    },
+    t: translateFor(language),
   }), [language]);
   return <LocalizationProvider controller={controller}>{children}</LocalizationProvider>;
 }

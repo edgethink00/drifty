@@ -20,9 +20,15 @@ import {
   type CompanionPillState,
 } from "./companionPillLayout";
 import { openNativeCompanionPillMenu } from "./companionPillNativeMenu";
+import { useLocalization } from "../localization/LocalizationContext";
+import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
+import { translateFor } from "../localization/translate";
+import { resolveDriftAlarmCopy, resolveInitialDriftAlarmCopyOverrides } from "./driftAlarmCopyStorage";
 import {
   buildCompanionDayReviewPreview,
   buildCompanionDriftAlarmPreview,
+  buildCompanionExtremeNudgePreview,
+  buildCompanionMilestonePreview,
 } from "./companionPillPreview";
 import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
 import { companionMomentReferenceMs, COMPANION_MOMENT_STALE_AFTER_MS, isCompanionMomentStale } from "./companionMomentFreshness";
@@ -59,6 +65,7 @@ const COMPANION_DEFAULT_THEME = "light";
 const COMPANION_MOMENT_QUEUE_GAP_MS = 700;
 
 export function CompanionWindowApp() {
+  const { t } = useLocalization();
   const [peekEvent, setPeekEvent] = useState<WatcherPeekEvent | null>(null);
   const [momentEvent, setMomentEvent] = useState<CompanionPillMomentEvent | null>(resolveDevelopmentPreviewMoment);
   /* Development previews start with a real moment instead of receiving one
@@ -401,7 +408,12 @@ export function CompanionWindowApp() {
     onOpenSettings: handleOpenSettings,
     onHideForOneHour: handleHideForOneHour,
     onTurnOffCompanion: handleTurnOffCompanion,
-  }), [handleHideForOneHour, handleOpenDashboard, handleOpenSettings, handleTurnOffCompanion]);
+  }, {
+    openDashboard: t("companion.menu.openDashboard"),
+    settings: t("companion.menu.settings"),
+    hideForOneHour: t("companion.menu.hideOneHour"),
+    turnOffCompanion: t("companion.menu.turnOff"),
+  }), [handleHideForOneHour, handleOpenDashboard, handleOpenSettings, handleTurnOffCompanion, t]);
 
   const handleMomentAction = useCallback((action: DriftAlarmAction) => {
     if (action.type === "manual_correction") {
@@ -721,15 +733,21 @@ function ignoreCompanionBridgeRejection() {
 function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   const preview = isDevelopmentPreview();
   const correctionStatus = resolveDevelopmentCorrectionStatus();
+  // Browser previews read the same wording the main window would send, so a
+  // Korean review shows Korean cards.
+  const language = resolveInitialDisplayLanguage();
+  const copy = { language, copySettings: resolveDriftAlarmCopy(resolveInitialDriftAlarmCopyOverrides(), language) };
   if (preview === "drift-alarm") {
     return {
-      ...toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("drift-alarm")),
+      ...toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("drift-alarm", Date.now(), false, copy)),
       correctionStatus,
     };
   }
   if (preview === "break-return") {
-    return toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("break-return"));
+    return toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("break-return", Date.now(), false, copy));
   }
+  if (preview === "extreme-nudge") return buildCompanionExtremeNudgePreview(Date.now(), copy);
+  if (preview === "milestone") return buildCompanionMilestonePreview("record-30d", Date.now(), translateFor(language));
   if (preview === "dayReview") return buildCompanionDayReviewPreview();
   return null;
 }

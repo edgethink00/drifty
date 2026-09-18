@@ -12,6 +12,9 @@ export type ExtremeNudgeToastEvent = {
   closedLabel: string;
   focusLabel: string | null;
   breakOptions?: readonly number[];
+  /** Button wording from the user's alert copy; the card falls back to defaults when absent. */
+  breakLabel?: string;
+  correctionLabel?: string;
   correctionStatus?: DriftAlarmCorrectionStatus;
 };
 
@@ -53,5 +56,7 @@ export function buildExtremeNudgeToastEvent(
     closedLabel,
     focusLabel: focusTarget?.label ?? null,
     breakOptions,
+    breakLabel: copySettings.takeBreakLabel,
+    correctionLabel: copySettings.manualCorrectionLabel,
   };
 }

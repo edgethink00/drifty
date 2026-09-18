@@ -7,9 +7,11 @@ import {
 } from "./driftAlarmEvent";
 import { CompanionAutomaticCloseCard, CompanionDriftAlarmCard } from "./CompanionDriftAlarmCard";
 import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
-import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
+import { buildDriftNotificationCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
+import { diffDriftAlarmCopyOverrides, type DriftAlarmCopyOverrides } from "./driftAlarmCopyStorage";
 import { DRIFT_ALARM_COPY_SECTIONS, selectCopySection, type DriftAlarmCopySectionKey } from "./driftAlarmCopySettingsSections";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import type { DisplayLanguage } from "../localization/languagePreference";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { ModalPresence } from "../../components/ModalPresence";
 import driftyIcon from "../../assets/drifty-icon.png";
@@ -18,7 +20,7 @@ type AlarmPreviewSectionKey = Extract<DriftAlarmCopySectionKey, "drift" | "break
 
 const NOTIFICATION_PREVIEW = {
   place: "youtube.com",
-  driftDurationLabel: "5 minutes",
+  driftDurationSeconds: 5 * 60,
 } as const;
 
 const EXTREME_NUDGE_PREVIEW = {
@@ -40,24 +42,35 @@ const ignorePreviewAction = () => undefined;
 
 export function DriftAlarmCopySettings({
   value,
+  defaults,
   onChange,
   disabled = false,
 }: {
+  /** Resolved wording: current-language defaults with the user's edits applied. */
   readonly value: DriftAlarmCopySettingsValue;
-  readonly onChange: (value: DriftAlarmCopySettingsValue) => void;
+  /** Current-language defaults, so Reset and blank fields land on the right language. */
+  readonly defaults: DriftAlarmCopySettingsValue;
+  readonly onChange: (overrides: DriftAlarmCopyOverrides) => void;
   readonly disabled?: boolean;
 }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeSectionKey, setActiveSectionKey] = useState<DriftAlarmCopySectionKey>("drift");
   const [draftCopy, setDraftCopy] = useState(value);
   const activeSection = selectCopySection(activeSectionKey);
+  // The preview renders what will be saved: a blank field falls back to the default.
+  const previewCopy = useMemo(() => resolveDraft(draftCopy, defaults), [draftCopy, defaults]);
   const previewEvent = useMemo(
-    () => activeSectionKey === "drift" || activeSectionKey === "breakReturn" ? buildPreviewEvent(activeSectionKey, draftCopy) : null,
-    [activeSectionKey, draftCopy],
+    () => activeSectionKey === "drift" || activeSectionKey === "breakReturn"
+      ? buildPreviewEvent(activeSectionKey, previewCopy, effectiveLanguage)
+      : null,
+    [activeSectionKey, effectiveLanguage, previewCopy],
   );
-  const notificationPreview = useMemo(() => buildDriftNotificationCopy(draftCopy, NOTIFICATION_PREVIEW), [draftCopy]);
-  const extremeNudgePreview = useMemo(() => buildExtremeNudgePreviewEvent(draftCopy), [draftCopy]);
+  const notificationPreview = useMemo(() => buildDriftNotificationCopy(previewCopy, {
+    place: NOTIFICATION_PREVIEW.place,
+    driftDurationLabel: t("companion.duration.minutes", { count: NOTIFICATION_PREVIEW.driftDurationSeconds / 60 }),
+  }), [previewCopy, t]);
+  const extremeNudgePreview = useMemo(() => buildExtremeNudgePreviewEvent(previewCopy), [previewCopy]);
 
   const openEditor = () => {
     setDraftCopy(value);
@@ -70,7 +83,7 @@ export function DriftAlarmCopySettings({
   };
 
   const saveEditor = () => {
-    onChange(draftCopy);
+    onChange(diffDriftAlarmCopyOverrides(draftCopy, defaults));
     setIsEditorOpen(false);
   };
 
@@ -129,21 +142,23 @@ export function DriftAlarmCopySettings({
                     {activeSection.fields.map((field) => (
                       <label className="drift-copy-field" key={field.key}>
                         <span>
-                          <strong>{t("settings.alarmCopy.titleField")}</strong>
-                          <small>{field.hint === "Plain text" ? t("settings.alarmCopy.plainText") : field.hint}</small>
+                          <strong>{t(field.labelKey)}</strong>
+                          <small>{field.placeholders.length > 0 ? field.placeholders.join(" ") : t("settings.alarmCopy.plainText")}</small>
                         </span>
                         <input
                           className="settings-input drift-copy-field__input"
                           value={draftCopy[field.key]}
+                          placeholder={defaults[field.key]}
                           onChange={(event) => updateField(field.key, event.target.value)}
-                          aria-label={t("settings.alarmCopy.titleField")}
+                          aria-label={t(field.labelKey)}
                         />
                       </label>
                     ))}
                   </div>
+                  <p className="drift-copy-editor__hint">{t("settings.alarmCopy.blankHint")}</p>
                 </section>
                 <div className="drift-copy-editor__actions">
-                  <button type="button" className="modal-btn modal-btn--secondary" onClick={() => setDraftCopy(buildDefaultDriftAlarmCopy())}>
+                  <button type="button" className="modal-btn modal-btn--secondary" onClick={() => setDraftCopy(defaults)}>
                     {t("settings.alarmCopy.reset")}
                   </button>
                   <div className="drift-copy-editor__commit-actions">
@@ -200,6 +215,10 @@ export function DriftAlarmCopySettings({
   );
 }
 
+function resolveDraft(draft: DriftAlarmCopySettingsValue, defaults: DriftAlarmCopySettingsValue): DriftAlarmCopySettingsValue {
+  return { ...defaults, ...diffDriftAlarmCopyOverrides(draft, defaults) };
+}
+
 function localizedCopySectionTitle(key: DriftAlarmCopySectionKey, t: LocalizationController["t"]): string {
   switch (key) {
     case "drift": return t("settings.alarmCopy.drift");
@@ -228,10 +247,16 @@ function buildExtremeNudgePreviewEvent(copySettings: DriftAlarmCopySettingsValue
     title: copy.title,
     closedLabel: EXTREME_NUDGE_PREVIEW.closedLabel,
     focusLabel: EXTREME_NUDGE_PREVIEW.focusLabel,
+    breakLabel: copySettings.takeBreakLabel,
+    correctionLabel: copySettings.manualCorrectionLabel,
   };
 }
 
-function buildPreviewEvent(sectionKey: AlarmPreviewSectionKey, copySettings: DriftAlarmCopySettingsValue): DriftAlarmEvent {
+function buildPreviewEvent(
+  sectionKey: AlarmPreviewSectionKey,
+  copySettings: DriftAlarmCopySettingsValue,
+  language: DisplayLanguage,
+): DriftAlarmEvent {
   switch (sectionKey) {
     case "drift":
       return buildDriftAlarmEvent({
@@ -245,6 +270,7 @@ function buildPreviewEvent(sectionKey: AlarmPreviewSectionKey, copySettings: Dri
         sourceAppName: "Google Chrome",
         sourceIconSrc: null,
         copySettings,
+        language,
       });
     case "breakReturn":
       return buildBreakReturnAlarmEvent({
@@ -255,6 +281,7 @@ function buildPreviewEvent(sectionKey: AlarmPreviewSectionKey, copySettings: Dri
         generatedAt: PREVIEW_GENERATED_AT,
         focusTargets: [PREVIEW_FOCUS_TARGET],
         copySettings,
+        language,
         breakDurationMinutes: 15,
         pausedFromLabel: "youtube.com",
         nextFocusLabel: "Xcode",
@@ -265,3 +292,4 @@ function buildPreviewEvent(sectionKey: AlarmPreviewSectionKey, copySettings: Dri
     }
   }
 }
+

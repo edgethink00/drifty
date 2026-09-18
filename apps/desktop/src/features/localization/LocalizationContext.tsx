@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS, type TranslationKey } from "./translations";
+import type { TranslationKey } from "./translations";
+import { translateFor, type TranslationParams } from "./translate";
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
@@ -16,8 +17,6 @@ export {
   type DisplayLanguage,
 } from "./languagePreference";
 
-type TranslationParams = Readonly<Record<string, string | number>>;
-
 export type LocalizationController = {
   readonly effectiveLanguage: DisplayLanguage;
   readonly setDisplayLanguage: (language: DisplayLanguage) => void;
@@ -27,7 +26,7 @@ export type LocalizationController = {
 const englishController: LocalizationController = {
   effectiveLanguage: "en",
   setDisplayLanguage: () => undefined,
-  t: (key, params) => interpolate(ENGLISH_TRANSLATIONS[key], params),
+  t: translateFor("en"),
 };
 
 const LocalizationContext = createContext<LocalizationController>(englishController);
@@ -52,10 +51,7 @@ export function useLocalizationController(): LocalizationController {
   return useMemo(() => ({
     effectiveLanguage,
     setDisplayLanguage,
-    t: (key: TranslationKey, params?: TranslationParams) => interpolate(
-      effectiveLanguage === "ko" ? KOREAN_TRANSLATIONS[key] : ENGLISH_TRANSLATIONS[key],
-      params,
-    ),
+    t: translateFor(effectiveLanguage),
   }), [effectiveLanguage]);
 }
 
@@ -67,15 +63,7 @@ export function LocalizationTestProvider({ children, language = "ko" }: { readon
   const controller = useMemo<LocalizationController>(() => ({
     effectiveLanguage: language,
     setDisplayLanguage: () => undefined,
-    t: (key, params) => interpolate(language === "ko" ? KOREAN_TRANSLATIONS[key] : ENGLISH_TRANSLATIONS[key], params),
+    t: translateFor(language),
   }), [language]);
   return <LocalizationContext.Provider value={controller}>{children}</LocalizationContext.Provider>;
-}
-
-function interpolate(template: string, params?: TranslationParams): string {
-  if (!params) return template;
-  return template.replace(/\{\{(\w+)\}\}/gu, (match, key: string) => {
-    const value = params[key];
-    return value === undefined ? match : String(value);
-  });
 }

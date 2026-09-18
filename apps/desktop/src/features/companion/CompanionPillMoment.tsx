@@ -9,11 +9,12 @@ import {
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
 import {
-  DRIFT_ALARM_CORRECTION_FEEDBACK_COPY,
   DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS,
   type DriftAlarmAction,
   type DriftAlarmCorrectionStatus,
 } from "./driftAlarmEvent";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import type { TranslationKey } from "../localization/translations";
 import { EXTREME_NUDGE_TOAST_VISIBLE_MS } from "./extremeNudgeTiming";
 import {
   PillDismissIcon,
@@ -130,12 +131,12 @@ const GOLD_COLORS = ["#c9a24f", "#e2c078", "#b98a2e", "var(--accent)"];
 const COMPANION_PILL_CONFETTI_SPREAD: Record<1 | 2 | 3, number> = { 1: 0, 2: 66, 3: 78 };
 
 /** What the figure beside a milestone headline refers to, per kind. */
-const MILESTONE_STAT_LABELS: Record<CompanionPillMilestoneKind, string> = {
-  total: "today",
-  rank: "today",
-  record: "this run",
-  recovery: "today",
-};
+const MILESTONE_STAT_LABEL_KEYS = {
+  total: "companion.milestone.statToday",
+  rank: "companion.milestone.statToday",
+  record: "companion.milestone.statThisRun",
+  recovery: "companion.milestone.statToday",
+} as const satisfies Record<CompanionPillMilestoneKind, TranslationKey>;
 
 /**
  * h:mm once past an hour, "42m" below it.
@@ -152,11 +153,12 @@ function formatMilestoneStat(totalSeconds: number): string {
 
 function resolveMilestoneStat(
   event: CompanionPillMilestoneEvent,
+  t: LocalizationController["t"],
 ): { value: string; label: string } | null {
   if (typeof event.statSeconds !== "number") return null;
   return {
     value: formatMilestoneStat(event.statSeconds),
-    label: event.statLabel ?? MILESTONE_STAT_LABELS[event.milestoneKind],
+    label: event.statLabel ?? t(MILESTONE_STAT_LABEL_KEYS[event.milestoneKind]),
   };
 }
 
@@ -229,6 +231,7 @@ export function CompanionPillMoment({
   onOpenDestination?: (destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => void;
   onAction?: (action: DriftAlarmAction) => void;
 }) {
+  const { t } = useLocalization();
   const [isLocallyHovered, setIsLocallyHovered] = useState(false);
   const [isKeyboardFocusWithin, setIsKeyboardFocusWithin] = useState(false);
   const isPointerOriginFocusRef = useRef(false);
@@ -374,29 +377,29 @@ export function CompanionPillMoment({
         style={autoDismissStyle}
         {...holdHandlers}
       >
-        <button className="card__more" type="button" title="Alert settings" aria-label="Open alert settings" onClick={() => onAction?.({ type: "settings" })}>
+        <button className="card__more" type="button" title={t("companion.card.alertSettings")} aria-label={t("companion.card.openAlertSettings")} onClick={() => onAction?.({ type: "settings" })}>
           <span aria-hidden="true">•••</span>
         </button>
-        <button className="card__close card__close--float" type="button" title="Dismiss" onClick={() => onDismiss("explicit")}>
+        <button className="card__close card__close--float" type="button" title={t("companion.card.dismiss")} onClick={() => onDismiss("explicit")}>
           <PillDismissIcon />
         </button>
         <div className="card__copy">
           <div className="card__title" data-sensitive>{event.title}</div>
           {event.focusLabel ? (
             <div className="card__sub" data-sensitive>
-              {"Back in "}
+              {t("companion.card.backIn")}{" "}
               <b>{event.focusLabel}</b>
             </div>
           ) : null}
         </div>
         <div className="card__actions">
           <CompanionBreakPicker
-            label="Take a break"
+            label={event.breakLabel ?? t("companion.copy.takeBreakLabel")}
             options={event.breakOptions?.length ? event.breakOptions : COMPANION_BREAK_OPTIONS}
             onSelect={(minutes) => onAction?.({ type: "start_break", minutes })}
           />
           <button className="act act--quiet" type="button" onClick={() => onAction?.({ type: "manual_correction" })}>
-            Not a drift
+            {event.correctionLabel ?? t("companion.copy.manualCorrectionLabel")}
           </button>
         </div>
       </div>
@@ -412,10 +415,10 @@ export function CompanionPillMoment({
       style={autoDismissStyle}
       {...holdHandlers}
     >
-      <button className="card__more" type="button" title="Alert settings" aria-label="Open alert settings" onClick={() => onAction?.({ type: "settings" })}>
+      <button className="card__more" type="button" title={t("companion.card.alertSettings")} aria-label={t("companion.card.openAlertSettings")} onClick={() => onAction?.({ type: "settings" })}>
         <span aria-hidden="true">•••</span>
       </button>
-      <button className="card__close card__close--float" type="button" title="Dismiss" onClick={() => onDismiss("explicit")}>
+      <button className="card__close card__close--float" type="button" title={t("companion.card.dismiss")} onClick={() => onDismiss("explicit")}>
         <PillDismissIcon />
       </button>
       <div className="card__copy">
@@ -469,6 +472,7 @@ function DriftCorrectionFeedbackView({
     onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => void;
   };
 }) {
+  const { t } = useLocalization();
   return (
     <div
       className={`view view--drift view--drift-feedback card card--float-close${isActive ? " is-active" : ""}`}
@@ -481,7 +485,7 @@ function DriftCorrectionFeedbackView({
       style={autoDismissStyle}
       {...holdHandlers}
     >
-      <button className="card__close card__close--float" type="button" title="Dismiss" onClick={() => onDismiss("explicit")}>
+      <button className="card__close card__close--float" type="button" title={t("companion.card.dismiss")} onClick={() => onDismiss("explicit")}>
         <PillDismissIcon />
       </button>
       <div className="drift-feedback__body">
@@ -489,8 +493,8 @@ function DriftCorrectionFeedbackView({
           <PillFeedbackCheckIcon />
         </span>
         <div className="card__copy">
-          <div className="card__title">{DRIFT_ALARM_CORRECTION_FEEDBACK_COPY.title}</div>
-          <div className="card__sub drift-feedback__subtitle">{DRIFT_ALARM_CORRECTION_FEEDBACK_COPY.subtitle}</div>
+          <div className="card__title">{t("companion.card.correctionTitle")}</div>
+          <div className="card__sub drift-feedback__subtitle">{t("companion.card.correctionSubtitle")}</div>
         </div>
       </div>
     </div>
@@ -536,7 +540,8 @@ function MilestoneView({
     onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => void;
   };
 }) {
-  const stat = resolveMilestoneStat(event);
+  const { t } = useLocalization();
+  const stat = resolveMilestoneStat(event, t);
   const destination = event.destination;
   return (
     <div
@@ -570,14 +575,14 @@ function MilestoneView({
           className="mile__action"
           type="button"
           data-companion-drag-surface
-          aria-label={milestoneDestinationLabel(destination)}
+          aria-label={milestoneDestinationLabel(destination, t)}
           onClick={() => onOpenDestination(destination)}
         >
-          <span>{milestoneDestinationActionLabel(destination)}</span>
+          <span>{milestoneDestinationActionLabel(destination, t)}</span>
           <PillOpenArrowIcon />
         </button>
       ) : null}
-      <button className="card__close card__close--float" type="button" title="Dismiss" onClick={() => onDismiss("explicit")}>
+      <button className="card__close card__close--float" type="button" title={t("companion.card.dismiss")} onClick={() => onDismiss("explicit")}>
         <PillDismissIcon />
       </button>
     </div>
@@ -593,6 +598,7 @@ function CompanionBreakPicker({
   readonly options: readonly number[];
   readonly onSelect: (minutes: number) => void;
 }) {
+  const { t } = useLocalization();
   const [isOpen, setIsOpen] = useState(false);
   return (
     <span className={`brk${isOpen ? " is-open" : ""}`}>
@@ -613,7 +619,7 @@ function CompanionBreakPicker({
             tabIndex={isOpen ? 0 : -1}
             onClick={() => onSelect(minutes)}
           >
-            {minutes}m
+            {t("companion.card.breakMinutes", { minutes })}
           </button>
         ))}
       </span>
@@ -623,16 +629,18 @@ function CompanionBreakPicker({
 
 function milestoneDestinationLabel(
   destination: NonNullable<CompanionPillMilestoneEvent["destination"]>,
+  t: LocalizationController["t"],
 ): string {
-  if (destination === "leaderboard") return "Open leaderboard";
-  if (destination === "insights") return "Open trends";
-  return "Open today's dashboard";
+  if (destination === "leaderboard") return t("companion.milestone.openLeaderboard");
+  if (destination === "insights") return t("companion.milestone.openInsights");
+  return t("companion.milestone.openDashboard");
 }
 
 function milestoneDestinationActionLabel(
   destination: NonNullable<CompanionPillMilestoneEvent["destination"]>,
+  t: LocalizationController["t"],
 ): string {
-  if (destination === "leaderboard") return "View rank";
-  if (destination === "insights") return "View insights";
-  return "View day";
+  if (destination === "leaderboard") return t("companion.milestone.viewRank");
+  if (destination === "insights") return t("companion.milestone.viewInsights");
+  return t("companion.milestone.viewDay");
 }

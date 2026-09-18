@@ -1,5 +1,7 @@
 import type { ActivityClassificationDetail } from "@drifty/domain";
 import { buildDefaultDriftAlarmCopy, buildDriftAlarmCopy, type DriftAlarmCopySettingsValue, type DriftAlarmRenderedCopy } from "./driftAlarmCopy";
+import type { DisplayLanguage } from "../localization/languagePreference";
+import { translateFor, type Translate } from "../localization/translate";
 
 export type DriftAlarmAction =
   | { readonly type: "return_to_focus"; readonly targetId: string }
@@ -10,10 +12,6 @@ export type DriftAlarmAction =
 /** A brief acknowledgement shown immediately after a Not a drift correction. */
 export type DriftAlarmCorrectionStatus = "acknowledged";
 export const DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS = 1_800;
-export const DRIFT_ALARM_CORRECTION_FEEDBACK_COPY = {
-  title: "Learning signal added",
-  subtitle: "Similar decisions will now weigh this as not drift.",
-} as const;
 
 export type DriftAlarmFocusTarget = {
   readonly targetId: string;
@@ -77,6 +75,8 @@ type DriftAlarmEventInput = {
   readonly sourceAppName?: string;
   readonly sourceIconSrc?: string | null;
   readonly copySettings?: DriftAlarmCopySettingsValue;
+  /** Formats durations and fallback labels; copySettings already carries the language. */
+  readonly language?: DisplayLanguage;
   /* Copy-only switch. The event still carries mode "drift" so every consumer,
      surface size, and stored interaction keeps working unchanged. */
   readonly petIntercepted?: boolean;
@@ -94,10 +94,12 @@ const DRIFT_ALARM_BREAK_OPTIONS = [5, 15, 30, 60] as const;
 export const DRIFT_ALARM_FOCUS_TARGET_LIMIT = 4;
 
 export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEvent {
-  const driftDurationLabel = formatDuration(input.driftDurationSeconds);
+  const t = translateFor(input.language ?? "en");
+  const { language: _language, ...eventInput } = input;
+  const driftDurationLabel = formatDuration(input.driftDurationSeconds, t);
   const focusTargets = normalizeFocusTargets(input.focusTargets);
   return {
-    ...input,
+    ...eventInput,
     mode: "drift",
     breakReturn: null,
     driftDurationLabel,
@@ -105,12 +107,12 @@ export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEve
     breakOptions: normalizeBreakOptions(input.breakOptions),
     focusTargets,
     sourceSiteDomain: input.sourceSiteDomain?.trim() ?? null,
-    sourceAppName: input.sourceAppName?.trim() || "Unknown app",
+    sourceAppName: input.sourceAppName?.trim() || t("companion.fallback.unknownApp"),
     sourceIconSrc: input.sourceIconSrc?.trim() ?? null,
     decisionClassification: normalizeDecisionClassification(input.decisionClassification),
     copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
       mode: input.petIntercepted ? "pet_intercept" : "drift",
-      contextLabel: input.contextLabel,
+      contextLabel: input.contextLabel.trim() || t("companion.fallback.thisDrift"),
       driftDurationLabel,
       latestFocusLabel: focusTargets[0]?.label ?? null,
     }),
@@ -118,15 +120,16 @@ export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEve
 }
 
 export function buildBreakReturnAlarmEvent(input: BreakReturnAlarmEventInput): DriftAlarmEvent {
-  const { breakDurationMinutes, pausedFromLabel, nextFocusLabel, ...eventInput } = input;
+  const { breakDurationMinutes, pausedFromLabel, nextFocusLabel, language, ...eventInput } = input;
+  const t = translateFor(language ?? "en");
   const breakOptions = normalizeBreakOptions(input.breakOptions);
   const focusTargets = normalizeFocusTargets(input.focusTargets);
-  const driftDurationLabel = formatDuration(input.driftDurationSeconds);
+  const driftDurationLabel = formatDuration(input.driftDurationSeconds, t);
   const breakReturn = {
     breakDurationMinutes,
-    breakDurationLabel: formatBreakOption(breakDurationMinutes),
-    pausedFromLabel: pausedFromLabel.trim() || "This drift",
-    nextFocusLabel: nextFocusLabel.trim() || focusTargets[0]?.label || "your focus",
+    breakDurationLabel: formatBreakOption(breakDurationMinutes, t),
+    pausedFromLabel: pausedFromLabel.trim() || t("companion.fallback.thisDrift"),
+    nextFocusLabel: nextFocusLabel.trim() || focusTargets[0]?.label || t("companion.fallback.yourFocus"),
   };
   return {
     ...eventInput,
@@ -137,7 +140,7 @@ export function buildBreakReturnAlarmEvent(input: BreakReturnAlarmEventInput): D
     breakOptions,
     focusTargets,
     sourceSiteDomain: input.sourceSiteDomain?.trim() ?? null,
-    sourceAppName: input.sourceAppName?.trim() || "Unknown app",
+    sourceAppName: input.sourceAppName?.trim() || t("companion.fallback.unknownApp"),
     sourceIconSrc: input.sourceIconSrc?.trim() ?? null,
     decisionClassification: normalizeDecisionClassification(input.decisionClassification),
     copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
@@ -149,9 +152,9 @@ export function buildBreakReturnAlarmEvent(input: BreakReturnAlarmEventInput): D
   };
 }
 
-export function formatBreakOption(minutes: number): string {
-  if (minutes === 60) return "1h";
-  return `${minutes}m`;
+export function formatBreakOption(minutes: number, t: Translate = translateFor("en")): string {
+  if (minutes === 60) return t("companion.duration.breakHour");
+  return t("companion.duration.breakMinutes", { minutes });
 }
 
 function normalizeBreakOptions(options: readonly number[] | undefined): readonly number[] {
@@ -191,12 +194,12 @@ function normalizeDecisionClassification(
   };
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds} seconds`;
+function formatDuration(seconds: number, t: Translate): string {
+  if (seconds < 60) return t("companion.duration.seconds", { count: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes === 1) return "1 minute";
-  if (minutes < 60) return `${minutes} minutes`;
-  if (minutes === 60) return "1 hour";
-  if (minutes % 60 === 0) return `${minutes / 60} hours`;
-  return `${minutes} minutes`;
+  if (minutes === 1) return t("companion.duration.minute");
+  if (minutes < 60) return t("companion.duration.minutes", { count: minutes });
+  if (minutes === 60) return t("companion.duration.hour");
+  if (minutes % 60 === 0) return t("companion.duration.hours", { count: minutes / 60 });
+  return t("companion.duration.minutes", { count: minutes });
 }

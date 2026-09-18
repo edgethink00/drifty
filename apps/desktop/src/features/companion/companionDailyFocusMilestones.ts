@@ -1,4 +1,6 @@
 import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
+import type { TranslationKey } from "../localization/translations";
+import { translateFor, type Translate } from "../localization/translate";
 
 export const COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY =
   "drifty.companion.dailyFocusMilestones.v1";
@@ -56,8 +58,8 @@ type StoredCompanionDailyFocusMilestoneProgress = {
 type DailyFocusMilestoneDefinition = {
   readonly id: CompanionDailyFocusMilestoneId;
   readonly thresholdSeconds: number;
-  readonly title: string;
-  readonly subtitle: string;
+  readonly titleKey: TranslationKey;
+  readonly subtitleKey: TranslationKey;
   readonly tier: 1 | 2;
 };
 
@@ -65,22 +67,22 @@ export const COMPANION_DAILY_FOCUS_MILESTONES: readonly DailyFocusMilestoneDefin
   {
     id: "day1h",
     thresholdSeconds: 60 * 60,
-    title: "1 hour of focus today",
-    subtitle: "The day has real work in it now",
+    titleKey: "companion.milestone.day1hTitle",
+    subtitleKey: "companion.milestone.day1hSubtitle",
     tier: 1,
   },
   {
     id: "day3h",
     thresholdSeconds: 3 * 60 * 60,
-    title: "3 hours of focus today",
-    subtitle: "A solid day by any measure",
+    titleKey: "companion.milestone.day3hTitle",
+    subtitleKey: "companion.milestone.day3hSubtitle",
     tier: 1,
   },
   {
     id: "day8h",
     thresholdSeconds: 8 * 60 * 60,
-    title: "8 hours of focus today",
-    subtitle: "That is a full day of deep work",
+    titleKey: "companion.milestone.day8hTitle",
+    subtitleKey: "companion.milestone.day8hSubtitle",
     tier: 2,
   },
 ];
@@ -123,11 +125,14 @@ export function evaluateCompanionDailyFocusMilestones({
   day,
   focusSecondsToday,
   announce,
+  translate = translateFor("en"),
 }: {
   readonly progress: CompanionDailyFocusMilestoneProgress;
   readonly day: string;
   readonly focusSecondsToday: number;
   readonly announce: boolean;
+  /** Builds the card wording in the display language; events cross to the Companion window as strings. */
+  readonly translate?: Translate;
 }): CompanionDailyFocusMilestoneEvaluation {
   if (progress.day !== day) {
     return {
@@ -153,7 +158,7 @@ export function evaluateCompanionDailyFocusMilestones({
       celebrated: orderedMilestoneIds(celebrated),
     },
     events: announce
-      ? crossed.map((milestone) => buildDailyFocusMilestoneEvent(milestone, day, normalizedSeconds))
+      ? crossed.map((milestone) => buildDailyFocusMilestoneEvent(milestone, day, normalizedSeconds, translate))
       : [],
   };
 }
@@ -189,14 +194,15 @@ function buildDailyFocusMilestoneEvent(
   milestone: DailyFocusMilestoneDefinition,
   day: string,
   focusSecondsToday: number,
+  translate: Translate,
 ): CompanionPillMilestoneEvent {
   return {
     kind: "milestone",
     id: `companion-daily-focus:${day}:${milestone.id}`,
     milestoneKind: "total",
     tier: milestone.tier,
-    title: milestone.title,
-    subtitle: milestone.subtitle,
+    title: translate(milestone.titleKey),
+    subtitle: translate(milestone.subtitleKey),
     destination: "dashboard",
     statSeconds: focusSecondsToday,
     generatedAt: new Date().toISOString(),

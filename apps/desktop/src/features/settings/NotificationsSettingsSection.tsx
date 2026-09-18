@@ -1,6 +1,7 @@
 import { Toggle } from "../../components/Toggle";
 import { DRIFT_ALERT_DELAY_OPTIONS, driftAlertDelaySecondsFromValue, driftAlertDelayValueFromSeconds, type DriftAlertDelaySeconds } from "../companion/driftAlarmData";
 import type { DriftAlarmCopySettingsValue } from "../companion/driftAlarmCopy";
+import type { DriftAlarmCopyOverrides } from "../companion/driftAlarmCopyStorage";
 import { DriftAlarmCopySettings } from "../companion/DriftAlarmCopySettings";
 import { SettingsSelect } from "./SettingsSelect";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
@@ -10,9 +11,10 @@ type NotificationsSettingsSectionProps = {
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
   readonly driftAlertsEnabled: boolean;
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
+  readonly driftAlarmCopyDefaults: DriftAlarmCopySettingsValue;
   readonly extremeNudgeEnabled: boolean;
   readonly onDriftAlertDelaySecondsChange: (seconds: DriftAlertDelaySeconds) => void;
-  readonly onDriftAlarmCopyChange: (value: DriftAlarmCopySettingsValue) => void;
+  readonly onDriftAlarmCopyOverridesChange: (overrides: DriftAlarmCopyOverrides) => void;
   readonly onDriftAlertsChange: (enabled: boolean) => void;
   readonly onExtremeNudgeChange: (enabled: boolean) => void;
 };
@@ -21,9 +23,10 @@ export function NotificationsSettingsSection({
   driftAlertDelaySeconds,
   driftAlertsEnabled,
   driftAlarmCopy,
+  driftAlarmCopyDefaults,
   extremeNudgeEnabled,
   onDriftAlertDelaySecondsChange,
-  onDriftAlarmCopyChange,
+  onDriftAlarmCopyOverridesChange,
   onDriftAlertsChange,
   onExtremeNudgeChange,
 }: NotificationsSettingsSectionProps) {
@@ -90,7 +93,12 @@ export function NotificationsSettingsSection({
             />
           </div>
         </div>
-        <DriftAlarmCopySettings value={driftAlarmCopy} onChange={onDriftAlarmCopyChange} disabled={!driftAlertsEnabled} />
+        <DriftAlarmCopySettings
+          value={driftAlarmCopy}
+          defaults={driftAlarmCopyDefaults}
+          onChange={onDriftAlarmCopyOverridesChange}
+          disabled={!driftAlertsEnabled}
+        />
       </div>
     </div>
   );

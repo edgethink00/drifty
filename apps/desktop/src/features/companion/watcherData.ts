@@ -3,8 +3,9 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { categorizeActivity, classifyActivity, computeCurrentFocusStrikeSeconds, computePreservedFocusStrikeSeconds } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, CurrentActivitySnapshot, ProductivityLabel } from "@drifty/domain";
 import { isProductivityLabel } from "../../lib/activityLabels";
-import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatCompactDurationFromSeconds, formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
+import type { DisplayLanguage } from "../localization/languagePreference";
 import { resolveWatcherCurrentSegment } from "./watcherCurrentSegment";
 
 export type WatcherSnapshot = Omit<WatcherPeekEvent, "id" | "slotIndex"> & {
@@ -475,7 +476,11 @@ export function normalizeWatcherPeriodicMinutes(value: string | null, fallback: 
   return Math.min(WATCHER_PERIODIC_MAX_LIMIT_MINUTES, Math.max(WATCHER_PERIODIC_MIN_LIMIT_MINUTES, Math.round(parsedValue)));
 }
 
-export async function sendDriftNotification(segment: ActivitySegment, copySettings: DriftAlarmCopySettingsValue = buildDefaultDriftAlarmCopy()) {
+export async function sendDriftNotification(
+  segment: ActivitySegment,
+  copySettings: DriftAlarmCopySettingsValue = buildDefaultDriftAlarmCopy(),
+  language: DisplayLanguage = "en",
+) {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
 
   try {
@@ -493,7 +498,7 @@ export async function sendDriftNotification(segment: ActivitySegment, copySettin
 
     const place = segment.siteDomain ?? segment.appName;
     const copy = buildDriftNotificationCopy(copySettings, {
-      driftDurationLabel: formatCompactDurationFromSeconds(segment.durationSeconds),
+      driftDurationLabel: formatLocalizedCompactDurationFromSeconds(segment.durationSeconds, language),
       place,
     });
     sendNotification({

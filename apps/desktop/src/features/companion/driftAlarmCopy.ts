@@ -1,3 +1,6 @@
+import type { DisplayLanguage } from "../localization/languagePreference";
+import { translateFor } from "../localization/translate";
+
 export type DriftAlarmCopySettingsValue = {
   readonly driftTitle: string;
   readonly driftSummary: string;
@@ -19,6 +22,30 @@ export type DriftAlarmCopySettingsValue = {
   readonly notificationBody: string;
   readonly extremeNudgeTitle: string;
 };
+
+export type DriftAlarmCopyField = keyof DriftAlarmCopySettingsValue;
+
+export const DRIFT_ALARM_COPY_FIELDS: readonly DriftAlarmCopyField[] = [
+  "driftTitle",
+  "driftSummary",
+  "petInterceptTitle",
+  "petInterceptSummary",
+  "currentContextPill",
+  "latestFocusPill",
+  "returnToFocusLabel",
+  "takeBreakLabel",
+  "noFocusTargetLabel",
+  "backToDashboardLabel",
+  "manualCorrectionLabel",
+  "breakReturnTitle",
+  "breakReturnSummary",
+  "pausedFromPill",
+  "nextFocusPill",
+  "extendBreakLabel",
+  "notificationTitle",
+  "notificationBody",
+  "extremeNudgeTitle",
+];
 
 export type DriftAlarmCopyContext =
   | {
@@ -71,42 +98,50 @@ export type ExtremeNudgeToastCopy = {
 
 type TemplateValues = Record<string, string | null>;
 
-const DEFAULT_DRIFT_ALARM_COPY = {
-  driftTitle: "Let's get you back in flow.",
-  driftSummary: "This seems outside your focus flow.",
-  /* Catching the cat is a deliberate physical act, so the card has to show it
-     landed. Reusing the ordinary drift title here read as if nothing had
-     happened. The question hands the judgement back without accusing. */
-  petInterceptTitle: "Still drifting?",
-  petInterceptSummary: "{context} stayed open.",
-  currentContextPill: "Now {context}",
-  latestFocusPill: "Latest focus {latestFocus}",
-  returnToFocusLabel: "Return to focus",
-  takeBreakLabel: "Take a break",
-  noFocusTargetLabel: "No recent focus destination yet.",
-  backToDashboardLabel: "Back to dashboard",
-  manualCorrectionLabel: "Not a drift",
-  breakReturnTitle: "{breakDuration} Break finished",
-  breakReturnSummary: "Break · {breakDuration} complete",
-  pausedFromPill: "Paused from {pausedFrom}",
-  nextFocusPill: "Next focus {nextFocus}",
-  extendBreakLabel: "Extend break",
-  notificationTitle: "Drift detected",
-  notificationBody: "{driftDuration} on {place}. Take a breath and choose the next action.",
-  extremeNudgeTitle: "Closed {closed}",
-} as const satisfies DriftAlarmCopySettingsValue;
-
-export function buildDefaultDriftAlarmCopy(): DriftAlarmCopySettingsValue {
-  return { ...DEFAULT_DRIFT_ALARM_COPY };
+/**
+ * Default wording follows the display language. The tables live in
+ * translations.ts under companion.copy.*; the pet-intercept title is kept
+ * distinct from the ordinary drift headline on purpose: catching the cat is a
+ * deliberate physical act, so the card has to show it landed. (The English
+ * default is "Still drifting?" and the case is "pet_intercept".)
+ */
+export function buildDefaultDriftAlarmCopy(language: DisplayLanguage = "en"): DriftAlarmCopySettingsValue {
+  const t = translateFor(language);
+  return {
+    driftTitle: t("companion.copy.driftTitle"),
+    driftSummary: t("companion.copy.driftSummary"),
+    petInterceptTitle: t("companion.copy.petInterceptTitle"),
+    petInterceptSummary: t("companion.copy.petInterceptSummary"),
+    currentContextPill: t("companion.copy.currentContextPill"),
+    latestFocusPill: t("companion.copy.latestFocusPill"),
+    returnToFocusLabel: t("companion.copy.returnToFocusLabel"),
+    takeBreakLabel: t("companion.copy.takeBreakLabel"),
+    noFocusTargetLabel: t("companion.copy.noFocusTargetLabel"),
+    backToDashboardLabel: t("companion.copy.backToDashboardLabel"),
+    manualCorrectionLabel: t("companion.copy.manualCorrectionLabel"),
+    breakReturnTitle: t("companion.copy.breakReturnTitle"),
+    breakReturnSummary: t("companion.copy.breakReturnSummary"),
+    pausedFromPill: t("companion.copy.pausedFromPill"),
+    nextFocusPill: t("companion.copy.nextFocusPill"),
+    extendBreakLabel: t("companion.copy.extendBreakLabel"),
+    notificationTitle: t("companion.copy.notificationTitle"),
+    notificationBody: t("companion.copy.notificationBody"),
+    extremeNudgeTitle: t("companion.copy.extremeNudgeTitle"),
+  };
 }
 
+/**
+ * Every field renders from the resolved settings. A resolved value is never
+ * blank (storage drops blank overrides), so the English default here is only
+ * a last-resort guard for callers that hand in a partial object.
+ */
 export function buildDriftAlarmCopy(settings: DriftAlarmCopySettingsValue, context: DriftAlarmCopyContext): DriftAlarmRenderedCopy {
   const defaults = buildDefaultDriftAlarmCopy();
   const sharedCopy = {
-    returnToFocusLabel: defaults.returnToFocusLabel,
-    noFocusTargetLabel: defaults.noFocusTargetLabel,
-    backToDashboardLabel: defaults.backToDashboardLabel,
-    manualCorrectionLabel: defaults.manualCorrectionLabel,
+    returnToFocusLabel: fallbackText(settings.returnToFocusLabel, defaults.returnToFocusLabel),
+    noFocusTargetLabel: fallbackText(settings.noFocusTargetLabel, defaults.noFocusTargetLabel),
+    backToDashboardLabel: fallbackText(settings.backToDashboardLabel, defaults.backToDashboardLabel),
+    manualCorrectionLabel: fallbackText(settings.manualCorrectionLabel, defaults.manualCorrectionLabel),
   };
 
   switch (context.mode) {
@@ -119,7 +154,7 @@ export function buildDriftAlarmCopy(settings: DriftAlarmCopySettingsValue, conte
         latestFocus: context.latestFocusLabel,
       } satisfies TemplateValues;
       const latestFocusPill = context.latestFocusLabel
-        ? [renderTemplate(defaults.latestFocusPill, defaults.latestFocusPill, values)]
+        ? [renderTemplate(settings.latestFocusPill, defaults.latestFocusPill, values)]
         : [];
 
       return {
@@ -128,13 +163,13 @@ export function buildDriftAlarmCopy(settings: DriftAlarmCopySettingsValue, conte
           ? renderTemplate(settings.petInterceptTitle, defaults.petInterceptTitle, values)
           : renderTemplate(settings.driftTitle, defaults.driftTitle, values),
         summary: intercepted
-          ? renderTemplate(defaults.petInterceptSummary, defaults.petInterceptSummary, values)
-          : renderTemplate(defaults.driftSummary, defaults.driftSummary, values),
+          ? renderTemplate(settings.petInterceptSummary, defaults.petInterceptSummary, values)
+          : renderTemplate(settings.driftSummary, defaults.driftSummary, values),
         contextPills: [
-          renderTemplate(defaults.currentContextPill, defaults.currentContextPill, values),
+          renderTemplate(settings.currentContextPill, defaults.currentContextPill, values),
           ...latestFocusPill,
         ],
-        breakChoiceLabel: defaults.takeBreakLabel,
+        breakChoiceLabel: fallbackText(settings.takeBreakLabel, defaults.takeBreakLabel),
       };
     }
     case "break_return": {
@@ -147,12 +182,12 @@ export function buildDriftAlarmCopy(settings: DriftAlarmCopySettingsValue, conte
       return {
         ...sharedCopy,
         title: renderTemplate(settings.breakReturnTitle, defaults.breakReturnTitle, values),
-        summary: renderTemplate(defaults.breakReturnSummary, defaults.breakReturnSummary, values),
+        summary: renderTemplate(settings.breakReturnSummary, defaults.breakReturnSummary, values),
         contextPills: [
-          renderTemplate(defaults.pausedFromPill, defaults.pausedFromPill, values),
-          renderTemplate(defaults.nextFocusPill, defaults.nextFocusPill, values),
+          renderTemplate(settings.pausedFromPill, defaults.pausedFromPill, values),
+          renderTemplate(settings.nextFocusPill, defaults.nextFocusPill, values),
         ],
-        breakChoiceLabel: defaults.extendBreakLabel,
+        breakChoiceLabel: fallbackText(settings.extendBreakLabel, defaults.extendBreakLabel),
       };
     }
     default:
@@ -169,7 +204,7 @@ export function buildDriftNotificationCopy(settings: DriftAlarmCopySettingsValue
 
   return {
     title: renderTemplate(settings.notificationTitle, defaults.notificationTitle, values),
-    body: renderTemplate(defaults.notificationBody, defaults.notificationBody, values),
+    body: renderTemplate(settings.notificationBody, defaults.notificationBody, values),
   };
 }
 
@@ -199,3 +234,4 @@ function fallbackText(value: string | null, fallback: string): string {
 function assertNever(value: never): never {
   throw new Error(`Unexpected drift alarm copy context: ${JSON.stringify(value)}`);
 }
+

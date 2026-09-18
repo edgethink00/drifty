@@ -405,6 +405,7 @@ import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalM
 import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedLocalAiStatusObserver";
 import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
+import { translateFor } from "./features/localization/translate";
 import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
@@ -538,6 +539,11 @@ function assertNever(value: never): never {
 
 export default function App() {
   const localization = useLocalizationController();
+  /* Companion cards and macOS notifications are built here as strings before
+     they cross to another window, so their wording follows the display
+     language at build time. */
+  const companionLanguage = localization.effectiveLanguage;
+  const companionTranslate = useMemo(() => translateFor(companionLanguage), [companionLanguage]);
   const sidebarTeamReviewVariant = resolveSidebarTeamReviewVariant();
   const devSettingsReviewSubsection = resolveDevSettingsReviewSubsection(window.location.search);
   const initialDevModeEnabled = devSettingsReviewSubsection !== null
@@ -827,13 +833,14 @@ export default function App() {
     driftAlertDelaySeconds,
     driftAlertsEnabled,
     driftAlarmCopy,
+    driftAlarmCopyDefaults,
     extremeNudgeEnabled,
     petModeEnabled,
     petModeCoat,
     petModeRunBetaEnabled,
     petModeSize,
     setDriftAlertDelaySeconds,
-    setDriftAlarmCopy,
+    setDriftAlarmCopyOverrides,
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
     setPetModeEnabled,
@@ -844,7 +851,7 @@ export default function App() {
     watcherPeekEnabled,
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
-  } = useCompanionSettingsController();
+  } = useCompanionSettingsController({ language: localization.effectiveLanguage });
   const [automaticCloseOverride, setAutomaticCloseOverride] = useState(resolveInitialAutomaticCloseOverride);
   // Persist only the committed choice. Writing inside queued updaters can
   // overwrite a newer explicit choice while leaving React on the newer state.
@@ -3152,32 +3159,32 @@ export default function App() {
   }, [clearDriftAlarmEvent, recordDriftAlarmShown]);
 
   const previewCompanionMilestone = useCallback((previewId: CompanionMilestonePreviewId) => {
-    void showNativeCompanionMilestone(buildCompanionMilestonePreview(previewId))
+    void showNativeCompanionMilestone(buildCompanionMilestonePreview(previewId, Date.now(), companionTranslate))
       .catch((error: unknown) => {
         console.warn("Failed to preview companion milestone", toErrorMessage(error));
       });
-  }, []);
+  }, [companionTranslate]);
 
   /* The decision cards could not be reviewed without waiting for real drift, so
      they are fired through the same native path the tracker uses. */
   const previewCompanionMoment = useCallback((previewId: CompanionMomentPreviewId) => {
     const sent = previewId === "extreme-nudge"
-      ? showNativeExtremeNudgeToast(buildCompanionExtremeNudgePreview())
-      : showNativeCompanionDriftAlarm(buildCompanionDriftAlarmPreview(previewId));
+      ? showNativeExtremeNudgeToast(buildCompanionExtremeNudgePreview(Date.now(), { copySettings: driftAlarmCopy, language: companionLanguage }))
+      : showNativeCompanionDriftAlarm(buildCompanionDriftAlarmPreview(previewId, Date.now(), false, { copySettings: driftAlarmCopy, language: companionLanguage }));
     void sent.catch((error: unknown) => {
       console.warn("Failed to preview companion moment", toErrorMessage(error));
     });
-  }, []);
+  }, [companionLanguage, driftAlarmCopy]);
 
   /* The caught-cat card differs from the ordinary drift card only in its copy,
      so it needs its own preview to be reviewable at all. */
   const previewPetInterceptCard = useCallback(() => {
-    const alarm = buildCompanionDriftAlarmPreview("drift-alarm", Date.now(), true);
+    const alarm = buildCompanionDriftAlarmPreview("drift-alarm", Date.now(), true, { copySettings: driftAlarmCopy, language: companionLanguage });
     const sent = showNativeCompanionDriftAlarm(alarm);
     void sent.catch((error: unknown) => {
       console.warn("Failed to preview pet intercept card", toErrorMessage(error));
     });
-  }, []);
+  }, [companionLanguage, driftAlarmCopy]);
 
   const handleWatcherResponse = useCallback((response: WatcherPeekResponse) => {
     const currentEvent = watcherEventRef.current;
@@ -5428,11 +5435,12 @@ export default function App() {
           sourceAppName,
           sourceIconSrc,
           copySettings: driftAlarmCopy,
+          language: companionLanguage,
           sourceSegmentId,
           decisionClassification: confirmedDecisionClassification,
           breakDurationMinutes: breakReturnAlarm.minutes,
           pausedFromLabel: breakReturnAlarm.pausedFromLabel,
-          nextFocusLabel: focusTargets[0]?.label ?? "your focus",
+          nextFocusLabel: focusTargets[0]?.label ?? "",
         });
       }
 
@@ -5447,6 +5455,7 @@ export default function App() {
         sourceAppName,
         sourceIconSrc,
         copySettings: driftAlarmCopy,
+        language: companionLanguage,
         sourceSegmentId,
         decisionClassification: confirmedDecisionClassification,
         petIntercepted,
@@ -5497,7 +5506,7 @@ export default function App() {
           candidate: summarizeDriftAlarmCandidate(latestDrift),
           evaluation,
         });
-        void sendDriftNotification(segment, driftAlarmCopy).catch((error: unknown) => {
+        void sendDriftNotification(segment, driftAlarmCopy, companionLanguage).catch((error: unknown) => {
           recordDriftAlarmDebugEvent({
             kind: "native_notification_failed",
             alertKey,
@@ -5847,7 +5856,7 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
-      void sendDriftNotification(segment, driftAlarmCopy).catch((error: unknown) => {
+      void sendDriftNotification(segment, driftAlarmCopy, companionLanguage).catch((error: unknown) => {
         recordDriftAlarmDebugEvent({
           kind: "native_notification_failed",
           alertKey,
@@ -6124,7 +6133,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -6986,6 +6995,7 @@ export default function App() {
     day: todayDay,
     focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
     announcementsEnabled: companionAchievementAnnouncementsEnabled,
+    translate: companionTranslate,
   });
 
   useCompanionDailyFocusMilestones({
@@ -6995,6 +7005,7 @@ export default function App() {
     /* Visibility controls only the resident capsule. A milestone is an alert,
        so a running tracker may announce it through the standalone surface. */
     announcementsEnabled: companionAchievementAnnouncementsEnabled,
+    translate: companionTranslate,
   });
 
   useCompanionFocusRunMilestones({
@@ -7004,6 +7015,7 @@ export default function App() {
     currentRunSeconds: companionTodaySnapshot.focusStrikeSeconds ?? 0,
     classificationOptions: companionFocusRecordClassificationOptions,
     announcementsEnabled: companionAchievementAnnouncementsEnabled,
+    translate: companionTranslate,
   });
 
   useCompanionLeaderboardMilestones({
@@ -7017,6 +7029,7 @@ export default function App() {
     startOfWeek,
     announcementsEnabled: true,
     publishCheckpoint: publishLeaderboardCheckpoint,
+    translate: companionTranslate,
   });
 
   useEffect(() => {
@@ -10120,9 +10133,10 @@ export default function App() {
                     driftAlertDelaySeconds={driftAlertDelaySeconds}
                     driftAlertsEnabled={driftAlertsEnabled}
                     driftAlarmCopy={driftAlarmCopy}
+                    driftAlarmCopyDefaults={driftAlarmCopyDefaults}
                     extremeNudgeEnabled={automaticCloseEnabled}
                     onDriftAlertDelaySecondsChange={setDriftAlertDelaySeconds}
-                    onDriftAlarmCopyChange={setDriftAlarmCopy}
+                    onDriftAlarmCopyOverridesChange={setDriftAlarmCopyOverrides}
                     onDriftAlertsChange={setDriftAlertsEnabled}
                     onExtremeNudgeChange={handleAutomaticCloseSettingsChange}
                   />

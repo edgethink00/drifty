@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 import type { DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
-import { persistDriftAlarmCopy, resolveInitialDriftAlarmCopy } from "./driftAlarmCopyStorage";
+import { buildDefaultDriftAlarmCopy } from "./driftAlarmCopy";
+import {
+  persistDriftAlarmCopyOverrides,
+  resolveDriftAlarmCopy,
+  resolveInitialDriftAlarmCopyOverrides,
+  type DriftAlarmCopyOverrides,
+} from "./driftAlarmCopyStorage";
+import type { DisplayLanguage } from "../localization/languagePreference";
 import {
   DRIFT_ALERTS_STORAGE_KEY,
   DRIFT_ALERT_DELAY_STORAGE_KEY,
@@ -39,7 +46,10 @@ import {
 type UseCompanionSettingsControllerResult = {
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
   readonly driftAlertsEnabled: boolean;
+  /** Current-language defaults with the user's edits applied. */
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
+  /** What the editor shows as "default" for the current language. */
+  readonly driftAlarmCopyDefaults: DriftAlarmCopySettingsValue;
   readonly extremeNudgeEnabled: boolean;
   readonly petModeEnabled: boolean;
   readonly petModeCoat: PetModeCoat;
@@ -48,7 +58,7 @@ type UseCompanionSettingsControllerResult = {
   readonly handleWatcherPeriodicMaxChange: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly handleWatcherPeriodicMinChange: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly setDriftAlertDelaySeconds: Dispatch<SetStateAction<DriftAlertDelaySeconds>>;
-  readonly setDriftAlarmCopy: Dispatch<SetStateAction<DriftAlarmCopySettingsValue>>;
+  readonly setDriftAlarmCopyOverrides: Dispatch<SetStateAction<DriftAlarmCopyOverrides>>;
   readonly setDriftAlertsEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setExtremeNudgeEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeEnabled: Dispatch<SetStateAction<boolean>>;
@@ -63,10 +73,19 @@ type UseCompanionSettingsControllerResult = {
   readonly watcherPeriodicMinMinutes: number;
 };
 
-export function useCompanionSettingsController(): UseCompanionSettingsControllerResult {
+export function useCompanionSettingsController({
+  language,
+}: {
+  readonly language: DisplayLanguage;
+}): UseCompanionSettingsControllerResult {
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
-  const [driftAlarmCopy, setDriftAlarmCopy] = useState(resolveInitialDriftAlarmCopy);
+  const [driftAlarmCopyOverrides, setDriftAlarmCopyOverrides] = useState(resolveInitialDriftAlarmCopyOverrides);
+  const driftAlarmCopyDefaults = useMemo(() => buildDefaultDriftAlarmCopy(language), [language]);
+  const driftAlarmCopy = useMemo(
+    () => resolveDriftAlarmCopy(driftAlarmCopyOverrides, language),
+    [driftAlarmCopyOverrides, language],
+  );
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
   const [petModeEnabled, setPetModeEnabled] = useState(resolveInitialPetModeEnabled);
   const [petModeCoat, setPetModeCoat] = useState<PetModeCoat>(resolveInitialPetModeCoat);
@@ -101,8 +120,8 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
   }, [driftAlertDelaySeconds]);
 
   useEffect(() => {
-    persistDriftAlarmCopy(driftAlarmCopy);
-  }, [driftAlarmCopy]);
+    persistDriftAlarmCopyOverrides(driftAlarmCopyOverrides);
+  }, [driftAlarmCopyOverrides]);
 
   useEffect(() => {
     window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, extremeNudgeEnabled ? "1" : "0");
@@ -151,6 +170,7 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
     driftAlertDelaySeconds,
     driftAlertsEnabled,
     driftAlarmCopy,
+    driftAlarmCopyDefaults,
     extremeNudgeEnabled,
     petModeEnabled,
     petModeCoat,
@@ -159,7 +179,7 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
     handleWatcherPeriodicMaxChange,
     handleWatcherPeriodicMinChange,
     setDriftAlertDelaySeconds,
-    setDriftAlarmCopy,
+    setDriftAlarmCopyOverrides,
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
     setPetModeEnabled,

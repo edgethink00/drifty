@@ -8,6 +8,7 @@ import {
   readCompanionCommunityMilestones,
 } from "./companionCommunityMilestones";
 import { isTauriRuntime, showNativeCompanionMilestone } from "./watcherBridge";
+import type { Translate } from "../localization/translate";
 
 export function useCompanionCommunityMilestones({
   ready,
@@ -15,17 +16,21 @@ export function useCompanionCommunityMilestones({
   day,
   focusSecondsToday,
   announcementsEnabled,
+  translate,
 }: {
   readonly ready: boolean;
   readonly recoveryPending?: boolean;
   readonly day: string;
   readonly focusSecondsToday: number;
   readonly announcementsEnabled: boolean;
+  readonly translate?: Translate;
 }) {
   const [model, setModel] = useState<CommunityFocusPercentileModel | null>(null);
   const progressRef = useRef(readCompanionCommunityMilestones());
   const deliveryInFlightRef = useRef(false);
   const suppressRecoveredDayRef = useRef(false);
+  const translateRef = useRef(translate);
+  translateRef.current = translate;
 
   useEffect(() => {
     if (recoveryPending) suppressRecoveredDayRef.current = true;
@@ -60,6 +65,7 @@ export function useCompanionCommunityMilestones({
       focusSeconds: focusSecondsToday,
       model,
       announce: announcementsEnabled && isTauriRuntime(),
+      translate: translateRef.current,
     });
     progressRef.current = evaluation.progress;
     persistCompanionCommunityMilestones(evaluation.progress);

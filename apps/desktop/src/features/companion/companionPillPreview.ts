@@ -4,6 +4,16 @@ import { buildBreakReturnAlarmEvent, buildDriftAlarmEvent, type DriftAlarmEvent 
 import { buildEndOfDayReviewSummary, type EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { buildMockEndOfDayReviewSegments } from "./endOfDayReviewData";
 import { logicalTodayIsoDate } from "../../lib/formatting";
+import type { DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
+import { buildExtremeNudgeToastCopy } from "./driftAlarmCopy";
+import type { DisplayLanguage } from "../localization/languagePreference";
+import { translateFor, type Translate } from "../localization/translate";
+
+/** Previews render the user's own wording and language so what they review is what ships. */
+export type CompanionPreviewCopyOptions = {
+  readonly copySettings?: DriftAlarmCopySettingsValue;
+  readonly language?: DisplayLanguage;
+};
 
 export const COMPANION_MILESTONE_PREVIEW_OPTIONS = [
   { id: "focus-1h", label: "1h focus" },
@@ -44,6 +54,7 @@ export function buildCompanionDriftAlarmPreview(
   previewId: Extract<CompanionMomentPreviewId, "drift-alarm" | "break-return">,
   now = Date.now(),
   petIntercepted = false,
+  copy: CompanionPreviewCopyOptions = {},
 ): DriftAlarmEvent {
   const shared = {
     id: `companion-preview-${previewId}-${now}`,
@@ -54,6 +65,8 @@ export function buildCompanionDriftAlarmPreview(
     focusTargets: PREVIEW_FOCUS_TARGETS,
     sourceSiteDomain: "youtube.com",
     sourceAppName: "Safari",
+    copySettings: copy.copySettings,
+    language: copy.language,
   };
 
   if (previewId === "break-return") {
@@ -67,16 +80,23 @@ export function buildCompanionDriftAlarmPreview(
   return buildDriftAlarmEvent({ ...shared, petIntercepted });
 }
 
-export function buildCompanionExtremeNudgePreview(now = Date.now()): ExtremeNudgeToastEvent {
+export function buildCompanionExtremeNudgePreview(
+  now = Date.now(),
+  copy: CompanionPreviewCopyOptions = {},
+): ExtremeNudgeToastEvent {
   return {
     kind: "extremeNudgeToast",
     placement: "top-right",
     id: `companion-preview-extreme-nudge-${now}`,
     generatedAt: new Date(now).toISOString(),
-    title: "Closed YouTube for you.",
+    title: copy.copySettings
+      ? buildExtremeNudgeToastCopy(copy.copySettings, { closedLabel: "YouTube" }).title
+      : "Closed YouTube for you.",
     closedLabel: "YouTube",
     focusLabel: "VS Code",
     breakOptions: [5, 15, 30, 60],
+    breakLabel: copy.copySettings?.takeBreakLabel,
+    correctionLabel: copy.copySettings?.manualCorrectionLabel,
   };
 }
 
@@ -100,6 +120,7 @@ export function buildCompanionDayReviewPreview(now = Date.now()): EndOfDayReview
 export function buildCompanionMilestonePreview(
   previewId: CompanionMilestonePreviewId,
   now = Date.now(),
+  translate: Translate = translateFor("en"),
 ): CompanionPillMilestoneEvent {
   const base = { kind: "milestone" as const, id: `companion-preview-${previewId}-${now}` };
 
@@ -109,8 +130,8 @@ export function buildCompanionMilestonePreview(
         ...base,
         milestoneKind: "total",
         tier: 1,
-        title: "1 hour of focus",
-        subtitle: "A solid hour, captured automatically.",
+        title: translate("companion.milestone.day1hTitle"),
+        subtitle: translate("companion.milestone.day1hSubtitle"),
         destination: "dashboard",
         /* A preview states the figure it was drawn against, so the headline and
            the number never contradict each other the way live demo data would. */
@@ -121,8 +142,8 @@ export function buildCompanionMilestonePreview(
         ...base,
         milestoneKind: "record",
         tier: 3,
-        title: "New 30-day focus record",
-        subtitle: "Your strongest focus run this month.",
+        title: translate("companion.milestone.recordTitle", { days: 30 }),
+        subtitle: translate("companion.milestone.recordFirstSubtitle"),
         destination: "insights",
         statSeconds: 81 * 60,
       };
@@ -134,11 +155,11 @@ export function buildCompanionMilestonePreview(
         ...base,
         milestoneKind: "rank",
         tier: 3,
-        title: `#${rank} in focus last week`,
-        subtitle: `Final rank among 14 active people`,
+        title: translate("companion.milestone.leaderboardTitle", { rank }),
+        subtitle: translate("companion.milestone.leaderboardSubtitle", { participants: 14 }),
         destination: "leaderboard",
         statSeconds: (16 - rank) * 3600 + 12 * 60,
-        statLabel: "last week",
+        statLabel: translate("companion.milestone.statLastWeek"),
       };
     }
   }

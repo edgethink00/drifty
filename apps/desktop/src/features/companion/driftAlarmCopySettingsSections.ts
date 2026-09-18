@@ -1,53 +1,56 @@
 import type { DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
+import type { TranslationKey } from "../localization/translations";
 
 export type DriftAlarmCopySectionKey = "drift" | "breakReturn" | "notification" | "extremeNudge";
 
-export type DriftAlarmCopyField = {
+export type DriftAlarmCopyFieldDefinition = {
   readonly key: keyof DriftAlarmCopySettingsValue;
-  readonly label: string;
-  readonly hint: string;
+  readonly labelKey: TranslationKey;
+  /** Placeholders the template may use, shown beside the field. */
+  readonly placeholders: readonly string[];
 };
 
 export type DriftAlarmCopyGroup = {
   readonly key: DriftAlarmCopySectionKey;
-  readonly title: string;
-  readonly description: string;
-  readonly fields: readonly DriftAlarmCopyField[];
+  readonly fields: readonly DriftAlarmCopyFieldDefinition[];
 };
 
+/* Context pills and the no-target/dashboard labels stay fixed: they are cut
+   to the capsule's width, so a longer phrase would clip mid-word. */
 const DRIFT_COPY_SECTION = {
   key: "drift",
-  title: "Drift alert",
-  description: "Shown by Companion when drift is detected.",
   fields: [
-    { key: "driftTitle", label: "Title", hint: "{context}" },
+    { key: "driftTitle", labelKey: "settings.alarmCopy.field.title", placeholders: ["{context}", "{driftDuration}"] },
+    { key: "driftSummary", labelKey: "settings.alarmCopy.field.summary", placeholders: ["{context}", "{driftDuration}"] },
+    { key: "returnToFocusLabel", labelKey: "settings.alarmCopy.field.returnToFocus", placeholders: [] },
+    { key: "takeBreakLabel", labelKey: "settings.alarmCopy.field.takeBreak", placeholders: [] },
+    { key: "manualCorrectionLabel", labelKey: "settings.alarmCopy.field.manualCorrection", placeholders: [] },
+    { key: "petInterceptTitle", labelKey: "settings.alarmCopy.field.petInterceptTitle", placeholders: ["{context}"] },
+    { key: "petInterceptSummary", labelKey: "settings.alarmCopy.field.petInterceptSummary", placeholders: ["{context}"] },
   ],
 } as const satisfies DriftAlarmCopyGroup;
 
 const BREAK_RETURN_COPY_SECTION = {
   key: "breakReturn",
-  title: "Break over",
-  description: "Shown by Companion when a selected break ends.",
   fields: [
-    { key: "breakReturnTitle", label: "Title", hint: "{breakDuration}" },
+    { key: "breakReturnTitle", labelKey: "settings.alarmCopy.field.title", placeholders: ["{breakDuration}"] },
+    { key: "breakReturnSummary", labelKey: "settings.alarmCopy.field.summary", placeholders: ["{breakDuration}"] },
+    { key: "extendBreakLabel", labelKey: "settings.alarmCopy.field.extendBreak", placeholders: [] },
   ],
 } as const satisfies DriftAlarmCopyGroup;
 
 const NOTIFICATION_COPY_SECTION = {
   key: "notification",
-  title: "macOS notification",
-  description: "Shown by macOS when Drifty sends a background drift notification.",
   fields: [
-    { key: "notificationTitle", label: "Title", hint: "Plain text" },
+    { key: "notificationTitle", labelKey: "settings.alarmCopy.field.title", placeholders: [] },
+    { key: "notificationBody", labelKey: "settings.alarmCopy.field.notificationBody", placeholders: ["{driftDuration}", "{place}"] },
   ],
 } as const satisfies DriftAlarmCopyGroup;
 
 const EXTREME_NUDGE_COPY_SECTION = {
   key: "extremeNudge",
-  title: "Automatic close",
-  description: "Shown after Drifty closes a supported distracting tab or app.",
   fields: [
-    { key: "extremeNudgeTitle", label: "Title", hint: "{closed}" },
+    { key: "extremeNudgeTitle", labelKey: "settings.alarmCopy.field.title", placeholders: ["{closed}"] },
   ],
 } as const satisfies DriftAlarmCopyGroup;
 
@@ -74,3 +77,4 @@ export function selectCopySection(key: DriftAlarmCopySectionKey): DriftAlarmCopy
     }
   }
 }
+

@@ -9,6 +9,20 @@ export type CompanionPillNativeMenuActions = {
   readonly onTurnOffCompanion: () => void;
 };
 
+export type CompanionPillNativeMenuLabels = {
+  readonly openDashboard: string;
+  readonly settings: string;
+  readonly hideForOneHour: string;
+  readonly turnOffCompanion: string;
+};
+
+const ENGLISH_MENU_LABELS: CompanionPillNativeMenuLabels = {
+  openDashboard: "Open Dashboard",
+  settings: "Settings…",
+  hideForOneHour: "Hide for 1 Hour",
+  turnOffCompanion: "Turn Off Companion",
+};
+
 /**
  * Present the operating system's context menu at the current pointer.
  *
@@ -18,6 +32,7 @@ export type CompanionPillNativeMenuActions = {
  */
 export async function openNativeCompanionPillMenu(
   actions: CompanionPillNativeMenuActions,
+  labels: CompanionPillNativeMenuLabels = ENGLISH_MENU_LABELS,
 ): Promise<boolean> {
   if (!isTauriRuntime()) return false;
 
@@ -25,23 +40,23 @@ export async function openNativeCompanionPillMenu(
     items: [
       {
         id: "companion-open-dashboard",
-        text: "Open Dashboard",
+        text: labels.openDashboard,
         action: actions.onOpenDashboard,
       },
       {
         id: "companion-open-settings",
-        text: "Settings…",
+        text: labels.settings,
         action: actions.onOpenSettings,
       },
       { item: "Separator" },
       {
         id: "companion-hide-one-hour",
-        text: "Hide for 1 Hour",
+        text: labels.hideForOneHour,
         action: actions.onHideForOneHour,
       },
       {
         id: "companion-turn-off",
-        text: "Turn Off Companion",
+        text: labels.turnOffCompanion,
         action: actions.onTurnOffCompanion,
       },
     ],

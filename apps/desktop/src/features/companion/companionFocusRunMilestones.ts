@@ -6,6 +6,7 @@ import {
   type ClassificationOptions,
 } from "@drifty/domain";
 import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
+import { translateFor, type Translate } from "../localization/translate";
 
 export type CompanionFocusRecordId = "record7d" | "record14d" | "record30d";
 
@@ -139,12 +140,14 @@ export function evaluateCompanionFocusRunRecords({
   currentRunSeconds,
   trackedDays,
   announce,
+  translate = translateFor("en"),
 }: {
   readonly progress: CompanionFocusRunRecordProgress;
   readonly day: string;
   readonly currentRunSeconds: number;
   readonly trackedDays: Readonly<Record<CompanionFocusRecordId, number>>;
   readonly announce: boolean;
+  readonly translate?: Translate;
 }): { readonly progress: CompanionFocusRunRecordProgress; readonly events: readonly CompanionPillMilestoneEvent[] } {
   if (progress.day !== day) return { progress, events: [] };
 
@@ -182,6 +185,7 @@ export function evaluateCompanionFocusRunRecords({
       day,
       normalizedRun,
       strongest.previousBestSeconds,
+      translate,
     )]
     : [];
 
@@ -202,24 +206,25 @@ function buildFocusRecordEvent(
   day: string,
   currentRunSeconds: number,
   previousBestSeconds: number,
+  translate: Translate,
 ): CompanionPillMilestoneEvent {
   return {
     kind: "milestone",
     id: `companion-focus-record:${day}:${definition.id}:${currentRunSeconds}`,
     milestoneKind: "record",
     tier: 3,
-    title: `Longest focus in ${definition.days} days`,
+    title: translate("companion.milestone.recordTitle", { days: definition.days }),
     subtitle: previousBestSeconds > 0
-      ? `Past your previous best of ${formatMinutes(previousBestSeconds)}`
-      : "Your first meaningful focus record",
+      ? translate("companion.milestone.recordSubtitle", { previousBest: formatMinutes(previousBestSeconds, translate) })
+      : translate("companion.milestone.recordFirstSubtitle"),
     destination: "insights",
     statSeconds: currentRunSeconds,
     generatedAt: new Date().toISOString(),
   };
 }
 
-function formatMinutes(seconds: number): string {
-  return `${Math.max(1, Math.floor(seconds / 60))}m`;
+function formatMinutes(seconds: number, translate: Translate): string {
+  return translate("companion.milestone.recordMinutes", { minutes: Math.max(1, Math.floor(seconds / 60)) });
 }
 
 function normalizeSeconds(value: number): number {

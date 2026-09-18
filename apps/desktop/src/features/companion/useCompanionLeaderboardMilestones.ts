@@ -10,6 +10,7 @@ import {
   type CompanionLeaderboardMilestoneProgress,
 } from "./companionLeaderboardMilestones";
 import { isTauriRuntime, showNativeCompanionMilestone } from "./watcherBridge";
+import type { Translate } from "../localization/translate";
 
 const COMPANION_WEEKLY_RESULT_REFRESH_COOLDOWN_MS = 5 * 60 * 1000;
 
@@ -22,6 +23,7 @@ export function useCompanionLeaderboardMilestones({
   startOfWeek,
   announcementsEnabled,
   publishCheckpoint,
+  translate,
 }: {
   readonly ready: boolean;
   readonly recoveryPending?: boolean;
@@ -31,12 +33,15 @@ export function useCompanionLeaderboardMilestones({
   readonly startOfWeek: StartOfWeek;
   readonly announcementsEnabled: boolean;
   readonly publishCheckpoint: (period: "weekly", windowEndDay: string) => Promise<boolean>;
+  readonly translate?: Translate;
 }) {
   const progressRef = useRef<CompanionLeaderboardMilestoneProgress | null>(null);
   const lastRefreshAtRef = useRef(0);
   const suppressRecoveredResultRef = useRef(false);
   const announcementsEnabledRef = useRef(announcementsEnabled);
   announcementsEnabledRef.current = announcementsEnabled;
+  const translateRef = useRef(translate);
+  translateRef.current = translate;
 
   useEffect(() => {
     if (recoveryPending) suppressRecoveredResultRef.current = true;
@@ -94,6 +99,7 @@ export function useCompanionLeaderboardMilestones({
           announce: !suppressRecoveredResultRef.current
             && announcementsEnabledRef.current
             && isTauriRuntime(),
+          translate: translateRef.current,
         });
         suppressRecoveredResultRef.current = false;
         progressRef.current = evaluation.progress;

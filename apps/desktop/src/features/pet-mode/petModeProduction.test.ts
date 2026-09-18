@@ -628,7 +628,8 @@ describe("catching the cat cancels the close", () => {
     // The user just reached out and grabbed the cat. Reusing "Let's get you back
     // in flow." there reads as if the app never noticed the gesture.
     const copy = readFileSync("src/features/companion/driftAlarmCopy.ts", "utf8");
-    expect(copy).toContain('petInterceptTitle: "Still drifting?"');
+    const translations = readFileSync("src/features/localization/translations.ts", "utf8");
+    expect(translations).toContain('"companion.copy.petInterceptTitle": "Still drifting?"');
     expect(copy).toContain('case "pet_intercept"');
 
     // The distinction is copy-only: the event still ships as a drift alarm so

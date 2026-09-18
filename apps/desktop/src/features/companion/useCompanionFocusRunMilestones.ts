@@ -10,6 +10,7 @@ import {
   type CompanionFocusRunRecordProgress,
 } from "./companionFocusRunMilestones";
 import { isTauriRuntime, showNativeCompanionMilestone } from "./watcherBridge";
+import type { Translate } from "../localization/translate";
 
 export function useCompanionFocusRunMilestones({
   ready,
@@ -18,6 +19,7 @@ export function useCompanionFocusRunMilestones({
   currentRunSeconds,
   classificationOptions,
   announcementsEnabled,
+  translate,
 }: {
   readonly ready: boolean;
   readonly day: string;
@@ -25,11 +27,14 @@ export function useCompanionFocusRunMilestones({
   readonly currentRunSeconds: number;
   readonly classificationOptions?: ClassificationOptions;
   readonly announcementsEnabled: boolean;
+  readonly translate?: Translate;
 }) {
   const progressRef = useRef<CompanionFocusRunRecordProgress | null>(null);
   const baselineRef = useRef<CompanionFocusRunRecordBaseline | null>(null);
   const currentRunRef = useRef(currentRunSeconds);
   currentRunRef.current = currentRunSeconds;
+  const translateRef = useRef(translate);
+  translateRef.current = translate;
 
   useEffect(() => {
     if (!ready) {
@@ -74,6 +79,7 @@ export function useCompanionFocusRunMilestones({
       currentRunSeconds,
       trackedDays: baseline.trackedDays,
       announce: announcementsEnabled && isTauriRuntime(),
+      translate: translateRef.current,
     });
     progressRef.current = result.progress;
     for (const event of result.events) {

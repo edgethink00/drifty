@@ -6,19 +6,24 @@ import {
   type CompanionDailyFocusMilestoneProgress,
 } from "./companionDailyFocusMilestones";
 import { isTauriRuntime, showNativeCompanionMilestone } from "./watcherBridge";
+import type { Translate } from "../localization/translate";
 
 export function useCompanionDailyFocusMilestones({
   ready,
   day,
   focusSecondsToday,
   announcementsEnabled,
+  translate,
 }: {
   readonly ready: boolean;
   readonly day: string;
   readonly focusSecondsToday: number;
   readonly announcementsEnabled: boolean;
+  readonly translate?: Translate;
 }) {
   const progressRef = useRef<CompanionDailyFocusMilestoneProgress | null>(null);
+  const translateRef = useRef(translate);
+  translateRef.current = translate;
 
   useEffect(() => {
     /* Losing readiness means the caller can no longer vouch for the figure (the
@@ -43,6 +48,7 @@ export function useCompanionDailyFocusMilestones({
       day,
       focusSecondsToday,
       announce: announcementsEnabled && isTauriRuntime(),
+      translate: translateRef.current,
     });
     progressRef.current = result.progress;
     persistCompanionDailyFocusMilestones(result.progress);

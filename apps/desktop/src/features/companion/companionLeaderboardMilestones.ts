@@ -2,6 +2,7 @@ import { shiftIsoDate } from "@drifty/domain";
 import type { LeaderboardCheckpointEntry } from "../leaderboard/leaderboardService";
 import type { StartOfWeek } from "../settings/settingsStorage";
 import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
+import { translateFor, type Translate } from "../localization/translate";
 
 export const DAILY_LEADERBOARD_CHECKPOINT_MINUTE = 20 * 60;
 export const WEEKLY_LEADERBOARD_RESULT_MINUTE = 9 * 60;
@@ -77,11 +78,13 @@ export function evaluateCompanionWeeklyLeaderboardMilestone({
   windowEndDay,
   entry,
   announce,
+  translate,
 }: {
   readonly progress: CompanionLeaderboardMilestoneProgress;
   readonly windowEndDay: string;
   readonly entry: LeaderboardCheckpointEntry | null;
   readonly announce: boolean;
+  readonly translate?: Translate;
 }): {
   readonly progress: CompanionLeaderboardMilestoneProgress;
   readonly event: CompanionPillMilestoneEvent | null;
@@ -94,7 +97,7 @@ export function evaluateCompanionWeeklyLeaderboardMilestone({
   const nextProgress = { ...progress, lastWeeklyWindowEndDay: windowEndDay };
   return {
     progress: nextProgress,
-    event: announce && celebration ? buildWeeklyLeaderboardResultEvent(celebration) : null,
+    event: announce && celebration ? buildWeeklyLeaderboardResultEvent(celebration, translate ?? translateFor("en")) : null,
   };
 }
 
@@ -126,17 +129,18 @@ export function persistCompanionLeaderboardMilestones(
 
 function buildWeeklyLeaderboardResultEvent(
   celebration: LeaderboardCelebration,
+  translate: Translate,
 ): CompanionPillMilestoneEvent {
   return {
     kind: "milestone",
     id: `companion-leaderboard-final:weekly:${celebration.windowEndDay}:rank${celebration.rank}`,
     milestoneKind: "rank",
     tier: 3,
-    title: `#${celebration.rank} in focus last week`,
-    subtitle: `Final rank among ${celebration.participantCount} active people`,
+    title: translate("companion.milestone.leaderboardTitle", { rank: celebration.rank }),
+    subtitle: translate("companion.milestone.leaderboardSubtitle", { participants: celebration.participantCount }),
     destination: "leaderboard",
     statSeconds: celebration.focusSeconds,
-    statLabel: "last week",
+    statLabel: translate("companion.milestone.statLastWeek"),
     generatedAt: new Date().toISOString(),
   };
 }

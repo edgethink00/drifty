@@ -4,6 +4,7 @@ import {
   type CommunityFocusPercentileModel,
 } from "./communityFocusPercentile";
 import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
+import { translateFor, type Translate } from "../localization/translate";
 
 export const COMPANION_COMMUNITY_MILESTONES_STORAGE_KEY =
   "drifty.companion.communityMilestones.v1";
@@ -26,12 +27,14 @@ export function evaluateCompanionCommunityMilestone({
   focusSeconds,
   model,
   announce,
+  translate,
 }: {
   readonly progress: CompanionCommunityMilestoneProgress;
   readonly day: string;
   readonly focusSeconds: number;
   readonly model: CommunityFocusPercentileModel | null;
   readonly announce: boolean;
+  readonly translate?: Translate;
 }): {
   readonly progress: CompanionCommunityMilestoneProgress;
   readonly event: CompanionPillMilestoneEvent | null;
@@ -61,11 +64,11 @@ export function evaluateCompanionCommunityMilestone({
       id: `companion-community-estimate:${day}:daily-top10`,
       milestoneKind: "rank",
       tier: 2,
-      title: "Top 10% focus today",
-      subtitle: `Estimated from ${estimate.sampleSize} leaderboard participants`,
+      title: (translate ?? translateFor("en"))("companion.milestone.communityTitle", { percent: COMPANION_COMMUNITY_TOP_PERCENT_THRESHOLD }),
+      subtitle: (translate ?? translateFor("en"))("companion.milestone.communitySubtitle", { sampleSize: estimate.sampleSize }),
       destination: "dashboard",
       statSeconds: Math.max(0, Math.floor(focusSeconds)),
-      statLabel: "today",
+      statLabel: (translate ?? translateFor("en"))("companion.milestone.statToday"),
       generatedAt: new Date().toISOString(),
     },
   };
