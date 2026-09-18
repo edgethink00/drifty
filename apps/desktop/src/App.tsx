@@ -764,11 +764,6 @@ export default function App() {
     recordCompanionEngagementMetric("companion_hidden_one_hour");
   }, [companionResidentEnabled]);
 
-  const handleShowCompanionNow = useCallback(() => {
-    setCompanionHiddenUntil(persistCompanionHiddenUntil(null));
-    recordCompanionEngagementMetric("companion_shown_now");
-  }, []);
-
   const handleCompanionVisibilityAction = useCallback((action: CompanionVisibilityAction) => {
     if (action === "hideOneHour") {
       handleHideCompanionForOneHour();
@@ -10122,8 +10117,6 @@ export default function App() {
                 )}
                 {settingsSection === "notifications" && (
                   <NotificationsSettingsSection
-                    companionHiddenUntil={companionHiddenUntil}
-                    companionSurfacePolicy={companionSurfacePolicy}
                     driftAlertDelaySeconds={driftAlertDelaySeconds}
                     driftAlertsEnabled={driftAlertsEnabled}
                     driftAlarmCopy={driftAlarmCopy}
@@ -10132,9 +10125,6 @@ export default function App() {
                     onDriftAlarmCopyChange={setDriftAlarmCopy}
                     onDriftAlertsChange={setDriftAlertsEnabled}
                     onExtremeNudgeChange={handleAutomaticCloseSettingsChange}
-                    onHideCompanionForOneHour={handleHideCompanionForOneHour}
-                    onShowCompanionNow={handleShowCompanionNow}
-                    onCompanionSurfacePolicyChange={handleCompanionSurfacePolicyChange}
                   />
                 )}
                 {settingsSection === "privacy" && (

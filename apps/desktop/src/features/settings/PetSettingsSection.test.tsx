@@ -61,11 +61,11 @@ describe("PetSettingsSection", () => {
 
   it("changes shared automatic close while the pet is off and opens alert details", () => {
     const { props } = renderPet({ enabled: false, automaticCloseEnabled: true });
-    const toggle = screen.getByRole("switch", { name: "딴짓 탭·앱 자동 닫기" });
+    const toggle = screen.getByRole("switch", { name: "데스크톱 펫의 딴짓 자동 닫기 전환" });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(toggle);
     expect(props.onAutomaticCloseChange).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByRole("button", { name: "알림 시점·문구 설정" }));
+    fireEvent.click(screen.getByRole("button", { name: "알림 시점과 문구 설정" }));
     expect(props.onOpenAlerts).toHaveBeenCalledTimes(1);
     expect(props.onEnabledChange).not.toHaveBeenCalled();
   });

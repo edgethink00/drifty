@@ -135,19 +135,6 @@ describe("Settings content styles", () => {
     ]);
   });
 
-  it("keeps the two Companion visibility actions compact and on one line", () => {
-    const styles = readAppStyles();
-    const groupRule = cssRule(styles, ".content--settings .companion-visibility-actions");
-    const actionRule = cssRule(styles, ".content--settings .companion-visibility-actions .settings-btn");
-    const temporaryRule = cssRule(styles, ".content--settings .companion-visibility-actions__temporary");
-    const powerRule = cssRule(styles, ".content--settings .companion-visibility-actions__power");
-
-    expect(groupRule).toContain("flex-wrap: nowrap;");
-    expect(actionRule).toContain("min-width: 0;");
-    expect(temporaryRule).toContain("width: 9.25rem;");
-    expect(powerRule).toContain("width: 6.75rem;");
-  });
-
   it("keeps exact URL classification rule controls compact and readable", () => {
     const styles = readAppStyles();
     const modeControlRule = cssRule(styles, ".classification-rule-mode-control");

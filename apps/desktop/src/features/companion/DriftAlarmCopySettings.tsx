@@ -41,9 +41,11 @@ const ignorePreviewAction = () => undefined;
 export function DriftAlarmCopySettings({
   value,
   onChange,
+  disabled = false,
 }: {
   readonly value: DriftAlarmCopySettingsValue;
   readonly onChange: (value: DriftAlarmCopySettingsValue) => void;
+  readonly disabled?: boolean;
 }) {
   const { t } = useLocalization();
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -77,13 +79,13 @@ export function DriftAlarmCopySettings({
   };
 
   return (
-    <div data-setting-id="settings.alarmCopy.label" className="settings-row settings-row--drift-copy" role="group" aria-label={t("settings.alarmCopy.label")}>
+    <div data-setting-id="settings.alarmCopy.label" className={`settings-row settings-row--drift-copy${disabled ? " settings-row--disabled" : ""}`} role="group" aria-label={t("settings.alarmCopy.label")}>
       <div>
         <div className="lbl">{t("settings.alarmCopy.label")}</div>
         <div className="desc">{t("settings.alarmCopy.description")}</div>
       </div>
       <div className="ctrl settings-row__actions">
-        <button type="button" className="settings-btn" onClick={openEditor}>
+        <button type="button" className="settings-btn" onClick={openEditor} disabled={disabled}>
           {t("settings.alarmCopy.edit")}
         </button>
       </div>

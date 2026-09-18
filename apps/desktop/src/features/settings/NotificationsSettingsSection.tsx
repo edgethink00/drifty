@@ -2,14 +2,11 @@ import { Toggle } from "../../components/Toggle";
 import { DRIFT_ALERT_DELAY_OPTIONS, driftAlertDelaySecondsFromValue, driftAlertDelayValueFromSeconds, type DriftAlertDelaySeconds } from "../companion/driftAlarmData";
 import type { DriftAlarmCopySettingsValue } from "../companion/driftAlarmCopy";
 import { DriftAlarmCopySettings } from "../companion/DriftAlarmCopySettings";
-import type { CompanionResidentPreference } from "../companion/companionPillSettings";
 import { SettingsSelect } from "./SettingsSelect";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 type NotificationsSettingsSectionProps = {
-  readonly companionHiddenUntil: number | null;
-  readonly companionSurfacePolicy: CompanionResidentPreference;
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
   readonly driftAlertsEnabled: boolean;
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
@@ -18,15 +15,9 @@ type NotificationsSettingsSectionProps = {
   readonly onDriftAlarmCopyChange: (value: DriftAlarmCopySettingsValue) => void;
   readonly onDriftAlertsChange: (enabled: boolean) => void;
   readonly onExtremeNudgeChange: (enabled: boolean) => void;
-  readonly onHideCompanionForOneHour: () => void;
-  readonly onShowCompanionNow: () => void;
-  readonly onCompanionSurfacePolicyChange: (policy: CompanionResidentPreference) => void;
-
 };
 
 export function NotificationsSettingsSection({
-  companionHiddenUntil,
-  companionSurfacePolicy,
   driftAlertDelaySeconds,
   driftAlertsEnabled,
   driftAlarmCopy,
@@ -35,30 +26,17 @@ export function NotificationsSettingsSection({
   onDriftAlarmCopyChange,
   onDriftAlertsChange,
   onExtremeNudgeChange,
-  onHideCompanionForOneHour,
-  onShowCompanionNow,
-  onCompanionSurfacePolicyChange,
-
 }: NotificationsSettingsSectionProps) {
-  const { effectiveLanguage, t } = useLocalization();
+  const { t } = useLocalization();
 
-  const companionTemporarilyHidden = companionHiddenUntil !== null && companionHiddenUntil > Date.now();
-  const hiddenUntilLabel = companionHiddenUntil !== null && companionHiddenUntil > Date.now()
-    ? new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(companionHiddenUntil))
-    : null;
-  const companionOff = companionSurfacePolicy === "off";
-  const companionVisibilityDescription = companionOff
-    ? t("settings.companion.offDescription")
-    : hiddenUntilLabel
-      ? t("settings.companion.hiddenUntil", { time: hiddenUntilLabel })
-      : t("settings.companion.visibleDescription");
   const driftAlertDelayOptions = DRIFT_ALERT_DELAY_OPTIONS.map((option) => ({
-    ...option,
+    value: option.value,
     label: localizedDriftAlertDelayLabel(option.value, t),
+    description: localizedDriftAlertDelayDetail(option.value, t),
   }));
+  // Timing and wording only matter while alerts can fire. Keep the values,
+  // but read them as inactive so the page shows what is in effect right now.
+  const dependentRowClassName = driftAlertsEnabled ? "settings-row" : "settings-row settings-row--disabled";
   const handleAutomaticCloseChange = (enabled: boolean) => {
     if (enabled && !driftAlertsEnabled) {
       onDriftAlertsChange(true);
@@ -75,41 +53,6 @@ export function NotificationsSettingsSection({
     <div className="settings-section">
       <div className="settings-block">
         <h3>{t("settings.section.notifications")}</h3>
-        <div data-setting-id="settings.companion.visibility" className="settings-row settings-row--companion-visibility">
-          <div>
-            <div className="lbl">{t("settings.companion.visibility")}</div>
-            <div className="desc">{companionVisibilityDescription}</div>
-          </div>
-          <div
-            className="ctrl settings-row__actions companion-visibility-actions"
-            role="group"
-            aria-label={t("settings.companion.visibility")}
-          >
-            <button
-              type="button"
-              className="settings-btn companion-visibility-actions__temporary"
-              disabled={companionOff}
-              onClick={companionTemporarilyHidden ? onShowCompanionNow : onHideCompanionForOneHour}
-            >
-              {companionTemporarilyHidden
-                ? t("settings.companion.showNow")
-                : t("settings.companion.hideOneHour")}
-            </button>
-            <button
-              type="button"
-              className="settings-btn companion-visibility-actions__power"
-              onClick={() => onCompanionSurfacePolicyChange(companionOff ? "menuBar" : "off")}
-            >
-              {companionOff
-                ? t("settings.companion.turnOn")
-                : t("settings.companion.turnOff")}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-block">
-        <h3>{t("settings.notifications.driftAlerts")}</h3>
         <div data-setting-id="settings.notifications.showDriftAlerts" className="settings-row">
           <div>
             <div className="lbl">{t("settings.notifications.showDriftAlerts")}</div>
@@ -131,7 +74,7 @@ export function NotificationsSettingsSection({
           prerequisiteDescription={t("settings.notifications.extremeOffDescription")}
           toggleAriaLabel={t("settings.notifications.toggleExtreme")}
         />
-        <div data-setting-id="settings.notifications.timing" className="settings-row">
+        <div data-setting-id="settings.notifications.timing" className={dependentRowClassName}>
           <div>
             <div className="lbl">{t("settings.notifications.timing")}</div>
             <div className="desc">{t("settings.notifications.timingDescription")}</div>
@@ -141,15 +84,14 @@ export function NotificationsSettingsSection({
               ariaLabel={t("settings.notifications.timing")}
               value={driftAlertDelayValueFromSeconds(driftAlertDelaySeconds)}
               options={driftAlertDelayOptions}
+              disabled={!driftAlertsEnabled}
               onChange={(value) => onDriftAlertDelaySecondsChange(driftAlertDelaySecondsFromValue(value))}
               className="settings-select-control--timing"
             />
           </div>
         </div>
-        <DriftAlarmCopySettings value={driftAlarmCopy} onChange={onDriftAlarmCopyChange} />
+        <DriftAlarmCopySettings value={driftAlarmCopy} onChange={onDriftAlarmCopyChange} disabled={!driftAlertsEnabled} />
       </div>
-
-
     </div>
   );
 }
@@ -165,5 +107,19 @@ function localizedDriftAlertDelayLabel(value: string, t: LocalizationController[
     case "900": return t("settings.notifications.delay900");
     case "1800": return t("settings.notifications.delay1800");
     default: return value;
+  }
+}
+
+function localizedDriftAlertDelayDetail(value: string, t: LocalizationController["t"]): string | undefined {
+  switch (value) {
+    case "0": return t("settings.notifications.delay0Detail");
+    case "30": return t("settings.notifications.delay30Detail");
+    case "60": return t("settings.notifications.delay60Detail");
+    case "120": return t("settings.notifications.delay120Detail");
+    case "300": return t("settings.notifications.delay300Detail");
+    case "600": return t("settings.notifications.delay600Detail");
+    case "900": return t("settings.notifications.delay900Detail");
+    case "1800": return t("settings.notifications.delay1800Detail");
+    default: return undefined;
   }
 }

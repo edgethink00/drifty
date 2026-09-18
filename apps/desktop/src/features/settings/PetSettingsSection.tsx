@@ -59,8 +59,7 @@ export function PetSettingsSection({
           checked={automaticCloseEnabled}
           prerequisiteMissing={!driftAlertsEnabled}
           onChange={onAutomaticCloseChange}
-          label={t("settings.pet.automaticCloseLabel")}
-          toggleAriaLabel={t("settings.pet.automaticCloseLabel")}
+          toggleAriaLabel={t("settings.pet.toggleAutomaticClose")}
           availableDescription={t("settings.pet.closeSettingsDescription")}
           prerequisiteDescription={t("settings.pet.closePrerequisiteDescription")}
         >

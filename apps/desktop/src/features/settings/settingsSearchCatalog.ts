@@ -143,12 +143,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.pet.allowOutingsDescription",
   },
   {
-    id: "settings.companion.visibility",
-    section: "notifications",
-    titleKey: "settings.companion.visibility",
-    keywords: "컴패니언 숨기기 끄기 알약 메뉴바 pill hide off menu bar",
-  },
-  {
     id: "settings.notifications.showDriftAlerts",
     section: "notifications",
     titleKey: "settings.notifications.showDriftAlerts",
