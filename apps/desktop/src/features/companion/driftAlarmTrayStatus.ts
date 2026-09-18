@@ -158,6 +158,7 @@ function resultDetailLabel(result: DriftAlarmTrayResult): string | null {
 
 function suppressionReasonLabel(reason: string, ko: boolean = false): string {
   const normalized = reason.trim();
+  if (normalized === "quiet-hours") return ko ? "조용한 시간" : "Quiet hours";
   if (normalized === "ai-low-confidence") return ko ? "AI 신뢰도 낮음" : "AI low confidence";
   if (normalized === "ai-timeout") return ko ? "AI 시간 초과" : "AI gate timed out";
   if (normalized === "ai-deadline") return ko ? "AI 시간 초과" : "AI gate timed out";
@@ -169,6 +170,7 @@ function suppressionReasonLabel(reason: string, ko: boolean = false): string {
 
 function suppressionStatusLabel(reason: string, ko: boolean): string {
   const normalized = reason.trim();
+  if (normalized === "quiet-hours") return ko ? "딴짓 알림: 조용한 시간" : "Drift alerts: Quiet hours";
   if (normalized.startsWith("ai-unavailable:")) return ko ? "딴짓 알림: AI 사용 불가" : "Drift alerts: AI unavailable";
   if (normalized === "ai-timeout") return ko ? "딴짓 알림: AI 시간 초과" : "Drift alerts: AI timed out";
   if (normalized === "ai-deadline") return ko ? "딴짓 알림: AI 시간 초과" : "Drift alerts: AI timed out";

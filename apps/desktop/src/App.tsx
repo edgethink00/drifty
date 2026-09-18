@@ -406,6 +406,7 @@ import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedL
 import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
+import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
 import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
@@ -830,19 +831,27 @@ export default function App() {
   const [categoryColorOverrides, setCategoryColorOverrides] = useState<CategoryColorOverrides>(resolveInitialCategoryColorOverrides);
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
   const {
+    celebrationsEnabled,
+    dayReviewEnabled,
     driftAlertDelaySeconds,
     driftAlertsEnabled,
     driftAlarmCopy,
     driftAlarmCopyDefaults,
     extremeNudgeEnabled,
+    macosNotificationEnabled,
+    quietHours,
     petModeEnabled,
     petModeCoat,
     petModeRunBetaEnabled,
     petModeSize,
+    setCelebrationsEnabled,
+    setDayReviewEnabled,
     setDriftAlertDelaySeconds,
     setDriftAlarmCopyOverrides,
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
+    setMacosNotificationEnabled,
+    setQuietHours,
     setPetModeEnabled,
     setPetModeCoat,
     setPetModeRunBetaEnabled,
@@ -852,6 +861,22 @@ export default function App() {
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController({ language: localization.effectiveLanguage });
+  /* Quiet hours pause interventions and celebrations. Delivery reads the
+     clock at evaluation time through the ref; render-time gates (milestones)
+     read the boundary-aware hook so they flip without a poll. */
+  const quietHoursActive = useQuietHoursActive(quietHours);
+  const quietHoursRef = useRef(quietHours);
+  quietHoursRef.current = quietHours;
+  const macosNotificationEnabledRef = useRef(macosNotificationEnabled);
+  // The switch is locked in Settings while Drift alerts are off, so the saved
+  // value must not act on its own if alerts were turned off afterwards.
+  macosNotificationEnabledRef.current = macosNotificationEnabled && driftAlertsEnabled;
+  const driftNotificationCopyRef = useRef({ copy: driftAlarmCopy, language: companionLanguage });
+  driftNotificationCopyRef.current = { copy: driftAlarmCopy, language: companionLanguage };
+  /** The last alert whose card failure was carried by a macOS notification. */
+  const cardFailureNotifiedAlertKeyRef = useRef<string | null>(null);
+  /** The last alert already recorded as suppressed by the current quiet window. */
+  const quietHoursSuppressedAlertKeyRef = useRef<string | null>(null);
   const [automaticCloseOverride, setAutomaticCloseOverride] = useState(resolveInitialAutomaticCloseOverride);
   // Persist only the committed choice. Writing inside queued updaters can
   // overwrite a newer explicit choice while leaving React on the newer state.
@@ -3150,6 +3175,30 @@ export default function App() {
         delivery,
       });
       if (driftAlarmEventRef.current?.id === event.id) clearDriftAlarmEvent();
+      /* The card is the primary surface; when it cannot be shown, macOS carries
+         the alert instead. Two limits keep that from becoming noise: a user who
+         already receives every card as a notification has been told, and a
+         Companion window that keeps failing must not repeat the notification on
+         every reminder for the same alert. */
+      if (event.mode === "drift"
+        && !macosNotificationEnabledRef.current
+        && cardFailureNotifiedAlertKeyRef.current !== event.id) {
+        cardFailureNotifiedAlertKeyRef.current = event.id;
+        recordDriftAlarmDebugEvent({ kind: "native_notification_requested", alertKey: event.id, message: "card_failed", delivery });
+        const { copy, language } = driftNotificationCopyRef.current;
+        void sendDriftNotification(
+          { place: event.sourceSiteDomain ?? event.sourceAppName, driftDurationSeconds: event.driftDurationSeconds },
+          copy,
+          language,
+        ).catch((notificationError: unknown) => {
+          recordDriftAlarmDebugEvent({
+            kind: "native_notification_failed",
+            alertKey: event.id,
+            message: toErrorMessage(notificationError),
+            delivery,
+          });
+        });
+      }
     }).finally(() => {
       driftAlarmRequestInFlightRef.current = false;
       const pendingEvent = pendingDriftAlarmEventRef.current;
@@ -5324,6 +5373,31 @@ export default function App() {
       }, checkedAt);
       return;
     }
+    if (isQuietHoursActiveAt(new Date(), quietHoursRef.current)) {
+      // Quiet hours pause the card, the notification, and automatic close.
+      // Nothing about the episode is consumed, so the same drift delivers on
+      // the first poll after the window closes.
+      /* Record the episode once. A quiet night on one site would otherwise
+         write a suppression every poll and push real intervention history out
+         of the 30-day ledger; the tray still refreshes on every check. */
+      if (quietHoursSuppressedAlertKeyRef.current !== alertKey) {
+        quietHoursSuppressedAlertKeyRef.current = alertKey;
+        recordDriftAlarmDebugEvent({
+          kind: "delivery_suppressed",
+          alertKey,
+          reason: "quiet-hours",
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+      }
+      publishEvaluationDriftAlarmTrayStatus({
+        kind: "suppressed",
+        reason: "quiet-hours",
+        candidateDetail,
+      }, checkedAt);
+      return;
+    }
+    quietHoursSuppressedAlertKeyRef.current = null;
     const transientDecision = resolveDriftAlarmTransientDefer({
       pending: pendingDriftAlarmTransientRef.current,
       candidate: {
@@ -5492,6 +5566,28 @@ export default function App() {
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
     };
+    /* The macOS notification is opt-in beside the card. When the switch is
+       on it accompanies every drift card for this episode, including
+       reminders; the card-failure fallback lives in showDriftAlarm. */
+    const sendUserEnabledDriftNotification = () => {
+      if (!macosNotificationEnabledRef.current) return;
+      recordDriftAlarmDebugEvent({
+        kind: "native_notification_requested",
+        alertKey,
+        message: "user_enabled",
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
+      void sendDriftNotification(segment, driftAlarmCopy, companionLanguage).catch((error: unknown) => {
+        recordDriftAlarmDebugEvent({
+          kind: "native_notification_failed",
+          alertKey,
+          message: toErrorMessage(error),
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+      });
+    };
     const showFallbackDriftAlarm = (
       notify: boolean,
       petIntercepted = false,
@@ -5499,23 +5595,7 @@ export default function App() {
     ) => {
       showCurrentDriftAlarm(petIntercepted, breakReturnAlarm);
       markCurrentDriftAlarmDelivered();
-      if (notify) {
-        recordDriftAlarmDebugEvent({
-          kind: "native_notification_requested",
-          alertKey,
-          candidate: summarizeDriftAlarmCandidate(latestDrift),
-          evaluation,
-        });
-        void sendDriftNotification(segment, driftAlarmCopy, companionLanguage).catch((error: unknown) => {
-          recordDriftAlarmDebugEvent({
-            kind: "native_notification_failed",
-            alertKey,
-            message: toErrorMessage(error),
-            candidate: summarizeDriftAlarmCandidate(latestDrift),
-            evaluation,
-          });
-        });
-      }
+      if (notify) sendUserEnabledDriftNotification();
     };
     const applyCurrentExtremeNudge = (
       notifyOnFallback: boolean,
@@ -5826,6 +5906,7 @@ export default function App() {
         lastDriftAlertSegmentRef.current = alertKey;
         showCurrentDriftAlarm();
         markCurrentDriftAlarmDelivered();
+        sendUserEnabledDriftNotification();
         return;
       }
       if (lastDriftAlertSegmentRef.current === alertKey) {
@@ -5850,21 +5931,7 @@ export default function App() {
       }
       showCurrentDriftAlarm();
       markCurrentDriftAlarmDelivered();
-      recordDriftAlarmDebugEvent({
-        kind: "native_notification_requested",
-        alertKey,
-        candidate: summarizeDriftAlarmCandidate(latestDrift),
-        evaluation,
-      });
-      void sendDriftNotification(segment, driftAlarmCopy, companionLanguage).catch((error: unknown) => {
-        recordDriftAlarmDebugEvent({
-          kind: "native_notification_failed",
-          alertKey,
-          message: toErrorMessage(error),
-          candidate: summarizeDriftAlarmCandidate(latestDrift),
-          evaluation,
-        });
-      });
+      sendUserEnabledDriftNotification();
     };
 
     if (lastDriftAlertSegmentRef.current === alertKey && !pendingBreakReturnAlarmRef.current) {
@@ -6985,6 +7052,8 @@ export default function App() {
   ]);
 
   const companionAchievementAnnouncementsEnabled = status?.running === true
+    && celebrationsEnabled
+    && !quietHoursActive
     && !isInitialDailyFocusQuietPeriod(onboardingCompletedAt);
 
   useCompanionCommunityMilestones({
@@ -7027,7 +7096,9 @@ export default function App() {
     calendarDay: localDateKey(new Date()),
     startOfDayMinutes,
     startOfWeek,
-    announcementsEnabled: true,
+    /* The weekly result lands once, at its morning slot; quiet hours do not
+       gate it because a skipped evaluation is consumed, not deferred. */
+    announcementsEnabled: celebrationsEnabled,
     publishCheckpoint: publishLeaderboardCheckpoint,
     translate: companionTranslate,
   });
@@ -7262,6 +7333,7 @@ export default function App() {
        day marker so a skipped review never suppresses the publish. */
     const trackedSeconds = sumEndOfDayReviewTrackedSeconds(segments);
     const reviewDue = reviewTimeDue
+      && dayReviewEnabled
       && !reviewShown
       && isInstallDayReviewEligible(onboardingCompletedAt, todayDay, startOfDayMinutes)
       && trackedSeconds >= END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS;
@@ -7327,7 +7399,7 @@ export default function App() {
     })().finally(() => {
       endOfDayReviewAutomaticInFlightRef.current = false;
     });
-  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
+  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, dayReviewEnabled, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
 
   /* Yesterday's review, once, if it never got shown: the machine was closed
      before the review time, or Drifty was not running. It loads its own
@@ -7342,6 +7414,7 @@ export default function App() {
     if (classificationAvailabilityGateEnabled
       && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
     if (endOfDayReviewCatchUpAttemptedRef.current) return;
+    if (!dayReviewEnabled) return;
     if (!isInstallDayReviewEligible(onboardingCompletedAt, shiftIsoDate(todayDay, -1), startOfDayMinutes)) return;
     if (onboardingCompletedAt && logicalDayIsoDateForDate(new Date(onboardingCompletedAt), startOfDayMinutes) === todayDay) return;
 
@@ -7392,7 +7465,7 @@ export default function App() {
          browser fallback, where a successful show is already visible. */
       if (shown && !isTauriRuntime()) persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
     })();
-  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);
+  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, dayReviewEnabled, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
@@ -10048,7 +10121,6 @@ export default function App() {
                   <GeneralSettingsSection
                     backgroundUpdatesSupported={hostPlatform === "macos"}
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
-                    dayReviewTimeValue={dayReviewTimeValue}
                     startOfDayValue={startOfDayValue}
                     startOfWeek={startOfWeek}
                     updaterChecking={updaterChecking}
@@ -10057,7 +10129,6 @@ export default function App() {
                     updaterMessage={updaterMessage}
                     onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
-                    onDayReviewTimeChange={handleDayReviewTimeChange}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
                   />
@@ -10135,10 +10206,20 @@ export default function App() {
                     driftAlarmCopy={driftAlarmCopy}
                     driftAlarmCopyDefaults={driftAlarmCopyDefaults}
                     extremeNudgeEnabled={automaticCloseEnabled}
+                    macosNotificationEnabled={macosNotificationEnabled}
+                    celebrationsEnabled={celebrationsEnabled}
+                    dayReviewEnabled={dayReviewEnabled}
+                    dayReviewTimeValue={dayReviewTimeValue}
+                    quietHours={quietHours}
                     onDriftAlertDelaySecondsChange={setDriftAlertDelaySeconds}
                     onDriftAlarmCopyOverridesChange={setDriftAlarmCopyOverrides}
                     onDriftAlertsChange={setDriftAlertsEnabled}
                     onExtremeNudgeChange={handleAutomaticCloseSettingsChange}
+                    onMacosNotificationChange={setMacosNotificationEnabled}
+                    onCelebrationsChange={setCelebrationsEnabled}
+                    onDayReviewEnabledChange={setDayReviewEnabled}
+                    onDayReviewTimeChange={handleDayReviewTimeChange}
+                    onQuietHoursChange={setQuietHours}
                   />
                 )}
                 {settingsSection === "privacy" && (

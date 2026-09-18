@@ -10,6 +10,15 @@ import {
 } from "./driftAlarmCopyStorage";
 import type { DisplayLanguage } from "../localization/languagePreference";
 import {
+  persistCelebrationsEnabled,
+  persistDayReviewEnabled,
+  persistMacosNotificationEnabled,
+  resolveInitialCelebrationsEnabled,
+  resolveInitialDayReviewEnabled,
+  resolveInitialMacosNotificationEnabled,
+} from "./companionMomentPreferences";
+import { persistQuietHours, resolveInitialQuietHours, type QuietHoursSettings } from "./quietHours";
+import {
   DRIFT_ALERTS_STORAGE_KEY,
   DRIFT_ALERT_DELAY_STORAGE_KEY,
   EXTREME_NUDGE_STORAGE_KEY,
@@ -44,6 +53,8 @@ import {
 } from "../pet-mode/petModeData";
 
 type UseCompanionSettingsControllerResult = {
+  readonly celebrationsEnabled: boolean;
+  readonly dayReviewEnabled: boolean;
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
   readonly driftAlertsEnabled: boolean;
   /** Current-language defaults with the user's edits applied. */
@@ -51,20 +62,26 @@ type UseCompanionSettingsControllerResult = {
   /** What the editor shows as "default" for the current language. */
   readonly driftAlarmCopyDefaults: DriftAlarmCopySettingsValue;
   readonly extremeNudgeEnabled: boolean;
+  readonly macosNotificationEnabled: boolean;
   readonly petModeEnabled: boolean;
   readonly petModeCoat: PetModeCoat;
   readonly petModeRunBetaEnabled: boolean;
   readonly petModeSize: PetModeSize;
+  readonly quietHours: QuietHoursSettings;
   readonly handleWatcherPeriodicMaxChange: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly handleWatcherPeriodicMinChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  readonly setCelebrationsEnabled: Dispatch<SetStateAction<boolean>>;
+  readonly setDayReviewEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setDriftAlertDelaySeconds: Dispatch<SetStateAction<DriftAlertDelaySeconds>>;
   readonly setDriftAlarmCopyOverrides: Dispatch<SetStateAction<DriftAlarmCopyOverrides>>;
   readonly setDriftAlertsEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setExtremeNudgeEnabled: Dispatch<SetStateAction<boolean>>;
+  readonly setMacosNotificationEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeCoat: Dispatch<SetStateAction<PetModeCoat>>;
   readonly setPetModeRunBetaEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeSize: Dispatch<SetStateAction<PetModeSize>>;
+  readonly setQuietHours: Dispatch<SetStateAction<QuietHoursSettings>>;
   readonly setWatcherMode: Dispatch<SetStateAction<WatcherMode>>;
   readonly setWatcherPeekEnabled: Dispatch<SetStateAction<boolean>>;
   readonly watcherMode: WatcherMode;
@@ -87,6 +104,10 @@ export function useCompanionSettingsController({
     [driftAlarmCopyOverrides, language],
   );
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
+  const [macosNotificationEnabled, setMacosNotificationEnabled] = useState(resolveInitialMacosNotificationEnabled);
+  const [celebrationsEnabled, setCelebrationsEnabled] = useState(resolveInitialCelebrationsEnabled);
+  const [dayReviewEnabled, setDayReviewEnabled] = useState(resolveInitialDayReviewEnabled);
+  const [quietHours, setQuietHours] = useState<QuietHoursSettings>(resolveInitialQuietHours);
   const [petModeEnabled, setPetModeEnabled] = useState(resolveInitialPetModeEnabled);
   const [petModeCoat, setPetModeCoat] = useState<PetModeCoat>(resolveInitialPetModeCoat);
   const [petModeRunBetaEnabled, setPetModeRunBetaEnabled] = useState(resolveInitialPetModeRunBetaEnabled);
@@ -128,6 +149,22 @@ export function useCompanionSettingsController({
   }, [extremeNudgeEnabled]);
 
   useEffect(() => {
+    persistMacosNotificationEnabled(macosNotificationEnabled);
+  }, [macosNotificationEnabled]);
+
+  useEffect(() => {
+    persistCelebrationsEnabled(celebrationsEnabled);
+  }, [celebrationsEnabled]);
+
+  useEffect(() => {
+    persistDayReviewEnabled(dayReviewEnabled);
+  }, [dayReviewEnabled]);
+
+  useEffect(() => {
+    persistQuietHours(quietHours);
+  }, [quietHours]);
+
+  useEffect(() => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, petModeEnabled ? "1" : "0");
   }, [petModeEnabled]);
 
@@ -167,25 +204,33 @@ export function useCompanionSettingsController({
   }, [watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
 
   return {
+    celebrationsEnabled,
+    dayReviewEnabled,
     driftAlertDelaySeconds,
     driftAlertsEnabled,
     driftAlarmCopy,
     driftAlarmCopyDefaults,
     extremeNudgeEnabled,
+    macosNotificationEnabled,
     petModeEnabled,
     petModeCoat,
     petModeRunBetaEnabled,
     petModeSize,
+    quietHours,
     handleWatcherPeriodicMaxChange,
     handleWatcherPeriodicMinChange,
+    setCelebrationsEnabled,
+    setDayReviewEnabled,
     setDriftAlertDelaySeconds,
     setDriftAlarmCopyOverrides,
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
+    setMacosNotificationEnabled,
     setPetModeEnabled,
     setPetModeCoat,
     setPetModeRunBetaEnabled,
     setPetModeSize,
+    setQuietHours,
     setWatcherMode,
     setWatcherPeekEnabled,
     watcherMode,

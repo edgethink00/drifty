@@ -476,8 +476,29 @@ export function normalizeWatcherPeriodicMinutes(value: string | null, fallback: 
   return Math.min(WATCHER_PERIODIC_MAX_LIMIT_MINUTES, Math.max(WATCHER_PERIODIC_MIN_LIMIT_MINUTES, Math.round(parsedValue)));
 }
 
+export type DriftNotificationSubject = {
+  readonly place: string;
+  readonly driftDurationSeconds: number;
+};
+
+export function driftNotificationSubjectFromSegment(segment: ActivitySegment): DriftNotificationSubject {
+  return { place: segment.siteDomain ?? segment.appName, driftDurationSeconds: segment.durationSeconds };
+}
+
+/** Delivery passes the live segment; the card-failure fallback passes the event's own place and duration. */
+export function resolveDriftNotificationSubject(
+  subject: ActivitySegment | DriftNotificationSubject,
+): DriftNotificationSubject {
+  return "driftDurationSeconds" in subject ? subject : driftNotificationSubjectFromSegment(subject);
+}
+
+/**
+ * The macOS notification is opt-in beside the Companion card, and the fallback
+ * when the card cannot be shown. Either way the same subject is described, so
+ * callers pass the place and duration rather than a whole segment.
+ */
 export async function sendDriftNotification(
-  segment: ActivitySegment,
+  subject: ActivitySegment | DriftNotificationSubject,
   copySettings: DriftAlarmCopySettingsValue = buildDefaultDriftAlarmCopy(),
   language: DisplayLanguage = "en",
 ) {
@@ -496,9 +517,9 @@ export async function sendDriftNotification(
 
     if (!hasPermission) return;
 
-    const place = segment.siteDomain ?? segment.appName;
+    const { place, driftDurationSeconds } = resolveDriftNotificationSubject(subject);
     const copy = buildDriftNotificationCopy(copySettings, {
-      driftDurationLabel: formatLocalizedCompactDurationFromSeconds(segment.durationSeconds, language),
+      driftDurationLabel: formatLocalizedCompactDurationFromSeconds(driftDurationSeconds, language),
       place,
     });
     sendNotification({
@@ -507,5 +528,17 @@ export async function sendDriftNotification(
     });
   } catch {
     // Notifications are a convenience; tracking should continue even if macOS denies permission.
+  }
+}
+
+/** Ask macOS for notification permission in response to the user turning the switch on. */
+export async function requestDriftNotificationPermission(): Promise<"granted" | "denied" | "unavailable"> {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return "unavailable";
+  try {
+    const { isPermissionGranted, requestPermission } = await import("@tauri-apps/plugin-notification");
+    if (await isPermissionGranted()) return "granted";
+    return (await requestPermission()) === "granted" ? "granted" : "denied";
+  } catch {
+    return "unavailable";
   }
 }

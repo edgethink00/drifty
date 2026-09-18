@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDefaultDriftAlarmCopy } from "../companion/driftAlarmCopy";
+import { DEFAULT_QUIET_HOURS } from "../companion/quietHours";
 import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
 import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 
@@ -15,10 +16,21 @@ function renderSettings(
     driftAlarmCopy: buildDefaultDriftAlarmCopy(),
     driftAlarmCopyDefaults: buildDefaultDriftAlarmCopy(),
     extremeNudgeEnabled: false,
+    macosNotificationEnabled: false,
+    celebrationsEnabled: true,
+    dayReviewEnabled: true,
+    dayReviewTimeValue: "20:00",
+    quietHours: DEFAULT_QUIET_HOURS,
     onDriftAlertDelaySecondsChange: vi.fn(),
     onDriftAlarmCopyOverridesChange: vi.fn(),
     onDriftAlertsChange: vi.fn(),
     onExtremeNudgeChange: vi.fn(),
+    onMacosNotificationChange: vi.fn(),
+    onCelebrationsChange: vi.fn(),
+    onDayReviewEnabledChange: vi.fn(),
+    onDayReviewTimeChange: vi.fn(),
+    onQuietHoursChange: vi.fn(),
+    requestNotificationPermission: vi.fn(async () => "granted" as const),
     ...overrides,
   };
   render(
@@ -70,6 +82,58 @@ describe("NotificationsSettingsSection", () => {
     fireEvent.click(trigger);
     expect(screen.getByText("After 1 minute of drift")).toBeTruthy();
     expect(screen.getByText("As soon as drift is detected")).toBeTruthy();
+  });
+
+  it("asks macOS for permission when the notification switch is turned on and reports a denial", async () => {
+    const requestNotificationPermission = vi.fn(async () => "denied" as const);
+    const props = renderSettings({ driftAlertsEnabled: true, requestNotificationPermission });
+
+    const toggle = screen.getByRole("switch", { name: "Toggle macOS notifications" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+
+    expect(props.onMacosNotificationChange).toHaveBeenCalledWith(true);
+    expect(requestNotificationPermission).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Allow them under Permissions");
+  });
+
+  it("locks the macOS notification switch while Drift alerts are off", () => {
+    renderSettings({ driftAlertsEnabled: false, macosNotificationEnabled: true });
+    const toggle = screen.getByRole("switch", { name: "Toggle macOS notifications" }) as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    // The saved choice is kept, but it is not in effect, so it must not read as on.
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.closest(".settings-row")?.classList.contains("settings-row--disabled")).toBe(true);
+  });
+
+  it("offers celebration and day review switches with the review time beside them", () => {
+    const props = renderSettings({ dayReviewEnabled: false });
+
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle focus celebrations" }));
+    expect(props.onCelebrationsChange).toHaveBeenCalledWith(false);
+
+    const reviewTime = screen.getByRole("combobox", { name: "Day review at" }) as HTMLButtonElement;
+    expect(reviewTime.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle the day review" }));
+    expect(props.onDayReviewEnabledChange).toHaveBeenCalledWith(true);
+  });
+
+  it("keeps quiet-hour times inactive until the window is on, and never lets start equal end", () => {
+    const props = renderSettings();
+    expect((screen.getByRole("combobox", { name: "Starts at" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle quiet hours" }));
+    expect(props.onQuietHoursChange).toHaveBeenLastCalledWith({ enabled: true, startMinute: 22 * 60, endMinute: 8 * 60 });
+
+    cleanup();
+    const enabledProps = renderSettings({ quietHours: { enabled: true, startMinute: 22 * 60, endMinute: 8 * 60 } });
+    expect(screen.getByText(/Quiet from 10:00 PM to 8:00 AM/)).toBeTruthy();
+    const end = screen.getByRole("combobox", { name: "Ends at" }) as HTMLButtonElement;
+    expect(end.disabled).toBe(false);
+    fireEvent.click(end);
+    fireEvent.click(screen.getByRole("option", { name: "10:00 PM" }));
+    expect(enabledProps.onQuietHoursChange).toHaveBeenLastCalledWith({ enabled: true, startMinute: 22 * 60, endMinute: 22 * 60 + 30 });
   });
 
   it("keeps pet appearance out of alerts and exposes one automatic-close control", () => {
