@@ -555,10 +555,24 @@ export function resolveInitialProfileBetaEnabled(): boolean {
   return window.localStorage.getItem(PROFILE_BETA_STORAGE_KEY) === "1";
 }
 
-/** The navigation refresh ships dark: only Dev mode can opt into the new IA. */
+/** Navigation refresh is a Dev opt-in. Persist "1" to preview Flow / Review / Social. */
 export function resolveInitialNavigationRefreshEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(NAVIGATION_REFRESH_STORAGE_KEY) === "1";
+  try {
+    return window.localStorage.getItem(NAVIGATION_REFRESH_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Persist the Dev navigation-refresh preview. An explicit "1" opts into Flow / Review / Social. */
+export function persistNavigationRefreshEnabled(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(NAVIGATION_REFRESH_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Persistence is optional; a blocked storage API must not block navigation.
+  }
 }
 
 /** Your Agents remains independently available in the legacy navigation. */
@@ -689,4 +703,3 @@ export function persistLeaderboardGraphStyle(style: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(LEADERBOARD_GRAPH_STYLE_STORAGE_KEY, style);
 }
-

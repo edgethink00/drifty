@@ -1,6 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { replaceNavigationHistoryTab, type NavigationHistoryState } from "./navigation";
+import { activityNav, flowNav, primaryNav, replaceNavigationHistoryTab, reviewNav, type NavigationHistoryState } from "./navigation";
+
+describe("navigation groups", () => {
+  it("keeps Flow and Review destinations explicit instead of index slices", () => {
+    expect(flowNav.map((item) => item.id)).toEqual(["dashboard", "agents", "projects"]);
+    expect(reviewNav.map((item) => item.id)).toEqual(["classification", "trends", "history"]);
+    expect(primaryNav.map((item) => item.id)).toEqual([
+      "dashboard",
+      "agents",
+      "projects",
+      "classification",
+      "trends",
+      "history",
+    ]);
+    expect(activityNav.map((item) => item.id)).toEqual(["classification", "projects", "trends", "history"]);
+  });
+});
 
 describe("replaceNavigationHistoryTab", () => {
   it("removes a hidden surface from back history without creating a loop", () => {

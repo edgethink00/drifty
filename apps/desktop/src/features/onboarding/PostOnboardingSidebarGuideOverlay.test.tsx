@@ -48,6 +48,23 @@ describe("PostOnboardingSidebarGuide", () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  it("uses Review copy for the activity step when navigation refresh is on", () => {
+    render(
+      <LocalizationTestProvider language="en">
+        <PostOnboardingSidebarGuide
+          step="activity"
+          onAdvance={vi.fn()}
+          onBack={vi.fn()}
+          onDismiss={vi.fn()}
+          navigationRefreshEnabled
+        />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByText("Review")).toBeTruthy();
+    expect(screen.getByText("Review labels, patterns, and the original record")).toBeTruthy();
+  });
+
   it("positions the guide when a portal-backed anchor appears after mount", async () => {
     render(
       <PostOnboardingSidebarGuide

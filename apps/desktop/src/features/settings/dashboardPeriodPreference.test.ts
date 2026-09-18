@@ -4,6 +4,7 @@ import {
   DASHBOARD_PERIOD_STORAGE_KEY,
   NAVIGATION_REFRESH_STORAGE_KEY,
   persistDashboardPeriod,
+  persistNavigationRefreshEnabled,
   resolveInitialDashboardPeriod,
   resolveInitialNavigationRefreshEnabled,
 } from "./settingsStorage";
@@ -20,6 +21,20 @@ describe("navigation refresh preference", () => {
     expect(resolveInitialNavigationRefreshEnabled()).toBe(false);
     window.localStorage.setItem(NAVIGATION_REFRESH_STORAGE_KEY, "1");
     expect(resolveInitialNavigationRefreshEnabled()).toBe(true);
+  });
+
+  it("stays off when storage access is blocked", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("Storage blocked", "SecurityError");
+    });
+    expect(resolveInitialNavigationRefreshEnabled()).toBe(false);
+  });
+
+  it("does not throw when persistence is blocked", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage blocked", "SecurityError");
+    });
+    expect(() => persistNavigationRefreshEnabled(false)).not.toThrow();
   });
 });
 

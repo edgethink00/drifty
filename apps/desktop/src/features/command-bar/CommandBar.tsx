@@ -232,27 +232,32 @@ export function CommandBar({
       });
     }
 
+    if (navigationRefreshEnabled) {
+      items.push({
+        id: "nav-classification",
+        section: "navigation",
+        label: t("nav.classification"),
+        sub: t("command.classificationSub"),
+        shortcut: includeProjects ? "⌘4" : "⌘3",
+        icon: "classification",
+        keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
+        onSelect: () => onNavigate("classification"),
+      });
+    }
+
     items.push(
       {
         id: "nav-trends",
         section: "navigation",
         label: t("nav.trends"),
         sub: t("command.trendsSub"),
-        shortcut: includeProjects ? "⌘4" : "⌘3",
+        shortcut: navigationRefreshEnabled
+          ? (includeProjects ? "⌘5" : "⌘4")
+          : (includeProjects ? "⌘4" : "⌘3"),
         icon: "trends",
         keywords: ["insights", "focus", "trends", "stats", "chart", "트렌드", "인사이트", "통계"],
         onSelect: () => onNavigate("trends"),
       },
-      ...(navigationRefreshEnabled ? [{
-        id: "nav-classification",
-        section: "navigation" as const,
-        label: t("nav.classification"),
-        sub: t("command.classificationSub"),
-        shortcut: includeProjects ? "⌘5" : "⌘4",
-        icon: "classification",
-        keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
-        onSelect: () => onNavigate("classification"),
-      }] : []),
       {
         id: "nav-history",
         section: "navigation",

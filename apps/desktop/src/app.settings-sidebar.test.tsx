@@ -247,10 +247,14 @@ describe("App settings sidebar", () => {
       "Calendar",
       "Agents",
       "Projects",
-      "Insights",
       "Classification",
+      "Insights",
       "History",
     ]);
+    expect(screen.getByRole("group", { name: /^Flow$/i })).toBeTruthy();
+    expect(screen.getByRole("group", { name: /^Review$/i })).toBeTruthy();
+    expect(screen.getByText("Social")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Your Day$/i })).toBeNull();
     const calendarRange = await screen.findByRole("group", { name: /calendar view/i });
     await act(async () => {
       fireEvent.click(within(calendarRange).getByRole("button", { name: /^Week$/i }));

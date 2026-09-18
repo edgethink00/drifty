@@ -7,7 +7,7 @@ import type { OwnTeam } from "../features/team/teamTypes";
 import type { TeamWorkspaceAction } from "../features/team/TeamWorkspace";
 import type { TeamProjectsSubView } from "../features/team/useTeamProjects";
 import { NavIcon } from "./AppShell";
-import { activityNav, dashboardPeriodOptions, primaryNav, type NavIconType, type TabId } from "./navigation";
+import { activityNav, dashboardPeriodOptions, flowNav, reviewNav, type NavIconType, type TabId } from "./navigation";
 
 export type SidebarTeamReviewVariant = "leaderboard-first" | "teams-first" | "people-labeled";
 
@@ -126,20 +126,14 @@ function RefreshedNavigation(props: SidebarNavigationProps) {
   return (
     <>
       <nav className="sidebar-nav sidebar-nav--primary" aria-label={props.t("nav.primaryNavigation")}>
-        <div className="sidebar-guide-section" data-sidebar-guide-anchor="dashboard">
-          {primaryNav.slice(0, 2).map((item) => (
-            <SidebarNavButton
-              key={item.id}
-              active={props.activeTab === item.id}
-              collapsed={props.isCollapsed}
-              icon={item.icon}
-              label={props.t(item.labelKey)}
-              onClick={() => props.onNavigate(item.id)}
-            />
-          ))}
-        </div>
-        <div className="sidebar-guide-section" data-sidebar-guide-anchor="activity">
-          {primaryNav.slice(2)
+        <div
+          className="sidebar-guide-section"
+          data-sidebar-guide-anchor="dashboard"
+          role="group"
+          aria-labelledby="sidebar-nav-group-flow"
+        >
+          <div id="sidebar-nav-group-flow" className="nav-label">{props.t("nav.group.flow")}</div>
+          {flowNav
             .filter((item) => props.projectClassificationFeatureEnabled || item.id !== "projects")
             .map((item) => (
               <SidebarNavButton
@@ -152,8 +146,26 @@ function RefreshedNavigation(props: SidebarNavigationProps) {
               />
             ))}
         </div>
+        <div
+          className="sidebar-guide-section"
+          data-sidebar-guide-anchor="activity"
+          role="group"
+          aria-labelledby="sidebar-nav-group-review"
+        >
+          <div id="sidebar-nav-group-review" className="nav-label">{props.t("nav.group.review")}</div>
+          {reviewNav.map((item) => (
+            <SidebarNavButton
+              key={item.id}
+              active={props.activeTab === item.id}
+              collapsed={props.isCollapsed}
+              icon={item.icon}
+              label={props.t(item.labelKey)}
+              onClick={() => props.onNavigate(item.id)}
+            />
+          ))}
+        </div>
       </nav>
-      <div className="sidebar-nav-divider" aria-hidden="true" />
+      <div className="nav-label">{props.t("nav.group.social")}</div>
       {props.canOpenTeamsBeta && props.teamReviewVariant === "people-labeled" ? (
         <div className="nav-label nav-label--people">{props.t("nav.peopleAndTeams")}</div>
       ) : null}

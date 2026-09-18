@@ -52,6 +52,7 @@ describe("sidebar motion styles", () => {
     expect(navItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(styles).not.toMatch(/\.nav-item\.nav-item--period\s*\{[^}]*padding-block/);
     expect(periodTextBlock).toContain("line-height: inherit;");
+    expect(styles).toContain("--nav-item-height: 30px;");
   });
 
   it("groups dashboard and activity with labels instead of a period divider", () => {

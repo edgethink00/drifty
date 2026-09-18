@@ -720,7 +720,7 @@ export function DevSettingsSection({
         <div className="settings-row">
           <div>
             <div className="lbl">Navigation refresh</div>
-            <div className="desc">Preview Calendar with its Day/Week control, promoted Agents, and the simplified Teams workspace. Off keeps the current navigation unchanged.</div>
+            <div className="desc">Preview Flow, Review, and Social, with Calendar Day/Week in the page and promoted Agents. Off keeps Your Day / Your Week under Dashboard, Activity, and Social.</div>
           </div>
           <div className="ctrl">
             <Toggle checked={navigationRefreshEnabled} onChange={onNavigationRefreshChange} ariaLabel="Toggle navigation refresh" />

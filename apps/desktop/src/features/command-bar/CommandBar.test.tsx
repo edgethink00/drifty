@@ -30,6 +30,26 @@ describe("CommandBar", () => {
     expect(within(navigation).queryByText("Agents")).toBeNull();
   });
 
+  it("uses Calendar, Agents, then Review order when the navigation refresh is on", () => {
+    render(
+      <LocalizationTestProvider language="en">
+        <CommandBar includeProjects navigationRefreshEnabled onDismiss={vi.fn()} onNavigate={vi.fn()} />
+      </LocalizationTestProvider>,
+    );
+
+    const navigation = screen.getByRole("group", { name: "Navigate" });
+    expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "CalendarToday at a glance⌘1",
+      "AgentsLocal agent sessions and output⌘2",
+      "ProjectsTime grouped by project⌘3",
+      "ClassificationActivity breakdown⌘4",
+      "InsightsUsage and focus rhythm⌘5",
+      "HistoryLocal records⌘6",
+      "LeaderboardGlobal focus leaderboard⌘7",
+      "SettingsApp preferences⌘,",
+    ]);
+  });
+
   it("uses Korean labels for global navigation", () => {
     render(
       <LocalizationTestProvider language="ko">

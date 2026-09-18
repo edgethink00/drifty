@@ -43,14 +43,19 @@ export type NavItem = {
   icon: NavIconType;
 };
 
-export const primaryNav: NavItem[] = [
+export const flowNav: NavItem[] = [
   { id: "dashboard", labelKey: "nav.calendar", icon: "calendar" },
   { id: "agents", labelKey: "nav.agents", icon: "agents" },
   { id: "projects", labelKey: "nav.projects", icon: "projects" },
-  { id: "trends", labelKey: "nav.trends", icon: "trends" },
+];
+
+export const reviewNav: NavItem[] = [
   { id: "classification", labelKey: "nav.classification", icon: "classification" },
+  { id: "trends", labelKey: "nav.trends", icon: "trends" },
   { id: "history", labelKey: "nav.history", icon: "history" },
 ];
+
+export const primaryNav: NavItem[] = [...flowNav, ...reviewNav];
 
 export const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
