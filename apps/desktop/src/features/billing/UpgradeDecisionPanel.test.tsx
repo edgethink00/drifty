@@ -73,7 +73,7 @@ describe("UpgradeDecisionPanel", () => {
     expect(screen.getByText(body)).toBeTruthy();
     expect(screen.getByText(badge)).toBeTruthy();
     expect(screen.getByRole("button", { name: action })).toBeTruthy();
-    expect(screen.getByText("Cloud AI classification on up to 2 Macs")).toBeTruthy();
+    expect(screen.getByText("Cloud AI classification on up to 3 Macs")).toBeTruthy();
   });
 
   it("acknowledges a configured Local AI setup before offering Cloud AI", () => {
