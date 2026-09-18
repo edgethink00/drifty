@@ -26,7 +26,7 @@ describe("AiSetupPanel managed local model setup", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-gemma-4-12b-local" }));
 
     await waitFor(() => {
-      const qwenOption = within(modelBeingUsed).getByRole("option", { name: /^Balanced · Qwen 3\.5 4B$/i });
+      const qwenOption = within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 4B · Balanced$/i });
       if (!(qwenOption instanceof HTMLButtonElement)) throw new Error("Installed managed model option should be a button.");
       expect(qwenOption.disabled).toBe(false);
     });
@@ -37,7 +37,7 @@ describe("AiSetupPanel managed local model setup", () => {
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
     fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
-    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^For higher-spec Macs · Gemma 4 12B$/i });
+    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 4 12B · High Performance$/i });
     if (!(gemmaOption instanceof HTMLButtonElement)) throw new Error("Disabled managed model option should be a button.");
     expect(gemmaOption.disabled).toBe(true);
 

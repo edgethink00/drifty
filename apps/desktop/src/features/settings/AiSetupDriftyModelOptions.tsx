@@ -106,7 +106,7 @@ export function driftyModelOptions({
     { ...cloudOption, description: t("ai.resources.cloudModelSummary") },
     ...catalog.map((model) => {
       const presentation = {
-        displayLabel: `${managedModelChoiceTitle(model, t)} · ${model.label}`,
+        displayLabel: `${model.label} · ${managedModelChoiceTitle(model, t)}`,
         description: managedModelResourceDescription(model, t),
       };
       const selectable = isSelectableManagedModel(model.id, status);

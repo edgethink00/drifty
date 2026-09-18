@@ -151,7 +151,7 @@ describe("managed model requirements in settings", () => {
     }
     render(<Harness />);
     fireEvent.click(screen.getByRole("combobox", { name: "AI model" }));
-    const unsupported = screen.getByRole("option", { name: "For higher-spec Macs · Qwen 3.6 27B" });
+    const unsupported = screen.getByRole("option", { name: "Qwen 3.6 27B · Maximum" });
     const description = document.getElementById(unsupported.getAttribute("aria-describedby") ?? "");
     expect(description?.textContent).toContain("Not enough memory on this Mac");
     expect(description?.textContent).toContain("Estimated memory");

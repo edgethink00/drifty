@@ -132,7 +132,7 @@ describe("AiSetupPanel managed local progress", () => {
     fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
 
     await waitFor(() => {
-      for (const label of [/^Lightweight · Qwen 3\.5 2B$/i, /^Balanced · Qwen 3\.5 4B$/i]) {
+      for (const label of [/^Qwen 3\.5 2B · Lightweight$/i, /^Qwen 3\.5 4B · Balanced$/i]) {
         const option = within(modelBeingUsed).getByRole("option", { name: label });
         if (!(option instanceof HTMLButtonElement)) throw new Error("Managed model option should be a button.");
         expect(option.disabled).toBe(true);
