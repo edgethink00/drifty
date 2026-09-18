@@ -114,6 +114,8 @@ const PET_MODE_CARRY_YANK_DISTANCE: f64 = 34.0;
 const PET_MODE_CARRY_MAX_GRIP_MS: f64 = 420.0;
 const PET_MODE_RUN_MAX_SECONDS: f64 = 6.0;
 const PET_MODE_WALK_MAX_SECONDS: f64 = 60.0;
+// Shortest trip the cat animates at full motion; keeps tiny nudges legible.
+const PET_MODE_MIN_MOVEMENT_SECONDS: f64 = 0.18;
 const PET_MODE_AUTONOMOUS_ROAM_PURPOSE: &str = "autonomous_roam";
 const PET_MODE_SEAT_CORRECTION_PURPOSE: &str = "seat_correction";
 // Same bounded walk as a seat correction, but announced separately so the
@@ -5154,7 +5156,21 @@ fn should_recover_cancelled_pet_entry(entry_was_active: bool, enabled: bool) -> 
 }
 
 fn movement_duration_seconds(distance: f64, speed: f64, max_duration_seconds: f64) -> f64 {
-    (distance / speed).clamp(0.18, max_duration_seconds)
+    // Reduced-motion callers (pet_fullscreen) pass a ceiling below the usual
+    // 0.18s floor. `f64::clamp` panics when min > max or either is NaN, and a
+    // panic here aborts the whole app (Sentry DRIFTY-MAC-NATIVE-5), so fold the
+    // floor under the ceiling and never hand NaN to `clamp`.
+    let max_duration_seconds = if max_duration_seconds.is_nan() {
+        PET_MODE_MIN_MOVEMENT_SECONDS
+    } else {
+        max_duration_seconds
+    };
+    let min_duration_seconds = PET_MODE_MIN_MOVEMENT_SECONDS.min(max_duration_seconds);
+    let raw_duration_seconds = distance / speed;
+    if raw_duration_seconds.is_nan() {
+        return min_duration_seconds;
+    }
+    raw_duration_seconds.clamp(min_duration_seconds, max_duration_seconds)
 }
 
 fn should_animate_to_target(kind: PetModeTargetKind, preview: bool) -> bool {
@@ -6447,6 +6463,19 @@ mod tests {
             (movement_duration_seconds(2.08, PET_MODE_WALK_SPEED, 60.0) - 0.18).abs()
                 < f64::EPSILON
         );
+    }
+
+    #[test]
+    fn movement_duration_never_panics_when_ceiling_is_below_floor() {
+        // Reduced-motion fullscreen chase: speed f64::MAX, ceiling 0.01s.
+        assert_eq!(movement_duration_seconds(640.0, f64::MAX, 0.01), 0.01);
+        // Zero speed yields +inf; the ceiling still wins.
+        assert_eq!(movement_duration_seconds(640.0, 0.0, 0.01), 0.01);
+        // NaN inputs fall back to the floor instead of panicking.
+        assert_eq!(movement_duration_seconds(f64::NAN, 1.0, 2.0), 0.18);
+        assert_eq!(movement_duration_seconds(10.0, 1.0, f64::NAN), 0.18);
+        // Normal callers keep the historical floor.
+        assert_eq!(movement_duration_seconds(1.0, 300.0, 2.0), 0.18);
     }
 
     #[test]
