@@ -1089,4 +1089,40 @@ describe("LeaderboardView", () => {
     });
     expect(screen.getByRole("img", { name: /daily focus for the last 7 days/i })).toBeTruthy();
   });
+
+  it("renders the 2-column split layout with expanded profile details when previewLayout is split-v2", () => {
+    const days = [
+      { day: "2026-09-14", focus: 3200, drift: 0, neutral: 0 },
+      { day: "2026-09-15", focus: 2800, drift: 0, neutral: 0 },
+      { day: "2026-09-16", focus: 4100, drift: 0, neutral: 0 },
+      { day: "2026-09-17", focus: 3500, drift: 0, neutral: 0 },
+      { day: "2026-09-18", focus: 4800, drift: 0, neutral: 0 },
+      { day: "2026-09-19", focus: 3000, drift: 0, neutral: 0 },
+      { day: "2026-09-20", focus: 3600, drift: 0, neutral: 0 },
+    ];
+    const { container } = renderView({
+      previewLayout: "split-v2",
+      isOptedIn: true,
+      ownRank: 6,
+      publicProfile: makePublicProfile({
+        dailyProductivity: days,
+        draft: {
+          displayName: "member",
+          avatarUrl: "",
+          bio: "깊게 몰입하고, 매일 조금씩 더 나은 흐름을 만듭니다.",
+          websiteUrl: "member.dev",
+          githubUrl: "github.com/member",
+          linkedinUrl: "",
+          isPublic: true,
+        },
+      }),
+    });
+
+    expect(container.querySelector(".leaderboard-split.lb-v2")).toBeTruthy();
+    expect(screen.getByText("깊게 몰입하고, 매일 조금씩 더 나은 흐름을 만듭니다.")).toBeTruthy();
+    expect(screen.getByText("member.dev")).toBeTruthy();
+    expect(screen.getByText("@member")).toBeTruthy();
+    expect(screen.getAllByText("#6").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("img", { name: /daily focus for the last 7 days/i })).toBeTruthy();
+  });
 });

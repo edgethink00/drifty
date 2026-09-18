@@ -32,6 +32,7 @@ export type LeaderboardPageProps = {
   onSelectProfile: (row: LeaderboardRow) => void;
   onSignIn: () => void;
   graphStyle?: LeaderboardGraphStyle;
+  previewLayout?: "stack" | "split-v2";
 };
 
 export function LeaderboardPage({
@@ -62,6 +63,7 @@ export function LeaderboardPage({
   onSelectProfile,
   onSignIn,
   graphStyle,
+  previewLayout,
 }: LeaderboardPageProps) {
   const { t } = useLocalization();
   return (
@@ -101,6 +103,7 @@ export function LeaderboardPage({
           onPeriodChange={onPeriodChange}
           onSelectProfile={onSelectProfile}
           graphStyle={graphStyle}
+          previewLayout={previewLayout}
         />
       </div>
     </div>

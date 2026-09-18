@@ -18,6 +18,7 @@ import type {
   TrackerStatus,
 } from "@drifty/domain";
 import { localDateKey } from "../formatting";
+import { DEV_MODE_STORAGE_KEY, LEADERBOARD_PREVIEW_STORAGE_KEY } from "../../features/settings/settingsStorage";
 
 type PreviewActivitySegment = ActivitySegment & { category: ActivityCategory; productivity: ProductivityLabel };
 type PreviewSegmentSpec = readonly [
@@ -505,6 +506,19 @@ export function shouldUsePreviewData() {
     return false;
   }
   return false;
+}
+
+export function shouldUseLeaderboardPreview(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const isDev = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
+    if (isDev && window.localStorage.getItem(LEADERBOARD_PREVIEW_STORAGE_KEY) === "1") {
+      return true;
+    }
+  } catch {}
+  const searchParams = new URLSearchParams(window.location.search);
+  if (searchParams.get("leaderboardPreview") === "1") return true;
+  return shouldUsePreviewData();
 }
 
 function clampTimelinePageLimit(limit: number | undefined): number {

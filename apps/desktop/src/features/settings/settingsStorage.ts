@@ -48,6 +48,8 @@ export const FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY = "drifty.dev.forceChro
 
 export const LEADERBOARD_GRAPH_STYLE_STORAGE_KEY = "drifty.dev.leaderboardGraphStyle";
 
+export const LEADERBOARD_PREVIEW_STORAGE_KEY = "drifty.dev.leaderboardPreview";
+
 export const DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.preRollSeconds";
 
 export const DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.durationSeconds";
@@ -702,4 +704,12 @@ export function resolveInitialLeaderboardGraphStyle(): string {
 export function persistLeaderboardGraphStyle(style: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(LEADERBOARD_GRAPH_STYLE_STORAGE_KEY, style);
+}
+
+export function resolveInitialLeaderboardPreviewEnabled(): boolean {
+  return readStoredBoolean(LEADERBOARD_PREVIEW_STORAGE_KEY, false);
+}
+
+export function persistLeaderboardPreviewEnabled(enabled: boolean): void {
+  writeStoredBoolean(LEADERBOARD_PREVIEW_STORAGE_KEY, enabled);
 }

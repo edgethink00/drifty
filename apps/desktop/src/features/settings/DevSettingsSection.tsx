@@ -146,6 +146,8 @@ type DevSettingsSectionProps = {
   readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onAgentsBetaChange: (enabled: boolean) => void;
   readonly onNavigationRefreshChange: (enabled: boolean) => void;
+  readonly leaderboardPreviewEnabled: boolean;
+  readonly onLeaderboardPreviewChange: (enabled: boolean) => void;
   readonly leaderboardGraphStyle: LeaderboardGraphStyle;
   readonly onLeaderboardGraphStyleChange: (style: LeaderboardGraphStyle) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
@@ -228,6 +230,8 @@ export function DevSettingsSection({
   onProfileBetaChange,
   onAgentsBetaChange,
   onNavigationRefreshChange,
+  leaderboardPreviewEnabled,
+  onLeaderboardPreviewChange,
   leaderboardGraphStyle,
   onLeaderboardGraphStyleChange,
   onPreviewDashboardAiUnavailableCase,
@@ -751,6 +755,15 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={profileBetaEnabled} onChange={onProfileBetaChange} ariaLabel="Toggle Profile beta" />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Leaderboard preview</div>
+            <div className="desc">Preview the redesigned 2-column split layout with expanded profile rail (bio, links, rank summary) and sample data. Off leaves the shipping stacked layout unchanged.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={leaderboardPreviewEnabled} onChange={onLeaderboardPreviewChange} ariaLabel="Toggle Leaderboard preview" />
           </div>
         </div>
         <div className="settings-row">

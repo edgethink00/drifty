@@ -67,6 +67,7 @@ export type LeaderboardViewProps = {
   onSelectProfile?: (row: LeaderboardRow) => void;
   /** Dev-only sparkline. Production callers leave this unset / "off". */
   graphStyle?: LeaderboardGraphStyle;
+  previewLayout?: "stack" | "split-v2";
 };
 
 export function LeaderboardView({
@@ -97,6 +98,7 @@ export function LeaderboardView({
   onPeriodChange,
   onSelectProfile,
   graphStyle = DEFAULT_LEADERBOARD_GRAPH_STYLE,
+  previewLayout = "stack",
 }: LeaderboardViewProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [searchQuery, setSearchQuery] = useState("");
@@ -122,6 +124,13 @@ export function LeaderboardView({
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
   const profileDraft = publicProfile?.draft ?? null;
   const profileAvatarUrl = profileDraft?.avatarUrl.trim() ?? "";
+  const previewBio = profileDraft?.bio?.trim()
+    || (previewLayout === "split-v2" ? "깊게 몰입하고, 매일 조금씩 더 나은 흐름을 만듭니다." : "");
+  const previewWebsite = profileDraft?.websiteUrl?.trim()
+    || (previewLayout === "split-v2" ? "member.dev" : "");
+  const previewSocial = profileDraft?.githubUrl?.trim()
+    || profileDraft?.linkedinUrl?.trim()
+    || (previewLayout === "split-v2" ? "@member" : "");
   // Captured out of the closure so the open-page button keeps its non-null narrowing.
   const publicPageId = publicProfile?.publicId ?? null;
   const editProfile = publicProfile?.onEditProfile ?? null;
@@ -132,7 +141,8 @@ export function LeaderboardView({
     () => (dailyProductivity ?? []).slice(-7).map((point) => ({ day: point.day, focus: point.focus })),
     [dailyProductivity],
   );
-  const showSparkline = graphStyle !== "off" && sparklinePoints.length >= 2;
+  const showSparkline = (previewLayout === "split-v2" || graphStyle !== "off") && sparklinePoints.length >= 2;
+  const sparklineVariant: Exclude<LeaderboardGraphStyle, "off"> = graphStyle === "off" ? "default" : graphStyle;
   const last30FocusSeconds = (dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
   const localMetricsStatus = publicProfile?.localMetricsStatus ?? "ready";
   const localMetricsStatusMessage = localMetricsStatus === "loading"
@@ -164,6 +174,171 @@ export function LeaderboardView({
   return (
     <section className="leaderboard-panel" aria-label={t("leaderboard.title")} aria-busy={isLoading || undefined}>
       <div className={`leaderboard-panel__stack${isLoading ? " leaderboard-loading-shell" : ""}`}>
+        {previewLayout === "split-v2" ? (
+          <div className="leaderboard-split lb-v2">
+            <section className="leaderboard-profile-block" aria-label={t("leaderboard.participationAria")} aria-hidden={isLoading || undefined}>
+              <section className="leaderboard-hero" aria-label={t("leaderboard.yourParticipationAria")}>
+                <div className="leaderboard-hero__identity-row">
+                  <ProfileAvatar
+                    className="leaderboard-hero__avatar"
+                    name={previewName}
+                    src={profileAvatarUrl || null}
+                    style={{ width: 96, height: 96, borderRadius: "50%", fontSize: "2rem" }}
+                  />
+                  <div className="leaderboard-hero__identity-copy">
+                    <h3>{previewName}</h3>
+                    <span
+                      className={`leaderboard-hero__status${isOptedIn && publiclyValid !== false ? " leaderboard-hero__status--live" : ""}${isOptedIn && publiclyValid === false ? " leaderboard-hero__status--fail" : ""}`}
+                    >
+                      {currentUserRank !== null ? `#${currentUserRank}` : t("leaderboard.onBoard")}
+                    </span>
+                  </div>
+                  {editProfile ? (
+                    <button
+                      type="button"
+                      className="leaderboard-profile-edit-button"
+                      aria-label={t("leaderboard.editProfileAria")}
+                      onClick={editProfile}
+                    >
+                      <PencilIcon />
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="leaderboard-v5-profile-details">
+                  <p className="leaderboard-v5-profile-details__bio">
+                    {previewBio}
+                  </p>
+                  <div className="leaderboard-v5-profile-details__links">
+                    <a
+                      className="leaderboard-v5-profile-details__link"
+                      href={normalizeExternalUrl(previewWebsite) || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`웹사이트 ${previewWebsite}`}
+                    >
+                      <WebsiteIcon />
+                      <span>{previewWebsite}</span>
+                    </a>
+                    <a
+                      className="leaderboard-v5-profile-details__link"
+                      href={normalizeExternalUrl(previewSocial) || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`소셜 프로필 ${previewSocial}`}
+                    >
+                      <LinkChainIcon />
+                      <span>{formatSocialDisplay(previewSocial)}</span>
+                    </a>
+                  </div>
+                </div>
+
+                <div className="leaderboard-hero__rail-actions">
+                  <div className="leaderboard-hero__participation-slot">
+                    <button
+                      type="button"
+                      className="app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
+                      aria-describedby="leaderboard-participation-privacy"
+                      onClick={() => onOptOut?.()}
+                    >
+                      {isOptedIn ? t("leaderboard.leave") : t("leaderboard.join")}
+                    </button>
+                  </div>
+                  <div className="leaderboard-hero__share-actions">
+                    <button
+                      type="button"
+                      className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono"
+                      onClick={() => setRankEmbedOpen(true)}
+                    >
+                      <EmbedIcon />
+                      {t("leaderboard.embed")}
+                    </button>
+                    <button
+                      type="button"
+                      className="app-btn app-btn--quiet profile-btn hero-action-btn"
+                      onClick={publicProfile?.onCopyProfileLink}
+                    >
+                      <ShareIcon />
+                      {t("leaderboard.share")}
+                    </button>
+                  </div>
+                </div>
+                <p id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
+                  {t("leaderboard.privacy")}
+                </p>
+
+                <div className="leaderboard-hero__insights">
+                  <div
+                    aria-label={t("leaderboard.focusTotalsAria")}
+                    className="leaderboard-hero__totals-row"
+                  >
+                    <div className="leaderboard-hero__focus-stat">
+                      <div className="focus-stat__header">
+                        <span className="label-mono">{t("leaderboard.focusThisWeek")}</span>
+                        <span className="focus-stat__subtrend">+18% vs 지난주</span>
+                      </div>
+                      <div className="focus-stat__num-wrap">
+                        <strong>{localMetricsStatus === "ready" ? formatLocalizedDuration(weekFocusSeconds, effectiveLanguage) : (weekFocusSeconds > 0 ? formatLocalizedDuration(weekFocusSeconds, effectiveLanguage) : "25시간 6분")}</strong>
+                      </div>
+                      <div className="focus-stat__chart-full" aria-label={t("leaderboard.weekSparklineAria")}>
+                        <LeaderboardSparkline
+                          points={sparklinePoints}
+                          variant={sparklineVariant}
+                          language={effectiveLanguage}
+                          ariaLabel={t("leaderboard.weekSparklineAria")}
+                        />
+                      </div>
+                    </div>
+
+                    <section className="leaderboard-v5-achievement" aria-label="전체 사용자 기준 TOP 0.001%, 주간 6위">
+                      <span className="leaderboard-v5-achievement__eyebrow">전체 사용자 기준</span>
+                      <strong>TOP 0.001%</strong>
+                      <span className="leaderboard-v5-achievement__meta">
+                        <b>주간 #{currentUserRank ?? 6}</b>
+                        <i aria-hidden="true" />
+                        <span>{participantCount ?? 50}명 참여</span>
+                        <span className="leaderboard-v5-achievement__delta">↑ 4계단</span>
+                      </span>
+                    </section>
+
+                    <div className="leaderboard-hero__focus-stat">
+                      <span className="label-mono">{t("leaderboard.dailyAverage")}</span>
+                      <strong>{localMetricsStatus === "ready" ? formatLocalizedDuration(dailyAverageSeconds, effectiveLanguage) : (dailyAverageSeconds > 0 ? formatLocalizedDuration(dailyAverageSeconds, effectiveLanguage) : "3시간 35분")}</strong>
+                    </div>
+
+                    <div className="leaderboard-hero__focus-stat">
+                      <span className="label-mono">{t("leaderboard.lastThirtyDays")}</span>
+                      <strong>{dailyProductivity !== null ? formatLocalizedDuration(last30FocusSeconds, effectiveLanguage) : "131시간 4분"}</strong>
+                    </div>
+
+                    <div className="leaderboard-hero__focus-stat leaderboard-v5-streak">
+                      <span className="label-mono">연속 집중</span>
+                      <strong>12일</strong>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </section>
+
+            <LeaderboardBoard
+              activePeriod={activePeriod}
+              currentUserRank={currentUserRank}
+              filteredLeaderboard={filteredLeaderboard}
+              isLoading={isLoading}
+              isOptedIn={isOptedIn}
+              leaderboard={leaderboard}
+              participantCount={participantCount}
+              searchQuery={searchQuery}
+              statusMessage={statusMessage}
+              statusTone={statusTone}
+              topScopeFocusSeconds={totalFocusSeconds7d}
+              onPeriodChange={onPeriodChange}
+              onSearchQueryChange={setSearchQuery}
+              onSelectProfile={onSelectProfile}
+            />
+          </div>
+        ) : (
+          <>
         <section className="leaderboard-profile-block" aria-label={t("leaderboard.participationAria")} aria-hidden={isLoading || undefined}>
           <section
             className="leaderboard-hero"
@@ -247,7 +422,7 @@ export function LeaderboardView({
                           {showSparkline ? (
                             <LeaderboardSparkline
                               points={sparklinePoints}
-                              variant={graphStyle}
+                              variant={sparklineVariant}
                               language={effectiveLanguage}
                               ariaLabel={t("leaderboard.weekSparklineAria")}
                             />
@@ -440,6 +615,8 @@ export function LeaderboardView({
           onSearchQueryChange={setSearchQuery}
           onSelectProfile={onSelectProfile}
         />
+          </>
+        )}
         {!isLoading && publicProfile?.shareMessage ? <div className="leaderboard-share-toast" role="status">{publicProfile.shareMessage}</div> : null}
       </div>
 
@@ -611,6 +788,21 @@ function WebsiteIcon() {
     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="9" />
       <path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18" />
+    </svg>
+  );
+}
+
+function formatSocialDisplay(raw: string): string {
+  const stripped = raw.replace(/^https?:\/\//, "").replace(/^(github\.com\/|linkedin\.com\/in\/)/, "").replace(/\/$/, "");
+  return stripped.startsWith("@") ? stripped : `@${stripped}`;
+}
+
+function LinkChainIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8.5 12.5 6 15a4 4 0 0 0 5.7 5.7l3-3" />
+      <path d="m15.5 11.5 2.5-2.5a4 4 0 0 0-5.7-5.7l-3 3" />
+      <path d="m8.5 15.5 7-7" />
     </svg>
   );
 }

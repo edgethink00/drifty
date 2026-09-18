@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 import { buildRollingFocusSeconds, isBrowserHistoryImportSegment, isExcludedSegment, isPassiveSupportedSegment } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
-import { shouldUsePreviewData } from "../../lib/api/previewData";
+import { shouldUseLeaderboardPreview } from "../../lib/api/previewData";
 import { isPublicProfileLiveOffBoard } from "./publicProfileOffBoard";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { capturePostHogDailyEvent, capturePostHogEvent, toAnalyticsErrorKind, toCountBucket, toDailyDedupKey, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
@@ -504,7 +504,7 @@ export function useLeaderboardProfileController({
       || fallbackDisplayName(user?.email, user?.id, user?.user_metadata),
     [profile?.display_name, user?.email, user?.id, user?.user_metadata],
   );
-  const leaderboardUsesPreviewProfile = shouldUsePreviewData();
+  const leaderboardUsesPreviewProfile = shouldUseLeaderboardPreview();
   const leaderboardProfileBio = profile?.bio || profileDraft.bio || (leaderboardUsesPreviewProfile ? "Building quiet tools for deeper work." : "");
   const leaderboardProfileWebsiteUrl = profile?.website_url || profileDraft.websiteUrl || (leaderboardUsesPreviewProfile ? "drifty.so/drifty" : "");
   const leaderboardProfileGithubUrl = profile?.github_url || profileDraft.githubUrl || (leaderboardUsesPreviewProfile ? "github.com/edgethink00" : "");
@@ -513,7 +513,7 @@ export function useLeaderboardProfileController({
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const leaderboardOwnEntryScopeKey = isPolicySignedIn ? getLeaderboardUserScopeKey(user) : "signed-out";
   const scopedOwnLeaderboardEntry = leaderboardOwnEntryScopeRef.current === leaderboardOwnEntryScopeKey ? ownLeaderboardEntry : null;
-  const isLeaderboardOptedIn = scopedOwnLeaderboardEntry?.opted_in === true;
+  const isLeaderboardOptedIn = leaderboardUsesPreviewProfile || scopedOwnLeaderboardEntry?.opted_in === true;
   // Participation is only "known" once the account is settled and this scope's own
   // entry has actually been fetched. While a persisted session is still being
   // restored the scope key is "signed-out" and the own-entry request is skipped,
@@ -605,7 +605,7 @@ export function useLeaderboardProfileController({
     const canLoadOwnLeaderboardEntry = Boolean(authenticatedUser) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
     const authenticatedUserScopeKey = canLoadOwnLeaderboardEntry ? getLeaderboardUserScopeKey(authenticatedUser) : "signed-out";
 
-    if (!isSupabaseConfigured && !shouldUsePreviewData()) {
+    if (!isSupabaseConfigured && !shouldUseLeaderboardPreview()) {
       setLeaderboardRows([]);
       setOwnLeaderboardEntry(null);
       setLeaderboardSegments([]);
@@ -696,7 +696,7 @@ export function useLeaderboardProfileController({
   }, [activeLeaderboardPeriod, hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, refreshLeaderboardLocalMetrics, user]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured && !shouldUsePreviewData()) {
+    if (!isSupabaseConfigured && !shouldUseLeaderboardPreview()) {
       setLeaderboardRows([]);
       setOwnLeaderboardEntry(null);
       setLeaderboardSegments([]);
@@ -720,7 +720,7 @@ export function useLeaderboardProfileController({
   }, [activeTab, isSupabaseConfigured, refreshLeaderboardData]);
 
   useEffect(() => {
-    if (activeTab !== "leaderboard" || (!isSupabaseConfigured && !shouldUsePreviewData())) return;
+    if (activeTab !== "leaderboard" || (!isSupabaseConfigured && !shouldUseLeaderboardPreview())) return;
 
     const intervalId = window.setInterval(() => {
       void refreshLeaderboardData();
@@ -829,7 +829,7 @@ export function useLeaderboardProfileController({
     windowEndDay: string,
   ): Promise<boolean> => {
     const assessmentRevision = classificationAssessmentRevisionRef.current;
-    if (!classificationAssessmentReadyRef.current || !isSupabaseConfigured || shouldUsePreviewData()) return false;
+    if (!classificationAssessmentReadyRef.current || !isSupabaseConfigured || shouldUseLeaderboardPreview()) return false;
     if (!isPolicySignedIn || !user || leaderboardOwnEntryScopeKey === "signed-out") return false;
     if (leaderboardManualActionInFlightRef.current || leaderboardCheckpointPublishInFlightRef.current) return false;
     if (profileReadyUserId !== user.id || profileLoading || profileError) return false;
@@ -874,7 +874,7 @@ export function useLeaderboardProfileController({
     options: LeaderboardAutoPublishOptions = {},
   ) => {
     const assessmentRevision = classificationAssessmentRevisionRef.current;
-    if (!classificationAssessmentReadyRef.current || !isSupabaseConfigured || shouldUsePreviewData()) return;
+    if (!classificationAssessmentReadyRef.current || !isSupabaseConfigured || shouldUseLeaderboardPreview()) return;
     if (!isPolicySignedIn || !user) return;
     if (leaderboardOwnEntryScopeKey === "signed-out") return;
     if (leaderboardManualActionInFlightRef.current) return;
@@ -1025,7 +1025,7 @@ export function useLeaderboardProfileController({
   useEffect(() => {
     // Preview/demo surfaces never publish (syncLeaderboardPublication already
     // no-ops there); skip mounting the recurring timer and listeners entirely.
-    if (shouldUsePreviewData()) return undefined;
+    if (shouldUseLeaderboardPreview()) return undefined;
     void syncLeaderboardPublication("startup");
 
     // Fire exactly on hour-slot boundaries rather than every N ms from mount, so

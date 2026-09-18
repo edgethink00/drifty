@@ -1,5 +1,5 @@
 import { isSupabaseEnabled, supabase } from "../../lib/supabase/client";
-import { shouldUsePreviewData } from "../../lib/api/previewData";
+import { shouldUseLeaderboardPreview, shouldUsePreviewData } from "../../lib/api/previewData";
 import { localDateKey } from "../../lib/formatting";
 import { fallbackDisplayName } from "../profile/profileService";
 
@@ -92,23 +92,43 @@ function shiftDay(day: string, offset: number) {
   return localDateKey(date);
 }
 
-function previewLeaderboardRows(period: LeaderboardPeriod, limit: number): LeaderboardRow[] {
+export { shouldUseLeaderboardPreview };
+
+export function previewLeaderboardRows(period: LeaderboardPeriod, limit: number): LeaderboardRow[] {
   const today = localDateKey(new Date());
   const windowStart = period === "daily" ? today : shiftDay(today, period === "monthly" ? -29 : -6);
   const names = ["Testing1", "arishin220", "minji_kim", "junseo", "haruka", "drifty", "soonjae", "yuki"];
   const focusSeconds = [141_540, 9_960, 8_520, 6_240, 4_520, 3_120, 2_400, 1_830];
-  return names.slice(0, limit).map((name, index) => ({
-    rank: index + 1,
-    public_id: `preview-${index + 1}`,
-    display_name: name,
-    avatar_url: "",
-    period,
-    focus_seconds: focusSeconds[index] ?? 0,
-    focus_seconds_7d: focusSeconds[index] ?? 0,
-    window_start_date: windowStart,
-    window_end_date: today,
-    updated_at: `${today}T09:05:00`,
-  }));
+  const nameSeeds = ["alex", "seoyeon", "taeho", "hyejin", "daniel", "mika", "jiwoo", "ren", "soomin", "kai", "eunji", "noah"];
+  const rows: LeaderboardRow[] = [];
+  const total = Math.max(limit, names.length);
+  for (let i = 0; i < total && i < 50; i++) {
+    const rank = i + 1;
+    let name: string;
+    let focus: number;
+    if (i < names.length) {
+      name = names[i];
+      focus = focusSeconds[i] ?? 0;
+    } else {
+      const baseSeed = nameSeeds[(rank - 9) % nameSeeds.length];
+      name = rank > 20 ? `${baseSeed}_${rank}` : baseSeed;
+      const minutes = Math.max(1, 37 - rank);
+      focus = minutes * 60;
+    }
+    rows.push({
+      rank,
+      public_id: `preview-${rank}`,
+      display_name: name,
+      avatar_url: "",
+      period,
+      focus_seconds: focus,
+      focus_seconds_7d: focus,
+      window_start_date: windowStart,
+      window_end_date: today,
+      updated_at: `${today}T09:05:00`,
+    });
+  }
+  return rows.slice(0, limit);
 }
 
 type LeaderboardClient = {
@@ -315,7 +335,7 @@ export async function fetchGlobalLeaderboard(
   const client = typeof periodOrLimit === "number"
     ? limitOrClient as LeaderboardClient | null | undefined
     : maybeClient ?? (typeof limitOrClient === "number" ? undefined : limitOrClient);
-  if (shouldUsePreviewData()) return { success: true, error: null, data: previewLeaderboardRows(period, limit) };
+  if (shouldUseLeaderboardPreview()) return { success: true, error: null, data: previewLeaderboardRows(period, limit) };
   const resolvedClient = resolveClient(client);
   if (!resolvedClient) {
     return { success: false, error: "Supabase is not configured" };
@@ -376,7 +396,7 @@ export async function fetchOwnLeaderboardEntry(
 ): Promise<LeaderboardResult<OwnLeaderboardEntry | null>> {
   const period = typeof periodOrClient === "string" ? periodOrClient : DEFAULT_LEADERBOARD_PERIOD;
   const client = typeof periodOrClient === "string" ? maybeClient : periodOrClient;
-  if (shouldUsePreviewData()) return { success: true, error: null, data: null };
+  if (shouldUseLeaderboardPreview()) return { success: true, error: null, data: null };
   const resolvedClient = resolveClient(client);
   if (!resolvedClient) {
     return { success: false, error: "Supabase is not configured" };

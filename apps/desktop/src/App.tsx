@@ -45,7 +45,7 @@ import { fetchOwnLeaderboardCheckpoint } from "./features/leaderboard/leaderboar
 import type { SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
-import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
+import { useDailyProductivitySeries, type DailyProductivityPoint } from "./features/share/dailyProductivity";
 import { isTeamQaMockEnabled, useTeamQaMockController } from "./features/team/teamQaMock";
 import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
@@ -407,7 +407,7 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, persistLeaderboardPreviewEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialLeaderboardPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "./features/leaderboard/leaderboardGraphStyle";
@@ -717,6 +717,7 @@ export default function App() {
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
   const [navigationRefreshEnabled, setNavigationRefreshEnabled] = useState(initialNavigationRefreshEnabled);
   const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(resolveInitialFloatingCompanionDevEnabled);
+  const [leaderboardPreviewEnabled, setLeaderboardPreviewEnabled] = useState(resolveInitialLeaderboardPreviewEnabled);
   const [leaderboardGraphStyle, setLeaderboardGraphStyle] = useState<LeaderboardGraphStyle>(
     () => parseLeaderboardGraphStyle(resolveInitialLeaderboardGraphStyle()),
   );
@@ -727,7 +728,8 @@ export default function App() {
   const [teamNavMenuPos, setTeamNavMenuPos] = useState<{ readonly left: number; readonly top: number } | null>(null);
   const [teamNavExpandedId, setTeamNavExpandedId] = useState<string | null | undefined>(undefined);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
-  const visibleLeaderboardGraphStyle: LeaderboardGraphStyle = isDevModeActive ? leaderboardGraphStyle : "off";
+  const isLeaderboardPreviewActive = isDevModeActive && leaderboardPreviewEnabled;
+  const visibleLeaderboardGraphStyle: LeaderboardGraphStyle = isDevModeActive ? (isLeaderboardPreviewActive && leaderboardGraphStyle === "off" ? "default" : leaderboardGraphStyle) : "off";
   const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
@@ -2317,6 +2319,25 @@ export default function App() {
     builtInHeuristicsUnavailableSince,
     enabled: activeTab === "leaderboard",
   });
+  const effectiveDailyProductivity = useMemo(() => {
+    if (profileDailyProductivity && profileDailyProductivity.length >= 2) return profileDailyProductivity;
+    if (!isLeaderboardPreviewActive && !leaderboardUsesPreviewProfile) return profileDailyProductivity;
+    const points: DailyProductivityPoint[] = [];
+    const focusMinutes = [25, 38, 32, 54, 42, 68, 52];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(`${leaderboardWindowEndDay}T12:00:00`);
+      date.setDate(date.getDate() - i);
+      const day = localDateKey(date);
+      const focus = (focusMinutes[6 - i] ?? 30) * 60;
+      points.push({
+        day,
+        focus,
+        drift: Math.round(focus * 0.2),
+        neutral: 0,
+      });
+    }
+    return points;
+  }, [isLeaderboardPreviewActive, leaderboardUsesPreviewProfile, leaderboardWindowEndDay, profileDailyProductivity]);
   const aiClassificationProviderKey = selectedLocalAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
     : canUseSelectedCloudAiClassification
@@ -4622,6 +4643,10 @@ export default function App() {
   useEffect(() => {
     persistLeaderboardGraphStyle(leaderboardGraphStyle);
   }, [leaderboardGraphStyle]);
+
+  useEffect(() => {
+    persistLeaderboardPreviewEnabled(leaderboardPreviewEnabled);
+  }, [leaderboardPreviewEnabled]);
 
   useEffect(() => {
     const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
@@ -9943,30 +9968,30 @@ export default function App() {
             isOptedIn={isLeaderboardOptedIn}
             isParticipationResolved={isLeaderboardParticipationResolved}
             isSignedIn={isPolicySignedIn}
-            isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
+            isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile || isLeaderboardPreviewActive}
             leaderboard={leaderboardRows}
-            ownFocusSeconds={leaderboardUsesPreviewProfile
-              ? leaderboardRows.find((row) => row.rank === 6)?.focus_seconds ?? null
+            ownFocusSeconds={isLeaderboardPreviewActive || leaderboardUsesPreviewProfile
+              ? leaderboardRows.find((row) => row.rank === 6)?.focus_seconds ?? 90360
               : ownLeaderboardEntry?.focus_seconds ?? null}
-            ownParticipantCount={leaderboardUsesPreviewProfile
-              ? leaderboardRows.length
+            ownParticipantCount={isLeaderboardPreviewActive || leaderboardUsesPreviewProfile
+              ? leaderboardRows.length || 50
               : ownLeaderboardEntry?.participant_count ?? null}
-            ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
-            publiclyValid={leaderboardUsesPreviewProfile ? true : ownLeaderboardEntry?.publicly_valid ?? null}
+            ownRank={isLeaderboardPreviewActive || leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
+            publiclyValid={isLeaderboardPreviewActive || leaderboardUsesPreviewProfile ? true : ownLeaderboardEntry?.publicly_valid ?? null}
             profileDisplayName={leaderboardProfileDisplayName}
             publicProfile={{
               card: focusCard,
-              dailyProductivity: profileDailyProductivity,
+              dailyProductivity: effectiveDailyProductivity,
               draft: profileDraft,
-              focusSeconds7d: localRollingFocusSeconds,
-              localMetricsStatus: leaderboardLocalMetricsStatus,
-              isPreviewProfile: leaderboardUsesPreviewProfile,
+              focusSeconds7d: isLeaderboardPreviewActive && localRollingFocusSeconds === 0 ? 90360 : localRollingFocusSeconds,
+              localMetricsStatus: isLeaderboardPreviewActive && leaderboardLocalMetricsStatus !== "ready" ? "ready" : leaderboardLocalMetricsStatus,
+              isPreviewProfile: leaderboardUsesPreviewProfile || isLeaderboardPreviewActive,
               liveOffBoard: publicProfileLiveOffBoard,
               profileError: isProfileEditorOpen ? null : profileError,
               profileLoading,
               profileMessage: isProfileEditorOpen ? null : profileMessage,
               profileSaving,
-              publicId: profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null),
+              publicId: profile?.public_id ?? ((leaderboardUsesPreviewProfile || isLeaderboardPreviewActive) ? "00000000-0000-4000-8000-000000000000" : null),
               shareMessage: profileShareMessage,
               onCopyProfileLink: () => void handleShareLeaderboardProfile(),
               onEditProfile: openProfileEditor,
@@ -9975,13 +10000,14 @@ export default function App() {
             }}
             statusMessage={leaderboardStatusMessage}
             statusTone={leaderboardStatusTone}
-            totalFocusSeconds7d={totalLeaderboardFocusSeconds}
+            totalFocusSeconds7d={isLeaderboardPreviewActive && totalLeaderboardFocusSeconds === 0 ? 178140 : totalLeaderboardFocusSeconds}
             onOptIn={() => void handleLeaderboardOptIn()}
             onOptOut={(options) => void handleLeaderboardOptOut(options)}
             onPeriodChange={setActiveLeaderboardPeriod}
             onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
             onSignIn={() => void handleLeaderboardOptIn()}
             graphStyle={visibleLeaderboardGraphStyle}
+            previewLayout={isLeaderboardPreviewActive ? "split-v2" : "stack"}
           />
         ) : null}
 
@@ -10334,6 +10360,8 @@ export default function App() {
                     onProfileBetaChange={setProfileBetaEnabled}
                     onAgentsBetaChange={setAgentsBetaEnabled}
                     onNavigationRefreshChange={setNavigationRefreshEnabled}
+                    leaderboardPreviewEnabled={leaderboardPreviewEnabled}
+                    onLeaderboardPreviewChange={setLeaderboardPreviewEnabled}
                     leaderboardGraphStyle={leaderboardGraphStyle}
                     onLeaderboardGraphStyleChange={setLeaderboardGraphStyle}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
