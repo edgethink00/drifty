@@ -75,12 +75,6 @@ export function CompanionWindowApp() {
   useEffect(() => {
     momentEventRef.current = momentEvent;
   }, [momentEvent]);
-  /* The once-a-day review slot is marked only when this surface confirms an
-     actual visible display; shipping the payload is not enough (see the
-     reporter hook). */
-  useEndOfDayReviewDisplayedReporter(
-    momentEvent?.kind === "endOfDayReview" ? momentEvent : null,
-  );
   const [isPointerInside, setIsPointerInside] = useState(false);
   const momentQueueRef = useRef<CompanionPillMomentEvent[]>([]);
   const momentQueueTimerRef = useRef<number | null>(null);
@@ -370,7 +364,11 @@ export function CompanionWindowApp() {
 
   const handleOpenSettings = useCallback(() => {
     recordCompanionEngagementMetric("settings_opened");
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openSettings", momentEventRef.current ? companionMomentIdentity(momentEventRef.current) : undefined));
+    const current = momentEventRef.current;
+    /* Opening the card's own settings is as deliberate as opening the day or
+       the AI setup, so it proves the display the same way those do. */
+    if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openSettings", current ? companionMomentIdentity(current) : undefined));
   }, []);
 
   const handleOpenDayReviewAiSettings = useCallback(() => {
@@ -494,6 +492,16 @@ export function CompanionWindowApp() {
     && preparedMomentKey === currentMomentKey;
   const directEntryAnimationReady = preparedForDirectEntry
     && presentedMomentKey === currentMomentKey;
+
+  /* The once-a-day review slot is marked only when this surface confirms an
+     actual display; shipping the payload is not enough (see the reporter
+     hook). A menu-bar card is prepared while the panel is still hidden, so it
+     counts only once the native reveal handshake has completed. Every other
+     path renders the card on receipt. */
+  useEndOfDayReviewDisplayedReporter(
+    momentEvent?.kind === "endOfDayReview" ? momentEvent : null,
+    !presentsMomentImmediately || directEntryAnimationReady,
+  );
 
   useEffect(() => {
     if (!preparedForDirectEntry) return;

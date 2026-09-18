@@ -4,7 +4,11 @@ import {
   END_OF_DAY_REVIEW_MINUTE_OPTIONS,
   endOfDayReviewMinuteToValue,
   endOfDayReviewValueToMinute,
+  END_OF_DAY_REVIEW_MAX_PRESENTATIONS_PER_DAY,
+  hasExhaustedEndOfDayReviewPresentations,
   isEndOfDayReviewDue,
+  readEndOfDayReviewPresentationCount,
+  recordEndOfDayReviewPresentation,
   resolveEndOfDayReviewCatchUp,
   resolveInitialEndOfDayReviewMinute,
   snapEndOfDayReviewMinute,
@@ -19,6 +23,18 @@ function storageWith(value: string | null): Storage {
     key: () => null,
     length: 0,
   };
+}
+
+function memoryStorage(): Storage {
+  const entries = new Map<string, string>();
+  return {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => { entries.set(key, value); },
+    removeItem: (key: string) => { entries.delete(key); },
+    clear: () => { entries.clear(); },
+    key: (index: number) => Array.from(entries.keys())[index] ?? null,
+    get length() { return entries.size; },
+  } as Storage;
 }
 
 describe("endOfDayReviewSchedule", () => {
@@ -68,5 +84,55 @@ describe("endOfDayReviewSchedule", () => {
     /* Only yesterday: older gaps are history, not a card. */
     expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: "2026-05-18", catchUpHandledDay: "2026-05-19" }))
       .toEqual({ day: "2026-05-20" });
+  });
+});
+
+/* A display report that never arrives used to leave the day open forever, so
+   the same review came back on every cooldown window until the logical day
+   rolled over. */
+describe("end-of-day review presentation ledger", () => {
+  it("counts presentations per day, so today and yesterday do not evict each other", () => {
+    const storage = memoryStorage();
+
+    expect(readEndOfDayReviewPresentationCount("2026-05-20", storage)).toBe(0);
+    expect(recordEndOfDayReviewPresentation("2026-05-20", storage)).toBe(1);
+    expect(recordEndOfDayReviewPresentation("2026-05-20", storage)).toBe(2);
+    expect(readEndOfDayReviewPresentationCount("2026-05-20", storage)).toBe(2);
+    /* Yesterday's catch-up and today's review are different days that can both
+       be in flight; recording one must not reset the other. */
+    expect(readEndOfDayReviewPresentationCount("2026-05-21", storage)).toBe(0);
+    expect(recordEndOfDayReviewPresentation("2026-05-21", storage)).toBe(1);
+    expect(readEndOfDayReviewPresentationCount("2026-05-20", storage)).toBe(2);
+  });
+
+  it("closes a day once it spends its allowance without an acknowledgement", () => {
+    const storage = memoryStorage();
+
+    for (let attempt = 0; attempt < END_OF_DAY_REVIEW_MAX_PRESENTATIONS_PER_DAY - 1; attempt += 1) {
+      recordEndOfDayReviewPresentation("2026-05-20", storage);
+      expect(hasExhaustedEndOfDayReviewPresentations("2026-05-20", storage)).toBe(false);
+    }
+    recordEndOfDayReviewPresentation("2026-05-20", storage);
+
+    expect(hasExhaustedEndOfDayReviewPresentations("2026-05-20", storage)).toBe(true);
+    expect(hasExhaustedEndOfDayReviewPresentations("2026-05-21", storage)).toBe(false);
+  });
+
+  it("treats unreadable ledger content as an unused allowance", () => {
+    expect(readEndOfDayReviewPresentationCount("2026-05-20", storageWith("not json"))).toBe(0);
+    expect(readEndOfDayReviewPresentationCount("2026-05-20", storageWith('{"2026-05-20":"two"}'))).toBe(0);
+    expect(readEndOfDayReviewPresentationCount("2026-05-20", storageWith('["2026-05-20"]'))).toBe(0);
+    expect(hasExhaustedEndOfDayReviewPresentations("2026-05-20", storageWith(null))).toBe(false);
+  });
+
+  it("keeps the ledger small as days pass", () => {
+    const storage = memoryStorage();
+    for (const day of ["2026-05-16", "2026-05-17", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21"]) {
+      recordEndOfDayReviewPresentation(day, storage);
+    }
+
+    const ledger = JSON.parse(storage.getItem("drifty.endOfDayReview.presentations.v1") ?? "{}") as Record<string, number>;
+
+    expect(Object.keys(ledger)).toEqual(["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21"]);
   });
 });

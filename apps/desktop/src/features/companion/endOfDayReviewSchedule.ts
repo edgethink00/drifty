@@ -110,6 +110,69 @@ export function persistEndOfDayReviewCatchUpHandledDay(day: string, storage = br
   }
 }
 
+/**
+ * A day whose review was presented but never acknowledged used to stay open
+ * indefinitely: the automatic evaluation re-presented the same card on every
+ * cooldown window until the logical day rolled over, and the catch-up offered
+ * yesterday again on every launch. The acknowledgement is still what marks a
+ * day as genuinely seen; this ledger only bounds how often an unacknowledged
+ * day may be presented, so a display report that never arrives costs a missed
+ * card instead of an evening of repeats.
+ *
+ * Today's review and yesterday's catch-up are separate days that can both be
+ * in flight, so the ledger counts per day rather than tracking a single one.
+ */
+export const END_OF_DAY_REVIEW_PRESENTATION_STORAGE_KEY = "drifty.endOfDayReview.presentations.v1";
+export const END_OF_DAY_REVIEW_MAX_PRESENTATIONS_PER_DAY = 2;
+
+/** Only today and yesterday can still be presented; the rest is dead weight. */
+const END_OF_DAY_REVIEW_PRESENTATION_HISTORY_DAYS = 4;
+
+function readEndOfDayReviewPresentationLedger(storage: Storage): Record<string, number> {
+  try {
+    const raw = storage.getItem(END_OF_DAY_REVIEW_PRESENTATION_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    const ledger: Record<string, number> = {};
+    for (const [day, count] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      if (typeof count !== "number" || !Number.isFinite(count) || count <= 0) continue;
+      ledger[day] = Math.floor(count);
+    }
+    return ledger;
+  } catch {
+    return {};
+  }
+}
+
+export function readEndOfDayReviewPresentationCount(day: string, storage = browserStorage()): number {
+  if (!storage) return 0;
+  return readEndOfDayReviewPresentationLedger(storage)[day] ?? 0;
+}
+
+export function hasExhaustedEndOfDayReviewPresentations(day: string, storage = browserStorage()): boolean {
+  return readEndOfDayReviewPresentationCount(day, storage) >= END_OF_DAY_REVIEW_MAX_PRESENTATIONS_PER_DAY;
+}
+
+/** Only a presentation the native surface accepted counts against the day. */
+export function recordEndOfDayReviewPresentation(day: string, storage = browserStorage()): number {
+  if (!storage) return 1;
+  const ledger = readEndOfDayReviewPresentationLedger(storage);
+  const next = (ledger[day] ?? 0) + 1;
+  ledger[day] = next;
+  const recentDays = Object.keys(ledger).sort().slice(-END_OF_DAY_REVIEW_PRESENTATION_HISTORY_DAYS);
+  try {
+    storage.setItem(
+      END_OF_DAY_REVIEW_PRESENTATION_STORAGE_KEY,
+      JSON.stringify(Object.fromEntries(recentDays.map((entry) => [entry, ledger[entry]]))),
+    );
+  } catch {
+    // Losing the ledger only restores the previous unbounded retry behaviour.
+  }
+  return next;
+}
+
 function browserStorage(): Storage | null {
   return typeof window === "undefined" ? null : window.localStorage;
 }

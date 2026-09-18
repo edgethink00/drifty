@@ -360,9 +360,11 @@ import {
   END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY,
   endOfDayReviewMinuteToValue,
   endOfDayReviewValueToMinute,
+  hasExhaustedEndOfDayReviewPresentations,
   isEndOfDayReviewDue,
   persistEndOfDayReviewCatchUpHandledDay,
   readEndOfDayReviewCatchUpHandledDay,
+  recordEndOfDayReviewPresentation,
   resolveEndOfDayReviewCatchUp,
   resolveInitialEndOfDayReviewMinute,
 } from "./features/companion/endOfDayReviewSchedule";
@@ -7345,7 +7347,13 @@ export default function App() {
       && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
     if (endOfDayReviewAutomaticInFlightRef.current) return;
 
-    const reviewShown = window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay;
+    /* A day is finished either because a surface acknowledged the card or
+       because it already spent its bounded presentation allowance without
+       one. Without the second clause an acknowledgement that never arrives
+       re-presents the same review on every cooldown window until the logical
+       day rolls over. */
+    const reviewShown = window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay
+      || hasExhaustedEndOfDayReviewPresentations(todayDay);
     const leaderboardCheckpointDone =
       !checkpointDue || window.localStorage.getItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY) === todayDay;
     if (reviewShown && leaderboardCheckpointDone) return;
@@ -7412,12 +7420,13 @@ export default function App() {
       });
       endOfDayReviewLastPresentedAtRef.current = Date.now();
       const shown = await showEndOfDayReview(event);
+      if (shown) recordEndOfDayReviewPresentation(todayDay);
       /* The day is marked shown only when a surface confirms an actual
          visible display: in Tauri the pill/watcher overlay reports it (see
          useEndOfDayReviewDisplayedReporter), while the browser fallback
          renders the overlay into the visible main window, so a successful
          show is the confirmation. A presentation nobody saw leaves the day
-         open for a fresh retry. */
+         open for a fresh retry, bounded by the presentation ledger above. */
       if (shown && !isTauriRuntime()) {
         window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
       }
@@ -7449,6 +7458,11 @@ export default function App() {
       catchUpHandledDay: readEndOfDayReviewCatchUpHandledDay(),
     });
     if (!catchUp) return;
+    /* The same bounded allowance today's review uses. A payload the native
+       layer drops, or one the surface defers behind a fullscreen app until it
+       goes stale, resolves as a successful show without ever reaching the
+       screen, so the attempt alone must not close yesterday for good. */
+    if (hasExhaustedEndOfDayReviewPresentations(catchUp.day)) return;
     endOfDayReviewCatchUpAttemptedRef.current = true;
 
     void (async () => {
@@ -7486,8 +7500,12 @@ export default function App() {
         leaderboardCelebration,
       });
       const shown = await showEndOfDayReview(event);
-      /* Native overlay reports display separately. Persist here only for the
-         browser fallback, where a successful show is already visible. */
+      if (shown) recordEndOfDayReviewPresentation(catchUp.day);
+      /* The native overlay acknowledges a real display and closes the slot from
+         there; the browser fallback renders into the visible main window, so a
+         successful show is already the display. Without the ledger above, an
+         acknowledgement that never arrives re-offered this card on every single
+         launch. */
       if (shown && !isTauriRuntime()) persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
     })();
   }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, dayReviewEnabled, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);

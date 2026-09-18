@@ -30,8 +30,8 @@ function buildReviewEvent(overrides: Partial<EndOfDayReviewEvent> = {}): EndOfDa
   } as EndOfDayReviewEvent;
 }
 
-function ReporterHost({ event }: { event: EndOfDayReviewEvent | null }) {
-  useEndOfDayReviewDisplayedReporter(event);
+function ReporterHost({ event, presented = true }: { event: EndOfDayReviewEvent | null; presented?: boolean }) {
+  useEndOfDayReviewDisplayedReporter(event, presented);
   return null;
 }
 
@@ -87,12 +87,31 @@ describe("useEndOfDayReviewDisplayedReporter", () => {
     expect(notifyNativeEndOfDayReviewDisplayed).not.toHaveBeenCalled();
   });
 
-  it("waits out a hidden document and reports once the card stays visible", () => {
+  /* The companion panel is a non-activating window that receives its payload
+     before the native reveal, and its page may never report itself visible.
+     Requiring that flag left the day unacknowledged and re-presented the same
+     review all evening. */
+  it("reports a card whose page never reports itself visible", () => {
     stubVisibility("hidden");
     render(<ReporterHost event={buildReviewEvent()} />);
 
     act(() => {
-      vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS * 4);
+      vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS + 100);
+    });
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18");
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a dwell the page actively interrupts and reports once it returns", () => {
+    render(<ReporterHost event={buildReviewEvent()} />);
+
+    act(() => {
+      vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS - 200);
+    });
+    stubVisibility("hidden");
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS * 2);
     });
     expect(notifyNativeEndOfDayReviewDisplayed).not.toHaveBeenCalled();
 
@@ -102,6 +121,25 @@ describe("useEndOfDayReviewDisplayedReporter", () => {
       vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS + 100);
     });
     expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18");
+  });
+
+  /* A menu-bar card is prepared and rendered while the native panel is still
+     hidden, so the dwell must not start until the reveal handshake completes. */
+  it("waits for the surface to report the card presented", () => {
+    const event = buildReviewEvent();
+    const { rerender } = render(<ReporterHost event={event} presented={false} />);
+
+    act(() => {
+      vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS * 2);
+    });
+    expect(notifyNativeEndOfDayReviewDisplayed).not.toHaveBeenCalled();
+
+    rerender(<ReporterHost event={event} presented />);
+    act(() => {
+      vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS + 100);
+    });
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18");
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledTimes(1);
   });
 });
 
