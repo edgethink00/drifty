@@ -423,6 +423,12 @@ describe("buildDebugLogPayload", () => {
         "lsappinfo info returned no parseable app name.": 1,
       },
     });
+    // Neither fixture segment carries a window-title source, so the recovery
+    // counters must report zero instead of inventing one.
+    expect(payload.tracker.frontmostCaptureDiagnostics.today).toMatchObject({
+      recoveredWindowTitleSegments: 0,
+      windowTitleSourceCounts: { missing: 2 },
+    });
   });
 
   it("recognizes Aside app-only segments as supported browser diagnostics", () => {

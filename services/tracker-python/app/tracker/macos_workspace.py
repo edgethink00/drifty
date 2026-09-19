@@ -12,6 +12,7 @@ from app.permissions.accessibility import read_front_window_title
 from app.tracker.capture_contract import (  # re-exported: this module was the
     FrontmostCaptureSource,  # original home of the capture contract, and callers
     Snapshot,  # still import it from here.
+    WindowTitleSource,
     utc_now_iso,
 )
 from app.tracker.adaptive_context import (
@@ -40,6 +41,7 @@ from app.tracker.macos_frontmost import (
 from app.tracker.macos_system_activity import (
     OnScreenWindowRow,
     SystemTransientActivity,
+    frontmost_window_name_for_owner,
     onscreen_window_rows,
     system_transient_activity_from_rows,
 )
@@ -98,6 +100,13 @@ def _error_text(error: RuntimeError) -> str:
 
 def _onscreen_window_rows() -> list[OnScreenWindowRow]:
     return onscreen_window_rows(_run_command)
+
+
+def _frontmost_window_name_for_owner(
+    rows: Sequence[OnScreenWindowRow],
+    owner_names: Sequence[str | None],
+) -> str | None:
+    return frontmost_window_name_for_owner(rows, owner_names)
 
 
 def _system_transient_activity_from_rows(rows: Sequence[OnScreenWindowRow]) -> SystemTransientActivity | None:
@@ -162,10 +171,17 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
             app_name, bundle_id, window_title, frontmost_fallback_error, pid = _frontmost_via_fallback_capture()
             frontmost_capture_source = "lsappinfo" if app_name else "unavailable"
 
+    system_events_app_name = app_name
     app_name = _canonical_macos_app_name(app_name, bundle_id)
 
+    # The window list is also the recovery path below, so read it whenever the
+    # accessibility tree produced no window title, not only for the transient
+    # marker.
+    onscreen_rows = (
+        _onscreen_window_rows() if include_system_transient or not window_title else []
+    )
     system_transient_activity = (
-        _system_transient_activity_from_rows(_onscreen_window_rows()) if include_system_transient else None
+        _system_transient_activity_from_rows(onscreen_rows) if include_system_transient else None
     )
 
     if not app_name:
@@ -174,6 +190,20 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         frontmost_capture_source = "unavailable"
         app_name = "Unavailable"
         pid = None
+
+    window_title_source: WindowTitleSource | None = "system-events" if window_title else None
+    if not window_title and frontmost_capture_source != "unavailable":
+        # A frontmost app with no readable front window used to be a total
+        # blind spot: the segment kept the app name, and the browser-history
+        # URL fallback below matches on the window title, so it could not run
+        # either. The window list sees these windows through a different API.
+        recovered_window_title = _frontmost_window_name_for_owner(
+            onscreen_rows,
+            (app_name, system_events_app_name),
+        )
+        if recovered_window_title:
+            window_title = recovered_window_title
+            window_title_source = "onscreen-window-list"
 
     window_title = apply_native_chatgpt_session_title(
         app_name,
@@ -206,6 +236,7 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     # so window_title and site_* cannot describe two different moments.
     if browser.ax_window_title:
         window_title = browser.ax_window_title
+        window_title_source = "browser-accessibility"
     if not force_browser_history_url_fallback and _should_try_browser_history_url_fallback(app_name, browser):
         history_browser = _browser_history_metadata(app_name, window_title, observed_at)
         browser_history = history_browser
@@ -286,6 +317,7 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         frontmost_capture_source=frontmost_capture_source,
         frontmost_capture_error=frontmost_capture_error,
         frontmost_fallback_error=frontmost_fallback_error,
+        window_title_source=window_title_source,
         adaptive_content_context=adaptive_content_context,
     )
 

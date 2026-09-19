@@ -77,6 +77,12 @@ export type FrontmostCaptureDiagnostics = {
   readonly captureSourceCounts: Readonly<Record<string, number>>;
   readonly captureErrorCounts: Readonly<Record<string, number>>;
   readonly fallbackErrorCounts: Readonly<Record<string, number>>;
+  // Titles recovered from the window list mean the accessibility tree exposed
+  // no front window for that capture. A rising count is a permission or
+  // browser-shape regression, not normal operation.
+  readonly windowTitleSourceCounts: Readonly<Record<string, number>>;
+  readonly recoveredWindowTitleSegments: number;
+  readonly titlelessSegments: number;
 };
 
 export type EnhancedContextDebugEventKind =
@@ -657,6 +663,7 @@ function buildCurrentSnapshotSummary(snapshot: CurrentActivitySnapshot | null) {
     frontmostCaptureSource: snapshot.frontmostCaptureSource ?? null,
     frontmostCaptureError: diagnosticError(snapshot.frontmostCaptureError),
     frontmostFallbackError: diagnosticError(snapshot.frontmostFallbackError),
+    windowTitleSource: snapshot.windowTitleSource ?? null,
     hasFrontmostCaptureError: Boolean(cleanText(snapshot.frontmostCaptureError)),
     hasFrontmostFallbackError: Boolean(cleanText(snapshot.frontmostFallbackError)),
   };
@@ -682,6 +689,7 @@ function buildFrontmostCaptureDiagnostics(
   const captureSourceCounts: Record<string, number> = {};
   const captureErrorCounts: Record<string, number> = {};
   const fallbackErrorCounts: Record<string, number> = {};
+  const windowTitleSourceCounts: Record<string, number> = {};
   let unavailableSegments = 0;
   let unavailableSeconds = 0;
   let systemEventsSegments = 0;
@@ -689,6 +697,8 @@ function buildFrontmostCaptureDiagnostics(
   let missingCaptureSourceSegments = 0;
   let captureErrorSegments = 0;
   let fallbackErrorSegments = 0;
+  let recoveredWindowTitleSegments = 0;
+  let titlelessSegments = 0;
 
   for (const segment of segments) {
     const captureSource = cleanText(segment.frontmostCaptureSource) ?? MISSING_DIAGNOSTIC_VALUE;
@@ -713,6 +723,11 @@ function buildFrontmostCaptureDiagnostics(
       unavailableSegments += 1;
       unavailableSeconds += segment.durationSeconds;
     }
+
+    const windowTitleSource = cleanText(segment.windowTitleSource) ?? MISSING_DIAGNOSTIC_VALUE;
+    incrementCount(windowTitleSourceCounts, windowTitleSource);
+    if (windowTitleSource === "onscreen-window-list") recoveredWindowTitleSegments += 1;
+    if (!cleanText(segment.windowTitle)) titlelessSegments += 1;
   }
 
   return {
@@ -729,6 +744,9 @@ function buildFrontmostCaptureDiagnostics(
     captureSourceCounts,
     captureErrorCounts,
     fallbackErrorCounts,
+    windowTitleSourceCounts,
+    recoveredWindowTitleSegments,
+    titlelessSegments,
   };
 }
 

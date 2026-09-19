@@ -6,6 +6,10 @@ export type BrowserAutomationStatus = "granted" | "denied" | "unavailable" | "st
 export type BrowserHistoryStatus = "unsupported" | "no_profile_root" | "no_readable_database" | "no_match" | "matched";
 export type SystemTransientActivity = "mission_control" | "app_switcher" | "launchpad" | "spotlight" | "system_overlay" | null;
 export type FrontmostCaptureSource = "system-events" | "lsappinfo" | "unavailable";
+// Which mechanism produced windowTitle. "onscreen-window-list" means the
+// accessibility tree exposed no front window and the title came from the
+// window list instead, so the capture is still app-accurate but weaker.
+export type WindowTitleSource = "system-events" | "browser-accessibility" | "onscreen-window-list";
 export const FLOW_INTERVAL_OPTIONS = [3, 4, 5, 6] as const;
 export type FlowIntervalMinutes = typeof FLOW_INTERVAL_OPTIONS[number];
 export type ProductivityLabel = "focus" | "neutral" | "drift";
@@ -112,6 +116,7 @@ export interface ActivitySegment {
   frontmostCaptureSource?: FrontmostCaptureSource | null;
   frontmostCaptureError?: string | null;
   frontmostFallbackError?: string | null;
+  windowTitleSource?: WindowTitleSource | null;
   platform: "macos" | "windows" | "android" | "ios";
   source: TrackerSource;
   /** Local capture support only; foreground audio never proves productivity or attention. */
@@ -217,6 +222,7 @@ export interface CurrentActivitySnapshot {
   frontmostCaptureSource?: FrontmostCaptureSource | null;
   frontmostCaptureError?: string | null;
   frontmostFallbackError?: string | null;
+  windowTitleSource?: WindowTitleSource | null;
   source: TrackerSource;
 }
 

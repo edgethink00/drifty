@@ -1683,6 +1683,7 @@ def get_current_snapshot():
             "frontmostCaptureSource": snapshot.frontmost_capture_source,
             "frontmostCaptureError": snapshot.frontmost_capture_error,
             "frontmostFallbackError": snapshot.frontmost_fallback_error,
+            "windowTitleSource": snapshot.window_title_source,
         },
     )
 

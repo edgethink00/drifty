@@ -23,7 +23,13 @@ from app.tracker.adaptive_context import AdaptiveContentContextPayload
 from app.tracker.browser_automation import BrowserAutomationStatus
 from app.tracker.macos_system_activity import SystemTransientActivity
 
-__all__ = ["EngagementEvidence", "FrontmostCaptureSource", "Snapshot", "utc_now_iso"]
+__all__ = [
+    "EngagementEvidence",
+    "FrontmostCaptureSource",
+    "Snapshot",
+    "WindowTitleSource",
+    "utc_now_iso",
+]
 
 
 def utc_now_iso() -> str:
@@ -40,6 +46,14 @@ FrontmostCaptureSource = Literal[
     "unavailable",
 ]
 EngagementEvidence = Literal["foreground-audio"]
+# Which mechanism produced window_title. The accessibility tree and the
+# on-screen window list fail independently, so a capture that recovered a title
+# from the window list must stay distinguishable in diagnostics.
+WindowTitleSource = Literal[
+    "system-events",
+    "browser-accessibility",
+    "onscreen-window-list",
+]
 
 
 @dataclass
@@ -70,6 +84,7 @@ class Snapshot:
     frontmost_capture_source: FrontmostCaptureSource | None = None
     frontmost_capture_error: str | None = None
     frontmost_fallback_error: str | None = None
+    window_title_source: WindowTitleSource | None = None
     adaptive_content_context: AdaptiveContentContextPayload | None = None
     engagement_evidence: EngagementEvidence | None = None
     exclusion_source: str | None = None

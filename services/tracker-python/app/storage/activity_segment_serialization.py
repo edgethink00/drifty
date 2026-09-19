@@ -65,6 +65,7 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "frontmostCaptureSource": context_text(raw_context, "frontmost_capture_source"),
         "frontmostCaptureError": context_text(raw_context, "frontmost_capture_error"),
         "frontmostFallbackError": context_text(raw_context, "frontmost_fallback_error"),
+        "windowTitleSource": context_text(raw_context, "window_title_source"),
         "platform": row.get("platform", "macos"),
         "source": row.get("source", "unknown"),
         "confidence": row.get("confidence"),

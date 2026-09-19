@@ -318,6 +318,108 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertIsNone(snapshot.system_transient_activity)
         mock_browser_metadata.assert_called_once_with('Notes')
 
+    def test_current_snapshot_recovers_a_browser_window_title_from_the_window_list(self) -> None:
+        # Chrome frontmost with no accessibility front window used to store an
+        # app-only segment: no title, so the browser-history URL fallback could
+        # not match either. The window list reports the same window.
+        rows = [
+            {"owner_name": "Dock", "layer": 20, "name": "Dock"},
+            {"owner_name": "Google Chrome", "layer": 0, "name": "Drifty pricing - Google Chrome"},
+            {"owner_name": "Google Chrome", "layer": 0, "name": "Background window - Google Chrome"},
+        ]
+        history = BrowserMetadata(
+            browser_name="Google Chrome",
+            site_domain="drifty.so",
+            site_url="https://drifty.so/pricing/",
+            match_state="browser-history-title",
+            browser_automation_status="unavailable",
+        )
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata(
+                 browser_name="Google Chrome",
+                 browser_automation_status="unavailable",
+                 browser_automation_error="Google Chrome accessibility address bar fallback found no front window.",
+             )), \
+             patch('app.tracker.macos_workspace._browser_history_metadata', return_value=history) as mock_history:
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.window_title, "Drifty pricing - Google Chrome")
+        self.assertEqual(snapshot.window_title_source, "onscreen-window-list")
+        self.assertEqual(snapshot.source, "accessibility")
+        # The recovered title is what lets the history fallback run at all.
+        mock_history.assert_called_once()
+        self.assertEqual(mock_history.call_args.args[1], "Drifty pricing - Google Chrome")
+        self.assertEqual(snapshot.site_domain, "drifty.so")
+
+    def test_current_snapshot_keeps_the_system_events_window_title_source(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=[]) as mock_rows, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            mock_run.return_value = 'Notes\ncom.apple.Notes\nMeeting notes'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.window_title, "Meeting notes")
+        self.assertEqual(snapshot.window_title_source, "system-events")
+        # A readable title must not cost an extra window-list read.
+        mock_rows.assert_not_called()
+
+    def test_current_snapshot_does_not_guess_a_title_without_readable_window_names(self) -> None:
+        # Without Screen Recording permission every kCGWindowName is None, so
+        # the list cannot distinguish an untitled window from an unreadable one.
+        unreadable_rows = [
+            {"owner_name": "Google Chrome", "layer": 0, "name": None},
+        ]
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=unreadable_rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertIsNone(snapshot.window_title)
+        self.assertIsNone(snapshot.window_title_source)
+        self.assertEqual(snapshot.source, "nsworkspace")
+
+    def test_current_snapshot_ignores_other_apps_and_overlay_layers_when_recovering(self) -> None:
+        rows = [
+            {"owner_name": "Window Server", "layer": 25, "name": "Menubar"},
+            {"owner_name": "Slack", "layer": 0, "name": "Slack - general"},
+            {"owner_name": "Google Chrome", "layer": 3, "name": "Chrome overlay"},
+        ]
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertIsNone(snapshot.window_title)
+        self.assertIsNone(snapshot.window_title_source)
+
+    def test_current_snapshot_prefers_the_browser_accessibility_title_over_the_window_list(self) -> None:
+        rows = [
+            {"owner_name": "Google Chrome", "layer": 0, "name": "Stale list title"},
+        ]
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata(
+                 browser_name="Google Chrome",
+                 ax_window_title="Same-pass title",
+                 site_domain="drifty.so",
+                 site_url="https://drifty.so/",
+                 match_state="accessibility-address-bar",
+             )):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.window_title, "Same-pass title")
+        self.assertEqual(snapshot.window_title_source, "browser-accessibility")
+
     def test_current_snapshot_marks_mission_control_from_dock_cgwindow_rows(self) -> None:
         mission_control_rows = [
             {"owner_name": "Dock", "layer": 20, "name": "Dock"},
@@ -483,7 +585,7 @@ class MacosWorkspaceTests(unittest.TestCase):
     def test_current_snapshot_recovers_app_name_from_real_lsappinfo_shape(self) -> None:
         info = '"Google Chrome" ASN:0x0-0x1c01c: (in front)\n    bundleID="com.google.Chrome"\n'
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('System Events denied')) as mock_run, \
-             patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x1c01c:', info]), \
+             patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x1c01c:', info, '[]']), \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
              patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
             snapshot = current_snapshot(include_system_transient=False)
@@ -493,6 +595,8 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.frontmost_capture_source, 'lsappinfo')
         self.assertEqual(snapshot.frontmost_capture_error, 'System Events denied')
         self.assertIsNone(snapshot.frontmost_fallback_error)
+        self.assertIsNone(snapshot.window_title)
+        self.assertIsNone(snapshot.window_title_source)
         mock_run.assert_called_once()
         mock_browser_metadata.assert_called_once_with('Google Chrome')
 
