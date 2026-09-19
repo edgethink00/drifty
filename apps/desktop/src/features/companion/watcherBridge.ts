@@ -95,6 +95,12 @@ export async function showNativeCompanionMilestone(
   return true;
 }
 
+/**
+ * Unused. The renderer drives the native surface through
+ * `setNativeCompanionSurfacePolicy` instead; this enable/disable shim maps
+ * `true` to the Dev-only `Floating` policy on the Rust side, so calling it
+ * would show the resident pill that no shipping policy presents.
+ */
 export async function setNativeCompanionPillEnabled(enabled: boolean): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("watcher_companion_set_enabled", { enabled });

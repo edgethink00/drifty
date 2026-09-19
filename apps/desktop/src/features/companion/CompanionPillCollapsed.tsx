@@ -12,6 +12,24 @@ import {
  * It keeps the one useful live measure beside the controls people may need at
  * any moment. Nothing is hidden behind hover, so the native panel never has to
  * resize just because the pointer crossed it.
+ *
+ * Dev-only surface. This view is always mounted inside the companion window's
+ * `.pill__clip`, but no shipping policy ever shows it to a user. The public
+ * preference is `"menuBar" | "off"`, and `resolveEffectiveCompanionSurfacePolicy`
+ * produces `"floating"` — the policy this capsule belongs to — solely when Dev
+ * mode is active with the `drifty.dev.floatingCompanion` toggle on. A stored
+ * `"floating"` from an older build is normalized back to `"menuBar"` on read.
+ * The native side agrees: `watcher.rs` defaults to `MomentsOnly` and hides the
+ * panel at rest rather than shrinking it into "a floating resident pill that
+ * does not exist in this policy".
+ *
+ * Two consequences worth knowing before changing anything here. Its copy stays
+ * English on purpose, because translating a surface no user reaches only adds
+ * keys to carry. And opening
+ * `auxiliary.html?driftySurface=companion` in a browser bypasses the policy gate
+ * and renders this view, so a QA sweep that walks URLs will report it as if it
+ * shipped — check reachability against the policy before filing anything found
+ * that way.
  */
 
 export type CollapsedKind = "total" | "streak" | "drift-grace" | "drifting" | "paused";

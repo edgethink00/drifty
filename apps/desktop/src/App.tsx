@@ -752,6 +752,9 @@ export default function App() {
     floatingCompanionDevActive,
     companionTemporarilyHidden,
   );
+  // Dev-only: "floating" is unreachable from the public preference
+  // (`"menuBar" | "off"`), so this is true only under Dev mode with the
+  // floating-companion toggle on. Treat the resident pill as a Dev surface.
   const companionPillVisible = effectiveCompanionSurfacePolicy === "floating";
 
   const handleCompanionSurfacePolicyChange = useCallback((policy: CompanionResidentPreference) => {

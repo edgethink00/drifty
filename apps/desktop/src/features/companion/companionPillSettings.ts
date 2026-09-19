@@ -8,7 +8,12 @@ export const COMPANION_DAY_REVIEW_LAYOUT_STORAGE_KEY = "drifty.dev.companion.day
 
 /** Stored user preference for the production resident Companion. */
 export type CompanionResidentPreference = "menuBar" | "off";
-/** Effective native surface after temporary and Dev-only overrides. */
+/**
+ * Effective native surface after temporary and Dev-only overrides.
+ *
+ * `"floating"` is the Dev-only value: no public preference produces it, and it
+ * is the only policy that mounts the resident pill view.
+ */
 export type CompanionSurfacePolicy = "floating" | "menuBar" | "momentsOnly";
 
 export const COMPANION_SURFACE_POLICY_DEFAULT: CompanionResidentPreference = "menuBar";
