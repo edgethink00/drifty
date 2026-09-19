@@ -216,6 +216,9 @@
   color: var(--dc-onb-text);
 }
 
+/* Segmented pill track: options opt out of the global button hover lift. */
+.dc-onb-language__option:hover { transform: none; }
+
 .dc-onb-language__option[aria-checked="true"] {
   background: var(--dc-onb-surface);
   color: var(--dc-onb-text);
@@ -1177,6 +1180,10 @@
   cursor: default;
   opacity: 0.58;
 }
+
+/* Same opt-out as .toggle: a switch track should not take the global
+   button hover lift (the cat-card-scoped rule above only covered cards). */
+.dc-onb-toggle:hover { transform: none; }
 
 .dc-onb-toggle__track {
   position: relative;

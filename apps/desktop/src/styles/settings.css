@@ -509,6 +509,10 @@
 .toggle.on { background: var(--accent); border-color: var(--accent); }
 .toggle:disabled { cursor: not-allowed; opacity: 0.62; }
 
+/* A switch is not a pressable button: opt out of the global
+   `button:hover { translateY(-1px) }` lift in tokens-base.css. */
+.toggle:hover { transform: none; }
+
 .toggle::after {
   content: '';
   position: absolute;
