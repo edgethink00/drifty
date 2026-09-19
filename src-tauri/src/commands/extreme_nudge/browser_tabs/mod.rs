@@ -20,6 +20,18 @@ mod windows;
 
 pub(super) use matching::{normalized_site_domain, site_domain_from_url};
 
+/// Browsers whose automatic close drives the AX selected tab directly instead
+/// of asking the browser through its scripting dictionary. Their app API
+/// either exposes no selected-tab close action or hung during QA, so nothing
+/// on the close path may script them. Anything that points the pet at one of
+/// these browsers has to read the same AX selection the close will act on.
+pub(in crate::commands) fn closes_through_native_ax_selection(app_name: &str) -> bool {
+    matches!(
+        app_name.trim(),
+        "Firefox" | "Firefox Developer Edition" | "Floorp" | "Zen" | "Whale"
+    )
+}
+
 const APPLESCRIPT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,10 +70,7 @@ pub(super) fn close_browser_tab(
     force_chromium_ax_tab_close: bool,
 ) -> Result<String, ExtremeNudgeError> {
     #[cfg(target_os = "macos")]
-    if matches!(
-        browser_name.trim(),
-        "Firefox" | "Firefox Developer Edition" | "Floorp" | "Zen" | "Whale"
-    ) {
+    if closes_through_native_ax_selection(browser_name) {
         let diagnostic_namespace = if browser_name.trim() == "Whale" {
             "whale_native_ax"
         } else {

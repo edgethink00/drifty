@@ -15,6 +15,7 @@ use tauri::async_runtime;
 use thiserror::Error;
 
 mod browser_tabs;
+pub(in crate::commands) use browser_tabs::closes_through_native_ax_selection;
 #[cfg(test)]
 mod qa_tests;
 #[cfg(target_os = "windows")]

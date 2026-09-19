@@ -22,6 +22,7 @@ use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 #[cfg(target_os = "macos")]
 use objc2_foundation::NSPoint;
 
+use super::extreme_nudge::closes_through_native_ax_selection;
 use super::pet_drop::{
     clamp_floor_home_pt, plan_pet_drop_with_floor_home, plan_pet_shake_floor_drop, PetDropKind,
     PetDropPlan, PetRect, PET_DROP_FLOOR_HOME_PT,
@@ -3160,54 +3161,65 @@ fn resolve_macos_accessibility_target(
 /// Cross-checks the AX selected-tab label against the browser's own scripted
 /// active tab. Returns a fail-closed diagnostic when the two disagree or when
 /// the active tab cannot be read at all. `None` means the hotspot is safe to
-/// use. Only Chromium-class browsers expose `active tab` through AppleScript
-/// under that name; Safari (`current tab`) and the Firefox family keep
-/// today's AX-only behaviour until they get their own verified adapter.
+/// use. The Firefox family exposes no scripted tab identity and keeps AX-only
+/// behaviour.
 #[cfg(target_os = "macos")]
 fn selected_tab_mismatch_diagnostic(
     app_name: &str,
     browser_name: Option<&str>,
     selected_tab_label: Option<&str>,
 ) -> Option<String> {
-    let scripted_name = [browser_name, Some(app_name)]
+    let (scripted_name, term) = [browser_name, Some(app_name)]
         .into_iter()
         .flatten()
         .map(str::trim)
-        .find(|name| supports_scripted_active_tab(name))?;
+        .find_map(|name| scripted_active_tab_term(name).map(|term| (name, term)))?;
     let script = format!(
         r#"tell application "{}"
   try
     if not (exists front window) then return "no_front_window"
-    return "title:" & (title of active tab of front window as text)
+    return "title:" & ({} as text)
   on error
     return "unavailable"
   end try
 end tell"#,
         applescript_string_literal(scripted_name),
+        term,
     );
     let output = run_osascript_with_timeout(&script, Duration::from_millis(1500));
     classify_selected_tab_cross_check(output.as_deref(), selected_tab_label)
 }
 
-/// Browsers whose scripting dictionary exposes `active tab of front window`
-/// with a `title`. This mirrors the Chromium adapter used by the automatic
-/// close. Safari names the same thing `current tab` and is deliberately not
-/// listed until its own live probe has been run.
+/// The scripting term each browser family uses for the tab the automatic close
+/// will act on. Chromium exposes `title of active tab`; Safari names the same
+/// thing `name of current tab`. Safari's live probe ran on 2026-09-19: its tab
+/// buttons carry no `AXSelected` attribute and mark the live tab with
+/// `AXValue`, which the AX scan already reads, but nothing verified that the
+/// tab under the paw is the tab the close acts on.
+///
+/// A browser whose close drives the AX selection is excluded on purpose. The
+/// hotspot and the close then read the same AX tab, so there is nothing to
+/// cross-check, and scripting them anyway is actively harmful: Whale's app API
+/// hangs (see docs/browser-automation-support.md), which would spend the whole
+/// 1.5s timeout on the pet's contact-timeout path and then always fail closed.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn supports_scripted_active_tab(app_name: &str) -> bool {
-    matches!(
-        app_name,
+fn scripted_active_tab_term(app_name: &str) -> Option<&'static str> {
+    if closes_through_native_ax_selection(app_name) {
+        return None;
+    }
+    match app_name {
         "Google Chrome"
-            | "Google Chrome Canary"
-            | "Microsoft Edge"
-            | "Arc"
-            | "Aside"
-            | "Brave Browser"
-            | "Chromium"
-            | "Opera"
-            | "Vivaldi"
-            | "Whale"
-    )
+        | "Google Chrome Canary"
+        | "Microsoft Edge"
+        | "Arc"
+        | "Aside"
+        | "Brave Browser"
+        | "Chromium"
+        | "Opera"
+        | "Vivaldi" => Some("title of active tab of front window"),
+        "Safari" | "Safari Technology Preview" => Some("name of current tab of front window"),
+        _ => None,
+    }
 }
 
 /// Pure decision for the cross-check so it can be unit tested without AX.
@@ -3215,6 +3227,9 @@ fn supports_scripted_active_tab(app_name: &str) -> bool {
 /// timed out); `selected_tab_label` is the AX label of the tab that claimed
 /// selection. Titles are compared after trimming, and a browser that appends
 /// a window suffix (`" - Aside"`) still matches on the shared prefix.
+/// A narrow tab strip also elides its label (`"Long page tit…"`), so an
+/// elided AX label is compared on the part before the ellipsis. Without that
+/// every crowded window would report a mismatch the paw never had.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn classify_selected_tab_cross_check(
     scripted: Option<&str>,
@@ -3238,11 +3253,28 @@ fn classify_selected_tab_cross_check(
     }
     let matches = active_title == selected
         || active_title.starts_with(selected)
-        || selected.starts_with(active_title);
+        || selected.starts_with(active_title)
+        || elided_label_prefix(selected).is_some_and(|prefix| active_title.starts_with(prefix))
+        || elided_label_prefix(active_title).is_some_and(|prefix| selected.starts_with(prefix));
     if matches {
         None
     } else {
         Some("browser_tab_selected_mismatch".to_string())
+    }
+}
+
+/// The readable part of a tab label the strip elided, or `None` when the label
+/// is not elided. A bare ellipsis carries no identity, so it never matches.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn elided_label_prefix(label: &str) -> Option<&str> {
+    let prefix = label
+        .strip_suffix('\u{2026}')
+        .or_else(|| label.strip_suffix("..."))?
+        .trim_end();
+    if prefix.is_empty() {
+        None
+    } else {
+        Some(prefix)
     }
 }
 
@@ -5399,21 +5431,84 @@ mod tests {
     }
 
     #[test]
-    fn scripted_active_tab_support_mirrors_the_chromium_close_adapter() {
-        for name in ["Aside", "Google Chrome", "Arc", "Whale"] {
-            assert!(supports_scripted_active_tab(name), "{name}");
+    fn scripted_active_tab_uses_each_browser_family_term() {
+        for name in ["Aside", "Google Chrome", "Arc", "Vivaldi"] {
+            assert_eq!(
+                scripted_active_tab_term(name),
+                Some("title of active tab of front window"),
+                "{name}"
+            );
         }
+        // Safari names the same tab differently, so the Chromium term would
+        // have raised an AppleScript error and permanently failed closed.
+        for name in ["Safari", "Safari Technology Preview"] {
+            assert_eq!(
+                scripted_active_tab_term(name),
+                Some("name of current tab of front window"),
+                "{name}"
+            );
+        }
+        // The Firefox family exposes no scripted tab identity, so it keeps
+        // AX-only behaviour instead of a check it could never pass.
+        for name in ["Firefox", "Zen", "Floorp", "Finder", ""] {
+            assert_eq!(scripted_active_tab_term(name), None, "{name}");
+        }
+        // Whale reads as Chromium everywhere else, but its close drives the AX
+        // selection and its app API hangs. Scripting it would burn the pet's
+        // 1.5s cross-check budget and then always fail closed.
+        assert_eq!(scripted_active_tab_term("Whale"), None);
+        assert!(closes_through_native_ax_selection("Whale"));
+        // Every browser that keeps a scripted cross-check must be one the
+        // close path actually scripts, so the two lists cannot drift apart.
         for name in [
+            "Google Chrome",
+            "Google Chrome Canary",
+            "Microsoft Edge",
+            "Arc",
+            "Aside",
+            "Brave Browser",
+            "Chromium",
+            "Opera",
+            "Vivaldi",
             "Safari",
             "Safari Technology Preview",
-            "Firefox",
-            "Zen",
-            "Floorp",
-            "Finder",
-            "",
         ] {
-            assert!(!supports_scripted_active_tab(name), "{name}");
+            assert!(scripted_active_tab_term(name).is_some(), "{name}");
+            assert!(!closes_through_native_ax_selection(name), "{name}");
         }
+    }
+
+    #[test]
+    fn cross_check_accepts_a_tab_label_the_strip_elided() {
+        // A crowded tab strip shortens the label it draws. The paw is still on
+        // the right tab, so this must not read as a mismatch.
+        assert_eq!(
+            classify_selected_tab_cross_check(
+                Some("title:Drifty pricing and plans"),
+                Some("Drifty pricing an\u{2026}"),
+            ),
+            None,
+        );
+        assert_eq!(
+            classify_selected_tab_cross_check(
+                Some("title:Drifty pricing and plans"),
+                Some("Drifty pricing an..."),
+            ),
+            None,
+        );
+        // An elided label still has to agree on the part it did show.
+        assert_eq!(
+            classify_selected_tab_cross_check(
+                Some("title:Drifty pricing and plans"),
+                Some("StayFree dashboar\u{2026}"),
+            ),
+            Some("browser_tab_selected_mismatch".to_string()),
+        );
+        // An ellipsis on its own identifies nothing.
+        assert_eq!(
+            classify_selected_tab_cross_check(Some("title:Drifty"), Some("\u{2026}")),
+            Some("browser_tab_selected_mismatch".to_string()),
+        );
     }
 
     /// Opt-in native probe against a running browser. It only reads AX and
