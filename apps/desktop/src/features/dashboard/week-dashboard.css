@@ -2066,7 +2066,7 @@
 
 .week-v2-calendar__legend .flow-chart-head__actions {
   flex: 1 1 auto;
-  width: 100%;
+  min-width: 0;
 }
 
 .week-v2-calendar__legend .flow-chart-legend {
@@ -2097,6 +2097,27 @@
 
 .week-v2-calendar__calendar-key--error {
   color: var(--warn);
+}
+
+/* The refresh status is a trailing item of the legend's control row, so it
+   wraps with the legend chips instead of claiming a line of its own. */
+.flow-chart-head__actions > .week-v2-summary__refresh {
+  flex: 0 0 auto;
+}
+
+.week-v2-summary__refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 /* Day columns are white now that the breakdown is its own separate block */
@@ -2211,6 +2232,15 @@
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
   align-items: flex-start;
+}
+
+/* When the head is too narrow to keep the date navigator beside the summary it
+   wraps to a second line, where `space-between` would otherwise drop it under
+   the title at the left edge. Keeping it right-aligned means the navigator
+   stays in the same column whether or not the row wrapped. */
+.day-split__main > .pg-head .dashboard-page-head__row > .dashboard-page-head__side,
+.page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__row > .dashboard-page-head__side {
+  margin-left: auto;
 }
 
 .day-split__main > .pg-head .dashboard-page-head__title {

@@ -136,9 +136,11 @@ function buildWeekSideTrendChart(
   const gridlines: { label: string; topPercent: number }[] = [];
   for (let value = stepHours; value <= maxHours + 1e-9; value += stepHours) {
     gridlines.push({
-      label: language === "ko"
-        ? `${Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "")}시간`
-        : `${Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "")}h`,
+      // Both languages use the compact "6h" tick the Projects trend chart already
+      // ships in Korean. "6시간" did not fit the rail's tick gutter, and the
+      // shorter "6시" would read as a clock hour next to the calendar's own
+      // "8시 / 9시" axis on the same screen.
+      label: `${Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "")}h`,
       topPercent: (1 - value / axisMaxHours) * 100,
     });
   }
@@ -306,6 +308,12 @@ export function WeekDashboard({
   }, []);
   const autoScrollKeyRef = useRef<string | null>(null);
   const refreshStatusLabel = refreshStatus === "loading" ? t("dashboard.week.updating") : refreshStatus === "error" ? t("dashboard.week.updateFailed") : null;
+  // Rendered inside the legend's control row rather than after it: as a sibling
+  // of that row it was pushed onto a line of its own, which grew the legend by a
+  // full row and shifted the calendar down whenever a refresh started.
+  const refreshStatusChip = refreshStatusLabel ? (
+    <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
+  ) : null;
   const googleCalendarStatusLabel = googleCalendarStatus === "ready"
     ? t("dashboard.week.googleCalendarPlanned")
     : googleCalendarStatus === "loading"
@@ -608,7 +616,7 @@ export function WeekDashboard({
           {header}
           <div className="week-v2-calendar__legend" aria-label={t("dashboard.week.legendAria")}>
             {initialDataLoading ? (
-              <WeekDashboardLoadingLegend />
+              <WeekDashboardLoadingLegend trailing={refreshStatusChip} />
             ) : (
               <div className="flow-chart-head__actions">
                 <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
@@ -628,6 +636,7 @@ export function WeekDashboard({
                     </button>
                   ))}
                 </div>
+                {refreshStatusChip}
                 <FlowChartLegend
                   ariaLabel={t(colorMode === "category" ? "dashboard.week.categoryTones" : "dashboard.week.productivityTones")}
                   colorMode={colorMode}
@@ -644,9 +653,6 @@ export function WeekDashboard({
                 ) : null}
               </div>
             )}
-            {refreshStatusLabel ? (
-              <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
-            ) : null}
           </div>
           <WeekCalendarBoard scrollerRef={calendarScrollerRef}>
             <div className="week-v2-calendar__day-head" aria-hidden={onSelectDay ? undefined : true}>

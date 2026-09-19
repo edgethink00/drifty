@@ -61,25 +61,25 @@ export function InsightsSummaryTiles({ productivityTotals, range, segments, week
   return (
     <div className={`kpi-row kpi-row--insights insights-summary${compact ? " insights-summary--compact" : ""}`} aria-label={t("trends.summaryAria")}>
       <MetricTile
-        className="insights-summary__tile insights-summary__tile--focus"
+        className="insight-summary__tile insight-summary__tile--focus"
         label={t("trends.summary.focus")}
         value={duration(productivityTotals.focus)}
         detail={trackedSeconds > 0 ? t("trends.summary.shareOfTracked", { percent: String(focusShare) }) : t("trends.summary.empty")}
       />
       <MetricTile
-        className="insights-summary__tile insights-summary__tile--drift"
+        className="insight-summary__tile insight-summary__tile--drift"
         label={t("trends.summary.drift")}
         value={duration(productivityTotals.drift)}
         detail={trackedSeconds > 0 ? t("trends.summary.shareOfTracked", { percent: String(driftShare) }) : t("trends.summary.empty")}
       />
       <MetricTile
-        className="insights-summary__tile insights-summary__tile--daily"
+        className="insight-summary__tile insight-summary__tile--daily"
         label={t("trends.summary.dailyFocus")}
         value={activeDays > 0 ? duration(dailyFocusSeconds) : t("trends.summary.empty")}
         detail={t("trends.summary.acrossDays", { count: String(activeDays) })}
       />
       {!compact && <MetricTile
-        className="insights-summary__tile insights-summary__tile--peak"
+        className="insight-summary__tile insight-summary__tile--peak"
         label={t("trends.summary.peakWeekday")}
         value={peakLabel}
         detail={peakDay

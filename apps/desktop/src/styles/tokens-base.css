@@ -438,6 +438,17 @@ body {
   overflow: hidden;
 }
 
+/* CSS breaks Korean between any two syllables by default, so a sentence that
+   needs two lines splits mid-word ("...새로고침합 / 니다."). keep-all wraps on
+   spaces the way Korean readers expect; break-word stays as the escape hatch
+   for a single token that cannot fit its column at all. Individual surfaces
+   that already opted in keep working; this makes it the baseline instead of a
+   per-component fix. */
+html[lang="ko"] body {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
 html[data-surface="watcher"],
 html[data-surface="watcher"] body,
 html[data-surface="watcher"] #root,

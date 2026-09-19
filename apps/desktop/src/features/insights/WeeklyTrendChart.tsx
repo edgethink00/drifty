@@ -48,7 +48,7 @@ export function WeeklyTrendChart({
         <div className="wt-plot">
           <div className="wt-grid">
             {chart.gridlines.map((line) => (
-              <div className="wt-gridline" style={{ top: `${line.topPct}%` }} key={`gl-${line.label}-${line.topPct}`}><span className="wt-gridlabel">{effectiveLanguage === "ko" ? line.label.replace(/h$/, "시간") : line.label}</span></div>
+              <div className="wt-gridline" style={{ top: `${line.topPct}%` }} key={`gl-${line.label}-${line.topPct}`}><span className="wt-gridlabel">{line.label}</span></div>
             ))}
             {[14.2857, 28.5714, 42.8571, 57.1429, 71.4286, 85.7143].map((left) => (
               <div className="wt-vline" style={{ left: `${left}%` }} key={`vl-${left}`} />

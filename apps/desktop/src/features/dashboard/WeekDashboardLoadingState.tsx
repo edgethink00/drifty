@@ -1,8 +1,11 @@
-export function WeekDashboardLoadingLegend() {
+import type { ReactNode } from "react";
+
+export function WeekDashboardLoadingLegend({ trailing }: { readonly trailing?: ReactNode }) {
   return (
-    <div className="flow-chart-head__actions" aria-hidden="true">
-      <span className="loading-skeleton-line loading-skeleton-line--control dashboard-skeleton-week-mode" />
-      <div className="flow-chart-legend dashboard-skeleton-week-legend">
+    <div className="flow-chart-head__actions">
+      <span aria-hidden="true" className="loading-skeleton-line loading-skeleton-line--control dashboard-skeleton-week-mode" />
+      {trailing}
+      <div aria-hidden="true" className="flow-chart-legend dashboard-skeleton-week-legend">
         {Array.from({ length: 3 }, (_, index) => (
           <span className="dashboard-skeleton-week-legend__item" key={index}>
             <span className="loading-skeleton-dot" />

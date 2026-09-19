@@ -1464,6 +1464,9 @@
   font-family: var(--font-mono);
   color: var(--text-soft);
   line-height: 1;
+  /* An axis tick is a single token. Korean units ("6시간") are wider than the
+     English "6h" this gutter was sized for, and wrapping split them mid-word. */
+  white-space: nowrap;
 }
 
 .wt-cols {

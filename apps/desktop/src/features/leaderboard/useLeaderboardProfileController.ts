@@ -1478,8 +1478,8 @@ export function useLeaderboardProfileController({
 
   const leaderboardBlockingLoading = leaderboardRefreshing && !leaderboardHasResolvedOnce;
   const leaderboardBlockingError = leaderboardHasLoadedOnce ? null : leaderboardError;
-  const leaderboardRefreshStatus = leaderboardRefreshing && leaderboardHasResolvedOnce ? "Refreshing leaderboard" : null;
-  const leaderboardAutoPublishStatus = leaderboardAutoPublishRefreshing && activeTab === "leaderboard" ? "Updating your leaderboard" : null;
+  const leaderboardRefreshStatus = leaderboardRefreshing && leaderboardHasResolvedOnce ? t("leaderboard.refreshingBoard") : null;
+  const leaderboardAutoPublishStatus = leaderboardAutoPublishRefreshing && activeTab === "leaderboard" ? t("leaderboard.updatingOwnEntry") : null;
   const leaderboardBackgroundError = leaderboardHasLoadedOnce
     ? leaderboardError ?? (activeTab === "leaderboard" ? leaderboardAutoPublishError : null)
     : null;
