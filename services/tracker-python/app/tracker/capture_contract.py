@@ -52,7 +52,6 @@ EngagementEvidence = Literal["foreground-audio"]
 WindowTitleSource = Literal[
     "system-events",
     "browser-accessibility",
-    "onscreen-window-list",
 ]
 
 

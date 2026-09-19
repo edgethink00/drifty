@@ -100,30 +100,3 @@ def system_transient_activity_from_rows(rows: Sequence[OnScreenWindowRow]) -> Sy
     if has_readable_window_names(rows) and any(is_app_switcher_marker(row) for row in rows):
         return "app_switcher"
     return None
-
-
-def frontmost_window_name_for_owner(
-    rows: Sequence[OnScreenWindowRow],
-    owner_names: Sequence[str | None],
-) -> str | None:
-    """Recover the frontmost standard window name for an app from the window list.
-
-    CGWindowListCopyWindowInfo with optionOnScreenOnly returns windows
-    front-to-back, so the first layer-0 row owned by the frontmost app is the
-    window the user is looking at. This is an independent mechanism from the
-    accessibility tree: it still reports a name when System Events reports no
-    front window at all, which is the only state where this recovery runs.
-
-    kCGWindowName needs Screen Recording permission, so an unreadable list
-    returns None rather than a guess.
-    """
-    wanted = {name for name in owner_names if name}
-    if not wanted or not has_readable_window_names(rows):
-        return None
-    for row in rows:
-        if row["owner_name"] not in wanted or row["layer"] != 0:
-            continue
-        name = row_name(row)
-        if name:
-            return name
-    return None

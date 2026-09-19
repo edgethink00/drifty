@@ -423,10 +423,10 @@ describe("buildDebugLogPayload", () => {
         "lsappinfo info returned no parseable app name.": 1,
       },
     });
-    // Neither fixture segment carries a window-title source, so the recovery
-    // counters must report zero instead of inventing one.
+    // Neither fixture segment carries a window-title source, and both are
+    // titleless, so the blind-spot counters must say exactly that.
     expect(payload.tracker.frontmostCaptureDiagnostics.today).toMatchObject({
-      recoveredWindowTitleSegments: 0,
+      titlelessSegments: 2,
       windowTitleSourceCounts: { missing: 2 },
     });
   });

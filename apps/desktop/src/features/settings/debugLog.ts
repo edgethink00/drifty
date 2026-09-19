@@ -77,11 +77,10 @@ export type FrontmostCaptureDiagnostics = {
   readonly captureSourceCounts: Readonly<Record<string, number>>;
   readonly captureErrorCounts: Readonly<Record<string, number>>;
   readonly fallbackErrorCounts: Readonly<Record<string, number>>;
-  // Titles recovered from the window list mean the accessibility tree exposed
-  // no front window for that capture. A rising count is a permission or
-  // browser-shape regression, not normal operation.
+  // Captures with no window title at all are the tracking blind spot: the
+  // segment keeps only the app name, and the browser-history URL fallback
+  // matches on the title, so it cannot run either.
   readonly windowTitleSourceCounts: Readonly<Record<string, number>>;
-  readonly recoveredWindowTitleSegments: number;
   readonly titlelessSegments: number;
 };
 
@@ -697,7 +696,6 @@ function buildFrontmostCaptureDiagnostics(
   let missingCaptureSourceSegments = 0;
   let captureErrorSegments = 0;
   let fallbackErrorSegments = 0;
-  let recoveredWindowTitleSegments = 0;
   let titlelessSegments = 0;
 
   for (const segment of segments) {
@@ -726,7 +724,6 @@ function buildFrontmostCaptureDiagnostics(
 
     const windowTitleSource = cleanText(segment.windowTitleSource) ?? MISSING_DIAGNOSTIC_VALUE;
     incrementCount(windowTitleSourceCounts, windowTitleSource);
-    if (windowTitleSource === "onscreen-window-list") recoveredWindowTitleSegments += 1;
     if (!cleanText(segment.windowTitle)) titlelessSegments += 1;
   }
 
@@ -745,7 +742,6 @@ function buildFrontmostCaptureDiagnostics(
     captureErrorCounts,
     fallbackErrorCounts,
     windowTitleSourceCounts,
-    recoveredWindowTitleSegments,
     titlelessSegments,
   };
 }
