@@ -22,6 +22,10 @@ _CHROMIUM_EPOCH_OFFSET_SECONDS: Final = 11_644_473_600
 # (2001-01-01 UTC). Seconds between the Unix epoch (1970) and the Cocoa epoch.
 _COCOA_EPOCH_OFFSET_SECONDS: Final = 978_307_200
 _HISTORY_TIMESTAMP_MICROSECONDS: Final = 1_000_000
+# Visit timestamps record last navigation, not last focus. Titles that map to
+# more than one URL must still fall inside this window so an older "ChatGPT" or
+# "Inbox" row cannot win. A title that maps to exactly one URL may match past
+# this window: the user is still looking at that page.
 BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS: Final = 3 * 60
 _VALID_URL_SCHEMES: Final = frozenset({"http", "https"})
 _GENERIC_TITLES: Final = frozenset({"", "new tab", "새 탭", "dashboard", "inbox", "home", "untitled"})
@@ -196,6 +200,20 @@ def _match_browser_history_title(
 
     if not matches:
         return BrowserHistoryMatchResult(candidate=None, reason="generic_title" if saw_generic else "no_match")
+    # Chromium/Firefox visit times record last navigation, not last focus. A
+    # unique page title still on screen after the 3-minute window is the user
+    # still on that page (Meet calls, long documents). Keep the window only to
+    # disambiguate titles that map to more than one URL.
+    unique_urls = {candidate.url for candidate in matches}
+    if len(unique_urls) == 1:
+        nearest_candidate = _nearest_history_candidate(
+            _most_specific_title_matches(matches),
+            observed_at,
+            enforce_window=False,
+        )
+        if nearest_candidate is None:
+            return BrowserHistoryMatchResult(candidate=None, reason="outside_time_window")
+        return BrowserHistoryMatchResult(candidate=nearest_candidate, reason="matched")
     timely_matches = _history_candidates_within_time_window(matches, observed_at)
     if not timely_matches:
         return BrowserHistoryMatchResult(candidate=None, reason="outside_time_window")
@@ -378,7 +396,14 @@ def _most_specific_title_matches(matches: list[BrowserHistoryCandidate]) -> list
     return [candidate for candidate in matches if len(_normalize_title(candidate.title)) == best_length]
 
 
-def _nearest_history_candidate(candidates: list[BrowserHistoryCandidate], observed_at: str | None) -> BrowserHistoryCandidate | None:
+def _nearest_history_candidate(
+    candidates: list[BrowserHistoryCandidate],
+    observed_at: str | None,
+    *,
+    enforce_window: bool = True,
+) -> BrowserHistoryCandidate | None:
+    if not candidates:
+        return None
     observed_at_seconds = _observed_at_unix_seconds(observed_at)
     if observed_at_seconds is None:
         return max(candidates, key=lambda candidate: candidate.visited_at)
@@ -387,6 +412,8 @@ def _nearest_history_candidate(candidates: list[BrowserHistoryCandidate], observ
         candidates,
         key=lambda candidate: abs(_candidate_visited_at_unix_seconds(candidate) - observed_at_seconds),
     )
+    if not enforce_window:
+        return nearest_candidate
     nearest_delta_seconds = abs(_candidate_visited_at_unix_seconds(nearest_candidate) - observed_at_seconds)
     if nearest_delta_seconds > BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS:
         return None

@@ -169,7 +169,7 @@ class BrowserHistoryTitleMatchingTests(unittest.TestCase):
         self.assertIsNone(result.candidate)
         self.assertEqual(result.reason, "ambiguous_url")
 
-    def test_matcher_rejects_nearest_specific_title_outside_time_window(self) -> None:
+    def test_matcher_accepts_unique_title_after_long_dwell(self) -> None:
         observed_at = "2026-06-28T17:06:30+00:00"
         candidates = [
             BrowserHistoryCandidate(
@@ -183,8 +183,77 @@ class BrowserHistoryTitleMatchingTests(unittest.TestCase):
 
         result = match_browser_history_title("Quarterly planning - Google Chrome", candidates, observed_at)
 
+        self.assertEqual(result.candidate, candidates[0])
+        self.assertEqual(result.reason, "matched")
+
+    def test_matcher_accepts_unique_meet_title_after_an_hour(self) -> None:
+        observed_at = "2026-06-28T18:10:00+00:00"
+        candidates = [
+            BrowserHistoryCandidate(
+                url="https://meet.google.com/abc-defg-hij",
+                title="Meet - abc-defg-hij",
+                visited_at=chromium_timestamp("2026-06-28T17:05:00+00:00"),
+                browser_name="Aside",
+                profile_name="Default",
+            )
+        ]
+
+        result = match_browser_history_title(
+            "Meet - abc-defg-hij - Alex Kim (직장)",
+            candidates,
+            observed_at,
+        )
+
+        self.assertEqual(result.candidate, candidates[0])
+        self.assertEqual(result.reason, "matched")
+
+    def test_matcher_still_rejects_shared_title_outside_time_window(self) -> None:
+        observed_at = "2026-06-28T17:06:30+00:00"
+        candidates = [
+            BrowserHistoryCandidate(
+                url="https://chatgpt.com/c/one",
+                title="ChatGPT",
+                visited_at=chromium_timestamp("2026-06-28T17:02:00+00:00"),
+                browser_name="Aside",
+                profile_name="Default",
+            ),
+            BrowserHistoryCandidate(
+                url="https://chatgpt.com/c/two",
+                title="ChatGPT",
+                visited_at=chromium_timestamp("2026-06-28T16:50:00+00:00"),
+                browser_name="Aside",
+                profile_name="Default",
+            ),
+        ]
+
+        result = match_browser_history_title("ChatGPT - Aside - Alex Kim (직장)", candidates, observed_at)
+
         self.assertIsNone(result.candidate)
         self.assertEqual(result.reason, "outside_time_window")
+
+    def test_matcher_picks_the_timely_url_when_the_title_is_shared(self) -> None:
+        observed_at = "2026-06-28T17:06:30+00:00"
+        candidates = [
+            BrowserHistoryCandidate(
+                url="https://chatgpt.com/c/old",
+                title="ChatGPT",
+                visited_at=chromium_timestamp("2026-06-28T16:50:00+00:00"),
+                browser_name="Aside",
+                profile_name="Default",
+            ),
+            BrowserHistoryCandidate(
+                url="https://chatgpt.com/c/now",
+                title="ChatGPT",
+                visited_at=chromium_timestamp("2026-06-28T17:06:10+00:00"),
+                browser_name="Aside",
+                profile_name="Default",
+            ),
+        ]
+
+        result = match_browser_history_title("ChatGPT - Aside", candidates, observed_at)
+
+        self.assertEqual(result.candidate, candidates[1])
+        self.assertEqual(result.reason, "matched")
 
     def test_matcher_accepts_specific_title_inside_time_window(self) -> None:
         observed_at = "2026-06-28T17:06:30+00:00"
