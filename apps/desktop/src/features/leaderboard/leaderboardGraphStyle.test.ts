@@ -37,8 +37,12 @@ describe("sparklineWeekdayLetter", () => {
     expect(sparklineWeekdayLetter("2026-09-14", "ko")).toBe("월");
   });
 
+  it("keeps Saturday and Sunday distinct in English", () => {
+    expect(sparklineWeekdayLetter("2026-09-19", "en")).toBe("Sa");
+    expect(sparklineWeekdayLetter("2026-09-20", "en")).toBe("Su");
+  });
+
   it("returns empty for invalid dates", () => {
     expect(sparklineWeekdayLetter("not-a-day", "en")).toBe("");
   });
 });
-

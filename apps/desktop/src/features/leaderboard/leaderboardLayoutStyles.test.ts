@@ -20,6 +20,11 @@ describe("leaderboard operate layout styles", () => {
     expect(ruleContaining(".content--leaderboard .leaderboard-list-frame", /overflow-y:/)).toMatch(/overflow-y:\s*auto;/);
   });
 
+  it("lets the split profile rail scroll when the card is taller than the pane", () => {
+    expect(ruleContaining(".leaderboard-split.lb-v2 > .leaderboard-profile-block", /overflow-y:/)).toMatch(/overflow-y:\s*auto/);
+    expect(ruleContaining(".lb-v2 .leaderboard-hero__totals-row", /height:/)).toMatch(/height:\s*auto/);
+  });
+
   it("keeps short final pages aligned below the sticky list header", () => {
     expect(ruleContaining(".content--leaderboard .leaderboard-list-frame", /align-content:/)).toMatch(/align-content:\s*start;/);
     expect(ruleContaining(".content--leaderboard .leaderboard-list-head", /position:/)).toMatch(/position:\s*sticky;/);

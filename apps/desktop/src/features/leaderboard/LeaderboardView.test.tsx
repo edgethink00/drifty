@@ -1104,6 +1104,7 @@ describe("LeaderboardView", () => {
       previewLayout: "split-v2",
       isOptedIn: true,
       ownRank: 6,
+      ownParticipantCount: 50,
       publicProfile: makePublicProfile({
         dailyProductivity: days,
         draft: {
@@ -1123,6 +1124,83 @@ describe("LeaderboardView", () => {
     expect(screen.getByText("member.dev")).toBeTruthy();
     expect(screen.getByText("@member")).toBeTruthy();
     expect(screen.getAllByText("#6").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("TOP 12%")).toBeTruthy();
+    expect(screen.getByText("50 participants")).toBeTruthy();
+    expect(screen.queryByText("TOP 0.001%")).toBeNull();
     expect(screen.getByRole("img", { name: /daily focus for the last 7 days/i })).toBeTruthy();
+  });
+
+  it("does not invent profile copy or rank stats in the split layout", () => {
+    renderView({
+      previewLayout: "split-v2",
+      isOptedIn: true,
+      ownRank: 3,
+      ownParticipantCount: 200,
+      publicProfile: makePublicProfile({
+        dailyProductivity: [
+          { day: "2026-09-19", focus: 3600, drift: 0, neutral: 0 },
+          { day: "2026-09-20", focus: 1800, drift: 0, neutral: 0 },
+        ],
+        draft: {
+          displayName: "Alex",
+          avatarUrl: "",
+          bio: "",
+          websiteUrl: "",
+          githubUrl: "",
+          linkedinUrl: "",
+          isPublic: true,
+        },
+      }),
+    });
+
+    expect(screen.queryByText(/member\.dev/i)).toBeNull();
+    expect(screen.queryByText(/깊게 몰입하고/)).toBeNull();
+    expect(screen.queryByText("TOP 0.001%")).toBeNull();
+    expect(screen.getByText("TOP 1.5%")).toBeTruthy();
+    expect(screen.getByText("Weekly #3")).toBeTruthy();
+  });
+
+  it("keeps split-rail errors, daily rank, and loading totals honest", () => {
+    const { unmount } = renderView({
+      previewLayout: "split-v2",
+      isOptedIn: true,
+      ownRank: 2,
+      ownParticipantCount: 2858,
+      activePeriod: "daily",
+      actionError: "Publish failed",
+      profileDisplayName: "Alexandria-the-unreasonably-long-display-name",
+      publicProfile: makePublicProfile({
+        localMetricsStatus: "ready",
+        draft: {
+          displayName: "Alexandria-the-unreasonably-long-display-name",
+          avatarUrl: "",
+          bio: "",
+          websiteUrl: "",
+          githubUrl: "",
+          linkedinUrl: "",
+          isPublic: true,
+        },
+      }),
+    });
+
+    expect(screen.getByText("Publish failed")).toBeTruthy();
+    expect(screen.getByText("Daily #2")).toBeTruthy();
+    expect(screen.getByText("2,858 participants")).toBeTruthy();
+    expect(screen.getByText("Alexandria-the-unreasonably-long-display-name")).toBeTruthy();
+    unmount();
+
+    renderView({
+      previewLayout: "split-v2",
+      isOptedIn: false,
+      isCatchingUp: true,
+      publicProfile: makePublicProfile({
+        localMetricsStatus: "loading",
+        focusSeconds7d: 0,
+        dailyProductivity: null,
+      }),
+    });
+    expect(screen.getByText(/calculating your local focus totals/i)).toBeTruthy();
+    expect(screen.getByText(/AI is catching up on recent activity/i)).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });

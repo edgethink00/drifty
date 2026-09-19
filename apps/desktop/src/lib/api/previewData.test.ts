@@ -12,6 +12,7 @@ import {
   previewTimelineSearch,
   resetPreviewMutations,
   shouldUsePreviewData,
+  shouldUseLeaderboardPreview,
 } from "./previewData";
 
 describe("previewData", () => {
@@ -40,6 +41,17 @@ describe("previewData", () => {
     window.history.replaceState(null, "", "/");
     window.localStorage.setItem("drifty.preview", "1");
     expect(shouldUsePreviewData()).toBe(true);
+  });
+
+  it("does not treat the Dev layout toggle as sample leaderboard data", () => {
+    window.localStorage.setItem("drifty.dev.mode", "1");
+    window.localStorage.setItem("drifty.dev.leaderboardPreview", "1");
+    expect(shouldUseLeaderboardPreview()).toBe(false);
+  });
+
+  it("still uses sample data for the website leaderboard preview query", () => {
+    window.history.replaceState(null, "", "/?leaderboardPreview=1");
+    expect(shouldUseLeaderboardPreview()).toBe(true);
   });
 
   it("uses varied week fixtures instead of repeating the same work blocks", () => {

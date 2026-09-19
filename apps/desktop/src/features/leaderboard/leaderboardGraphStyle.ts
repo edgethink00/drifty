@@ -49,17 +49,17 @@ export function buildSparklineGeometry(values: readonly number[]): { readonly x:
   const pad = 2;
   const usable = SPARKLINE_VIEW_HEIGHT - pad * 2;
   return clamped.map((value, index) => ({
-    x: (index / (clamped.length - 1)) * SPARKLINE_VIEW_WIDTH,
+    x: ((index + 0.5) / clamped.length) * SPARKLINE_VIEW_WIDTH,
     y: SPARKLINE_VIEW_HEIGHT - (value / max) * usable - pad,
   }));
 }
 
 const KOREAN_WEEKDAY_LETTERS = ["일", "월", "화", "수", "목", "금", "토"] as const;
+const ENGLISH_WEEKDAY_LETTERS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
 
 export function sparklineWeekdayLetter(day: string, language: "en" | "ko"): string {
   const date = new Date(`${day}T12:00:00`);
   if (Number.isNaN(date.getTime())) return "";
   if (language === "ko") return KOREAN_WEEKDAY_LETTERS[date.getDay()] ?? "";
-  return date.toLocaleDateString("en-US", { weekday: "narrow" });
+  return ENGLISH_WEEKDAY_LETTERS[date.getDay()] ?? "";
 }
-

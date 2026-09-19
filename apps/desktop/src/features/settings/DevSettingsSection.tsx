@@ -760,7 +760,7 @@ export function DevSettingsSection({
         <div className="settings-row">
           <div>
             <div className="lbl">Leaderboard preview</div>
-            <div className="desc">Preview the redesigned 2-column split layout with expanded profile rail (bio, links, rank summary) and sample data. Off leaves the shipping stacked layout unchanged.</div>
+            <div className="desc">Preview the redesigned 2-column split layout with the expanded profile rail. Uses your live focus totals and rank; off leaves the shipping stacked layout unchanged.</div>
           </div>
           <div className="ctrl">
             <Toggle checked={leaderboardPreviewEnabled} onChange={onLeaderboardPreviewChange} ariaLabel="Toggle Leaderboard preview" />

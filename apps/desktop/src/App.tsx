@@ -2323,7 +2323,7 @@ export default function App() {
   });
   const effectiveDailyProductivity = useMemo(() => {
     if (profileDailyProductivity && profileDailyProductivity.length >= 2) return profileDailyProductivity;
-    if (!isLeaderboardPreviewActive && !leaderboardUsesPreviewProfile) return profileDailyProductivity;
+    if (!leaderboardUsesPreviewProfile) return profileDailyProductivity;
     const points: DailyProductivityPoint[] = [];
     const focusMinutes = [25, 38, 32, 54, 42, 68, 52];
     for (let i = 6; i >= 0; i--) {
@@ -2339,7 +2339,7 @@ export default function App() {
       });
     }
     return points;
-  }, [isLeaderboardPreviewActive, leaderboardUsesPreviewProfile, leaderboardWindowEndDay, profileDailyProductivity]);
+  }, [leaderboardUsesPreviewProfile, leaderboardWindowEndDay, profileDailyProductivity]);
   const aiClassificationProviderKey = selectedLocalAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
     : canUseSelectedCloudAiClassification
@@ -9986,30 +9986,30 @@ export default function App() {
             isOptedIn={isLeaderboardOptedIn}
             isParticipationResolved={isLeaderboardParticipationResolved}
             isSignedIn={isPolicySignedIn}
-            isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile || isLeaderboardPreviewActive}
+            isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
             leaderboard={leaderboardRows}
-            ownFocusSeconds={isLeaderboardPreviewActive || leaderboardUsesPreviewProfile
+            ownFocusSeconds={leaderboardUsesPreviewProfile
               ? leaderboardRows.find((row) => row.rank === 6)?.focus_seconds ?? 90360
               : ownLeaderboardEntry?.focus_seconds ?? null}
-            ownParticipantCount={isLeaderboardPreviewActive || leaderboardUsesPreviewProfile
+            ownParticipantCount={leaderboardUsesPreviewProfile
               ? leaderboardRows.length || 50
               : ownLeaderboardEntry?.participant_count ?? null}
-            ownRank={isLeaderboardPreviewActive || leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
-            publiclyValid={isLeaderboardPreviewActive || leaderboardUsesPreviewProfile ? true : ownLeaderboardEntry?.publicly_valid ?? null}
+            ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
+            publiclyValid={leaderboardUsesPreviewProfile ? true : ownLeaderboardEntry?.publicly_valid ?? null}
             profileDisplayName={leaderboardProfileDisplayName}
             publicProfile={{
               card: focusCard,
               dailyProductivity: effectiveDailyProductivity,
               draft: profileDraft,
-              focusSeconds7d: isLeaderboardPreviewActive && localRollingFocusSeconds === 0 ? 90360 : localRollingFocusSeconds,
-              localMetricsStatus: isLeaderboardPreviewActive && leaderboardLocalMetricsStatus !== "ready" ? "ready" : leaderboardLocalMetricsStatus,
-              isPreviewProfile: leaderboardUsesPreviewProfile || isLeaderboardPreviewActive,
+              focusSeconds7d: localRollingFocusSeconds,
+              localMetricsStatus: leaderboardLocalMetricsStatus,
+              isPreviewProfile: leaderboardUsesPreviewProfile,
               liveOffBoard: publicProfileLiveOffBoard,
               profileError: isProfileEditorOpen ? null : profileError,
               profileLoading,
               profileMessage: isProfileEditorOpen ? null : profileMessage,
               profileSaving,
-              publicId: profile?.public_id ?? ((leaderboardUsesPreviewProfile || isLeaderboardPreviewActive) ? "00000000-0000-4000-8000-000000000000" : null),
+              publicId: profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null),
               shareMessage: profileShareMessage,
               onCopyProfileLink: () => void handleShareLeaderboardProfile(),
               onEditProfile: openProfileEditor,
@@ -10018,7 +10018,7 @@ export default function App() {
             }}
             statusMessage={leaderboardStatusMessage}
             statusTone={leaderboardStatusTone}
-            totalFocusSeconds7d={isLeaderboardPreviewActive && totalLeaderboardFocusSeconds === 0 ? 178140 : totalLeaderboardFocusSeconds}
+            totalFocusSeconds7d={totalLeaderboardFocusSeconds}
             onOptIn={() => void handleLeaderboardOptIn()}
             onOptOut={(options) => void handleLeaderboardOptOut(options)}
             onPeriodChange={setActiveLeaderboardPeriod}

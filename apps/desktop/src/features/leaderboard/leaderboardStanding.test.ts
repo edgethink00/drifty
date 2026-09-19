@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LeaderboardRow } from "./leaderboardService";
-import { getLeaderFocusSeconds, getLeaderShareRatio, getRankGap, getRankTier, getTopPercentile } from "./leaderboardStanding";
+import { formatPreciseTopPercentile, getLeaderFocusSeconds, getLeaderShareRatio, getPreciseTopPercentile, getRankGap, getRankTier, getTopPercentile } from "./leaderboardStanding";
 
 function makeRow(overrides: Partial<LeaderboardRow> = {}): LeaderboardRow {
   return {
@@ -36,6 +36,14 @@ describe("getTopPercentile", () => {
     expect(getTopPercentile(5, null)).toBeNull();
     expect(getTopPercentile(5, undefined)).toBeNull();
     expect(getTopPercentile(5, 4)).toBeNull();
+  });
+});
+
+describe("getPreciseTopPercentile", () => {
+  it("keeps sub-1% standings instead of rounding up to 1%", () => {
+    expect(getPreciseTopPercentile(6, 50)).toBe(12);
+    expect(getPreciseTopPercentile(6, 600_000)).toBe(0.001);
+    expect(formatPreciseTopPercentile(0.001)).toBe("0.001");
   });
 });
 

@@ -70,7 +70,11 @@ export function LeaderboardSparkline({
       >
         {graph}
       </svg>
-      <div className="leaderboard-sparkline__axis" aria-hidden="true">
+      <div
+        className="leaderboard-sparkline__axis"
+        style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))` }}
+        aria-hidden="true"
+      >
         {labels.map((label, index) => <span key={`${points[index]?.day ?? index}-${label}`}>{label}</span>)}
       </div>
     </div>
@@ -219,4 +223,3 @@ function renderVariant(
     }
   }
 }
-

@@ -35,6 +35,25 @@ export function getTopPercentile(rank: number, participantCount: number | null |
   return Math.min(100, Math.max(1, Math.ceil((rank / total) * 100)));
 }
 
+/**
+ * Exact board percentile for the profile rail. Unlike `getTopPercentile`, this
+ * keeps sub-1% standings instead of rounding the leader up to "top 1%".
+ */
+export function getPreciseTopPercentile(rank: number, participantCount: number | null | undefined): number | null {
+  if (!Number.isFinite(rank) || rank < 1) return null;
+  const total = Number(participantCount);
+  if (!Number.isFinite(total) || total < 1 || rank > total) return null;
+  const raw = (rank / total) * 100;
+  if (raw < 0.1) return Math.round(raw * 1_000) / 1_000;
+  if (raw < 1) return Math.round(raw * 100) / 100;
+  return Math.round(raw * 10) / 10;
+}
+
+export function formatPreciseTopPercentile(percent: number): string {
+  if (!Number.isFinite(percent) || percent <= 0) return "";
+  return String(percent);
+}
+
 /** Highest focus total on the same period board, or null when it is unusable. */
 export function getLeaderFocusSeconds(rows: readonly LeaderboardRow[], row: LeaderboardRow): number | null {
   let best = 0;
