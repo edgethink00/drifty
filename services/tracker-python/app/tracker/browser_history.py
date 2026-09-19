@@ -41,6 +41,11 @@ _MACOS_BROWSER_ROOTS: Final[dict[str, Path]] = {
     "Opera": Path.home() / "Library/Application Support/com.operasoftware.Opera",
     "Whale": Path.home() / "Library/Application Support/Naver/Whale",
     "Firefox": Path.home() / "Library/Application Support/Firefox/Profiles",
+    # Developer Edition ships its own app bundle but keeps its profile beside
+    # release Firefox, in a dev-edition-default directory under the same
+    # Profiles root. The scanner already walks every profile in a root, so both
+    # share one entry instead of needing a second layout.
+    "Firefox Developer Edition": Path.home() / "Library/Application Support/Firefox/Profiles",
     "Zen": Path.home() / "Library/Application Support/zen/Profiles",
     "Floorp": Path.home() / "Library/Application Support/Floorp/Profiles",
     # Safari keeps a single History.db directly under ~/Library/Safari (no
@@ -69,7 +74,9 @@ _BROWSER_ROOTS: Final[dict[str, Path]] = _platform_browser_roots()
 # Firefox-family browsers use profiles.ini-style profile directories with a
 # places.sqlite history database and unix-microsecond visit timestamps, unlike
 # the Chromium family (Default/History with WebKit-epoch timestamps).
-_FIREFOX_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset({"Firefox", "Zen", "Floorp"})
+_FIREFOX_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset(
+    {"Firefox", "Firefox Developer Edition", "Zen", "Floorp"}
+)
 
 # Safari-family browsers use a single History.db (history_items join history_visits)
 # with Cocoa-epoch second timestamps, gated behind Full Disk Access.

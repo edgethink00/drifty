@@ -78,6 +78,7 @@ def windows_browser_roots() -> dict:
         "Opera": roaming / "Opera Software" / "Opera Stable",
         "Whale": local / "Naver" / "Naver Whale" / "User Data",
         "Firefox": roaming / "Mozilla" / "Firefox" / "Profiles",
+        "Firefox Developer Edition": roaming / "Mozilla" / "Firefox" / "Profiles",
         "Zen": roaming / "zen" / "Profiles",
         "Floorp": roaming / "Floorp" / "Profiles",
     }

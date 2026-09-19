@@ -164,6 +164,29 @@ class BrowserHistoryTests(unittest.TestCase):
         self.assertEqual(metadata.site_domain, "docs.example.test")
         self.assertEqual(metadata.match_state, "browser-history-title")
 
+    def test_firefox_developer_edition_shares_the_firefox_profile_root(self) -> None:
+        # Developer Edition is a supported capture and close target everywhere
+        # else, but it was missing from the profile roots and the family set,
+        # so it alone got no browser-history URL fallback when the address bar
+        # could not be read, and a root would have been scanned as Chromium.
+        self.assertTrue(is_firefox_family_browser("Firefox Developer Edition"))
+        self.assertTrue(is_browser_history_supported_app("Firefox Developer Edition"))
+
+        self._write_firefox_places(
+            "abcd1234.dev-edition-default",
+            [("https://developer.example.test/docs", "Developer docs", 40)],
+        )
+
+        metadata = browser_history_metadata(
+            "Firefox Developer Edition",
+            "Developer docs - Mozilla Firefox",
+            profile_roots={"Firefox Developer Edition": self.root},
+        )
+
+        self.assertEqual(metadata.site_url, "https://developer.example.test/docs")
+        self.assertEqual(metadata.site_domain, "developer.example.test")
+        self.assertEqual(metadata.match_state, "browser-history-title")
+
     def test_chromium_history_paths_discovers_root_level_history(self) -> None:
         # Opera's main profile stores History directly in the user-data root
         # rather than a Default/ subfolder.
