@@ -6,6 +6,7 @@ import {
   endOfDayReviewValueToMinute,
   END_OF_DAY_REVIEW_MAX_PRESENTATIONS_PER_DAY,
   END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY,
+  endOfDayReviewDeadlineForDay,
   hasExhaustedEndOfDayReviewPresentations,
   isEndOfDayReviewDue,
   persistEndOfDayReviewLastPresentationDay,
@@ -75,6 +76,23 @@ describe("endOfDayReviewSchedule", () => {
     expect(isEndOfDayReviewDue(4 * 60, 18 * 60, startOfDay)).toBe(false);
     /* With a midnight day start, 1 AM is the next day and nothing is due. */
     expect(isEndOfDayReviewDue(1 * 60, 18 * 60, 0)).toBe(false);
+  });
+
+  it("places a review earlier than the day start near the end of that logical day", () => {
+    const startOfDay = 17 * 60;
+    const reviewMinute = 15 * 60;
+    expect(isEndOfDayReviewDue(17 * 60, reviewMinute, startOfDay)).toBe(false);
+    expect(isEndOfDayReviewDue(23 * 60, reviewMinute, startOfDay)).toBe(false);
+    expect(isEndOfDayReviewDue(14 * 60 + 59, reviewMinute, startOfDay)).toBe(false);
+    expect(isEndOfDayReviewDue(15 * 60, reviewMinute, startOfDay)).toBe(true);
+    expect(isEndOfDayReviewDue(16 * 60 + 59, reviewMinute, startOfDay)).toBe(true);
+  });
+
+  it("builds the catch-up delivery deadline from today's configured review time", () => {
+    expect(endOfDayReviewDeadlineForDay("2026-05-21", 20 * 60, 4 * 60))
+      .toBe(new Date(2026, 4, 21, 20, 0, 0, 0).toISOString());
+    expect(endOfDayReviewDeadlineForDay("2026-05-21", 15 * 60, 17 * 60))
+      .toBe(new Date(2026, 4, 22, 15, 0, 0, 0).toISOString());
   });
 
   it("offers yesterday once when it was never shown", () => {

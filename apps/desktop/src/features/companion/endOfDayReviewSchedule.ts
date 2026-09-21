@@ -1,4 +1,5 @@
 import { shiftIsoDate } from "@drifty/domain";
+import { END_OF_DAY_REVIEW_STORAGE_KEY } from "./endOfDayReviewData";
 
 /**
  * The day review used to fire at a fixed 8 PM, borrowed from the leaderboard
@@ -72,8 +73,32 @@ export function isEndOfDayReviewDue(
   reviewMinute: number,
   startOfDayMinutes: number,
 ): boolean {
-  if (currentMinuteOfDay >= reviewMinute) return true;
-  return startOfDayMinutes > 0 && currentMinuteOfDay < startOfDayMinutes && reviewMinute >= startOfDayMinutes;
+  const minutesPerDay = 24 * 60;
+  const logicalMinute = (currentMinuteOfDay - startOfDayMinutes + minutesPerDay) % minutesPerDay;
+  const logicalReviewMinute = (reviewMinute - startOfDayMinutes + minutesPerDay) % minutesPerDay;
+  return logicalMinute >= logicalReviewMinute;
+}
+
+/** The wall-clock instant at which today's review supersedes a catch-up. */
+export function endOfDayReviewDeadlineForDay(
+  day: string,
+  reviewMinute: number,
+  startOfDayMinutes: number,
+): string {
+  /* When the selected review clock is earlier than the logical day start, it
+     belongs to the following calendar date within that same logical day. */
+  const deadlineDay = reviewMinute < startOfDayMinutes ? shiftIsoDate(day, 1) : day;
+  const [year, month, dayOfMonth] = deadlineDay.split("-").map(Number);
+  const deadline = new Date(
+    year,
+    month - 1,
+    dayOfMonth,
+    Math.floor(reviewMinute / 60),
+    reviewMinute % 60,
+    0,
+    0,
+  );
+  return deadline.toISOString();
 }
 
 export type EndOfDayReviewCatchUp = {
@@ -139,6 +164,27 @@ export function persistEndOfDayReviewLastPresentationDay(day: string, storage = 
   } catch {
     // Losing the marker may permit another card, but must not break the app.
   }
+}
+
+/**
+ * Persist the acknowledgement in the shared webview storage before the
+ * best-effort native event handoff. The main and Companion webviews share this
+ * origin, so a close cannot open a gap in which the scheduler still sees the
+ * day as eligible.
+ */
+export function persistEndOfDayReviewAcknowledgement(
+  reviewDay: string,
+  presentationDay: string,
+  storage = browserStorage(),
+): void {
+  if (!storage || !/^\d{4}-\d{2}-\d{2}$/.test(reviewDay)) return;
+  try {
+    storage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, reviewDay);
+  } catch {
+    // The presentation-day marker below may still close the interruption slot.
+  }
+  persistEndOfDayReviewCatchUpHandledDay(reviewDay, storage);
+  persistEndOfDayReviewLastPresentationDay(presentationDay, storage);
 }
 
 /**

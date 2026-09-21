@@ -31,7 +31,7 @@ import {
   buildCompanionMilestonePreview,
 } from "./companionPillPreview";
 import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
-import { companionMomentReferenceMs, COMPANION_MOMENT_STALE_AFTER_MS, isCompanionMomentStale } from "./companionMomentFreshness";
+import { companionMomentDeadlineMs, isCompanionMomentStale } from "./companionMomentFreshness";
 import { companionEventIdentity as companionMomentIdentity } from "./companionEventIdentity";
 import { recordCompanionLifecycle } from "./companionLifecycleLog";
 import {
@@ -64,6 +64,10 @@ const COMPANION_THEME_STORAGE_KEY = "drifty.theme";
 const COMPANION_DEFAULT_THEME = "light";
 const COMPANION_MOMENT_QUEUE_GAP_MS = 700;
 
+function containsFreshEndOfDayReview(events: readonly CompanionPillMomentEvent[]): boolean {
+  return events.some((event) => event.kind === "endOfDayReview" && !isCompanionMomentStale(event));
+}
+
 export function CompanionWindowApp() {
   const { t } = useLocalization();
   const [peekEvent, setPeekEvent] = useState<WatcherPeekEvent | null>(null);
@@ -78,6 +82,8 @@ export function CompanionWindowApp() {
   const [isPointerInside, setIsPointerInside] = useState(false);
   const momentQueueRef = useRef<CompanionPillMomentEvent[]>([]);
   const momentQueueTimerRef = useRef<number | null>(null);
+  const deferredInformationalRef = useRef<CompanionPillMomentEvent[]>([]);
+  const deferredInformationalTimerRef = useRef<number | null>(null);
   const recordedMomentRef = useRef<string | null>(null);
   const [horizontalAnchor, setHorizontalAnchor] =
     useState<CompanionHorizontalAnchor>("center");
@@ -132,7 +138,7 @@ export function CompanionWindowApp() {
        older producer races the main-window scheduler. */
     if (nextMoment.kind === "endOfDayReview" && (
       current?.kind === "endOfDayReview"
-      || momentQueueRef.current.some((queued) => queued.kind === "endOfDayReview")
+      || containsFreshEndOfDayReview(momentQueueRef.current)
     )) return;
     if (momentQueueRef.current.some((queued) => companionMomentIdentity(queued) === nextKey)) return;
 
@@ -178,9 +184,6 @@ export function CompanionWindowApp() {
      film, a game): they wait in a side queue and retry once a minute until
      the fullscreen ends, and are consumed silently when they outlive their
      own freshness. Interventions bypass the gate entirely. */
-  const deferredInformationalRef = useRef<CompanionPillMomentEvent[]>([]);
-  const deferredInformationalTimerRef = useRef<number | null>(null);
-
   const flushDeferredInformationalMoments = useCallback(() => {
     void (async () => {
       await refreshInformationalMomentSuppression();
@@ -213,6 +216,15 @@ export function CompanionWindowApp() {
       recordCompanionLifecycle("expired_on_receipt", companionMomentIdentity(nextMoment));
       return;
     }
+    /* The Day Review slot spans every place a card can wait. In particular, a
+       fullscreen transition must not park a second review beside an active one
+       and reveal it after the user closes the first. Stale deferred cards do
+       not reserve the slot. */
+    if (nextMoment.kind === "endOfDayReview" && (
+      momentEventRef.current?.kind === "endOfDayReview"
+      || containsFreshEndOfDayReview(momentQueueRef.current)
+      || containsFreshEndOfDayReview(deferredInformationalRef.current)
+    )) return;
     if (!isInformationalMomentKind(nextMoment.kind)) {
       enqueueMomentNow(nextMoment);
       return;
@@ -476,14 +488,16 @@ export function CompanionWindowApp() {
     }
     const requested = momentEventRef.current;
     const requestedKey = requested ? companionMomentIdentity(requested) : lastMomentKeyRef.current;
-    const referenceMs = requested ? companionMomentReferenceMs(requested) : null;
+    const expiresAtMs = requested ? companionMomentDeadlineMs(requested) : null;
     const requestId = ++stateRequestRef.current;
     if (requested && isCompanionMomentStale(requested)) {
       finishCurrentMoment(requestedKey);
       return;
     }
-    void setNativeCompanionPillState(state, requestedKey,
-      referenceMs === null ? undefined : referenceMs + COMPANION_MOMENT_STALE_AFTER_MS,
+    void setNativeCompanionPillState(
+      state,
+      requestedKey,
+      expiresAtMs === null ? undefined : expiresAtMs,
     ).then((result) => {
       const current = momentEventRef.current;
       if (requestId !== stateRequestRef.current || !current

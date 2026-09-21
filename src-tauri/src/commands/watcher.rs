@@ -923,22 +923,33 @@ pub fn watcher_peek_end_of_day_review_action(
 /// than from the fire-and-forget show invoke, so an unseen presentation
 /// (lid closed, machine asleep) never burns the once-a-day slot.
 #[tauri::command]
-pub fn watcher_peek_end_of_day_review_displayed(app: AppHandle, day: String) -> Result<(), String> {
-    let valid_day = day.len() == 10
-        && day.chars().enumerate().all(|(index, ch)| {
-            if index == 4 || index == 7 {
-                ch == '-'
-            } else {
-                ch.is_ascii_digit()
-            }
-        });
-    if !valid_day {
+pub fn watcher_peek_end_of_day_review_displayed(
+    app: AppHandle,
+    day: String,
+    presentation_day: String,
+) -> Result<(), String> {
+    let valid_day = |value: &str| {
+        value.len() == 10
+            && value.chars().enumerate().all(|(index, ch)| {
+                if index == 4 || index == 7 {
+                    ch == '-'
+                } else {
+                    ch.is_ascii_digit()
+                }
+            })
+    };
+    if !valid_day(&day) {
         return Err(format!("invalid day format: {day}"));
+    }
+    if !valid_day(&presentation_day) {
+        return Err(format!(
+            "invalid presentation day format: {presentation_day}"
+        ));
     }
     if let Some(main) = app.get_webview_window("main") {
         main.emit(
             "end-of-day-review-displayed",
-            serde_json::json!({ "day": day }),
+            serde_json::json!({ "day": day, "presentationDay": presentation_day }),
         )
         .map_err(|error| error.to_string())?;
     }

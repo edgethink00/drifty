@@ -14,6 +14,7 @@ export const COMPANION_MOMENT_STALE_AFTER_MS = 10 * 60 * 1000;
 /** Any moment event carries at least one of these wall-clock anchors. */
 export type CompanionMomentTimestamps = {
   readonly generatedAt?: string;
+  readonly expiresAt?: string;
 };
 
 export function companionMomentReferenceMs(event: CompanionMomentTimestamps): number | null {
@@ -23,12 +24,33 @@ export function companionMomentReferenceMs(event: CompanionMomentTimestamps): nu
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function isCompanionMomentStale(
+export function companionMomentDeadlineMs(
+  event: CompanionMomentTimestamps,
+  staleAfterMs: number = COMPANION_MOMENT_STALE_AFTER_MS,
+): number | null {
+  const referenceMs = companionMomentReferenceMs(event);
+  const ageDeadlineMs = referenceMs === null ? null : referenceMs + staleAfterMs;
+  const producerDeadlineMs = event.expiresAt ? Date.parse(event.expiresAt) : Number.NaN;
+  if (!Number.isFinite(producerDeadlineMs)) return ageDeadlineMs;
+  return ageDeadlineMs === null ? producerDeadlineMs : Math.min(ageDeadlineMs, producerDeadlineMs);
+}
+
+/** Once a card began presentation, only wall-clock age can invalidate its acknowledgement. */
+export function isCompanionMomentAgedOut(
   event: CompanionMomentTimestamps,
   nowMs: number = Date.now(),
   staleAfterMs: number = COMPANION_MOMENT_STALE_AFTER_MS,
 ): boolean {
   const referenceMs = companionMomentReferenceMs(event);
-  if (referenceMs === null) return false;
-  return nowMs - referenceMs > staleAfterMs;
+  return referenceMs !== null && nowMs - referenceMs > staleAfterMs;
+}
+
+export function isCompanionMomentStale(
+  event: CompanionMomentTimestamps,
+  nowMs: number = Date.now(),
+  staleAfterMs: number = COMPANION_MOMENT_STALE_AFTER_MS,
+): boolean {
+  const expiresAtMs = event.expiresAt ? Date.parse(event.expiresAt) : Number.NaN;
+  if (Number.isFinite(expiresAtMs) && nowMs >= expiresAtMs) return true;
+  return isCompanionMomentAgedOut(event, nowMs, staleAfterMs);
 }

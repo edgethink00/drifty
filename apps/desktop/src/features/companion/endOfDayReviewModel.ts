@@ -75,6 +75,10 @@ export type EndOfDayReviewEvent = {
   placement?: "top-right";
   day: string;
   generatedAt: string;
+  /** Producer deadline for a queued/deferred card. */
+  expiresAt?: string;
+  /** Logical day whose single interruption slot this card consumes. */
+  presentationDay?: string;
   trackedLabel: string;
   focusLabel: string;
   driftLabel: string;

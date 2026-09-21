@@ -33,9 +33,23 @@ const nativeMenu = vi.hoisted(() => ({
   open: vi.fn().mockResolvedValue(true),
 }));
 
+const informationalSuppression = vi.hoisted(() => ({
+  suppressed: false,
+  refresh: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("./companionPillNativeMenu", () => ({
   openNativeCompanionPillMenu: nativeMenu.open,
 }));
+
+vi.mock("./informationalMomentSuppression", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./informationalMomentSuppression")>();
+  return {
+    ...actual,
+    isInformationalMomentSuppressedNow: () => informationalSuppression.suppressed,
+    refreshInformationalMomentSuppression: informationalSuppression.refresh,
+  };
+});
 
 vi.mock("../../lib/api/trackerClient", () => ({
   trackerClient: {
@@ -159,6 +173,8 @@ describe("CompanionWindowApp", () => {
     window.history.replaceState({}, "", "/");
     bridge.setNativeCompanionPillState.mockResolvedValue({ prepared: false, menuAnchorX: null });
     bridge.notifyNativeEndOfDayReviewDisplayed.mockResolvedValue(undefined);
+    informationalSuppression.suppressed = false;
+    informationalSuppression.refresh.mockResolvedValue(undefined);
     /* `clearAllMocks` drops mock implementations as well as call history, so
        the cursor poll would answer `undefined` instead of "not over the
        capsule" and hover assertions would pass for the wrong reason. */
@@ -329,7 +345,7 @@ describe("CompanionWindowApp", () => {
     act(() => vi.advanceTimersByTime(180));
 
     fireEvent.click(getByRole("button", { name: "AI settings" }));
-    expect(bridge.notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-03");
+    expect(bridge.notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-03", "2026-08-03");
     expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -835,6 +851,57 @@ describe("CompanionWindowApp", () => {
     expect(container.textContent).not.toContain("7:00 tracked");
   });
 
+  it("never defers a second day review behind an active review during fullscreen", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.showHandler?.(reviewMoment));
+    informationalSuppression.suppressed = true;
+    act(() => bridge.showHandler?.({
+      ...reviewMoment,
+      day: "2026-08-04",
+      generatedAt: new Date(Date.now() + 1).toISOString(),
+      trackedLabel: "7h tracked",
+      totalSeconds: 7 * 3_600,
+      focusSeconds: 5 * 3_600,
+    }));
+
+    await act(async () => {
+      fireEvent.click(container.querySelector(".view--eod .card__close")!);
+      await Promise.resolve();
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+
+    informationalSuppression.suppressed = false;
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+
+    expect(container.textContent).not.toContain("7:00 tracked");
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("collapsed");
+  });
+
+  it("expires a fullscreen-deferred catch-up at today's review deadline", async () => {
+    vi.useFakeTimers();
+    const generatedAt = Date.now();
+    informationalSuppression.suppressed = true;
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.showHandler?.({
+      ...reviewMoment,
+      generatedAt: new Date(generatedAt).toISOString(),
+      expiresAt: new Date(generatedAt + 30_000).toISOString(),
+    }));
+    expect(container.textContent).not.toContain("Day review");
+
+    await act(async () => vi.advanceTimersByTimeAsync(31_000));
+    informationalSuppression.suppressed = false;
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+
+    expect(container.textContent).not.toContain("Day review");
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("collapsed");
+  });
+
   it("waits for the day-review display acknowledgement before an explicit close", async () => {
     vi.useFakeTimers();
     let resolveAcknowledgement: (() => void) | undefined;
@@ -848,7 +915,7 @@ describe("CompanionWindowApp", () => {
     fireEvent.click(container.querySelector(".view--eod .card__close")!);
     await act(async () => vi.advanceTimersByTimeAsync(400));
 
-    expect(bridge.notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-03");
+    expect(bridge.notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-03", "2026-08-03");
     expect(bridge.dismissNativeCompanionMoment).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Day review");
 

@@ -16,6 +16,7 @@ import {
   classifyActivity,
   buildHourlySummary,
   buildPersonalProjectSliceProjection,
+  logicalDayEndExclusiveMs,
   logicalDayIsoDateForDate,
   shiftIsoDate,
   todayIsoDate,
@@ -358,10 +359,12 @@ import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TR
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import {
   END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY,
+  endOfDayReviewDeadlineForDay,
   endOfDayReviewMinuteToValue,
   endOfDayReviewValueToMinute,
   hasExhaustedEndOfDayReviewPresentations,
   isEndOfDayReviewDue,
+  persistEndOfDayReviewAcknowledgement,
   persistEndOfDayReviewCatchUpHandledDay,
   persistEndOfDayReviewLastPresentationDay,
   readEndOfDayReviewCatchUpHandledDay,
@@ -892,6 +895,16 @@ export default function App() {
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController({ language: localization.effectiveLanguage });
+  const endOfDayReviewDeliveryPolicyRef = useRef({
+    enabled: dayReviewEnabled,
+    reviewMinute: endOfDayReviewMinute,
+    startOfDayMinutes,
+  });
+  endOfDayReviewDeliveryPolicyRef.current = {
+    enabled: dayReviewEnabled,
+    reviewMinute: endOfDayReviewMinute,
+    startOfDayMinutes,
+  };
   /* Quiet hours pause interventions and celebrations. Delivery reads the
      clock at evaluation time through the ref; render-time gates (milestones)
      read the boundary-aware hook so they flip without a poll. */
@@ -4974,10 +4987,13 @@ export default function App() {
       unlisteners.push(unlisten);
     });
 
-    void listenToNativeEndOfDayReviewDisplayed((day) => {
-      window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, day);
-      persistEndOfDayReviewCatchUpHandledDay(day);
-      persistEndOfDayReviewLastPresentationDay(logicalTodayIsoDate(startOfDayMinutes));
+    void listenToNativeEndOfDayReviewDisplayed((day, presentationDay) => {
+      persistEndOfDayReviewAcknowledgement(
+        day,
+        presentationDay && /^\d{4}-\d{2}-\d{2}$/.test(presentationDay)
+          ? presentationDay
+          : logicalTodayIsoDate(endOfDayReviewDeliveryPolicyRef.current.startOfDayMinutes),
+      );
     }).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
@@ -5036,7 +5052,7 @@ export default function App() {
       disposed = true;
       unlisteners.forEach(cleanupTauriEventListener);
     };
-  }, [dismissWatcherPeek, handleCompanionVisibilityAction, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse, startOfDayMinutes]);
+  }, [dismissWatcherPeek, handleCompanionVisibilityAction, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
 
   const evaluateDriftAlarm = useCallback((input: DriftAlarmEvaluationInput) => {
     const checkedAt = input.checkedAt ?? new Date();
@@ -7471,8 +7487,36 @@ export default function App() {
         segments,
         leaderboardCelebration,
       });
+      /* Leaderboard/icon work can outlive the arbitration that admitted this
+         review. Re-check at the commit boundary so a catch-up acknowledged in
+         the meantime, a preference change, a clock rollback, or a logical-day
+         rollover cannot send a stale second card to the native queue. */
+      const deliveryPolicy = endOfDayReviewDeliveryPolicyRef.current;
+      const deliveryTime = new Date();
+      const deliveryMinuteOfDay = deliveryTime.getHours() * 60 + deliveryTime.getMinutes();
+      if (!deliveryPolicy.enabled
+        /* The loaded segments belong to the boundary captured by this effect.
+           A boundary change can retain the same ISO day while changing which
+           hours belong to it, so let the next evaluation rebuild the review. */
+        || deliveryPolicy.startOfDayMinutes !== startOfDayMinutes
+        || logicalDayIsoDateForDate(deliveryTime, deliveryPolicy.startOfDayMinutes) !== todayDay
+        || !isEndOfDayReviewDue(
+          deliveryMinuteOfDay,
+          deliveryPolicy.reviewMinute,
+          deliveryPolicy.startOfDayMinutes,
+        )
+        || window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay
+        || readEndOfDayReviewLastPresentationDay() === todayDay
+        || hasExhaustedEndOfDayReviewPresentations(todayDay)) return;
       endOfDayReviewLastPresentedAtRef.current = Date.now();
-      const shown = await showEndOfDayReview(event);
+      const shown = await showEndOfDayReview({
+        ...event,
+        presentationDay: todayDay,
+        expiresAt: new Date(logicalDayEndExclusiveMs(
+          todayDay,
+          deliveryPolicy.startOfDayMinutes,
+        )).toISOString(),
+      });
       if (shown) recordEndOfDayReviewPresentation(todayDay);
       /* The day is marked shown only when a surface confirms an actual
          visible display: in Tauri the pill/watcher overlay reports it (see
@@ -7554,11 +7598,25 @@ export default function App() {
       /* Loading yesterday can overlap the minute today's review becomes due.
          Re-check the wall clock immediately before delivery so the stale
          catch-up cannot race today's higher-priority card into the queue. */
-      const deliveryTime = new Date();
-      const deliveryMinuteOfDay = deliveryTime.getHours() * 60 + deliveryTime.getMinutes();
-      if (logicalDayIsoDateForDate(deliveryTime, startOfDayMinutes) !== todayDay
-        || isEndOfDayReviewDue(deliveryMinuteOfDay, endOfDayReviewMinute, startOfDayMinutes)
-        || readEndOfDayReviewLastPresentationDay() === todayDay) return;
+      const resolveCatchUpDeliveryPolicy = () => {
+        const deliveryPolicy = endOfDayReviewDeliveryPolicyRef.current;
+        const deliveryTime = new Date();
+        const deliveryMinuteOfDay = deliveryTime.getHours() * 60 + deliveryTime.getMinutes();
+        if (!deliveryPolicy.enabled
+          || deliveryPolicy.startOfDayMinutes !== startOfDayMinutes
+          || logicalDayIsoDateForDate(deliveryTime, deliveryPolicy.startOfDayMinutes) !== todayDay
+          || isEndOfDayReviewDue(
+            deliveryMinuteOfDay,
+            deliveryPolicy.reviewMinute,
+            deliveryPolicy.startOfDayMinutes,
+          )
+          || window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === catchUp.day
+          || readEndOfDayReviewCatchUpHandledDay() === catchUp.day
+          || readEndOfDayReviewLastPresentationDay() === todayDay
+          || hasExhaustedEndOfDayReviewPresentations(catchUp.day)) return null;
+        return deliveryPolicy;
+      };
+      if (!resolveCatchUpDeliveryPolicy()) return;
 
       const event = await buildEndOfDayReviewEvent({
         day: catchUp.day,
@@ -7566,7 +7624,19 @@ export default function App() {
         segments: daySegments,
         leaderboardCelebration,
       });
-      const shown = await showEndOfDayReview(event);
+      /* Icon lookup is another async boundary. Today's review time or another
+         acknowledged review may win while it is in flight. */
+      const deliveryPolicy = resolveCatchUpDeliveryPolicy();
+      if (!deliveryPolicy) return;
+      const shown = await showEndOfDayReview({
+        ...event,
+        presentationDay: todayDay,
+        expiresAt: endOfDayReviewDeadlineForDay(
+          todayDay,
+          deliveryPolicy.reviewMinute,
+          deliveryPolicy.startOfDayMinutes,
+        ),
+      });
       if (shown) recordEndOfDayReviewPresentation(catchUp.day);
       /* The native overlay acknowledges a real display and closes the slot from
          there; the browser fallback renders into the visible main window, so a

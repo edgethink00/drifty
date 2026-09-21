@@ -216,9 +216,12 @@ export async function triggerNativeEndOfDayReviewAction(
   await invoke("watcher_peek_end_of_day_review_action", { action, ...(momentKey ? { momentKey } : {}) });
 }
 
-export async function notifyNativeEndOfDayReviewDisplayed(day: string): Promise<void> {
+export async function notifyNativeEndOfDayReviewDisplayed(
+  day: string,
+  presentationDay: string,
+): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("watcher_peek_end_of_day_review_displayed", { day });
+  await invoke("watcher_peek_end_of_day_review_displayed", { day, presentationDay });
 }
 
 export async function triggerNativeCompanionVisibilityAction(
@@ -302,11 +305,16 @@ export async function listenToNativeEndOfDayReviewAction(
 }
 
 export async function listenToNativeEndOfDayReviewDisplayed(
-  onDisplayed: (day: string) => void,
+  onDisplayed: (day: string, presentationDay?: string) => void,
 ): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
-  return listen<{ day?: unknown }>("end-of-day-review-displayed", ({ payload }) => {
-    if (typeof payload?.day === "string") onDisplayed(payload.day);
+  return listen<{ day?: unknown; presentationDay?: unknown }>("end-of-day-review-displayed", ({ payload }) => {
+    if (typeof payload?.day === "string") {
+      onDisplayed(
+        payload.day,
+        typeof payload.presentationDay === "string" ? payload.presentationDay : undefined,
+      );
+    }
   });
 }
 

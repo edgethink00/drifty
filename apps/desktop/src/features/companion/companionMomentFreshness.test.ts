@@ -29,6 +29,18 @@ describe("companion moment freshness", () => {
     // No timestamp means nothing to expire; producers without one behave as before.
     expect(isCompanionMomentStale({}, NOW)).toBe(false);
   });
+
+  it("honors a producer deadline before the ordinary stale window", () => {
+    const generatedAt = new Date(NOW - 60_000).toISOString();
+    expect(isCompanionMomentStale({
+      generatedAt,
+      expiresAt: new Date(NOW + 1).toISOString(),
+    }, NOW)).toBe(false);
+    expect(isCompanionMomentStale({
+      generatedAt,
+      expiresAt: new Date(NOW).toISOString(),
+    }, NOW)).toBe(true);
+  });
 });
 
 describe("end-of-day review minimum tracked time", () => {

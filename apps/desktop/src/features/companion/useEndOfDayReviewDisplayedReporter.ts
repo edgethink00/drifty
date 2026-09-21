@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
-import { isCompanionMomentStale } from "./companionMomentFreshness";
+import { isCompanionMomentAgedOut, isCompanionMomentStale } from "./companionMomentFreshness";
+import { persistEndOfDayReviewAcknowledgement } from "./endOfDayReviewSchedule";
 import { notifyNativeEndOfDayReviewDisplayed } from "./watcherBridge";
 
 /**
@@ -8,9 +9,10 @@ import { notifyNativeEndOfDayReviewDisplayed } from "./watcherBridge";
  * invoke that shipped the payload: a machine asleep with the lid closed
  * "shows" the card to no one, and marking that day as shown used to burn the
  * slot. The surface reports the display only after the card has stayed on
- * screen for a short dwell while still fresh; the main window marks the day
- * from there. Mock previews never report — looking at a preview must not
- * consume the real day's slot.
+ * screen for a short dwell while still fresh. The surface first marks the day
+ * in shared webview storage, then mirrors the acknowledgement through native
+ * events for the main window. Mock previews never report — looking at a
+ * preview must not consume the real day's slot.
  *
  * The dwell waits for the surface's own `presented` signal rather than for
  * `document.visibilityState`. The companion panel is a non-activating
@@ -23,6 +25,16 @@ import { notifyNativeEndOfDayReviewDisplayed } from "./watcherBridge";
  * actively goes hidden mid-dwell still cancels.
  */
 export const END_OF_DAY_REVIEW_DISPLAY_DWELL_MS = 2_500;
+
+function reviewPresentationDay(event: EndOfDayReviewEvent): string {
+  return event.presentationDay && /^\d{4}-\d{2}-\d{2}$/.test(event.presentationDay)
+    ? event.presentationDay
+    : event.day;
+}
+
+function persistDisplayedReview(event: EndOfDayReviewEvent): void {
+  persistEndOfDayReviewAcknowledgement(event.day, reviewPresentationDay(event));
+}
 
 /**
  * `presented` is the surface's answer to "is this card on screen now". Surfaces
@@ -56,9 +68,13 @@ export function useEndOfDayReviewDisplayedReporter(
            wake: a card that crossed its freshness during the nap never
            earns the slot. */
         if (notifiedRef.current === identity) return;
-        if (isCompanionMomentStale(event)) return;
+        /* The producer deadline controls whether presentation may begin. Once
+           this dwell has started, crossing that deadline must still count the
+           already-visible card; only a sleep-length age-out invalidates it. */
+        if (isCompanionMomentAgedOut(event)) return;
         notifiedRef.current = identity;
-        void notifyNativeEndOfDayReviewDisplayed(event.day).catch(() => undefined);
+        persistDisplayedReview(event);
+        void notifyNativeEndOfDayReviewDisplayed(event.day, reviewPresentationDay(event)).catch(() => undefined);
       }, END_OF_DAY_REVIEW_DISPLAY_DWELL_MS);
     };
     const handleVisibilityChange = () => {
@@ -88,9 +104,12 @@ export async function reportEndOfDayReviewInteraction(
   event: EndOfDayReviewEvent | null | undefined,
 ): Promise<void> {
   if (!event || event.isMock) return;
-  if (isCompanionMomentStale(event)) return;
+  /* This helper is called only for the currently visible card. Its producer
+     deadline may pass while the user is reading it, but its age window may not. */
+  if (isCompanionMomentAgedOut(event)) return;
+  persistDisplayedReview(event);
   try {
-    await notifyNativeEndOfDayReviewDisplayed(event.day);
+    await notifyNativeEndOfDayReviewDisplayed(event.day, reviewPresentationDay(event));
   } catch {
     // Closing the surface must remain available even if the native bridge is
     // shutting down; the bounded presentation ledger remains the fallback.

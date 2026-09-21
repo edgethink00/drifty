@@ -8,6 +8,11 @@ import {
   useEndOfDayReviewDisplayedReporter,
 } from "./useEndOfDayReviewDisplayedReporter";
 import { notifyNativeEndOfDayReviewDisplayed } from "./watcherBridge";
+import { END_OF_DAY_REVIEW_STORAGE_KEY } from "./endOfDayReviewData";
+import {
+  END_OF_DAY_REVIEW_CATCH_UP_STORAGE_KEY,
+  END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY,
+} from "./endOfDayReviewSchedule";
 
 vi.mock("./watcherBridge", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./watcherBridge")>()),
@@ -65,7 +70,7 @@ describe("useEndOfDayReviewDisplayedReporter", () => {
     act(() => {
       vi.advanceTimersByTime(200);
     });
-    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18");
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18", "2026-08-18");
     expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledTimes(1);
   });
 
@@ -98,7 +103,7 @@ describe("useEndOfDayReviewDisplayedReporter", () => {
     act(() => {
       vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS + 100);
     });
-    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18");
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18", "2026-08-18");
     expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledTimes(1);
   });
 
@@ -120,7 +125,7 @@ describe("useEndOfDayReviewDisplayedReporter", () => {
       document.dispatchEvent(new Event("visibilitychange"));
       vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS + 100);
     });
-    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18");
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18", "2026-08-18");
   });
 
   /* A menu-bar card is prepared and rendered while the native panel is still
@@ -138,19 +143,37 @@ describe("useEndOfDayReviewDisplayedReporter", () => {
     act(() => {
       vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS + 100);
     });
-    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18");
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18", "2026-08-18");
     expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledTimes(1);
+  });
+
+  it("acknowledges a card presented before its delivery deadline even when the dwell crosses it", () => {
+    const event = buildReviewEvent({
+      expiresAt: new Date(Date.now() + 1_000).toISOString(),
+      presentationDay: "2026-08-19",
+    });
+    render(<ReporterHost event={event} />);
+
+    act(() => {
+      vi.advanceTimersByTime(END_OF_DAY_REVIEW_DISPLAY_DWELL_MS + 100);
+    });
+
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18", "2026-08-19");
+    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY)).toBe("2026-08-18");
+    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY))
+      .toBe("2026-08-19");
   });
 });
 
 describe("reportEndOfDayReviewInteraction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
   });
 
   it("reports a real fresh event immediately, without the dwell", () => {
     reportEndOfDayReviewInteraction(buildReviewEvent());
-    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18");
+    expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18", "2026-08-18");
   });
 
   it("ignores mock previews, stale events, and missing events", () => {
@@ -160,5 +183,27 @@ describe("reportEndOfDayReviewInteraction", () => {
     }));
     reportEndOfDayReviewInteraction(null);
     expect(notifyNativeEndOfDayReviewDisplayed).not.toHaveBeenCalled();
+  });
+
+  it("persists the shared acknowledgement before the native handoff settles", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 20, 9, 0, 0, 0));
+    let resolveNative: (() => void) | undefined;
+    vi.mocked(notifyNativeEndOfDayReviewDisplayed).mockImplementationOnce(
+      () => new Promise<void>((resolve) => { resolveNative = resolve; }),
+    );
+
+    const reporting = reportEndOfDayReviewInteraction(buildReviewEvent({
+      day: "2026-08-19",
+      presentationDay: "2026-08-20",
+    }));
+
+    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY)).toBe("2026-08-19");
+    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_CATCH_UP_STORAGE_KEY)).toBe("2026-08-19");
+    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY)).toBe("2026-08-20");
+
+    resolveNative?.();
+    await reporting;
+    vi.useRealTimers();
   });
 });

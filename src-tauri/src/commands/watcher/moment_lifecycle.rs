@@ -91,7 +91,7 @@ impl MomentLifecycle {
         if !resting
             && (key.is_none()
                 || key.is_some_and(|key| self.cancelled.iter().any(|item| item == key))
-                || expires.is_some_and(|deadline| now > deadline))
+                || expires.is_some_and(|deadline| now >= deadline))
         {
             return None;
         }
@@ -116,7 +116,7 @@ impl MomentLifecycle {
             return false;
         }
         self.prepared = None;
-        !expires.is_some_and(|deadline| now > deadline)
+        !expires.is_some_and(|deadline| now >= deadline)
     }
 
     pub fn receive_legacy(&mut self, key: Option<String>) {
@@ -153,6 +153,14 @@ pub(super) fn payload_expired(payload: &Value, now: i64) -> bool {
     } else {
         payload
     };
+    if event
+        .get("expiresAt")
+        .and_then(Value::as_str)
+        .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())
+        .is_some_and(|time| now >= time.timestamp_millis())
+    {
+        return true;
+    }
     event
         .get("generatedAt")
         .and_then(Value::as_str)
@@ -203,8 +211,9 @@ mod tests {
         let token = life.set_state(false, Some("fresh"), Some(10), 9);
         assert!(!life.present(token, 11));
         assert!(!life.present(token, 9));
-        let token = life.set_state(false, Some("edge"), Some(10), 10);
-        assert!(life.present(token, 10));
+        assert!(life
+            .set_state(false, Some("edge"), Some(10), 10)
+            .is_none());
     }
     #[test]
     fn cancellation_before_prepare_does_not_resurrect_a_card() {
@@ -265,6 +274,14 @@ mod tests {
         ));
         assert!(!payload_expired(
             &json!({"kind":"milestone", "generatedAt":"2026-09-08T11:50:00Z"}),
+            now
+        ));
+        assert!(payload_expired(
+            &json!({
+                "kind":"endOfDayReview",
+                "generatedAt":"2026-09-08T11:59:00Z",
+                "expiresAt":"2026-09-08T12:00:00Z"
+            }),
             now
         ));
     }
