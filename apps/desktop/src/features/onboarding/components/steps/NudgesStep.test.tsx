@@ -20,10 +20,9 @@ describe("NudgesStep cat preview", () => {
     render(
       <LocalizationTestProvider language="en">
         <NudgesStep
-          driftAlarmEnabled={false}
           extremeNudgeEnabled={false}
           petModeEnabled={false}
-          onInterventionChange={() => undefined}
+          onExtremeNudgeToggle={() => undefined}
           onPetToggle={onPetToggle}
         />
       </LocalizationTestProvider>,
@@ -33,5 +32,26 @@ describe("NudgesStep cat preview", () => {
     expect(screen.getByRole("button", { name: "Pet the desktop cat" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Pet the desktop cat" }));
     expect(onPetToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers automatic close without exposing a drift alert choice", () => {
+    const onExtremeNudgeToggle = vi.fn();
+    render(
+      <LocalizationTestProvider language="en">
+        <NudgesStep
+          extremeNudgeEnabled={false}
+          petModeEnabled={false}
+          onExtremeNudgeToggle={onExtremeNudgeToggle}
+          onPetToggle={() => undefined}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.queryByText("Alert me")).toBeNull();
+    expect(screen.queryByText("Just record")).toBeNull();
+    const automaticClose = screen.getByRole("button", { name: "Automatic close" });
+    expect(automaticClose.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(automaticClose);
+    expect(onExtremeNudgeToggle).toHaveBeenCalledTimes(1);
   });
 });

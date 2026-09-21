@@ -13,7 +13,7 @@ import { DISPLAY_LANGUAGE_STORAGE_KEY } from "./features/localization/Localizati
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
 
-const NUDGES_DIALOG_NAME = /what should drifty do when you drift/i;
+const NUDGES_DIALOG_NAME = /how should drifty support your focus/i;
 const FINAL_ONBOARDING_ACTION = /start tracking|continue with cloud|start 7-day free trial/i;
 const AVAILABLE_CLOUD_TRIAL = {
   plan: "individual" as const,
@@ -689,14 +689,12 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Browser Activity")).toBeNull();
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: /just record/i })).toHaveProperty("checked", true);
-    expect(screen.getByRole("radio", { name: /alert me/i })).toHaveProperty("checked", false);
-    expect(screen.getByRole("radio", { name: /automatic close/i })).toHaveProperty("checked", false);
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByText(/just record/i)).toBeNull();
+    expect(screen.queryByText(/alert me/i)).toBeNull();
+    expect(screen.getByRole("button", { name: /automatic close/i }).getAttribute("aria-pressed")).toBe("false");
     expect(screen.getByRole("button", { name: "Show desktop cat" }).getAttribute("aria-pressed")).toBe("false");
-    const alertRow = screen.getByRole("radio", { name: /alert me/i }).closest("label");
-    const closeRow = screen.getByRole("radio", { name: /automatic close/i }).closest("label");
-    expect(alertRow?.textContent).toContain("Recommended");
-    expect(closeRow?.textContent).not.toContain("Recommended");
+    const closeRow = screen.getByRole("button", { name: /automatic close/i }).closest(".dc-onb-intervene__option");
     expect(closeRow?.textContent).toContain("Beta");
   }, 15_000);
 
@@ -1527,35 +1525,28 @@ describe("App onboarding", () => {
     expect(within(readyDialog).getByText(/pro pass is active through oct 26, 2026/i)).toBeTruthy();
   });
 
-  it("stores selected drift alert, automatic close, and desktop cat preferences from onboarding", async () => {
+  it("stores explicit automatic close and desktop cat preferences from onboarding", async () => {
     render(<App />);
 
     await advanceToPermissionsStep();
     await clickEnabledNext();
     await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME });
 
-    const offRadio = screen.getByRole("radio", { name: /just record/i });
-    const alertRadio = screen.getByRole("radio", { name: /alert me/i });
-    const closeRadio = screen.getByRole("radio", { name: /automatic close/i });
+    const automaticCloseToggle = screen.getByRole("button", { name: /automatic close/i });
     const petToggle = screen.getByRole("button", { name: "Show desktop cat" });
-    expect(offRadio).toHaveProperty("checked", true);
-    expect(alertRadio).toHaveProperty("checked", false);
-    expect(closeRadio).toHaveProperty("checked", false);
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByText(/alert me/i)).toBeNull();
+    expect(screen.queryByText(/just record/i)).toBeNull();
+    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
     expect(petToggle.getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(alertRadio);
-    expect(alertRadio).toHaveProperty("checked", true);
-    expect(offRadio).toHaveProperty("checked", false);
-    expect(screen.queryByRole("alertdialog")).toBeNull();
-
-    closeRadio.focus();
-    fireEvent.click(closeRadio);
+    automaticCloseToggle.focus();
+    fireEvent.click(automaticCloseToggle);
     const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
     const keepOffButton = within(confirmDialog).getByRole("button", { name: /keep off/i });
     const allowClosingButton = within(confirmDialog).getByRole("button", { name: /allow closing/i });
     expect(confirmDialog.textContent).toContain("close the distracting browser tab or quit the distracting app");
-    expect(closeRadio).toHaveProperty("checked", false);
-    expect(alertRadio).toHaveProperty("checked", true);
+    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
     await waitFor(() => expect(document.activeElement).toBe(keepOffButton));
     allowClosingButton.focus();
     fireEvent.keyDown(confirmDialog, { key: "Tab" });
@@ -1564,15 +1555,12 @@ describe("App onboarding", () => {
     expect(document.activeElement).toBe(allowClosingButton);
     fireEvent.keyDown(confirmDialog, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull());
-    expect(document.activeElement).toBe(closeRadio);
-    expect(alertRadio).toHaveProperty("checked", true);
-    expect(closeRadio).toHaveProperty("checked", false);
+    expect(document.activeElement).toBe(automaticCloseToggle);
+    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(closeRadio);
+    fireEvent.click(automaticCloseToggle);
     fireEvent.click(await screen.findByRole("button", { name: /allow closing/i }));
-    expect(closeRadio).toHaveProperty("checked", true);
-    expect(alertRadio).toHaveProperty("checked", false);
-    expect(offRadio).toHaveProperty("checked", false);
+    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("true");
     expect(screen.queryByText(/the cat closes the distracting tab or app after repeated drift/i)).toBeNull();
     fireEvent.click(petToggle);
     expect(petToggle.getAttribute("aria-pressed")).toBe("true");
@@ -1596,31 +1584,21 @@ describe("App onboarding", () => {
     expect(window.localStorage.getItem("drifty.pet.enabled")).toBe("1");
   });
 
-  it("keeps the current intervention when automatic close confirmation is cancelled", async () => {
+  it("keeps automatic close off when confirmation is cancelled", async () => {
     render(<App />);
 
     await advanceToPermissionsStep();
     await clickEnabledNext();
     await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME });
 
-    const offRadio = screen.getByRole("radio", { name: /just record/i });
-    const alertRadio = screen.getByRole("radio", { name: /alert me/i });
-    const closeRadio = screen.getByRole("radio", { name: /automatic close/i });
-
-    fireEvent.click(alertRadio);
-    expect(alertRadio).toHaveProperty("checked", true);
-    expect(screen.queryByRole("alertdialog")).toBeNull();
-
-    fireEvent.click(closeRadio);
+    const automaticCloseToggle = screen.getByRole("button", { name: /automatic close/i });
+    fireEvent.click(automaticCloseToggle);
     const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
-    expect(closeRadio).toHaveProperty("checked", false);
-    expect(alertRadio).toHaveProperty("checked", true);
+    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.click(within(confirmDialog).getByRole("button", { name: /keep off/i }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(offRadio).toHaveProperty("checked", false);
-    expect(alertRadio).toHaveProperty("checked", true);
-    expect(closeRadio).toHaveProperty("checked", false);
+    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("enables login startup by default when onboarding completes in the Mac app", async () => {

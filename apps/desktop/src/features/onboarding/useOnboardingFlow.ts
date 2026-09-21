@@ -57,7 +57,6 @@ type UseOnboardingFlowOptions = {
   readonly onEarlyTrackingStart: () => void;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
-  readonly onEnableDriftAlerts: () => void;
   readonly localAiSetup: LocalAiSetupState;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
@@ -83,7 +82,6 @@ export function useOnboardingFlow({
   onEarlyTrackingStart,
   onCheckAccessibility,
   onRequestAccessibility,
-  onEnableDriftAlerts,
   localAiSetup,
   onLocalAiSetupChange,
   cloudTrialStartedNotice,
@@ -132,10 +130,9 @@ export function useOnboardingFlow({
   const [workDescription, setWorkDescription] = useState(restoredProgress?.workDescription ?? "");
   const [jobType] = useState<string | null>(null);
   const [jobTypeOther] = useState("");
-  const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(restoredProgress?.driftAlarmEnabled ?? false);
-  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(
-    Boolean(restoredProgress?.driftAlarmEnabled && restoredProgress.extremeNudgeEnabled),
-  );
+  const restoredExtremeNudgeEnabled = Boolean(restoredProgress?.driftAlarmEnabled && restoredProgress.extremeNudgeEnabled);
+  const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(restoredExtremeNudgeEnabled);
+  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(restoredExtremeNudgeEnabled);
   const [petModeEnabled, setPetModeEnabled] = useState(restoredProgress?.petModeEnabled ?? false);
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(true);
   const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(restoredProgress?.openAtLoginEnabled ?? true);
@@ -168,7 +165,6 @@ export function useOnboardingFlow({
     accessibilityRequired,
     onCheckAccessibility,
     onEarlyTrackingStart,
-    onEnableDriftAlerts,
     onRequestAccessibility,
     setSetupError,
     step,

@@ -18,7 +18,6 @@ describe("useOnboardingPermissions early tracking start", () => {
         accessibilityRequired: true,
         onCheckAccessibility: async () => props.accessibilityGrantedFromApp,
         onEarlyTrackingStart,
-        onEnableDriftAlerts: () => {},
         onRequestAccessibility: async () => props.accessibilityGrantedFromApp,
         setSetupError: () => {},
         step: "permissions",

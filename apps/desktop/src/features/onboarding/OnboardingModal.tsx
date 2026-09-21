@@ -45,7 +45,6 @@ function OnboardingSession({
   onEarlyTrackingStart,
   onCheckAccessibility,
   onRequestAccessibility,
-  onEnableDriftAlerts,
   localAiSetup,
   onLocalAiSetupChange,
   cloudTrialStartedNotice,
@@ -74,7 +73,6 @@ function OnboardingSession({
   onEarlyTrackingStart: () => void;
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
-  onEnableDriftAlerts: () => void;
   localAiSetup: LocalAiSetupState;
   onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
@@ -111,7 +109,6 @@ function OnboardingSession({
     onEarlyTrackingStart,
     onCheckAccessibility,
     onRequestAccessibility,
-    onEnableDriftAlerts,
     localAiSetup,
     onLocalAiSetupChange,
     cloudTrialStartedNotice,

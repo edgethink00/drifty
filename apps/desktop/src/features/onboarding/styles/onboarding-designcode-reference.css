@@ -972,18 +972,14 @@
 
 .dc-onb-intervene__option {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   gap: 11px;
-  padding: 8px 12px;
+  padding: 12px;
   border: 1px solid var(--dc-onb-line);
   border-radius: 13px;
   background: #fff;
-  cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-}
-
-.dc-onb-intervene__option:hover:not(.dc-onb-intervene__option--selected) {
-  border-color: color-mix(in srgb, var(--dc-onb-text) 26%, transparent);
 }
 
 .dc-onb-intervene__option:focus-within {
@@ -1002,45 +998,9 @@
   box-shadow: 0 0 0 1px rgba(158, 66, 56, 0.3);
 }
 
-.dc-onb-intervene__radio {
-  position: relative;
-  flex: none;
-  width: 17px;
-  height: 17px;
-  margin-top: 1px;
-  border: 1.5px solid rgba(28, 28, 25, 0.28);
-  border-radius: 50%;
-  transition: border-color 0.15s;
-}
-
-.dc-onb-intervene__radio::after {
-  content: "";
-  position: absolute;
-  inset: 3.5px;
-  border-radius: 50%;
-  background: var(--dc-onb-accent);
-  transform: scale(0);
-  transition: transform 0.18s ease;
-}
-
-.dc-onb-intervene__option--selected .dc-onb-intervene__radio {
-  border-color: var(--dc-onb-accent);
-}
-
-.dc-onb-intervene__option--selected .dc-onb-intervene__radio::after {
-  transform: scale(1);
-}
-
-.dc-onb-intervene__option--selected.dc-onb-intervene__option--close .dc-onb-intervene__radio {
-  border-color: var(--dc-onb-warn);
-}
-
-.dc-onb-intervene__option--selected.dc-onb-intervene__option--close .dc-onb-intervene__radio::after {
-  background: var(--dc-onb-warn);
-}
-
 .dc-onb-intervene__copy {
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1054,17 +1014,6 @@
   font-size: 14px;
   font-weight: 600;
   color: var(--dc-onb-text);
-}
-
-.dc-onb-intervene__recommended {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--dc-onb-accent) 14%, transparent);
-  color: var(--dc-onb-accent);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
 .dc-onb-intervene__desc {
@@ -2209,10 +2158,6 @@
 :root[data-theme="dark"] .dc-onb-cat-card,
 :root[data-theme="dark"] .dc-onb-intervene__option {
   background: var(--dc-onb-raised);
-}
-
-:root[data-theme="dark"] .dc-onb-intervene__radio {
-  border-color: rgba(232, 230, 223, 0.34);
 }
 
 :root[data-theme="dark"] .dc-onb-intervene__option--selected.dc-onb-intervene__option--close {

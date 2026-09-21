@@ -6,7 +6,6 @@ import { AccountStep } from "./components/steps/AccountStep";
 import { JobStep } from "./components/steps/JobStep";
 import { PermissionsStep } from "./components/steps/PermissionsStep";
 import { NudgesStep } from "./components/steps/NudgesStep";
-import type { DriftIntervention } from "./components/steps/NudgesStep";
 import { SetupChoiceStep } from "./components/steps/SetupChoiceStep";
 import { ConnectServerStep } from "./components/steps/ConnectServerStep";
 import { TestConnectionStep } from "./components/steps/TestConnectionStep";
@@ -70,18 +69,13 @@ export function OnboardingDesignCodeContent({
     if (!flow.workType) flow.setWorkType(option);
   }
 
-  function handleInterventionChange(next: DriftIntervention) {
-    if (next === "off") {
+  function handleExtremeNudgeToggle() {
+    if (flow.extremeNudgeEnabled) {
       flow.setDriftAlarmEnabled(false);
       flow.setExtremeNudgeEnabled(false);
       return;
     }
-    if (next === "alert") {
-      flow.setDriftAlarmEnabled(true);
-      flow.setExtremeNudgeEnabled(false);
-      return;
-    }
-    if (!flow.extremeNudgeEnabled) setConfirmCloseOpen(true);
+    setConfirmCloseOpen(true);
   }
 
   function handleConfirmClose() {
@@ -143,10 +137,9 @@ export function OnboardingDesignCodeContent({
               {flow.step === "permissions" ? <PermissionsStep flow={flow} /> : null}
               {flow.step === "nudges" ? (
                 <NudgesStep
-                  driftAlarmEnabled={flow.driftAlarmEnabled}
                   extremeNudgeEnabled={flow.extremeNudgeEnabled}
                   petModeEnabled={flow.petModeEnabled}
-                  onInterventionChange={handleInterventionChange}
+                  onExtremeNudgeToggle={handleExtremeNudgeToggle}
                   onPetToggle={() => flow.setPetModeEnabled((enabled) => !enabled)}
                 />
               ) : null}

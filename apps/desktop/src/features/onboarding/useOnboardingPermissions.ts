@@ -9,7 +9,6 @@ type UseOnboardingPermissionsOptions = {
   readonly onCheckAccessibility: () => Promise<boolean>;
   /** Fired once when Accessibility flips to granted mid-onboarding: tracking starts right away. */
   readonly onEarlyTrackingStart: () => void;
-  readonly onEnableDriftAlerts: () => void;
   readonly onRequestAccessibility: () => Promise<boolean>;
   readonly setSetupError: Dispatch<SetStateAction<string | null>>;
   readonly step: OnboardingStep;
@@ -21,7 +20,6 @@ export function useOnboardingPermissions({
   accessibilityRequired,
   onCheckAccessibility,
   onEarlyTrackingStart,
-  onEnableDriftAlerts,
   onRequestAccessibility,
   setSetupError,
   step,
@@ -142,7 +140,6 @@ export function useOnboardingPermissions({
       const { isPermissionGranted, requestPermission } = await import("@tauri-apps/plugin-notification");
       const alreadyGranted = await isPermissionGranted();
       if (alreadyGranted) {
-        onEnableDriftAlerts();
         setNotificationPermission("granted");
         capturePostHogEvent("permission_action", {
           permission: "notifications",
@@ -155,7 +152,6 @@ export function useOnboardingPermissions({
       }
       const permission = await requestPermission();
       if (permission === "granted") {
-        onEnableDriftAlerts();
         setNotificationPermission("granted");
         capturePostHogEvent("permission_action", {
           permission: "notifications",
