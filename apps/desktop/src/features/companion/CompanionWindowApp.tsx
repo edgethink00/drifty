@@ -127,6 +127,13 @@ export function CompanionWindowApp() {
       }
       return;
     }
+    /* Day Review owns one interruption slot. A second review must never sit
+       behind the first and reopen as soon as the user closes it, even if an
+       older producer races the main-window scheduler. */
+    if (nextMoment.kind === "endOfDayReview" && (
+      current?.kind === "endOfDayReview"
+      || momentQueueRef.current.some((queued) => queued.kind === "endOfDayReview")
+    )) return;
     if (momentQueueRef.current.some((queued) => companionMomentIdentity(queued) === nextKey)) return;
 
     if (!current) {
@@ -358,8 +365,10 @@ export function CompanionWindowApp() {
   const handleOpenDashboard = useCallback(() => {
     recordCompanionEngagementMetric("dashboard_opened");
     const current = momentEventRef.current;
-    if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard", current ? companionMomentIdentity(current) : undefined));
+    ignoreCompanionBridgePromise((async () => {
+      if (current?.kind === "endOfDayReview") await reportEndOfDayReviewInteraction(current);
+      await triggerNativeEndOfDayReviewAction("openDashboard", current ? companionMomentIdentity(current) : undefined);
+    })());
   }, []);
 
   const handleOpenSettings = useCallback(() => {
@@ -367,15 +376,19 @@ export function CompanionWindowApp() {
     const current = momentEventRef.current;
     /* Opening the card's own settings is as deliberate as opening the day or
        the AI setup, so it proves the display the same way those do. */
-    if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openSettings", current ? companionMomentIdentity(current) : undefined));
+    ignoreCompanionBridgePromise((async () => {
+      if (current?.kind === "endOfDayReview") await reportEndOfDayReviewInteraction(current);
+      await triggerNativeEndOfDayReviewAction("openSettings", current ? companionMomentIdentity(current) : undefined);
+    })());
   }, []);
 
   const handleOpenDayReviewAiSettings = useCallback(() => {
     const current = momentEventRef.current;
-    if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
     recordCompanionEngagementMetric("settings_opened");
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openAiSettings", current ? companionMomentIdentity(current) : undefined));
+    ignoreCompanionBridgePromise((async () => {
+      if (current?.kind === "endOfDayReview") await reportEndOfDayReviewInteraction(current);
+      await triggerNativeEndOfDayReviewAction("openAiSettings", current ? companionMomentIdentity(current) : undefined);
+    })());
   }, []);
 
   const handleOpenMilestoneDestination = useCallback((destination: "leaderboard" | "insights" | "dashboard") => {
@@ -433,20 +446,24 @@ export function CompanionWindowApp() {
     const key = momentEvent ? companionMomentIdentity(momentEvent) : null;
     if (!key || !momentEventRef.current || companionMomentIdentity(momentEventRef.current) !== key) return;
     recordCompanionLifecycle(`dismiss_${reason}`, key);
-    /* A deliberate dismiss inside the reporter's dwell window still proves
-       the card was seen; auto dismissals never do. */
-    if (reason !== "auto" && kind === "endOfDayReview" && momentEvent?.kind === "endOfDayReview") {
-      reportEndOfDayReviewInteraction(momentEvent);
-    }
-    finishCurrentMoment();
-    recordCompanionEngagementMetric(reason === "auto" ? "moment_auto_dismissed" : "moment_dismissed");
-    if (kind) {
-      const dismissKind = momentEvent && isDriftCorrectionMoment(momentEvent)
-        && momentEvent.correctionStatus === "acknowledged"
-        ? "notDriftFeedback"
-        : kind;
-      ignoreCompanionBridgePromise(dismissNativeCompanionMoment(dismissKind, key));
-    }
+    ignoreCompanionBridgePromise((async () => {
+      /* A deliberate dismiss inside the reporter's dwell window still proves
+         the card was seen; wait for that acknowledgement to reach the main
+         window before hiding the card. Auto dismissals never earn the slot. */
+      if (reason !== "auto" && kind === "endOfDayReview" && momentEvent?.kind === "endOfDayReview") {
+        await reportEndOfDayReviewInteraction(momentEvent);
+      }
+      if (!momentEventRef.current || companionMomentIdentity(momentEventRef.current) !== key) return;
+      finishCurrentMoment(key);
+      recordCompanionEngagementMetric(reason === "auto" ? "moment_auto_dismissed" : "moment_dismissed");
+      if (kind) {
+        const dismissKind = momentEvent && isDriftCorrectionMoment(momentEvent)
+          && momentEvent.correctionStatus === "acknowledged"
+          ? "notDriftFeedback"
+          : kind;
+        await dismissNativeCompanionMoment(dismissKind, key);
+      }
+    })());
   }, [finishCurrentMoment, momentEvent]);
 
   const handleStateChange = useCallback((state: Parameters<typeof setNativeCompanionPillState>[0]) => {

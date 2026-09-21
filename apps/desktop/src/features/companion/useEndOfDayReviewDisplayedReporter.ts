@@ -84,8 +84,15 @@ export function useEndOfDayReviewDisplayedReporter(
  * window, so it earns the slot immediately. Auto-dismiss and staleness
  * consumption never call this: they are the machine talking to itself.
  */
-export function reportEndOfDayReviewInteraction(event: EndOfDayReviewEvent | null | undefined): void {
+export async function reportEndOfDayReviewInteraction(
+  event: EndOfDayReviewEvent | null | undefined,
+): Promise<void> {
   if (!event || event.isMock) return;
   if (isCompanionMomentStale(event)) return;
-  void notifyNativeEndOfDayReviewDisplayed(event.day).catch(() => undefined);
+  try {
+    await notifyNativeEndOfDayReviewDisplayed(event.day);
+  } catch {
+    // Closing the surface must remain available even if the native bridge is
+    // shutting down; the bounded presentation ledger remains the fallback.
+  }
 }

@@ -363,7 +363,9 @@ import {
   hasExhaustedEndOfDayReviewPresentations,
   isEndOfDayReviewDue,
   persistEndOfDayReviewCatchUpHandledDay,
+  persistEndOfDayReviewLastPresentationDay,
   readEndOfDayReviewCatchUpHandledDay,
+  readEndOfDayReviewLastPresentationDay,
   recordEndOfDayReviewPresentation,
   resolveEndOfDayReviewCatchUp,
   resolveInitialEndOfDayReviewMinute,
@@ -4975,6 +4977,7 @@ export default function App() {
     void listenToNativeEndOfDayReviewDisplayed((day) => {
       window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, day);
       persistEndOfDayReviewCatchUpHandledDay(day);
+      persistEndOfDayReviewLastPresentationDay(logicalTodayIsoDate(startOfDayMinutes));
     }).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
@@ -5033,7 +5036,7 @@ export default function App() {
       disposed = true;
       unlisteners.forEach(cleanupTauriEventListener);
     };
-  }, [dismissWatcherPeek, handleCompanionVisibilityAction, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
+  }, [dismissWatcherPeek, handleCompanionVisibilityAction, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse, startOfDayMinutes]);
 
   const evaluateDriftAlarm = useCallback((input: DriftAlarmEvaluationInput) => {
     const checkedAt = input.checkedAt ?? new Date();
@@ -7402,7 +7405,8 @@ export default function App() {
        re-presents the same review on every cooldown window until the logical
        day rolls over. */
     const reviewShown = window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay
-      || hasExhaustedEndOfDayReviewPresentations(todayDay);
+      || hasExhaustedEndOfDayReviewPresentations(todayDay)
+      || readEndOfDayReviewLastPresentationDay() === todayDay;
     const leaderboardCheckpointDone =
       !checkpointDue || window.localStorage.getItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY) === todayDay;
     if (reviewShown && leaderboardCheckpointDone) return;
@@ -7478,22 +7482,25 @@ export default function App() {
          open for a fresh retry, bounded by the presentation ledger above. */
       if (shown && !isTauriRuntime()) {
         window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
+        persistEndOfDayReviewLastPresentationDay(todayDay);
       }
     })().finally(() => {
       endOfDayReviewAutomaticInFlightRef.current = false;
     });
   }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, dayReviewEnabled, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
 
-  /* Yesterday's review, once, if it never got shown: the machine was closed
-     before the review time, or Drifty was not running. It loads its own
-     timeline so the dashboard's selected day is untouched, and it runs at
-     most once per launch. Thin days close the slot without a card. */
+  /* Yesterday's review, once and only before today's review time, if it never
+     got shown: the machine was closed before the review time, or Drifty was
+     not running. It loads its own timeline so the dashboard's selected day is
+     untouched, and it runs at most once per launch. Thin days close the slot
+     without a card. */
   const endOfDayReviewCatchUpAttemptedRef = useRef(false);
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
     if (isPreviewSurface) return;
     if (!hasLoadedOnce || shouldBlockLocalTrackerAccess) return;
     if (!status?.running) return;
+    if (currentMinuteOfDay === null) return;
     if (classificationAvailabilityGateEnabled
       && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
     if (endOfDayReviewCatchUpAttemptedRef.current) return;
@@ -7505,6 +7512,8 @@ export default function App() {
       todayDay,
       lastShownDay: window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY),
       catchUpHandledDay: readEndOfDayReviewCatchUpHandledDay(),
+      lastPresentationDay: readEndOfDayReviewLastPresentationDay(),
+      currentReviewDue: isEndOfDayReviewDue(currentMinuteOfDay, endOfDayReviewMinute, startOfDayMinutes),
     });
     if (!catchUp) return;
     /* The same bounded allowance today's review uses. A payload the native
@@ -7542,6 +7551,15 @@ export default function App() {
         leaderboardCelebration = undefined;
       }
 
+      /* Loading yesterday can overlap the minute today's review becomes due.
+         Re-check the wall clock immediately before delivery so the stale
+         catch-up cannot race today's higher-priority card into the queue. */
+      const deliveryTime = new Date();
+      const deliveryMinuteOfDay = deliveryTime.getHours() * 60 + deliveryTime.getMinutes();
+      if (logicalDayIsoDateForDate(deliveryTime, startOfDayMinutes) !== todayDay
+        || isEndOfDayReviewDue(deliveryMinuteOfDay, endOfDayReviewMinute, startOfDayMinutes)
+        || readEndOfDayReviewLastPresentationDay() === todayDay) return;
+
       const event = await buildEndOfDayReviewEvent({
         day: catchUp.day,
         generatedAt: new Date().toISOString(),
@@ -7555,9 +7573,12 @@ export default function App() {
          successful show is already the display. Without the ledger above, an
          acknowledgement that never arrives re-offered this card on every single
          launch. */
-      if (shown && !isTauriRuntime()) persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
+      if (shown && !isTauriRuntime()) {
+        persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
+        persistEndOfDayReviewLastPresentationDay(todayDay);
+      }
     })();
-  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, dayReviewEnabled, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);
+  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, dayReviewEnabled, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(

@@ -8,6 +8,8 @@ import { shiftIsoDate } from "@drifty/domain";
  */
 export const END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY = "drifty.endOfDayReview.reviewMinute";
 export const END_OF_DAY_REVIEW_CATCH_UP_STORAGE_KEY = "drifty.endOfDayReview.catchUpHandledDay";
+export const END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY =
+  "drifty.endOfDayReview.lastPresentationDay.v1";
 
 export const DEFAULT_END_OF_DAY_REVIEW_MINUTE = 20 * 60;
 
@@ -88,7 +90,15 @@ export function resolveEndOfDayReviewCatchUp(input: {
   readonly todayDay: string;
   readonly lastShownDay: string | null;
   readonly catchUpHandledDay: string | null;
+  readonly lastPresentationDay?: string | null;
+  readonly currentReviewDue?: boolean;
 }): EndOfDayReviewCatchUp | null {
+  /* Catch-up is a morning recovery path, not a second review competing with
+     today's card. Once today's review time arrives, today owns the slot. */
+  if (input.currentReviewDue) return null;
+  /* A review already presented during this logical day has used the single
+     interruption slot, even when the card summarized yesterday. */
+  if (input.lastPresentationDay === input.todayDay) return null;
   const yesterday = shiftIsoDate(input.todayDay, -1);
   if (input.lastShownDay === yesterday) return null;
   if (input.catchUpHandledDay === yesterday) return null;
@@ -111,6 +121,27 @@ export function persistEndOfDayReviewCatchUpHandledDay(day: string, storage = br
 }
 
 /**
+ * The reviewed day and the day on which the card interrupted the user are
+ * different for catch-up. Keep both identities: target-day markers prevent
+ * replaying the same summary, while this marker enforces at most one visible
+ * Day Review interruption per logical day.
+ */
+export function readEndOfDayReviewLastPresentationDay(storage = browserStorage()): string | null {
+  if (!storage) return null;
+  const value = storage.getItem(END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY);
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+export function persistEndOfDayReviewLastPresentationDay(day: string, storage = browserStorage()): void {
+  if (!storage || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+  try {
+    storage.setItem(END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY, day);
+  } catch {
+    // Losing the marker may permit another card, but must not break the app.
+  }
+}
+
+/**
  * A day whose review was presented but never acknowledged used to stay open
  * indefinitely: the automatic evaluation re-presented the same card on every
  * cooldown window until the logical day rolled over, and the catch-up offered
@@ -119,8 +150,10 @@ export function persistEndOfDayReviewCatchUpHandledDay(day: string, storage = br
  * day may be presented, so a display report that never arrives costs a missed
  * card instead of an evening of repeats.
  *
- * Today's review and yesterday's catch-up are separate days that can both be
- * in flight, so the ledger counts per day rather than tracking a single one.
+ * Presentation allowances still belong to the reviewed day, so an unseen
+ * attempt for yesterday cannot consume today's retry allowance. Separate
+ * delivery arbitration above prevents both cards from interrupting the user
+ * during the same logical day.
  */
 export const END_OF_DAY_REVIEW_PRESENTATION_STORAGE_KEY = "drifty.endOfDayReview.presentations.v1";
 export const END_OF_DAY_REVIEW_MAX_PRESENTATIONS_PER_DAY = 2;

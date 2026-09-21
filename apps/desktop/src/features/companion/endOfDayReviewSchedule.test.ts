@@ -5,8 +5,11 @@ import {
   endOfDayReviewMinuteToValue,
   endOfDayReviewValueToMinute,
   END_OF_DAY_REVIEW_MAX_PRESENTATIONS_PER_DAY,
+  END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY,
   hasExhaustedEndOfDayReviewPresentations,
   isEndOfDayReviewDue,
+  persistEndOfDayReviewLastPresentationDay,
+  readEndOfDayReviewLastPresentationDay,
   readEndOfDayReviewPresentationCount,
   recordEndOfDayReviewPresentation,
   resolveEndOfDayReviewCatchUp,
@@ -85,6 +88,36 @@ describe("endOfDayReviewSchedule", () => {
     expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: "2026-05-18", catchUpHandledDay: "2026-05-19" }))
       .toEqual({ day: "2026-05-20" });
   });
+
+  it("gives today's due review priority over yesterday's catch-up", () => {
+    expect(resolveEndOfDayReviewCatchUp({
+      todayDay: "2026-05-21",
+      lastShownDay: null,
+      catchUpHandledDay: null,
+      lastPresentationDay: null,
+      currentReviewDue: true,
+    })).toBeNull();
+  });
+
+  it("does not offer another review after catch-up used today's interruption slot", () => {
+    expect(resolveEndOfDayReviewCatchUp({
+      todayDay: "2026-05-21",
+      lastShownDay: null,
+      catchUpHandledDay: null,
+      lastPresentationDay: "2026-05-21",
+      currentReviewDue: false,
+    })).toBeNull();
+  });
+
+  it("persists the logical day on which a review was presented", () => {
+    const storage = memoryStorage();
+
+    expect(readEndOfDayReviewLastPresentationDay(storage)).toBeNull();
+    persistEndOfDayReviewLastPresentationDay("2026-05-21", storage);
+
+    expect(storage.getItem(END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY)).toBe("2026-05-21");
+    expect(readEndOfDayReviewLastPresentationDay(storage)).toBe("2026-05-21");
+  });
 });
 
 /* A display report that never arrives used to leave the day open forever, so
@@ -98,8 +131,8 @@ describe("end-of-day review presentation ledger", () => {
     expect(recordEndOfDayReviewPresentation("2026-05-20", storage)).toBe(1);
     expect(recordEndOfDayReviewPresentation("2026-05-20", storage)).toBe(2);
     expect(readEndOfDayReviewPresentationCount("2026-05-20", storage)).toBe(2);
-    /* Yesterday's catch-up and today's review are different days that can both
-       be in flight; recording one must not reset the other. */
+    /* The allowance remains target-day-specific even though delivery
+       arbitration prevents two visible cards in one logical day. */
     expect(readEndOfDayReviewPresentationCount("2026-05-21", storage)).toBe(0);
     expect(recordEndOfDayReviewPresentation("2026-05-21", storage)).toBe(1);
     expect(readEndOfDayReviewPresentationCount("2026-05-20", storage)).toBe(2);
