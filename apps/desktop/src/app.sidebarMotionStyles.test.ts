@@ -29,6 +29,29 @@ function collapsedToggleRule(styles: string): string {
 }
 
 describe("sidebar motion styles", () => {
+  it("right-aligns Windows history controls to the expanded sidebar rail", () => {
+    const styles = readStyles();
+    const navigationBlock = cssBlock(styles, ':root[data-platform="windows"] .windows-titlebar-nav');
+    const settingsNavigationBlock = cssBlock(styles, ':root[data-platform="windows"] .windows-titlebar-nav--settings');
+    const historyBlock = cssBlock(styles, ':root[data-platform="windows"] .windows-titlebar-nav__history');
+    const collapsedHistoryBlock = cssBlock(styles, ':root[data-platform="windows"] .windows-titlebar-nav--sidebar-collapsed .windows-titlebar-nav__history');
+    const titlebarLeadingBlock = cssBlock(styles, ':root[data-platform="windows"] .windows-titlebar__leading');
+
+    expect(navigationBlock).toContain("justify-content: space-between;");
+    expect(styles).toContain("--sidebar-content-width: calc(");
+    expect(styles).toContain("--sidebar-cta-slot-width: var(--sidebar-content-width);");
+    expect(navigationBlock).toContain("width: var(--sidebar-content-width);");
+    expect(navigationBlock).not.toMatch(/transition:[^;]*width/);
+    expect(settingsNavigationBlock).toContain("justify-content: flex-end;");
+    expect(historyBlock).toContain("flex: 0 0 var(--windows-titlebar-history-width);");
+    expect(historyBlock).toContain("gap: var(--windows-titlebar-nav-gap);");
+    expect(historyBlock).toContain("transition: transform var(--sidebar-duration) var(--sidebar-ease);");
+    expect(collapsedHistoryBlock).toContain("transform: translateX(var(--windows-titlebar-collapsed-history-shift));");
+    expect(titlebarLeadingBlock).toContain("pointer-events: none;");
+    expect(styles).toMatch(/\.window-sidebar-toggle--titlebar,[\s\S]*?\.windows-titlebar-nav-button\s*\{[\s\S]*?pointer-events: auto;/);
+    expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.windows-titlebar-nav__history,/);
+  });
+
   it("moves the titlebar sidebar toggle with transform instead of left", () => {
     const styles = readStyles();
     const toggleBlock = cssBlock(styles, ".window-sidebar-toggle");
@@ -273,6 +296,7 @@ describe("sidebar motion styles", () => {
     expect(navLabelBlock).toContain("padding: 12px var(--sidebar-row-inline-padding) 4px;");
     expect(settingsBackBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(settingsBackBlock).toContain("min-height: var(--nav-item-height);");
+    expect(styles).not.toMatch(/:root\[data-platform="windows"\] \.sidebar--settings \.settings-sidebar-back\s*\{[^}]*display:\s*none;/);
     expect(settingsNavLabelBlock).toContain("padding-top: 10px;");
     expect(settingsNavItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(settingsNavItemBlock).not.toContain("overflow: hidden;");

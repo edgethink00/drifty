@@ -698,6 +698,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .app-shell,
+  .windows-titlebar-nav__history,
   .window-nav-controls,
   .window-sidebar-toggle,
   .sidebar,

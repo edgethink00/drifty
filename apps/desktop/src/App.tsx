@@ -9465,6 +9465,11 @@ export default function App() {
     isSidebarVisuallyCollapsed ? "app-shell--sidebar-collapsed" : null,
     shouldShowPostOnboardingSidebarGuide ? "app-shell--sidebar-guide" : null,
   ].filter(Boolean).join(" ");
+  const windowsTitlebarNavClassName = [
+    "windows-titlebar-nav",
+    isSettingsTab ? "windows-titlebar-nav--settings" : null,
+    isSidebarVisuallyCollapsed ? "windows-titlebar-nav--sidebar-collapsed" : null,
+  ].filter(Boolean).join(" ");
 
 
   if (onboardingOpen) {
@@ -9543,33 +9548,22 @@ export default function App() {
       {hostPlatform === "windows" ? (
         <WindowsTitlebar
           leading={(
-            <div className="windows-titlebar-nav" role="group" aria-label={localization.t("shell.windowNavigation")}>
-              {isSettingsTab ? (
-                <button
-                  type="button"
-                  className="windows-titlebar-nav-button windows-titlebar-nav-button--back"
-                  onClick={handleSettingsBack}
-                  aria-label={localization.t("shell.goBack")}
-                  title={localization.t("shell.goBack")}
-                >
+            <div className={windowsTitlebarNavClassName} role="group" aria-label={localization.t("shell.windowNavigation")}>
+              {!isSettingsTab ? (
+                <WindowSidebarToggle
+                  collapsed={isSidebarVisuallyCollapsed}
+                  placement="titlebar"
+                  onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+                />
+              ) : null}
+              <span className="windows-titlebar-nav__history">
+                <button type="button" className="windows-titlebar-nav-button" onClick={navigateBack} disabled={!canNavigateBack} aria-label={localization.t("shell.goBack")}>
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" /></svg>
-                  <span className="windows-titlebar-nav-button__label">{localization.t("common.back")}</span>
                 </button>
-              ) : (
-                <>
-                  <WindowSidebarToggle
-                    collapsed={isSidebarVisuallyCollapsed}
-                    placement="titlebar"
-                    onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
-                  />
-                  <button type="button" className="windows-titlebar-nav-button" onClick={navigateBack} disabled={!canNavigateBack} aria-label={localization.t("shell.goBack")}>
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" /></svg>
-                  </button>
-                  <button type="button" className="windows-titlebar-nav-button" onClick={navigateForward} disabled={!canNavigateForward} aria-label={localization.t("shell.goForward")}>
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.2 3.8 10.4 8l-4.2 4.2" /></svg>
-                  </button>
-                </>
-              )}
+                <button type="button" className="windows-titlebar-nav-button" onClick={navigateForward} disabled={!canNavigateForward} aria-label={localization.t("shell.goForward")}>
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.2 3.8 10.4 8l-4.2 4.2" /></svg>
+                </button>
+              </span>
             </div>
           )}
           trailing={<AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />}

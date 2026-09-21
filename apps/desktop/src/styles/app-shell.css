@@ -384,6 +384,7 @@
   left: 8px;
   display: flex;
   align-items: center;
+  pointer-events: none;
 }
 
 :root[data-platform="windows"] .windows-titlebar__trailing {
@@ -394,18 +395,50 @@
 }
 
 :root[data-platform="windows"] .windows-titlebar-nav {
+  --windows-titlebar-nav-button-size: 32px;
+  --windows-titlebar-nav-gap: 2px;
+  --windows-titlebar-sidebar-toggle-width: 36px;
+  --windows-titlebar-history-width: calc(
+    var(--windows-titlebar-nav-button-size) + var(--windows-titlebar-nav-button-size) + var(--windows-titlebar-nav-gap)
+  );
+  --windows-titlebar-collapsed-history-shift: calc(
+    var(--windows-titlebar-sidebar-toggle-width) + var(--windows-titlebar-nav-gap) + var(--windows-titlebar-history-width) - var(--sidebar-content-width)
+  );
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  justify-content: space-between;
+  width: var(--sidebar-content-width);
+}
+
+:root[data-platform="windows"] .windows-titlebar-nav--settings {
+  justify-content: flex-end;
+}
+
+:root[data-platform="windows"] .windows-titlebar-nav__history {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 var(--windows-titlebar-history-width);
+  gap: var(--windows-titlebar-nav-gap);
+  transform: translateX(0);
+  transition: transform var(--sidebar-duration) var(--sidebar-ease);
+}
+
+:root[data-platform="windows"] .windows-titlebar-nav--sidebar-collapsed .windows-titlebar-nav__history {
+  transform: translateX(var(--windows-titlebar-collapsed-history-shift));
+}
+
+:root[data-platform="windows"] .window-sidebar-toggle--titlebar,
+:root[data-platform="windows"] .windows-titlebar-nav-button {
+  pointer-events: auto;
 }
 
 :root[data-platform="windows"] .window-sidebar-toggle--titlebar,
 :root[data-platform="windows"] .app-shell:not(.app-shell--sidebar-collapsed) .window-sidebar-toggle--titlebar {
   --window-sidebar-toggle-shift: 0px;
   position: static;
-  flex: 0 0 36px;
-  width: 36px;
-  height: 32px;
+  flex: 0 0 var(--windows-titlebar-sidebar-toggle-width);
+  width: var(--windows-titlebar-sidebar-toggle-width);
+  height: var(--windows-titlebar-nav-button-size);
   border-radius: 4px;
   transform: none;
 }
@@ -418,8 +451,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--windows-titlebar-nav-button-size);
+  height: var(--windows-titlebar-nav-button-size);
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -435,24 +468,6 @@
 
 :root[data-platform="windows"] .windows-titlebar-nav-button:disabled {
   opacity: 0.32;
-}
-
-:root[data-platform="windows"] .windows-titlebar-nav-button--back {
-  width: auto;
-  min-width: 58px;
-  height: 28px;
-  padding: 0 8px 0 6px;
-  gap: 5px;
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  border-radius: 4px;
-}
-
-:root[data-platform="windows"] .windows-titlebar-nav-button--back .windows-titlebar-nav-button__label {
-  line-height: 1;
-  color: var(--text);
-  font-weight: 500;
 }
 
 :root[data-platform="windows"] .windows-titlebar-nav-button:focus-visible,
@@ -605,17 +620,11 @@
   padding: 0 var(--sidebar-inline-gutter) var(--content-panel-gap);
 }
 
-:root[data-platform="windows"] .sidebar--settings .settings-sidebar-back {
-  display: none;
-}
-
 :root[data-platform="windows"] .sidebar--settings {
-  padding-top: 10px;
   padding-inline: var(--sidebar-inline-gutter);
 }
 
 :root[data-platform="windows"] .sidebar--settings > .settings-search {
-  margin-block-start: 10px;
   padding-inline: 2px;
 }
 
