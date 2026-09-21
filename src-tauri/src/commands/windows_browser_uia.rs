@@ -1,0 +1,700 @@
+use std::{
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
+    thread,
+    time::{Duration, Instant},
+};
+
+use uiautomation::{
+    patterns::{UIInvokePattern, UISelectionItemPattern, UIValuePattern},
+    types::{ControlType, Handle, TreeScope, UIProperty},
+    variants::Variant,
+    UIAutomation, UIElement, UITreeWalker,
+};
+use url::Url;
+use windows_sys::Win32::{
+    Foundation::{CloseHandle, HWND},
+    System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    },
+    UI::{
+        HiDpi::GetDpiForWindow,
+        WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
+    },
+};
+
+// UIA target resolution must finish inside this budget before any browser
+// mutation starts. Keep it separate from the caller's completion budget: once
+// Invoke has closed a tab, Chromium can take several more seconds to expose a
+// stable post-close tree that proves the exact runtime ID disappeared.
+const UIA_ACTION_TIMEOUT: Duration = Duration::from_secs(5);
+const UIA_CLOSE_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
+// Match the previously live-proven PowerShell verifier's settle window before
+// checking that the closed runtime ID vanished and a survivor became selected.
+const POST_CLOSE_SETTLE: Duration = Duration::from_millis(500);
+static UIA_OPERATION_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+#[derive(Clone, Debug)]
+struct TargetRequest {
+    process_name: String,
+    browser_identity: String,
+    site_url: String,
+    site_domain: String,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct ForegroundTabClosePoint {
+    pub x: f64,
+    pub y: f64,
+    pub diagnostic: String,
+}
+
+#[derive(Debug)]
+struct ForegroundSnapshot {
+    hwnd: HWND,
+    pid: u32,
+    dpi: u32,
+}
+
+// UIAutomation may synchronously call into a browser provider. Keep that work
+// off Tauri and bound the caller. A provider that ignores cancellation owns at
+// most one quarantined thread; later actions fail closed instead of leaking an
+// unbounded queue of automation threads.
+struct OperationGuard;
+
+impl OperationGuard {
+    fn acquire() -> Result<Self, String> {
+        UIA_OPERATION_ACTIVE
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| Self)
+            .map_err(|_| "windows_uia_busy".to_string())
+    }
+}
+
+impl Drop for OperationGuard {
+    fn drop(&mut self) {
+        UIA_OPERATION_ACTIVE.store(false, Ordering::Release);
+    }
+}
+
+pub(super) fn locate_foreground_tab_close(
+    process_name: &str,
+    browser_identity: &str,
+    site_url: &str,
+    site_domain: &str,
+) -> Result<ForegroundTabClosePoint, String> {
+    let request = owned_request(process_name, browser_identity, site_url, site_domain)?;
+    run_bounded(
+        "windows_uia_geometry_timeout",
+        UIA_ACTION_TIMEOUT,
+        UIA_ACTION_TIMEOUT,
+        move |deadline| locate_impl(&request, deadline),
+    )
+}
+
+pub(super) fn close_foreground_tab(
+    process_name: &str,
+    browser_identity: &str,
+    site_url: &str,
+    site_domain: &str,
+) -> Result<String, String> {
+    let request = owned_request(process_name, browser_identity, site_url, site_domain)?;
+    run_bounded(
+        "windows_uia_timeout",
+        UIA_ACTION_TIMEOUT,
+        UIA_CLOSE_COMPLETION_TIMEOUT,
+        move |deadline| close_impl(&request, deadline),
+    )
+}
+
+fn owned_request(
+    process_name: &str,
+    browser_identity: &str,
+    site_url: &str,
+    site_domain: &str,
+) -> Result<TargetRequest, String> {
+    let process_name = process_name.trim().to_ascii_lowercase();
+    if !matches!(process_name.as_str(), "chrome" | "msedge" | "brave") {
+        return Err("windows_uia_unsupported_browser".to_string());
+    }
+    let browser_identity = browser_identity.trim();
+    if browser_identity.is_empty() || !Path::new(browser_identity).is_absolute() {
+        return Err("windows_uia_invalid_browser_identity".to_string());
+    }
+    let site_url = site_url.trim().to_string();
+    let site_domain = normalize_domain(site_domain);
+    if site_url.is_empty() && site_domain.is_empty() {
+        return Err("windows_uia_missing_target".to_string());
+    }
+    if !site_url.is_empty() && normalize_http_url(&site_url).is_none() {
+        return Err("windows_uia_invalid_target_url".to_string());
+    }
+    Ok(TargetRequest {
+        process_name,
+        browser_identity: browser_identity.to_string(),
+        site_url,
+        site_domain,
+    })
+}
+
+fn run_bounded<T: Send + 'static>(
+    timeout_diagnostic: &'static str,
+    action_timeout: Duration,
+    completion_timeout: Duration,
+    work: impl FnOnce(Instant) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let guard = OperationGuard::acquire()?;
+    let deadline = Instant::now() + action_timeout;
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let _guard = guard;
+        let _ = sender.send(work(deadline));
+    });
+    receiver
+        .recv_timeout(completion_timeout)
+        .map_err(|_| timeout_diagnostic.to_string())?
+}
+
+fn locate_impl(
+    request: &TargetRequest,
+    deadline: Instant,
+) -> Result<ForegroundTabClosePoint, String> {
+    let snapshot = foreground_snapshot(request)?;
+    let resolved = resolve_selected_tab(request, &snapshot, deadline)?;
+    let scale = if snapshot.dpi > 0 {
+        f64::from(snapshot.dpi) / 96.0
+    } else {
+        1.0
+    };
+    Ok(ForegroundTabClosePoint {
+        x: f64::from(resolved.close_rect.get_left() + resolved.close_rect.get_right())
+            / 2.0
+            / scale,
+        y: f64::from(resolved.close_rect.get_top() + resolved.close_rect.get_bottom())
+            / 2.0
+            / scale,
+        diagnostic: format!("windows_uia_{}_close_button", resolved.match_kind),
+    })
+}
+
+fn close_impl(request: &TargetRequest, deadline: Instant) -> Result<String, String> {
+    let snapshot = foreground_snapshot(request)?;
+    let resolved = resolve_selected_tab(request, &snapshot, deadline)?;
+    // No automation action may start after the caller's deadline. If a browser
+    // provider returns late, the quarantined thread exits without touching it.
+    if Instant::now() >= deadline {
+        return Err("windows_uia_timeout".to_string());
+    }
+    verify_foreground_snapshot(request, &snapshot)?;
+    if !resolved.selection.is_selected().unwrap_or(false) {
+        return Err("windows_uia_stale_target".to_string());
+    }
+    resolved
+        .close_invoke
+        .invoke()
+        .map_err(|_| "windows_uia_invoke_failed".to_string())?;
+    thread::sleep(POST_CLOSE_SETTLE);
+
+    verify_foreground_snapshot(request, &snapshot)?;
+    let remaining = browser_tabs(
+        &resolved.automation,
+        &resolved.walker,
+        &resolved.window,
+        &request.process_name,
+    )?;
+    let remaining_runtime_ids = remaining
+        .iter()
+        .map(|tab| {
+            tab.get_runtime_id()
+                .map_err(|_| "windows_uia_no_verified_close".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if !post_close_runtime_ids_verify(&remaining_runtime_ids, &resolved.runtime_id) {
+        return Err("windows_uia_no_verified_close".to_string());
+    }
+    // Chromium can briefly expose zero or multiple selected UIA tab items while
+    // it promotes the survivor. That transition state does not weaken the close
+    // proof: the exact pre-invoke tab runtime ID is gone, every remaining ID was
+    // readable, at least one tab survived, and the same browser window/process
+    // is still foreground. Requiring a selected-count here caused a real close
+    // to be reported as a failure and incorrectly showed the fallback alarm.
+    // Keep the externally observed diagnostic stable across the PowerShell to
+    // in-process implementation change. Foreground binding is a safety
+    // invariant above, not a new product outcome category.
+    Ok(close_success_diagnostic(resolved.match_kind))
+}
+
+fn close_success_diagnostic(match_kind: &str) -> String {
+    format!("windows_uia_{match_kind}")
+}
+
+fn post_close_runtime_ids_verify(remaining: &[Vec<i32>], closed: &[i32]) -> bool {
+    !remaining.is_empty() && remaining.iter().all(|runtime_id| runtime_id != closed)
+}
+
+struct ResolvedSelectedTab {
+    automation: UIAutomation,
+    walker: UITreeWalker,
+    window: UIElement,
+    selection: UISelectionItemPattern,
+    close_invoke: UIInvokePattern,
+    close_rect: uiautomation::types::Rect,
+    runtime_id: Vec<i32>,
+    match_kind: &'static str,
+}
+
+fn resolve_selected_tab(
+    request: &TargetRequest,
+    snapshot: &ForegroundSnapshot,
+    deadline: Instant,
+) -> Result<ResolvedSelectedTab, String> {
+    ensure_deadline(deadline)?;
+    let automation =
+        UIAutomation::new().map_err(|_| "windows_uia_initialize_failed".to_string())?;
+    let walker = automation
+        .get_control_view_walker()
+        .map_err(|_| "windows_uia_walker_failed".to_string())?;
+    let window = automation
+        .element_from_handle(Handle::from(snapshot.hwnd as isize))
+        .map_err(|_| "windows_uia_window_unavailable".to_string())?;
+    if window.get_control_type().ok() != Some(ControlType::Window)
+        || window.get_process_id().ok() != Some(snapshot.pid)
+        || Into::<isize>::into(
+            window
+                .get_native_window_handle()
+                .map_err(|_| "windows_uia_stale_window".to_string())?,
+        ) != snapshot.hwnd as isize
+    {
+        return Err("windows_uia_stale_window".to_string());
+    }
+
+    let tabs = browser_tabs(&automation, &walker, &window, &request.process_name)?;
+    if tabs.len() < 2 {
+        return Err("windows_uia_last_tab_refused".to_string());
+    }
+    let mut selected = Vec::new();
+    for tab in tabs {
+        let Ok(pattern) = tab.get_pattern::<UISelectionItemPattern>() else {
+            return Err("windows_uia_incomplete_tabs".to_string());
+        };
+        if pattern.is_selected().unwrap_or(false) {
+            selected.push((tab, pattern));
+        }
+    }
+    if selected.len() != 1 {
+        return Err("windows_uia_ambiguous_selected_tab".to_string());
+    }
+    let (tab, selection) = selected.pop().expect("one selected tab");
+    let actual_url = read_page_url(&automation, &walker, &window)?;
+    let match_kind = target_match_kind(request, &actual_url)?;
+    let tab_rect = tab
+        .get_bounding_rectangle()
+        .map_err(|_| "windows_uia_invalid_tab_geometry".to_string())?;
+    if !positive_rect(&tab_rect) {
+        return Err("windows_uia_invalid_tab_geometry".to_string());
+    }
+
+    let button_condition = automation
+        .create_property_condition(
+            UIProperty::ControlType,
+            Variant::from(ControlType::Button as i32),
+            None,
+        )
+        .map_err(|_| "windows_uia_condition_failed".to_string())?;
+    let buttons = tab
+        .find_all(TreeScope::Descendants, &button_condition)
+        .map_err(|_| "windows_uia_no_close_button".to_string())?;
+    let mut close_buttons = Vec::new();
+    for button in buttons {
+        if button.is_offscreen().unwrap_or(true) {
+            continue;
+        }
+        let Ok(rect) = button.get_bounding_rectangle() else {
+            continue;
+        };
+        if !positive_rect(&rect) || !rect_inside(&rect, &tab_rect, 2) {
+            continue;
+        }
+        let Ok(invoke) = button.get_pattern::<UIInvokePattern>() else {
+            continue;
+        };
+        close_buttons.push((rect, invoke));
+    }
+    close_buttons.sort_by_key(|(rect, _)| rect.get_right());
+    let Some((close_rect, close_invoke)) = close_buttons.pop() else {
+        return Err("windows_uia_no_close_button".to_string());
+    };
+
+    ensure_deadline(deadline)?;
+    verify_foreground_snapshot(request, snapshot)?;
+    if !selection.is_selected().unwrap_or(false)
+        || read_page_url(&automation, &walker, &window).ok().as_deref() != Some(&actual_url)
+    {
+        return Err("windows_uia_stale_target".to_string());
+    }
+
+    Ok(ResolvedSelectedTab {
+        automation,
+        walker,
+        window,
+        selection,
+        close_invoke,
+        close_rect,
+        runtime_id: tab
+            .get_runtime_id()
+            .map_err(|_| "windows_uia_stale_target".to_string())?,
+        match_kind,
+    })
+}
+
+fn browser_tabs(
+    automation: &UIAutomation,
+    walker: &UITreeWalker,
+    window: &UIElement,
+    process_name: &str,
+) -> Result<Vec<UIElement>, String> {
+    let condition = automation
+        .create_property_condition(
+            UIProperty::ControlType,
+            Variant::from(ControlType::TabItem as i32),
+            None,
+        )
+        .map_err(|_| "windows_uia_condition_failed".to_string())?;
+    let candidates = window
+        .find_all(TreeScope::Descendants, &condition)
+        .map_err(|_| "windows_uia_incomplete_tabs".to_string())?;
+    let mut tabs = Vec::new();
+    for tab in candidates {
+        if !expected_tab_shape(walker, &tab, process_name)
+            || !has_exact_window_ancestry(automation, walker, &tab, window, true, false)
+        {
+            continue;
+        }
+        let Ok(rect) = tab.get_bounding_rectangle() else {
+            continue;
+        };
+        let Ok(window_rect) = window.get_bounding_rectangle() else {
+            return Err("windows_uia_stale_window".to_string());
+        };
+        if positive_rect(&rect)
+            && positive_rect(&window_rect)
+            && overlaps(&rect, &window_rect)
+            && !tab.is_offscreen().unwrap_or(true)
+        {
+            tabs.push(tab);
+        }
+    }
+    Ok(tabs)
+}
+
+fn expected_tab_shape(walker: &UITreeWalker, tab: &UIElement, process_name: &str) -> bool {
+    let Ok(class_name) = tab.get_classname() else {
+        return false;
+    };
+    let expected = match process_name {
+        "chrome" => ("Tab", "TabContainerImpl"),
+        "msedge" => ("EdgeTab", "EdgeTabContainerImpl"),
+        "brave" => ("BraveTab", "BraveTabContainer"),
+        _ => return false,
+    };
+    if class_name != expected.0 {
+        return false;
+    }
+    let Ok(parent) = walker.get_parent(tab) else {
+        return false;
+    };
+    parent.get_control_type().ok() == Some(ControlType::Tab)
+        && parent.get_classname().ok().as_deref() == Some(expected.1)
+}
+
+fn read_page_url(
+    automation: &UIAutomation,
+    walker: &UITreeWalker,
+    window: &UIElement,
+) -> Result<String, String> {
+    let condition = automation
+        .create_property_condition(
+            UIProperty::ControlType,
+            Variant::from(ControlType::Document as i32),
+            None,
+        )
+        .map_err(|_| "windows_uia_condition_failed".to_string())?;
+    let documents = window
+        .find_all(TreeScope::Descendants, &condition)
+        .map_err(|_| "windows_uia_document_unavailable".to_string())?;
+    let mut values = Vec::new();
+    for document in documents {
+        if document.is_offscreen().unwrap_or(true)
+            || !has_exact_window_ancestry(automation, walker, &document, window, true, true)
+        {
+            continue;
+        }
+        let Ok(rect) = document.get_bounding_rectangle() else {
+            continue;
+        };
+        let Ok(window_rect) = window.get_bounding_rectangle() else {
+            return Err("windows_uia_stale_window".to_string());
+        };
+        if !positive_rect(&rect) || !overlaps(&rect, &window_rect) {
+            continue;
+        }
+        let Ok(pattern) = document.get_pattern::<UIValuePattern>() else {
+            continue;
+        };
+        let Ok(value) = pattern.get_value() else {
+            continue;
+        };
+        if let Some(normalized) = normalize_http_url(&value) {
+            values.push(normalized);
+        }
+    }
+    if values.len() != 1 {
+        return Err("windows_uia_document_unavailable".to_string());
+    }
+    values
+        .pop()
+        .ok_or_else(|| "windows_uia_document_unavailable".to_string())
+}
+
+fn has_exact_window_ancestry(
+    automation: &UIAutomation,
+    walker: &UITreeWalker,
+    element: &UIElement,
+    window: &UIElement,
+    reject_document_ancestor: bool,
+    reject_toolbar_ancestor: bool,
+) -> bool {
+    let mut cursor = match walker.get_parent(element) {
+        Ok(parent) => parent,
+        Err(_) => return false,
+    };
+    let mut toolbar_seen = false;
+    for _ in 0..64 {
+        let Ok(control_type) = cursor.get_control_type() else {
+            return false;
+        };
+        if reject_document_ancestor && control_type == ControlType::Document {
+            return false;
+        }
+        if reject_toolbar_ancestor && control_type == ControlType::ToolBar {
+            toolbar_seen = true;
+        }
+        if control_type == ControlType::Window {
+            return !toolbar_seen
+                && automation
+                    .compare_elements(&cursor, window)
+                    .unwrap_or(false);
+        }
+        cursor = match walker.get_parent(&cursor) {
+            Ok(parent) => parent,
+            Err(_) => return false,
+        };
+    }
+    false
+}
+
+fn target_match_kind(request: &TargetRequest, actual_url: &str) -> Result<&'static str, String> {
+    if !request.site_url.is_empty() {
+        let expected = normalize_http_url(&request.site_url)
+            .ok_or_else(|| "windows_uia_invalid_target_url".to_string())?;
+        return (actual_url == expected)
+            .then_some("exact_url")
+            .ok_or_else(|| "windows_uia_target_mismatch".to_string());
+    }
+    let actual_domain = Url::parse(actual_url)
+        .ok()
+        .and_then(|url| url.host_str().map(normalize_domain))
+        .unwrap_or_default();
+    (actual_domain == request.site_domain)
+        .then_some("unique_domain")
+        .ok_or_else(|| "windows_uia_target_mismatch".to_string())
+}
+
+fn foreground_snapshot(request: &TargetRequest) -> Result<ForegroundSnapshot, String> {
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.is_null() {
+        return Err("windows_uia_geometry_no_foreground".to_string());
+    }
+    let mut pid = 0_u32;
+    unsafe {
+        GetWindowThreadProcessId(hwnd, &mut pid);
+    }
+    if pid == 0 || !process_identity_matches(pid, &request.browser_identity) {
+        return Err("windows_uia_geometry_wrong_foreground".to_string());
+    }
+    Ok(ForegroundSnapshot {
+        hwnd,
+        pid,
+        dpi: unsafe { GetDpiForWindow(hwnd) },
+    })
+}
+
+fn verify_foreground_snapshot(
+    request: &TargetRequest,
+    snapshot: &ForegroundSnapshot,
+) -> Result<(), String> {
+    if unsafe { GetForegroundWindow() } != snapshot.hwnd {
+        return Err("windows_uia_stale_target".to_string());
+    }
+    let mut pid = 0_u32;
+    unsafe {
+        GetWindowThreadProcessId(snapshot.hwnd, &mut pid);
+    }
+    if pid != snapshot.pid || !process_identity_matches(pid, &request.browser_identity) {
+        return Err("windows_uia_stale_browser_identity".to_string());
+    }
+    Ok(())
+}
+
+fn process_identity_matches(pid: u32, expected: &str) -> bool {
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if process.is_null() {
+        return false;
+    }
+    let mut buffer = vec![0_u16; 32_768];
+    let mut length = buffer.len() as u32;
+    let read =
+        unsafe { QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut length) } != 0;
+    unsafe {
+        CloseHandle(process);
+    }
+    if !read {
+        return false;
+    }
+    let observed = String::from_utf16_lossy(&buffer[..length as usize]);
+    normalize_windows_path(&observed) == normalize_windows_path(expected)
+}
+
+fn normalize_windows_path(value: &str) -> String {
+    value.trim().replace('/', "\\").to_ascii_lowercase()
+}
+
+fn normalize_http_url(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.chars().any(char::is_whitespace) || value.contains('\\') {
+        return None;
+    }
+    let parsed = Url::parse(value).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return None;
+    }
+    Some(parsed.to_string())
+}
+
+fn normalize_domain(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized
+        .strip_prefix("www.")
+        .unwrap_or(&normalized)
+        .to_string()
+}
+
+fn positive_rect(rect: &uiautomation::types::Rect) -> bool {
+    rect.get_right() > rect.get_left() && rect.get_bottom() > rect.get_top()
+}
+
+fn overlaps(left: &uiautomation::types::Rect, right: &uiautomation::types::Rect) -> bool {
+    left.get_right() > right.get_left()
+        && left.get_left() < right.get_right()
+        && left.get_bottom() > right.get_top()
+        && left.get_top() < right.get_bottom()
+}
+
+fn rect_inside(
+    child: &uiautomation::types::Rect,
+    parent: &uiautomation::types::Rect,
+    tolerance: i32,
+) -> bool {
+    child.get_left() >= parent.get_left() - tolerance
+        && child.get_right() <= parent.get_right() + tolerance
+        && child.get_top() >= parent.get_top() - tolerance
+        && child.get_bottom() <= parent.get_bottom() + tolerance
+}
+
+fn ensure_deadline(deadline: Instant) -> Result<(), String> {
+    (Instant::now() < deadline)
+        .then_some(())
+        .ok_or_else(|| "windows_uia_timeout".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn close_completion_budget_does_not_extend_the_pre_invoke_action_budget() {
+        assert_eq!(UIA_ACTION_TIMEOUT, Duration::from_secs(5));
+        assert!(UIA_CLOSE_COMPLETION_TIMEOUT > UIA_ACTION_TIMEOUT);
+        assert!(UIA_CLOSE_COMPLETION_TIMEOUT >= UIA_ACTION_TIMEOUT + POST_CLOSE_SETTLE);
+    }
+
+    #[test]
+    fn url_identity_is_exact_and_case_sensitive_below_the_authority() {
+        assert_eq!(
+            normalize_http_url("HTTPS://Example.COM:443/Case?Token=AbC#Frag"),
+            Some("https://example.com/Case?Token=AbC#Frag".to_string())
+        );
+        assert_ne!(
+            normalize_http_url("https://example.com/Case?Token=AbC"),
+            normalize_http_url("https://example.com/case?Token=abc")
+        );
+    }
+
+    #[test]
+    fn url_identity_rejects_unsafe_or_unverifiable_targets() {
+        for value in [
+            "example.com/path",
+            "file:///C:/private.txt",
+            "https://user@example.com/path",
+            "https://example.com/a b",
+            r"https:\\example.com\path",
+        ] {
+            assert_eq!(normalize_http_url(value), None, "{value}");
+        }
+    }
+
+    #[test]
+    fn rectangle_guards_require_positive_contained_geometry() {
+        let tab = uiautomation::types::Rect::new(100, 10, 300, 50);
+        let close = uiautomation::types::Rect::new(270, 20, 290, 40);
+        assert!(positive_rect(&tab));
+        assert!(rect_inside(&close, &tab, 2));
+        assert!(overlaps(&close, &tab));
+        assert!(!positive_rect(&uiautomation::types::Rect::new(2, 2, 2, 3)));
+        assert!(!rect_inside(
+            &uiautomation::types::Rect::new(0, 0, 20, 20),
+            &tab,
+            2
+        ));
+    }
+
+    #[test]
+    fn close_success_keeps_the_existing_external_diagnostic_contract() {
+        assert_eq!(
+            close_success_diagnostic("exact_url"),
+            "windows_uia_exact_url"
+        );
+        assert_eq!(
+            close_success_diagnostic("unique_domain"),
+            "windows_uia_unique_domain"
+        );
+    }
+
+    #[test]
+    fn post_close_requires_a_survivor_and_exact_target_runtime_id_absence() {
+        let closed = vec![1, 2, 3];
+        assert!(post_close_runtime_ids_verify(
+            &[vec![4, 5, 6], vec![7, 8, 9]],
+            &closed,
+        ));
+        assert!(!post_close_runtime_ids_verify(&[], &closed));
+        assert!(!post_close_runtime_ids_verify(
+            &[vec![4, 5, 6], closed.clone()],
+            &closed,
+        ));
+    }
+}

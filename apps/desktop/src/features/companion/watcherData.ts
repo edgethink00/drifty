@@ -527,11 +527,11 @@ export async function sendDriftNotification(
       body: copy.body,
     });
   } catch {
-    // Notifications are a convenience; tracking should continue even if macOS denies permission.
+    // Notifications are a convenience; tracking should continue even if the host OS denies permission.
   }
 }
 
-/** Ask macOS for notification permission in response to the user turning the switch on. */
+/** Ask the host OS for notification permission when the user turns the switch on. */
 export async function requestDriftNotificationPermission(): Promise<"granted" | "denied" | "unavailable"> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return "unavailable";
   try {

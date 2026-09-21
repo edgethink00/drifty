@@ -137,4 +137,3 @@ describe("driftAlarmCopy", () => {
     expect(resolveInitialDriftAlarmCopyOverrides()).toEqual({ manualCorrectionLabel: "Keep" });
   });
 });
-

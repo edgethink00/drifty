@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import type { DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import { isTauriRuntime } from "./watcherBridge";
 
@@ -18,6 +19,19 @@ export async function resolveAvailableFocusTargets(
   }));
 
   return resolvedTargets.filter((target): target is DriftAlarmFocusTarget => target !== null);
+}
+
+export async function resolvePostCloseFocusTargets(
+  targets: readonly DriftAlarmFocusTarget[],
+  hostPlatform: HostPlatform,
+  resolver = resolveAvailableFocusTargets,
+): Promise<DriftAlarmFocusTarget[]> {
+  // Windows does not implement browser-tab reactivation: its native
+  // availability command is a deliberate false-only stub. Avoid making a
+  // successful automatic close wait on that redundant invoke after the tab
+  // has disappeared. macOS keeps the live browser-tab lookup unchanged.
+  if (hostPlatform === "windows") return filterDefinitelyAvailableFocusTargets(targets);
+  return resolver(targets);
 }
 
 export function haveSameDriftAlarmFocusTargets(

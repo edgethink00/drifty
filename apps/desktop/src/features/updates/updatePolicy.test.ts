@@ -15,6 +15,7 @@ import {
   shouldPrepareUpdateInBackground,
   shouldShowAutomaticUpdateDialog,
   updatePolicyUrl,
+  updatePolicyUrls,
   upsertUpdateSeen,
 } from "./updatePolicy";
 
@@ -104,6 +105,29 @@ describe("updatePolicy", () => {
       "https://github.com/edgethink00/drifty_releases/releases/download/1.0.12/update-policy.json",
     );
     expect(fetcher).toHaveBeenCalledWith(updatePolicyUrl(VERSION), expect.objectContaining({ cache: "no-store" }));
+    expect(policy.version).toBe(VERSION);
+  });
+
+  it("prefers the Windows release tag and falls back to the shared bridge policy", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          version: VERSION,
+          urgency: "general",
+          autoInstall: false,
+        }),
+      });
+
+    const policy = await fetchUpdatePolicy(VERSION, fetcher, "windows");
+
+    expect(updatePolicyUrls(VERSION, "windows")).toEqual([
+      "https://github.com/edgethink00/drifty_releases/releases/download/1.0.12-win/update-policy.json",
+      "https://github.com/edgethink00/drifty_releases/releases/download/1.0.12/update-policy.json",
+    ]);
+    expect(fetcher).toHaveBeenNthCalledWith(1, updatePolicyUrls(VERSION, "windows")[0], expect.objectContaining({ cache: "no-store" }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, updatePolicyUrls(VERSION, "windows")[1], expect.objectContaining({ cache: "no-store" }));
     expect(policy.version).toBe(VERSION);
   });
 

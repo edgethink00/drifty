@@ -173,6 +173,10 @@ export function windowsReleaseConfig(env = process.env) {
   if (!(env.TAURI_SIGNING_PRIVATE_KEY ?? "").trim()) {
     throw new Error("TAURI_SIGNING_PRIVATE_KEY is required for Windows updater artifacts.");
   }
+  const expectedPublisherName = (env.DRIFTY_WINDOWS_EXPECTED_PUBLISHER_NAME ?? "").trim();
+  if (!expectedPublisherName || expectedPublisherName.length > 256 || /[\r\n]/u.test(expectedPublisherName)) {
+    throw new Error("DRIFTY_WINDOWS_EXPECTED_PUBLISHER_NAME is required for Windows Authenticode identity verification.");
+  }
   return {
     bundle: {
       createUpdaterArtifacts: true,
@@ -180,6 +184,19 @@ export function windowsReleaseConfig(env = process.env) {
         certificateThumbprint: thumbprint,
         digestAlgorithm: "sha256",
         timestampUrl: timestampUrl.href,
+        signCommand: {
+          cmd: "powershell.exe",
+          args: [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            resolve(repoRoot, "scripts/sign-windows-artifact.ps1"),
+            "-Path",
+            "%1",
+          ],
+        },
       },
     },
   };
@@ -222,12 +239,31 @@ function main(argv = process.argv.slice(2)) {
 
   if (windowsRelease) {
     args.push("--config", JSON.stringify(windowsReleaseConfig()));
+    run(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        resolve(repoRoot, "scripts/windows-release-signing-preflight.ps1"),
+      ],
+      releaseEnvironment,
+    );
   }
 
   // The Windows bundle requires a PyInstaller onedir resource that is ignored by
   // Git. Stage and smoke-test it on every native build so a clean checkout cannot
   // accidentally package without the tracker.
   if (process.platform === "win32") {
+    if (command === "build") {
+      run(
+        process.execPath,
+        [resolve(repoRoot, "scripts/prepare-windows-vc-redist.mjs")],
+        releaseEnvironment,
+      );
+    }
     run(
       process.execPath,
       [resolve(repoRoot, "scripts/build-tracker-sidecar.mjs")],

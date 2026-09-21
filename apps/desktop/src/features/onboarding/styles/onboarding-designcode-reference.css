@@ -2258,3 +2258,14 @@
   border-color: color-mix(in srgb, var(--dc-onb-text) 20%, transparent);
   background: var(--dc-onb-raised);
 }
+
+/* Onboarding fills the whole Windows window, so its canvas matches the shell
+   colour; on the macOS canvas it read as a lighter panel inside the frame. */
+:root[data-platform="windows"] .onboarding-screen.dc-onboarding-screen {
+  --onb-canvas: var(--windows-shell-bg);
+  --onb-surface: var(--windows-shell-bg);
+  --dc-onb-surface: var(--windows-shell-bg);
+  --dc-onb-raised: color-mix(in srgb, var(--surface-strong) 78%, var(--windows-shell-bg));
+  --dc-onb-inset: color-mix(in srgb, var(--bg-2) 74%, var(--windows-shell-bg));
+  background: var(--windows-shell-bg);
+}

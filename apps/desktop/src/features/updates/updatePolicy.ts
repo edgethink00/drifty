@@ -47,6 +47,16 @@ export function updatePolicyUrl(version: string): string {
   return `${UPDATE_POLICY_RELEASES_URL}/${encodeURIComponent(version)}/update-policy.json`;
 }
 
+export function updatePolicyUrls(
+  version: string,
+  hostPlatform: "macos" | "windows" | "other" = "other",
+): string[] {
+  const legacyUrl = updatePolicyUrl(version);
+  return hostPlatform === "windows"
+    ? [`${UPDATE_POLICY_RELEASES_URL}/${encodeURIComponent(`${version}-win`)}/update-policy.json`, legacyUrl]
+    : [legacyUrl];
+}
+
 export function normalizeUpdatePolicyMetadata(metadata: unknown, expectedVersion: string): UpdatePolicy | null {
   if (!isRecord(metadata)) return null;
 
@@ -82,7 +92,11 @@ export function normalizeUpdatePolicyMetadata(metadata: unknown, expectedVersion
   };
 }
 
-export async function fetchUpdatePolicy(version: string, fetcher: FetchLike = globalThis.fetch): Promise<UpdatePolicy> {
+export async function fetchUpdatePolicy(
+  version: string,
+  fetcher: FetchLike = globalThis.fetch,
+  hostPlatform: "macos" | "windows" | "other" = "other",
+): Promise<UpdatePolicy> {
   if (typeof fetcher !== "function") return fallbackUpdatePolicy(version);
 
   const controller = typeof AbortController === "function" ? new AbortController() : null;
@@ -91,14 +105,23 @@ export async function fetchUpdatePolicy(version: string, fetcher: FetchLike = gl
     : null;
 
   try {
-    const response = await fetcher(updatePolicyUrl(version), {
-      cache: "no-store",
-      signal: controller?.signal,
-    });
-    if (!response.ok) return fallbackUpdatePolicy(version);
+    for (const url of updatePolicyUrls(version, hostPlatform)) {
+      try {
+        const response = await fetcher(url, {
+          cache: "no-store",
+          signal: controller?.signal,
+        });
+        if (!response.ok) continue;
 
-    const metadata: unknown = await response.json();
-    return normalizeUpdatePolicyMetadata(metadata, version) ?? fallbackUpdatePolicy(version);
+        const metadata: unknown = await response.json();
+        const policy = normalizeUpdatePolicyMetadata(metadata, version);
+        if (policy) return policy;
+      } catch {
+        // A platform pointer may be absent during the bridge. Try the legacy
+        // immutable release tag before falling back to the safe manual policy.
+      }
+    }
+    return fallbackUpdatePolicy(version);
   } catch {
     return fallbackUpdatePolicy(version);
   } finally {

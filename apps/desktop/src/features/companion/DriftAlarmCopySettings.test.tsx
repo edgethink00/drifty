@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DriftAlarmCopySettings } from "./DriftAlarmCopySettings";
 import { buildDefaultDriftAlarmCopy } from "./driftAlarmCopy";
 import { resolveDriftAlarmCopy, type DriftAlarmCopyOverrides } from "./driftAlarmCopyStorage";
 import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 
 describe("DriftAlarmCopySettings", () => {
+  afterEach(cleanup);
+
   it("previews draft edits and saves only the fields that differ from the defaults", async () => {
     const onChange = renderSettings();
 
@@ -136,4 +138,3 @@ function renderSettings(language: DisplayLanguage = "en", initialOverrides: Drif
   render(<Harness />);
   return onChange;
 }
-

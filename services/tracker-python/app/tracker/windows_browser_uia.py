@@ -1,4 +1,4 @@
-"""Live allowlisted-browser address-bar capture through a Windows UIA host.
+"""Live allowlisted-browser Document URL capture through a Windows UIA host.
 
 The tracker is stdlib-only, so it cannot depend on pywin32/comtypes. Windows
 PowerShell already ships the managed UI Automation assemblies; one hidden,
@@ -13,6 +13,7 @@ import base64
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -22,6 +23,14 @@ from urllib.parse import urlparse
 
 
 _STARTUP_TIMEOUT_SECONDS = 20.0
+# A cold UIA provider can take longer than the steady-state tick budget while
+# it materializes Edge's accessibility tree. Repeated Windows 10 22H2 evidence
+# showed a focused Edge Document taking roughly 12-19 seconds even after the
+# browser window existed. A ten-second limit killed the host before its first
+# useful reply and made the next attempt cold again. Give only the first
+# completed request a bounded 30-second warm-up window; every later read keeps
+# the normal limit.
+_COLD_REQUEST_TIMEOUT_SECONDS = 30.0
 _REQUEST_TIMEOUT_SECONDS = 2.0
 _SUPPORTED_BROWSERS = {
     "Google Chrome",
@@ -38,80 +47,165 @@ $ErrorActionPreference = 'Stop'
 $OutputEncoding = [Console]::OutputEncoding
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class DriftyTrackerUiaNative {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+}
+'@
 $auto = [System.Windows.Automation.AutomationElement]
-$editCondition = New-Object System.Windows.Automation.PropertyCondition(
-  $auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+$documentCondition = New-Object System.Windows.Automation.PropertyCondition(
+  $auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
 $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
 
-function Is-BrowserToolbarEdit($edit, $root) {
-  $editRect = $edit.Current.BoundingRectangle
-  $rootRect = $root.Current.BoundingRectangle
-  if ($editRect.Height -le 0 -or $rootRect.Height -le 0) { return $false }
-  $chromeBottom = [Math]::Min($rootRect.Top + 220, $rootRect.Top + ($rootRect.Height * 0.25))
-  if ($editRect.Top -ge $chromeBottom) { return $false }
-
-  $hasToolbar = $false
-  $hasWindow = $false
-  $ancestor = $walker.GetParent($edit)
-  for ($depth = 0; $depth -lt 16 -and $null -ne $ancestor; $depth += 1) {
-    if ($ancestor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Document) {
-      return $false
-    }
-    if ($ancestor.Current.ControlType -eq [System.Windows.Automation.ControlType]::ToolBar) {
-      $hasToolbar = $true
-    }
-    if ($ancestor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) {
-      $hasWindow = $true
-      break
-    }
-    $ancestor = $walker.GetParent($ancestor)
-  }
-  return ($hasToolbar -and $hasWindow)
-}
-
-function Looks-Like-WebLocation([string]$value) {
-  if ([string]::IsNullOrWhiteSpace($value) -or $value -match '\s') { return $false }
-  $hasScheme = $value -match '^[a-z][a-z0-9+.-]*://'
-  $candidate = if ($hasScheme) { $value } else { 'https://' + $value }
+function Test-SameAutomationElement($left, $right) {
   try {
-    $uri = [Uri]$candidate
-    if ($uri.Scheme -notin @('http', 'https') -or [string]::IsNullOrWhiteSpace($uri.Host)) {
-      return $false
+    if ($null -eq $left -or $null -eq $right) { return $false }
+    $leftId = @($left.GetRuntimeId())
+    $rightId = @($right.GetRuntimeId())
+    if ($leftId.Count -eq 0 -or $leftId.Count -ne $rightId.Count) { return $false }
+    for ($i = 0; $i -lt $leftId.Count; $i++) {
+      if ($leftId[$i] -ne $rightId[$i]) { return $false }
     }
-    $hostKind = [Uri]::CheckHostName($uri.Host)
-    if ($uri.Host -match '^[0-9.]+$' -and $hostKind -ne [UriHostNameType]::IPv4) {
-      return $false
-    }
-    if ($hasScheme) { return $true }
-    return ($uri.Host -eq 'localhost' -or
-      $hostKind -in @([UriHostNameType]::IPv4, [UriHostNameType]::IPv6) -or
-      ($hostKind -eq [UriHostNameType]::Dns -and $uri.Host.Contains('.')))
+    return $true
   } catch { return $false }
 }
 
-function Read-AddressBar([IntPtr]$handle) {
+function Test-ExplicitHttpUrl($value) {
+  if ($value -isnot [string] -or $value -notmatch '^https?://' -or
+      $value -match '[\s\x00-\x20\x7f\\]' -or $value -match '%(?![0-9a-fA-F]{2})') { return $false }
   try {
-    $root = $auto::FromHandle($handle)
-    if ($null -eq $root) {
-      return [pscustomobject]@{ found = $false; url = ''; error = 'window element not found' }
+    $uri = [Uri]$value
+    return ($uri.IsAbsoluteUri -and $uri.Scheme -in @('http', 'https') -and
+      -not [string]::IsNullOrWhiteSpace($uri.Host) -and $uri.UserInfo -eq '')
+  } catch { return $false }
+}
+
+function Read-ValidatedDocumentUrl($document, $rootRect) {
+  $offscreen = $document.Current.IsOffscreen
+  if ($offscreen -eq $true) { throw 'document visibility unavailable' }
+  if ($offscreen -ne $false) { throw 'document visibility unavailable' }
+  $rect = $document.Current.BoundingRectangle
+  foreach ($field in @('Left', 'Top', 'Width', 'Height')) {
+    $component = $rect.$field
+    if ($null -eq $component -or [double]::IsNaN([double]$component) -or
+        [double]::IsInfinity([double]$component)) { throw 'document geometry unavailable' }
+  }
+  if ($rect.Width -le 0 -or $rect.Height -le 0 -or
+      $rect.Left -ge ($rootRect.Left + $rootRect.Width) -or
+      ($rect.Left + $rect.Width) -le $rootRect.Left -or
+      $rect.Top -ge ($rootRect.Top + $rootRect.Height) -or
+      ($rect.Top + $rect.Height) -le $rootRect.Top) { throw 'document geometry unavailable' }
+  $valuePattern = $null
+  if (-not $document.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$valuePattern)) {
+    throw 'document URL unavailable'
+  }
+  $url = $valuePattern.Current.Value
+  if (-not (Test-ExplicitHttpUrl $url)) { throw 'document URL unavailable' }
+  return $url
+}
+
+function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement) {
+  if ($null -eq $focusedElement) { return $null }
+  $document = $null
+  $cursor = $focusedElement
+  $exactWindow = $false
+  for ($depth = 0; $depth -lt 64 -and $null -ne $cursor; $depth++) {
+    if (Test-SameAutomationElement $cursor $root) { $exactWindow = $true; break }
+    if ($cursor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) { break }
+    # Keep replacing the candidate while walking upward. If focus is inside an
+    # iframe, this selects the outermost Document directly below the exact
+    # foreground window rather than exposing the nested frame URL.
+    if ($cursor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Document) {
+      $document = $cursor
     }
-    $edits = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $editCondition)
-    foreach ($edit in $edits) {
-      if (-not (Is-BrowserToolbarEdit $edit $root)) { continue }
-      $valuePattern = $null
-      if (-not $edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$valuePattern)) {
-        continue
-      }
-      $value = $valuePattern.Current.Value
-      if ([string]::IsNullOrWhiteSpace($value)) { continue }
-      $trimmed = $value.Trim()
-      if (Looks-Like-WebLocation $trimmed) {
-        return [pscustomobject]@{ found = $true; url = $trimmed; error = '' }
-      }
+    $cursor = $treeWalker.GetParent($cursor)
+  }
+  if (-not $exactWindow) { throw 'document ancestry unavailable' }
+  return $document
+}
+
+function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement = $null) {
+  try {
+    if ($null -eq $root -or $root.Current.ControlType -ne [System.Windows.Automation.ControlType]::Window -or
+        $root.Current.IsOffscreen -ne $false) { throw 'document window unavailable' }
+    $rootRect = $root.Current.BoundingRectangle
+    foreach ($field in @('Left', 'Top', 'Width', 'Height')) {
+      $component = $rootRect.$field
+      if ($null -eq $component -or [double]::IsNaN([double]$component) -or
+          [double]::IsInfinity([double]$component)) { throw 'document geometry unavailable' }
     }
-    return [pscustomobject]@{ found = $false; url = ''; error = 'no URL-shaped edit control value' }
+    if ($rootRect.Width -le 0 -or $rootRect.Height -le 0) { throw 'document geometry unavailable' }
+
+    # Chromium can briefly enumerate more than one visible Document while its
+    # accessibility tree warms up. A focused Document is a stronger identity
+    # signal, but only after its full ancestry is proven to terminate at this
+    # exact foreground root. Chrome focus (tab strip/omnibox) has no Document
+    # ancestor and deliberately falls back to the strict enumeration below.
+    $focusedDocument = Find-FocusedTopLevelDocument $root $treeWalker $focusedElement
+    if ($null -ne $focusedDocument) {
+      $focusedUrl = Read-ValidatedDocumentUrl $focusedDocument $rootRect
+      return [pscustomobject]@{ found = $true; url = $focusedUrl; error = '' }
+    }
+
+    $documents = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    $count = 0
+    $url = ''
+    foreach ($document in $documents) {
+      # IsOffscreen and proven nesting are the only exclusion routes. A broken
+      # provider/ancestry/rectangle cannot make an ambiguous window look unique.
+      $offscreen = $document.Current.IsOffscreen
+      if ($offscreen -eq $true) { continue }
+      if ($offscreen -ne $false) { throw 'document visibility unavailable' }
+      $ancestor = $treeWalker.GetParent($document)
+      $nested = $false
+      $exactWindow = $false
+      for ($depth = 0; $depth -lt 64 -and $null -ne $ancestor; $depth++) {
+        if (Test-SameAutomationElement $ancestor $root) { $exactWindow = $true; break }
+        if ($ancestor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) { break }
+        if ($ancestor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Document) { $nested = $true }
+        $ancestor = $treeWalker.GetParent($ancestor)
+      }
+      if (-not $exactWindow) { throw 'document ancestry unavailable' }
+      if ($nested) { continue }
+      $count++
+      if ($count -gt 1) { throw 'multiple visible top-level documents' }
+      $url = Read-ValidatedDocumentUrl $document $rootRect
+    }
+    if ($count -ne 1) { throw 'document URL unavailable' }
+    return [pscustomobject]@{ found = $true; url = $url; error = '' }
   } catch {
-    return [pscustomobject]@{ found = $false; url = ''; error = $_.Exception.Message }
+    # Only our fixed diagnostics leave the host, never provider exception data.
+    $message = $_.Exception.Message
+    if ($message -notin @('document window unavailable', 'document geometry unavailable',
+        'document ancestry unavailable', 'document visibility unavailable',
+        'multiple visible top-level documents', 'document URL unavailable')) {
+      $message = 'document provider unavailable'
+    }
+    return [pscustomobject]@{ found = $false; url = ''; error = $message }
+  }
+}
+
+function Read-Document([IntPtr]$handle) {
+  try {
+    if ($handle -eq [IntPtr]::Zero -or [DriftyTrackerUiaNative]::GetForegroundWindow() -ne $handle) {
+      throw 'foreground changed'
+    }
+    [uint32]$ownerPid = 0
+    [void][DriftyTrackerUiaNative]::GetWindowThreadProcessId($handle, [ref]$ownerPid)
+    $root = $auto::FromHandle($handle)
+    if ($ownerPid -eq 0 -or $null -eq $root -or $root.Current.ProcessId -ne $ownerPid -or
+        $root.Current.NativeWindowHandle -ne $handle.ToInt64()) { throw 'window changed' }
+    $result = Read-TopLevelDocument $root $walker $documentCondition ($auto::FocusedElement)
+    [uint32]$afterPid = 0
+    [void][DriftyTrackerUiaNative]::GetWindowThreadProcessId($handle, [ref]$afterPid)
+    if ($afterPid -ne $ownerPid -or [DriftyTrackerUiaNative]::GetForegroundWindow() -ne $handle -or
+        -not (Test-SameAutomationElement $root ($auto::FromHandle($handle)))) { throw 'window changed' }
+    return $result
+  } catch {
+    return [pscustomobject]@{ found = $false; url = ''; error = 'document window unavailable or changed' }
   }
 }
 
@@ -127,9 +221,9 @@ while ($true) {
       [pscustomobject]@{ found = $false; url = ''; error = 'invalid request' } | ConvertTo-Json -Compress
       continue
     }
-    Read-AddressBar ([IntPtr][long]$Matches[1]) | ConvertTo-Json -Compress
+    Read-Document ([IntPtr][long]$Matches[1]) | ConvertTo-Json -Compress
   } catch {
-    [pscustomobject]@{ found = $false; url = ''; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    [pscustomobject]@{ found = $false; url = ''; error = 'invalid request' } | ConvertTo-Json -Compress
   }
 }
 """
@@ -146,22 +240,24 @@ def is_live_uia_browser(app_name: str | None) -> bool:
 
 
 def normalize_uia_url(value: str | None) -> str | None:
-    """Return an absolute HTTP(S) URL or refuse a non-URL UIA value."""
-    cleaned = (value or "").strip()
-    if not cleaned or any(character.isspace() for character in cleaned):
+    """Validate an explicit Document URL without inventing or rewriting identity."""
+    if not isinstance(value, str) or not re.match(r"^https?://", value, re.IGNORECASE):
         return None
-    if "://" not in cleaned:
-        cleaned = "https://" + cleaned
+    cleaned = value
+    if (any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in cleaned)
+            or "\\" in cleaned or re.search(r"%(?![0-9a-fA-F]{2})", cleaned)):
+        return None
     try:
         parsed = urlparse(cleaned)
     except ValueError:
         return None
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+    if (parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname
+            or parsed.username is not None or parsed.password is not None):
         return None
     if all(character.isdigit() or character == "." for character in parsed.hostname):
         octets = parsed.hostname.split(".")
         if len(octets) != 4 or any(
-            not octet or int(octet) > 255 for octet in octets
+            not octet or not octet.isascii() or int(octet) > 255 for octet in octets
         ):
             return None
     try:
@@ -178,10 +274,10 @@ def parse_uia_response(line: str) -> WindowsBrowserUiaResult:
         return WindowsBrowserUiaResult(None, "Windows UIA returned invalid JSON.")
     if not isinstance(payload, dict):
         return WindowsBrowserUiaResult(None, "Windows UIA returned an invalid response.")
-    normalized = normalize_uia_url(payload.get("url") if payload.get("found") else None)
+    normalized = normalize_uia_url(payload.get("url") if payload.get("found") is True else None)
     if normalized:
         return WindowsBrowserUiaResult(normalized, None)
-    error = " ".join(str(payload.get("error") or "address bar URL unavailable").split())[:240]
+    error = " ".join(str(payload.get("error") or "document URL unavailable").split())[:240]
     return WindowsBrowserUiaResult(None, error)
 
 
@@ -222,6 +318,7 @@ def _readline_with_timeout(stream, timeout_seconds: float) -> str:
 
 class _WindowsUiaHost:
     def __init__(self) -> None:
+        self._has_completed_request = False
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         self._process = subprocess.Popen(
             [
@@ -259,9 +356,16 @@ class _WindowsUiaHost:
             raise RuntimeError("Windows UIA host is not running.")
         self._process.stdin.write(f"READ {int(hwnd)}\n")
         self._process.stdin.flush()
-        return parse_uia_response(
-            _readline_with_timeout(self._process.stdout, _REQUEST_TIMEOUT_SECONDS)
+        timeout_seconds = (
+            _REQUEST_TIMEOUT_SECONDS
+            if self._has_completed_request
+            else _COLD_REQUEST_TIMEOUT_SECONDS
         )
+        result = parse_uia_response(
+            _readline_with_timeout(self._process.stdout, timeout_seconds)
+        )
+        self._has_completed_request = True
+        return result
 
     def close(self) -> None:
         process = getattr(self, "_process", None)

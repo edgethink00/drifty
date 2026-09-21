@@ -7,6 +7,7 @@ import {
   areSameDriftAlarmSurface,
   driftAlarmSurfaceKey,
   resolveDriftAlarmSurface,
+  type DriftAlarmSurface,
 } from "./driftAlarmSurface";
 
 export const DRIFT_ALARM_EPISODE_MAX_GAP_SECONDS = 15;
@@ -47,8 +48,16 @@ export function buildContinuousDriftAlarmEpisode(input: {
   for (let index = currentIndex - 1; index >= 0; index -= 1) {
     const previousSegment = ordered[index];
     const previousSurface = resolveDriftAlarmSurface(previousSegment);
-    if (!previousSurface || !areSameDriftAlarmSurface(previousSurface, currentSurface)) break;
     if (!areSegmentsContinuous(previousSegment, nextSegment, maxGapSeconds)) break;
+    if (!previousSurface) {
+      if (!isTransientBrowserContextGap(previousSegment, nextSegment, currentSurface, maxGapSeconds)) break;
+      // A bounded failed address sample proves no drift time by itself. Skip it
+      // without adding its duration, but keep it as the temporal bridge to the
+      // next independently identified segment on the same browser surface.
+      nextSegment = previousSegment;
+      continue;
+    }
+    if (!areSameDriftAlarmSurface(previousSurface, currentSurface)) break;
     if (!input.isEligibleDrift(previousSegment)) break;
 
     episodeSegments.unshift(previousSegment);
@@ -66,6 +75,34 @@ export function buildContinuousDriftAlarmEpisode(input: {
     ),
     segmentIds: episodeSegments.map((segment) => segment.id),
   };
+}
+
+function isTransientBrowserContextGap(
+  segment: ActivitySegment,
+  nextSegment: ActivitySegment,
+  currentSurface: DriftAlarmSurface,
+  maxGapSeconds: number,
+): boolean {
+  if (currentSurface.kind !== "browser") return false;
+  if (segment.browserAutomationStatus !== "unavailable") return false;
+  if (resolveDriftAlarmSurface(segment) !== null) return false;
+  if (normalizedDurationSeconds(segment.durationSeconds) > maxGapSeconds) return false;
+
+  const segmentBundleId = normalizedIdentity(segment.bundleId);
+  const nextBundleId = normalizedIdentity(nextSegment.bundleId);
+  const segmentBrowser = normalizedIdentity(segment.browserName ?? segment.appName);
+  const nextBrowser = normalizedIdentity(nextSegment.browserName ?? nextSegment.appName);
+  const segmentTitle = normalizedTitle(segment.windowTitle);
+  const nextTitle = normalizedTitle(nextSegment.windowTitle);
+
+  return Boolean(
+    segmentBundleId
+    && segmentBundleId === nextBundleId
+    && segmentBrowser
+    && segmentBrowser === nextBrowser
+    && segmentTitle
+    && segmentTitle === nextTitle
+  );
 }
 
 function singleSegmentEpisode(segment: ActivitySegment): DriftAlarmEpisode {
@@ -104,6 +141,14 @@ function areSegmentsContinuous(previous: ActivitySegment, next: ActivitySegment,
 
 function normalizedDurationSeconds(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function normalizedIdentity(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizedTitle(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\s+/g, " ");
 }
 
 function timestampMs(value: string): number {

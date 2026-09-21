@@ -163,6 +163,22 @@ describe("NotificationsSettingsSection", () => {
     expect(screen.getAllByRole("switch", { name: /자동 닫기/ })).toHaveLength(1);
   });
 
+  it("uses Windows notification copy on Windows without leaking macOS terminology", () => {
+    renderSettings({ hostPlatform: "windows" });
+
+    expect(screen.getByText("Also send a Windows notification")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Toggle Windows notifications" })).toBeTruthy();
+    expect(screen.getByText("Customize the wording shown across Drift alerts, Windows notifications, and Automatic close.")).toBeTruthy();
+    expect(screen.queryByText("Also send a macOS notification")).toBeNull();
+    expect(screen.queryByText(/macOS notifications/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit alert wording" }));
+    expect(screen.getByRole("tab", { name: "Windows notification" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "macOS notification" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Windows notification" }));
+    expect(screen.getByText("Shown by Windows when Drifty sends a background drift notification.")).toBeTruthy();
+  });
+
   it("connects each Automatic close switch to its row copy", () => {
     renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: false });
 

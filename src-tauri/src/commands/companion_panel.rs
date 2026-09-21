@@ -5,6 +5,10 @@ use std::sync::{mpsc, OnceLock};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use super::watcher::COMPANION_PILL_WINDOW_LABEL;
+#[cfg(target_os = "windows")]
+use super::windows_overlay::{
+    configure_windows_overlay, show_windows_overlay, WindowsOverlayInputMode,
+};
 
 pub const COMPANION_POINTER_ENTERED_EVENT: &str = "watcher-companion-pointer-entered";
 pub const COMPANION_POINTER_MOVED_EVENT: &str = "watcher-companion-pointer-moved";
@@ -27,7 +31,7 @@ static COMPANION_TRANSITION_SENDER: OnceLock<mpsc::Sender<CompanionTransitionMes
 animation block. Emitting synchronously from that stack can deadlock, while
 spawning one thread per event can reorder `completed` ahead of `started`.
 One serial worker preserves native phase order without re-entering WebKit. */
-fn emit_companion_panel_transition(
+pub(super) fn emit_companion_panel_transition(
     window: &WebviewWindow,
     state: &str,
     phase: &str,
@@ -750,7 +754,12 @@ pub fn configure_companion_panel(app: &AppHandle, window: &WebviewWindow) -> tau
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn configure_companion_panel(_app: &AppHandle, window: &WebviewWindow) -> tauri::Result<()> {
+    configure_windows_overlay(window, WindowsOverlayInputMode::Interactive)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn configure_companion_panel(_app: &AppHandle, _window: &WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
@@ -762,6 +771,10 @@ pub fn show_companion_panel(app: &AppHandle, window: &WebviewWindow) -> Result<(
         return Ok(());
     }
 
+    #[cfg(target_os = "windows")]
+    return show_windows_overlay(window);
+
+    #[cfg(not(target_os = "windows"))]
     window.show().map_err(|error| error.to_string())
 }
 

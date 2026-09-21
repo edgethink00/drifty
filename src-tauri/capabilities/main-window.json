@@ -12,6 +12,7 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "snap-layout:default",
     "notification:default",
     "updater:allow-check",
     "updater:allow-download",
@@ -170,6 +171,7 @@
     "allow-system-open-settings-pane",
     "allow-window-set-onboarding-presentation",
     "allow-window-set-theme-appearance",
+    "allow-window-show-system-menu",
     "allow-watcher-peek-show",
     "allow-watcher-peek-hide",
     "allow-watcher-companion-set-enabled",

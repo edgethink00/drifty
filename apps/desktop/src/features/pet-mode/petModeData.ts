@@ -299,6 +299,12 @@ export type PetModeInterventionTarget = {
   readonly id: string;
   readonly appName: string;
   readonly browserName: string | null;
+  /** Native-only browser process identity. Rust strips this before emitting to the pet WebView. */
+  readonly browserIdentity?: string | null;
+  /** Native-only captured page identity. Rust strips this before emitting to the pet WebView. */
+  readonly siteDomain?: string | null;
+  /** Native-only captured page identity. Rust strips this before emitting to the pet WebView. */
+  readonly siteUrl?: string | null;
   readonly preview: boolean;
   readonly labTarget?: "browser_tab_x" | "drifty_window_x" | null;
 };
@@ -956,6 +962,9 @@ export function buildPetModeInterventionTarget(input: {
   readonly id: string;
   readonly appName: string;
   readonly browserName?: string | null;
+  readonly browserIdentity?: string | null;
+  readonly siteDomain?: string | null;
+  readonly siteUrl?: string | null;
   readonly preview?: boolean;
   readonly labTarget?: "browser_tab_x" | "drifty_window_x" | null;
 }): PetModeInterventionTarget {
@@ -963,6 +972,9 @@ export function buildPetModeInterventionTarget(input: {
     id: input.id,
     appName: input.appName.trim() || "Unknown app",
     browserName: input.browserName?.trim() || null,
+    browserIdentity: input.browserIdentity?.trim() || null,
+    siteDomain: input.siteDomain?.trim() || null,
+    siteUrl: input.siteUrl?.trim() || null,
     preview: input.preview ?? false,
     labTarget: input.labTarget ?? null,
   };

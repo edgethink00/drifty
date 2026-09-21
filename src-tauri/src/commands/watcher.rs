@@ -25,7 +25,7 @@ use std::{
 };
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, PhysicalPosition as Point,
-    PhysicalSize as Size, WebviewUrl, WebviewWindowBuilder,
+    PhysicalSize as Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
 #[cfg(not(target_os = "macos"))]
@@ -37,10 +37,17 @@ use super::companion_panel::{
     resolve_companion_horizontal_anchor, show_companion_panel, CompanionFrame,
     CompanionHorizontalAnchor, CompanionVerticalAnchor,
 };
+#[cfg(not(target_os = "macos"))]
+use super::companion_panel::emit_companion_panel_transition;
 use super::watcher_extreme_nudge::{
     calculate_extreme_nudge_toast_window_position, extreme_nudge_toast_window_dimensions,
     is_extreme_nudge_toast_payload,
 };
+#[cfg(target_os = "windows")]
+use super::windows_overlay::{
+    configure_windows_overlay, show_windows_overlay, WindowsOverlayInputMode,
+};
+use super::windows_overlay::{hide_windows_overlay, set_windows_overlay_click_through};
 
 pub const WATCHER_PEEK_WINDOW_LABEL: &str = "watcher-peek";
 pub const COMPANION_PILL_WINDOW_LABEL: &str = "companion-pill";
@@ -267,7 +274,10 @@ pub fn setup_watcher_window(app: &tauri::App) -> tauri::Result<()> {
     .visible(false)
     .build()?;
 
-    let _ = window.set_ignore_cursor_events(true);
+    #[cfg(target_os = "windows")]
+    configure_windows_overlay(&window, WindowsOverlayInputMode::Passive)?;
+    #[cfg(not(target_os = "windows"))]
+    window.set_ignore_cursor_events(true)?;
     Ok(())
 }
 
@@ -299,7 +309,7 @@ pub fn setup_companion_pill_window(app: &tauri::App) -> tauri::Result<()> {
     .build()?;
 
     configure_companion_panel(app.handle(), &window)?;
-    let _ = window.set_ignore_cursor_events(false);
+    let _ = set_windows_overlay_click_through(&window, false);
     Ok(())
 }
 
@@ -347,9 +357,7 @@ pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), Strin
         .ok_or_else(|| "watcher peek window is not available".to_string())?;
     resize_watcher_window(&app, &payload)?;
     position_watcher_window(&app, &payload)?;
-    window
-        .set_ignore_cursor_events(should_ignore_cursor_events_for_payload(&payload))
-        .map_err(|error| error.to_string())?;
+    set_windows_overlay_click_through(&window, should_ignore_cursor_events_for_payload(&payload))?;
     window
         .set_always_on_top(true)
         .map_err(|error| error.to_string())?;
@@ -359,6 +367,10 @@ pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), Strin
     window
         .emit("watcher-peek-show", payload)
         .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "windows")]
+    return show_windows_overlay(&window);
+
+    #[cfg(not(target_os = "windows"))]
     window.show().map_err(|error| error.to_string())
 }
 
@@ -391,19 +403,15 @@ pub fn watcher_peek_hide(app: AppHandle, moment_key: Option<String>) -> Result<(
             schedule_menu_bar_companion_hide(app.clone());
             return Ok(());
         }
-        window
-            .set_ignore_cursor_events(false)
-            .map_err(|error| error.to_string())?;
+        refresh_companion_pointer_policy(&app, &window)?;
         return show_companion_panel(&app, &window);
     }
 
     let Some(window) = app.get_webview_window(WATCHER_PEEK_WINDOW_LABEL) else {
         return Ok(());
     };
-    window
-        .set_ignore_cursor_events(true)
-        .map_err(|error| error.to_string())?;
-    window.hide().map_err(|error| error.to_string())
+    set_windows_overlay_click_through(&window, true)?;
+    hide_windows_overlay(&window)
 }
 
 #[tauri::command]
@@ -437,7 +445,7 @@ fn set_companion_surface_policy(
 
     if policy != CompanionSurfacePolicy::Off {
         if let Some(watcher_window) = app.get_webview_window(WATCHER_PEEK_WINDOW_LABEL) {
-            let _ = watcher_window.hide();
+            let _ = hide_windows_overlay(&watcher_window);
         }
     }
 
@@ -464,9 +472,7 @@ fn set_companion_surface_policy(
                 // which looks like the resident pill jumps across the desktop.
                 position_companion_pill_default(app)?;
             }
-            window
-                .set_ignore_cursor_events(false)
-                .map_err(|error| error.to_string())?;
+            refresh_companion_pointer_policy(app, &window)?;
             // On macOS the companion NSPanel already carries a status-window level
             // and its final collection behavior. Reapplying Tauri's generic window
             // flags here would downgrade the level to a regular floating window and
@@ -494,16 +500,12 @@ fn set_companion_surface_policy(
                 resize_companion_pill_window(&window, "collapsed")?;
                 position_companion_pill_under_menu_bar(app, &window, "collapsed")?;
             }
-            window
-                .set_ignore_cursor_events(true)
-                .map_err(|error| error.to_string())?;
-            window.hide().map_err(|error| error.to_string())
+            set_windows_overlay_click_through(&window, true)?;
+            hide_windows_overlay(&window)
         }
         CompanionSurfacePolicy::Off => {
-            window
-                .set_ignore_cursor_events(true)
-                .map_err(|error| error.to_string())?;
-            window.hide().map_err(|error| error.to_string())
+            set_windows_overlay_click_through(&window, true)?;
+            hide_windows_overlay(&window)
         }
     }
 }
@@ -605,21 +607,17 @@ pub fn watcher_companion_set_state(
             React exit fade has completed, remove the panel instead of visibly
             shrinking it into a floating resident pill that does not exist in
             this policy. Reset its resting geometry only while hidden. */
-            window.hide().map_err(|error| error.to_string())?;
+            hide_windows_overlay(&window)?;
             resize_companion_pill_window(&window, &state)?;
             position_companion_pill_under_menu_bar(&app, &window, &state)?;
-            window
-                .set_ignore_cursor_events(true)
-                .map_err(|error| error.to_string())?;
+            set_windows_overlay_click_through(&window, true)?;
             return Ok(CompanionSetStateResult {
                 presentation_id: None,
                 prepared: false,
                 menu_anchor_x: None,
             });
         }
-        window
-            .set_ignore_cursor_events(false)
-            .map_err(|error| error.to_string())?;
+        refresh_companion_pointer_policy(&app, &window)?;
         /* A menu-bar card always enters from the status item, including when it
         preempts or follows a differently sized card. Letting AppKit resize the
         visible milestone frame directly into EOD/drift/nudge pins the previous
@@ -630,7 +628,7 @@ pub fn watcher_companion_set_state(
             should_prepare_direct_menu_bar_card(companion_menu_bar_mode(), &state);
         if prepare_hidden_menu_bar_card {
             if matches!(window.is_visible(), Ok(true)) {
-                window.hide().map_err(|error| error.to_string())?;
+                hide_windows_overlay(&window)?;
             }
             /* This path intentionally has no native resize animation. The panel
             is still hidden, so resize and anchor it at the destination before
@@ -656,6 +654,7 @@ pub fn watcher_companion_set_state(
     )?;
     if let Some(window) = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL) {
         show_companion_panel(&app, &window)?;
+        refresh_companion_pointer_policy(&app, &window)?;
     }
     Ok(CompanionSetStateResult {
         presentation_id: None,
@@ -695,11 +694,28 @@ pub fn watcher_companion_present_prepared(
         return Ok(false);
     }
     position_companion_pill_under_menu_bar(&app, &window, &state)?;
-    window
-        .set_ignore_cursor_events(false)
-        .map_err(|error| error.to_string())?;
+    refresh_companion_pointer_policy(&app, &window)?;
     show_companion_panel(&app, &window)?;
     Ok(true)
+}
+
+fn refresh_companion_pointer_policy(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Showing another moment need not change the capsule state or cursor.
+        // The renderer's edge-triggered poll therefore may not send another
+        // input-policy update. Reconcile with native geometry at this boundary
+        // instead of unconditionally making the whole canvas interactive.
+        set_windows_overlay_click_through(
+            window,
+            !watcher_companion_cursor_over_capsule(app.clone()),
+        )
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        set_windows_overlay_click_through(window, false)
+    }
 }
 
 /// Keep the fixed transparent canvas around the capsule from stealing clicks.
@@ -719,9 +735,7 @@ pub fn watcher_companion_set_click_through(app: AppHandle, ignore: bool) -> Resu
     let Some(window) = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL) else {
         return Ok(());
     };
-    window
-        .set_ignore_cursor_events(ignore)
-        .map_err(|error| error.to_string())
+    set_windows_overlay_click_through(&window, ignore)
 }
 
 /// True when the cursor is over the visible capsule rather than the fixed
@@ -838,9 +852,7 @@ pub fn watcher_peek_set_interactive(app: AppHandle, interactive: bool) -> Result
         return Ok(());
     };
 
-    window
-        .set_ignore_cursor_events(!interactive)
-        .map_err(|error| error.to_string())
+    set_windows_overlay_click_through(&window, !interactive)
 }
 
 #[tauri::command]
@@ -1202,12 +1214,20 @@ fn resize_companion_pill_window_anchored(
 
     #[cfg(not(target_os = "macos"))]
     {
+        // The renderer animates the capsule between sizes, so the native resize
+        // has to be bracketed by its own transition events. Without them the
+        // window jumps to the new frame while the webview is still painting the
+        // old one.
+        let horizontal = companion_pill_horizontal_anchor();
         let Some(monitor) = window
             .current_monitor()
             .map_err(|error| error.to_string())?
             .or_else(|| resolve_watcher_monitor(app))
         else {
-            return resize_companion_pill_window(&window, state);
+            emit_companion_panel_transition(&window, state, "started", horizontal);
+            resize_companion_pill_window(&window, state)?;
+            emit_companion_panel_transition(&window, state, "completed", horizontal);
+            return Ok(());
         };
 
         let scale_factor = monitor.scale_factor();
@@ -1227,7 +1247,7 @@ fn resize_companion_pill_window_anchored(
         let old_capsule_x = old_position.x + old_left_inset;
         let (old_capsule_width, _) = companion_pill_capsule_size(previous_state)?;
         let (new_capsule_width, _) = companion_pill_capsule_size(state)?;
-        let target_capsule_x = match companion_pill_horizontal_anchor() {
+        let target_capsule_x = match horizontal {
             CompanionHorizontalAnchor::Left => old_capsule_x,
             CompanionHorizontalAnchor::Center => {
                 old_capsule_x + (old_capsule_width - new_capsule_width) / 2.0
@@ -1260,10 +1280,13 @@ fn resize_companion_pill_window_anchored(
             work_position.y,
             (work_bottom - target_height).max(work_position.y),
         );
+        emit_companion_panel_transition(&window, state, "started", horizontal);
         resize_companion_pill_window(&window, state)?;
         window
             .set_position(LogicalPosition::new(clamped_x.round(), clamped_y.round()))
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        emit_companion_panel_transition(&window, state, "completed", horizontal);
+        Ok(())
     }
 }
 
@@ -1413,8 +1436,8 @@ fn schedule_menu_bar_companion_hide(app: AppHandle) {
                 return;
             }
             if let Some(window) = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL) {
-                let _ = window.set_ignore_cursor_events(true);
-                let _ = window.hide();
+                let _ = set_windows_overlay_click_through(&window, true);
+                let _ = hide_windows_overlay(&window);
             }
         });
     });

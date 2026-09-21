@@ -255,6 +255,31 @@ fn safe_failure_diagnostic(value: &str) -> Option<String> {
     if normalized.is_empty() || normalized.len() > 96 {
         return None;
     }
+    // The extension's close-tab protocol uses hyphens; renderer diagnostics
+    // use underscores. Translate only known protocol reasons, not free text.
+    if let Some(reason) = normalized.strip_prefix("windows_browser_bridge_") {
+        if matches!(
+            reason,
+            "target-missing"
+                | "private-tab"
+                | "target-id-mismatch"
+                | "target-url-mismatch"
+                | "target-not-active"
+                | "browser-unfocused"
+                | "browser-api-failed"
+                | "last-tab-refused"
+                | "target-window-changed"
+                | "target-context-changed"
+                | "postcondition-failed"
+                | "close-failed"
+                | "command-busy"
+        ) {
+            return Some(format!(
+                "windows_browser_bridge_{}",
+                reason.replace('-', "_")
+            ));
+        }
+    }
     normalized
         .chars()
         .all(|character| {
@@ -488,6 +513,57 @@ mod tests {
         let serialized = serde_json::to_string(&failure).expect("serialize failure");
         assert!(!serialized.contains("https://"));
         assert!(!serialized.contains("target"));
+    }
+
+    #[test]
+    fn windows_bridge_refusals_keep_safe_renderer_diagnostics() {
+        for (reason, expected) in [
+            ("target-missing", "target_missing"),
+            ("private-tab", "private_tab"),
+            ("target-id-mismatch", "target_id_mismatch"),
+            ("target-url-mismatch", "target_url_mismatch"),
+            ("target-not-active", "target_not_active"),
+            ("browser-unfocused", "browser_unfocused"),
+            ("browser-api-failed", "browser_api_failed"),
+            ("last-tab-refused", "last_tab_refused"),
+            ("target-window-changed", "target_window_changed"),
+            ("target-context-changed", "target_context_changed"),
+            ("postcondition-failed", "postcondition_failed"),
+            ("close-failed", "close_failed"),
+            ("command-busy", "command_busy"),
+        ] {
+            let failure = ExtremeNudgeFailure::from(ExtremeNudgeError::BrowserTabNotFound {
+                diagnostic: format!("windows_browser_bridge_{reason}"),
+            });
+            assert_eq!(
+                serde_json::to_value(failure).expect("serialize bridge refusal"),
+                serde_json::json!({
+                    "code": "browser_tab_not_found",
+                    "diagnostic": format!("windows_browser_bridge_{expected}"),
+                }),
+                "{reason}",
+            );
+        }
+    }
+
+    #[test]
+    fn windows_bridge_refusal_mapping_does_not_accept_arbitrary_messages() {
+        for diagnostic in [
+            "windows_browser_bridge_unknown-reason",
+            "windows_browser_bridge_last-tab-refused-extra",
+            "windows_browser_bridge_LAST-TAB-REFUSED",
+            "windows_browser_bridge_last-tab-refused\nprivate",
+            "windows_browser_bridge_https://example.com/reset?token=secret",
+            "windows_browser_bridge_C:\\Users\\private\\data",
+            "last-tab-refused",
+        ] {
+            let failure = ExtremeNudgeFailure::from(ExtremeNudgeError::BrowserTabNotFound {
+                diagnostic: diagnostic.to_string(),
+            });
+            assert_eq!(failure.diagnostic, None, "{diagnostic}");
+        }
+        assert_eq!(safe_failure_diagnostic(&"a".repeat(97)), None);
+        assert_eq!(safe_failure_diagnostic(" "), None);
     }
 
     #[test]

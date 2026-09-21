@@ -394,15 +394,21 @@ describe("petModeData", () => {
     expect(snapshot).not.toHaveProperty("windowTitle");
   });
 
-  it("normalizes intervention identity without adding raw activity fields", () => {
+  it("normalizes the native-only identity needed to locate a browser tab X", () => {
     expect(buildPetModeInterventionTarget({
       id: "candidate-1",
       appName: "  Google Chrome  ",
       browserName: "  Google Chrome ",
+      browserIdentity: "  C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe  ",
+      siteDomain: "  example.com ",
+      siteUrl: "  https://example.com/drift?q=1  ",
     })).toEqual({
       id: "candidate-1",
       appName: "Google Chrome",
       browserName: "Google Chrome",
+      browserIdentity: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      siteDomain: "example.com",
+      siteUrl: "https://example.com/drift?q=1",
       preview: false,
       labTarget: null,
     });

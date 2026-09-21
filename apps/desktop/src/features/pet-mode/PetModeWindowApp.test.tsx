@@ -435,6 +435,11 @@ describe("PetModeWindowApp", () => {
 
   async function mountTimedPause(kind: "15" | "60" | "today" | "forever" = "15", enabled = false) {
     vi.useFakeTimers();
+    // Keep "today" comfortably ahead of local midnight. Without a fixed
+    // wall clock this suite becomes time-of-day dependent: a run during the
+    // final 14 minutes of the day legitimately expires the pause while the
+    // assertion below still expects it to remain asleep.
+    vi.setSystemTime(new Date(2026, 8, 14, 12, 0, 0, 0));
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     window.localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(enabled, kind)));
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
@@ -674,7 +679,19 @@ describe("PetModeWindowApp", () => {
       window.dispatchEvent(new Event("focus"));
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");
-    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    // A phase-change effect normally schedules this within 120 ms. Under a
+    // fully parallel suite React can defer that passive effect, so keep the
+    // same product contract bounded by the 6-second periodic safety net.
+    for (
+      let elapsedMs = 0;
+      elapsedMs <= PET_MODE_SEAT_RECONCILE_INTERVAL_MS + 120
+        && !bridge.reconcileNativePetPosition.mock.calls.some(
+          ([reducedMotion, onlyIfCoveringControl]) => !reducedMotion && !onlyIfCoveringControl,
+        );
+      elapsedMs += 120
+    ) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(120); });
+    }
     expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false, false);
   }, 20_000);
 

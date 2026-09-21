@@ -41,4 +41,3 @@ describe("drift notification subject", () => {
     });
   });
 });
-

@@ -77,4 +77,3 @@ export function selectCopySection(key: DriftAlarmCopySectionKey): DriftAlarmCopy
     }
   }
 }
-

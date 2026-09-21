@@ -1174,7 +1174,9 @@
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  /* 이 배지는 한글 라벨을 9.5px 로 조판한다. 토큰을 쓰면 플랫폼별 폴백과
+     한글 폴백이 한 곳에서 관리된다. */
+  font-family: var(--font-sans);
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -1253,7 +1255,7 @@
   border-radius: 9999px;
   background: rgba(15, 23, 42, 0.94);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.42);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 8.5px;
   font-weight: 800;
   letter-spacing: 0.025em;

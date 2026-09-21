@@ -27,7 +27,13 @@ pub fn list_on_screen_ledges(
         let windows = copy_listed_windows()?;
         Ok(ledges_from_windows(&windows, pet_window_number))
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let scale_factor = windows_scale_factor_for(pet_window_number);
+        let windows = copy_listed_windows(scale_factor)?;
+        Ok(ledges_from_windows(&windows, pet_window_number))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = pet_window_number;
         Err("Window listing is unavailable".into())
@@ -105,16 +111,21 @@ fn is_dock_strip(window: &ListedWindow) -> bool {
 
 fn is_system_chrome(owner: &str) -> bool {
     matches!(
-        owner,
-        "Window Server"
+        owner.to_ascii_lowercase().as_str(),
+        "window server"
             | "loginwindow"
-            | "Dock"
-            | "Control Center"
+            | "dock"
+            | "control center"
             | "제어 센터"
-            | "SystemUIServer"
-            | "Notification Center"
-            | "UserNotificationCenter"
-            | "NotificationCentre"
+            | "systemuiserver"
+            | "notification center"
+            | "usernotificationcenter"
+            | "notificationcentre"
+            | "explorer"
+            | "shellexperiencehost"
+            | "searchhost"
+            | "startmenuexperiencehost"
+            | "textinputhost"
     )
 }
 
@@ -126,6 +137,150 @@ fn ledge_name(window: &ListedWindow) -> String {
     } else {
         "window".into()
     }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_scale_factor_for(pet_window_number: i64) -> f64 {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+
+    if pet_window_number <= 0 {
+        return 1.0;
+    }
+    let hwnd = pet_window_number as usize as HWND;
+    let dpi = unsafe { GetDpiForWindow(hwnd) };
+    if dpi == 0 {
+        1.0
+    } else {
+        f64::from(dpi) / 96.0
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn copy_listed_windows(scale_factor: f64) -> Result<Vec<ListedWindow>, String> {
+    use windows_sys::core::BOOL;
+    use windows_sys::Win32::Foundation::{HWND, LPARAM, RECT};
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+        IsIconic, IsWindowVisible,
+    };
+
+    struct Context {
+        windows: Vec<ListedWindow>,
+        scale_factor: f64,
+    }
+
+    fn read_title(hwnd: HWND) -> String {
+        let length = unsafe { GetWindowTextLengthW(hwnd) };
+        if length <= 0 {
+            return String::new();
+        }
+        let mut buffer = vec![0_u16; length as usize + 1];
+        let written = unsafe { GetWindowTextW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32) };
+        String::from_utf16_lossy(&buffer[..written.max(0) as usize])
+    }
+
+    fn read_owner(pid: u32) -> String {
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if process.is_null() {
+            return String::new();
+        }
+        let mut buffer = vec![0_u16; 32_768];
+        let mut length = buffer.len() as u32;
+        let read =
+            unsafe { QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut length) }
+                != 0;
+        unsafe {
+            windows_sys::Win32::Foundation::CloseHandle(process);
+        }
+        if !read {
+            return String::new();
+        }
+        let path = String::from_utf16_lossy(&buffer[..length as usize]);
+        path.rsplit(['\\', '/'])
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches(".exe")
+            .to_string()
+    }
+
+    fn read_bounds(hwnd: HWND) -> Option<RECT> {
+        let mut cloaked = 0_u32;
+        let cloak_result = unsafe {
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED as u32,
+                (&mut cloaked as *mut u32).cast::<c_void>(),
+                std::mem::size_of::<u32>() as u32,
+            )
+        };
+        if cloak_result >= 0 && cloaked != 0 {
+            return None;
+        }
+
+        let mut bounds = RECT::default();
+        let extended_result = unsafe {
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_EXTENDED_FRAME_BOUNDS as u32,
+                (&mut bounds as *mut RECT).cast::<c_void>(),
+                std::mem::size_of::<RECT>() as u32,
+            )
+        };
+        if extended_result < 0 && unsafe { GetWindowRect(hwnd, &mut bounds) } == 0 {
+            return None;
+        }
+        Some(bounds)
+    }
+
+    unsafe extern "system" fn visit(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        if unsafe { IsWindowVisible(hwnd) } == 0 || unsafe { IsIconic(hwnd) } != 0 {
+            return 1;
+        }
+        let Some(bounds) = read_bounds(hwnd) else {
+            return 1;
+        };
+        let context = unsafe { &mut *(lparam as *mut Context) };
+        let scale = context.scale_factor.max(0.5);
+        let mut pid = 0_u32;
+        unsafe {
+            GetWindowThreadProcessId(hwnd, &mut pid);
+        }
+        let owner = read_owner(pid);
+        context.windows.push(ListedWindow {
+            id: hwnd as usize as i64,
+            pid: i64::from(pid),
+            owner,
+            name: read_title(hwnd),
+            layer: 0,
+            alpha: 1.0,
+            bounds: PetRect {
+                x: f64::from(bounds.left) / scale,
+                y: f64::from(bounds.top) / scale,
+                width: f64::from(bounds.right - bounds.left) / scale,
+                height: f64::from(bounds.bottom - bounds.top) / scale,
+            },
+        });
+        1
+    }
+
+    let mut context = Context {
+        windows: Vec::new(),
+        scale_factor,
+    };
+    if unsafe { EnumWindows(Some(visit), (&mut context as *mut Context) as LPARAM) } == 0 {
+        return Err(format!(
+            "Win32 window listing failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(context.windows)
 }
 
 #[cfg(target_os = "macos")]

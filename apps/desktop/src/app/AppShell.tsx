@@ -1,4 +1,6 @@
-import type { ReactNode, RefObject } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ThemeMode } from "../features/settings/settingsStorage";
 import type { NavIconType, TabId } from "./navigation";
 import { useLocalization } from "../features/localization/LocalizationContext";
@@ -59,6 +61,175 @@ export function WindowThemeToggle({ theme, onToggle }: { theme: ThemeMode; onTog
         </svg>
       )}
     </button>
+  );
+}
+
+type WindowSidebarToggleProps = {
+  collapsed: boolean;
+  placement: "chrome" | "titlebar";
+  onToggle: () => void;
+};
+
+export function WindowSidebarToggle({ collapsed, placement, onToggle }: WindowSidebarToggleProps) {
+  const { t } = useLocalization();
+
+  return (
+    <button
+      type="button"
+      className={`window-sidebar-toggle window-sidebar-toggle--${placement}`}
+      onClick={onToggle}
+      aria-label={t(collapsed ? "shell.expandSidebar" : "shell.collapseSidebar")}
+      aria-controls="app-sidebar"
+      aria-expanded={!collapsed}
+      aria-pressed={collapsed}
+    >
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="12" height="12" rx="2.5" />
+        <path d="M7 3v12" />
+      </svg>
+    </button>
+  );
+}
+
+type WindowsTitlebarProps = {
+  leading?: ReactNode;
+  trailing?: ReactNode;
+  maximizable?: boolean;
+};
+
+type WindowsWindowAction = "minimize" | "toggleMaximize" | "close" | "startDragging";
+
+async function runWindowsWindowAction(action: WindowsWindowAction): Promise<void> {
+  if (!isTauri()) return;
+  await getCurrentWindow()[action]();
+}
+
+async function showWindowsSystemMenu(): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("window_show_system_menu");
+}
+
+/**
+ * Windows-only client titlebar. React owns the visible controls while the
+ * native snap-layout plugin overlays the maximize hit target on Windows 11.
+ */
+export function WindowsTitlebar({ leading, trailing, maximizable = true }: WindowsTitlebarProps) {
+  const { t } = useLocalization();
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    if (!isTauri() || !maximizable) return undefined;
+
+    let cancelled = false;
+    let unlistenResize: (() => void) | undefined;
+    let syncInFlight = false;
+    let syncRequested = false;
+
+    void (async () => {
+      const currentWindow = getCurrentWindow();
+      const syncMaximized = async () => {
+        syncRequested = true;
+        if (syncInFlight) return;
+
+        syncInFlight = true;
+        try {
+          while (syncRequested && !cancelled) {
+            syncRequested = false;
+            try {
+              const nextMaximized = await currentWindow.isMaximized();
+              if (!cancelled) setMaximized(nextMaximized);
+            } catch (error: unknown) {
+              if (!cancelled) console.warn("Unable to read the Windows maximize state.", error);
+            }
+          }
+        } finally {
+          syncInFlight = false;
+        }
+      };
+
+      await syncMaximized();
+      const nextUnlistenResize = await currentWindow.onResized(() => {
+        void syncMaximized();
+      });
+      if (cancelled) nextUnlistenResize();
+      else unlistenResize = nextUnlistenResize;
+    })().catch((error: unknown) => {
+      console.warn("Unable to observe the Windows maximize state.", error);
+    });
+
+    return () => {
+      cancelled = true;
+      unlistenResize?.();
+    };
+  }, [maximizable]);
+
+  const runAction = (action: WindowsWindowAction) => {
+    void runWindowsWindowAction(action).catch((error: unknown) => {
+      console.warn(`Unable to ${action} the Windows window.`, error);
+    });
+  };
+
+  return (
+    <header
+      className={maximizable ? "windows-titlebar" : "windows-titlebar windows-titlebar--not-maximizable"}
+      aria-label={t("shell.windowTitlebar")}
+    >
+      <div
+        className="windows-titlebar__drag-region"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          void showWindowsSystemMenu().catch((error: unknown) => {
+            console.warn("Unable to open the Windows system menu.", error);
+          });
+        }}
+        onMouseDown={(event) => {
+          if (event.button !== 0) return;
+          if (maximizable && event.detail === 2) runAction("toggleMaximize");
+          else runAction("startDragging");
+        }}
+      />
+      {leading ? <div className="windows-titlebar__leading">{leading}</div> : null}
+      {trailing ? <div className="windows-titlebar__trailing">{trailing}</div> : null}
+      <div className="windows-caption-controls" role="group" aria-label={t("shell.windowControls")}>
+        <button
+          type="button"
+          className="windows-caption-button"
+          aria-label={t("shell.minimizeWindow")}
+          title={t("shell.minimizeWindow")}
+          onClick={() => runAction("minimize")}
+        >
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5.5h8" /></svg>
+        </button>
+        {maximizable ? (
+          <button
+            id="windows-caption-maximize"
+            type="button"
+            className="windows-caption-button windows-caption-button--maximize"
+            aria-label={t(maximized ? "shell.restoreWindow" : "shell.maximizeWindow")}
+            title={t(maximized ? "shell.restoreWindow" : "shell.maximizeWindow")}
+            onClick={() => runAction("toggleMaximize")}
+          >
+            {maximized ? (
+              <svg viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M3 1.5h5.5V7H7" />
+                <rect x="1.5" y="3" width="5.5" height="5.5" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" /></svg>
+            )}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="windows-caption-button windows-caption-button--close"
+          aria-label={t("shell.closeWindow")}
+          title={t("shell.closeWindow")}
+          onClick={() => runAction("close")}
+        >
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="m1.5 1.5 7 7m0-7-7 7" /></svg>
+        </button>
+      </div>
+    </header>
   );
 }
 

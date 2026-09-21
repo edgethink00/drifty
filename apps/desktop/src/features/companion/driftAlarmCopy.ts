@@ -234,4 +234,3 @@ function fallbackText(value: string | null, fallback: string): string {
 function assertNever(value: never): never {
   throw new Error(`Unexpected drift alarm copy context: ${JSON.stringify(value)}`);
 }
-

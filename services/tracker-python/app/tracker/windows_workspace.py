@@ -20,10 +20,10 @@ Identity model under test (§4.2): ``bundle_id`` carries the AUMID for packaged
 apps and the lowercased executable path otherwise, so downstream identity keys
 (`app_identity_key`) stay unique without schema changes.
 
-Allowlisted Chromium browser URLs are read from the focused window's address
-bar through a resident UI Automation host. Browser history is a conservative
-fallback, not the primary attribution source; Firefox remains on that fallback
-path.
+Allowlisted Chromium browser URLs are read from the focused window's top-level
+Document ValuePattern through a resident UI Automation host. An exact extension
+bridge takes precedence; verified browser history is a separately labeled,
+conservative fallback, including for Firefox without bridge context.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ from app.tracker.browser_automation import BrowserMetadata, normalize_domain, yo
 from app.tracker.browser_history import browser_history_metadata, is_browser_history_supported_app
 from app.tracker.capture_contract import Snapshot, utc_now_iso
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult, read_live_browser_url
+from app.tracker.windows_browser_bridge import read_browser_bridge_metadata
 
 
 _APPLICATION_FRAME_HOST = "applicationframehost.exe"
@@ -349,7 +350,7 @@ def _browser_metadata_from_live_uia(
         return BrowserMetadata(
             browser_name=app_name,
             browser_automation_status="unavailable",
-            browser_automation_error=result.error or "Windows UIA address bar URL unavailable.",
+            browser_automation_error=result.error or "Windows UIA Document URL unavailable.",
         )
     video_id, playlist_id, is_shorts = youtube_ids(result.url)
     return BrowserMetadata(
@@ -359,7 +360,7 @@ def _browser_metadata_from_live_uia(
         youtube_video_id=video_id,
         youtube_playlist_id=playlist_id,
         youtube_is_shorts=is_shorts,
-        match_state="windows-uia-address-bar",
+        match_state="windows-uia-document",
         browser_automation_status="granted",
     )
 
@@ -370,15 +371,20 @@ def enrich_browser_snapshot(
     live_reader: Callable[[int, str | None], WindowsBrowserUiaResult] = read_live_browser_url,
     history_reader: Callable[[str | None, str | None, str | None], BrowserMetadata] = browser_history_metadata,
     history_identity_checker: Callable[[str, str | None], bool] = is_verified_browser_history_identity,
+    bridge_reader: Callable[[str], BrowserMetadata | None] = read_browser_bridge_metadata,
 ) -> Snapshot:
-    """Attach live URL context, then conservatively fall back to history."""
+    """Attach exact bridge context, then UIA, then conservative history."""
     if not is_browser_history_supported_app(snapshot.app_name):
         return snapshot
 
-    live = _browser_metadata_from_live_uia(snapshot.app_name, live_reader(hwnd, snapshot.app_name))
+    bridge = bridge_reader(snapshot.app_name)
+    live = BrowserMetadata(browser_name=snapshot.app_name)
     history = None
-    metadata = live
-    if not live.site_url and history_identity_checker(snapshot.app_name, snapshot.bundle_id):
+    metadata = bridge or live
+    if bridge is None:
+        live = _browser_metadata_from_live_uia(snapshot.app_name, live_reader(hwnd, snapshot.app_name))
+        metadata = live
+    if bridge is None and not live.site_url and history_identity_checker(snapshot.app_name, snapshot.bundle_id):
         history = history_reader(snapshot.app_name, snapshot.window_title, snapshot.observed_at)
         if history.site_url:
             metadata = history
@@ -391,14 +397,23 @@ def enrich_browser_snapshot(
     snapshot.youtube_playlist_id = metadata.youtube_playlist_id
     snapshot.youtube_is_shorts = metadata.youtube_is_shorts
     snapshot.site_source = (
-        "windows-uia-address-bar" if live.site_url else "browser-history-title" if metadata.site_url else None
+        "browser-extension"
+        if bridge is not None
+        else "windows-uia-document"
+        if live.site_url
+        else "browser-history-title"
+        if metadata.site_url
+        else None
     )
-    if live.site_url:
+    if bridge is not None:
+        snapshot.capture_confidence = 1.0
+    elif live.site_url:
         snapshot.capture_confidence = _LIVE_UIA_CONFIDENCE
     elif metadata.site_url:
         snapshot.capture_confidence = _HISTORY_FALLBACK_CONFIDENCE
-    snapshot.browser_automation_status = live.browser_automation_status
-    snapshot.browser_automation_error = live.browser_automation_error
+    diagnostic_metadata = bridge if bridge is not None else live
+    snapshot.browser_automation_status = diagnostic_metadata.browser_automation_status
+    snapshot.browser_automation_error = diagnostic_metadata.browser_automation_error
     if history is not None:
         snapshot.browser_history_status = history.browser_history_status
         snapshot.browser_history_reason = history.browser_history_reason
@@ -472,5 +487,17 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
         return build_snapshot(None, None, observed, "GetForegroundWindow returned no window.")
 
     identity, diagnostic = resolve_identity(window)
+    if read_foreground_window() != window:
+        return build_snapshot(
+            None, None, observed, "Foreground window changed during identity capture."
+        )
     snapshot = build_snapshot(window, identity, observed, diagnostic)
-    return enrich_browser_snapshot(snapshot, window.hwnd)
+    enriched = enrich_browser_snapshot(snapshot, window.hwnd)
+    # URL/bridge/history reads may outlive the original foreground observation.
+    # Never combine an earlier title/process with later browser metadata. This
+    # detects observed changes; it does not make UIA or tab navigation atomic.
+    if read_foreground_window() != window:
+        return build_snapshot(
+            None, None, observed, "Foreground window changed during browser capture."
+        )
+    return enriched

@@ -36,6 +36,7 @@ use super::pet_hit_region::{
 use super::pet_panel::{
     configure_pet_panel, perform_pet_panel_drag, show_pet_panel, show_pet_panel_at_position,
 };
+use super::windows_overlay::{hide_windows_overlay, is_windows_overlay_visible};
 
 #[cfg(target_os = "macos")]
 #[path = "pet_fullscreen.rs"]
@@ -43,6 +44,9 @@ mod pet_fullscreen;
 #[cfg(target_os = "macos")]
 #[path = "pet_mode_native_ax.rs"]
 mod pet_mode_native_ax;
+#[cfg(target_os = "windows")]
+#[path = "pet_mode_windows.rs"]
+mod pet_mode_windows;
 
 pub const PET_MODE_WINDOW_LABEL: &str = "pet-mode";
 // Keep the approved 60% cat scale, but include the F12 action's transparent
@@ -428,10 +432,67 @@ pub struct PetModeInterventionTarget {
     pub id: String,
     pub app_name: String,
     pub browser_name: Option<String>,
+    /// Captured executable identity used only by the native Windows resolver.
+    /// Raw activity identity must not cross into the isolated pet WebView.
+    #[serde(default, skip_serializing)]
+    pub browser_identity: Option<String>,
+    /// Captured page identity used only by the native Windows resolver.
+    #[serde(default, skip_serializing)]
+    pub site_domain: Option<String>,
+    /// Captured page identity used only by the native Windows resolver.
+    #[serde(default, skip_serializing)]
+    pub site_url: Option<String>,
     #[serde(default)]
     pub preview: bool,
     #[serde(default)]
     pub lab_target: Option<PetModeLabTargetKind>,
+}
+
+// The main renderer supplies exact browser/page identity, but the pet WebView
+// receives only the public animation target. Keep at most one pending native
+// capability and consume it when the pet asks Rust to resolve the X position.
+// A newer intervention supersedes a lost/stale one instead of accumulating raw
+// local activity data in process memory.
+static PET_MODE_PENDING_INTERVENTION: Mutex<Option<PetModeInterventionTarget>> = Mutex::new(None);
+
+fn same_public_intervention(
+    stored: &PetModeInterventionTarget,
+    incoming: &PetModeInterventionTarget,
+) -> bool {
+    stored.id == incoming.id
+        && stored.app_name == incoming.app_name
+        && stored.browser_name == incoming.browser_name
+        && stored.preview == incoming.preview
+        && stored.lab_target == incoming.lab_target
+}
+
+fn remember_pet_mode_intervention(target: &PetModeInterventionTarget) -> Result<(), String> {
+    *PET_MODE_PENDING_INTERVENTION
+        .lock()
+        .map_err(|_| "Pet Mode intervention identity lock is unavailable".to_string())? =
+        Some(target.clone());
+    Ok(())
+}
+
+fn take_pet_mode_intervention(incoming: PetModeInterventionTarget) -> PetModeInterventionTarget {
+    let Ok(mut pending) = PET_MODE_PENDING_INTERVENTION.lock() else {
+        return incoming;
+    };
+    if pending
+        .as_ref()
+        .is_some_and(|stored| same_public_intervention(stored, &incoming))
+    {
+        return pending.take().unwrap_or(incoming);
+    }
+    incoming
+}
+
+fn clear_pet_mode_intervention(id: &str) {
+    if let Ok(mut pending) = PET_MODE_PENDING_INTERVENTION.lock() {
+        if pending.as_ref().is_some_and(|target| target.id == id) {
+            *pending = None;
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1008,7 +1069,7 @@ fn reconcile_pet_visibility(app: &AppHandle, window: &WebviewWindow) -> Result<(
         } else {
             reset_pet_hit_region();
             set_pet_window_interactive(window, false)?;
-            window.hide().map_err(|error| error.to_string())?;
+            hide_windows_overlay(window)?;
         }
 
         if PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst) == generation
@@ -1167,7 +1228,7 @@ fn set_pet_mode_enabled(
         reset_pet_hit_region();
         let _ = set_pet_window_interactive(&window, false);
         let _ = super::pet_quick_controls::hide_pet_quick_controls(&app);
-        return window.hide().map_err(|error| error.to_string());
+        return hide_windows_overlay(&window);
     }
 
     // Size and placement form one presentation transaction. Applying the
@@ -1517,7 +1578,7 @@ fn apply_pet_visibility_action(
         restore_pet_dance_headroom(&window);
         reset_pet_hit_region();
         let _ = set_pet_window_interactive(&window, false);
-        window.hide().map_err(|error| error.to_string())?;
+        hide_windows_overlay(&window)?;
     }
     if !keep_quick_controls_visible {
         let _ = super::pet_quick_controls::hide_pet_quick_controls(&app);
@@ -1540,7 +1601,13 @@ pub fn pet_mode_intervene(app: AppHandle, target: PetModeInterventionTarget) -> 
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
     show_pet_panel(&app, &window)?;
-    emit_pet_event(&window, json!({ "kind": "intervention", "target": target }))
+    remember_pet_mode_intervention(&target)?;
+    let id = target.id.clone();
+    let result = emit_pet_event(&window, json!({ "kind": "intervention", "target": target }));
+    if result.is_err() {
+        clear_pet_mode_intervention(&id);
+    }
+    result
 }
 
 #[tauri::command]
@@ -1556,6 +1623,9 @@ pub fn pet_mode_preview_intervention(app: AppHandle) -> Result<(), String> {
             id: format!("pet-preview-{preview_id}"),
             app_name: "Preview target".to_string(),
             browser_name: None,
+            browser_identity: None,
+            site_domain: None,
+            site_url: None,
             preview: true,
             lab_target: None,
         },
@@ -1634,6 +1704,7 @@ pub async fn pet_mode_move_to_target(
     target: PetModeInterventionTarget,
     reduced_motion: Option<bool>,
 ) -> Result<PetModeResolvedTarget, String> {
+    let target = take_pet_mode_intervention(target);
     async_runtime::spawn_blocking(move || {
         move_pet_to_target(&app, &target, reduced_motion.unwrap_or(false))
     })
@@ -1769,6 +1840,7 @@ pub fn pet_mode_report_contact(
     contacted: Option<bool>,
     reason: Option<String>,
 ) -> Result<(), String> {
+    clear_pet_mode_intervention(&id);
     #[cfg(target_os = "macos")]
     {
         if !pet_fullscreen::accept_contact(&id, contacted.unwrap_or(true)) {
@@ -1888,7 +1960,7 @@ pub fn pet_mode_set_presence(
         // resurrect a stale pose when the panel is shown again.
         reset_pet_hit_region();
         set_pet_window_interactive(&window, false)?;
-        window.hide().map_err(|error| error.to_string())?;
+        hide_windows_overlay(&window)?;
     }
 
     if !pet_outing_is_current(command_generation) {
@@ -2065,7 +2137,7 @@ pub fn pet_mode_cursor_inside(app: AppHandle) -> bool {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return false;
     };
-    if !matches!(window.is_visible(), Ok(true)) {
+    if !is_windows_overlay_visible(&window) {
         return false;
     }
     refresh_pet_hit_region_for_window(&window).is_ok() && pet_hit_region_pointer_inside()
@@ -2083,7 +2155,7 @@ pub fn pet_mode_input_bounds(app: AppHandle) -> Result<PetModeInputBounds, Strin
         y: position.y,
         width: size.width,
         height: size.height,
-        visible: window.is_visible().unwrap_or(false),
+        visible: is_windows_overlay_visible(&window),
     })
 }
 
@@ -2092,7 +2164,7 @@ pub fn pet_mode_cursor_sample(app: AppHandle) -> Result<PetModeCursorSample, Str
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
-    let visible = window.is_visible().unwrap_or(false);
+    let visible = is_windows_overlay_visible(&window);
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
     let position = window
         .outer_position()
@@ -2102,10 +2174,7 @@ pub fn pet_mode_cursor_sample(app: AppHandle) -> Result<PetModeCursorSample, Str
         .outer_size()
         .map_err(|error| error.to_string())?
         .to_logical::<f64>(scale_factor);
-    let cursor = app
-        .cursor_position()
-        .map_err(|error| error.to_string())?
-        .to_logical::<f64>(scale_factor);
+    let cursor = pet_cursor_position(&app)?.to_logical::<f64>(scale_factor);
     Ok(PetModeCursorSample {
         cursor_x: cursor.x,
         cursor_y: cursor.y,
@@ -2124,7 +2193,7 @@ pub async fn pet_mode_stalk_cursor(
 ) -> Result<PetModeStalkResult, String> {
     validate_pet_mode_stalk_request(request)?;
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (app, request);
         return Ok(PetModeStalkResult {
@@ -2136,7 +2205,7 @@ pub async fn pet_mode_stalk_cursor(
         });
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     async_runtime::spawn_blocking(move || stalk_pet_toward_cursor(&app, request))
         .await
         .map_err(|error| error.to_string())?
@@ -2149,7 +2218,7 @@ pub async fn pet_mode_carry_cursor(
 ) -> Result<PetModeCursorCarryResult, String> {
     validate_pet_mode_cursor_carry_request(&request)?;
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (app, request);
         return Ok(PetModeCursorCarryResult {
@@ -2158,7 +2227,7 @@ pub async fn pet_mode_carry_cursor(
         });
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     async_runtime::spawn_blocking(move || carry_pet_mode_cursor(&app, request))
         .await
         .map_err(|error| error.to_string())?
@@ -2591,7 +2660,14 @@ fn macos_window_number(window: &WebviewWindow) -> i64 {
             })
             .unwrap_or(-1)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        window
+            .hwnd()
+            .map(|hwnd| hwnd.0 as usize as i64)
+            .unwrap_or(-1)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = window;
         -1
@@ -2709,7 +2785,7 @@ fn reconcile_resident_pet_position(
             SeatDecisionReason::PetDisabled,
         ));
     }
-    if !window.is_visible().unwrap_or(false) {
+    if !is_windows_overlay_visible(&window) {
         return Ok(SeatResolution::unchanged(
             current.x,
             current.y,
@@ -2781,7 +2857,7 @@ fn probe_current_pet_ax_seat(
             SeatDecisionReason::PetDisabled,
         ));
     }
-    if !window.is_visible().unwrap_or(false) {
+    if !is_windows_overlay_visible(&window) {
         return Ok(SeatResolution::unchanged(
             current.x,
             current.y,
@@ -2979,6 +3055,12 @@ fn resolve_pet_target_point(
             return point;
         }
     }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(point) = pet_mode_windows::resolve_window_close_target(monitor, target) {
+            return point;
+        }
+    }
 
     fallback_target_point(monitor, "accessibility_target_unavailable")
 }
@@ -3009,6 +3091,25 @@ fn resolve_drifty_lab_window_close_point(app: &AppHandle) -> Result<PetModeTarge
         .outer_position()
         .map_err(|error| error.to_string())?
         .to_logical::<f64>(scale_factor);
+
+    #[cfg(target_os = "windows")]
+    {
+        let size = window
+            .outer_size()
+            .map_err(|error| error.to_string())?
+            .to_logical::<f64>(scale_factor);
+        let (x, y) =
+            calculate_windows_caption_close_point(position.x, position.y, size.width, None);
+        return Ok(PetModeTargetPoint {
+            x,
+            y,
+            kind: PetModeTargetKind::WindowClose,
+            confidence: PetModeTargetConfidence::High,
+            diagnostic: "windows_titlebar_close_button".to_string(),
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
     Ok(PetModeTargetPoint {
         x: position.x + 14.0,
         y: position.y + 14.0,
@@ -3093,6 +3194,78 @@ fn drifty_window_close_geometry_script(process_name: &str) -> String {
   end tell
 end tell
 return "not_found""#,
+    )
+}
+
+const WINDOWS_CAPTION_CLOSE_INSET_X: f64 = 23.0;
+const WINDOWS_CAPTION_CLOSE_INSET_Y: f64 = 16.0;
+
+fn normalize_windows_app_token(value: &str) -> String {
+    value
+        .trim()
+        .trim_end_matches(".exe")
+        .trim_end_matches(".EXE")
+        .to_ascii_lowercase()
+}
+
+fn windows_app_name_matches(owner: &str, app_name: &str) -> bool {
+    let owner = normalize_windows_app_token(owner);
+    let app = normalize_windows_app_token(app_name);
+    if owner.is_empty() || app.is_empty() {
+        return false;
+    }
+    if owner == app {
+        return true;
+    }
+    const DISPLAY_ALIASES: &[(&str, &str)] = &[
+        ("chrome", "google chrome"),
+        ("msedge", "microsoft edge"),
+        ("brave", "brave browser"),
+        ("chromium", "chromium"),
+        ("vivaldi", "vivaldi"),
+        ("opera", "opera"),
+        ("whale", "whale"),
+        ("firefox", "firefox"),
+        ("code", "visual studio code"),
+        ("notepad", "notepad"),
+    ];
+    for (exe, display) in DISPLAY_ALIASES {
+        if owner == *exe && (app == *display || app == *exe) {
+            return true;
+        }
+        if app == *exe && (owner == *display || owner == *exe) {
+            return true;
+        }
+    }
+    app.split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|part| !part.is_empty() && part == owner)
+}
+
+fn should_resolve_windows_app_window_close(target: &PetModeInterventionTarget) -> bool {
+    target
+        .browser_name
+        .as_deref()
+        .map(str::trim)
+        .map(str::is_empty)
+        .unwrap_or(true)
+}
+
+fn calculate_windows_caption_close_point(
+    window_x: f64,
+    window_y: f64,
+    window_width: f64,
+    close_button_bounds: Option<(f64, f64, f64, f64)>,
+) -> (f64, f64) {
+    if let Some((left, top, right, bottom)) = close_button_bounds {
+        let close_center_x = window_x + (left + right) / 2.0;
+        let close_center_y = window_y + (top + bottom) / 2.0;
+        if close_center_x.is_finite() && close_center_y.is_finite() {
+            return (close_center_x, close_center_y);
+        }
+    }
+    (
+        window_x + window_width - WINDOWS_CAPTION_CLOSE_INSET_X,
+        window_y + WINDOWS_CAPTION_CLOSE_INSET_Y,
     )
 }
 
@@ -4290,6 +4463,23 @@ fn pet_mode_stalk_duration_ms(distance: f64, speed: f64, grace_ms: u64) -> u64 {
         .min(PET_MODE_STALK_MAX_TOTAL_DURATION_MS)
 }
 
+fn pet_cursor_position(app: &AppHandle) -> Result<PhysicalPosition<f64>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = app;
+        super::pet_cursor_windows::cursor_position()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        app.cursor_position().map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn primary_pointer_pressed() -> bool {
+    super::pet_cursor_windows::pointer_pressed()
+}
+
 #[cfg(target_os = "macos")]
 fn primary_pointer_pressed() -> bool {
     #[link(name = "ApplicationServices", kind = "framework")]
@@ -4303,7 +4493,7 @@ fn primary_pointer_pressed() -> bool {
     unsafe { CGEventSourceButtonState(COMBINED_SESSION_STATE, LEFT_MOUSE_BUTTON) }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn stalk_pet_toward_cursor(
     app: &AppHandle,
     request: PetModeStalkRequest,
@@ -4320,7 +4510,7 @@ fn stalk_pet_toward_cursor(
             cursor_movement_distance: 0.0,
         });
     }
-    if !window.is_visible().unwrap_or(false) {
+    if !is_windows_overlay_visible(&window) {
         return Ok(PetModeStalkResult {
             outcome: PetModeStalkOutcome::Hidden,
             facing: "right",
@@ -4354,7 +4544,7 @@ fn stalk_pet_toward_cursor(
             )
         })
         .collect::<Vec<_>>();
-    let initial_cursor = app.cursor_position().map_err(|error| error.to_string())?;
+    let initial_cursor = pet_cursor_position(app)?;
     let initial_position = window.outer_position().map_err(|error| error.to_string())?;
     let panel_size = window.outer_size().map_err(|error| error.to_string())?;
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
@@ -4387,6 +4577,8 @@ fn stalk_pet_toward_cursor(
         });
     }
 
+    #[cfg(target_os = "windows")]
+    let cursor_context = super::pet_cursor_windows::InteractionContext::capture(&window)?;
     let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
     // Single-attempt mode captures one target. Chase mode refreshes it every
     // frame, so a pointer that moves is followed live instead of walked to
@@ -4432,10 +4624,17 @@ fn stalk_pet_toward_cursor(
         if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
             break PetModeStalkOutcome::Disabled;
         }
+        if !is_windows_overlay_visible(&window) {
+            break PetModeStalkOutcome::Hidden;
+        }
+        #[cfg(target_os = "windows")]
+        if !cursor_context.is_current(&window) {
+            break PetModeStalkOutcome::Cancelled;
+        }
         if primary_pointer_pressed() {
             break PetModeStalkOutcome::PointerPressed;
         }
-        let cursor = app.cursor_position().map_err(|error| error.to_string())?;
+        let cursor = pet_cursor_position(app)?;
         let cursor = (cursor.x, cursor.y);
         cursor_movement_distance = cursor_movement_distance
             .max(pet_mode_cursor_movement_distance(cursor, cursor_point) / scale_factor);
@@ -4505,7 +4704,7 @@ fn stalk_pet_toward_cursor(
     })
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn carry_pet_mode_cursor(
     app: &AppHandle,
     request: PetModeCursorCarryRequest,
@@ -4519,12 +4718,21 @@ fn carry_pet_mode_cursor(
             moved_distance: 0.0,
         });
     }
-    if !window.is_visible().unwrap_or(false) {
+    if !is_windows_overlay_visible(&window) {
         return Ok(PetModeCursorCarryResult {
             outcome: PetModeCursorCarryOutcome::Hidden,
             moved_distance: 0.0,
         });
     }
+
+    if primary_pointer_pressed() {
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::PointerPressed,
+            moved_distance: 0.0,
+        });
+    }
+    #[cfg(target_os = "windows")]
+    let cursor_context = super::pet_cursor_windows::InteractionContext::capture(&window)?;
 
     let screens = app
         .available_monitors()
@@ -4562,8 +4770,9 @@ fn carry_pet_mode_cursor(
         });
     };
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
-    let initial = app.cursor_position().map_err(|error| error.to_string())?;
+    let initial = pet_cursor_position(app)?;
     let initial = (initial.x, initial.y);
+    #[cfg(target_os = "macos")]
     let native_initial = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
         .and_then(CGEvent::new)
         .map_err(|_| "Could not read the macOS cursor position".to_string())?
@@ -4657,14 +4866,18 @@ fn carry_pet_mode_cursor(
         if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
             break PetModeCursorCarryOutcome::Disabled;
         }
-        if !window.is_visible().unwrap_or(false) {
+        if !is_windows_overlay_visible(&window) {
             break PetModeCursorCarryOutcome::Hidden;
+        }
+        #[cfg(target_os = "windows")]
+        if !cursor_context.is_current(&window) {
+            break PetModeCursorCarryOutcome::Cancelled;
         }
         if primary_pointer_pressed() {
             break PetModeCursorCarryOutcome::PointerPressed;
         }
 
-        let cursor = app.cursor_position().map_err(|error| error.to_string())?;
+        let cursor = pet_cursor_position(app)?;
         let cursor = (cursor.x, cursor.y);
         if !screen_frame.contains(cursor) {
             break PetModeCursorCarryOutcome::DifferentDisplay;
@@ -4714,14 +4927,40 @@ fn carry_pet_mode_cursor(
                 return_window.1.round() as i32,
             ))
             .map_err(|error| format!("Could not carry the Pet Mode window: {error}"))?;
+        // set_position can cross the UI-thread boundary. Recheck cancellation
+        // after it returns and before touching the shared system cursor.
+        if PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != motion_revision {
+            break PetModeCursorCarryOutcome::Cancelled;
+        }
+        if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
+            break PetModeCursorCarryOutcome::Disabled;
+        }
+        if !is_windows_overlay_visible(&window) {
+            break PetModeCursorCarryOutcome::Hidden;
+        }
+        if primary_pointer_pressed() {
+            break PetModeCursorCarryOutcome::PointerPressed;
+        }
+        #[cfg(target_os = "macos")]
         let native_next = pet_mode_core_graphics_cursor_point(
             (native_initial.x, native_initial.y),
             initial,
             next,
             scale_factor,
         );
+        #[cfg(target_os = "macos")]
         CGDisplay::warp_mouse_cursor_position(CGPoint::new(native_next.0, native_next.1))
             .map_err(|error| format!("Could not carry the Pet Mode cursor: {error}"))?;
+        #[cfg(target_os = "windows")]
+        match cursor_context.move_cursor(&window, next)? {
+            super::pet_cursor_windows::CursorMoveOutcome::Moved => {}
+            super::pet_cursor_windows::CursorMoveOutcome::Cancelled => {
+                break PetModeCursorCarryOutcome::Cancelled;
+            }
+            super::pet_cursor_windows::CursorMoveOutcome::PointerPressed => {
+                break PetModeCursorCarryOutcome::PointerPressed;
+            }
+        }
         last_commanded = next;
         if elapsed >= duration {
             break PetModeCursorCarryOutcome::Completed;
@@ -5511,6 +5750,31 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pet_webview_payload_omits_native_browser_and_page_identity() {
+        let target = PetModeInterventionTarget {
+            id: "private-browser-target".to_string(),
+            app_name: "Google Chrome".to_string(),
+            browser_name: Some("Google Chrome".to_string()),
+            browser_identity: Some(
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe".to_string(),
+            ),
+            site_domain: Some("example.com".to_string()),
+            site_url: Some("https://example.com/private/path".to_string()),
+            preview: false,
+            lab_target: None,
+        };
+
+        let value = serde_json::to_value(&target).expect("serialize pet target");
+        assert_eq!(
+            value.get("appName").and_then(Value::as_str),
+            Some("Google Chrome")
+        );
+        assert!(value.get("browserIdentity").is_none());
+        assert!(value.get("siteDomain").is_none());
+        assert!(value.get("siteUrl").is_none());
+    }
+
     /// Opt-in native probe against a running browser. It only reads AX and
     /// the browser's scripting dictionary; it never moves the pet or closes
     /// anything. Run with the browser in the state under test, for example
@@ -5534,6 +5798,9 @@ mod tests {
             id: "qa-selected-tab-cross-check".to_string(),
             app_name: browser.clone(),
             browser_name: Some(browser.clone()),
+            browser_identity: None,
+            site_domain: None,
+            site_url: None,
             preview: false,
             lab_target: None,
         };
@@ -6546,6 +6813,80 @@ mod tests {
             PetModeTargetKind::BrowserTabClose,
             false
         ));
+    }
+
+    #[test]
+    fn windows_caption_close_falls_back_to_the_top_right_inset() {
+        let (x, y) = calculate_windows_caption_close_point(100.0, 40.0, 800.0, None);
+        assert!((x - 877.0).abs() < f64::EPSILON);
+        assert!((y - 56.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn windows_caption_close_uses_the_measured_close_button_bounds() {
+        let (x, y) = calculate_windows_caption_close_point(
+            200.0,
+            10.0,
+            1200.0,
+            Some((1142.0, 0.0, 1188.0, 32.0)),
+        );
+        assert!((x - (200.0 + (1142.0 + 1188.0) / 2.0)).abs() < f64::EPSILON);
+        assert!((y - (10.0 + 16.0)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn windows_app_names_match_tracker_display_names_to_exe_stems() {
+        assert!(windows_app_name_matches("chrome", "Google Chrome"));
+        assert!(windows_app_name_matches("msedge", "Microsoft Edge"));
+        assert!(windows_app_name_matches("notepad", "Notepad"));
+        assert!(windows_app_name_matches("Code", "Visual Studio Code"));
+        assert!(!windows_app_name_matches("explorer", "Notepad"));
+        assert!(!windows_app_name_matches("drifty", "Google Chrome"));
+    }
+
+    #[test]
+    fn windows_window_close_geometry_is_not_used_for_browser_tab_targets() {
+        let app_target = PetModeInterventionTarget {
+            id: "notepad-close".to_string(),
+            app_name: "Notepad".to_string(),
+            browser_name: None,
+            browser_identity: None,
+            site_domain: None,
+            site_url: None,
+            preview: false,
+            lab_target: None,
+        };
+        let browser_target = PetModeInterventionTarget {
+            id: "chrome-tab-close".to_string(),
+            app_name: "Google Chrome".to_string(),
+            browser_name: Some("Google Chrome".to_string()),
+            browser_identity: Some(
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe".to_string(),
+            ),
+            site_domain: Some("example.com".to_string()),
+            site_url: Some("https://example.com/drift".to_string()),
+            preview: false,
+            lab_target: None,
+        };
+
+        assert!(should_resolve_windows_app_window_close(&app_target));
+        assert!(!should_resolve_windows_app_window_close(&browser_target));
+    }
+
+    #[test]
+    fn firefox_geometry_helper_receives_the_parent_foreground_identity() {
+        let windows_source = include_str!("pet_mode_windows.rs");
+        for variable in [
+            "DRIFTY_NUDGE_FOREGROUND_HWND",
+            "DRIFTY_NUDGE_FOREGROUND_PID",
+            "DRIFTY_NUDGE_FOREGROUND_DPI",
+        ] {
+            assert!(
+                windows_source.contains(&format!(".env(\"{variable}\""))
+                    || windows_source.contains(&format!("\"{variable}\",")),
+                "Firefox geometry subprocess is missing {variable}"
+            );
+        }
     }
 
     #[test]

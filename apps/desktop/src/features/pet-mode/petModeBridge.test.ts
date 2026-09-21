@@ -595,19 +595,19 @@ describe("pet mode intervention outcome classification", () => {
     await expect(result).resolves.toMatchObject({ outcome: "rejected" });
   });
 
-  it("classifies eight seconds of silence as timed_out, never as a catch", async () => {
+  it("classifies eighteen seconds of silence as timed_out, never as a catch", async () => {
     // This is the exact failure observed on 2026-08-29: no contact report
     // arrived and the old boolean collapse turned the timeout into
     // pet_intercepted, cancelling the close the user had enabled.
     const { result } = await startIntervention();
-    await vi.advanceTimersByTimeAsync(8_000);
+    await vi.advanceTimersByTimeAsync(18_000);
     await expect(result).resolves.toMatchObject({ outcome: "timed_out", reason: "contact_timeout" });
   });
 
   it("ignores contact reports for other intervention ids", async () => {
     const { result, sendContact } = await startIntervention();
     sendContact({ id: "alert:other", contacted: false, reason: "user_intercepted" });
-    await vi.advanceTimersByTimeAsync(8_000);
+    await vi.advanceTimersByTimeAsync(18_000);
     await expect(result).resolves.toMatchObject({ outcome: "timed_out" });
   });
 

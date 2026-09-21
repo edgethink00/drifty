@@ -41,6 +41,88 @@ describe("buildContinuousDriftAlarmEpisode", () => {
     });
   });
 
+  it("stitches a same-window browser episode across repeated bounded unavailable address samples without counting the gaps", () => {
+    const first = reel("reel-a", "2026-08-30T09:00:00.000Z", "2026-08-30T09:00:55.000Z", 55);
+    const firstGap = reel("address-gap-a", "2026-08-30T09:01:00.000Z", "2026-08-30T09:01:05.000Z", 5, "drift", {
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      browserAutomationStatus: "unavailable",
+      windowTitle: "Instagram reel",
+    });
+    const second = reel("reel-b", "2026-08-30T09:01:10.000Z", "2026-08-30T09:01:20.000Z", 10, "drift", {
+      windowTitle: "Instagram reel",
+    });
+    const secondGap = reel("address-gap-b", "2026-08-30T09:01:25.000Z", "2026-08-30T09:01:30.000Z", 5, "drift", {
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      browserAutomationStatus: "unavailable",
+      windowTitle: "Instagram reel",
+    });
+    const third = reel("reel-c", "2026-08-30T09:01:35.000Z", "2026-08-30T09:02:20.000Z", 45, "drift", {
+      windowTitle: "Instagram reel",
+    });
+    const thirdGap = reel("address-gap-c", "2026-08-30T09:02:25.000Z", "2026-08-30T09:02:30.000Z", 5, "drift", {
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      browserAutomationStatus: "unavailable",
+      windowTitle: "Instagram reel",
+    });
+    const current = reel("reel-d", "2026-08-30T09:02:35.000Z", "2026-08-30T09:03:10.000Z", 35, "drift", {
+      windowTitle: "Instagram reel",
+    });
+    first.windowTitle = "Instagram reel";
+
+    expect(buildContinuousDriftAlarmEpisode({
+      currentSegment: current,
+      segments: [first, firstGap, second, secondGap, third, thirdGap, current],
+      isEligibleDrift: isDrift,
+    })).toEqual({
+      episodeKey: "drift-episode:reel-a",
+      surfaceKey: "browser:com.google.chrome:instagram.com",
+      startedAt: first.startedAt,
+      durationSeconds: 145,
+      segmentIds: ["reel-a", "reel-b", "reel-c", "reel-d"],
+    });
+  });
+
+  it("does not stitch an address gap that is long, identified, or from another browser window", () => {
+    const first = reel("reel-a", "2026-08-30T09:00:00.000Z", "2026-08-30T09:00:30.000Z", 30, "drift", {
+      windowTitle: "Instagram reel",
+    });
+    const current = reel("reel-b", "2026-08-30T09:01:00.000Z", "2026-08-30T09:01:20.000Z", 20, "drift", {
+      windowTitle: "Instagram reel",
+    });
+    const cases = [
+      reel("long-gap", "2026-08-30T09:00:35.000Z", "2026-08-30T09:00:55.000Z", 20, "drift", {
+        siteDomain: null, siteTitle: null, siteUrl: null, browserAutomationStatus: "unavailable", windowTitle: "Instagram reel",
+      }),
+      reel("identified-gap", "2026-08-30T09:00:40.000Z", "2026-08-30T09:00:55.000Z", 15, "drift", {
+        siteDomain: "youtube.com", siteUrl: "https://youtube.com/watch?v=other", browserAutomationStatus: "unavailable", windowTitle: "Instagram reel",
+      }),
+      reel("other-window", "2026-08-30T09:00:40.000Z", "2026-08-30T09:00:55.000Z", 15, "drift", {
+        siteDomain: null, siteTitle: null, siteUrl: null, browserAutomationStatus: "unavailable", windowTitle: "Another tab",
+      }),
+      reel("granted-gap", "2026-08-30T09:00:40.000Z", "2026-08-30T09:00:55.000Z", 15, "drift", {
+        siteDomain: null, siteTitle: null, siteUrl: null, browserAutomationStatus: "granted", windowTitle: "Instagram reel",
+      }),
+    ];
+
+    for (const gap of cases) {
+      expect(buildContinuousDriftAlarmEpisode({
+        currentSegment: current,
+        segments: [first, gap, current],
+        isEligibleDrift: isDrift,
+      })).toMatchObject({
+        episodeKey: "drift-episode:reel-b",
+        durationSeconds: 20,
+        segmentIds: ["reel-b"],
+      });
+    }
+  });
+
   it("stops across another domain, browser, or a gap longer than fifteen seconds", () => {
     const current = reel("current", "2026-08-30T09:01:00.000Z", "2026-08-30T09:01:20.000Z", 20);
     const cases = [

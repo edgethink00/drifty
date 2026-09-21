@@ -11,6 +11,9 @@ use super::pet_mode::{current_pet_logical_position, PET_MODE_WINDOW_LABEL};
 use super::pet_panel::configure_pet_panel;
 #[cfg(not(target_os = "macos"))]
 use {super::pet_panel::show_pet_panel_at_position, tauri::LogicalPosition};
+use super::windows_overlay::set_windows_overlay_click_through;
+#[cfg(not(target_os = "macos"))]
+use super::windows_overlay::hide_windows_overlay;
 
 #[cfg(target_os = "macos")]
 mod motion;
@@ -274,10 +277,13 @@ fn resolve_quick_controls_layout(
 fn hide_pet_quick_controls_window(window: &WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     return motion::hide_immediately(window);
+    // Off macOS the bar is a layered overlay: drop its click-through state and
+    // hide it through the same helper, which falls back to a plain hide on
+    // platforms without the native overlay.
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = window.set_ignore_cursor_events(true);
-        window.hide().map_err(|error| error.to_string())?;
+        let _ = set_windows_overlay_click_through(window, true);
+        hide_windows_overlay(window)?;
         release_pet_quick_controls_interaction(window.app_handle());
         Ok(())
     }
@@ -389,7 +395,7 @@ pub fn setup_pet_quick_controls_window(app: &tauri::App) -> tauri::Result<()> {
     configure_pet_panel(&window)?;
     #[cfg(target_os = "macos")]
     apply_pet_quick_controls_material(&window);
-    let _ = window.set_ignore_cursor_events(true);
+    let _ = set_windows_overlay_click_through(&window, true);
     Ok(())
 }
 
@@ -471,9 +477,10 @@ fn set_pet_quick_controls_visible(app: &AppHandle, visible: bool) -> Result<bool
             PET_QUICK_CONTROLS_KO_IDLE_WIDTH
         };
         let layout = resolve_quick_controls_layout(&app, &pet, controls_width)?;
-        window
-            .set_ignore_cursor_events(false)
-            .map_err(|error| error.to_string())?;
+        // The layered overlay carries WS_EX_TRANSPARENT on Windows. Clearing it
+        // here is what makes the bar clickable; without it the bar is visible
+        // but every click falls through to the window beneath it.
+        set_windows_overlay_click_through(&window, false)?;
         let _ = window.emit(
             "pet-quick-controls-layout",
             json!({ "placement": layout.placement }),

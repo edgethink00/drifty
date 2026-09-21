@@ -9,6 +9,7 @@ import { useState } from "react";
 
 type DevSettingsCompanionPillBlockProps = {
   readonly floatingEnabled: boolean;
+  readonly floatingSupported: boolean;
   readonly onFloatingEnabledChange: (enabled: boolean) => void;
   readonly onPreviewMilestone: (previewId: CompanionMilestonePreviewId) => void;
   readonly onPreviewMoment: (previewId: CompanionMomentPreviewId) => void;
@@ -17,6 +18,7 @@ type DevSettingsCompanionPillBlockProps = {
 
 export function DevSettingsCompanionPillBlock({
   floatingEnabled,
+  floatingSupported,
   onFloatingEnabledChange,
   onPreviewMilestone,
   onPreviewMoment,
@@ -28,19 +30,21 @@ export function DevSettingsCompanionPillBlock({
   return (
     <div className="settings-block settings-block--dev-preview">
       <h3>Companion previews</h3>
-      <div className="settings-row settings-row--companion-previews">
-        <div>
-          <div className="lbl">Use floating Companion</div>
-          <div className="desc">
-            {floatingEnabled
-              ? "Dev preview is enabled. Resident Companion moments expand from the desktop pill when it is not temporarily hidden."
-              : "Production uses the menu-bar Companion when Companion is enabled."}
+      {floatingSupported ? (
+        <div className="settings-row settings-row--companion-previews">
+          <div>
+            <div className="lbl">Use floating Companion</div>
+            <div className="desc">
+              {floatingEnabled
+                ? "Dev preview is enabled. Resident Companion moments expand from the desktop pill when it is not temporarily hidden."
+                : "Production uses the menu-bar Companion when Companion is enabled."}
+            </div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={floatingEnabled} onChange={onFloatingEnabledChange} ariaLabel="Toggle floating Companion" />
           </div>
         </div>
-        <div className="ctrl">
-          <Toggle checked={floatingEnabled} onChange={onFloatingEnabledChange} ariaLabel="Toggle floating Companion" />
-        </div>
-      </div>
+      ) : null}
       <div className="settings-row settings-row--companion-previews">
         <div>
           <div className="lbl">Celebration previews</div>

@@ -16,6 +16,7 @@ import { requestDriftNotificationPermission } from "../companion/watcherData";
 import { SettingsSelect } from "./SettingsSelect";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 
 type NotificationsSettingsSectionProps = {
@@ -24,6 +25,7 @@ type NotificationsSettingsSectionProps = {
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
   readonly driftAlarmCopyDefaults: DriftAlarmCopySettingsValue;
   readonly extremeNudgeEnabled: boolean;
+  readonly hostPlatform?: HostPlatform;
   readonly macosNotificationEnabled: boolean;
   readonly celebrationsEnabled: boolean;
   readonly dayReviewEnabled: boolean;
@@ -38,7 +40,7 @@ type NotificationsSettingsSectionProps = {
   readonly onDayReviewEnabledChange: (enabled: boolean) => void;
   readonly onDayReviewTimeChange: (value: string) => void;
   readonly onQuietHoursChange: (settings: QuietHoursSettings) => void;
-  /** Injectable for tests; production asks macOS. */
+  /** Injectable for tests; production asks the host OS. */
   readonly requestNotificationPermission?: () => Promise<"granted" | "denied" | "unavailable">;
 };
 
@@ -48,6 +50,7 @@ export function NotificationsSettingsSection({
   driftAlarmCopy,
   driftAlarmCopyDefaults,
   extremeNudgeEnabled,
+  hostPlatform = "macos",
   macosNotificationEnabled,
   celebrationsEnabled,
   dayReviewEnabled,
@@ -109,7 +112,7 @@ export function NotificationsSettingsSection({
       return;
     }
     // Ask for permission at the moment the switch is turned on, so the
-    // macOS prompt arrives in context instead of on the first drift.
+    // The OS prompt arrives in context instead of on the first drift.
     void requestNotificationPermission().then((result) => {
       setNotificationPermissionDenied(result === "denied");
     });
@@ -166,10 +169,16 @@ export function NotificationsSettingsSection({
         </div>
         <div data-setting-id="settings.notifications.macosNotification" className={dependentRowClassName}>
           <div>
-            <div className="lbl">{t("settings.notifications.macosNotification")}</div>
-            <div className="desc">{t("settings.notifications.macosNotificationDescription")}</div>
+            <div className="lbl">{t(hostPlatform === "windows"
+              ? "settings.notifications.windowsNotification"
+              : "settings.notifications.macosNotification")}</div>
+            <div className="desc">{t(hostPlatform === "windows"
+              ? "settings.notifications.windowsNotificationDescription"
+              : "settings.notifications.macosNotificationDescription")}</div>
             {notificationPermissionDenied ? (
-              <p className="capture-recency capture-recency--error" role="alert">{t("settings.notifications.macosNotificationDenied")}</p>
+              <p className="capture-recency capture-recency--error" role="alert">{t(hostPlatform === "windows"
+                ? "settings.notifications.windowsNotificationDenied"
+                : "settings.notifications.macosNotificationDenied")}</p>
             ) : null}
           </div>
           <div className="ctrl">
@@ -177,11 +186,14 @@ export function NotificationsSettingsSection({
               checked={macosNotificationActive}
               disabled={!driftAlertsEnabled}
               onChange={handleMacosNotificationChange}
-              ariaLabel={t("settings.notifications.toggleMacosNotification")}
+              ariaLabel={t(hostPlatform === "windows"
+                ? "settings.notifications.toggleWindowsNotification"
+                : "settings.notifications.toggleMacosNotification")}
             />
           </div>
         </div>
         <DriftAlarmCopySettings
+          hostPlatform={hostPlatform}
           value={driftAlarmCopy}
           defaults={driftAlarmCopyDefaults}
           onChange={onDriftAlarmCopyOverridesChange}

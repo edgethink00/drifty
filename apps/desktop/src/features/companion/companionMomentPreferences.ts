@@ -55,4 +55,3 @@ export function resolveInitialMacosNotificationEnabled(): boolean {
 export function persistMacosNotificationEnabled(enabled: boolean): void {
   writeFlag(MACOS_NOTIFICATION_STORAGE_KEY, enabled);
 }
-

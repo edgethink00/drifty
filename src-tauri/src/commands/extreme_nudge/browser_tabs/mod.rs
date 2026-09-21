@@ -17,6 +17,8 @@ mod qa_tests;
 mod safari;
 #[cfg(target_os = "windows")]
 mod windows;
+#[cfg(target_os = "windows")]
+mod windows_browser_bridge;
 
 pub(super) use matching::{normalized_site_domain, site_domain_from_url};
 
@@ -44,7 +46,8 @@ enum BrowserTabScriptKind {
 pub(super) fn is_supported_browser_tab_target(app_name: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
-        return windows::is_supported_browser(app_name);
+        return windows::is_supported_browser(app_name)
+            || windows_browser_bridge::is_supported_browser(app_name);
     }
     #[cfg(not(target_os = "windows"))]
     browser_tab_script_kind(app_name).is_some()
@@ -58,6 +61,9 @@ pub(super) fn close_browser_tab(
     site_domain: Option<&str>,
     _force_chromium_ax_tab_close: bool,
 ) -> Result<String, ExtremeNudgeError> {
+    if windows_browser_bridge::is_supported_browser(browser_name) {
+        return windows_browser_bridge::close_browser_tab(browser_name, browser_identity, site_url);
+    }
     windows::close_browser_tab(browser_name, browser_identity, site_url, site_domain)
 }
 

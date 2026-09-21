@@ -219,7 +219,11 @@ it("discards a scheduled update when the pause begins during policy loading", as
   const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: true }));
   let pending!: Promise<unknown>;
   act(() => { pending = result.current.handleCheckForUpdates("automatic"); });
-  await waitFor(() => expect(fetchUpdatePolicy).toHaveBeenCalledWith("1.11.0"));
+  await waitFor(() => expect(fetchUpdatePolicy).toHaveBeenCalledWith(
+    "1.11.0",
+    expect.any(Function),
+    "other",
+  ));
   act(() => pauseUpdatesForVersionTest());
   await act(async () => { finish(fallbackUpdatePolicy("1.11.0")); await pending; });
   expect(result.current.availableUpdate).toBeNull();

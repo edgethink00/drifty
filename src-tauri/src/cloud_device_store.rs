@@ -175,40 +175,29 @@ fn cloud_device_label() -> String {
 
 #[cfg(target_os = "windows")]
 fn windows_cloud_device_label() -> String {
-    // CIM is the same source Settings > System > About uses for the PC name
-    // and processor. A failed query must not block device registration.
-    let manufacturer = wmi_property("Win32_ComputerSystem", "Manufacturer");
-    let model = wmi_property("Win32_ComputerSystem", "Model");
-    let cpu = wmi_property("Win32_Processor", "Name");
+    // These registry values are maintained by Windows and firmware discovery.
+    // Read them in-process: spawning PowerShell/CIM here can block an otherwise
+    // local identity command indefinitely while Windows servicing is active.
+    let manufacturer =
+        windows_registry_string(r"HARDWARE\DESCRIPTION\System\BIOS", "SystemManufacturer");
+    let model = windows_registry_string(r"HARDWARE\DESCRIPTION\System\BIOS", "SystemProductName");
+    let cpu = windows_registry_string(
+        r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+        "ProcessorNameString",
+    );
     windows_device_label_from_parts(manufacturer.as_deref(), model.as_deref(), cpu.as_deref())
 }
 
 #[cfg(target_os = "windows")]
-fn wmi_property(class: &str, property: &str) -> Option<String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+fn windows_registry_string(path: &str, value_name: &str) -> Option<String> {
+    use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ};
+    use winreg::RegKey;
 
-    let mut command = Command::new("powershell");
-    command
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "(Get-CimInstance -ClassName {class} | Select-Object -ExpandProperty {property} | Select-Object -First 1)"
-            ),
-        ])
-        .creation_flags(CREATE_NO_WINDOW);
-    let output = command.output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let value = String::from_utf8(output.stdout).ok()?;
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+    let key = RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey_with_flags(path, KEY_READ)
+        .ok()?;
+    let value: String = key.get_value(value_name).ok()?;
+    clean_field(Some(&value)).map(str::to_string)
 }
 
 fn windows_device_label_from_parts(

@@ -5,11 +5,11 @@
       {
         "title": "drifty",
         "width": 1254,
-        "height": 809,
-        "minWidth": 960,
-        "minHeight": 680,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
         "resizable": true,
-        "decorations": true,
+        "decorations": false,
         "transparent": false,
         "backgroundColor": "#111111",
         "visible": false,
@@ -23,12 +23,25 @@
       "nsis"
     ],
     "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
       "nsis": {
         "installerHooks": "windows/nsis-hooks.nsh"
       }
     },
     "resources": {
-      "binaries/drifty-tracker-x86_64-pc-windows-msvc/": "drifty-tracker/"
+      "binaries/drifty-tracker-x86_64-pc-windows-msvc/": "drifty-tracker/",
+      "windows/native-messaging/so.drifty.browser_bridge.firefox.json": "browser-bridge/so.drifty.browser_bridge.firefox.json"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://raw.githubusercontent.com/edgethink00/drifty_releases/main/latest-windows.json",
+        "https://github.com/edgethink00/drifty_releases/releases/latest/download/latest.json"
+      ]
     }
   }
 }

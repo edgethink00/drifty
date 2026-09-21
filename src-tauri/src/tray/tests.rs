@@ -259,6 +259,7 @@ fn focused_label_start_utf16_works_for_korean_suffix() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn donut_focus_time_replaces_the_dot_with_a_compact_productivity_ring() {
     let (_, hybrid_width, hybrid_height) = render_tray_display_icon(
         TrayDisplayMode::DonutFocusTime,
@@ -279,6 +280,30 @@ fn donut_focus_time_replaces_the_dot_with_a_compact_productivity_ring() {
 
     assert_eq!((hybrid_width, hybrid_height), (22, 18));
     assert_eq!((dot_width, dot_height), (14, 18));
+}
+
+#[test]
+#[cfg(target_os = "windows")]
+fn windows_tray_display_modes_keep_the_brand_hourglass() {
+    let expected = donut_icon::render_brand_hourglass(true);
+
+    for mode in [
+        TrayDisplayMode::Donut,
+        TrayDisplayMode::FocusTime,
+        TrayDisplayMode::DonutFocusTime,
+    ] {
+        assert_eq!(
+            render_tray_display_icon(
+                mode,
+                0.6,
+                0.2,
+                0.2,
+                true,
+                TrayIconStyle::Expanded,
+            ),
+            expected,
+        );
+    }
 }
 
 #[test]

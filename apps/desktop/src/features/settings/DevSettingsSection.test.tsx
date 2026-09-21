@@ -437,6 +437,18 @@ describe("DevSettingsSection", () => {
     expect(props.onFloatingCompanionDevEnabledChange).toHaveBeenCalledWith(true);
   });
 
+  it("does not expose the floating Companion preview on Windows", () => {
+    renderProductionDevSettings({
+      activeSubsection: "previews",
+      floatingCompanionDevEnabled: true,
+      floatingCompanionDevSupported: false,
+    });
+
+    expect(screen.queryByText("Use floating Companion")).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Toggle floating Companion" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Companion moment preview" })).toBeTruthy();
+  });
+
   it("renders only the active Dev subsection", () => {
     renderProductionDevSettings();
 

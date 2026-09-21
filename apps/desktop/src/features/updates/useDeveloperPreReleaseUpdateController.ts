@@ -1,6 +1,7 @@
 import { acquireUpdateOperation } from "./versionSwitchState";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toErrorMessage } from "../../lib/formatting";
+import type { ScheduledUpdateCheckResult } from "./useAutomaticUpdateScheduler";
 import {
   checkDeveloperPreReleaseUpdate,
   installAndRelaunchDeveloperPreReleaseUpdate,
@@ -19,7 +20,7 @@ export type DeveloperPreReleaseUpdateController = {
   readonly status: PreReleaseUpdateStatus;
   readonly update: DeveloperPreReleaseUpdate | null;
   readonly updaterAvailable: boolean;
-  readonly checkLatestBuild: () => Promise<void>;
+  readonly checkLatestBuild: () => Promise<ScheduledUpdateCheckResult | void>;
   readonly dismissPrompt: () => void;
   readonly installLatestBuild: () => Promise<void>;
 };
@@ -54,7 +55,7 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
     setUpdateState(nextUpdate);
   }, []);
 
-  const checkLatestBuild = useCallback(async () => {
+  const checkLatestBuild = useCallback(async (): Promise<ScheduledUpdateCheckResult | void> => {
     if (isBusyStatus(statusRef.current) || statusRef.current === "unavailable") return;
 
     setStatus("checking");
@@ -69,7 +70,7 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
         setStatus("unavailable");
         setMessage(DESKTOP_RUNTIME_MESSAGE);
         setPromptedUpdateVersion(null);
-        return;
+        return { kind: "error" };
       }
 
       setUpdate(nextUpdate);
@@ -77,12 +78,13 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
         setStatus("available");
         setMessage(`Drifty ${nextUpdate.version} pre-release is available.`);
         setPromptedUpdateVersion(nextUpdate.version);
-        return;
+        return { kind: "available" };
       }
 
       setStatus("none");
       setMessage(`No pre-release update is available. Current version ${nextUpdate.currentVersion}.`);
       setPromptedUpdateVersion(null);
+      return { kind: "none" };
     } catch (nextError) {
       const errorMessage = nextError instanceof Error ? nextError.message : toErrorMessage(nextError);
       setUpdate(null);
@@ -90,11 +92,12 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
       if (isMissingPreReleaseManifestError(errorMessage)) {
         setStatus("none");
         setMessage(MISSING_PRE_RELEASE_MANIFEST_MESSAGE);
-        return;
+        return { kind: "none" };
       }
 
       setStatus("error");
       setError(`Pre-release update check failed: ${errorMessage}`);
+      return { kind: "error" };
     }
   }, [setStatus, setUpdate]);
 

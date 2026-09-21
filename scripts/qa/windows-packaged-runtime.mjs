@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const DEFAULT_DEBUG_PORT = 9337;
 const MANAGED_AI_PORT = 39217;
+const PACKAGE_INSTALL_TIMEOUT_MS = 15 * 60_000;
 const DEFAULT_MODEL_ID = "drifty-qwen3-5-2b-economy";
 const QA_CREDENTIAL_PREFIX = "drifty-packaged-qa-";
 const WINDOWS_OPENROUTER_TARGET = "desktop.so.drifty.openrouter-api-key";
@@ -23,6 +24,7 @@ export function resolveWindowsToolPaths(windowsDirectory) {
   return {
     powershell: path.win32.join(system32, "WindowsPowerShell", "v1.0", "powershell.exe"),
     cmdkey: path.win32.join(system32, "cmdkey.exe"),
+    netstat: path.win32.join(system32, "netstat.exe"),
     taskkill: path.win32.join(system32, "taskkill.exe"),
   };
 }
@@ -402,6 +404,44 @@ export function validateAuthenticodeDetails(details, options, artifactLabel) {
   }
 }
 
+export async function inspectInstalledBrowserHost(appPath, options, readers = {}) {
+  if (!path.win32.isAbsolute(appPath)) throw new Error("Installed app path must be absolute.");
+  const hostPath = path.win32.join(path.win32.dirname(appPath), "drifty-browser-host.exe");
+  const metadata = await (readers.stat ?? stat)(hostPath);
+  if (!metadata.isFile()) throw new Error("Installed browser host must be a regular file.");
+  const sha256 = await (readers.sha256 ?? sha256File)(hostPath);
+  const authenticode = await (readers.authenticode ?? authenticodeDetails)(hostPath);
+  validateAuthenticodeDetails(authenticode, options, "Installed browser host");
+  const nativeVersion = await (readers.fileVersion ?? windowsFileVersionDetails)(hostPath);
+  validateWindowsFileVersion(nativeVersion, options.expectedAppVersion, "Installed browser host");
+  return { path: redactEvidencePath(hostPath), sha256, authenticodeStatus: authenticode.status, authenticode, nativeVersion };
+}
+
+export function validateWindowsProtocolRegistration(command, appPath, env = process.env) {
+  if (!path.win32.isAbsolute(appPath)) throw new Error("Installed app path must be absolute.");
+  const expectedCommand = `"${appPath}" "%1"`;
+  if (command !== expectedCommand) {
+    throw new Error(
+      `Installed drifty:// protocol command mismatch. Expected ${redactEvidenceText(expectedCommand, env)}, got ${redactEvidenceText(command, env)}.`,
+    );
+  }
+  return {
+    scheme: "drifty",
+    command: redactEvidenceText(command, env),
+    expectedCommand: redactEvidenceText(expectedCommand, env),
+    targetsInstalledApp: true,
+  };
+}
+
+async function inspectWindowsProtocolRegistration(appPath) {
+  const result = await runPowerShell([
+    '$key = "HKCU:\\Software\\Classes\\drifty\\shell\\open\\command"',
+    '$command = (Get-ItemProperty -LiteralPath $key -ErrorAction Stop)."(default)"',
+    '[pscustomobject]@{ command = [string]$command } | ConvertTo-Json -Compress',
+  ].join("\n"));
+  return validateWindowsProtocolRegistration(JSON.parse(result.stdout).command, appPath);
+}
+
 export function isCleanupComplete(cleanup) {
   return cleanup?.appStopped === true
     && cleanup?.debugPortClosed === true
@@ -410,15 +450,32 @@ export function isCleanupComplete(cleanup) {
     && cleanup.residualProductProcessIds.length === 0;
 }
 
+export function parseNetstatListeners(output, port) {
+  const expectedPort = Number(port);
+  const listeners = [];
+  for (const rawLine of String(output ?? "").split(/\r?\n/)) {
+    const fields = rawLine.trim().split(/\s+/);
+    if (fields.length < 5 || fields[0].toUpperCase() !== "TCP") continue;
+    const local = fields[1];
+    const foreign = fields[2];
+    const owningProcess = Number(fields.at(-1));
+    const match = local.match(/^\[([^\]]+)]:(\d+)$/) ?? local.match(/^(.+):(\d+)$/);
+    if (!match || Number(match[2]) !== expectedPort || !Number.isInteger(owningProcess)) continue;
+    if (foreign !== "0.0.0.0:0" && foreign !== "[::]:0") continue;
+    listeners.push({
+      LocalAddress: match[1],
+      LocalPort: expectedPort,
+      OwningProcess: owningProcess,
+    });
+  }
+  return listeners;
+}
+
 async function getListeners(port) {
-  const script = [
-    "$items = @(Get-NetTCPConnection -State Listen -LocalPort ([int]$env:DRIFTY_QA_PORT) -ErrorAction SilentlyContinue |",
-    "  Select-Object LocalAddress,LocalPort,OwningProcess)",
-    "if ($items.Count -eq 0) { '[]' } else { $items | ConvertTo-Json -Compress }",
-  ].join("\n");
-  const result = await runPowerShell(script, { DRIFTY_QA_PORT: String(port) });
-  const parsed = JSON.parse(result.stdout || "[]");
-  return Array.isArray(parsed) ? parsed : [parsed];
+  const result = await run(getWindowsToolPaths().netstat, ["-ano", "-p", "tcp"], {
+    timeoutMs: 30_000,
+  });
+  return parseNetstatListeners(result.stdout, port);
 }
 
 async function getProcessIdsByName(name) {
@@ -496,6 +553,15 @@ async function findInstalledAppPath() {
   return null;
 }
 
+async function waitForInstalledAppRemoval(appPath, timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await pathExists(appPath))) return;
+    await delay(500);
+  }
+  throw new Error(`Pre-existing Drifty executable remained after silent uninstall: ${appPath}`);
+}
+
 async function resolveInstalledAppPath() {
   const installedPath = await findInstalledAppPath();
   if (installedPath) return installedPath;
@@ -503,17 +569,29 @@ async function resolveInstalledAppPath() {
 }
 
 async function removePreexistingInstallation() {
-  const appPath = await findInstalledAppPath();
-  if (!appPath) return { found: false, removed: true };
-  const uninstallerPath = path.join(path.dirname(appPath), "uninstall.exe");
-  if (!(await pathExists(uninstallerPath))) {
-    throw new Error(`Pre-existing Drifty installation has no uninstaller: ${uninstallerPath}`);
+  let found = false;
+  const attemptedDirectories = new Set();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const appPath = await findInstalledAppPath();
+    if (!appPath) return { found, removed: true };
+    found = true;
+
+    const installDirectory = path.dirname(appPath);
+    const directoryKey = installDirectory.toLocaleLowerCase("en-US");
+    if (attemptedDirectories.has(directoryKey)) {
+      throw new Error(`Pre-existing Drifty installation remained after its uninstaller completed: ${appPath}`);
+    }
+    attemptedDirectories.add(directoryKey);
+
+    const uninstallerPath = path.join(installDirectory, "uninstall.exe");
+    if (!(await pathExists(uninstallerPath))) {
+      throw new Error(`Pre-existing Drifty installation has no uninstaller: ${uninstallerPath}`);
+    }
+    const uninstall = await run(uninstallerPath, ["/S"], { timeoutMs: 5 * 60_000, allowFailure: true });
+    if (uninstall.code !== 0) throw new Error(`Pre-existing Drifty uninstaller exited with code ${uninstall.code}.`);
+    await waitForInstalledAppRemoval(appPath);
   }
-  const uninstall = await run(uninstallerPath, ["/S"], { timeoutMs: 5 * 60_000, allowFailure: true });
-  if (uninstall.code !== 0) throw new Error(`Pre-existing Drifty uninstaller exited with code ${uninstall.code}.`);
-  await delay(1_000);
-  if (await findInstalledAppPath()) throw new Error("Pre-existing Drifty executable remained after silent uninstall.");
-  return { found: true, removed: true };
+  throw new Error("Too many pre-existing Drifty installations were discovered during cleanup.");
 }
 
 async function waitForMainTarget(port, timeoutMs = 90_000) {
@@ -654,6 +732,22 @@ async function waitForTauriBridge(cdp, timeoutMs = 60_000) {
   throw new Error(`Tauri invoke bridge did not become available within ${timeoutMs / 1000} seconds.`);
 }
 
+async function waitForBuildIdentity(cdp, timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
+  let identity = null;
+  while (Date.now() < deadline) {
+    identity = await cdp.evaluate(`({
+      commit: document.documentElement.dataset.driftyBuildCommit ?? null,
+      version: document.documentElement.dataset.driftyAppVersion ?? null
+    })`, 5_000);
+    if (typeof identity?.commit === "string" && typeof identity?.version === "string") {
+      return identity;
+    }
+    await delay(250);
+  }
+  throw new Error(`Installed app build identity did not appear within ${timeoutMs / 1000} seconds.`);
+}
+
 async function restoreCredential(cdp) {
   return cdp.evaluate(`
     (async () => {
@@ -720,6 +814,7 @@ function makeResult(options) {
       expectedVersion: options.expectedAppVersion,
       version: null,
       processId: null,
+      deepLinkRegistration: null,
     },
     tracker: {
       path: null,
@@ -727,6 +822,7 @@ function makeResult(options) {
       authenticodeStatus: null,
       authenticode: null,
     },
+    browserHost: null,
     debugTransport: {
       port: options.debugPort,
       environmentScope: "spawned-app-only",
@@ -855,7 +951,10 @@ async function runQa(options) {
     if (!result.installer.appAbsentBeforeInstall) {
       throw new Error("Drifty executable exists immediately before verified installer execution.");
     }
-    const installer = await run(options.installerPath, ["/S"], { timeoutMs: 5 * 60_000, allowFailure: true });
+    const installer = await run(options.installerPath, ["/S"], {
+      timeoutMs: PACKAGE_INSTALL_TIMEOUT_MS,
+      allowFailure: true,
+    });
     result.installer.exitCode = installer.code;
     if (installer.code !== 0) throw new Error(`Installer exited with code ${installer.code}.`);
 
@@ -868,6 +967,7 @@ async function runQa(options) {
     validateAuthenticodeDetails(result.app.authenticode, options, "Installed app");
     result.app.nativeVersion = await windowsFileVersionDetails(appPath);
     validateWindowsFileVersion(result.app.nativeVersion, options.expectedAppVersion, "Installed app");
+    result.app.deepLinkRegistration = await inspectWindowsProtocolRegistration(appPath);
 
     const trackerPath = path.join(path.dirname(appPath), "drifty-tracker", "drifty-tracker.exe");
     await stat(trackerPath);
@@ -876,6 +976,7 @@ async function runQa(options) {
     result.tracker.authenticode = await authenticodeDetails(trackerPath);
     result.tracker.authenticodeStatus = result.tracker.authenticode.status;
     validateAuthenticodeDetails(result.tracker.authenticode, options, "Installed tracker");
+    result.browserHost = await inspectInstalledBrowserHost(appPath, options);
 
     appProcess = spawn(appPath, [], {
       env: {
@@ -898,10 +999,7 @@ async function runQa(options) {
     cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
     await waitForTauriBridge(cdp);
     result.debugTransport.tauriInvokeReady = true;
-    const buildIdentity = await cdp.evaluate(`({
-      commit: document.documentElement.dataset.driftyBuildCommit ?? null,
-      version: document.documentElement.dataset.driftyAppVersion ?? null
-    })`);
+    const buildIdentity = await waitForBuildIdentity(cdp);
     result.app.buildCommit = typeof buildIdentity?.commit === "string" ? buildIdentity.commit.toLowerCase() : null;
     if (result.app.buildCommit !== options.expectedBuildCommit) {
       throw new Error(`Installed app build commit mismatch. Expected ${options.expectedBuildCommit}, got ${String(result.app.buildCommit)}.`);
@@ -1086,13 +1184,13 @@ async function runQa(options) {
     result.managedLocalAi.installed = true;
 
     status = await cdp.invoke("managed_ai_start", { modelId: options.modelId }, 180_000);
-    const runtimeDeadline = Date.now() + 5 * 60_000;
+    const runtimeDeadline = Date.now() + 6 * 60_000;
     while (status?.state !== "running" && Date.now() < runtimeDeadline) {
       if (status?.state === "error") throw new Error(`Managed local AI runtime failed: ${status.message}`);
       await delay(2_000);
       status = await cdp.invoke("managed_ai_status");
     }
-    if (status?.state !== "running") throw new Error("Managed local AI runtime did not reach running state within five minutes.");
+    if (status?.state !== "running") throw new Error("Managed local AI runtime did not reach running state within six minutes.");
     result.managedLocalAi.running = true;
     result.managedLocalAi.baseUrl = requireManagedAiLoopbackEndpoint(status.baseUrl);
     result.managedLocalAi.runtimeModel = status.model;

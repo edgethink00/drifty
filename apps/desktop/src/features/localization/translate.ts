@@ -21,4 +21,3 @@ export function translateFor(language: DisplayLanguage): Translate {
   const table = language === "ko" ? KOREAN_TRANSLATIONS : ENGLISH_TRANSLATIONS;
   return (key, params) => interpolate(table[key], params);
 }
-

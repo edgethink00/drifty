@@ -92,4 +92,3 @@ function readJson(key: string): unknown {
     throw error;
   }
 }
-

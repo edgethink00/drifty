@@ -78,10 +78,21 @@ html {
   --button-danger-ink: color-mix(in srgb, var(--warn) 82%, var(--text));
   --button-danger-hover-bg: color-mix(in srgb, var(--warn-soft) 96%, var(--surface));
   --button-danger-hover-border: color-mix(in srgb, var(--warn) 28%, transparent);
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  /* 각 스택은 Apple → Windows → 한글 → 제네릭 순으로 플랫폼 그룹을 명시한다.
+     이전 스택은 Apple 전용 이름만 담고 있어 Windows 에서는 모두 해석되지
+     않았고(Helvetica Neue 도 Windows 에는 없다) 본문 전체가 Arial 로,
+     mono 는 Courier New 로 떨어졌다. Segoe UI 는 한글 글리프가 없으므로
+     Malgun Gothic 을 명시해 한글 폴백을 브라우저 추정에 맡기지 않는다.
+     Segoe UI Variable 은 Windows 11, Segoe UI 는 Windows 10 경로다. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", "Malgun Gothic", system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", "Malgun Gothic", system-ui, sans-serif;
   --font-serif: "Iowan Old Style", "Georgia", serif;
-  --font-mono: "SF Mono", ui-monospace, "Fira Code", monospace;
+  /* Hangul needs naming here too. Left to itself the engine picks the system's
+     fixed-width Korean face, which on Windows is the bitmap-era GulimChe and
+     renders jagged next to the Latin glyphs. Korean labels in this stack are
+     read, not column-aligned, so the clean proportional face is the right
+     partner for Cascadia's Latin. */
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, "Malgun Gothic", "Fira Code", monospace;
   --font-ui: var(--font-sans);
   --type-overline-size: 0.6875rem;
   --type-control-size: 0.75rem;
@@ -214,6 +225,25 @@ html {
   font-family: var(--font-sans);
 }
 
+/* Windows refines the shared tokens rather than reusing macOS geometry: the
+   caption strip and its 46px buttons are fixed Windows metrics, the panel
+   corner is tighter, and the sidebar runs faster than the macOS 380ms. The
+   font overrides put the Windows faces first so the platform never walks the
+   Apple names; the base stack in this file still covers any surface that has
+   not had data-platform applied yet. */
+:root[data-platform="windows"] {
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", "Malgun Gothic", sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "Malgun Gothic", sans-serif;
+  --font-serif: "Georgia", serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", "Consolas", "Malgun Gothic", ui-monospace, monospace;
+  --window-nav-offset-x: 12px;
+  --windows-titlebar-height: 32px;
+  --windows-caption-button-width: 46px;
+  --windows-caption-controls-width: calc(var(--windows-caption-button-width) * 3);
+  --content-panel-radius: 10px;
+  --sidebar-duration: 180ms;
+}
+
 :root[data-theme="light"] {
   color-scheme: light;
   --canvas: #f2f1ed;
@@ -298,6 +328,10 @@ html {
      carry no text. In light mode the tint pushes the block toward its own near
      white label, so the light theme uses a lighter dose than dark. */
   --week-event-surface-tint: 12%;
+}
+
+:root[data-platform="windows"][data-theme="light"] {
+  --windows-shell-bg: #e9ebe6;
 }
 
 :root[data-theme="dark"] {
@@ -416,6 +450,10 @@ html {
   --shell-floating-surface: rgba(32,31,28,.62);
   --shell-floating-surface-strong: rgba(36,35,32,.78);
   --pet-quick-controls-surface: rgba(35,34,31,.88);
+}
+
+:root[data-platform="windows"][data-theme="dark"] {
+  --windows-shell-bg: #1b1c19;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

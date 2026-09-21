@@ -100,9 +100,12 @@ export type PetModeSeatResolution = {
   readonly reason: PetModeSeatResolutionReason;
 };
 
-// Native travel can legitimately use the full six-second cap before the paw
-// reaches its reviewed contact frame. Keep the listener alive through both.
-const PET_MODE_CONTACT_TIMEOUT_MS = 8_000;
+// Windows first resolves the exact foreground browser-tab X through UIA, then
+// native travel can legitimately use the full six-second cap before the paw
+// reaches its reviewed contact frame. Keep the listener alive through lookup,
+// travel, and the reviewed paw beat; the timeout is a lost-renderer failsafe,
+// not a normal animation budget.
+const PET_MODE_CONTACT_TIMEOUT_MS = 18_000;
 let petModeEnabledSync: Promise<void> = Promise.resolve();
 
 export async function setNativePetModeEnabled(

@@ -41,6 +41,8 @@ const petModeCssContract = readFileSync("src/features/pet-mode/petMode.css", "ut
 const petModeDataContract = readFileSync("src/features/pet-mode/petModeData.ts", "utf8");
 const petModeWindowContract = readFileSync("src/features/pet-mode/PetModeWindowApp.tsx", "utf8");
 const petModeRustContract = readFileSync("../../src-tauri/src/commands/pet_mode.rs", "utf8");
+const petModeWindowsRustContract = readFileSync("../../src-tauri/src/commands/pet_mode_windows.rs", "utf8");
+const windowsBrowserUiaRustContract = readFileSync("../../src-tauri/src/commands/windows_browser_uia.rs", "utf8");
 const petPanelRustContract = readFileSync("../../src-tauri/src/commands/pet_panel.rs", "utf8");
 const petQuickControlsCssContract = readFileSync("src/features/pet-mode/petModeQuickControls.css", "utf8");
 const petQuickControlsTsContract = readFileSync("src/features/pet-mode/petModeQuickControls.ts", "utf8");
@@ -491,6 +493,14 @@ describe("catching the cat cancels the close", () => {
     expect(body).toContain('if (intervention.outcome === "cancelled")');
     expect(body).toContain("pet_context_changed");
     expect(body).not.toContain("if (!contacted)");
+  });
+
+  it("uses the fast native Chromium locator without regressing Firefox exact-X geometry", () => {
+    expect(petModeWindowsRustContract).toContain('if process_name == "firefox"');
+    expect(petModeWindowsRustContract).toContain("locate_firefox_tab_close");
+    expect(petModeWindowsRustContract).toContain("windows_browser_uia::locate_foreground_tab_close");
+    expect(windowsBrowserUiaRustContract).toContain('matches!(process_name.as_str(), "chrome" | "msedge" | "brave")');
+    expect(windowsBrowserUiaRustContract).toContain('format!("windows_uia_{match_kind}")');
   });
 
   it("hands an intercepted nudge to the companion without an OS notification", () => {

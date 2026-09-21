@@ -334,6 +334,9 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     let menu = TrayMenu::new(app, tray_menu_rows(&tray_menu_plan(app)))?;
 
+    #[cfg(target_os = "windows")]
+    let (initial_rgba, iw, ih) = donut_icon::render_brand_hourglass(is_dark_mode());
+    #[cfg(not(target_os = "windows"))]
     let (initial_rgba, iw, ih) = donut_icon::render(DonutIconRenderInput {
         focus: 0.0,
         drift: 0.0,
@@ -886,6 +889,16 @@ fn render_tray_display_icon(
     dark: bool,
     style: TrayIconStyle,
 ) -> (Vec<u8>, u32, u32) {
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, the system tray icon sits inside the overflow area or taskbar.
+        // A hollow, low-contrast neutral donut ring has near-zero visibility and lacks brand presence.
+        // Option 1: Render the crisp Drifty hourglass brand mark as the authoritative Windows tray icon.
+        let _ = (mode, focus, drift, neutral, style);
+        return donut_icon::render_brand_hourglass(dark);
+    }
+
+    #[cfg(not(target_os = "windows"))]
     match mode {
         TrayDisplayMode::Donut => donut_icon::render(DonutIconRenderInput {
             focus,
@@ -1111,10 +1124,22 @@ fn latest_tray_drift_alarm_status(app: &AppHandle) -> TrayDriftAlarmStatus {
         .unwrap_or_default()
 }
 
+#[cfg(target_os = "macos")]
 fn is_dark_mode() -> bool {
     std::process::Command::new("defaults")
         .args(["read", "-g", "AppleInterfaceStyle"])
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "Dark")
         .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn is_dark_mode() -> bool {
+    // Windows 10/11 taskbar and overflow chevron popup default to dark mode.
+    true
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn is_dark_mode() -> bool {
+    false
 }

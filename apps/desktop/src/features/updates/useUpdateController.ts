@@ -64,6 +64,7 @@ type UseUpdateControllerResult = {
 
 type UseUpdateControllerOptions = {
   readonly backgroundPreparationSupported: boolean;
+  readonly hostPlatform?: "macos" | "windows" | "other";
   readonly getIdleSeconds?: () => Promise<number | null>;
   readonly canSafelyRestart?: () => boolean;
 };
@@ -77,6 +78,7 @@ function releaseUpdateResource(update: AvailableUpdate | null): void {
 
 export function useUpdateController({
   backgroundPreparationSupported,
+  hostPlatform = "other",
   getIdleSeconds,
   canSafelyRestart,
 }: UseUpdateControllerOptions): UseUpdateControllerResult {
@@ -268,7 +270,7 @@ export function useUpdateController({
         }
 
         const nowMs = Date.now();
-        const nextPolicy = await fetchUpdatePolicy(nextUpdate.version);
+        const nextPolicy = await fetchUpdatePolicy(nextUpdate.version, globalThis.fetch, hostPlatform);
         if (!manualCheckRequestedRef.current && readVersionTestPauseUntil() > Date.now()) {
           releaseUpdateResource(nextUpdate);
           return;
@@ -329,6 +331,7 @@ export function useUpdateController({
   }, [
     backgroundPreparationSupported,
     backgroundUpdatesEnabled,
+    hostPlatform,
     prepareUpdateInBackground,
     replaceAvailableUpdate,
     updateStoredInteractions,
@@ -358,7 +361,7 @@ export function useUpdateController({
       const latestPolicy = latestUpdate.version === offeredUpdate.version
         && availableUpdatePolicy?.version === latestUpdate.version
         ? availableUpdatePolicy
-        : await fetchUpdatePolicy(latestUpdate.version);
+        : await fetchUpdatePolicy(latestUpdate.version, globalThis.fetch, hostPlatform);
       replaceAvailableUpdate(latestUpdate);
       setAvailableUpdatePolicy(latestPolicy);
       // The user already chose to install. If installation fails, keep the
@@ -377,6 +380,7 @@ export function useUpdateController({
     });
   }, [
     availableUpdatePolicy,
+    hostPlatform,
     installUpdateAndRestart,
     replaceAvailableUpdate,
     updateStoredInteractions,

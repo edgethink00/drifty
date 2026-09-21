@@ -96,6 +96,7 @@ type DevSettingsSectionProps = {
   readonly petModeLabPointerStatus: string | null;
   readonly petModeLabInputBounds: string | null;
   readonly floatingCompanionDevEnabled: boolean;
+  readonly floatingCompanionDevSupported?: boolean;
   readonly onFloatingCompanionDevEnabledChange: (enabled: boolean) => void;
   readonly onPreviewCompanionMilestone: (previewId: CompanionMilestonePreviewId) => void;
   readonly onPreviewCompanionMoment: (previewId: CompanionMomentPreviewId) => void;
@@ -180,6 +181,7 @@ export function DevSettingsSection({
   petModeLabPointerStatus,
   petModeLabInputBounds,
   floatingCompanionDevEnabled,
+  floatingCompanionDevSupported = true,
   onFloatingCompanionDevEnabledChange,
   onPreviewCompanionMilestone,
   onPreviewCompanionMoment,
@@ -848,6 +850,7 @@ export function DevSettingsSection({
           </div>
           <DevSettingsCompanionPillBlock
             floatingEnabled={floatingCompanionDevEnabled}
+            floatingSupported={floatingCompanionDevSupported}
             onFloatingEnabledChange={onFloatingCompanionDevEnabledChange}
             onPreviewMilestone={onPreviewCompanionMilestone}
             onPreviewMoment={onPreviewCompanionMoment}

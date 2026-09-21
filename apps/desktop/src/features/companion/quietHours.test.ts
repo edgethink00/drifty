@@ -59,4 +59,3 @@ describe("quietHours", () => {
     expect(millisecondsUntilNextQuietHoursBoundary(new Date(2026, 8, 18, 22, 0, 0, 0), settings)).toBe(10 * 60 * 60 * 1000);
   });
 });
-

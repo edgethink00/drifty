@@ -192,11 +192,12 @@ class BrowserEnrichmentTests(unittest.TestCase):
             44,
             live_reader=lambda hwnd, app: WindowsBrowserUiaResult("https://www.example.com/docs", None),
             history_reader=lambda *_: self.fail("history must not run after a live URL"),
+            bridge_reader=lambda *_: None,
         )
         self.assertEqual(snapshot.browser_name, "Google Chrome")
         self.assertEqual(snapshot.site_domain, "example.com")
         self.assertEqual(snapshot.site_url, "https://www.example.com/docs")
-        self.assertEqual(snapshot.site_source, "windows-uia-address-bar")
+        self.assertEqual(snapshot.site_source, "windows-uia-document")
         self.assertEqual(snapshot.capture_confidence, 0.8)
         self.assertEqual(snapshot.browser_automation_status, "granted")
 
@@ -218,6 +219,7 @@ class BrowserEnrichmentTests(unittest.TestCase):
             live_reader=lambda hwnd, app: WindowsBrowserUiaResult(None, "no URL-shaped edit control value"),
             history_reader=lambda *_: history,
             history_identity_checker=lambda *_: True,
+            bridge_reader=lambda *_: None,
         )
         self.assertEqual(snapshot.site_url, "https://example.com/fallback")
         self.assertEqual(snapshot.site_source, "browser-history-title")
@@ -225,6 +227,23 @@ class BrowserEnrichmentTests(unittest.TestCase):
         self.assertIn("URL-shaped", snapshot.browser_automation_error or "")
         self.assertEqual(snapshot.browser_history_status, "matched")
         self.assertEqual(snapshot.capture_confidence, 0.45)
+
+    def test_document_http_url_identity_reaches_snapshot_unchanged(self) -> None:
+        url = "http://127.0.0.1:4173/Docs/?Q=Case#Fragment"
+        snapshot = enrich_browser_snapshot(
+            self._snapshot(),
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult(url, None),
+            history_reader=lambda *_: self.fail("history must not replace Document identity"),
+            bridge_reader=lambda *_: None,
+        )
+        self.assertEqual(snapshot.site_url, url)
+        self.assertEqual(snapshot.site_source, "windows-uia-document")
+        self.assertEqual(snapshot.site_domain, "127.0.0.1")
+        metadata = windows_workspace._browser_metadata_from_live_uia(
+            "Google Chrome", WindowsBrowserUiaResult(url, None)
+        )
+        self.assertEqual(metadata.match_state, "windows-uia-document")
 
     def test_unverified_portable_browser_never_reads_canonical_history(self) -> None:
         snapshot = self._snapshot()
@@ -234,6 +253,7 @@ class BrowserEnrichmentTests(unittest.TestCase):
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult(None, "address bar unavailable"),
             history_reader=lambda *_: self.fail("unverified executable must not read browser history"),
+            bridge_reader=lambda *_: None,
         )
         self.assertIsNone(enriched.site_url)
         self.assertEqual(enriched.capture_confidence, 1.0)
@@ -246,9 +266,32 @@ class BrowserEnrichmentTests(unittest.TestCase):
             44,
             live_reader=lambda *_: self.fail("UIA must not run"),
             history_reader=lambda *_: self.fail("history must not run"),
+            bridge_reader=lambda *_: None,
         )
         self.assertIs(unchanged, snapshot)
         self.assertIsNone(unchanged.browser_name)
+
+    def test_exact_firefox_bridge_skips_uia_and_history(self) -> None:
+        snapshot = self._snapshot("Firefox")
+        snapshot.app_name = "Firefox"
+        bridge = BrowserMetadata(
+            browser_name="Firefox",
+            site_domain="example.com",
+            site_title="Exact Firefox tab",
+            site_url="https://example.com/firefox",
+            match_state="browser-extension",
+            browser_automation_status="granted",
+        )
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: self.fail("UIA must not run after an exact bridge match"),
+            history_reader=lambda *_: self.fail("history must not run after an exact bridge match"),
+            bridge_reader=lambda *_: bridge,
+        )
+        self.assertEqual(enriched.site_url, "https://example.com/firefox")
+        self.assertEqual(enriched.site_source, "browser-extension")
+        self.assertEqual(enriched.capture_confidence, 1.0)
 
 
 class BrowserHistoryIdentityTests(unittest.TestCase):
@@ -279,6 +322,62 @@ class BrowserHistoryIdentityTests(unittest.TestCase):
             path,
             environment,
         ))
+
+class ForegroundSnapshotFreshnessTests(unittest.TestCase):
+    def capture(self, windows):
+        identity = ProcessIdentity(
+            exe_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            exe_name="Google Chrome",
+            aumid=None,
+        )
+
+        def enrich(snapshot, hwnd):
+            snapshot.site_url = "http://127.0.0.1/PageB"
+            snapshot.site_source = "windows-uia-document"
+            return snapshot
+
+        with (
+            patch.object(windows_workspace, "is_windows", return_value=True),
+            patch.object(windows_workspace, "process_session_id", return_value=1),
+            patch.object(windows_workspace, "read_foreground_window", side_effect=windows),
+            patch.object(windows_workspace, "resolve_identity", return_value=(identity, None)),
+            patch.object(windows_workspace, "enrich_browser_snapshot", side_effect=enrich) as enrichment,
+        ):
+            snapshot = windows_workspace.current_snapshot()
+        return snapshot, enrichment
+
+    def test_stable_foreground_keeps_enrichment(self) -> None:
+        stable = ForegroundWindow(hwnd=100, title="Page B", pid=10)
+        snapshot, enrichment = self.capture([stable, stable, stable])
+        self.assertEqual(snapshot.window_title, "Page B")
+        self.assertEqual(snapshot.site_url, "http://127.0.0.1/PageB")
+        enrichment.assert_called_once()
+
+    def test_changed_identity_refuses_before_enrichment(self) -> None:
+        old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
+        changed = ForegroundWindow(hwnd=100, title="Page A", pid=20)
+        snapshot, enrichment = self.capture([old, changed])
+        enrichment.assert_not_called()
+        self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+        self.assertIsNone(snapshot.site_url)
+
+    def test_changed_foreground_discards_enriched_context(self) -> None:
+        old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
+        for changed in (
+            ForegroundWindow(hwnd=200, title="Page A", pid=10),
+            ForegroundWindow(hwnd=100, title="Page A", pid=20),
+            ForegroundWindow(hwnd=100, title="Page B", pid=10),
+            None,
+        ):
+            with self.subTest(changed=changed):
+                snapshot, enrichment = self.capture([old, old, changed])
+                enrichment.assert_called_once()
+                self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+                self.assertIn("changed", snapshot.frontmost_capture_error or "")
+                self.assertIsNone(snapshot.window_title)
+                self.assertIsNone(snapshot.site_url)
+                self.assertIsNone(snapshot.site_source)
+
 
 class SessionZeroRefusalTests(unittest.TestCase):
     def test_session_zero_refuses_capture(self) -> None:

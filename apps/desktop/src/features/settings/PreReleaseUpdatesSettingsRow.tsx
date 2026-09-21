@@ -28,7 +28,7 @@ export function PreReleaseUpdatesSettingsRow({
     <div className="settings-row settings-row--fallback settings-row--pre-release-updates" role="group" aria-label="Pre-release updates">
       <div>
         <div className="lbl">Pre-release updates</div>
-        <div className="desc">Checks the developer pre-release channel used by Developer &gt; Check Latest Build...</div>
+        <div className="desc">Manual checks use the developer pre-release channel. On Windows, Dev mode also checks its beta channel after launch and daily; installation stays explicit.</div>
         {notice ? (
           <p
             className={notice.role === "alert" ? "capture-recency capture-recency--error" : "capture-recency"}

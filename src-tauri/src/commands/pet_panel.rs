@@ -2,6 +2,10 @@ use std::collections::VecDeque;
 use tauri::{AppHandle, Emitter, LogicalPosition, WebviewWindow};
 
 use super::pet_mode::{current_pet_logical_position, probe_pet_drop_plan};
+#[cfg(target_os = "windows")]
+use super::windows_overlay::{
+    configure_windows_overlay, show_windows_overlay, WindowsOverlayInputMode,
+};
 
 const PET_SHAKE_WINDOW_MS: u64 = 1_000;
 const PET_SHAKE_MIN_SAMPLE_DISTANCE_PT: f64 = 2.0;
@@ -318,15 +322,20 @@ pub fn configure_pet_panel(window: &WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn configure_pet_panel(window: &WebviewWindow) -> tauri::Result<()> {
+    configure_windows_overlay(window, WindowsOverlayInputMode::Passive)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn configure_pet_panel(_window: &WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
 /// How long a marshalled presentation waits for AppKit to run the block.
 /// Matches the timeout the other Pet Mode main-thread hops already use.
-#[cfg(target_os = "macos")]
-const PET_PANEL_MAIN_THREAD_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(250);
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+const PET_PANEL_MAIN_THREAD_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(2000);
 
 /// Whether a presentation has to hop to AppKit's main thread first.
 ///
@@ -369,8 +378,29 @@ pub fn show_pet_panel(app: &AppHandle, window: &WebviewWindow) -> Result<(), Str
                 .recv_timeout(PET_PANEL_MAIN_THREAD_TIMEOUT)
                 .map_err(|_| "Pet Mode panel presentation timed out".to_string())?;
         }
+
+        return show_pet_panel_on_main_thread(app, window);
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let app_for_main = app.clone();
+        let window_for_main = window.clone();
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        app.run_on_main_thread(move || {
+            let _ = sender.send(show_pet_panel_on_main_thread(
+                &app_for_main,
+                &window_for_main,
+            ));
+        })
+        .map_err(|error| error.to_string())?;
+
+        return receiver
+            .recv_timeout(PET_PANEL_MAIN_THREAD_TIMEOUT)
+            .map_err(|_| "Pet Mode panel presentation timed out".to_string())?;
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     show_pet_panel_on_main_thread(app, window)
 }
 
@@ -411,7 +441,26 @@ pub fn show_pet_panel_at_position(
         return show_pet_panel_at_position_on_main_thread(app, window, desired);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let app_for_main = app.clone();
+        let window_for_main = window.clone();
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        app.run_on_main_thread(move || {
+            let res = window_for_main
+                .set_position(desired)
+                .map_err(|error| error.to_string())
+                .and_then(|_| show_pet_panel_on_main_thread(&app_for_main, &window_for_main));
+            let _ = sender.send(res);
+        })
+        .map_err(|error| error.to_string())?;
+
+        return receiver
+            .recv_timeout(PET_PANEL_MAIN_THREAD_TIMEOUT)
+            .map_err(|_| "Pet Mode positioned panel presentation timed out".to_string())?;
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         window
             .set_position(desired)
@@ -487,6 +536,10 @@ fn show_pet_panel_on_main_thread(app: &AppHandle, window: &WebviewWindow) -> Res
         }
     }
 
+    #[cfg(target_os = "windows")]
+    return show_windows_overlay(window);
+
+    #[cfg(not(target_os = "windows"))]
     window.show().map_err(|error| error.to_string())
 }
 
@@ -720,7 +773,194 @@ pub fn perform_pet_panel_drag(
     })
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Track the real pointer on Windows so a press can still resolve as petting.
+///
+/// `start_dragging` hands the whole gesture to the window manager and cannot
+/// report whether the pointer ever moved, so it had to claim `moved: true` for
+/// every press. The renderer treats that as a relocation, which meant a plain
+/// click could never reach the tap reaction. This mirrors the macOS loop
+/// instead: poll the physical cursor, drive the same shared state machine, and
+/// only start following the pointer once the press is classified as a drag.
+#[cfg(target_os = "windows")]
+pub fn perform_pet_panel_drag(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    _start_client_x: f64,
+    _start_client_y: f64,
+    pickup_delay_ms: u64,
+) -> Result<PetPanelDragOutcome, String> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc::sync_channel;
+    use std::sync::Arc;
+    use tauri::PhysicalPosition;
+
+    const MAIN_THREAD_TIMEOUT: Duration = Duration::from_millis(250);
+    // Touch and pen produce a webview pointerdown that never sets a mouse
+    // button, so an unheld press must resolve as a tap instead of spinning
+    // this worker forever. A real mouse is already held when polling starts.
+    const BUTTON_OBSERVE_GRACE: Duration = Duration::from_millis(250);
+    // Absolute stop for a button-up edge this process never observes, such as
+    // a session lock mid-gesture. Far longer than any deliberate drag.
+    const MAX_GESTURE_DURATION: Duration = Duration::from_secs(120);
+
+    let start_pointer = super::pet_cursor_windows::cursor_position()?;
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let gesture_started = Instant::now();
+    let mut shake_detector = PetShakeDetector::default();
+    shake_detector.observe(
+        0,
+        start_pointer.x / scale_factor,
+        start_pointer.y / scale_factor,
+    );
+
+    // Anchor the grab offset in physical pixels. GetPhysicalCursorPos and
+    // outer_position already share that space on every monitor, so a mixed-DPI
+    // desktop needs no per-monitor conversion while the gesture runs.
+    let origin = window.outer_position().map_err(|error| error.to_string())?;
+    let anchor_origin = (origin.x as f64, origin.y as f64);
+    let anchor_pointer = (start_pointer.x, start_pointer.y);
+
+    // Coalesce main-thread applies: at most one move is queued at a time, so a
+    // busy main thread never accumulates a backlog of stale positions.
+    let apply_in_flight = Arc::new(AtomicBool::new(false));
+    let dispatch_apply = |wait_for_completion: bool| -> Result<(), String> {
+        if apply_in_flight
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Ok(());
+        }
+        let flag = Arc::clone(&apply_in_flight);
+        let window_for_apply = window.clone();
+        let completion = if wait_for_completion {
+            Some(sync_channel::<()>(1))
+        } else {
+            None
+        };
+        let completion_sender = completion.as_ref().map(|(sender, _)| sender.clone());
+        app.run_on_main_thread(move || {
+            // Sample the freshest cursor inside the apply so the panel lands on
+            // the current pointer rather than the position that queued it.
+            if let Ok(mouse) = super::pet_cursor_windows::cursor_position() {
+                let (x, y) = pet_drag_origin(anchor_origin, anchor_pointer, (mouse.x, mouse.y));
+                if x.is_finite() && y.is_finite() {
+                    let target = PhysicalPosition::new(x.round() as i32, y.round() as i32);
+                    // Skip no-op moves so a stationary held pointer does not
+                    // spam the window with redundant position changes.
+                    let changed = window_for_apply.outer_position().map_or(true, |current| {
+                        current.x != target.x || current.y != target.y
+                    });
+                    if changed {
+                        let _ = window_for_apply.set_position(target);
+                    }
+                }
+            }
+            flag.store(false, Ordering::Release);
+            if let Some(sender) = completion_sender {
+                let _ = sender.send(());
+            }
+        })
+        .map_err(|error| {
+            apply_in_flight.store(false, Ordering::Release);
+            error.to_string()
+        })?;
+        if let Some((_, receiver)) = completion {
+            let _ = receiver.recv_timeout(MAIN_THREAD_TIMEOUT);
+        }
+        Ok(())
+    };
+
+    let mut gesture = PetPanelGestureState::Pending;
+    let mut pickup_started_at: Option<Instant> = None;
+    let pickup_delay = Duration::from_millis(pickup_delay_ms.min(500));
+    let mut last_probe_at = Instant::now();
+    let mut observed_button_held = false;
+
+    loop {
+        let pointer = super::pet_cursor_windows::cursor_position()?;
+        let elapsed_ms = gesture_started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+        shake_detector.observe(
+            elapsed_ms,
+            pointer.x / scale_factor,
+            pointer.y / scale_factor,
+        );
+        let dx = pointer.x - start_pointer.x;
+        let dy = pointer.y - start_pointer.y;
+        let samples: Vec<_> = shake_detector.samples.iter().copied().collect();
+        let stroking = pet_stroke_detected(&samples);
+        match gesture.observe(elapsed_ms, dx, dy, stroking) {
+            Some(PetPanelGestureEvent::StrokeDetected) => {
+                // A stroke may take over while only the pickup artwork shows.
+                // Clear its clock so this press can never begin moving the
+                // panel on a later loop iteration.
+                pickup_started_at = None;
+                window
+                    .emit("pet-mode-stroke-detected", true)
+                    .map_err(|error| error.to_string())?;
+            }
+            Some(PetPanelGestureEvent::DragStarted) => {
+                pickup_started_at = Some(Instant::now());
+                // A press stays a normal petting tap until physical movement
+                // crosses the threshold. Emitting at that exact boundary keeps
+                // a click from flashing the held sprite, while the pickup hold
+                // below gives the webview time to paint it before the panel
+                // starts following the cursor.
+                window
+                    .emit("pet-mode-drag-start", true)
+                    .map_err(|error| error.to_string())?;
+            }
+            None => {}
+        }
+        if pickup_started_at.is_some_and(|started_at| started_at.elapsed() >= pickup_delay) {
+            // Crossing this boundary is irreversible for the current press. A
+            // later back-and-forth belongs to the shipped shake gesture, not to
+            // petting, because the cat is already following the pointer.
+            gesture.begin_following_pointer();
+        }
+        if gesture == PetPanelGestureState::Dragging {
+            dispatch_apply(false)?;
+            if last_probe_at.elapsed() >= Duration::from_millis(40) {
+                last_probe_at = Instant::now();
+                if let Ok(pos) = current_pet_logical_position(window) {
+                    if let Ok(plan) = probe_pet_drop_plan(app, window, pos, false) {
+                        let _ = window.emit("pet-mode-drag-probe", &plan);
+                    }
+                }
+            }
+        }
+
+        let held = super::pet_cursor_windows::primary_pointer_held();
+        observed_button_held |= held;
+        let button_resolved = !held
+            && (observed_button_held || elapsed_ms >= BUTTON_OBSERVE_GRACE.as_millis() as u64);
+        if button_resolved || gesture_started.elapsed() >= MAX_GESTURE_DURATION {
+            // A fast real drag can finish before the visual pickup hold. Keep
+            // its full pointer delta instead of degrading it into a click.
+            if gesture.moved() {
+                gesture.begin_following_pointer();
+                // Drain any in-flight coalesced apply so the settle below is
+                // guaranteed to be dispatched rather than skipped.
+                let drain_deadline = Instant::now() + MAIN_THREAD_TIMEOUT;
+                while apply_in_flight.load(Ordering::Acquire) && Instant::now() < drain_deadline {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                // Final settle: wait for the apply so the release position is
+                // committed before the command reports the end coordinates.
+                dispatch_apply(true)?;
+            }
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(4));
+    }
+
+    Ok(PetPanelDragOutcome {
+        moved: gesture.moved(),
+        shake_detected: gesture.moved() && shake_detector.detected(),
+        stroke_detected: gesture.stroke_detected(),
+    })
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn perform_pet_panel_drag(
     _app: &AppHandle,
     window: &WebviewWindow,
@@ -769,6 +1009,24 @@ mod tests {
     fn drag_starts_only_when_the_physical_threshold_is_crossed() {
         assert!(is_pet_drag_delta(7.0, 0.0));
         assert!(is_pet_drag_delta(5.0, 5.0));
+    }
+
+    #[test]
+    fn a_press_that_never_crosses_the_threshold_reports_no_movement() {
+        // The Windows path used to hand the whole gesture to the window
+        // manager, which cannot report pointer movement, so it claimed
+        // `moved: true` for every press and a plain click could never reach
+        // the tap reaction. Every platform now derives the outcome from this
+        // state machine, where an unmoved press stays unmoved.
+        let mut gesture = PetPanelGestureState::Pending;
+        for elapsed_ms in [0, 120, 240, 600] {
+            assert_eq!(gesture.observe(elapsed_ms, 2.0, 1.0, false), None);
+        }
+        // The release path promotes a pending pickup before reporting. That
+        // promotion must not invent movement for a press that never had any.
+        gesture.begin_following_pointer();
+        assert!(!gesture.moved());
+        assert!(!gesture.stroke_detected());
     }
 
     #[test]

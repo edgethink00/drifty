@@ -5,6 +5,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager, WebviewWindow};
 
 use super::pet_mode::PET_MODE_WINDOW_LABEL;
+#[cfg(target_os = "windows")]
+use super::windows_overlay::set_windows_overlay_click_through;
 
 const HIT_REGION_VERSION: u32 = 1;
 const BASE_WIDTH: f64 = 288.0;
@@ -195,7 +197,31 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
         }
         return refresh_pet_hit_region_on_main_thread(window);
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let pointer = window
+            .app_handle()
+            .cursor_position()
+            .map_err(|error| error.to_string())?;
+        let position = window.outer_position().map_err(|error| error.to_string())?;
+        let size = window.outer_size().map_err(|error| error.to_string())?;
+        let inside = HIT_REGION
+            .lock()
+            .map(|state| {
+                hit_test_physical(
+                    &state,
+                    pointer.x - position.x as f64,
+                    pointer.y - position.y as f64,
+                    size.width as f64,
+                    size.height as f64,
+                    hit_region_top_inset_ratio(),
+                )
+            })
+            .unwrap_or(false);
+        let interactive = resolve_windows_press_interaction(inside, windows_mouse_button_down());
+        set_windows_pet_interactive(window, interactive)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let pointer = window
             .app_handle()
@@ -224,6 +250,50 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
     }
 }
 
+#[cfg(target_os = "windows")]
+fn windows_mouse_button_down() -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
+    };
+
+    [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON]
+        .into_iter()
+        .any(|button| unsafe { GetAsyncKeyState(button as i32) } < 0)
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_press_interaction(pointer_inside: bool, button_down: bool) -> bool {
+    let Ok(mut press) = HIT_REGION_PRESS.lock() else {
+        return pointer_inside;
+    };
+    if button_down {
+        if !press.active {
+            press.active = true;
+            press.owned_by_pet = pointer_inside;
+        }
+        press.owned_by_pet
+    } else {
+        *press = PressState::default();
+        pointer_inside
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn set_windows_pet_interactive(window: &WebviewWindow, interactive: bool) -> Result<(), String> {
+    if HIT_REGION
+        .lock()
+        .map(|state| state.pointer_inside == interactive)
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+    set_windows_overlay_click_through(window, !interactive)?;
+    if let Ok(mut state) = HIT_REGION.lock() {
+        state.pointer_inside = interactive;
+    }
+    Ok(())
+}
+
 pub fn set_pet_window_interactive(window: &WebviewWindow, interactive: bool) -> Result<(), String> {
     if !interactive {
         if let Ok(mut press) = HIT_REGION_PRESS.lock() {
@@ -250,7 +320,11 @@ pub fn set_pet_window_interactive(window: &WebviewWindow, interactive: bool) -> 
         }
         return set_pet_window_interactive_on_main_thread(window, interactive);
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        set_windows_pet_interactive(window, interactive)?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         window
             .set_ignore_cursor_events(!interactive)
@@ -282,7 +356,32 @@ pub fn install_pet_hit_region_monitor(app: &AppHandle) -> Result<(), String> {
             return Err(error);
         }
     }
+    #[cfg(target_os = "windows")]
+    if let Err(error) = install_windows_monitor(app) {
+        HIT_REGION_MONITOR_INSTALLED.store(false, Ordering::Release);
+        return Err(error);
+    }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn install_windows_monitor(app: &AppHandle) -> Result<(), String> {
+    let app = app.clone();
+    std::thread::Builder::new()
+        .name("drifty-pet-hit-region".into())
+        .spawn(move || loop {
+            let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
+                break;
+            };
+            if matches!(window.is_visible(), Ok(true)) {
+                let _ = refresh_pet_hit_region_for_window(&window);
+                std::thread::sleep(Duration::from_millis(16));
+            } else {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        })
+        .map(|_| ())
+        .map_err(|error| format!("failed to start Windows Pet Mode hit-region monitor: {error}"))
 }
 
 #[cfg(target_os = "macos")]

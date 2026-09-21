@@ -96,7 +96,7 @@ use commands::{
     watcher_peek_extreme_nudge_action, watcher_peek_hide, watcher_peek_respond,
     watcher_peek_set_interactive, watcher_peek_show,
     calibrate_main_window_to_work_area, window_set_onboarding_presentation,
-    window_set_theme_appearance,
+    window_set_theme_appearance, window_show_system_menu,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
@@ -416,9 +416,27 @@ pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.unminimize();
         let _ = window.show();
+        #[cfg(target_os = "windows")]
+        if let Err(error) = commands::fit_main_window_to_current_work_area(app) {
+            eprintln!("could not fit Drifty inside the Windows work area: {error}");
+        }
         let _ = window.set_focus();
         #[cfg(target_os = "macos")]
         activate_drifty_application(app);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn repair_windows_deep_link_registration(app: &AppHandle) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+
+    // A development or older portable build can leave the per-user protocol
+    // pointing at an executable that no longer exists. Refreshing it from the
+    // running packaged app keeps the browser auth return path bound to these
+    // exact installed bytes. Installation also writes the same mapping so a
+    // first callback can cold-start Drifty before this repair has ever run.
+    if let Err(error) = app.deep_link().register_all() {
+        eprintln!("could not refresh the Windows drifty:// registration: {error}");
     }
 }
 
@@ -545,6 +563,20 @@ pub fn run() {
                             let _ = window.hide();
                         }
                     }
+                    #[cfg(target_os = "windows")]
+                    tauri::RunEvent::WindowEvent {
+                        label,
+                        event:
+                            tauri::WindowEvent::Resized(_)
+                            | tauri::WindowEvent::ScaleFactorChanged { .. },
+                        ..
+                    } if label == MAIN_WINDOW_LABEL => {
+                        if let Err(error) = commands::fit_main_window_to_current_work_area(app) {
+                            eprintln!(
+                                "could not refit Drifty after a window size or scale change: {error}"
+                            );
+                        }
+                    }
                     #[cfg(target_os = "macos")]
                     tauri::RunEvent::Reopen {
                         has_visible_windows,
@@ -556,6 +588,13 @@ pub fn run() {
                 })
                 .build(),
         );
+
+    #[cfg(target_os = "windows")]
+    let builder = builder.plugin(
+        tauri_plugin_snap_layout::init()
+            .button_id("windows-caption-maximize")
+            .build(),
+    );
 
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _| {
         #[cfg(target_os = "windows")]
@@ -591,6 +630,15 @@ pub fn run() {
 
     let app_result = builder
         .setup(|app| {
+            // Restore the durable pause before creating auxiliary WebViews.
+            // The configured main window already exists. On Windows, creating
+            // each WebView2 below pumps the message loop, allowing that main
+            // renderer to query status and request automatic tracking startup.
+            // Restoring afterward let those requests erase a user's pause
+            // during relaunch (Windows QA attempt 31, 2026-09-07).
+            let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
+            #[cfg(target_os = "windows")]
+            repair_windows_deep_link_registration(app.handle());
             setup_app_menu(app.handle())?;
             if let Err(error) = calibrate_main_window_to_work_area(app.handle()) {
                 // The configured 1254×800 fallback is already usable. Monitor
@@ -601,7 +649,6 @@ pub fn run() {
             setup_companion_pill_window(app)?;
             setup_pet_mode_window(app)?;
             setup_pet_quick_controls_window(app)?;
-            let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             setup_tray(app.handle())?;
 
             // Reclaim icon-cache generations nothing reads anymore. Both run
@@ -822,6 +869,7 @@ pub fn run() {
             system_open_settings_pane,
             window_set_onboarding_presentation,
             window_set_theme_appearance,
+            window_show_system_menu,
             watcher_peek_show,
             watcher_peek_hide,
             watcher_peek_dismiss,

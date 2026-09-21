@@ -12,6 +12,8 @@ mod google_calendar;
 mod living_soul;
 mod managed_ai;
 mod native_update_dialog;
+#[cfg(target_os = "windows")]
+mod pet_cursor_windows;
 mod pet_drop;
 mod pet_drop_windows;
 mod pet_hit_region;
@@ -27,6 +29,9 @@ mod tracker;
 mod watcher;
 mod watcher_extreme_nudge;
 mod window_chrome;
+#[cfg(target_os = "windows")]
+mod windows_browser_uia;
+mod windows_overlay;
 
 pub use accessibility::*;
 pub use ai::*;

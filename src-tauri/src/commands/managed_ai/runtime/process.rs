@@ -17,6 +17,9 @@ use super::RUNTIME_PORT_NUMBER;
 use super::{RUNTIME_HOST, RUNTIME_PORT};
 
 const START_READY_GRACE: Duration = Duration::from_millis(1_500);
+#[cfg(windows)]
+const START_FAILURE_TIMEOUT: Duration = Duration::from_secs(300);
+#[cfg(not(windows))]
 const START_FAILURE_TIMEOUT: Duration = Duration::from_secs(120);
 const HEALTH_TIMEOUT: Duration = Duration::from_millis(400);
 const READY_HEALTH_FAILURE_LIMIT: u8 = 3;

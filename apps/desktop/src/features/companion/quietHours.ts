@@ -137,4 +137,3 @@ export function useQuietHoursActive(settings: QuietHoursSettings): boolean {
 
   return active;
 }
-

@@ -1,0 +1,9 @@
+{
+  "name": "so.drifty.browser_bridge",
+  "description": "Drifty local browser activity bridge",
+  "path": "..\\drifty-browser-host.exe",
+  "type": "stdio",
+  "allowed_extensions": [
+    "browser-bridge@drifty.so"
+  ]
+}

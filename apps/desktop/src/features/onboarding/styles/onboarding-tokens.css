@@ -6,9 +6,12 @@
 
 .onboarding-screen {
   /* prototype token overrides — scoped to onboarding only */
-  --onb-font-sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
-  --onb-font-display: var(--font-display, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif);
-  --onb-font-mono: var(--font-mono, "SF Mono", ui-monospace, 'Fira Code', Menlo, monospace);
+  /* 온보딩은 앱 폰트 스택을 그대로 쓴다. 예전에는 여기에 Apple 전용
+     스택을 인라인 폴백으로 복제해 두었는데, 플랫폼 폴백이 늘어나면
+     이 사본만 뒤처진다. 단일 출처로 위임한다. */
+  --onb-font-sans: var(--font-sans);
+  --onb-font-display: var(--font-display);
+  --onb-font-mono: var(--font-mono);
 
   --onb-space-1: 0.25rem;
   --onb-space-2: 0.5rem;

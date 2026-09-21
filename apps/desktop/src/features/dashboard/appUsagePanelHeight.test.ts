@@ -101,7 +101,6 @@ describe("app usage panel height coupling", () => {
       /@media \(max-width:\s*1050px\) and \(min-height:\s*805px\)\s*\{[\s\S]*?\.app-usage-panel--short-compact \.app-usage-feature__topline\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/u,
     );
   });
-
   it("keeps the macOS fallback window safely inside the five-rank height boundary", () => {
     const compactHeight = Number(
       styles.match(/@media \(max-width:\s*1050px\),\s*\(max-height:\s*(\d+)px\)/u)?.[1],

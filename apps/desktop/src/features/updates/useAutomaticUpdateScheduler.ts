@@ -5,15 +5,17 @@ export const AUTO_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const AUTO_UPDATE_CHECK_RETRY_MS = 60 * 60 * 1000;
 export const AUTO_UPDATE_CHECK_BUSY_RETRY_MS = 15 * 60 * 1000;
 export const AUTO_UPDATE_CHECK_STARTUP_DELAY_MS = 2500;
+export const WINDOWS_BETA_NEXT_AUTOMATIC_CHECK_STORAGE_KEY = "drifty.updates.windowsBetaNextAutomaticCheckAt.v1";
 export { UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY } from "./versionSwitchState";
 
-type ScheduledUpdateCheckResult = {
+export type ScheduledUpdateCheckResult = {
   readonly kind: "available" | "none" | "error";
 };
 
 type UseAutomaticUpdateSchedulerOptions = {
   readonly enabled: boolean;
   readonly checkForUpdates: () => Promise<ScheduledUpdateCheckResult | void>;
+  readonly storageKey?: string;
 };
 
 export function parseNextAutomaticCheckAt(savedValue: string | null): number | null {
@@ -22,14 +24,19 @@ export function parseNextAutomaticCheckAt(savedValue: string | null): number | n
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export function readNextAutomaticCheckAt(): number | null {
+export function readNextAutomaticCheckAt(
+  storageKey = UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY,
+): number | null {
   if (typeof window === "undefined") return null;
-  return parseNextAutomaticCheckAt(window.localStorage.getItem(UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY));
+  return parseNextAutomaticCheckAt(window.localStorage.getItem(storageKey));
 }
 
-export function persistNextAutomaticCheckAt(nextCheckAtMs: number): void {
+export function persistNextAutomaticCheckAt(
+  nextCheckAtMs: number,
+  storageKey = UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY,
+): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY, String(nextCheckAtMs));
+  window.localStorage.setItem(storageKey, String(nextCheckAtMs));
 }
 
 export function nextAutomaticCheckDelayMs(input: {
@@ -52,6 +59,7 @@ export function nextAutomaticCheckAtAfterResult(
 export function useAutomaticUpdateScheduler({
   enabled,
   checkForUpdates,
+  storageKey = UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY,
 }: UseAutomaticUpdateSchedulerOptions): void {
   const versionTestPauseUntil = useVersionTestPauseUntil();
   const checkForUpdatesRef = useRef(checkForUpdates);
@@ -76,7 +84,7 @@ export function useAutomaticUpdateScheduler({
       clearScheduledCheck();
       const nowMs = Date.now();
       const delayMs = nextAutomaticCheckDelayMs({
-        nextCheckAtMs: readNextAutomaticCheckAt(),
+        nextCheckAtMs: Math.max(readNextAutomaticCheckAt(storageKey) ?? 0, versionTestPauseUntil),
         nowMs,
         startupNotBeforeMs,
       });
@@ -93,7 +101,7 @@ export function useAutomaticUpdateScheduler({
         scheduleNextCheck();
         return;
       }
-      const nextCheckAtMs = readNextAutomaticCheckAt();
+      const nextCheckAtMs = Math.max(readNextAutomaticCheckAt(storageKey) ?? 0, versionTestPauseUntil);
       if (nextCheckAtMs !== null && nowMs < nextCheckAtMs) {
         scheduleNextCheck();
         return;
@@ -109,7 +117,7 @@ export function useAutomaticUpdateScheduler({
         checkInFlight = false;
       }
       if (disposed) return;
-      persistNextAutomaticCheckAt(nextAutomaticCheckAtAfterResult(result, Date.now()));
+      persistNextAutomaticCheckAt(nextAutomaticCheckAtAfterResult(result, Date.now()), storageKey);
       scheduleNextCheck();
     };
 
@@ -133,5 +141,5 @@ export function useAutomaticUpdateScheduler({
       window.removeEventListener("online", reconsiderSchedule);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [enabled, versionTestPauseUntil]);
+  }, [enabled, storageKey, versionTestPauseUntil]);
 }

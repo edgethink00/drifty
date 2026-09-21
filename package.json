@@ -1,6 +1,6 @@
 {
   "name": "drifty",
-  "version": "1.11.13",
+  "version": "1.11.14",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -14,6 +14,7 @@
     "dev:web:auth-required": "VITE_DRIFTY_AUTH_MODE=required npm --prefix apps/desktop run dev",
     "build:web": "npm --prefix apps/desktop run build",
     "build:tracker-sidecar": "node scripts/build-tracker-sidecar.mjs",
+    "build:browser-host": "node scripts/build-browser-host.mjs --release",
     "test:domain": "vitest run --config packages/domain/vitest.config.ts",
     "typecheck": "npm --prefix apps/desktop run typecheck",
     "test:python": "node scripts/run-python-tests.mjs",

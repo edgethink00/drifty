@@ -222,6 +222,44 @@ fn point_in_triangle(
     !(has_neg && has_pos)
 }
 
+/// Renders the standalone Drifty hourglass brand mark for system tray usage.
+/// On Windows, taskbars and overflow trays require unmistakable brand presence
+/// and high contrast, rather than a hollow neutral donut ring.
+pub fn render_brand_hourglass(dark_taskbar: bool) -> (Vec<u8>, u32, u32) {
+    const W: usize = 18;
+    const H: usize = 18;
+    let mut pixels = vec![0u8; W * H * 4];
+
+    let col = if dark_taskbar {
+        [0xf1, 0xef, 0xe7]
+    } else {
+        [0x18, 0x1a, 0x19]
+    };
+
+    for py in 0..H {
+        for px in 0..W {
+            let mut sum_alpha = 0.0f32;
+            for sy in 0..2 {
+                for sx in 0..2 {
+                    let sub_x = px as f32 + 0.25 + (sx as f32) * 0.5;
+                    let sub_y = py as f32 + 0.25 + (sy as f32) * 0.5;
+                    sum_alpha += hourglass_alpha(sub_x, sub_y);
+                }
+            }
+            let alpha = sum_alpha / 4.0;
+            if alpha > 0.0 {
+                let i = (py * W + px) * 4;
+                pixels[i] = col[0];
+                pixels[i + 1] = col[1];
+                pixels[i + 2] = col[2];
+                pixels[i + 3] = (alpha * 255.0).round() as u8;
+            }
+        }
+    }
+
+    (pixels, W as u32, H as u32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +369,16 @@ mod tests {
         assert!(count_color(&dark_pixels, [0xf1, 0xef, 0xe7]) > 0);
         assert!(count_color(&light_pixels, [0xf1, 0xef, 0xe7]) > 0);
         assert_eq!(count_color(&light_pixels, [26, 26, 26]), 0);
+    }
+
+    #[test]
+    fn render_brand_hourglass_emits_valid_rgba() {
+        let (dark_pixels, dw, dh) = render_brand_hourglass(true);
+        let (light_pixels, lw, lh) = render_brand_hourglass(false);
+
+        assert_eq!((dw, dh), (18, 18));
+        assert_eq!((lw, lh), (18, 18));
+        assert!(count_color(&dark_pixels, [0xf1, 0xef, 0xe7]) > 0);
+        assert!(count_color(&light_pixels, [0x18, 0x1a, 0x19]) > 0);
     }
 }

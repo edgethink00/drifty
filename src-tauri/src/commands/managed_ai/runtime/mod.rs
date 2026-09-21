@@ -236,6 +236,17 @@ fn observed_runtime_status(
     Ok(status)
 }
 
+fn start_timeout_message() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "Managed local AI runtime did not become ready within five minutes."
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        "Managed local AI runtime did not become ready within two minutes."
+    }
+}
+
 pub(super) fn stop_runtime_for_model(root: &Path, model_id: &str) -> Result<(), ManagedAiError> {
     process::stop_runtime_for_model(root, model_id)?;
     // Windows can safely reap an exact untracked executable through one stable

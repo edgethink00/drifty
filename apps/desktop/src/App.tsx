@@ -83,7 +83,7 @@ import { applyClassificationAvailabilityToAiStatus, resolveBuiltInHeuristicsUnav
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
-import { useAutomaticUpdateScheduler } from "./features/updates/useAutomaticUpdateScheduler";
+import { useAutomaticUpdateScheduler, WINDOWS_BETA_NEXT_AUTOMATIC_CHECK_STORAGE_KEY } from "./features/updates/useAutomaticUpdateScheduler";
 import { useUpdateController } from "./features/updates/useUpdateController";
 import { consumePostUpdateRelaunchFocusPending, fallbackUpdatePolicy } from "./features/updates/updatePolicy";
 import { useDeveloperPreReleaseUpdateController } from "./features/updates/useDeveloperPreReleaseUpdateController";
@@ -289,7 +289,7 @@ import { getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_GATE_EXEMPT_SOURCES, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToSurface, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
-import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
+import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets, resolvePostCloseFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
 import { buildDriftAlarmCandidateProbe } from "./features/companion/driftAlarmCandidateProbe";
 import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents, recordDriftAlarmDebugEvent, summarizeDriftAlarmCandidate, summarizeDriftAlarmEvent, summarizeDriftAlarmSegment, summarizeDriftAlarmSnapshot, summarizeDriftAlarmTrayResult, summarizeLiveAiClassificationResult, summarizeYouTubeDriftAlarmGateResult } from "./features/companion/driftAlarmDebugLog";
 import { buildInterventionLedgerDebugInput } from "./features/companion/interventionLedger";
@@ -416,7 +416,7 @@ import { parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "./featur
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
-import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
+import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
 import { replaceNavigationHistoryTab, type NavigationHistoryState, type TabId } from "./app/navigation";
 import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
@@ -600,6 +600,13 @@ export default function App() {
   const brandCaptureEventAtRef = useRef<string | null>(null);
   const hasObservedBrandCaptureRef = useRef(false);
   const [hostPlatform, setHostPlatform] = useState<HostPlatform>(accessibilityClient.detectHostPlatform);
+  // index.html seeds data-platform from a user-agent guess so the first paint
+  // already has Windows chrome. Reassert it from the real host detection: the
+  // whole Windows token layer hangs off this one attribute, and a wrong guess
+  // silently drops the titlebar metrics, panel radius, and font overrides.
+  useLayoutEffect(() => {
+    document.documentElement.dataset.platform = hostPlatform;
+  }, [hostPlatform]);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [accessibilityRequired, setAccessibilityRequired] = useState(hostPlatform !== "windows");
   const [currentSnapshot, setCurrentSnapshot] = useState<CurrentActivitySnapshot | null>(null);
@@ -681,6 +688,7 @@ export default function App() {
     // Keep unattended next-launch preparation on the macOS path proven by
     // packaged runtime QA until another platform has its own safe contract.
     backgroundPreparationSupported: hostPlatform === "macos",
+    hostPlatform,
     getIdleSeconds: async () => {
       try {
         const occupancy = petOccupancyRef.current;
@@ -706,10 +714,6 @@ export default function App() {
     },
     canSafelyRestart: () => canSafelyRestartRef.current(),
   });
-  useAutomaticUpdateScheduler({
-    enabled: isTauriRuntime(),
-    checkForUpdates: () => handleCheckForUpdates("automatic"),
-  });
   const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
   const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
@@ -718,7 +722,10 @@ export default function App() {
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
   const [navigationRefreshEnabled, setNavigationRefreshEnabled] = useState(initialNavigationRefreshEnabled);
-  const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(resolveInitialFloatingCompanionDevEnabled);
+  const floatingCompanionDevSupported = hostPlatform === "macos";
+  const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(
+    () => floatingCompanionDevSupported && resolveInitialFloatingCompanionDevEnabled(),
+  );
   const [leaderboardPreviewEnabled, setLeaderboardPreviewEnabled] = useState(resolveInitialLeaderboardPreviewEnabled);
   const [leaderboardGraphStyle, setLeaderboardGraphStyle] = useState<LeaderboardGraphStyle>(
     () => parseLeaderboardGraphStyle(resolveInitialLeaderboardGraphStyle()),
@@ -730,6 +737,18 @@ export default function App() {
   const [teamNavMenuPos, setTeamNavMenuPos] = useState<{ readonly left: number; readonly top: number } | null>(null);
   const [teamNavExpandedId, setTeamNavExpandedId] = useState<string | null | undefined>(undefined);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
+  const windowsBetaAutomaticChecksEnabled = isTauriRuntime()
+    && hostPlatform === "windows"
+    && isDevModeActive;
+  useAutomaticUpdateScheduler({
+    enabled: isTauriRuntime() && !windowsBetaAutomaticChecksEnabled,
+    checkForUpdates: () => handleCheckForUpdates("automatic"),
+  });
+  useAutomaticUpdateScheduler({
+    enabled: windowsBetaAutomaticChecksEnabled,
+    checkForUpdates: developerPreReleaseUpdateController.checkLatestBuild,
+    storageKey: WINDOWS_BETA_NEXT_AUTOMATIC_CHECK_STORAGE_KEY,
+  });
   const isLeaderboardPreviewActive = isDevModeActive && leaderboardPreviewEnabled;
   const visibleLeaderboardGraphStyle: LeaderboardGraphStyle = isDevModeActive ? (isLeaderboardPreviewActive && leaderboardGraphStyle === "off" ? "default" : leaderboardGraphStyle) : "off";
   const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
@@ -744,7 +763,9 @@ export default function App() {
   });
   const [companionSurfacePolicy, setCompanionSurfacePolicy] = useState(resolveInitialCompanionSurfacePolicy);
   const [companionHiddenUntil, setCompanionHiddenUntil] = useState(resolveInitialCompanionHiddenUntil);
-  const floatingCompanionDevActive = isDevModeActive && floatingCompanionDevEnabled;
+  const floatingCompanionDevActive = floatingCompanionDevSupported
+    && isDevModeActive
+    && floatingCompanionDevEnabled;
   const companionResidentEnabled = companionSurfacePolicy !== "off";
   const companionTemporarilyHidden = companionHiddenUntil !== null && companionHiddenUntil > Date.now();
   const effectiveCompanionSurfacePolicy = resolveEffectiveCompanionSurfacePolicy(
@@ -769,8 +790,9 @@ export default function App() {
   }, []);
 
   const handleFloatingCompanionDevEnabledChange = useCallback((enabled: boolean) => {
+    if (!floatingCompanionDevSupported) return;
     setFloatingCompanionDevEnabled(enabled);
-  }, []);
+  }, [floatingCompanionDevSupported]);
 
   const handleHideCompanionForOneHour = useCallback(() => {
     if (!companionResidentEnabled) return;
@@ -981,6 +1003,7 @@ export default function App() {
   };
   const handledPetModeRevealRevisionRef = useRef(0);
   const pendingPetModeRevealRevisionsRef = useRef(new Set<number>());
+  const initialPetModeSyncCompletedRef = useRef(false);
   const petModeRevealRetryAttemptsRef = useRef(new Map<number, number>());
   const latestPetModeRevealRevisionRef = useRef(petModeRevealRevision);
   const petModeSyncMountedRef = useRef(false);
@@ -3201,7 +3224,7 @@ export default function App() {
         delivery,
       });
       if (driftAlarmEventRef.current?.id === event.id) clearDriftAlarmEvent();
-      /* The card is the primary surface; when it cannot be shown, macOS carries
+      /* The card is the primary surface; when it cannot be shown, the host OS carries
          the alert instead. Two limits keep that from becoming noise: a user who
          already receives every card as a notification has been told, and a
          Companion window that keeps failing must not repeat the notification on
@@ -4642,8 +4665,13 @@ export default function App() {
   }, [agentsBetaEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
+    if (!floatingCompanionDevSupported) {
+      if (floatingCompanionDevEnabled) setFloatingCompanionDevEnabled(false);
+      window.localStorage.removeItem(FLOATING_COMPANION_DEV_STORAGE_KEY);
+      return;
+    }
     window.localStorage.setItem(FLOATING_COMPANION_DEV_STORAGE_KEY, floatingCompanionDevActive ? "1" : "0");
-  }, [floatingCompanionDevActive]);
+  }, [floatingCompanionDevActive, floatingCompanionDevEnabled, floatingCompanionDevSupported]);
 
   useEffect(() => {
     persistLeaderboardGraphStyle(leaderboardGraphStyle);
@@ -5596,7 +5624,7 @@ export default function App() {
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
     };
-    /* The macOS notification is opt-in beside the card. When the switch is
+    /* The host notification is opt-in beside the card. When the switch is
        on it accompanies every drift card for this episode, including
        reminders; the card-failure fallback lives in showDriftAlarm. */
     const sendUserEnabledDriftNotification = () => {
@@ -5651,6 +5679,9 @@ export default function App() {
             id: petInterventionId,
             appName: segment.appName,
             browserName: segment.browserName,
+            browserIdentity: segment.bundleId,
+            siteDomain: segment.siteDomain,
+            siteUrl: segment.siteUrl,
           }));
           // A pause can arrive while the cat approaches. A sleeping renderer's
           // cancellation is user intent, not a reason to close without the cat.
@@ -5756,7 +5787,10 @@ export default function App() {
         }
         let resolvedDriftAlarmFocusTargets = availableDriftAlarmFocusTargetsForAlarm;
         try {
-          resolvedDriftAlarmFocusTargets = await resolveAvailableFocusTargets(driftAlarmFocusTargets);
+          resolvedDriftAlarmFocusTargets = await resolvePostCloseFocusTargets(
+            driftAlarmFocusTargets,
+            hostPlatform,
+          );
         } catch (error: unknown) {
           if (error instanceof Error) {
             console.warn("Failed to resolve current drift alarm focus target availability", error);
@@ -5774,8 +5808,12 @@ export default function App() {
         const latestFocusTarget = resolvedDriftAlarmFocusTargets[0] ?? null;
         const extremeNudgeToastEvent = buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy, driftAlarmEvent.breakOptions);
         lastExtremeNudgeToastEventRef.current = extremeNudgeToastEvent;
-        void showNativeExtremeNudgeToast(extremeNudgeToastEvent).catch((error) => console.warn("Failed to show extreme nudge toast", error));
+        // Persist delivery before the companion window starts recording its
+        // own lifecycle. Both renderers share localStorage; launching the
+        // native surface first lets its accepted event race this write and
+        // erase the delivery receipt (and intervention-ledger entry).
         markCurrentDriftAlarmDelivered();
+        void showNativeExtremeNudgeToast(extremeNudgeToastEvent).catch((error) => console.warn("Failed to show extreme nudge toast", error));
         if (latestFocusTarget) {
           window.setTimeout(() => {
             if (lastDriftAlertSegmentRef.current === alertKey) returnToFocusTarget(latestFocusTarget);
@@ -6230,7 +6268,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, hostPlatform, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -6836,9 +6874,11 @@ export default function App() {
     if (!isTauriRuntime()) return;
     const snapshot = petModeActive ? buildPetModeSnapshot(petModeLiveSnapshotRef.current) : null;
     const revealRevision = petModeRevealRevision;
+    const isInitialStartupSync = !initialPetModeSyncCompletedRef.current;
     const forceReveal = petModeActive
-      && revealRevision > handledPetModeRevealRevisionRef.current
-      && !pendingPetModeRevealRevisionsRef.current.has(revealRevision);
+      && (isInitialStartupSync
+        || (revealRevision > handledPetModeRevealRevisionRef.current
+          && !pendingPetModeRevealRevisionsRef.current.has(revealRevision)));
     if (forceReveal) pendingPetModeRevealRevisionsRef.current.add(revealRevision);
     const reducedMotion = typeof window.matchMedia === "function"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -6851,6 +6891,9 @@ export default function App() {
       height,
       forceReveal,
     ).then(() => {
+      if (petModeActive) {
+        initialPetModeSyncCompletedRef.current = true;
+      }
       if (!forceReveal) return;
       pendingPetModeRevealRevisionsRef.current.delete(revealRevision);
       petModeRevealRetryAttemptsRef.current.delete(revealRevision);
@@ -6859,13 +6902,16 @@ export default function App() {
         revealRevision,
       );
     }).catch((nextError) => {
+      if (isInitialStartupSync) {
+        initialPetModeSyncCompletedRef.current = false;
+      }
       console.warn("Failed to sync Pet Mode window", nextError);
       if (!forceReveal) return;
       pendingPetModeRevealRevisionsRef.current.delete(revealRevision);
       const retryAttempts = petModeRevealRetryAttemptsRef.current.get(revealRevision) ?? 0;
       if (
         petModeSyncMountedRef.current
-        && revealRevision <= latestPetModeRevealRevisionRef.current
+        && (isInitialStartupSync || revealRevision <= latestPetModeRevealRevisionRef.current)
         && revealRevision > handledPetModeRevealRevisionRef.current
         && retryAttempts < 1
       ) {
@@ -9247,6 +9293,7 @@ export default function App() {
       <SiteIconProvider value={siteIcons}>
         <LocalizationProvider controller={localization}>
           <>
+            {hostPlatform === "windows" ? <WindowsTitlebar /> : null}
             {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
             <AuthConfigurationGate />
             {availableUpdatePrompt}
@@ -9262,6 +9309,7 @@ export default function App() {
       <SiteIconProvider value={siteIcons}>
         <LocalizationProvider controller={localization}>
           <>
+            {hostPlatform === "windows" ? <WindowsTitlebar /> : null}
             {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
             <AuthLoadingGate />
             {availableUpdatePrompt}
@@ -9277,6 +9325,7 @@ export default function App() {
       <SiteIconProvider value={siteIcons}>
         <LocalizationProvider controller={localization}>
           <>
+            {hostPlatform === "windows" ? <WindowsTitlebar /> : null}
             {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
             <AuthRequiredGate onSignIn={openDefaultAuthModal} />
             <ModalPresence>{authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}</ModalPresence>
@@ -9403,6 +9452,7 @@ export default function App() {
       <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
         <>
+          {hostPlatform === "windows" ? <WindowsTitlebar maximizable={false} /> : null}
           {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
           {promoAuthOnboardingOpen ? (
             <AuthModal
@@ -9437,6 +9487,7 @@ export default function App() {
       <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
         <>
+          {hostPlatform === "windows" ? <WindowsTitlebar maximizable={false} /> : null}
           {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
           <FirstDayPreparationScreen
             failure={firstDayPreparationFailure}
@@ -9467,23 +9518,53 @@ export default function App() {
         if (entry.devSubsection) handleDevSettingsSubsectionChange(entry.devSubsection);
       }}
     >
+      {/* Keep native window controls outside the narrow Settings scroll container. */}
+      {hostPlatform === "windows" ? (
+        <WindowsTitlebar
+          leading={(
+            <div className="windows-titlebar-nav" role="group" aria-label={localization.t("shell.windowNavigation")}>
+              {isSettingsTab ? (
+                <button
+                  type="button"
+                  className="windows-titlebar-nav-button windows-titlebar-nav-button--back"
+                  onClick={handleSettingsBack}
+                  aria-label={localization.t("shell.goBack")}
+                  title={localization.t("shell.goBack")}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" /></svg>
+                  <span className="windows-titlebar-nav-button__label">{localization.t("common.back")}</span>
+                </button>
+              ) : (
+                <>
+                  <WindowSidebarToggle
+                    collapsed={isSidebarVisuallyCollapsed}
+                    placement="titlebar"
+                    onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+                  />
+                  <button type="button" className="windows-titlebar-nav-button" onClick={navigateBack} disabled={!canNavigateBack} aria-label={localization.t("shell.goBack")}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" /></svg>
+                  </button>
+                  <button type="button" className="windows-titlebar-nav-button" onClick={navigateForward} disabled={!canNavigateForward} aria-label={localization.t("shell.goForward")}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.2 3.8 10.4 8l-4.2 4.2" /></svg>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          trailing={<AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />}
+        />
+      ) : null}
     <div className={shellClassName}>
-      <div className="window-chrome">
-        <div className="window-nav-controls" aria-label={localization.t("shell.windowNavigation")}>
-          {!isSettingsTab ? (
-            <button
-              type="button"
-              className="window-sidebar-toggle"
-              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-              aria-label={localization.t(isSidebarVisuallyCollapsed ? "shell.expandSidebar" : "shell.collapseSidebar")}
-              aria-pressed={isSidebarVisuallyCollapsed}
-            >
-              <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="3" width="12" height="12" rx="2.5" />
-                <path d="M7 3v12" />
-              </svg>
-            </button>
-          ) : null}
+      {hostPlatform !== "windows" ? (
+        <div className="window-chrome">
+          <div className="window-nav-controls" aria-label={localization.t("shell.windowNavigation")}>
+            {!isSettingsTab ? (
+              <WindowSidebarToggle
+                collapsed={isSidebarVisuallyCollapsed}
+                placement="chrome"
+                onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              />
+            ) : null}
           <button type="button" className="window-nav-button" onClick={navigateBack} disabled={!canNavigateBack} aria-label={localization.t("shell.goBack")}>
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" /></svg>
           </button>
@@ -9504,7 +9585,8 @@ export default function App() {
             />
           ) : null}
         </div>
-      </div>
+        </div>
+      ) : null}
       {cloudTrialStartedNotice && !onboardingOpen && !isDashboardDemoReplayActive ? (
         <CloudTrialStartedNotice
           notice={cloudTrialStartedNotice}
@@ -9526,25 +9608,25 @@ export default function App() {
           onSendFeedback={() => setFeedbackModalOpen(true)}
         />
       ) : (
-        <aside className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
-        <div
-          className="brand"
-          role="button"
-          tabIndex={0}
-          aria-label="Drifty"
-          title="Drifty"
-          data-capture-motion-key={brandCaptureMotionKey}
-          data-capture-motion={brandCaptureMotionKey > 0 ? "capture-flip" : undefined}
-          onClick={triggerBrandCaptureMotion}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              triggerBrandCaptureMotion();
-            }
-          }}
-        >
-          <img key={brandCaptureMotionKey} className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
-        </div>
+        <aside id="app-sidebar" className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
+          <div
+            className="brand"
+            role="button"
+            tabIndex={0}
+            aria-label="Drifty"
+            title="Drifty"
+            data-capture-motion-key={brandCaptureMotionKey}
+            data-capture-motion={brandCaptureMotionKey > 0 ? "capture-flip" : undefined}
+            onClick={triggerBrandCaptureMotion}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                triggerBrandCaptureMotion();
+              }
+            }}
+          >
+            <img key={brandCaptureMotionKey} className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
+          </div>
 
         <div className="sidebar-scroll">
           <SidebarNavigation
@@ -9576,6 +9658,15 @@ export default function App() {
         </div>
 
         <div className="sidebar-foot">
+          {hostPlatform === "windows" && titlebarUpdateVersion ? (
+            <div className="sidebar-update-action">
+              <TopbarUpdateButton
+                onInstall={() => void handleInstallUpdate()}
+                status={updateLifecycleStatus}
+                version={titlebarUpdateVersion}
+              />
+            </div>
+          ) : null}
           {shouldShowSidebarCtaSlot && sidebarCtaSlot ? (
             <SidebarCtaSlot
               funnelEnabled={funnelEnabled}
@@ -10168,6 +10259,7 @@ export default function App() {
                   <GeneralSettingsSection
                     backgroundUpdatesSupported={hostPlatform === "macos"}
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
+                    hostPlatform={hostPlatform}
                     startOfDayValue={startOfDayValue}
                     startOfWeek={startOfWeek}
                     updaterChecking={updaterChecking}
@@ -10248,6 +10340,7 @@ export default function App() {
                 )}
                 {settingsSection === "notifications" && (
                   <NotificationsSettingsSection
+                    hostPlatform={hostPlatform}
                     driftAlertDelaySeconds={driftAlertDelaySeconds}
                     driftAlertsEnabled={driftAlertsEnabled}
                     driftAlarmCopy={driftAlarmCopy}
@@ -10304,6 +10397,7 @@ export default function App() {
                     petModeLabPointerStatus={petModeLabPointerStatus}
                     petModeLabInputBounds={petModeLabInputBounds}
                     floatingCompanionDevEnabled={floatingCompanionDevEnabled}
+                    floatingCompanionDevSupported={floatingCompanionDevSupported}
                     onFloatingCompanionDevEnabledChange={handleFloatingCompanionDevEnabledChange}
                     onPreviewCompanionMilestone={previewCompanionMilestone}
                     onPreviewCompanionMoment={previewCompanionMoment}

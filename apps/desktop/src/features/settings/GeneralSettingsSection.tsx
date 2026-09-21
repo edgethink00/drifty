@@ -8,10 +8,12 @@ import {
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
+import type { HostPlatform } from "../../lib/api/accessibilityClient";
 
 type GeneralSettingsSectionProps = {
   readonly backgroundUpdatesEnabled: boolean;
   readonly backgroundUpdatesSupported: boolean;
+  readonly hostPlatform?: HostPlatform;
   readonly startOfDayValue: string;
   readonly startOfWeek: StartOfWeek;
   readonly updaterChecking: boolean;
@@ -27,6 +29,7 @@ type GeneralSettingsSectionProps = {
 export function GeneralSettingsSection({
   backgroundUpdatesEnabled,
   backgroundUpdatesSupported,
+  hostPlatform = "macos",
   startOfDayValue,
   startOfWeek,
   updaterChecking,
@@ -56,8 +59,8 @@ export function GeneralSettingsSection({
   return (
     <div className="settings-section settings-section--general">
       <div className="settings-block"><h3>{t("settings.section.general")}</h3>
-        <div data-setting-id="settings.general.language" className="settings-row"><div><div className="lbl">{t("settings.general.language")}</div><div className="desc">{t("settings.general.languageDescription")}</div></div><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.language")} value={effectiveLanguage} options={languageOptions} onChange={setDisplayLanguage} /></div></div>
-        <div data-setting-id="settings.general.startOfDay" className="settings-row"><label><div className="lbl">{t("settings.general.startOfDay")}</div><div className="desc">{t("settings.general.startOfDayDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfDay")} value={startOfDayValue} options={startOfDayOptions} onChange={onStartOfDayChange} /></div></div>
+        <div data-setting-id="settings.general.language" className="settings-row"><div><div className="lbl">{t("settings.general.language")}</div><div className="desc">{t(hostPlatform === "windows" ? "settings.general.languageDescriptionWindows" : "settings.general.languageDescription")}</div></div><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.language")} value={effectiveLanguage} options={languageOptions} onChange={setDisplayLanguage} /></div></div>
+        <div data-setting-id="settings.general.startOfDay" className="settings-row"><label><div className="lbl">{t("settings.general.startOfDay")}</div><div className="desc">{t(hostPlatform === "windows" ? "settings.general.startOfDayDescriptionWindows" : "settings.general.startOfDayDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfDay")} value={startOfDayValue} options={startOfDayOptions} onChange={onStartOfDayChange} /></div></div>
         <div data-setting-id="settings.general.startOfWeek" className="settings-row"><label><div className="lbl">{t("settings.general.startOfWeek")}</div><div className="desc">{t("settings.general.startOfWeekDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfWeek")} value={startOfWeek} options={startOfWeekOptions} onChange={onStartOfWeekChange} /></div></div>
       </div>
       <div className="settings-block"><h3>{t("settings.general.startup")}</h3>
