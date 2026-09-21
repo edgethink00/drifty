@@ -51,6 +51,7 @@ const {
   requestPermission,
   accessibilityGetStatus,
   accessibilityRequestAccess,
+  accessibilityDetectHostPlatform,
   trackerGetStatus,
   trackerStart,
   trackerGetHourlySummary,
@@ -100,6 +101,7 @@ const {
   requestPermission: vi.fn(),
   accessibilityGetStatus: vi.fn(),
   accessibilityRequestAccess: vi.fn(),
+  accessibilityDetectHostPlatform: vi.fn(),
   trackerGetStatus: vi.fn(),
   trackerStart: vi.fn(),
   trackerGetHourlySummary: vi.fn(),
@@ -223,6 +225,7 @@ vi.mock("./lib/api/accessibilityClient", () => ({
   accessibilityClient: {
     getStatus: accessibilityGetStatus,
     requestAccess: accessibilityRequestAccess,
+    detectHostPlatform: accessibilityDetectHostPlatform,
   },
 }));
 
@@ -530,6 +533,7 @@ describe("App onboarding", () => {
     requestPermission.mockResolvedValue("granted");
     accessibilityGetStatus.mockResolvedValue({ granted: true, required: true });
     accessibilityRequestAccess.mockResolvedValue({ granted: true, required: true });
+    accessibilityDetectHostPlatform.mockReturnValue("macos");
     startupSettingsClient.isAvailable.mockReturnValue(false);
     startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue({
       success: true,
@@ -1980,6 +1984,7 @@ describe("App onboarding", () => {
 
   it("lets Windows continue without presenting a macOS-only Accessibility grant", async () => {
     setTauriRuntime();
+    accessibilityDetectHostPlatform.mockReturnValue("windows");
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
       accessibilityGranted: false,
     }));
@@ -1991,6 +1996,9 @@ describe("App onboarding", () => {
     const continueButton = await screen.findByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
     await waitFor(() => expect(continueButton.disabled).toBe(false));
     expect(screen.queryByText(/^Accessibility$/)).toBeNull();
+    expect(screen.queryByText("Safari history")).toBeNull();
+    expect(trackerGetBrowserHistoryEnvironment).not.toHaveBeenCalled();
+    expect(trackerPreviewBrowserHistoryImport).not.toHaveBeenCalled();
     expect(screen.getByText(/^Notifications$/)).toBeTruthy();
   });
 

@@ -24,16 +24,29 @@ paused auto-close spells out when it lifts, so that state needs its own
 width; each value is the widest string the state can render (for English,
 "Paused until 10:48pm"). Slack inside a narrower reading is absorbed by the
 two auto grid tracks. */
-/* Each value is the widest measured reading plus a three-point margin. The
+/* Each non-Windows value is the widest measured reading plus a three-point margin. The
 tracks ellipsize rather than overflow, so a width rounded flush to the
 longest string truncates it: the first pass rounded English "Off" to its
 exact 281.2pt and lost the last letter. WebKit and Chromium measure these
 strings within 0.03pt of each other, so the margin covers font revisions
-and subpixel rounding rather than an engine gap. */
+and subpixel rounding rather than an engine gap. WebView2 uses the Windows
+Segoe UI Variable Text/Malgun Gothic fallback for Korean; those glyphs are
+wider than the macOS reading, so Windows keeps a measured platform-specific
+frame instead of squeezing either button into an ellipsis. */
+#[cfg(target_os = "windows")]
+const PET_QUICK_CONTROLS_KO_IDLE_WIDTH: f64 = 300.0;
+#[cfg(not(target_os = "windows"))]
 const PET_QUICK_CONTROLS_KO_IDLE_WIDTH: f64 = 255.0;
 const PET_QUICK_CONTROLS_EN_IDLE_WIDTH: f64 = 285.0;
+#[cfg(target_os = "windows")]
+const PET_QUICK_CONTROLS_KO_PAUSED_WIDTH: f64 = 330.0;
+#[cfg(not(target_os = "windows"))]
 const PET_QUICK_CONTROLS_KO_PAUSED_WIDTH: f64 = 290.0;
 const PET_QUICK_CONTROLS_EN_PAUSED_WIDTH: f64 = 330.0;
+#[cfg(target_os = "windows")]
+const PET_QUICK_CONTROLS_MIN_WIDTH: f64 = PET_QUICK_CONTROLS_EN_IDLE_WIDTH;
+#[cfg(not(target_os = "windows"))]
+const PET_QUICK_CONTROLS_MIN_WIDTH: f64 = PET_QUICK_CONTROLS_KO_IDLE_WIDTH;
 const PET_QUICK_CONTROLS_HEIGHT: f64 = 36.0;
 #[cfg(target_os = "macos")]
 const PET_QUICK_CONTROLS_MATERIAL_RADIUS: f64 = PET_QUICK_CONTROLS_HEIGHT / 2.0;
@@ -372,7 +385,7 @@ pub fn setup_pet_quick_controls_window(app: &tauri::App) -> tauri::Result<()> {
     )
     .title("Drifty Pet Controls")
     .inner_size(PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
-    .min_inner_size(PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
+    .min_inner_size(PET_QUICK_CONTROLS_MIN_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
     .max_inner_size(
         PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
         PET_QUICK_CONTROLS_HEIGHT,
@@ -730,7 +743,7 @@ mod tests {
         PetQuickControlsState, PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
         PET_QUICK_CONTROLS_EN_IDLE_WIDTH, PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
         PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
-        PET_QUICK_CONTROLS_SCREEN_INSET,
+        PET_QUICK_CONTROLS_MIN_WIDTH, PET_QUICK_CONTROLS_SCREEN_INSET,
     };
     use serde_json::json;
 
@@ -787,10 +800,17 @@ mod tests {
             PET_QUICK_CONTROLS_KO_PAUSED_WIDTH
         );
 
-        // Every reading has to fit between the creation minimum and maximum.
-        assert!(PET_QUICK_CONTROLS_KO_IDLE_WIDTH <= PET_QUICK_CONTROLS_EN_IDLE_WIDTH);
-        assert!(PET_QUICK_CONTROLS_EN_IDLE_WIDTH <= PET_QUICK_CONTROLS_EN_PAUSED_WIDTH);
-        assert!(PET_QUICK_CONTROLS_KO_PAUSED_WIDTH <= PET_QUICK_CONTROLS_EN_PAUSED_WIDTH);
+        // Every reading has to fit between the creation minimum and maximum,
+        // even though the widest idle language differs by platform.
+        for width in [
+            PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
+            PET_QUICK_CONTROLS_EN_IDLE_WIDTH,
+            PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
+            PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
+        ] {
+            assert!(width >= PET_QUICK_CONTROLS_MIN_WIDTH);
+            assert!(width <= PET_QUICK_CONTROLS_EN_PAUSED_WIDTH);
+        }
     }
 
     #[test]
@@ -990,7 +1010,16 @@ mod tests {
     }
     #[test]
     fn feedback_updates_wait_for_a_hidden_frame_before_resizing() {
-        for (idle, paused) in [(255.0, 290.0), (285.0, 330.0)] {
+        for (idle, paused) in [
+            (
+                PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
+                PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
+            ),
+            (
+                PET_QUICK_CONTROLS_EN_IDLE_WIDTH,
+                PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
+            ),
+        ] {
             assert!(!super::quick_controls_resize_needed(
                 true, true, idle, paused
             ));

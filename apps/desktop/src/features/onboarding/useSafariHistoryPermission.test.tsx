@@ -5,8 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OnboardingStep } from "./onboardingFlow";
 import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 
-const { getBrowserHistoryEnvironment, previewBrowserHistoryImport, openFullDiskAccessSettingsPane } = vi.hoisted(
+const {
+  detectHostPlatform,
+  getBrowserHistoryEnvironment,
+  previewBrowserHistoryImport,
+  openFullDiskAccessSettingsPane,
+} = vi.hoisted(
   () => ({
+    detectHostPlatform: vi.fn(),
     getBrowserHistoryEnvironment: vi.fn(),
     previewBrowserHistoryImport: vi.fn(),
     openFullDiskAccessSettingsPane: vi.fn(),
@@ -15,6 +21,9 @@ const { getBrowserHistoryEnvironment, previewBrowserHistoryImport, openFullDiskA
 
 vi.mock("../../lib/api/trackerClient", () => ({
   trackerClient: { getBrowserHistoryEnvironment, previewBrowserHistoryImport },
+}));
+vi.mock("../../lib/api/accessibilityClient", () => ({
+  accessibilityClient: { detectHostPlatform },
 }));
 vi.mock("../../lib/api/systemSettingsClient", () => ({ openFullDiskAccessSettingsPane }));
 
@@ -44,6 +53,7 @@ function Harness({ step }: { readonly step: OnboardingStep }) {
 describe("useSafariHistoryPermission (Safari onboarding row)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    detectHostPlatform.mockReturnValue("macos");
     openFullDiskAccessSettingsPane.mockResolvedValue(true);
     Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
   });
@@ -63,6 +73,19 @@ describe("useSafariHistoryPermission (Safari onboarding row)", () => {
     // Let the mount-time evaluation resolve, then confirm the row never appears.
     await waitFor(() => expect(previewBrowserHistoryImport).toHaveBeenCalled());
     expect(screen.queryByText("Safari history")).toBeNull();
+  });
+
+  it("never probes or shows Safari history on Windows", async () => {
+    detectHostPlatform.mockReturnValue("windows");
+    getBrowserHistoryEnvironment.mockResolvedValue({ safariHistoryReadable: false, defaultBrowserIsSafari: false });
+    previewBrowserHistoryImport.mockResolvedValue({ segmentCount: 0 });
+
+    render(<Harness step="permissions" />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.queryByText("Safari history")).toBeNull();
+    expect(getBrowserHistoryEnvironment).not.toHaveBeenCalled();
+    expect(previewBrowserHistoryImport).not.toHaveBeenCalled();
   });
 
   it("shows the Safari row for a Safari-default user", async () => {

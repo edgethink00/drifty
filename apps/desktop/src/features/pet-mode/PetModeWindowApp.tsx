@@ -1567,6 +1567,27 @@ export function PetModeWindowApp() {
         return;
       }
       movedToTarget = true;
+      // Native movement already lands on the authored contact point, but a
+      // monitor's backing scale can leave a sub-point residual. Settle that
+      // residual at arrival, where it reads as the end of the run, rather than
+      // immediately before the contact frame (which made the whole cat snap
+      // upward just before closing the target on Windows).
+      const hitTargetRect = hitTargetRef.current?.getBoundingClientRect();
+      const anchorRect = contactAnchorRef.current?.getBoundingClientRect();
+      if (hitTargetRect && anchorRect) {
+        const renderedAnchorX = anchorRect.left - hitTargetRect.left;
+        const anchorX = renderedFacingRef.current === resolved.facing
+          ? renderedAnchorX
+          : hitTargetRect.width - renderedAnchorX;
+        await alignNativePetContact({
+          targetX: resolved.targetX,
+          targetY: resolved.targetY,
+          anchorX,
+          anchorY: anchorRect.top - hitTargetRect.top,
+          diagnostic: resolved.diagnostic,
+        }).catch(() => undefined);
+        if (token !== actionTokenRef.current) return;
+      }
       commitFacing(resolved.facing);
       if (pawTimelineStartIndex === 0) {
         setPawFrame(0);
@@ -1576,20 +1597,6 @@ export function PetModeWindowApp() {
       const unitMilliseconds = reducedMotion ? 8 : 1000 / PET_MODE_PAW_FPS;
       for (const step of PET_MODE_PAW_TIMELINE.slice(pawTimelineStartIndex)) {
         if (token !== actionTokenRef.current) return;
-        if (!contacted && step.frame === PET_MODE_PAW_CONTACT_FRAME) {
-          const hitTargetRect = hitTargetRef.current?.getBoundingClientRect();
-          const anchorRect = contactAnchorRef.current?.getBoundingClientRect();
-          if (hitTargetRect && anchorRect) {
-            await alignNativePetContact({
-              targetX: resolved.targetX,
-              targetY: resolved.targetY,
-              anchorX: anchorRect.left - hitTargetRect.left,
-              anchorY: anchorRect.top - hitTargetRect.top,
-              diagnostic: resolved.diagnostic,
-            }).catch(() => undefined);
-          }
-          if (token !== actionTokenRef.current) return;
-        }
         // Paw frames are advanced by this parent loop rather than the cat's
         // internal animation clock. Close the old native silhouette before
         // painting each new frame, matching the gait/life-motion contract.

@@ -4501,7 +4501,7 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
-  it("replays the approved F12 v1.6 frames and reports contact only on frame 15", async () => {
+  it("settles contact alignment on arrival, then reports contact only on frame 15", async () => {
     vi.useFakeTimers();
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -4511,8 +4511,45 @@ describe("PetModeWindowApp", () => {
       configurable: true,
       value: () => ({ matches: true }),
     });
+    let finishMove!: () => void;
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => {
+      finishMove = () => resolve({
+        facing: "left",
+        targetKind: "browser_tab_close",
+        motionOutcome: "completed",
+        confidence: "high",
+        diagnostic: "ax_selected_tab_close",
+        targetX: 640,
+        targetY: 48,
+      });
+    }));
     render(<PetModeWindowApp />);
     await act(async () => undefined);
+    const hitTarget = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const contactAnchor = document.querySelector(".pet-mode-contact-anchor");
+    if (!(contactAnchor instanceof HTMLElement)) throw new Error("contact anchor missing");
+    vi.spyOn(hitTarget, "getBoundingClientRect").mockReturnValue({
+      x: 10,
+      y: 20,
+      left: 10,
+      top: 20,
+      right: 154,
+      bottom: 119,
+      width: 144,
+      height: 99,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(contactAnchor, "getBoundingClientRect").mockReturnValue({
+      x: 153,
+      y: 60,
+      left: 153,
+      top: 60,
+      right: 153,
+      bottom: 60,
+      width: 0,
+      height: 0,
+      toJSON: () => ({}),
+    });
 
     act(() => {
       bridge.eventHandler?.({
@@ -4525,17 +4562,33 @@ describe("PetModeWindowApp", () => {
         },
       });
     });
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+    expect(bridge.alignNativePetContact).not.toHaveBeenCalled();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(14 * 8 + 4); });
+    await act(async () => {
+      finishMove();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(bridge.alignNativePetContact).toHaveBeenCalledWith(expect.objectContaining({
       targetX: 640,
       targetY: 48,
+      anchorX: 1,
+      anchorY: 40,
       diagnostic: "ax_selected_tab_close",
     }));
+    expect(bridge.reportNativePetContact).not.toHaveBeenCalled();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(14 * 8 + 4); });
+    expect(bridge.alignNativePetContact).toHaveBeenCalledTimes(1);
     expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
     expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-1");
+    expect(bridge.alignNativePetContact.mock.invocationCallOrder[0])
+      .toBeLessThan(bridge.reportNativePetContact.mock.invocationCallOrder[0]);
   });
 
   it("celebrates with dance after closing when danceOnCloseBeta is enabled", async () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowserHistoryEnvironment } from "@drifty/domain";
 import { openFullDiskAccessSettingsPane } from "../../lib/api/systemSettingsClient";
 import { trackerClient } from "../../lib/api/trackerClient";
+import { accessibilityClient } from "../../lib/api/accessibilityClient";
 import type { OnboardingStep } from "./onboardingFlow";
 
 // Show the Safari Full Disk Access row only for likely Safari users: either Safari is
@@ -36,7 +37,12 @@ export function useSafariHistoryPermission(step: OnboardingStep): SafariHistoryP
   const [readable, setReadable] = useState(false);
   const [opening, setOpening] = useState(false);
 
-  const active = step === "permissions" && isDesktopRuntime();
+  // Safari history and Full Disk Access are macOS-only. The low-history
+  // fallback must not turn this row on in a fresh Windows profile where the
+  // supported-browser preview is naturally still empty.
+  const active = step === "permissions"
+    && isDesktopRuntime()
+    && accessibilityClient.detectHostPlatform() === "macos";
 
   // On step mount, decide whether to show the row and seed the readable state.
   useEffect(() => {
