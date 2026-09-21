@@ -4,6 +4,7 @@ import { SETTINGS_SEARCH_ENTRIES, SETTINGS_SECTION_LABELS, type SettingsSearchEn
 export type SettingsSearchAvailability = {
   readonly dev: boolean;
   readonly intelligence: boolean;
+  readonly windows: boolean;
   readonly backgroundUpdates: boolean;
   readonly signedIn: boolean;
   readonly authenticated?: boolean;

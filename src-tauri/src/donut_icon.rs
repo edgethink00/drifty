@@ -222,42 +222,64 @@ fn point_in_triangle(
     !(has_neg && has_pos)
 }
 
-/// Renders the standalone Drifty hourglass brand mark for system tray usage.
-/// On Windows, taskbars and overflow trays require unmistakable brand presence
-/// and high contrast, rather than a hollow neutral donut ring.
-pub fn render_brand_hourglass(dark_taskbar: bool) -> (Vec<u8>, u32, u32) {
-    const W: usize = 18;
-    const H: usize = 18;
-    let mut pixels = vec![0u8; W * H * 4];
+/// Renders the Windows tray mark at the exact small-icon metric requested by
+/// the shell. The opaque warm tile and black, pixel-snapped hourglass stay
+/// legible on both light overflow panels and dark taskbars; no taskbar-theme
+/// guess or fractional-alpha edge is involved.
+pub fn render_windows_tray_badge(size: u32) -> (Vec<u8>, u32, u32) {
+    let size = size.clamp(16, 64) as usize;
+    let mut pixels = vec![0u8; size * size * 4];
+    let margin = (size / 16).max(1);
+    let corner = (size / 5).max(2);
+    let tile_rgb = [0xf7, 0xf6, 0xf1];
+    let mark_rgb = [0x05, 0x08, 0x07];
+    let right = size - margin - 1;
+    let bottom = size - margin - 1;
 
-    let col = if dark_taskbar {
-        [0xf1, 0xef, 0xe7]
-    } else {
-        [0x18, 0x1a, 0x19]
-    };
-
-    for py in 0..H {
-        for px in 0..W {
-            let mut sum_alpha = 0.0f32;
-            for sy in 0..2 {
-                for sx in 0..2 {
-                    let sub_x = px as f32 + 0.25 + (sx as f32) * 0.5;
-                    let sub_y = py as f32 + 0.25 + (sy as f32) * 0.5;
-                    sum_alpha += hourglass_alpha(sub_x, sub_y);
-                }
-            }
-            let alpha = sum_alpha / 4.0;
-            if alpha > 0.0 {
-                let i = (py * W + px) * 4;
-                pixels[i] = col[0];
-                pixels[i + 1] = col[1];
-                pixels[i + 2] = col[2];
-                pixels[i + 3] = (alpha * 255.0).round() as u8;
+    for py in margin..=bottom {
+        for px in margin..=right {
+            let inside_corner = |corner_x: usize, corner_y: usize| {
+                let dx = px.abs_diff(corner_x);
+                let dy = py.abs_diff(corner_y);
+                dx * dx + dy * dy <= corner * corner
+            };
+            let inside_tile = if px < margin + corner && py < margin + corner {
+                inside_corner(margin + corner, margin + corner)
+            } else if px > right - corner && py < margin + corner {
+                inside_corner(right - corner, margin + corner)
+            } else if px < margin + corner && py > bottom - corner {
+                inside_corner(margin + corner, bottom - corner)
+            } else if px > right - corner && py > bottom - corner {
+                inside_corner(right - corner, bottom - corner)
+            } else {
+                true
+            };
+            if inside_tile {
+                let i = (py * size + px) * 4;
+                pixels[i..i + 3].copy_from_slice(&tile_rgb);
+                pixels[i + 3] = 255;
             }
         }
     }
 
-    (pixels, W as u32, H as u32)
+    let inset = ((size as f32) * 0.27).round();
+    let far = (size - 1) as f32 - inset;
+    let center = (size as f32 - 1.0) * 0.5;
+    for py in 0..size {
+        for px in 0..size {
+            let x = px as f32 + 0.5;
+            let y = py as f32 + 0.5;
+            if point_in_triangle(x, y, inset, inset, far, inset, center, center)
+                || point_in_triangle(x, y, center, center, far, far, inset, far)
+            {
+                let i = (py * size + px) * 4;
+                pixels[i..i + 3].copy_from_slice(&mark_rgb);
+                pixels[i + 3] = 255;
+            }
+        }
+    }
+
+    (pixels, size as u32, size as u32)
 }
 
 #[cfg(test)]
@@ -372,13 +394,13 @@ mod tests {
     }
 
     #[test]
-    fn render_brand_hourglass_emits_valid_rgba() {
-        let (dark_pixels, dw, dh) = render_brand_hourglass(true);
-        let (light_pixels, lw, lh) = render_brand_hourglass(false);
-
-        assert_eq!((dw, dh), (18, 18));
-        assert_eq!((lw, lh), (18, 18));
-        assert!(count_color(&dark_pixels, [0xf1, 0xef, 0xe7]) > 0);
-        assert!(count_color(&light_pixels, [0x18, 0x1a, 0x19]) > 0);
+    fn windows_tray_badge_is_opaque_high_contrast_and_exact_size() {
+        for size in [16, 20, 24, 32] {
+            let (pixels, width, height) = render_windows_tray_badge(size);
+            assert_eq!((width, height), (size, size));
+            assert!(count_color(&pixels, [0xf7, 0xf6, 0xf1]) > 0);
+            assert!(count_color(&pixels, [0x05, 0x08, 0x07]) > 0);
+            assert!(pixels.chunks_exact(4).all(|pixel| pixel[3] == 0 || pixel[3] == 255));
+        }
     }
 }

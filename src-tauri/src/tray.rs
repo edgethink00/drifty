@@ -40,7 +40,9 @@ use self::productivity_icon::{
 };
 
 pub use self::productivity_icon::TrayProductivityState;
-use crate::donut_icon::{self, DonutIconRenderInput, TrayDisplayMode, TrayIconStyle};
+use crate::donut_icon::{self, TrayDisplayMode, TrayIconStyle};
+#[cfg(not(target_os = "windows"))]
+use crate::donut_icon::DonutIconRenderInput;
 use crate::shell_action::{self, tray_menu_id, ShellAction};
 use crate::tracker::TrackerController;
 use crate::tracking_pause::{self, TrackingPauseSnapshot, TrackingPauseState};
@@ -335,7 +337,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = TrayMenu::new(app, tray_menu_rows(&tray_menu_plan(app)))?;
 
     #[cfg(target_os = "windows")]
-    let (initial_rgba, iw, ih) = donut_icon::render_brand_hourglass(is_dark_mode());
+    let (initial_rgba, iw, ih) = donut_icon::render_windows_tray_badge(windows_tray_icon_size());
     #[cfg(not(target_os = "windows"))]
     let (initial_rgba, iw, ih) = donut_icon::render(DonutIconRenderInput {
         focus: 0.0,
@@ -739,6 +741,7 @@ struct TrayIconRenderKey {
     is_dark: bool,
     style: TrayIconStyle,
     display_mode: TrayDisplayMode,
+    pixel_size: u32,
 }
 
 impl TrayIconRenderKey {
@@ -749,6 +752,7 @@ impl TrayIconRenderKey {
         is_dark: bool,
         style: TrayIconStyle,
         display_mode: TrayDisplayMode,
+        pixel_size: u32,
     ) -> Self {
         Self {
             focus_bits: focus.to_bits(),
@@ -757,6 +761,7 @@ impl TrayIconRenderKey {
             is_dark,
             style,
             display_mode,
+            pixel_size,
         }
     }
 }
@@ -864,14 +869,30 @@ fn prepare_tray_icon(app: &AppHandle, request_generation: u64) -> Option<Prepare
     let dark = is_dark_mode();
     let style = latest_tray_icon_style(app);
     let display = latest_tray_display(app);
-    let key = TrayIconRenderKey::new(focus, drift, neutral, dark, style, display.mode);
+    let pixel_size = tray_icon_pixel_size();
+    let key = TrayIconRenderKey::new(
+        focus,
+        drift,
+        neutral,
+        dark,
+        style,
+        display.mode,
+        pixel_size,
+    );
 
     if tray_icon_render_key_is_current(key) {
         return None;
     }
 
-    let (rgba, width, height) =
-        render_tray_display_icon(display.mode, focus, drift, neutral, dark, style);
+    let (rgba, width, height) = render_tray_display_icon(
+        display.mode,
+        focus,
+        drift,
+        neutral,
+        dark,
+        style,
+        pixel_size,
+    );
     Some(PreparedTrayIcon {
         request_generation,
         key,
@@ -888,40 +909,43 @@ fn render_tray_display_icon(
     neutral: f64,
     dark: bool,
     style: TrayIconStyle,
+    pixel_size: u32,
 ) -> (Vec<u8>, u32, u32) {
     #[cfg(target_os = "windows")]
     {
-        // On Windows, the system tray icon sits inside the overflow area or taskbar.
-        // A hollow, low-contrast neutral donut ring has near-zero visibility and lacks brand presence.
-        // Option 1: Render the crisp Drifty hourglass brand mark as the authoritative Windows tray icon.
-        let _ = (mode, focus, drift, neutral, style);
-        return donut_icon::render_brand_hourglass(dark);
+        // Keep the branded mark theme-independent: the Windows overflow panel
+        // can be light even when the taskbar is dark.
+        let _ = (mode, focus, drift, neutral, dark, style);
+        return donut_icon::render_windows_tray_badge(pixel_size);
     }
 
     #[cfg(not(target_os = "windows"))]
-    match mode {
-        TrayDisplayMode::Donut => donut_icon::render(DonutIconRenderInput {
-            focus,
-            drift,
-            neutral,
-            is_dark: dark,
-            style,
-        }),
-        TrayDisplayMode::FocusTime => {
-            add_trailing_icon_space(donut_icon::render_focus_dot(dark), 4)
-        }
-        /* This mode replaces the Focus-time dot, so it deliberately keeps the
-        compact 18px ring even if the legacy tray icon style is Expanded. */
-        TrayDisplayMode::DonutFocusTime => add_trailing_icon_space(
-            donut_icon::render(DonutIconRenderInput {
+    {
+        let _ = pixel_size;
+        match mode {
+            TrayDisplayMode::Donut => donut_icon::render(DonutIconRenderInput {
                 focus,
                 drift,
                 neutral,
                 is_dark: dark,
-                style: TrayIconStyle::Compact,
+                style,
             }),
-            4,
-        ),
+            TrayDisplayMode::FocusTime => {
+                add_trailing_icon_space(donut_icon::render_focus_dot(dark), 4)
+            }
+            /* This mode replaces the Focus-time dot, so it deliberately keeps the
+            compact 18px ring even if the legacy tray icon style is Expanded. */
+            TrayDisplayMode::DonutFocusTime => add_trailing_icon_space(
+                donut_icon::render(DonutIconRenderInput {
+                    focus,
+                    drift,
+                    neutral,
+                    is_dark: dark,
+                    style: TrayIconStyle::Compact,
+                }),
+                4,
+            ),
+        }
     }
 }
 
@@ -1135,11 +1159,30 @@ fn is_dark_mode() -> bool {
 
 #[cfg(target_os = "windows")]
 fn is_dark_mode() -> bool {
-    // Windows 10/11 taskbar and overflow chevron popup default to dark mode.
-    true
+    // The Windows badge is deliberately theme-independent. Keep this stable
+    // input only for the shared render key used by every platform.
+    false
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn is_dark_mode() -> bool {
     false
+}
+
+#[cfg(target_os = "windows")]
+fn windows_tray_icon_size() -> u32 {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSMICON};
+
+    let size = unsafe { GetSystemMetrics(SM_CXSMICON) };
+    u32::try_from(size).ok().filter(|value| *value > 0).unwrap_or(16)
+}
+
+#[cfg(target_os = "windows")]
+fn tray_icon_pixel_size() -> u32 {
+    windows_tray_icon_size()
+}
+
+#[cfg(not(target_os = "windows"))]
+const fn tray_icon_pixel_size() -> u32 {
+    18
 }

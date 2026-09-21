@@ -4,7 +4,7 @@ import type { SettingsSearchEntry } from "./settingsSearchCatalog";
 import { isSettingsSearchEntryVisible, type SettingsSearchAvailability } from "./settingsSearchIndex";
 
 const defaultAvailability: SettingsSearchAvailability = {
-  dev: false, intelligence: false, backgroundUpdates: false, signedIn: false, deviceSync: false,
+  dev: false, intelligence: false, windows: false, backgroundUpdates: false, signedIn: false, deviceSync: false,
 };
 
 type SearchRequest = { readonly entry: SettingsSearchEntry; readonly originSection: SettingsSection | null };

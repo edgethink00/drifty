@@ -268,6 +268,7 @@ fn donut_focus_time_replaces_the_dot_with_a_compact_productivity_ring() {
         0.2,
         true,
         TrayIconStyle::Expanded,
+        18,
     );
     let (_, dot_width, dot_height) = render_tray_display_icon(
         TrayDisplayMode::FocusTime,
@@ -276,6 +277,7 @@ fn donut_focus_time_replaces_the_dot_with_a_compact_productivity_ring() {
         0.2,
         true,
         TrayIconStyle::Expanded,
+        18,
     );
 
     assert_eq!((hybrid_width, hybrid_height), (22, 18));
@@ -285,7 +287,7 @@ fn donut_focus_time_replaces_the_dot_with_a_compact_productivity_ring() {
 #[test]
 #[cfg(target_os = "windows")]
 fn windows_tray_display_modes_keep_the_brand_hourglass() {
-    let expected = donut_icon::render_brand_hourglass(true);
+    let expected = donut_icon::render_windows_tray_badge(20);
 
     for mode in [
         TrayDisplayMode::Donut,
@@ -300,6 +302,7 @@ fn windows_tray_display_modes_keep_the_brand_hourglass() {
                 0.2,
                 true,
                 TrayIconStyle::Expanded,
+                20,
             ),
             expected,
         );
@@ -396,7 +399,8 @@ fn tray_icon_render_key_matches_for_unchanged_input() {
             0.25,
             true,
             TrayIconStyle::Compact,
-            TrayDisplayMode::Donut
+            TrayDisplayMode::Donut,
+            18
         ),
         TrayIconRenderKey::new(
             0.5,
@@ -404,7 +408,8 @@ fn tray_icon_render_key_matches_for_unchanged_input() {
             0.25,
             true,
             TrayIconStyle::Compact,
-            TrayDisplayMode::Donut
+            TrayDisplayMode::Donut,
+            18
         ),
     );
 }
@@ -418,6 +423,7 @@ fn tray_icon_render_key_changes_when_any_render_input_changes() {
         true,
         TrayIconStyle::Compact,
         TrayDisplayMode::Donut,
+        18,
     );
 
     assert_ne!(
@@ -428,7 +434,8 @@ fn tray_icon_render_key_changes_when_any_render_input_changes() {
             0.25,
             true,
             TrayIconStyle::Compact,
-            TrayDisplayMode::Donut
+            TrayDisplayMode::Donut,
+            18
         )
     );
     assert_ne!(
@@ -439,7 +446,8 @@ fn tray_icon_render_key_changes_when_any_render_input_changes() {
             0.25,
             true,
             TrayIconStyle::Compact,
-            TrayDisplayMode::Donut
+            TrayDisplayMode::Donut,
+            18
         )
     );
     assert_ne!(
@@ -450,7 +458,8 @@ fn tray_icon_render_key_changes_when_any_render_input_changes() {
             0.3,
             true,
             TrayIconStyle::Compact,
-            TrayDisplayMode::Donut
+            TrayDisplayMode::Donut,
+            18
         )
     );
     assert_ne!(
@@ -461,7 +470,8 @@ fn tray_icon_render_key_changes_when_any_render_input_changes() {
             0.25,
             false,
             TrayIconStyle::Compact,
-            TrayDisplayMode::Donut
+            TrayDisplayMode::Donut,
+            18
         )
     );
     assert_ne!(
@@ -472,7 +482,8 @@ fn tray_icon_render_key_changes_when_any_render_input_changes() {
             0.25,
             true,
             TrayIconStyle::Expanded,
-            TrayDisplayMode::Donut
+            TrayDisplayMode::Donut,
+            18
         )
     );
     assert_ne!(
@@ -483,7 +494,20 @@ fn tray_icon_render_key_changes_when_any_render_input_changes() {
             0.25,
             true,
             TrayIconStyle::Compact,
-            TrayDisplayMode::FocusTime
+            TrayDisplayMode::FocusTime,
+            18
+        )
+    );
+    assert_ne!(
+        base,
+        TrayIconRenderKey::new(
+            0.5,
+            0.25,
+            0.25,
+            true,
+            TrayIconStyle::Compact,
+            TrayDisplayMode::Donut,
+            20
         )
     );
 }
@@ -499,6 +523,7 @@ fn older_queued_render_cannot_overwrite_newer_direct_render() {
         true,
         TrayIconStyle::Compact,
         TrayDisplayMode::Donut,
+        18,
     );
 
     let direct_b_generation = state.claim_request();
@@ -509,6 +534,7 @@ fn older_queued_render_cannot_overwrite_newer_direct_render() {
         true,
         TrayIconStyle::Compact,
         TrayDisplayMode::Donut,
+        18,
     );
     assert!(
         state.should_apply(direct_b_generation, direct_b_key),

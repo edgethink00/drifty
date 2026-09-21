@@ -12,7 +12,7 @@ export type SettingsSearchEntry = {
   readonly aiTab?: "providers" | "intelligence" | "profile";
   readonly aiProvider?: "openrouter" | "custom";
   readonly devSubsection?: DevSettingsSubsection;
-  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility";
+  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows";
 };
 
 // Reuse visible labels and descriptions; aliases contain vocabulary only.
@@ -74,6 +74,14 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.general.manualUpdate",
     keywords: "업데이트 버전 확인 update version check",
     descriptionKey: "settings.general.manualUpdateDescription",
+  },
+  {
+    id: "settings.general.devMode",
+    section: "general",
+    titleKey: "settings.general.devMode",
+    keywords: "개발자 모드 베타 업데이트 진단 미리보기 developer mode beta update diagnostics preview",
+    descriptionKey: "settings.general.devModeDescriptionWindows",
+    gate: "windows",
   },
   {
     id: "settings.appearance.theme",

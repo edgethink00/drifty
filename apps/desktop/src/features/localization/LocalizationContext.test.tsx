@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
@@ -204,5 +204,59 @@ describe("display language preference", () => {
 
     expect(screen.queryByRole("switch", { name: "Automatically update Drifty" })).toBeNull();
     expect(screen.getByRole("button", { name: "Check for Updates" })).toBeTruthy();
+  });
+
+  it("offers the release-build Developer mode control only on Windows", () => {
+    const onDevModeChange = vi.fn();
+    const { rerender } = render(
+      <LocalizationTestProvider language="en">
+        <GeneralSettingsSection
+          backgroundUpdatesEnabled={false}
+          backgroundUpdatesSupported={false}
+          devModeEnabled={false}
+          hostPlatform="windows"
+          showDevMode
+          startOfDayValue="04:00"
+          startOfWeek="monday"
+          updaterChecking={false}
+          updaterError={null}
+          updaterInstalling={false}
+          updaterMessage={null}
+          onBackgroundUpdatesEnabledChange={() => undefined}
+          onCheckForUpdates={() => undefined}
+          onDevModeChange={onDevModeChange}
+          onStartOfDayChange={() => undefined}
+          onStartOfWeekChange={() => undefined}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "Developer mode" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText(/Windows beta channel/i)).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(onDevModeChange).toHaveBeenCalledWith(true);
+
+    rerender(
+      <LocalizationTestProvider language="en">
+        <GeneralSettingsSection
+          backgroundUpdatesEnabled={false}
+          backgroundUpdatesSupported={false}
+          hostPlatform="macos"
+          showDevMode
+          startOfDayValue="04:00"
+          startOfWeek="monday"
+          updaterChecking={false}
+          updaterError={null}
+          updaterInstalling={false}
+          updaterMessage={null}
+          onBackgroundUpdatesEnabledChange={() => undefined}
+          onCheckForUpdates={() => undefined}
+          onStartOfDayChange={() => undefined}
+          onStartOfWeekChange={() => undefined}
+        />
+      </LocalizationTestProvider>,
+    );
+    expect(screen.queryByRole("switch", { name: "Developer mode" })).toBeNull();
   });
 });

@@ -9537,7 +9537,7 @@ export default function App() {
       <LocalizationProvider controller={localization}>
     <SettingsSearchProvider
       activeSection={activeTab === "settings" ? settingsSection : null}
-      availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled,
+      availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows",
         backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired }}
       onNavigate={(entry) => {
         setSettingsSection(entry.section);
@@ -10274,7 +10274,9 @@ export default function App() {
                   <GeneralSettingsSection
                     backgroundUpdatesSupported={hostPlatform === "macos"}
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
+                    devModeEnabled={isDevModeActive}
                     hostPlatform={hostPlatform}
+                    showDevMode={DEV_SETTINGS_ENABLED && hostPlatform === "windows"}
                     startOfDayValue={startOfDayValue}
                     startOfWeek={startOfWeek}
                     updaterChecking={updaterChecking}
@@ -10283,6 +10285,7 @@ export default function App() {
                     updaterMessage={updaterMessage}
                     onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
+                    onDevModeChange={setDevModeEnabled}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
                   />

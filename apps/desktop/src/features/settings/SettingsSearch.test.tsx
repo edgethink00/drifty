@@ -9,7 +9,7 @@ import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import type { SettingsSection } from "./SettingsSidebar";
 import { searchSettings, type SettingsSearchAvailability } from "./settingsSearchIndex";
 
-const publicAvailability: SettingsSearchAvailability = { dev: false, intelligence: true, backgroundUpdates: true, signedIn: false, deviceSync: false };
+const publicAvailability: SettingsSearchAvailability = { dev: false, intelligence: true, windows: false, backgroundUpdates: true, signedIn: false, deviceSync: false };
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -24,13 +24,15 @@ describe("settings search", () => {
   });
 
   it("omits gated destinations from search, including Dev in production", () => {
-    const enabled = { dev: true, intelligence: true, backgroundUpdates: true, signedIn: true, deviceSync: true };
-    const disabled = { dev: false, intelligence: false, backgroundUpdates: false, signedIn: false, deviceSync: false };
+    const enabled = { dev: true, intelligence: true, windows: true, backgroundUpdates: true, signedIn: true, deviceSync: true };
+    const disabled = { dev: false, intelligence: false, windows: false, backgroundUpdates: false, signedIn: false, deviceSync: false };
     expect(searchSettings("Diagnostics", enabled).some((entry) => entry.section === "dev")).toBe(true);
     expect(searchSettings("Diagnostics", disabled).some((entry) => entry.section === "dev")).toBe(false);
     for (const query of ["sync", "Intelligence", "update", "delete"]) {
       expect(searchSettings(query, disabled).every((entry) => !entry.gate)).toBe(true);
     }
+    expect(searchSettings("Developer mode", enabled).some((entry) => entry.id === "settings.general.devMode")).toBe(true);
+    expect(searchSettings("Developer mode", disabled).some((entry) => entry.id === "settings.general.devMode")).toBe(false);
   });
 
   it("provides result/empty states, clear and Escape, without losing the existing navigation", () => {
