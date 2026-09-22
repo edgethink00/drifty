@@ -28,6 +28,14 @@ export type HistoryRow = {
   readonly searchText: string;
 };
 
+export type HistoryTitleSource = {
+  readonly appName: string;
+  readonly siteDomain?: string | null;
+  readonly siteTitle?: string | null;
+  readonly windowTitle?: string | null;
+  readonly exclusionSource?: ExclusionSource | null;
+};
+
 export type HistoryDayGroup = {
   readonly dayKey: string;
   readonly label: string;
@@ -57,21 +65,30 @@ type MutableHistoryRow = {
   searchParts: string[];
 };
 
+/**
+ * One continuous stretch on the same page still arrives as several segments: the
+ * browser rewrites its window title while audio plays, the URL picks up a
+ * timestamp parameter, or the tracker simply opens a new sample after a short
+ * capture gap. History shows the page title, so those segments read as identical
+ * rows stacked on top of each other. Rows therefore merge on what the row
+ * actually displays, and a gap up to the tracker's passive-capture grace counts
+ * as the same stretch of activity.
+ */
+const HISTORY_ROW_MERGE_GAP_MS = 15_000;
+
 export function buildHistoryRows(segments: readonly ActivitySegment[], classificationOptions?: ClassificationOptions): readonly HistoryRow[] {
   const rows: HistoryRow[] = [];
   let currentRow: MutableHistoryRow | null = null;
 
   for (const segment of [...segments].sort((left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt))) {
-    if (currentRow === null || !canMergeIntoHistoryRow(currentRow, segment)) {
-      if (currentRow !== null) rows.push(finishHistoryRow(currentRow));
-      currentRow = startHistoryRow(segment, classificationOptions);
+    const classification = historyClassification(segment, classificationOptions);
+    if (currentRow !== null && canAppendIntoHistoryRow(currentRow, segment, classification)) {
+      appendIntoHistoryRow(currentRow, segment);
       continue;
     }
 
-    currentRow.endedAt = segment.endedAt;
-    currentRow.durationSeconds += segment.durationSeconds;
-    currentRow.segmentIds.push(segment.id);
-    currentRow.searchParts.push(...historySearchParts(segment));
+    if (currentRow !== null) rows.push(finishHistoryRow(currentRow));
+    currentRow = startHistoryRow(segment, classification);
   }
 
   if (currentRow !== null) rows.push(finishHistoryRow(currentRow));
@@ -92,19 +109,20 @@ export function buildHistoryRowsWindow(segments: readonly ActivitySegment[], lim
     const segment = segments[index];
     if (!segment) continue;
 
+    const classification = historyClassification(segment, classificationOptions);
     if (currentRow === null) {
-      currentRow = startHistoryRow(segment, classificationOptions);
+      currentRow = startHistoryRow(segment, classification);
       continue;
     }
 
-    if (canPrependIntoHistoryRow(currentRow, segment)) {
-      prependIntoHistoryRow(currentRow, segment, classificationOptions);
+    if (canPrependIntoHistoryRow(currentRow, segment, classification)) {
+      prependIntoHistoryRow(currentRow, segment, classification);
       continue;
     }
 
     rows.push(finishHistoryRow(currentRow));
     if (rows.length >= rowLimit) return { rows, hasMore: true };
-    currentRow = startHistoryRow(segment, classificationOptions);
+    currentRow = startHistoryRow(segment, classification);
   }
 
   if (currentRow !== null) rows.push(finishHistoryRow(currentRow));
@@ -137,15 +155,14 @@ export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMin
   }));
 }
 
-export function historyRowTitle(row: HistoryRow): string {
+export function historyRowTitle(row: HistoryTitleSource): string {
   if (isExcludedSegment(row)) {
     return "";
   }
   return row.siteTitle ?? row.windowTitle ?? row.siteDomain ?? row.appName;
 }
 
-function startHistoryRow(segment: ActivitySegment, classificationOptions?: ClassificationOptions): MutableHistoryRow {
-  const classification = historyClassification(segment, classificationOptions);
+function startHistoryRow(segment: ActivitySegment, classification: HistoryClassification): MutableHistoryRow {
   return {
     id: `history-row-${segment.id}-${segment.id}`,
     segmentIds: [segment.id],
@@ -161,7 +178,7 @@ function startHistoryRow(segment: ActivitySegment, classificationOptions?: Class
     windowTitle: segment.windowTitle,
     classification,
     exclusionSource: segment.exclusionSource,
-    searchParts: [...historySearchParts(segment), classification.categoryLabel, classification.productivityLabel],
+    searchParts: [...historySearchParts(segment)],
   };
 }
 
@@ -183,27 +200,34 @@ function finishHistoryRow(row: MutableHistoryRow): HistoryRow {
     windowTitle: row.windowTitle,
     classification: row.classification,
     exclusionSource: row.exclusionSource,
-    searchText: row.searchParts.filter(Boolean).join(" ").toLowerCase(),
+    // Built here rather than per merge step so a row reads the same whether it
+    // was assembled forward (search) or backward (the newest-first window).
+    searchText: [...row.searchParts, row.classification.categoryLabel, row.classification.productivityLabel]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase(),
   };
 }
 
-function canMergeIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment): boolean {
-  return sameApp(row, segment) &&
-    (row.windowTitle ?? null) === (segment.windowTitle ?? null) &&
-    Date.parse(row.endedAt) === Date.parse(segment.startedAt);
+function canAppendIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment, classification: HistoryClassification): boolean {
+  return sameHistorySurface(row, segment, classification) && withinHistoryMergeGap(row, segment);
 }
 
-function canPrependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment): boolean {
-  return sameApp(row, segment) &&
-    (row.windowTitle ?? null) === (segment.windowTitle ?? null) &&
-    Date.parse(segment.endedAt) === Date.parse(row.startedAt);
+function canPrependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment, classification: HistoryClassification): boolean {
+  return sameHistorySurface(row, segment, classification) && withinHistoryMergeGap(segment, row);
 }
 
-function prependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment, classificationOptions?: ClassificationOptions): void {
-  const classification = historyClassification(segment, classificationOptions);
-  row.segmentIds.unshift(segment.id);
-  row.startedAt = segment.startedAt;
+function appendIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment): void {
+  row.segmentIds.push(segment.id);
   row.durationSeconds += segment.durationSeconds;
+  if (Date.parse(segment.endedAt) > Date.parse(row.endedAt)) row.endedAt = segment.endedAt;
+  row.searchParts.push(...historySearchParts(segment));
+}
+
+function prependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment, classification: HistoryClassification): void {
+  row.segmentIds.unshift(segment.id);
+  row.durationSeconds += segment.durationSeconds;
+  if (Date.parse(segment.startedAt) < Date.parse(row.startedAt)) row.startedAt = segment.startedAt;
   row.appName = segment.appName;
   row.bundleId = segment.bundleId;
   row.browserName = segment.browserName;
@@ -212,7 +236,33 @@ function prependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment,
   row.siteUrl = segment.siteUrl;
   row.windowTitle = segment.windowTitle;
   row.classification = classification;
-  row.searchParts.push(...historySearchParts(segment), classification.categoryLabel, classification.productivityLabel);
+  row.searchParts.unshift(...historySearchParts(segment));
+}
+
+/**
+ * Rows merge on the identity History actually renders: the same app, the same
+ * site, the same displayed title, and the same classification badge. Raw window
+ * titles and URLs are deliberately left out, because those churn while a single
+ * page stays open.
+ */
+function sameHistorySurface(row: MutableHistoryRow, segment: ActivitySegment, classification: HistoryClassification): boolean {
+  return sameApp(row, segment) &&
+    (row.exclusionSource ?? null) === (segment.exclusionSource ?? null) &&
+    (row.siteDomain ?? null) === (segment.siteDomain ?? null) &&
+    historyRowTitle(row) === historyRowTitle(segment) &&
+    row.classification.category === classification.category &&
+    row.classification.productivity === classification.productivity;
+}
+
+function withinHistoryMergeGap(
+  earlier: { readonly startedAt: string; readonly endedAt: string },
+  later: { readonly startedAt: string },
+): boolean {
+  const earlierStartMs = Date.parse(earlier.startedAt);
+  const earlierEndMs = Date.parse(earlier.endedAt);
+  const laterStartMs = Date.parse(later.startedAt);
+  if (!Number.isFinite(earlierStartMs) || !Number.isFinite(earlierEndMs) || !Number.isFinite(laterStartMs)) return false;
+  return laterStartMs >= earlierStartMs && laterStartMs - earlierEndMs <= HISTORY_ROW_MERGE_GAP_MS;
 }
 
 function sameApp(row: MutableHistoryRow, segment: ActivitySegment): boolean {

@@ -73,6 +73,57 @@ describe("buildHistoryRows", () => {
       ["cmux-1"],
     ]);
   });
+
+  it("merges one stretch on a page whose window title and url churn while the shown title holds", () => {
+    const rows = buildHistoryRows([
+      historySegment("watch-start", "2026-06-10T01:00:00+00:00", "2026-06-10T01:02:00+00:00", 120, {
+        appName: "Aside",
+        bundleId: "at.studio.AsideBrowser",
+        siteDomain: "youtube.com",
+        siteTitle: "음악 토크 에피소드 - YouTube",
+        siteUrl: "https://www.youtube.com/watch?v=abc",
+        windowTitle: "음악 토크 에피소드 - YouTube - Aside",
+      }),
+      historySegment("watch-playing", "2026-06-10T01:02:03+00:00", "2026-06-10T01:05:00+00:00", 177, {
+        appName: "Aside",
+        bundleId: "at.studio.AsideBrowser",
+        siteDomain: "youtube.com",
+        siteTitle: "음악 토크 에피소드 - YouTube",
+        siteUrl: "https://www.youtube.com/watch?v=abc&t=120",
+        windowTitle: "음악 토크 에피소드 - YouTube - 오디오 재생 - Aside",
+      }),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      startedAt: "2026-06-10T01:00:00+00:00",
+      endedAt: "2026-06-10T01:05:00+00:00",
+      durationSeconds: 297,
+      segmentIds: ["watch-start", "watch-playing"],
+    });
+  });
+
+  it("keeps a split row when the same page resumes after more than the capture gap", () => {
+    const rows = buildHistoryRows([
+      historySegment("before", "2026-06-10T01:00:00+00:00", "2026-06-10T01:02:00+00:00", 120),
+      historySegment("after", "2026-06-10T01:02:16+00:00", "2026-06-10T01:04:00+00:00", 104),
+    ]);
+
+    expect(rows.map((row) => row.segmentIds)).toEqual([["after"], ["before"]]);
+  });
+
+  it("keeps look-alike segments apart when they carry different classifications", () => {
+    const rows = buildHistoryRows([
+      historySegment("focused", "2026-06-10T01:00:00+00:00", "2026-06-10T01:02:00+00:00", 120, {
+        classification: { category: "workspace", productivity: "focus", source: "llm", confidence: 0.9 },
+      }),
+      historySegment("drifted", "2026-06-10T01:02:01+00:00", "2026-06-10T01:04:00+00:00", 119, {
+        classification: { category: "social_media", productivity: "drift", source: "llm", confidence: 0.9 },
+      }),
+    ]);
+
+    expect(rows.map((row) => row.segmentIds)).toEqual([["drifted"], ["focused"]]);
+  });
 });
 
 describe("buildHistoryRowsWindow", () => {
@@ -106,6 +157,27 @@ describe("buildHistoryRowsWindow", () => {
 
     expect(windowedRows.hasMore).toBe(false);
     expect(windowedRows.rows.map((row) => row.segmentIds)).toEqual([["start", "end"]]);
+  });
+
+  it("merges the same page across a capture gap the way the full list does", () => {
+    const pageSegment = (id: string, startedAt: string, endedAt: string, durationSeconds: number, windowTitle: string) =>
+      historySegment(id, startedAt, endedAt, durationSeconds, {
+        appName: "Aside",
+        bundleId: "at.studio.AsideBrowser",
+        siteDomain: "youtube.com",
+        siteTitle: "음악 토크 에피소드 - YouTube",
+        windowTitle,
+      });
+
+    const segments = [
+      pageSegment("watch-start", "2026-06-10T01:00:00+00:00", "2026-06-10T01:02:00+00:00", 120, "음악 토크 에피소드 - YouTube - Aside"),
+      pageSegment("watch-playing", "2026-06-10T01:02:04+00:00", "2026-06-10T01:05:00+00:00", 176, "음악 토크 에피소드 - YouTube - 오디오 재생 - Aside"),
+    ];
+
+    const windowedRows = buildHistoryRowsWindow(segments, 5);
+
+    expect(windowedRows.rows.map((row) => row.segmentIds)).toEqual([["watch-start", "watch-playing"]]);
+    expect(windowedRows.rows).toEqual(buildHistoryRows(segments));
   });
 
   it("formats excluded segments with truth-accurate label in history row title", () => {
