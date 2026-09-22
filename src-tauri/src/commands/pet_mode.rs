@@ -4952,13 +4952,21 @@ fn carry_pet_mode_cursor(
         CGDisplay::warp_mouse_cursor_position(CGPoint::new(native_next.0, native_next.1))
             .map_err(|error| format!("Could not carry the Pet Mode cursor: {error}"))?;
         #[cfg(target_os = "windows")]
-        match cursor_context.move_cursor(&window, next)? {
+        match cursor_context.move_cursor(
+            &window,
+            next,
+            last_commanded,
+            request.yank_distance * scale_factor,
+        )? {
             super::pet_cursor_windows::CursorMoveOutcome::Moved => {}
             super::pet_cursor_windows::CursorMoveOutcome::Cancelled => {
                 break PetModeCursorCarryOutcome::Cancelled;
             }
             super::pet_cursor_windows::CursorMoveOutcome::PointerPressed => {
                 break PetModeCursorCarryOutcome::PointerPressed;
+            }
+            super::pet_cursor_windows::CursorMoveOutcome::CursorEscaped => {
+                break PetModeCursorCarryOutcome::CursorEscaped;
             }
         }
         last_commanded = next;

@@ -523,6 +523,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    #[ignore = "requires an interactive macOS Window Server session"]
     fn live_listing_is_available_and_skips_window_server() {
         let (ledges, _) = list_on_screen_ledges(-1).expect("listing");
         assert!(ledges.iter().all(|(name, _)| name != "Window Server"));
@@ -530,6 +531,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    #[ignore = "requires an interactive macOS Window Server session"]
     fn live_windows_plan_catch_above_and_never_teleport_from_inside() {
         let (ledges, dock) = list_on_screen_ledges(-1).expect("listing");
         let work = PetRect {
@@ -582,6 +584,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    #[ignore = "requires an interactive macOS Window Server session"]
     fn live_windows_never_plan_an_upward_teleport() {
         let (ledges, dock) = list_on_screen_ledges(-1).expect("listing");
         let named: Vec<(&str, PetRect)> = ledges

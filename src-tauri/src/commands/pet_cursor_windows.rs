@@ -82,12 +82,16 @@ fn physical_target(point: (f64, f64)) -> Result<(i32, i32), String> {
 
 // Small immediate readback differences need confirmation, not another write.
 // This is a bounded product policy, not an OS timing guarantee. A persistent
-// two-pixel clip still fails; successful movement keeps the one-pixel bound.
+// four-pixel clip still fails at the deadline; successful movement keeps the
+// one-pixel bound. Windows can expose the previous frame's cursor position for
+// one observer tick even after SetPhysicalCursorPos succeeds.
 const CURSOR_READBACK_GRACE: Duration = Duration::from_millis(32);
-const CURSOR_TRANSIENT_DISTANCE: f64 = 2.0;
+const CURSOR_TRANSIENT_DISTANCE: f64 = 4.0;
 
 fn confirm_cursor_position(
     target: (i32, i32),
+    cursor_escape_origin: (f64, f64),
+    cursor_escape_distance: f64,
     mut read: impl FnMut() -> Result<PhysicalPosition<f64>, String>,
     mut interrupted: impl FnMut() -> Option<CursorMoveOutcome>,
     mut elapsed: impl FnMut() -> Duration,
@@ -101,6 +105,14 @@ fn confirm_cursor_position(
         let distance = (actual.x - target.0 as f64).hypot(actual.y - target.1 as f64);
         if distance <= 1.0 {
             return Ok(CursorMoveOutcome::Moved);
+        }
+        // A real yank can land after SetPhysicalCursorPos succeeds but before
+        // its immediate readback. Classify only a request-sized displacement
+        // as an escaped cursor; small persistent clipping remains an error.
+        let escape_distance =
+            (actual.x - cursor_escape_origin.0).hypot(actual.y - cursor_escape_origin.1);
+        if escape_distance.is_finite() && escape_distance >= cursor_escape_distance {
+            return Ok(CursorMoveOutcome::CursorEscaped);
         }
         if !distance.is_finite()
             || distance > CURSOR_TRANSIENT_DISTANCE
@@ -118,6 +130,8 @@ fn confirm_cursor_position(
 
 fn move_cursor(
     point: (f64, f64),
+    cursor_escape_origin: (f64, f64),
+    cursor_escape_distance: f64,
     interrupted: impl FnMut() -> Option<CursorMoveOutcome>,
 ) -> Result<CursorMoveOutcome, String> {
     let (x, y) = physical_target(point)?;
@@ -130,6 +144,8 @@ fn move_cursor(
     let started = Instant::now();
     confirm_cursor_position(
         (x, y),
+        cursor_escape_origin,
+        cursor_escape_distance,
         cursor_position,
         interrupted,
         || started.elapsed(),
@@ -216,6 +232,7 @@ pub(super) enum CursorMoveOutcome {
     Moved,
     Cancelled,
     PointerPressed,
+    CursorEscaped,
 }
 
 fn movement_interruption(current: bool, pressed: bool) -> Option<CursorMoveOutcome> {
@@ -233,13 +250,15 @@ impl InteractionContext {
         &self,
         window: &WebviewWindow,
         point: (f64, f64),
+        cursor_escape_origin: (f64, f64),
+        cursor_escape_distance: f64,
     ) -> Result<CursorMoveOutcome, String> {
         // Recheck immediately before the shared cursor mutation, not only at
         // the beginning of a frame that also moves/emits events to the panel.
         if let Some(outcome) = movement_interruption(self.is_current(window), pointer_pressed()) {
             return Ok(outcome);
         }
-        move_cursor(point, || {
+        move_cursor(point, cursor_escape_origin, cursor_escape_distance, || {
             movement_interruption(self.is_current(window), pointer_pressed())
         })
     }
@@ -270,15 +289,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn small_readback_lag_is_confirmed_without_writing_again() {
+    fn bounded_readback_lag_is_confirmed_without_writing_again() {
         let mut reads = [
-            PhysicalPosition::new(102.0, 50.0),
+            PhysicalPosition::new(104.0, 50.0),
             PhysicalPosition::new(100.0, 50.0),
         ]
         .into_iter();
         let mut pauses = 0;
         let outcome = confirm_cursor_position(
             (100, 50),
+            (100.0, 50.0),
+            34.0,
             || Ok(reads.next().unwrap()),
             || None,
             || Duration::from_millis(16),
@@ -291,31 +312,35 @@ mod tests {
     }
 
     #[test]
-    fn persistent_two_pixel_clip_still_fails_at_the_deadline() {
+    fn persistent_four_pixel_clip_still_fails_at_the_deadline() {
         let mut times = [Duration::ZERO, CURSOR_READBACK_GRACE].into_iter();
         let mut pauses = 0;
         let result = confirm_cursor_position(
             (100, 50),
-            || Ok(PhysicalPosition::new(102.0, 50.0)),
+            (100.0, 50.0),
+            34.0,
+            || Ok(PhysicalPosition::new(104.0, 50.0)),
             || None,
             || times.next().unwrap(),
             || pauses += 1,
         );
         assert!(result
             .unwrap_err()
-            .contains("target 100,50; observed 102,50"));
+            .contains("target 100,50; observed 104,50"));
         assert_eq!(pauses, 1);
     }
 
     #[test]
     fn larger_or_invalid_readback_never_enters_the_grace_period() {
         for actual in [
-            PhysicalPosition::new(103.0, 50.0),
-            PhysicalPosition::new(102.0, 51.0),
+            PhysicalPosition::new(105.0, 50.0),
+            PhysicalPosition::new(104.0, 53.0),
             PhysicalPosition::new(f64::NAN, 50.0),
         ] {
             assert!(confirm_cursor_position(
                 (100, 50),
+                (100.0, 50.0),
+                34.0,
                 || Ok(actual),
                 || None,
                 || Duration::ZERO,
@@ -336,6 +361,8 @@ mod tests {
             assert_eq!(
                 confirm_cursor_position(
                     (100, 50),
+                    (100.0, 50.0),
+                    34.0,
                     || {
                         reads += 1;
                         Ok(PhysicalPosition::new(102.0, 50.0))
@@ -356,6 +383,8 @@ mod tests {
         assert_eq!(
             confirm_cursor_position(
                 (100, 50),
+                (100.0, 50.0),
+                34.0,
                 || Err("read unavailable".into()),
                 || None,
                 || Duration::ZERO,
@@ -381,6 +410,23 @@ mod tests {
             Some(CursorMoveOutcome::PointerPressed)
         );
         assert_eq!(movement_interruption(true, false), None);
+    }
+
+    #[test]
+    fn request_sized_readback_displacement_is_a_typed_cursor_escape() {
+        assert_eq!(
+            confirm_cursor_position(
+                (100, 50),
+                (100.0, 50.0),
+                34.0,
+                || Ok(PhysicalPosition::new(134.0, 50.0)),
+                || None,
+                || Duration::ZERO,
+                || panic!("A cursor escape must not enter the grace period"),
+            )
+            .unwrap(),
+            CursorMoveOutcome::CursorEscaped
+        );
     }
 
     #[test]
