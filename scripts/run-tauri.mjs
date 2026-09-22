@@ -179,7 +179,10 @@ export function windowsReleaseConfig(env = process.env) {
   }
   return {
     bundle: {
-      createUpdaterArtifacts: true,
+      // Sign the NSIS updater explicitly after Tauri returns. Tauri's bundled
+      // signer treats an empty-password key as interactive and can wait for
+      // stdin forever even when the environment variable is present.
+      createUpdaterArtifacts: false,
       windows: {
         certificateThumbprint: thumbprint,
         digestAlgorithm: "sha256",
@@ -292,6 +295,13 @@ function main(argv = process.argv.slice(2)) {
     [resolve(repoRoot, "node_modules/@tauri-apps/cli/tauri.js"), command, ...args],
     env,
   );
+  if (windowsRelease) {
+    run(
+      process.execPath,
+      [resolve(repoRoot, "scripts/sign-windows-updater-artifact.mjs")],
+      env,
+    );
+  }
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
