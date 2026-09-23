@@ -1,7 +1,7 @@
 use std::{ffi::OsString, path::Path};
 
 #[cfg(target_os = "macos")]
-use std::process::Command;
+use objc2_foundation::NSProcessInfo;
 
 use super::super::ManagedAiModelSpec;
 use super::{RUNTIME_HOST, RUNTIME_PORT};
@@ -49,25 +49,23 @@ fn runtime_args_for_platform(
 
 #[cfg(target_os = "macos")]
 fn legacy_macos_cpu_fallback() -> bool {
-    let version = Command::new("/usr/bin/sw_vers")
-        .arg("-productVersion")
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok());
-    version
-        .as_deref()
-        .and_then(parse_macos_major_version)
-        .map_or(true, |major| major < 26)
+    // Starting a subprocess here can block model startup indefinitely if the
+    // OS stalls the child before sw_vers exits. Foundation already has the
+    // current version in process, so this check needs no external command.
+    let major = NSProcessInfo::processInfo()
+        .operatingSystemVersion()
+        .majorVersion;
+    legacy_macos_cpu_fallback_for_major(major)
+}
+
+#[cfg(target_os = "macos")]
+fn legacy_macos_cpu_fallback_for_major(major: isize) -> bool {
+    major < 26
 }
 
 #[cfg(not(target_os = "macos"))]
 fn legacy_macos_cpu_fallback() -> bool {
     false
-}
-
-fn parse_macos_major_version(version: &str) -> Option<u32> {
-    version.trim().split('.').next()?.parse().ok()
 }
 
 #[cfg(test)]
@@ -117,10 +115,10 @@ mod tests {
         assert!(!args.windows(2).any(|pair| pair == ["--device", "none"]));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
-    fn parses_macos_major_versions() {
-        assert_eq!(parse_macos_major_version("14.8.7\n"), Some(14));
-        assert_eq!(parse_macos_major_version("26.0"), Some(26));
-        assert_eq!(parse_macos_major_version("not-a-version"), None);
+    fn legacy_cpu_fallback_stops_at_macos_26() {
+        assert!(legacy_macos_cpu_fallback_for_major(15));
+        assert!(!legacy_macos_cpu_fallback_for_major(26));
     }
 }
