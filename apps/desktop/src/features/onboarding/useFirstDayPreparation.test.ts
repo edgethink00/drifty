@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiClassificationSummary } from "../classification/aiClassificationService";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
-import { evaluateAiClassificationAccess } from "../../../supabase/functions/classify-activity/quota";
 import {
   FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS,
+  FIRST_DAY_PREPARATION_CLOUD_MAX_MS,
   FIRST_DAY_PREPARATION_MAX_MS,
   FIRST_DAY_PREPARATION_RETRY_BASE_MS,
   FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT,
@@ -114,6 +114,7 @@ function makeOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}): Us
     startOfDayMinutes: 0,
     selectedDayRef: { current: "2026-07-04" },
     clearLocalActivityCaches: vi.fn(),
+    onBrowserHistoryImportFailed: vi.fn(),
     onReveal: vi.fn(),
     refresh: vi.fn().mockResolvedValue(true),
     selectDay: vi.fn(),
@@ -124,6 +125,17 @@ function makeOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}): Us
     selectedAiProviderKeyRef: { current: "cloud" },
     ...overrides,
   };
+}
+
+function makeLocalOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}): UseFirstDayPreparationOptions {
+  return makeOptions({
+    cloudAiSelected: false,
+    canUseCloudAiClassificationRef: { current: false },
+    localAiClassificationOptionsRef: {
+      current: { localProvider: { provider: "self_hosted", baseUrl: "http://127.0.0.1:39217/v1", model: "test" } },
+    },
+    ...overrides,
+  });
 }
 
 describe("useFirstDayPreparation", () => {
@@ -178,7 +190,7 @@ describe("useFirstDayPreparation", () => {
       .fn<(...args: unknown[]) => Promise<AiClassificationSummary>>()
       .mockReturnValueOnce(firstBatch.promise)
       .mockResolvedValueOnce(emptySummary);
-    const options = makeOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"] });
+    const options = makeLocalOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"] });
 
     renderHook(() => useFirstDayPreparation(options));
     await flushAsync(20);
@@ -204,7 +216,7 @@ describe("useFirstDayPreparation", () => {
       .fn<(...args: unknown[]) => Promise<AiClassificationSummary>>()
       .mockReturnValueOnce(firstBatch.promise)
       .mockResolvedValueOnce(emptySummary);
-    const options = makeOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"] });
+    const options = makeLocalOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"] });
 
     renderHook(() => useFirstDayPreparation(options));
     await flushAsync(20);
@@ -239,7 +251,8 @@ describe("useFirstDayPreparation", () => {
     expect(result.current.failure).toBe("classification_incomplete");
   });
 
-  it("does not accept an empty batch while whole-day metrics still report Unclassified", async () => {
+  it("does not accept an empty batch while local candidates remain", async () => {
+    trackerMocks.getUnclassifiedSegments.mockResolvedValue([{}]);
     const stillIncompleteEmptySummary = summary({
       status: "empty",
       selectedSegments: 0,
@@ -257,13 +270,28 @@ describe("useFirstDayPreparation", () => {
     expect(result.current.failure).toBe("classification_incomplete");
   });
 
+  it("finishes when only unclassifiable synced-device segments remain in whole-day metrics", async () => {
+    const runAiClassification = vi.fn().mockResolvedValue(summary({
+      status: "empty",
+      metrics: metrics(20, 17),
+    }));
+    const options = makeOptions({ runAiClassification });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(30);
+
+    expect(trackerMocks.getUnclassifiedSegments).toHaveBeenCalledWith(expect.objectContaining({ limit: 1 }));
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
+    expect(result.current.failure).toBeNull();
+  });
+
   it("reuses a still-running timed-out batch when the user retries", async () => {
     const firstBatch = deferred<AiClassificationSummary>();
     const runAiClassification = vi
       .fn<(...args: unknown[]) => Promise<AiClassificationSummary>>()
       .mockReturnValueOnce(firstBatch.promise)
       .mockResolvedValueOnce(emptySummary);
-    const options = makeOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"] });
+    const options = makeLocalOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"] });
 
     const { result } = renderHook(() => useFirstDayPreparation(options));
     await flushAsync(20);
@@ -427,7 +455,7 @@ describe("useFirstDayPreparation", () => {
   });
 
   it("continues classification when the optional browser history import throws", async () => {
-    trackerMocks.previewBrowserHistoryImport.mockRejectedValue(new Error("history unavailable"));
+    trackerMocks.importBrowserHistory.mockRejectedValue(new Error("history unavailable"));
     const options = makeOptions();
 
     renderHook(() => useFirstDayPreparation(options));
@@ -435,6 +463,52 @@ describe("useFirstDayPreparation", () => {
 
     expect(options.runAiClassification).toHaveBeenCalled();
     expect(options.onReveal).toHaveBeenCalledTimes(1);
+    expect(options.onBrowserHistoryImportFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("imports browser history once without a duplicate preview scan", async () => {
+    trackerMocks.importBrowserHistory.mockResolvedValue({
+      ...emptyImportPreview(),
+      insertedCount: 7,
+      skippedDuplicateCount: 0,
+    });
+    const options = makeOptions();
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(30);
+
+    expect(trackerMocks.previewBrowserHistoryImport).not.toHaveBeenCalled();
+    expect(trackerMocks.importBrowserHistory).toHaveBeenCalledTimes(1);
+    expect(options.clearLocalActivityCaches).toHaveBeenCalledTimes(1);
+    expect(options.onBrowserHistoryImportFailed).not.toHaveBeenCalled();
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
+  });
+
+  it("identifies a slow browser import as the Cloud timeout phase", async () => {
+    const pendingImport = deferred<ReturnType<typeof emptyImportPreview> & { insertedCount: number; skippedDuplicateCount: number }>();
+    trackerMocks.importBrowserHistory.mockReturnValue(pendingImport.promise);
+    const cloudReadyRef = { current: false };
+    const background = vi.fn().mockResolvedValue(emptySummary);
+    const options = makeOptions({ canUseCloudAiClassificationRef: cloudReadyRef, runAiClassificationUntilEmpty: background });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_CLOUD_MAX_MS);
+    await flushAsync(20);
+
+    expect(options.onReveal).toHaveBeenCalledWith("continue");
+    expect(options.runAiClassification).not.toHaveBeenCalled();
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      provider_kind: "cloud", outcome: "preparation_timed_out", phase: "importing",
+    }));
+    pendingImport.resolve({ ...emptyImportPreview(), insertedCount: 0, skippedDuplicateCount: 0 });
+    await flushAsync(30);
+    expect(options.selectDay).not.toHaveBeenCalled();
+    expect(background).not.toHaveBeenCalled();
+    cloudReadyRef.current = true;
+    await vi.advanceTimersByTimeAsync(500);
+    await flushAsync(30);
+    expect(background).toHaveBeenCalled();
   });
 
   it("reveals the dashboard even when analytics capture throws", async () => {
@@ -469,8 +543,9 @@ describe("useFirstDayPreparation", () => {
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
-  it("pauses with a retry choice when Cloud readiness never settles", async () => {
-    const options = makeOptions({ canUseCloudAiClassificationRef: { current: false } });
+  it("opens the dashboard after a Cloud readiness wait and resumes when Cloud becomes ready", async () => {
+    const cloudReadyRef = { current: false };
+    const options = makeOptions({ canUseCloudAiClassificationRef: cloudReadyRef });
 
     const { result } = renderHook(() => useFirstDayPreparation(options));
     await flushAsync(20);
@@ -480,8 +555,18 @@ describe("useFirstDayPreparation", () => {
     });
 
     expect(options.runAiClassification).not.toHaveBeenCalled();
-    expect(options.onReveal).not.toHaveBeenCalled();
-    expect(result.current.failure).toBe("cloud_not_ready");
+    expect(options.onReveal).toHaveBeenCalledWith("continue");
+    expect(result.current.failure).toBeNull();
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      provider_kind: "cloud", outcome: "cloud_not_ready", phase: "classifying",
+    }));
+
+    cloudReadyRef.current = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await flushAsync(20);
+    });
+    expect(options.runAiClassificationUntilEmpty).toHaveBeenCalled();
   });
 
   it("recovers from a single transient Cloud classification failure", async () => {
@@ -501,149 +586,100 @@ describe("useFirstDayPreparation", () => {
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
-  it("waits out the trial minute quota instead of exhausting all transient retries", async () => {
-    vi.setSystemTime(new Date("2026-08-26T00:00:10.000Z"));
-    const trialAccess = evaluateAiClassificationAccess(
-      { id: "trial-user", email: "trial@example.com", isAnonymous: false },
-      { status: "trialing", canUseApp: true },
-    );
-    if (trialAccess.kind !== "allowed") throw new Error("Expected the trial quota policy.");
-    let classifiedSegments = 0;
-    let quotaMinute = -1;
-    let callsInQuotaMinute = 0;
-    // Preparation issues three passes, so squeeze the burst allowance below that
-    // to exercise the wait. Binding to the live policy number instead would make
-    // this test silently stop covering the retry path whenever the burst is
-    // raised above the pass count.
-    const burstAllowanceUnderTest = 2;
-    const callTimes: number[] = [];
-    const runAiClassification = vi.fn(async (): Promise<AiClassificationSummary> => {
-      const now = Date.now();
-      const currentQuotaMinute = Math.floor(now / 60_000);
-      if (currentQuotaMinute !== quotaMinute) {
-        quotaMinute = currentQuotaMinute;
-        callsInQuotaMinute = 0;
-      }
-      callsInQuotaMinute += 1;
-      callTimes.push(now);
-      if (callsInQuotaMinute > burstAllowanceUnderTest) {
-        throw new Error("Minute AI classification quota exceeded. Please wait before trying again.");
-      }
-      classifiedSegments += 5;
-      return summary({
-        status: "saved",
-        selectedSegments: 5,
-        savedRecords: 5,
-        metrics: metrics(15, classifiedSegments),
-        usedAiProvider: true,
-      });
-    });
-    const options = makeOptions({ runAiClassification });
-
-    renderHook(() => useFirstDayPreparation(options));
-    await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(3);
-
-    await vi.advanceTimersByTimeAsync(59_999);
-    await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(3);
-
-    await vi.advanceTimersByTimeAsync(101);
-    await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(4);
-    expect(callTimes[3]! - callTimes[2]!).toBeGreaterThanOrEqual(60_000);
-    expect(options.onReveal).toHaveBeenCalledTimes(1);
-    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", {
-      provider_kind: "cloud",
-      outcome: "success",
-      quota_window: "minute",
-      quota_wait_count_bucket: "1",
-      duration_bucket: "30_90s",
-      initial_segment_count_bucket: "1_20",
-      remaining_segment_count_bucket: "none",
-    });
-  });
-
-  it("waits for the next quota minute when another Cloud path already consumed the available slots", async () => {
-    vi.setSystemTime(new Date("2026-08-26T00:00:10.000Z"));
-    const runAiClassification = vi.fn()
-      .mockRejectedValueOnce(new Error("Minute AI classification quota exceeded. Please wait before trying again."))
-      .mockResolvedValueOnce(emptySummary);
-    const options = makeOptions({ runAiClassification });
-
-    renderHook(() => useFirstDayPreparation(options));
-    await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(59_999);
-    await flushAsync(20);
-    expect(runAiClassification).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(101);
-    await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(2);
-    expect(options.onReveal).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not retry a minute quota after the preparation effect is unmounted", async () => {
-    const runAiClassification = vi.fn()
-      .mockRejectedValue(new Error("Minute AI classification quota exceeded. Please wait before trying again."));
-    const options = makeOptions({ runAiClassification });
-
-    const { unmount } = renderHook(() => useFirstDayPreparation(options));
-    await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(1);
-
-    unmount();
-    await vi.advanceTimersByTimeAsync(60_000);
-    await flushAsync(20);
-
-    expect(runAiClassification).toHaveBeenCalledTimes(1);
-    expect(options.onReveal).not.toHaveBeenCalled();
-  });
-
-  it("keeps minute quota waits outside the generic transient retry budget", async () => {
-    const runAiClassification = vi.fn()
-      .mockRejectedValueOnce(new Error("Minute AI classification quota exceeded. Please wait before trying again."))
-      .mockRejectedValueOnce(new Error("Minute AI classification quota exceeded. Please wait before trying again."))
-      .mockResolvedValueOnce(emptySummary);
-    const options = makeOptions({ runAiClassification });
+  it("reveals a partial Cloud day on minute quota and retries the target day in the background", async () => {
+    const quota = new Error("Minute AI classification quota exceeded. Please wait before trying again.");
+    const runAiClassification = vi.fn().mockRejectedValueOnce(quota);
+    const background = vi.fn().mockRejectedValueOnce(quota).mockResolvedValue(emptySummary);
+    const options = makeOptions({ runAiClassification, runAiClassificationUntilEmpty: background });
 
     const { result } = renderHook(() => useFirstDayPreparation(options));
-    await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(1);
+    await flushAsync(40);
 
-    await vi.advanceTimersByTimeAsync(60_000);
-    await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(2);
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).toHaveBeenCalledWith("continue");
     expect(result.current.failure).toBeNull();
+    expect(background).toHaveBeenCalledTimes(1);
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      outcome: "classification_incomplete",
+      phase: "classifying",
+      quota_window: "minute",
+      duration_bucket: "under_30s",
+    }));
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(59_999);
+    await flushAsync(20);
+    expect(background).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
     await flushAsync(30);
-    expect(runAiClassification).toHaveBeenCalledTimes(3);
-    expect(options.onReveal).toHaveBeenCalledTimes(1);
+    expect(background).toHaveBeenCalledTimes(4); // initial quota, target-day retry, then two older days
   });
 
-  it("does not hammer an exhausted hourly Cloud quota", async () => {
-    const runAiClassification = vi.fn()
-      .mockRejectedValue(new Error("Hourly AI classification quota exceeded. Please try again later."));
-    const options = makeOptions({ runAiClassification });
-
+  it("stops the previous Cloud backlog when onboarding is rearmed", async () => {
+    const quota = new Error("Minute AI classification quota exceeded. Please wait before trying again.");
+    const background = vi.fn().mockRejectedValueOnce(quota).mockResolvedValue(emptySummary);
+    const options = makeOptions({
+      runAiClassification: vi.fn().mockRejectedValueOnce(quota),
+      runAiClassificationUntilEmpty: background,
+    });
     const { result } = renderHook(() => useFirstDayPreparation(options));
-    await act(async () => flushAsync(40));
+    await flushAsync(40);
+    expect(background).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.rearm());
+    await vi.advanceTimersByTimeAsync(60_000);
+    await flushAsync(20);
+    expect(background).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a quota after the preparation effect is unmounted before reveal", async () => {
+    const pending = deferred<AiClassificationSummary>();
+    const options = makeOptions({ runAiClassification: vi.fn().mockReturnValue(pending.promise) });
+    const { unmount } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    unmount();
+    pending.reject(new Error("Minute AI classification quota exceeded. Please wait before trying again."));
+    await vi.advanceTimersByTimeAsync(60_000);
+    await flushAsync(20);
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(options.runAiClassificationUntilEmpty).not.toHaveBeenCalled();
+  });
+
+  it("reveals on hourly Cloud quota without retrying in the foreground", async () => {
+    const runAiClassification = vi.fn().mockRejectedValue(new Error("Hourly AI classification quota exceeded. Please try again later."));
+    const options = makeOptions({ runAiClassification });
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(40);
 
     expect(runAiClassification).toHaveBeenCalledTimes(1);
-    expect(options.onReveal).not.toHaveBeenCalled();
-    expect(result.current.failure).toBe("classification_incomplete");
-    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", {
-      provider_kind: "cloud",
-      outcome: "classification_incomplete",
-      quota_window: "hour",
-      quota_wait_count_bucket: "none",
-      duration_bucket: "under_30s",
-      initial_segment_count_bucket: "1_20",
-      remaining_segment_count_bucket: "1_20",
-    });
+    expect(options.onReveal).toHaveBeenCalledWith("continue");
+    expect(result.current.failure).toBeNull();
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      outcome: "classification_incomplete", phase: "classifying", quota_window: "hour",
+    }));
+  });
+
+  it("opens the dashboard at the Cloud time cap without starting a duplicate in-flight batch", async () => {
+    const pending = deferred<AiClassificationSummary>();
+    const runAiClassification = vi.fn().mockReturnValueOnce(pending.promise);
+    const background = vi.fn().mockResolvedValue(emptySummary);
+    const options = makeOptions({ runAiClassification, runAiClassificationUntilEmpty: background });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_CLOUD_MAX_MS);
+    await flushAsync(20);
+
+    expect(options.onReveal).toHaveBeenCalledWith("continue");
+    expect(result.current.failure).toBeNull();
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+    expect(background).not.toHaveBeenCalled();
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      provider_kind: "cloud", outcome: "preparation_timed_out", phase: "classifying",
+    }));
+
+    pending.resolve(savedSummary);
+    await flushAsync(30);
+    expect(background).toHaveBeenCalled();
   });
 
   it("requires three consecutive transient failures before pausing", async () => {
@@ -705,17 +741,18 @@ describe("useFirstDayPreparation", () => {
   });
 
   it("retries a paused attempt and lets the user explicitly continue anyway", async () => {
-    const cloudReadyRef = { current: false };
-    const options = makeOptions({ canUseCloudAiClassificationRef: cloudReadyRef });
+    const contentMiss = summary({ status: "error", selectedSegments: 3, savedRecords: 0, failureKind: "content" });
+    const runAiClassification = vi.fn()
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValue(emptySummary);
+    const options = makeOptions({ runAiClassification });
     const { result } = renderHook(() => useFirstDayPreparation(options));
-    await flushAsync(20);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS);
-      await flushAsync(20);
-    });
-    expect(result.current.failure).toBe("cloud_not_ready");
+    await act(async () => flushAsync(50));
+    expect(result.current.failure).toBe("classification_incomplete");
 
-    cloudReadyRef.current = true;
     await act(async () => {
       result.current.retry();
       await flushAsync(30);
@@ -724,13 +761,10 @@ describe("useFirstDayPreparation", () => {
     // A finished run has earned its closing beat.
     expect(options.onReveal).toHaveBeenCalledWith("complete");
 
-    const secondOptions = makeOptions({ canUseCloudAiClassificationRef: { current: false } });
+    const secondOptions = makeOptions({ runAiClassification: vi.fn().mockResolvedValue(contentMiss) });
     const second = renderHook(() => useFirstDayPreparation(secondOptions));
-    await flushAsync(20);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS);
-      await flushAsync(20);
-    });
+    await act(async () => flushAsync(50));
+    expect(second.result.current.failure).toBe("classification_incomplete");
     act(() => second.result.current.continueAnyway());
     expect(secondOptions.onReveal).toHaveBeenCalledTimes(1);
     // Moving on from a paused run has not; it must not be dressed up as success.

@@ -20,6 +20,7 @@ import type {
   ERROR_KINDS,
   FIRST_DAY_PREPARATION_DURATION_BUCKETS,
   FIRST_DAY_PREPARATION_OUTCOMES,
+  FIRST_DAY_PREPARATION_PHASES,
   FIRST_DAY_PREPARATION_QUOTA_WINDOWS,
   FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
   INSTALL_LOCATIONS,
@@ -99,6 +100,7 @@ export type PostHogEventPropertiesByName = {
   readonly first_day_preparation: {
     readonly provider_kind: (typeof AI_PROVIDER_KINDS)[number];
     readonly outcome: (typeof FIRST_DAY_PREPARATION_OUTCOMES)[number];
+    readonly phase?: (typeof FIRST_DAY_PREPARATION_PHASES)[number];
     readonly quota_window?: (typeof FIRST_DAY_PREPARATION_QUOTA_WINDOWS)[number];
     readonly quota_wait_count_bucket: (typeof COUNT_BUCKETS)[number];
     readonly duration_bucket: (typeof FIRST_DAY_PREPARATION_DURATION_BUCKETS)[number];

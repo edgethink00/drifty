@@ -105,6 +105,7 @@ export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
 export const AI_SETUP_ACTIONS = ["open", "test_connection", "save_provider", "disable"] as const;
 export const AI_PROVIDER_KINDS = ["cloud", "local", "custom", "none"] as const;
 export const FIRST_DAY_PREPARATION_OUTCOMES = ["success", "cloud_not_ready", "classification_incomplete", "preparation_timed_out"] as const;
+export const FIRST_DAY_PREPARATION_PHASES = ["importing", "downloading", "classifying"] as const;
 export const FIRST_DAY_PREPARATION_QUOTA_WINDOWS = ["minute", "hour", "day", "unknown"] as const;
 export const FIRST_DAY_PREPARATION_DURATION_BUCKETS = ["under_30s", "30_90s", "90_180s", "180_300s", "300s_plus"] as const;
 export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_50", "51_100", "100_plus"] as const;
@@ -203,6 +204,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
   first_day_preparation: {
     provider_kind: AI_PROVIDER_KINDS,
     outcome: FIRST_DAY_PREPARATION_OUTCOMES,
+    phase: FIRST_DAY_PREPARATION_PHASES,
     quota_window: FIRST_DAY_PREPARATION_QUOTA_WINDOWS,
     quota_wait_count_bucket: COUNT_BUCKETS,
     duration_bucket: FIRST_DAY_PREPARATION_DURATION_BUCKETS,

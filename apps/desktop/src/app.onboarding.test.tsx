@@ -55,6 +55,7 @@ const {
   trackerGetStatus,
   trackerStart,
   trackerGetHourlySummary,
+  trackerGetClassificationMetrics,
   trackerPreviewBrowserHistoryImport,
   trackerImportBrowserHistory,
   trackerGetBrowserHistoryEnvironment,
@@ -105,6 +106,7 @@ const {
   trackerGetStatus: vi.fn(),
   trackerStart: vi.fn(),
   trackerGetHourlySummary: vi.fn(),
+  trackerGetClassificationMetrics: vi.fn(),
   trackerPreviewBrowserHistoryImport: vi.fn(),
   trackerImportBrowserHistory: vi.fn(),
   trackerGetBrowserHistoryEnvironment: vi.fn(),
@@ -242,6 +244,7 @@ vi.mock("./lib/api/trackerClient", () => ({
     }),
     getCurrentSnapshot: vi.fn().mockResolvedValue(null),
     getHourlySummary: trackerGetHourlySummary,
+    getClassificationMetrics: trackerGetClassificationMetrics,
     getTopSites: vi.fn().mockResolvedValue([]),
     getAppIcons: vi.fn().mockResolvedValue({}),
     start: trackerStart,
@@ -543,6 +546,7 @@ describe("App onboarding", () => {
     });
     configureManagedAiMocks();
     trackerGetHourlySummary.mockResolvedValue([]);
+    trackerGetClassificationMetrics.mockReset().mockRejectedValue(new Error("classification metrics unavailable"));
     trackerPreviewBrowserHistoryImport.mockResolvedValue({
       lookbackDays: 2,
       candidateCount: 0,
@@ -1735,12 +1739,30 @@ describe("App onboarding", () => {
     // The dashboard is gated behind the preparation screen while the 48h import runs.
     expect(await screen.findByText(/getting your day ready/i)).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
-    await waitFor(() => expect(trackerPreviewBrowserHistoryImport).toHaveBeenCalledWith({ lookbackDays: 2 }));
     await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledWith({ lookbackDays: 2 }));
+    expect(trackerPreviewBrowserHistoryImport).not.toHaveBeenCalled();
 
     // Only once preparation settles does the dashboard appear.
     resolveImport();
     await waitFor(() => expect(screen.queryByText(/getting your day ready/i)).toBeNull());
+    expect(trackerImportBrowserHistory).toHaveBeenCalledTimes(1);
+    expect(trackerPreviewBrowserHistoryImport).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it("lets the empty dashboard retry when first-day browser history import fails", async () => {
+    trackerImportBrowserHistory.mockRejectedValueOnce(new Error("browser database temporarily locked"));
+    trackerGetClassificationMetrics.mockResolvedValue({ totalSegments: 0, classifiedSegments: 0, unclassifiedSegments: 0 });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    render(<App />);
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
+
+    await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(document.querySelector(".first-day-prep")).toBeNull());
+    await waitFor(() => expect(trackerPreviewBrowserHistoryImport).toHaveBeenCalledTimes(1));
+    expect(warnSpy).toHaveBeenCalledWith("First-day browser history import unavailable", expect.any(Error));
   }, 15_000);
 
   it("completes onboarding when login startup cannot be enabled", async () => {

@@ -78,7 +78,7 @@ import { collectMissingSiteIconRequests, mergeSiteIconResults, normalizeSiteIcon
 import { SiteIconProvider } from "./components/SiteIconContext";
 import { cloudAiRequestBackoffs, isDailyCloudQuotaBackoff } from "./features/classification/cloudAiRequestBackoff";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, clearCloudAiRequestBackoff, describeAiClassificationFailure, describeLocalAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
-import { useClassificationActivity } from "./features/classification/classificationActivity";
+import { getClassificationActivitySnapshot, useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { applyClassificationAvailabilityToAiStatus, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch } from "./features/classification/classificationAvailability";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
@@ -1476,6 +1476,7 @@ export default function App() {
   // One-shot: armed only by completing onboarding in this session — never re-read
   // from storage, so the bootstrap import cannot re-fire on later launches.
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(false);
+  const firstDayHistoryImportFailedRef = useRef(false);
   const [preparingFirstDay, setPreparingFirstDay] = useState(false);
   const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
   const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
@@ -4126,11 +4127,18 @@ export default function App() {
     cloudAiSelected,
     localAiClassificationOptionsRef,
     managedLocalSelected,
+    onBrowserHistoryImportFailed: () => {
+      firstDayHistoryImportFailedRef.current = true;
+      setBrowserHistoryBootstrapEnabled(true);
+    },
     onReveal: (outcome) => {
       if (firstDayRevealTimerRef.current !== null) {
         window.clearTimeout(firstDayRevealTimerRef.current);
         firstDayRevealTimerRef.current = null;
       }
+      // A successful import needs no dashboard scan. If import failed before
+      // reveal, leave its one-shot recovery available; a late failure re-arms it.
+      setBrowserHistoryBootstrapEnabled(firstDayHistoryImportFailedRef.current);
       // Moving on from a paused run has nothing to celebrate, so it cuts
       // straight through.
       if (outcome !== "complete") {
@@ -8404,6 +8412,7 @@ export default function App() {
     // running the periodic batch concurrently would double-classify the same day.
     if (preparingFirstDay) return null;
     if (aiClassificationInFlightRef.current) return null;
+    if (getClassificationActivitySnapshot().running) return null;
 
     const today = logicalTodayIsoDate(startOfDayMinutes);
     const isFocused = rendererFocusedRef.current;
@@ -8751,6 +8760,7 @@ export default function App() {
   }, [authStatus, devSettingsReviewSubsection, hasRequiredAccountAuth, isEffectiveAuthRequired, profileReadyUserId, user?.id]);
 
   function handleOnboardingComplete(state: UserOnboardingState) {
+    firstDayHistoryImportFailedRef.current = false;
     const displayName = state.displayName.trim();
     if (displayName) {
       updateProfileDraft({ displayName });

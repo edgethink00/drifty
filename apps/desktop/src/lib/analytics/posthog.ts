@@ -1,5 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { BUILD_INFO } from "../../buildInfo";
+import { detectHostPlatform, type HostPlatform } from "../api/accessibilityClient";
 import { readProductAnalyticsEnabled, createProductAnalyticsDeliveryGuard } from "./productAnalyticsPreference";
 import {
   sanitizePostHogEventProperties,
@@ -34,9 +35,11 @@ export type PostHogIdentity = {
 };
 
 type PostHogDefaultProperties = {
+  // Kept as "mac_app" on every host so existing desktop funnels still include
+  // Windows events; app_platform carries the actual host.
   readonly event_source: "mac_app";
   readonly event_surface: "desktop_app";
-  readonly app_platform: "macos";
+  readonly app_platform: HostPlatform;
   readonly runtime: "tauri" | "web";
   readonly channel: string;
   readonly analytics_schema_version: "v3";
@@ -237,7 +240,7 @@ function getDefaultProperties(identityScope: PostHogIdentityScope): PostHogDefau
   return {
     event_source: "mac_app",
     event_surface: "desktop_app",
-    app_platform: "macos",
+    app_platform: detectHostPlatform(),
     runtime: isTauriRuntime() ? "tauri" : "web",
     channel: posthogChannel,
     // v3 is the cutover where machine-driven events became at-most-once-per-day.

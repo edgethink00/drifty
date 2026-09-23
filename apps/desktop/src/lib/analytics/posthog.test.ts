@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BUILD_INFO } from "../../buildInfo";
 import {
   POSTHOG_EVENT_NAMES,
@@ -21,6 +21,24 @@ import {
 } from "./posthog";
 
 describe("PostHog desktop analytics privacy boundary", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("reports the actual host platform so Windows events stay separable", () => {
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "windows");
+    const payload = createPostHogEventPayload({
+      apiKey: "phc_test",
+      distinctId: "launch-session",
+      identityScope: "install",
+      event: "app_active",
+      properties: {},
+    });
+
+    expect(payload.properties.app_platform).toBe("windows");
+    expect(payload.properties.event_source).toBe("mac_app");
+  });
+
   it("keeps identity fields out of event properties", () => {
     const sanitized = sanitizePostHogEventProperties("auth_state_changed", {
       auth_state: "signed_in",
@@ -105,6 +123,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect(POSTHOG_EVENT_PROPERTY_ALLOWLIST.first_day_preparation).toMatchObject({
       provider_kind: expect.any(Array),
       outcome: expect.any(Array),
+      phase: expect.any(Array),
       quota_window: expect.any(Array),
       quota_wait_count_bucket: expect.any(Array),
       duration_bucket: expect.any(Array),
@@ -139,6 +158,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     const properties = {
       provider_kind: "cloud",
       outcome: "success",
+      phase: "classifying",
       quota_window: "minute",
       quota_wait_count_bucket: "1",
       duration_bucket: "30_90s",
