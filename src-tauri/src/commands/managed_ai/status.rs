@@ -1,6 +1,8 @@
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -13,6 +15,11 @@ use super::{
 
 const STATUS_FILE_NAME: &str = "status.json";
 static STATUS_WRITE_LOCK: Mutex<()> = Mutex::new(());
+/// Windows can briefly refuse to replace status.json while Defender or the
+/// search indexer still holds the previous copy open. Bounded retries (about
+/// 0.7 s in total) absorb that without hiding a persistent storage failure.
+pub(super) const STATUS_REPLACE_MAX_ATTEMPTS: u32 = 8;
+const STATUS_REPLACE_RETRY_STEP: Duration = Duration::from_millis(25);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -195,11 +202,50 @@ pub(super) fn write_status(root: &Path, status: &ManagedAiStatus) -> Result<(), 
     // corrupting this writer's atomic rename.
     let temp_path = root.join(format!(".{STATUS_FILE_NAME}.{}.tmp", Uuid::new_v4()));
     fs::write(&temp_path, serde_json::to_vec_pretty(status)?)?;
-    if let Err(error) = replace_status_file(&temp_path, &status_path) {
+    if let Err(error) = retry_transient_replace(
+        || replace_status_file(&temp_path, &status_path),
+        is_transient_replace_error,
+        std::thread::sleep,
+    ) {
         let _ = fs::remove_file(temp_path);
         return Err(error.into());
     }
     Ok(())
+}
+
+pub(super) fn retry_transient_replace(
+    mut replace: impl FnMut() -> io::Result<()>,
+    is_transient: impl Fn(&io::Error) -> bool,
+    mut sleep: impl FnMut(Duration),
+) -> io::Result<()> {
+    let mut attempt = 1;
+    loop {
+        match replace() {
+            Ok(()) => return Ok(()),
+            Err(error) if attempt < STATUS_REPLACE_MAX_ATTEMPTS && is_transient(&error) => {
+                sleep(STATUS_REPLACE_RETRY_STEP * attempt);
+                attempt += 1;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION, and ERROR_LOCK_VIOLATION are
+/// what MoveFileExW reports while another process briefly holds the target.
+#[cfg(any(windows, test))]
+pub(super) fn is_windows_sharing_error(error: &io::Error) -> bool {
+    matches!(error.raw_os_error(), Some(5 | 32 | 33))
+}
+
+#[cfg(windows)]
+fn is_transient_replace_error(error: &io::Error) -> bool {
+    is_windows_sharing_error(error)
+}
+
+#[cfg(not(windows))]
+fn is_transient_replace_error(_error: &io::Error) -> bool {
+    false
 }
 
 #[cfg(not(windows))]

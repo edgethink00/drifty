@@ -319,7 +319,16 @@ fn install_model_at_root_with_components(
         }
         let status =
             status_with_installed_models(root, status_for_download_progress(spec, progress))?;
-        write_and_emit_status(root, &status, app)
+        // Progress snapshots are advisory: the next percent or the terminal
+        // status rewrites status.json, so one refused write must not abort a
+        // multi-gigabyte download.
+        if let Err(error) = write_status(root, &status) {
+            eprintln!("Managed local AI progress was not persisted: {error}");
+        }
+        if let Some(app) = app {
+            let _ = app.emit(MANAGED_AI_STATUS_EVENT, status.clone());
+        }
+        Ok(())
     };
 
     let artifact_dir = if let Some(artifact_dir) = existing_artifact_dir {

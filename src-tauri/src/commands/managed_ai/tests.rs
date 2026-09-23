@@ -995,6 +995,84 @@ fn progress_gate_writes_once_per_integer_percent_change() {
 }
 
 #[test]
+fn status_replace_retries_transient_sharing_errors_then_succeeds() {
+    let mut calls = 0;
+    let mut sleeps = Vec::new();
+    let result = super::status::retry_transient_replace(
+        || {
+            calls += 1;
+            if calls < 3 {
+                Err(std::io::Error::from_raw_os_error(5))
+            } else {
+                Ok(())
+            }
+        },
+        super::status::is_windows_sharing_error,
+        |delay| sleeps.push(delay.as_millis()),
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(calls, 3);
+    assert_eq!(sleeps, vec![25, 50]);
+}
+
+#[test]
+fn status_replace_stops_after_bounded_transient_attempts() {
+    let mut calls = 0;
+    let mut total_sleep_ms = 0;
+    let error = super::status::retry_transient_replace(
+        || {
+            calls += 1;
+            Err(std::io::Error::from_raw_os_error(32))
+        },
+        super::status::is_windows_sharing_error,
+        |delay| total_sleep_ms += delay.as_millis(),
+    )
+    .expect_err("persistent sharing violation surfaces");
+
+    assert_eq!(error.raw_os_error(), Some(32));
+    assert_eq!(calls, super::status::STATUS_REPLACE_MAX_ATTEMPTS);
+    assert!(total_sleep_ms <= 1_000);
+}
+
+#[test]
+fn status_replace_does_not_retry_other_errors() {
+    let mut calls = 0;
+    let error = super::status::retry_transient_replace(
+        || {
+            calls += 1;
+            Err(std::io::Error::from_raw_os_error(28))
+        },
+        super::status::is_windows_sharing_error,
+        |_| panic!("non-sharing errors must not wait"),
+    )
+    .expect_err("disk full surfaces immediately");
+
+    assert_eq!(error.raw_os_error(), Some(28));
+    assert_eq!(calls, 1);
+}
+
+#[test]
+fn refused_progress_write_does_not_abort_model_download() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+
+    let installed = install_model_at_root_with_downloader(
+        root.path(),
+        spec.id,
+        progress_write_refused_download,
+        None,
+    )
+    .expect("install despite refused progress write");
+
+    assert!(matches!(installed.state, ManagedAiInstallState::Installed));
+    assert!(matches!(
+        read_status(root.path()).expect("read final status").state,
+        ManagedAiInstallState::Installed
+    ));
+}
+
+#[test]
 fn progress_gate_bounds_status_writes_for_chunked_download() {
     let total: u64 = 3 * 1024 * 1024 * 1024;
     let chunk: u64 = 64 * 1024;
@@ -1141,6 +1219,25 @@ fn progress_reporting_download(
             .map(|item| item.downloaded_bytes),
         Some(spec.expected_size_bytes / 2)
     );
+
+    fake_download(root, spec, progress)
+}
+
+fn progress_write_refused_download(
+    root: &Path,
+    spec: ManagedAiModelSpec,
+    progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+) -> Result<PathBuf, ManagedAiError> {
+    // A non-empty directory in place of status.json makes every replace fail,
+    // standing in for a file that another process refuses to release.
+    let status_path = root.join("status.json");
+    std::fs::remove_file(&status_path)?;
+    std::fs::create_dir_all(status_path.join("held"))?;
+    progress(ManagedAiDownloadProgress::from_counts(
+        spec.expected_size_bytes / 2,
+        spec.expected_size_bytes,
+    ))?;
+    std::fs::remove_dir_all(&status_path)?;
 
     fake_download(root, spec, progress)
 }
