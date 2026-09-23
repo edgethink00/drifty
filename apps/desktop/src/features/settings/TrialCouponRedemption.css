@@ -1,139 +1,200 @@
-.content--settings .settings-row--coupon {
-  align-items: flex-start;
+/* Promo code: the plan card's always-open second row. Label and a status
+   line on the left, one joined field (code + Apply) on the right, lined up
+   with the plan card's own button column. The plan card is a size container
+   so the row can stack by its own width rather than the window's. */
+.content--settings .settings-section--account .settings-block--plans {
+  container: account-plan / inline-size;
 }
 
-.content--settings .trial-coupon-form__layout {
-  align-items: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  width: 100%;
-}
-
-/* Collapsed by default; the toggle reads as a quiet disclosure row rather than
-   a competing action next to the plan cards. */
-.content--settings .trial-coupon-form__toggle {
+.content--settings .settings-section--account .settings-block--plans > .trial-coupon {
   align-items: center;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  cursor: pointer;
-  display: inline-flex;
-  gap: var(--space-2);
-  justify-self: start;
+  column-gap: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   margin: 0;
-  padding: 0;
-  text-align: left;
-  width: max-content;
+  row-gap: var(--space-3);
 }
 
-.content--settings .trial-coupon-form__toggle .lbl {
-  color: inherit;
+.content--settings .settings-section--account .settings-block--plans > form.trial-coupon {
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 20rem);
 }
 
-.content--settings .trial-coupon-form__toggle:hover .lbl,
-.content--settings .trial-coupon-form__toggle:focus-visible .lbl {
-  color: var(--accent);
+/* Same inset divider Settings cards draw between rows. */
+.content--settings .settings-section--account .settings-block--plans > .trial-coupon::before {
+  background: var(--line);
+  content: "";
+  height: 1px;
+  left: 1rem;
+  position: absolute;
+  right: 1rem;
+  top: 0;
 }
 
-.content--settings .trial-coupon-form__toggle-icon {
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  color: var(--text-soft);
-  display: inline-flex;
-  font-size: 0.9rem;
-  height: 1.15rem;
-  justify-content: center;
-  line-height: 1;
-  width: 1.15rem;
+.content--settings .trial-coupon__copy {
+  min-width: 0;
 }
 
-.content--settings .trial-coupon-form__hint {
+.content--settings .trial-coupon__copy .lbl {
   display: block;
 }
 
-
-.content--settings .trial-coupon-form {
-  align-items: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
+/* The description doubles as the status line: results replace it in place. */
+.content--settings .trial-coupon .trial-coupon__status {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  transition: color var(--transition-fast);
 }
 
-.content--settings .trial-coupon-form__controls {
-  align-items: stretch;
-  display: flex;
-  gap: var(--space-2);
-  min-height: var(--settings-control-height);
-  width: min(100%, 28rem);
+.content--settings .trial-coupon .trial-coupon__status:focus {
+  outline: none;
 }
 
-.content--settings .trial-coupon-form__input {
-  flex: 1 1 auto;
-  height: var(--settings-control-height);
-  min-height: var(--settings-control-height);
-  letter-spacing: 0.045em;
-  min-width: 0;
-  padding-inline: var(--space-3);
-  text-transform: uppercase;
-  width: 100%;
-}
-
-.content--settings .trial-coupon-form__input[aria-invalid="true"] {
-  border-color: color-mix(in srgb, var(--warn) 46%, var(--line));
-}
-
-.content--settings .trial-coupon-form__submit {
-  flex: 0 0 auto;
-  height: var(--settings-control-height);
-  min-height: var(--settings-control-height);
-  min-width: 10rem;
-  padding-inline: var(--space-4);
-  white-space: nowrap;
-}
-
-.content--settings .trial-coupon-form__feedback {
-  align-items: baseline;
-  display: flex;
-  gap: var(--space-2);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.45;
-  margin: 0;
-}
-
-.content--settings .trial-coupon-form__feedback::before {
-  background: currentColor;
-  border-radius: var(--radius-pill);
-  content: "";
-  flex: 0 0 auto;
-  height: 0.38rem;
-  margin-top: 0.32rem;
-  width: 0.38rem;
-}
-
-.content--settings .trial-coupon-form__feedback--success {
-  color: var(--productivity-focus);
-}
-
-.content--settings .trial-coupon-form__feedback--error {
+.content--settings .trial-coupon .trial-coupon__status--error {
   color: var(--warn);
 }
 
-@media (max-width: 760px) {
-  .content--settings .trial-coupon-form__controls {
-    align-items: stretch;
-    flex-direction: column;
-    width: 100%;
-  }
+.content--settings .trial-coupon .trial-coupon__status--success {
+  color: var(--productivity-focus);
+}
 
-  .content--settings .trial-coupon-form__input,
-  .content--settings .trial-coupon-form__submit {
-    flex-basis: auto;
-    min-width: 0;
-    width: 100%;
+.content--settings .trial-coupon__badge {
+  white-space: nowrap;
+}
+
+/* Joined field: the code and its Apply share one outline at the Settings
+   action height, so the pair reads as a single control. */
+.content--settings .trial-coupon__field {
+  align-items: stretch;
+  background: var(--settings-control-bg);
+  border: 1px solid var(--settings-control-border);
+  border-radius: var(--settings-control-radius);
+  display: flex;
+  height: var(--settings-action-height);
+  min-width: 0;
+  overflow: hidden;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content--settings .trial-coupon__field:hover {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+}
+
+.content--settings .trial-coupon__field:has(> .trial-coupon__input:focus-visible) {
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+
+.content--settings .trial-coupon__field.is-invalid {
+  border-color: color-mix(in srgb, var(--warn) 46%, var(--line));
+}
+
+.content--settings .trial-coupon__field:has(> .trial-coupon__input:disabled) {
+  background: color-mix(in srgb, var(--text) 3%, var(--settings-control-bg));
+}
+
+.content--settings .trial-coupon__input {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  letter-spacing: 0.045em;
+  min-width: 0;
+  outline: none;
+  padding: 0 var(--space-3);
+  text-transform: uppercase;
+}
+
+/* Format hint, not decoration: keep it readable against the field. */
+.content--settings .trial-coupon__input::placeholder {
+  color: var(--text-soft);
+  opacity: 1;
+}
+
+.content--settings .trial-coupon__input:disabled {
+  -webkit-text-fill-color: var(--text-soft);
+  color: var(--text-soft);
+  opacity: 1;
+}
+
+.content--settings .trial-coupon__apply {
+  appearance: none;
+  /* A faint tint marks the segment as the button half of the field. */
+  background: color-mix(in srgb, var(--text) 4%, var(--settings-control-bg));
+  border: 0;
+  border-left: 1px solid var(--settings-control-border);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  min-width: 5.5rem;
+  padding: 0 var(--space-3);
+  position: relative;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.content--settings .trial-coupon__apply[data-ready] {
+  color: var(--text);
+}
+
+.content--settings .trial-coupon__apply:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, var(--settings-control-bg));
+  color: var(--text);
+}
+
+.content--settings .trial-coupon__apply:focus-visible {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: -3px;
+}
+
+.content--settings .trial-coupon__apply:disabled:not([aria-busy="true"]) {
+  color: var(--text-soft);
+  cursor: default;
+}
+
+/* Busy Apply keeps its width: the label hides and a small ring turns in its
+   place. */
+.content--settings .trial-coupon__apply[aria-busy="true"] {
+  cursor: progress;
+}
+
+.content--settings .trial-coupon__apply[aria-busy="true"] > .trial-coupon__submit-label {
+  visibility: hidden;
+}
+
+.content--settings .trial-coupon__apply[aria-busy="true"]::after {
+  animation: trial-coupon-spin 0.8s linear infinite;
+  border: 1.5px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: var(--radius-pill);
+  border-top-color: var(--text);
+  content: "";
+  height: 0.8rem;
+  inset: 0;
+  margin: auto;
+  position: absolute;
+  width: 0.8rem;
+}
+
+@keyframes trial-coupon-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content--settings .trial-coupon__apply[aria-busy="true"]::after {
+    animation-duration: 2.4s;
+  }
+}
+
+/* Narrow plan card: the field takes its own full-width line under the copy,
+   still ending on the button column. */
+@container account-plan (max-width: 42rem) {
+  .content--settings .settings-section--account .settings-block--plans > form.trial-coupon {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

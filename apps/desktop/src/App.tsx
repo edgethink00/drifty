@@ -1,4 +1,4 @@
-import { canStartCloudTrial } from "./features/billing/billingEligibility";
+import { canOfferPromoCode, canStartCloudTrial } from "./features/billing/billingEligibility";
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
 import { SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -9607,7 +9607,8 @@ export default function App() {
     <SettingsSearchProvider
       activeSection={activeTab === "settings" ? settingsSection : null}
       availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows",
-        backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired }}
+        backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired,
+        promoCode: canOfferPromoCode(effectiveBillingEntitlement) }}
       onNavigate={(entry) => {
         setSettingsSection(entry.section);
         if (entry.devSubsection) handleDevSettingsSubsectionChange(entry.devSubsection);

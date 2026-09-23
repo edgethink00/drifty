@@ -168,7 +168,8 @@ describe("AccountSettingsSection", () => {
     expect(within(publicProfileHeading).getByText("Beta").className).toContain("settings-beta-badge");
     expect(screen.queryByRole("heading", { name: /Public profile Beta/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Sign in$/i }));
+    const signedInBlock = screen.getByText("Not signed in").closest(".settings-block") as HTMLElement;
+    fireEvent.click(within(signedInBlock).getByRole("button", { name: /^Sign in$/i }));
 
     expect(onSignIn).toHaveBeenCalledTimes(1);
   });
@@ -271,14 +272,7 @@ describe("AccountSettingsSection", () => {
     };
 
     const { rerender } = render(<AccountSettingsSection {...props} />);
-    // The promo field is collapsed by default so it does not compete with the
-    // plan cards; expand it before entering a code.
-    expect(screen.queryByRole("textbox", { name: /Drifty promo code/i })).toBeNull();
-    const promoToggle = screen.getByRole("button", { name: /Promo code/i });
-    expect(promoToggle.firstElementChild?.textContent).toBe("Promo code");
-    expect(promoToggle.lastElementChild?.textContent).toBe("+");
-    fireEvent.click(promoToggle);
-    expect(promoToggle.lastElementChild?.textContent).toBe("−");
+    // The promo field is always open in the plan card; no disclosure step.
     const codeInput = screen.getByRole("textbox", { name: /Drifty promo code/i });
 
     fireEvent.change(codeInput, { target: { value: " drft-test-2026 " } });
@@ -286,7 +280,7 @@ describe("AccountSettingsSection", () => {
     expect(screen.getByText("Promo code")).toBeTruthy();
     expect(codeInput.getAttribute("placeholder")).toBe("DRFT-XXXX");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Apply code$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply$/i }));
 
     expect(onRedeemTrialCoupon).toHaveBeenCalledWith("DRFT-TEST-2026");
 
@@ -303,6 +297,8 @@ describe("AccountSettingsSection", () => {
     );
 
     expect(screen.getByRole("status").textContent).toContain("30 days added");
+    // One code per account: the applied row replaces the field.
+    expect(screen.queryByRole("textbox", { name: /Drifty promo code/i })).toBeNull();
 
     rerender(
       <AccountSettingsSection
@@ -312,12 +308,18 @@ describe("AccountSettingsSection", () => {
     );
 
     const alert = screen.getByRole("alert");
+    const retryInput = screen.getByRole("textbox", { name: /Drifty promo code/i });
     expect(alert.textContent).toContain("Try again in 15 minutes");
-    expect(codeInput.getAttribute("aria-invalid")).toBe("true");
-    expect(codeInput.getAttribute("aria-describedby")).toBe(alert.id);
+    expect(retryInput.getAttribute("aria-invalid")).toBe("true");
+    expect(retryInput.getAttribute("aria-describedby")).toBe(alert.id);
+
+    // The error describes the code that was sent; editing the field clears it.
+    fireEvent.change(retryInput, { target: { value: "DRFT-OTHER-2026" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(retryInput.getAttribute("aria-invalid")).toBeNull();
   });
 
-  it("keeps active subscription management visible beside an already-used coupon notice", async () => {
+  it("hides the promo code for an active subscription and keeps billing management", async () => {
     const onManageCloudBilling = vi.fn();
     render(
       <AccountSettingsSection
@@ -353,9 +355,37 @@ describe("AccountSettingsSection", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("already used a promo code");
+    // The server refuses trial codes for an active subscription, so the row
+    // is not offered at all.
+    expect(screen.queryByText("Promo code")).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /Drifty promo code/i })).toBeNull();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^Manage billing$/i })); });
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports active promotion access instead of offering another code", () => {
+    render(
+      <AccountSettingsSection
+        {...couponTestProps()}
+        billingEntitlementLockedReason={null}
+        billingEntitlementStatus="trialing"
+        billingEntitlement={{
+          plan: "individual",
+          status: "trialing",
+          canUseApp: true,
+          trialEndsAt: "2026-10-23T00:00:00.000Z",
+          currentPeriodEnd: null,
+          accessSource: "promotion",
+        }}
+      />,
+    );
+    const promoRow = screen.getByText("Promo code").closest(".settings-row") as HTMLElement;
+
+    expect(within(promoRow).getByText(/Promo access is active through Oct 23, 2026/)).toBeTruthy();
+    expect(within(promoRow).getByText("Applied")).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /Drifty promo code/i })).toBeNull();
+    // No field, so no label pointing at one.
+    expect(promoRow.querySelector("label")).toBeNull();
   });
 
   it("surfaces Cloud device access failures instead of presenting an empty device list", () => {
@@ -462,14 +492,65 @@ describe("AccountSettingsSection", () => {
     expect(screen.queryByRole("button", { name: /choose drifty pro plan/i })).toBeNull();
   });
 
-  it("keeps Promo code outside the Account heading block, directly under the plan summary", () => {
-    const markup = readFileSync(desktopSourcePath("src/features/settings/AccountSettingsSection.tsx"), "utf8");
-    const plansClose = markup.indexOf("</div>", markup.indexOf("settings-block--plans"));
-    const coupon = markup.indexOf("<TrialCouponRedemption");
-    const signedIn = markup.indexOf('t("settings.account.signedIn")');
-    expect(coupon).toBeGreaterThan(plansClose);
-    expect(coupon).toBeLessThan(signedIn);
-    expect(markup.indexOf("<TrialCouponRedemption", markup.indexOf("settings-block--plans"))).toBe(coupon);
+  it("places Promo code as the plan card row right after the plan summary", () => {
+    render(<AccountSettingsSection {...couponTestProps()} />);
+    const planBlock = screen.getByRole("heading", { name: /^Account$/ }).closest(".settings-block");
+    const promoRow = screen.getByText("Promo code").closest(".settings-row");
+
+    expect(promoRow?.parentElement).toBe(planBlock);
+    expect(promoRow?.previousElementSibling?.classList.contains("account-plan-summary")).toBe(true);
+  });
+
+  it("explains an incomplete promo code instead of disabling the submit button", () => {
+    const onRedeemTrialCoupon = vi.fn();
+    render(<AccountSettingsSection {...couponTestProps()} onRedeemTrialCoupon={onRedeemTrialCoupon} />);
+    const submit = screen.getByRole("button", { name: /^Apply$/i }) as HTMLButtonElement;
+
+    expect(submit.disabled).toBe(false);
+    fireEvent.change(screen.getByRole("textbox", { name: /Drifty promo code/i }), { target: { value: "DRFT" } });
+    fireEvent.click(submit);
+
+    expect(onRedeemTrialCoupon).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("Check the code and try again.");
+  });
+
+  it("offers sign-in in the promo row when no account is signed in", () => {
+    const onSignIn = vi.fn();
+    render(<AccountSettingsSection {...couponTestProps()} userEmail={null} hasSignedInAccount={false} onSignIn={onSignIn} />);
+    const promoRow = screen.getByText("Promo code").closest(".settings-row");
+
+    expect(screen.queryByRole("textbox", { name: /Drifty promo code/i })).toBeNull();
+    fireEvent.click(within(promoRow as HTMLElement).getByRole("button", { name: /^Sign in$/i }));
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("folds pasted typographic dashes and full-width letters into the stored code form", () => {
+    const onRedeemTrialCoupon = vi.fn();
+    render(<AccountSettingsSection {...couponTestProps()} onRedeemTrialCoupon={onRedeemTrialCoupon} />);
+    const codeInput = screen.getByRole("textbox", { name: /Drifty promo code/i });
+
+    fireEvent.change(codeInput, { target: { value: " ｄｒｆｔ–test—2026 " } });
+    fireEvent.click(screen.getByRole("button", { name: /^Apply$/i }));
+
+    expect(onRedeemTrialCoupon).toHaveBeenCalledWith("DRFT-TEST-2026");
+  });
+
+  it("moves focus to the result when a submitted code is applied", () => {
+    const props = couponTestProps();
+    const { rerender } = render(<AccountSettingsSection {...props} />);
+    fireEvent.change(screen.getByRole("textbox", { name: /Drifty promo code/i }), { target: { value: "DRFT-TEST-2026" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Apply$/i }));
+
+    rerender(
+      <AccountSettingsSection
+        {...props}
+        couponRedemption={{ status: "redeemed", grantedDays: 30, trialEndsAt: "2026-10-23T00:00:00.000Z", redeemedAt: "2026-09-23T00:00:00.000Z" }}
+      />,
+    );
+
+    const result = screen.getByRole("status");
+    expect(result.textContent).toContain("30 days added");
+    expect(document.activeElement).toBe(result);
   });
 
   it("keeps consistent spacing between Account settings sections", () => {
@@ -483,8 +564,6 @@ describe("AccountSettingsSection", () => {
     const sharedPlanIntervalsRule = cssRule(sharedPlanStyles, ".individual-plan-intervals");
     const sharedPlanCardsRule = cssRule(sharedPlanStyles, ".individual-plan-cards");
     const sharedSectionHeadingRule = cssRule(sharedPlanStyles, ".content--settings .settings-block > h3");
-    const couponRowRule = cssRule(styles, ".content--settings .settings-section--account > .settings-row--coupon");
-    const couponSpacingRule = cssRule(styles, ".content--settings .settings-section--account .settings-block--plans + .settings-row--coupon");
     const dangerLabelRule = cssRule(styles, ".content--settings .settings-section--account .settings-block--danger-zone .lbl");
 
     expect(sectionRule).toContain("gap: var(--space-5);");
@@ -500,9 +579,7 @@ describe("AccountSettingsSection", () => {
     expect(sharedPlanIntervalsRule).toContain("margin: 0;");
     expect(sharedPlanCardsRule).toContain("margin: 0;");
     expect(sharedSectionHeadingRule).toContain("color: var(--text-soft);");
-    expect(couponRowRule).toContain("min-height: 0;");
-    expect(couponSpacingRule).toContain("margin-bottom: calc(var(--space-6) - var(--space-5));");
-    expect(couponSpacingRule).toContain("margin-top: calc(var(--space-3) - var(--space-5));");
+    expect(styles).not.toContain("settings-row--coupon");
     expect(dangerLabelRule).toContain("color: var(--warn);");
     expect(styles).not.toContain(".settings-block--danger-zone h3");
   });
@@ -510,15 +587,42 @@ describe("AccountSettingsSection", () => {
     const styles = readFileSync(desktopSourcePath("src/features/settings/TrialCouponRedemption.css"), "utf8");
     const markup = readFileSync(desktopSourcePath("src/features/settings/TrialCouponRedemption.tsx"), "utf8");
 
-    expect(markup).toContain('className="settings-btn trial-coupon-form__submit"');
     expect(markup).not.toContain("settings-btn--primary");
     expect(styles).not.toContain("background: var(--accent);");
-    expect(styles).toContain("height: var(--settings-control-height);");
-    expect(styles).toContain("min-width: 10rem;");
-    expect(styles).toContain("width: min(100%, 28rem);");
-    expect(styles).not.toContain("grid-template-columns: minmax(12rem, 1fr) minmax(18rem, 24rem);");
+    // The joined code field stands at the Settings action height used by the
+    // plan card's own buttons, so the two right-hand controls line up.
+    expect(cssRule(styles, ".content--settings .trial-coupon__field")).toContain("height: var(--settings-action-height);");
   });
 });
+
+function couponTestProps(): AccountSettingsSectionProps {
+  return {
+    billingCheckoutLoadingInterval: null,
+    billingEntitlementError: null,
+    billingEntitlementLockedReason: "trial_expired",
+    billingEntitlementStatus: "locked",
+    billingPlansDisabled: false,
+    billingPortalLoading: false,
+    couponRedemption: null,
+    couponRedemptionErrorCode: null,
+    couponRedemptionLoading: false,
+    cloudDeviceAccess: null,
+    cloudDeviceActionError: null,
+    cloudDeviceRevokingId: null,
+    cloudDevices: [],
+    cloudStatusRefreshing: false,
+    currentBillingPlan: "free",
+    isSupabaseConfigured: true,
+    shouldShowCloudCheckoutPlans: false,
+    userEmail: "alex@example.com",
+    onManageCloudBilling: vi.fn(),
+    onRefreshCloudStatus: vi.fn(),
+    onRedeemTrialCoupon: vi.fn(),
+    onRevokeCloudDevice: vi.fn(),
+    onSignIn: vi.fn(),
+    onStartCloudSetup: vi.fn(),
+  };
+}
 
 const individualEntitlement = {
   plan: "individual",

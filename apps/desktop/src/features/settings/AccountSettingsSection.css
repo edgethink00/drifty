@@ -29,21 +29,6 @@
   content: none;
 }
 
-/* Promo code sits directly under the plan summary, outside the Account block,
-   so it must not pick up the shared settings-row card chrome. */
-.content--settings .settings-section--account > .settings-row--coupon {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  min-height: 0;
-  padding: 0;
-}
-
-.content--settings .settings-section--account .settings-block--plans + .settings-row--coupon {
-  margin-bottom: calc(var(--space-6) - var(--space-5));
-  margin-top: calc(var(--space-3) - var(--space-5));
-}
-
 .content--settings .settings-section--account .settings-block--cloud-account > .settings-row--cloud-devices {
   align-items: stretch;
   padding-top: 0.2rem;

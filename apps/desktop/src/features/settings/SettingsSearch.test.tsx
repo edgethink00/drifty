@@ -33,6 +33,9 @@ describe("settings search", () => {
     }
     expect(searchSettings("Developer mode", enabled).some((entry) => entry.id === "settings.general.devMode")).toBe(true);
     expect(searchSettings("Developer mode", disabled).some((entry) => entry.id === "settings.general.devMode")).toBe(false);
+    // Promo code follows the Account row: no result where the row is hidden.
+    expect(searchSettings("promo", { ...disabled, promoCode: true }).some((entry) => entry.id === "settings.account.couponTitle")).toBe(true);
+    expect(searchSettings("promo", disabled).some((entry) => entry.id === "settings.account.couponTitle")).toBe(false);
   });
 
   it("provides result/empty states, clear and Escape, without losing the existing navigation", () => {

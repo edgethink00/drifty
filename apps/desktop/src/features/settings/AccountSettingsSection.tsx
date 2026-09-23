@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { canStartCloudTrial } from "../billing/billingEligibility";
+import { canOfferPromoCode, canStartCloudTrial } from "../billing/billingEligibility";
 import { AccountPlanModal } from "./AccountPlanModal";
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
 import { Toggle } from "../../components/Toggle";
@@ -253,6 +253,15 @@ export function AccountSettingsSection({
   const accountEmail = trimmedUserEmail || (isSignedIn
     ? t("settings.account.signedInWithoutEmail")
     : t("settings.account.notSignedIn"));
+  // Settings search reads the same rule, so it never points at a hidden row.
+  const showPromoCode = canOfferPromoCode(billingEntitlementStatus === null ? billingEntitlement : {
+    status: billingEntitlementStatus,
+    lockedReason: billingEntitlementLockedReason ?? undefined,
+    entitlementOwner: billingEntitlement?.entitlementOwner,
+  });
+  const activePromotionEndsAt = billingEntitlement?.status === "trialing" && billingEntitlement.accessSource === "promotion"
+    ? billingEntitlement.trialEndsAt
+    : null;
 
   const planCards = (
     <div className="settings-row settings-row--cloud-pricing">
@@ -330,6 +339,18 @@ export function AccountSettingsSection({
             ) : null}
           </div>
         </div>
+        {showPromoCode ? (
+          <TrialCouponRedemption
+            activePromotionEndsAt={activePromotionEndsAt}
+            disabled={billingPlansDisabled || !isSupabaseConfigured || !isSignedIn}
+            errorCode={couponRedemptionErrorCode}
+            isSignedIn={isSignedIn}
+            loading={couponRedemptionLoading}
+            redemption={couponRedemption}
+            onRedeem={onRedeemTrialCoupon}
+            onSignIn={onSignIn}
+          />
+        ) : null}
         {organizationSeat && organizationSeat.role !== "owner" ? (
           <div className="settings-row account-organization-seat-release">
             <div>
@@ -451,15 +472,6 @@ export function AccountSettingsSection({
           </div>
         ) : null}
       </AccountPlanModal>
-
-      <TrialCouponRedemption
-        disabled={billingPlansDisabled || !isSupabaseConfigured || !isSignedIn}
-        errorCode={couponRedemptionErrorCode}
-        isSignedIn={isSignedIn}
-        loading={couponRedemptionLoading}
-        redemption={couponRedemption}
-        onRedeem={onRedeemTrialCoupon}
-      />
 
       <div data-setting-id="settings.account.signedIn" className="settings-block settings-block--cloud-account">
         <h3>{t("settings.account.signedIn")}</h3>

@@ -1,5 +1,4 @@
-import { useSettingsSearch } from "./SettingsSearchContext";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import type {
   CouponRedemption,
   CouponRedemptionFailureCode,
@@ -8,34 +7,41 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import "./TrialCouponRedemption.css";
 
 type TrialCouponRedemptionProps = {
+  readonly activePromotionEndsAt?: string | null;
   readonly disabled: boolean;
   readonly isSignedIn: boolean;
   readonly loading: boolean;
   readonly redemption: CouponRedemption | null;
   readonly errorCode: CouponRedemptionFailureCode | null;
   readonly onRedeem: (code: string) => void | Promise<void>;
+  readonly onSignIn?: () => void;
 };
 
+/**
+ * Promo code row inside the Account plan card. It is always open: the label
+ * and a status line on the left, one joined field (code + Apply) on the right.
+ */
 export function TrialCouponRedemption({
+  activePromotionEndsAt = null,
   disabled,
   isSignedIn,
   loading,
   redemption,
   errorCode,
   onRedeem,
+  onSignIn,
 }: TrialCouponRedemptionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const inputId = useId();
-  const feedbackId = useId();
-  const formId = useId();
+  const statusId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
+  const submittedRef = useRef(false);
   const [code, setCode] = useState("");
-  // Collapsed by default: a promo code is a rare, deliberate action, so it
-  // should not compete with the plan cards for attention.
-  const [expanded, setExpanded] = useState(false);
-  const { request } = useSettingsSearch();
-  useEffect(() => {
-    if (request?.entry.reveal === "coupon") setExpanded(true);
-  }, [request]);
+  const [localInvalid, setLocalInvalid] = useState(false);
+  // A server error describes the code that was sent. Once the user edits the
+  // field it no longer applies, so it clears until the next attempt.
+  const [editedSinceAttempt, setEditedSinceAttempt] = useState(false);
   const normalizedCode = normalizeCouponCode(code);
   const codeReady = isCouponCodeReady(normalizedCode);
 
@@ -43,85 +49,164 @@ export function TrialCouponRedemption({
     if (redemption) setCode("");
   }, [redemption]);
 
-  // Keep the panel open whenever there is something to read: a success notice
-  // or an error the user still has to act on.
   useEffect(() => {
-    if (redemption || errorCode) setExpanded(true);
-  }, [errorCode, redemption]);
+    setEditedSinceAttempt(false);
+  }, [errorCode, loading]);
 
+  // A failed attempt ends that submit; only the submit that succeeds may
+  // move focus.
+  useEffect(() => {
+    if (errorCode) submittedRef.current = false;
+  }, [errorCode]);
+
+  // A successful submit removes the field. Move focus to the result so
+  // keyboard and screen reader users are not dropped at the top of the page.
+  useEffect(() => {
+    if (!redemption || !submittedRef.current) return;
+    submittedRef.current = false;
+    statusRef.current?.focus();
+  }, [redemption]);
+
+  // The submit button stays a readable button instead of a faded, disabled
+  // twin of the field; an incomplete code is explained after the attempt.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (disabled || loading || !codeReady) return;
+    if (disabled || loading) return;
+    if (!codeReady) {
+      setLocalInvalid(normalizedCode.length > 0);
+      inputRef.current?.focus();
+      return;
+    }
+    setLocalInvalid(false);
+    submittedRef.current = true;
     void onRedeem(normalizedCode);
   }
 
-  const feedback = redemption
-    ? describeRedemption(redemption, effectiveLanguage, t)
-    : errorCode
-      ? describeCouponError(errorCode, t)
-      : null;
+  // The description line doubles as the status line, so errors and results
+  // replace it in place instead of pushing the row taller.
+  const renderCopy = (
+    status: ReactNode,
+    tone: "default" | "error" | "success",
+    options: {
+      readonly live?: "alert" | "status";
+      readonly focusTarget?: RefObject<HTMLParagraphElement>;
+      readonly labelsField?: boolean;
+    } = {},
+  ) => (
+    <div className="trial-coupon__copy">
+      {/* Only the open field has a control to label; other states show the
+          title as plain text so no label points at a missing input. */}
+      {options.labelsField
+        ? <label className="lbl" htmlFor={inputId}>{t("settings.account.couponTitle")}</label>
+        : <div className="lbl">{t("settings.account.couponTitle")}</div>}
+      <p
+        ref={options.focusTarget}
+        id={statusId}
+        className={"desc trial-coupon__status trial-coupon__status--" + tone}
+        role={options.live}
+        tabIndex={options.focusTarget ? -1 : undefined}
+      >
+        {status}
+      </p>
+    </div>
+  );
 
-  return (
-    <div data-setting-id="settings.account.couponTitle" className="settings-row settings-row--coupon">
-      <div className="trial-coupon-form__layout">
-        <button
-          type="button"
-          className="trial-coupon-form__toggle"
-          aria-expanded={expanded}
-          aria-controls={formId}
-          onClick={() => setExpanded((open) => !open)}
-        >
-          <span className="lbl">{t("settings.account.couponTitle")}</span>
-          <span className="trial-coupon-form__toggle-icon" aria-hidden="true">{expanded ? "−" : "+"}</span>
-        </button>
-        {expanded ? (
-        <form id={formId} className="trial-coupon-form" onSubmit={handleSubmit} aria-busy={loading}>
-          <label className="desc trial-coupon-form__hint" htmlFor={inputId}>
-            {isSignedIn ? t("settings.account.couponDescription") : t("settings.account.couponSignIn")}
-          </label>
-          <div className="trial-coupon-form__controls">
-            <input
-              id={inputId}
-              className="settings-input trial-coupon-form__input"
-              type="text"
-              value={code}
-              onChange={(event) => setCode(event.target.value.toUpperCase())}
-              placeholder={t("settings.account.couponPlaceholder")}
-              aria-label={t("settings.account.couponInputAria")}
-              aria-describedby={feedback ? feedbackId : undefined}
-              aria-invalid={errorCode ? true : undefined}
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              maxLength={64}
-              disabled={disabled || loading}
-            />
-            <button
-              type="submit"
-              className="settings-btn trial-coupon-form__submit"
-              disabled={disabled || loading || !codeReady}
-            >
-              {loading ? t("settings.account.couponRedeeming") : t("settings.account.couponRedeem")}
+  if (!isSignedIn) {
+    return (
+      <div data-setting-id="settings.account.couponTitle" className="settings-row trial-coupon">
+        {renderCopy(t("settings.account.couponSignIn"), "default")}
+        {onSignIn ? (
+          <div className="ctrl">
+            <button type="button" className="settings-btn" onClick={onSignIn}>
+              {t("settings.account.signIn")}
             </button>
           </div>
-          {feedback ? (
-            <p
-              id={feedbackId}
-              className={`trial-coupon-form__feedback${feedback.error ? " trial-coupon-form__feedback--error" : " trial-coupon-form__feedback--success"}`}
-              role={feedback.error ? "alert" : "status"}
-            >
-              {feedback.message}
-            </p>
-          ) : null}
-        </form>
         ) : null}
       </div>
-    </div>
+    );
+  }
+
+  // One code per account: once a code is applied the field has nothing left
+  // to do, so the row reports the result instead.
+  const applied = redemption
+    ? describeRedemption(redemption, effectiveLanguage, t).message
+    : activePromotionEndsAt
+      ? t("settings.account.couponActive", { date: formatCouponDate(activePromotionEndsAt, effectiveLanguage) })
+      : null;
+  if (applied) {
+    const alreadyUsed = redemption?.status === "already_redeemed";
+    return (
+      <div data-setting-id="settings.account.couponTitle" className="settings-row trial-coupon trial-coupon--applied">
+        {renderCopy(applied, alreadyUsed ? "default" : "success", { live: redemption ? "status" : undefined, focusTarget: statusRef })}
+        {alreadyUsed ? null : (
+          <div className="ctrl">
+            <span className="status-badge trial-coupon__badge">{t("settings.account.couponApplied")}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const failure = errorCode && !editedSinceAttempt ? describeCouponError(errorCode, t).message
+    : localInvalid ? t("settings.account.couponInvalid")
+      : null;
+  return (
+    <form
+      data-setting-id="settings.account.couponTitle"
+      className="settings-row trial-coupon"
+      onSubmit={handleSubmit}
+      aria-busy={loading}
+      noValidate
+    >
+      {renderCopy(failure ?? t("settings.account.couponDescription"), failure ? "error" : "default", { live: failure ? "alert" : undefined, labelsField: true })}
+      <div className={"trial-coupon__field" + (failure ? " is-invalid" : "")}>
+        <input
+          ref={inputRef}
+          id={inputId}
+          className="trial-coupon__input"
+          type="text"
+          value={code}
+          onChange={(event) => {
+            setCode(event.target.value.toUpperCase());
+            setLocalInvalid(false);
+            setEditedSinceAttempt(true);
+          }}
+          placeholder={t("settings.account.couponPlaceholder")}
+          aria-label={t("settings.account.couponInputAria")}
+          aria-describedby={statusId}
+          aria-invalid={failure ? true : undefined}
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          maxLength={64}
+          disabled={disabled || loading}
+        />
+        <button
+          type="submit"
+          className="trial-coupon__apply"
+          data-ready={codeReady || undefined}
+          aria-busy={loading || undefined}
+          disabled={disabled || loading}
+        >
+          <span className="trial-coupon__submit-label">{t("settings.account.couponApply")}</span>
+          {loading ? <span className="sr-only">{t("settings.account.couponRedeeming")}</span> : null}
+        </button>
+      </div>
+    </form>
   );
 }
 
+/**
+ * Codes often arrive by chat or email, where dashes turn typographic and
+ * CJK keyboards produce full-width letters. Fold those back to the ASCII
+ * form the server stores before validating or sending.
+ */
 function normalizeCouponCode(value: string): string {
-  return value.replace(/\s+/gu, "").trim().toUpperCase();
+  return value
+    .normalize("NFKC")
+    .replace(/[\u2010-\u2015\u2212\uFE58\uFE63]/gu, "-")
+    .replace(/\s+/gu, "")
+    .toUpperCase();
 }
 
 function isCouponCodeReady(value: string): boolean {

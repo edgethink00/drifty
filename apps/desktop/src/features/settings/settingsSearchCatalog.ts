@@ -12,7 +12,7 @@ export type SettingsSearchEntry = {
   readonly aiTab?: "providers" | "intelligence" | "profile";
   readonly aiProvider?: "openrouter" | "custom";
   readonly devSubsection?: DevSettingsSubsection;
-  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows";
+  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "promoCode";
 };
 
 // Reuse visible labels and descriptions; aliases contain vocabulary only.
@@ -266,7 +266,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: "account",
     titleKey: "settings.account.couponTitle",
     keywords: "프로모션 할인 쿠폰 코드 promo coupon discount",
-    reveal: "coupon",
+    gate: "promoCode",
   },
   {
     id: "settings.privacy.aiSending",
