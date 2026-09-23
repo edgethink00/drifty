@@ -71,7 +71,7 @@ export function DevVersionSwitchBlock() {
       <div className="ctrl"><button type="button" className="settings-btn" disabled={!available || busy || !!installed} onClick={() => void load()}>{loading ? "Loading…" : "Load versions"}</button></div>
     </div>
     {catalog && !installed && <div className="settings-row settings-row--fallback">
-      <div><label className="lbl" htmlFor="dev-release-version">Target version</label><div className="desc">{catalog.releases.length === 0 ? "No compatible signed releases found." : "Releases that cannot be installed on this Mac are hidden."}{catalog.hasMore ? " Showing the most recent 100 releases." : ""}</div></div>
+      <div><label className="lbl" htmlFor="dev-release-version">Target version</label><div className="desc">{catalog.releases.length === 0 ? "No compatible signed releases found." : "Releases that cannot be installed on this device are hidden."}{catalog.hasMore ? " Showing the most recent 100 releases." : ""}</div></div>
       <div className="ctrl settings-row__actions settings-row__actions--wrap">
         <select id="dev-release-version" className="settings-select" value={tag} disabled={busy} onChange={(event) => { setTag(event.target.value); setConfirming(false); setError(null); }}>
           <option value="">Choose a version</option>

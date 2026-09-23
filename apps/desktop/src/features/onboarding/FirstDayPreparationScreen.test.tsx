@@ -94,7 +94,7 @@ describe("FirstDayPreparationScreen", () => {
     );
 
     expect(screen.getByRole("alertdialog", { name: "하루 준비를 완료하지 못했습니다" })).toBeTruthy();
-    expect(screen.getByText(/활동 기록은 이 Mac에 안전하게 보관되어 있습니다/)).toBeTruthy();
+    expect(screen.getByText(/활동 기록은 이 기기에 안전하게 보관되어 있습니다/)).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "다시 시도" }));
     expect(screen.getByRole("button", { name: "우선 계속하기" })).toBeTruthy();
   });

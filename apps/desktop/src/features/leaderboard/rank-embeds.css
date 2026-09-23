@@ -1,4 +1,4 @@
-.rank-embeds-modal {
+.auth-modal.profile-modal.rank-embeds-modal {
   max-width: 860px;
   position: relative;
   width: min(860px, calc(100vw - 32px));

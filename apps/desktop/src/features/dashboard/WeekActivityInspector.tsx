@@ -24,7 +24,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { AppGlyph } from "../../components/AppGlyph";
-import { ANCHORED_CARD_GAP, getViewportSafeAnchoredPosition, isAnchorOutsideViewport } from "../../components/anchoredCardPosition";
+import { getViewportSafeAnchoredPosition, isAnchorOutsideViewport } from "../../components/anchoredCardPosition";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
@@ -769,7 +769,7 @@ function remoteDeviceLabels(
   const labels = new Set(event.deviceLabels ?? []);
   for (const segment of segments) {
     if (!isRemoteDeviceSegment(segment)) continue;
-    labels.add(deviceLabelById?.get(segment.deviceId ?? "") ?? "Synced Mac");
+    labels.add(deviceLabelById?.get(segment.deviceId ?? "") ?? "Synced device");
   }
   return [...labels];
 }
@@ -821,7 +821,7 @@ function ActivityInspectorBody({
   readonly onUndo?: () => void;
   readonly onDelete?: () => void;
 }) {
-  const { effectiveLanguage, t } = useLocalization();
+  const { t } = useLocalization();
   const count = segments.length;
   const canMutate = !actionsDisabledReason && count > 0;
   const computedMixed = useMemo(
@@ -932,7 +932,7 @@ function ActivityInspectorBody({
         <div className="week-activity-inspector__devices">
           {devices.map((device) => (
             <span className="week-activity-inspector__device-chip" key={device}>
-              {effectiveLanguage === "ko" && device === "Synced Mac" ? "동기화된 Mac" : device}
+              {device === "Synced device" ? t("dashboard.week.inspector.syncedMac") : device}
             </span>
           ))}
         </div>

@@ -153,7 +153,7 @@ describe("managed model requirements in settings", () => {
     fireEvent.click(screen.getByRole("combobox", { name: "AI model" }));
     const unsupported = screen.getByRole("option", { name: "Qwen 3.6 27B · Maximum" });
     const description = document.getElementById(unsupported.getAttribute("aria-describedby") ?? "");
-    expect(description?.textContent).toContain("Not enough memory on this Mac");
+    expect(description?.textContent).toContain("Not enough memory on this device");
     expect(description?.textContent).toContain("Estimated memory");
     const blocked = screen.getByRole("button", { name: "Download Qwen 3.6 27B managed local model" });
     expect(blocked).toHaveProperty("disabled", true);

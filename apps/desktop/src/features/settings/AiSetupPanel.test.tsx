@@ -185,7 +185,7 @@ describe("AiSetupPanel", () => {
     fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
     const memoryOverview = screen.getByLabelText(/Drifty Memory overview/i);
     expect(within(memoryOverview).getByRole("heading", { name: /What Drifty remembers about your work/i })).toBeTruthy();
-    expect(within(memoryOverview).getByText("Stored on this Mac")).toBeTruthy();
+    expect(within(memoryOverview).getByText("Stored on this device")).toBeTruthy();
     expect(await within(memoryOverview).findByText("Ready to learn")).toBeTruthy();
     expect(within(memoryOverview).getByText("Coding")).toBeTruthy();
     expect(within(memoryOverview).getByText("Writing")).toBeTruthy();

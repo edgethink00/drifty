@@ -95,6 +95,6 @@ describe("local model blocked hint", () => {
 
   it("sends the user to Cloud when no local model can run", () => {
     expect(blockedHintForStep({ ...localBlock, hasInstallableLocalModel: false }))
-      .toBe("No local model can run on this Mac. Switch to Cloud to continue.");
+      .toBe("No local model can run on this device. Switch to Cloud to continue.");
   });
 });

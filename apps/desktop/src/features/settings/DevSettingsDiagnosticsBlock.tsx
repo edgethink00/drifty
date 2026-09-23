@@ -103,7 +103,7 @@ export function DevSettingsInterventionLedgerBlock({ summaries, onRefresh }: Dev
       <div className="settings-row">
         <div>
           <div className="lbl">Local outcome ledger</div>
-          <div className="desc">Delivered alarms and automatic close attempts kept on this Mac for 30 days. No URLs, titles, or domains are stored.</div>
+          <div className="desc">Delivered alarms and automatic close attempts kept on this device for 30 days. No URLs, titles, or domains are stored.</div>
         </div>
         <div className="ctrl">
           <button type="button" className="settings-btn" onClick={onRefresh}>Refresh</button>

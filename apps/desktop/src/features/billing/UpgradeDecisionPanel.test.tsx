@@ -49,7 +49,7 @@ describe("UpgradeDecisionPanel", () => {
     expect(screen.getByText("You provide")).toBeTruthy();
     expect(screen.getByText(/on-device model, api key, or endpoint/i)).toBeTruthy();
     expect(screen.getByText("Good to know")).toBeTruthy();
-    expect(screen.getByText(/on-device model: uses mac memory and storage/i)).toBeTruthy();
+    expect(screen.getByText(/on-device model: uses device memory and storage/i)).toBeTruthy();
     expect(screen.getByText(/api or endpoint: may need separate setup and incur usage fees/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /view local ai setup/i }));
     expect(onContinueLocal).toHaveBeenCalledTimes(1);
@@ -73,7 +73,7 @@ describe("UpgradeDecisionPanel", () => {
     expect(screen.getByText(body)).toBeTruthy();
     expect(screen.getByText(badge)).toBeTruthy();
     expect(screen.getByRole("button", { name: action })).toBeTruthy();
-    expect(screen.getByText("Cloud AI classification on up to 3 Macs")).toBeTruthy();
+    expect(screen.getByText("Cloud AI classification on up to 3 devices")).toBeTruthy();
   });
 
   it("acknowledges a configured Local AI setup before offering Cloud AI", () => {

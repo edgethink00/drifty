@@ -86,7 +86,7 @@ export function blockedHintForStep({
       if (isManagedProviderSetup) {
         return hasInstallableLocalModel
           ? t?.("onboarding.block.localModel") ?? "Start a local model download to continue."
-          : t?.("onboarding.block.localModelInsufficient") ?? "No local model can run on this Mac. Switch to Cloud to continue.";
+          : t?.("onboarding.block.localModelInsufficient") ?? "No local model can run on this device. Switch to Cloud to continue.";
       }
       if (isCustomEndpointSetup) return customEndpointBaseUrlIssue ?? customEndpointModelIssue ?? (t?.("onboarding.block.customEndpoint") ?? "Enter your custom endpoint details.");
       return t?.("onboarding.block.openRouter") ?? "Enter an OpenRouter key that starts with sk-or-.";

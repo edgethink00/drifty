@@ -1457,7 +1457,7 @@ describe("WeekDashboard activity inspector", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
 
-    expect(screen.getByText(/must be edited on the Mac that recorded it/i)).toBeTruthy();
+    expect(screen.getByText(/must be edited on the device that recorded it/i)).toBeTruthy();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Change Category/ }).disabled).toBe(true);
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Delete activity/ }).disabled).toBe(true);
   });

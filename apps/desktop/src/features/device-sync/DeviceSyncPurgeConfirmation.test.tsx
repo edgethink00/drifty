@@ -29,7 +29,7 @@ describe("DeviceSyncPurgeConfirmation", () => {
 
     const dialog = screen.getByRole("alertdialog", { name: "Delete synced cloud data?" });
     expect(dialog.getAttribute("aria-describedby")).toBe("device-sync-purge-description");
-    expect(screen.getByText(/pauses uploads from every connected Mac/i)).toBeTruthy();
+    expect(screen.getByText(/pauses uploads from every connected device/i)).toBeTruthy();
     expect(screen.getByText(/explicitly turn it on again/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cancel" }).classList.contains("modal-btn--ghost")).toBe(true);
     expect(screen.getByRole("button", { name: "Delete cloud copy" }).classList.contains("modal-btn--danger")).toBe(true);

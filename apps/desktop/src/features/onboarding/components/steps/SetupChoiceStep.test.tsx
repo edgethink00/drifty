@@ -43,7 +43,7 @@ describe("onboarding setup local choice", () => {
     const { handleSetupChoice } = renderSetup({ fit: "insufficient" });
     const local = screen.getByRole("button", { name: /local ai/i });
     expect(local.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText(/no local model can run on this mac/i)).toBeTruthy();
+    expect(screen.getByText(/no local model can run on this device/i)).toBeTruthy();
     fireEvent.click(local);
     expect(handleSetupChoice).not.toHaveBeenCalled();
   });

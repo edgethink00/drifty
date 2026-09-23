@@ -77,7 +77,7 @@ describe("onboarding local model unsupported Mac", () => {
 
   it("shows a Cloud switch when every model is insufficient", () => {
     const { handleSetupChoice } = renderLocalCatalog({ fit: "insufficient" });
-    expect(screen.getByText("This Mac doesn't meet the local model requirements")).toBeTruthy();
+    expect(screen.getByText("This device doesn't meet the local model requirements")).toBeTruthy();
     expect(screen.queryAllByRole("article")).toEqual([]);
     expect(screen.queryByText(/choose a managed local model/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Switch to Cloud" }));
@@ -86,7 +86,7 @@ describe("onboarding local model unsupported Mac", () => {
 
   it("hides the Cloud switch when at least one model can install", () => {
     renderLocalCatalog({ fit: "good" });
-    expect(screen.queryByText("This Mac doesn't meet the local model requirements")).toBeNull();
+    expect(screen.queryByText("This device doesn't meet the local model requirements")).toBeNull();
     expect(screen.queryByRole("button", { name: "Switch to Cloud" })).toBeNull();
   });
 

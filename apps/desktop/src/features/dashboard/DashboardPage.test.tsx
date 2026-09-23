@@ -510,7 +510,7 @@ describe("DashboardPage billing recovery overlay", () => {
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
     expect(onSelectBillingPlan).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /choose drifty pro plan/i })).toBeNull();
-    expect(screen.getByText(/Activity tracking and the timeline keep running on this Mac/i)).toBeTruthy();
+    expect(screen.getByText(/Activity tracking and the timeline keep running on this device/i)).toBeTruthy();
     expect(screen.getByText(ENGLISH_TRANSLATIONS["dashboard.aiRecovery.billingSafeNote"])).toBeTruthy();
   });
 
@@ -534,7 +534,7 @@ describe("DashboardPage billing recovery overlay", () => {
 
     expect(screen.getByRole("heading", { name: ENGLISH_TRANSLATIONS["dashboard.aiRecovery.trialEndedTitle"] })).toBeTruthy();
     expect(screen.queryByText(ENGLISH_TRANSLATIONS["dashboard.aiRecovery.billingSafeNote"])).toBeNull();
-    expect(screen.queryByText(/Activity tracking and the timeline keep running on this Mac/i)).toBeNull();
+    expect(screen.queryByText(/Activity tracking and the timeline keep running on this device/i)).toBeNull();
   });
 });
 

@@ -177,7 +177,7 @@ describe("display language preference", () => {
     fireEvent.click(screen.getByRole("option", { name: "Korean" }));
 
     expect(screen.getByRole("combobox", { name: "언어" }).textContent).toContain("한국어");
-    expect(screen.getByText("이 Mac에서 Drifty에 사용할 언어를 선택합니다.")).toBeTruthy();
+    expect(screen.getByText("이 기기에서 Drifty에 사용할 언어를 선택합니다.")).toBeTruthy();
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
     expect(document.documentElement.lang).toBe("ko");
   });
