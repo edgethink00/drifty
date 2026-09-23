@@ -198,6 +198,17 @@
   min-width: 0;
 }
 
+/* Flow/Review groups must shrink with the rail; their labels otherwise keep
+   the grid track wider than the clipped sidebar and cut off active pills. */
+.sidebar--collapsed .sidebar-nav--primary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sidebar--collapsed .sidebar-nav--primary > .sidebar-guide-section {
+  width: 100%;
+  min-width: 0;
+}
+
 .sidebar--collapsed .sidebar-nav-divider {
   width: 24px;
   margin: 8px auto 6px;
