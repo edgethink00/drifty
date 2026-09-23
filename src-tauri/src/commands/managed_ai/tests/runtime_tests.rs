@@ -592,38 +592,42 @@ fn spawn_adopted_runtime(root: &Path) -> Child {
 fn write_native_sleep_runtime(root: &Path) -> Result<(), ManagedAiError> {
     let runtime_dir = root.join("runtime");
     std::fs::create_dir_all(&runtime_dir)?;
-    std::fs::copy("/bin/sleep", runtime_dir.join("llama-server"))?;
+    let runtime_path = runtime_dir.join("llama-server");
+    std::fs::copy("/bin/sleep", &runtime_path)?;
+    // A copied Apple platform binary is SIGKILLed by code signing outside its
+    // system path, which files a crash report and races the liveness checks
+    // below. Re-sign the copy ad hoc so it runs as an ordinary binary.
+    #[cfg(target_os = "macos")]
+    {
+        let status = Command::new("/usr/bin/codesign")
+            .args(["--force", "--sign", "-"])
+            .arg(&runtime_path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        assert!(status.success(), "ad hoc signing failed: {status}");
+    }
+    // Finish the copy's first launch assessment before a test kills it; see
+    // write_assessed_fake_runtime.
+    let status = Command::new(&runtime_path).arg("0").status()?;
+    assert!(status.success(), "native runtime warm-up failed: {status}");
     runtime::write_runtime_completion_fixture(root)
 }
 
 #[cfg(unix)]
 fn write_counting_fake_runtime(root: &Path, starts_path: &Path) -> Result<(), ManagedAiError> {
-    let runtime_dir = root.join("runtime");
-    std::fs::create_dir_all(&runtime_dir)?;
-    let runtime_path = runtime_dir.join("llama-server");
     let starts_path = shell_quote(starts_path);
-    std::fs::write(
-        &runtime_path,
-        format!("#!/bin/sh\nprintf 'started\\n' >> {starts_path}\nwhile true; do sleep 5; done\n"),
+    write_assessed_fake_runtime(
+        root,
+        &format!("printf 'started\\n' >> {starts_path}\nwhile true; do sleep 5; done\n"),
     )?;
-    let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
-    use std::os::unix::fs::PermissionsExt;
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(runtime_path, permissions)?;
     runtime::write_runtime_completion_fixture(root)?;
     Ok(())
 }
 
 #[cfg(unix)]
 fn write_exiting_fake_runtime(root: &Path) -> Result<(), ManagedAiError> {
-    let runtime_dir = root.join("runtime");
-    std::fs::create_dir_all(&runtime_dir)?;
-    let runtime_path = runtime_dir.join("llama-server");
-    std::fs::write(&runtime_path, "#!/bin/sh\nexit 17\n")?;
-    let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
-    use std::os::unix::fs::PermissionsExt;
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(runtime_path, permissions)?;
+    write_assessed_fake_runtime(root, "exit 17\n")?;
     runtime::write_runtime_completion_fixture(root)?;
     Ok(())
 }

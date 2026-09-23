@@ -1058,24 +1058,56 @@ fn mark_sparse_for_windows_test(file: &std::fs::File) -> std::io::Result<()> {
 }
 
 fn write_fake_runtime(root: &Path, args_path: &Path) -> Result<(), ManagedAiError> {
+    let temp_args_path = shell_quote(&args_path.with_extension("tmp"));
+    let args_path = shell_quote(args_path);
+    write_assessed_fake_runtime(
+        root,
+        &format!("printf '%s\\n' \"$@\" > {temp_args_path}\nmv {temp_args_path} {args_path}\nwhile true; do sleep 5; done\n"),
+    )?;
+    runtime::write_runtime_completion_fixture(root)?;
+    Ok(())
+}
+
+const FAKE_RUNTIME_WARMUP_ENV: &str = "DRIFTY_FAKE_RUNTIME_WARMUP";
+
+/// Writes the fake `runtime/llama-server` shell script and finishes its first
+/// launch assessment before any test depends on it.
+///
+/// On macOS 26, syspolicyd crashes when it is still assessing a freshly written
+/// script that a test has already killed and deleted with its temp dir. Every
+/// assessed launch on the host then stalls at `_dyld_start` until launchd
+/// respawns syspolicyd. Running the script once to completion, directly and
+/// through `/bin/sh` as the app does, keeps later kills and cleanup out of
+/// that assessment window.
+fn write_assessed_fake_runtime(root: &Path, body: &str) -> Result<PathBuf, ManagedAiError> {
     let runtime_dir = root.join("runtime");
     std::fs::create_dir_all(&runtime_dir)?;
     let runtime_path = runtime_dir.join("llama-server");
-    let temp_args_path = shell_quote(&args_path.with_extension("tmp"));
-    let args_path = shell_quote(args_path);
     std::fs::write(
         &runtime_path,
-        format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > {temp_args_path}\nmv {temp_args_path} {args_path}\nwhile true; do sleep 5; done\n"),
+        format!("#!/bin/sh\nif [ \"${FAKE_RUNTIME_WARMUP_ENV}\" = 1 ]; then exit 0; fi\n{body}"),
     )?;
-    let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
         permissions.set_mode(0o755);
+        std::fs::set_permissions(&runtime_path, permissions)?;
+        for mut launch in [std::process::Command::new(&runtime_path), {
+            let mut shell = std::process::Command::new("/bin/sh");
+            shell.arg(&runtime_path);
+            shell
+        }] {
+            let status = launch
+                .env(FAKE_RUNTIME_WARMUP_ENV, "1")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()?;
+            assert!(status.success(), "fake runtime warm-up failed: {status}");
+        }
     }
-    std::fs::set_permissions(runtime_path, permissions)?;
-    runtime::write_runtime_completion_fixture(root)?;
-    Ok(())
+    Ok(runtime_path)
 }
 
 fn shell_quote(path: &Path) -> String {
