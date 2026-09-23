@@ -88,7 +88,7 @@ export async function openShareComposer(url: string): Promise<void> {
   window.open(parsed.toString(), "_blank", "noopener,noreferrer");
 }
 
-/** Save the card PNG through the native macOS save panel. */
+/** Save the card PNG: a native save panel on macOS, the Downloads folder on Windows. */
 export async function saveShareCardWithDialog(
   svg: string,
   width: number,

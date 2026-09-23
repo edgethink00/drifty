@@ -53,9 +53,16 @@ vi.mock("./useShareCardLiveRanks", () => ({
   useShareCardLiveRanks: () => rankMocks,
 }));
 
+const platformMock = vi.hoisted(() => ({ value: "macos" as "macos" | "windows" | "other" }));
+vi.mock("../../lib/api/accessibilityClient", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../lib/api/accessibilityClient")>(),
+  detectHostPlatform: () => platformMock.value,
+}));
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  platformMock.value = "macos";
   modelMocks.load.mockReset().mockImplementation(() => Promise.resolve({ daily: null, weekly: null }));
   rankMocks.state = {
     daily: {
@@ -151,6 +158,23 @@ describe("ShareCardModal feedback", () => {
 
     await waitFor(() => expect(exportMocks.saveShareCardWithDialog).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("tells Windows users to paste with Ctrl+V and that the PNG went to Downloads", async () => {
+    platformMock.value = "windows";
+    renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save PNG" }));
+    expect((await screen.findByRole("status")).textContent).toContain("PNG saved to your Downloads folder.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy image" }));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Ready to paste with Ctrl+V."));
+
+    fireEvent.click(screen.getByRole("button", { name: "X" }));
+    await waitFor(() => expect(exportMocks.openShareComposer).toHaveBeenCalledTimes(1));
+    const composerUrl = new URL(exportMocks.openShareComposer.mock.calls[0]?.[0]);
+    expect(composerUrl.searchParams.get("text")).toContain("paste it here with Ctrl+V.");
+    expect(composerUrl.searchParams.get("text")).not.toContain("⌘V");
   });
 
   it("locks only the precise place-rank card when the user has not joined", async () => {

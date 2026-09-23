@@ -20,6 +20,7 @@ import { buildShareCardCaption, buildShareComposerUrl, type ShareCardDestination
 import { useShareCardLiveRanks, type ShareCardLiveRanksState } from "./useShareCardLiveRanks";
 import { useShareCardCommunityModels } from "./useShareCardCommunityModels";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { detectHostPlatform, type HostPlatform } from "../../lib/api/accessibilityClient";
 
 export type ShareCardModalCard =
   | { readonly kind: "day"; readonly data: ShareCardData }
@@ -105,6 +106,7 @@ function rankGateForStory(
 
 export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose }: ShareCardModalProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const hostPlatform = useMemo(() => detectHostPlatform(), []);
   const [selectedStoryId, setSelectedStoryId] = useState<UnifiedShareStoryId | null>(null);
   const [exportState, setExportState] = useState<ExportState>({ kind: "idle" });
   const [joiningLeaderboard, setJoiningLeaderboard] = useState(false);
@@ -211,9 +213,9 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
     if (actionsDisabled) return;
     setExportState({ kind: "working", action: destination });
     // The product handoff is intentional: prepare the PNG first, then reveal the
-    // composer with its ready-to-post caption and a clear ⌘V instruction.
+    // composer with its ready-to-post caption and a clear paste instruction.
     copyShareCardPng(svg, exportSize.width, exportSize.height)
-      .then(() => openShareComposer(buildShareComposerUrl(destination, caption)))
+      .then(() => openShareComposer(buildShareComposerUrl(destination, caption, hostPlatform)))
       .then(() => settle({ kind: "shared", destination }))
       .catch((error: unknown) => settle({
         kind: "error",
@@ -346,19 +348,21 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
           </div>
         </section>
       </div>
-      <ShareCardToast state={exportState} />
+      <ShareCardToast state={exportState} hostPlatform={hostPlatform} />
     </>
   );
 }
 
-function ShareCardToast({ state }: { readonly state: ExportState }) {
+function ShareCardToast({ state, hostPlatform }: { readonly state: ExportState; readonly hostPlatform: HostPlatform }) {
   const { t } = useLocalization();
   if (state.kind === "idle" || state.kind === "working") return null;
 
+  // Only macOS has the save panel and ⌘; other desktop hosts save to Downloads and paste with Ctrl+V.
+  const windows = hostPlatform !== "macos";
   const copy = state.kind === "copied"
-    ? { title: t("share.toast.copied"), detail: t("share.toast.paste"), tone: "success" }
+    ? { title: t("share.toast.copied"), detail: t(windows ? "share.toast.pasteWindows" : "share.toast.paste"), tone: "success" }
     : state.kind === "saved"
-      ? { title: t("share.toast.saved"), detail: t("share.toast.savedDetail"), tone: "success" }
+      ? { title: t("share.toast.saved"), detail: t(windows ? "share.toast.savedDetailWindows" : "share.toast.savedDetail"), tone: "success" }
       : state.kind === "shared"
         ? { title: t("share.toast.copied"), detail: t("share.toast.composer", { destination: state.destination === "linkedin" ? "LinkedIn" : "X" }), tone: "success" }
         : { title: t("share.toast.error"), detail: state.message, tone: "error" };

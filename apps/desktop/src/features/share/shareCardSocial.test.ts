@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { SHARE_CARD_DEFAULT_CAPTION, SHARE_CARD_IMAGE_PASTE_HINT, buildShareCardCaption, buildShareCardComposerText, buildShareComposerUrl } from "./shareCardSocial";
+import {
+  SHARE_CARD_DEFAULT_CAPTION,
+  SHARE_CARD_IMAGE_PASTE_HINT,
+  SHARE_CARD_IMAGE_PASTE_HINT_WINDOWS,
+  buildShareCardCaption,
+  buildShareCardComposerText,
+  buildShareComposerUrl,
+} from "./shareCardSocial";
 
 describe("share card social handoff", () => {
   it("uses one short, general social draft", () => {
@@ -9,6 +16,12 @@ describe("share card social handoff", () => {
   it("adds a paste instruction to the composer text", () => {
     expect(buildShareCardComposerText("Focused & clear")).toBe(
       `Focused & clear\n\n${SHARE_CARD_IMAGE_PASTE_HINT}`,
+    );
+  });
+
+  it("uses the Windows paste shortcut in the composer text on Windows", () => {
+    expect(buildShareCardComposerText("Focused & clear", "windows")).toBe(
+      `Focused & clear\n\n${SHARE_CARD_IMAGE_PASTE_HINT_WINDOWS}`,
     );
   });
 

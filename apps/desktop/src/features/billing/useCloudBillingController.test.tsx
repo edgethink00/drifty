@@ -651,6 +651,8 @@ describe("useCloudBillingController", () => {
 
   it("keeps the redeemed entitlement locally available when the confirmation refresh is offline", async () => {
     vi.useFakeTimers();
+    const redeemedAt = new Date();
+    const redeemedTrialEndsAt = new Date(redeemedAt.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
     const lockedEntitlement: BillingEntitlement = {
       plan: "individual",
       status: "locked",
@@ -668,8 +670,8 @@ describe("useCloudBillingController", () => {
       data: {
         status: "redeemed",
         grantedDays: 30,
-        trialEndsAt: "2026-09-23T00:00:00.000Z",
-        redeemedAt: "2026-08-24T00:00:00.000Z",
+        trialEndsAt: redeemedTrialEndsAt,
+        redeemedAt: redeemedAt.toISOString(),
       },
     });
 
@@ -695,7 +697,7 @@ describe("useCloudBillingController", () => {
     expect(result.current.billingEntitlement).toMatchObject({
       status: "trialing",
       canUseApp: true,
-      trialEndsAt: "2026-09-23T00:00:00.000Z",
+      trialEndsAt: redeemedTrialEndsAt,
     });
     expect(result.current.billingEntitlement?.lockedReason).toBeUndefined();
 
@@ -708,12 +710,14 @@ describe("useCloudBillingController", () => {
     expect(result.current.billingEntitlement).toMatchObject({
       status: "trialing",
       canUseApp: true,
-      trialEndsAt: "2026-09-23T00:00:00.000Z",
+      trialEndsAt: redeemedTrialEndsAt,
     });
     expect(result.current.billingEntitlementError).toBe("Network connection still failed.");
   });
 
   it("keeps a redeemed overlay when the confirmation fetch returns a stale locked snapshot", async () => {
+    const redeemedAt = new Date();
+    const redeemedTrialEndsAt = new Date(redeemedAt.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
     const lockedEntitlement: BillingEntitlement = {
       plan: "individual",
       status: "locked",
@@ -730,8 +734,8 @@ describe("useCloudBillingController", () => {
       data: {
         status: "redeemed",
         grantedDays: 30,
-        trialEndsAt: "2026-09-23T00:00:00.000Z",
-        redeemedAt: "2026-08-24T00:00:00.000Z",
+        trialEndsAt: redeemedTrialEndsAt,
+        redeemedAt: redeemedAt.toISOString(),
       },
     });
 
@@ -753,7 +757,7 @@ describe("useCloudBillingController", () => {
     expect(result.current.billingEntitlement).toMatchObject({
       status: "trialing",
       canUseApp: true,
-      trialEndsAt: "2026-09-23T00:00:00.000Z",
+      trialEndsAt: redeemedTrialEndsAt,
     });
     expect(result.current.billingEntitlement?.lockedReason).toBeUndefined();
   });

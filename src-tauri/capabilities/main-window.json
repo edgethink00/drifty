@@ -168,6 +168,8 @@
     "allow-pet-mode-lab-apply-target",
     "allow-pet-mode-lab-place-center",
     "allow-pet-mode-input-bounds",
+    "allow-pet-mode-cursor-inside",
+    "allow-pet-quick-controls-cursor-inside",
     "allow-system-open-settings-pane",
     "allow-window-set-onboarding-presentation",
     "allow-window-set-theme-appearance",

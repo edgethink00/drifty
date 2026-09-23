@@ -2133,6 +2133,43 @@ class TrackerMainTests(unittest.TestCase):
         self.assertTrue(third["ok"])
         self.assertNotIn("id", third)
 
+    def test_serve_reads_utf8_requests_when_the_platform_code_page_is_not_utf8(self) -> None:
+        import io
+        import json
+
+        payload = {"name": "카카오톡", "reason": "회의록 정리 — 업무"}
+        request = json.dumps({"id": 1, "command": "echo", "payload": payload}, ensure_ascii=False)
+        # Windows opens a piped stdin with the ANSI code page: cp949 on Korean Windows.
+        stdin = io.TextIOWrapper(io.BytesIO(f"{request}\n".encode("utf-8")), encoding="cp949")
+        stub_commands = {"echo": lambda received: tracker_main.response(True, received)}
+        out = io.StringIO()
+        with patch.object(tracker_main, "COMMANDS", stub_commands), patch.object(
+            tracker_main.sys, "stdin", stdin
+        ), patch.object(tracker_main.sys, "stdout", out):
+            tracker_main.serve()
+
+        envelope = json.loads(out.getvalue())
+        self.assertTrue(envelope["ok"])
+        self.assertEqual(envelope["data"], payload)
+
+    def test_serve_survives_a_malformed_byte_in_the_request_stream(self) -> None:
+        import io
+        import json
+
+        valid = json.dumps({"id": 2, "command": "echo", "payload": {"name": "카카오톡"}}, ensure_ascii=False)
+        stream = b'{"id": 1, "command": "echo", "payload": {"name": "\xff"}}\n' + f"{valid}\n".encode("utf-8")
+        stdin = io.TextIOWrapper(io.BytesIO(stream), encoding="cp949")
+        stub_commands = {"echo": lambda received: tracker_main.response(True, received)}
+        out = io.StringIO()
+        with patch.object(tracker_main, "COMMANDS", stub_commands), patch.object(
+            tracker_main.sys, "stdin", stdin
+        ), patch.object(tracker_main.sys, "stdout", out):
+            tracker_main.serve()
+
+        envelopes = [json.loads(line) for line in out.getvalue().splitlines() if line]
+        self.assertEqual([envelope["id"] for envelope in envelopes], [1, 2])
+        self.assertEqual(envelopes[1]["data"], {"name": "카카오톡"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2201,6 +2201,14 @@ def serve():
     Errors are returned per request and never break the loop; EOF on stdin
     (parent process exit / closed pipe) ends the loop cleanly.
     """
+    # The Rust host writes UTF-8 JSON lines. Windows otherwise decodes a piped
+    # stdin with the ANSI code page (cp949 on Korean Windows), which turns every
+    # non-ASCII request field into lone surrogates that SQLite then rejects.
+    # "replace" keeps one malformed byte from raising outside the per-request
+    # handler and ending the serve loop.
+    reconfigure = getattr(sys.stdin, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8", errors="replace")
     for raw_line in sys.stdin:
         line = raw_line.strip()
         if not line:

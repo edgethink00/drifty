@@ -1,4 +1,8 @@
-use std::{path::PathBuf, sync::mpsc};
+use std::fs::OpenOptions;
+use std::io::{ErrorKind, Write};
+use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
+use std::sync::mpsc;
 
 use base64::Engine;
 #[cfg(target_os = "macos")]
@@ -15,10 +19,12 @@ use tauri::AppHandle;
 const MAX_SHARE_CARD_PNG_BYTES: usize = 20 * 1024 * 1024;
 const MAX_SHARE_CARD_PNG_BASE64_CHARS: usize = (MAX_SHARE_CARD_PNG_BYTES / 3 + 1) * 4;
 const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+const MAX_DOWNLOAD_NAME_ATTEMPTS: u32 = 100;
 
-/// Present a native macOS save panel, then save the exported share-card PNG at
-/// the user-selected path. The frontend renders the card (aggregates only) and
-/// sends the encoded PNG; this command only decodes and writes it locally.
+/// Save the exported share-card PNG locally. macOS asks for a destination in a
+/// native save panel; Windows saves into Downloads and selects the file in File
+/// Explorer. The frontend renders the card (aggregates only) and sends the
+/// encoded PNG; this command only decodes and writes it locally.
 ///
 /// Returns `None` when the user cancels the native save panel.
 #[tauri::command]
@@ -30,6 +36,15 @@ pub async fn share_card_save_png(
     let bytes = decode_share_card_png(&png_base64)?;
 
     let safe_name = sanitize_file_name(&file_name);
+    save_share_card(app, safe_name, bytes).await
+}
+
+#[cfg(target_os = "macos")]
+async fn save_share_card(
+    app: AppHandle,
+    safe_name: String,
+    bytes: Vec<u8>,
+) -> Result<Option<String>, String> {
     // Waiting for a native panel must not occupy Tauri's async executor while
     // the user chooses a destination.
     let target = async_runtime::spawn_blocking(move || show_share_card_save_panel(app, safe_name))
@@ -46,6 +61,79 @@ pub async fn share_card_save_png(
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn save_share_card(
+    app: AppHandle,
+    safe_name: String,
+    bytes: Vec<u8>,
+) -> Result<Option<String>, String> {
+    save_share_card_to_downloads(app, safe_name, bytes)
+        .await
+        .map(Some)
+}
+
+/// Windows has no native save panel wired up, so the card goes to Downloads
+/// under a name that never replaces an earlier card. File Explorer then selects
+/// it so the user can see where it went.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+async fn save_share_card_to_downloads(
+    app: AppHandle,
+    safe_name: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    let directory = tauri::Manager::path(&app)
+        .download_dir()
+        .map_err(|error| format!("Could not find the Downloads folder: {error}"))?;
+    let saved = async_runtime::spawn_blocking(move || {
+        write_new_share_card_file(&directory, &safe_name, &bytes)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let saved_path = saved.to_string_lossy().into_owned();
+    // Revealing initializes COM as single-threaded on the calling thread, so it
+    // runs on its own short-lived thread instead of a reused runtime worker.
+    std::thread::spawn(move || {
+        if let Err(error) = tauri_plugin_opener::OpenerExt::opener(&app).reveal_item_in_dir(&saved)
+        {
+            eprintln!("could not reveal the saved share card: {error}");
+        }
+    });
+    Ok(saved_path)
+}
+
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn write_new_share_card_file(
+    directory: &Path,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(directory).map_err(|error| format!("Could not save image: {error}"))?;
+    let stem = file_name.strip_suffix(".png").unwrap_or(file_name);
+    for attempt in 1..=MAX_DOWNLOAD_NAME_ATTEMPTS {
+        let candidate = if attempt == 1 {
+            directory.join(file_name)
+        } else {
+            directory.join(format!("{stem} ({attempt}).png"))
+        };
+        let mut file = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("Could not save image: {error}")),
+        };
+        if let Err(error) = file.write_all(bytes) {
+            drop(file);
+            let _ = std::fs::remove_file(&candidate);
+            return Err(format!("Could not save image: {error}"));
+        }
+        return Ok(candidate);
+    }
+    Err("Could not find an unused file name in the Downloads folder.".to_string())
 }
 
 fn decode_share_card_png(png_base64: &str) -> Result<Vec<u8>, String> {
@@ -67,6 +155,7 @@ fn decode_share_card_png(png_base64: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+#[cfg(target_os = "macos")]
 fn show_share_card_save_panel(
     app: AppHandle,
     file_name: String,
@@ -119,11 +208,6 @@ fn show_share_card_save_panel_on_main_thread(file_name: &str) -> Result<Option<P
     })
 }
 
-#[cfg(not(target_os = "macos"))]
-fn show_share_card_save_panel_on_main_thread(_file_name: &str) -> Result<Option<PathBuf>, String> {
-    Err("Native save dialog is only available on macOS.".to_string())
-}
-
 /// Strip path separators / hidden-file prefixes and force a .png extension.
 fn sanitize_file_name(raw: &str) -> String {
     let base = raw
@@ -131,7 +215,7 @@ fn sanitize_file_name(raw: &str) -> String {
         .trim_end_matches(".png")
         .chars()
         .map(|c| match c {
-            '/' | '\\' | ':' | '\0' => '-',
+            '/' | '\\' | ':' | '\0' | '<' | '>' | '"' | '|' | '?' | '*' => '-',
             _ => c,
         })
         .collect::<String>();
@@ -157,6 +241,7 @@ mod tests {
         // Separators become dashes; interior dots are harmless once no separators remain.
         assert_eq!(sanitize_file_name("../../etc/passwd"), "-..-etc-passwd.png");
         assert_eq!(sanitize_file_name("a/b\\c:d.png"), "a-b-c-d.png");
+        assert_eq!(sanitize_file_name("a<b>c\"d|e?f*g"), "a-b-c-d-e-f-g.png");
         assert_eq!(sanitize_file_name("   "), "drifty-card.png");
         assert_eq!(sanitize_file_name(".hidden"), "hidden.png");
     }
@@ -177,5 +262,20 @@ mod tests {
             decode_share_card_png(&payload).unwrap(),
             PNG_SIGNATURE.to_vec()
         );
+    }
+
+    #[test]
+    fn downloads_save_never_replaces_an_earlier_card() {
+        let directory = tempfile::tempdir().unwrap();
+
+        let first =
+            write_new_share_card_file(directory.path(), "drifty-card.png", b"first").unwrap();
+        let second =
+            write_new_share_card_file(directory.path(), "drifty-card.png", b"second").unwrap();
+
+        assert_eq!(first, directory.path().join("drifty-card.png"));
+        assert_eq!(second, directory.path().join("drifty-card (2).png"));
+        assert_eq!(std::fs::read(&first).unwrap(), b"first");
+        assert_eq!(std::fs::read(&second).unwrap(), b"second");
     }
 }
