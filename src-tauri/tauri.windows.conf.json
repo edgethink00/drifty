@@ -28,7 +28,8 @@
         "silent": true
       },
       "nsis": {
-        "installerHooks": "windows/nsis-hooks.nsh"
+        "installerHooks": "windows/nsis-hooks.nsh",
+        "installerIcon": "icons/icon.ico"
       }
     },
     "resources": {
