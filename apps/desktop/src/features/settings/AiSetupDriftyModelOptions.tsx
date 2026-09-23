@@ -4,6 +4,7 @@ import { isRetryableManagedModelError } from "./managedLocalAiLabels";
 import { managedLocalAiProgressText } from "./managedLocalAiProgressText";
 import type { LocalizationController } from "../localization/LocalizationContext";
 import { managedModelChoiceTitle, managedModelResourceDescription } from "./managedModelPresentation";
+import { accessibilityClient } from "../../lib/api/accessibilityClient";
 
 export const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
 /**
@@ -136,7 +137,12 @@ export function driftyModelOptions({
         if (artifactDir) {
           actions.push({
             key: "reveal",
-            label: t("settings.ai.showManagedModelInFinderAria", { model: model.label }),
+            label: t(
+              accessibilityClient.detectHostPlatform() === "windows"
+                ? "settings.ai.showManagedModelInFinderAriaWindows"
+                : "settings.ai.showManagedModelInFinderAria",
+              { model: model.label },
+            ),
             icon: <FolderIcon />,
             onAction: () => {
               void onRevealArtifact(artifactDir);

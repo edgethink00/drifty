@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLocalization } from "../localization/LocalizationContext";
 import { driftyModelOptions } from "./AiSetupDriftyModelOptions";
 import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "./managedLocalAiCatalog";
@@ -9,9 +9,38 @@ import { SettingsSelect } from "./SettingsSelect";
 import { ENGLISH_TRANSLATIONS } from "../localization/translations";
 import type { ManagedLocalAiStatus } from "./managedLocalAiClient";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 describe("managed model requirements in settings", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "macos");
+  });
+
+  it("names File Explorer for the installed-model reveal action on Windows", () => {
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "windows");
+    const model = MANAGED_LOCAL_AI_FALLBACK_CATALOG[0];
+    const option = driftyModelOptions({
+      catalog: MANAGED_LOCAL_AI_FALLBACK_CATALOG,
+      actionModelId: null,
+      cloudSubscribeActionDisabled: false, cloudSubscribeActionLabel: "Upgrade",
+      cloudSelectable: false, canManageBilling: false,
+      onInstallModel: vi.fn(), onStartModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
+      onDeleteModel: vi.fn(), onRevealArtifact: vi.fn(),
+      t: ((key: keyof typeof ENGLISH_TRANSLATIONS, values?: Record<string, string>) =>
+        ENGLISH_TRANSLATIONS[key].replace("{{model}}", values?.model ?? "")) as never,
+      status: {
+        state: "installed", selectedModelId: model.id, installedModels: [{ id: model.id, artifactDir: "C:\\qa-model" }],
+        baseUrl: null, model: null, message: "", artifactDir: null,
+        progress: null, errorKind: null, memoryUsageBytes: null,
+      },
+    })[1];
+
+    expect(option.actions?.find((action) => action.key === "reveal")?.label).toBe(`Show ${model.label} in File Explorer`);
+  });
+
   it("keeps idle downloads on hover while showing progress, retries, and installed-model management", () => {
     const base = {
       catalog: MANAGED_LOCAL_AI_FALLBACK_CATALOG,

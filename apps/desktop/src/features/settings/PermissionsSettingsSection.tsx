@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useLocalization } from "../localization/LocalizationContext";
 import { useSafariHistoryPermission } from "../onboarding/useSafariHistoryPermission";
+import { accessibilityClient } from "../../lib/api/accessibilityClient";
 import {
   openFullDiskAccessSettingsPane,
   openSystemSettingsPane,
@@ -166,15 +167,22 @@ export function PermissionsSettingsSection({
     if (!desktopRuntime) return t("settings.permissions.unavailableAction");
     if (accessibilityChecking) return t("settings.permissions.checking");
     return accessibilityGranted
-      ? t("settings.permissions.openSystemSettings")
+      ? t(openSettingsLabelKey())
       : t("settings.permissions.allowAccessibility");
+  }
+
+  // The button opens the host's own settings app, so name the one it opens.
+  function openSettingsLabelKey() {
+    return accessibilityClient.detectHostPlatform() === "windows"
+      ? "settings.permissions.openSystemSettingsWindows"
+      : "settings.permissions.openSystemSettings";
   }
 
   function notificationActionLabel() {
     if (notificationPermission === "unavailable") return t("settings.permissions.unavailableAction");
     if (notificationPermission === "checking") return t("settings.permissions.checking");
     if (notificationPermission === "granted" || notificationPermission === "denied") {
-      return t("settings.permissions.openSystemSettings");
+      return t(openSettingsLabelKey());
     }
     if (notificationPermission === "error") return t("settings.permissions.checkAgain");
     return t("settings.permissions.allowNotifications");

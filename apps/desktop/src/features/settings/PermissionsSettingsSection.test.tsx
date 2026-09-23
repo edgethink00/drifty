@@ -39,6 +39,9 @@ vi.mock("../onboarding/useSafariHistoryPermission", () => ({
 
 describe("PermissionsSettingsSection", () => {
   beforeEach(() => {
+    // jsdom's user agent contains "darwin", which the host detector's
+    // user-agent fallback reads as Windows. Pin the build-time host instead.
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "macos");
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
       value: {},
@@ -56,6 +59,27 @@ describe("PermissionsSettingsSection", () => {
   afterEach(() => {
     cleanup();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    vi.unstubAllEnvs();
+  });
+
+  it("names Windows Settings for a denied notification permission on Windows", async () => {
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "windows");
+    requestPermission.mockResolvedValueOnce("denied");
+
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted
+        accessibilityRequired={false}
+        onCheckAccessibility={vi.fn().mockResolvedValue(true)}
+        onRequestAccessibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /^Allow notifications$/ }));
+    const settingsButton = await screen.findByRole("button", { name: /^Open Windows Settings$/ });
+    expect(screen.queryByRole("button", { name: /^Open System Settings$/ })).toBeNull();
+    fireEvent.click(settingsButton);
+    await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
   });
 
   it("requests OS permissions without changing notification feature preferences", async () => {
