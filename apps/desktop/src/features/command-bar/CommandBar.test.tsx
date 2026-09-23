@@ -7,7 +7,10 @@ import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { CommandBar } from "./CommandBar";
 import { ModalPresence } from "../../components/ModalPresence";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 describe("CommandBar", () => {
   it("keeps the legacy command order when the navigation refresh is off", () => {
@@ -28,6 +31,26 @@ describe("CommandBar", () => {
       "SettingsApp preferences⌘,",
     ]);
     expect(within(navigation).queryByText("Agents")).toBeNull();
+  });
+
+  it("hides the macOS shortcut hints on Windows, where no key triggers them", () => {
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "windows");
+    render(
+      <LocalizationTestProvider language="en">
+        <CommandBar includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
+      </LocalizationTestProvider>,
+    );
+
+    const navigation = screen.getByRole("group", { name: "Navigate" });
+    expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "DashboardToday at a glance",
+      "ClassificationActivity breakdown",
+      "ProjectsTime grouped by project",
+      "InsightsUsage and focus rhythm",
+      "HistoryLocal records",
+      "SocialGlobal focus leaderboard",
+      "SettingsApp preferences",
+    ]);
   });
 
   it("uses Calendar, Agents, then Review order when the navigation refresh is on", () => {

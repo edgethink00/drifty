@@ -349,6 +349,7 @@ export function useOnboardingFlow({
             ...(onActivateCloudTrial ? { activateCloudTrial: onActivateCloudTrial } : {}),
             ...(onRefreshBillingEntitlement ? { refreshEntitlement: onRefreshBillingEntitlement } : {}),
             unavailableMessage: t("billing.trialActivation.unavailable"),
+            deviceLimitMessage: t("onboarding.ready.cloudDeviceLimit"),
           });
           assertCurrentAccount();
           if (connection.setupChoice === "simple") {

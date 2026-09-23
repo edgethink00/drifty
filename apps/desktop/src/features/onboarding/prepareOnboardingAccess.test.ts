@@ -105,4 +105,16 @@ describe("Cloud onboarding completion boundary", () => {
     expect(input.startTracking).not.toHaveBeenCalled();
   });
 
+  it("names the device limit when this device is over the account's limit", async () => {
+    const input = fixture({
+      entitlement: active,
+      deviceLimitMessage: "Remove a device you no longer use.",
+      refreshEntitlement: vi.fn().mockResolvedValue({
+        ...active, status: "locked", canUseApp: false, lockedReason: "device_limit_reached",
+      }),
+    });
+    await expect(prepareOnboardingAccess(input)).rejects.toThrow("Remove a device you no longer use.");
+    expect(input.startTracking).not.toHaveBeenCalled();
+  });
+
 });

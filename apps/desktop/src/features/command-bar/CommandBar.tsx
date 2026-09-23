@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { type TabId } from "../../app/navigation";
+import { accessibilityClient } from "../../lib/api/accessibilityClient";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -177,6 +178,9 @@ export function CommandBar({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // The hints are macOS glyphs, and Windows installs no app menu, so none of
+  // them maps to a key there. Showing them would advertise dead shortcuts.
+  const showShortcuts = useMemo(() => accessibilityClient.detectHostPlatform() === "macos", []);
 
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-command-search]" });
   useModalDismiss(onDismiss);
@@ -491,7 +495,7 @@ export function CommandBar({
                       <span className="cmd-label">{item.label}</span>
                       <span className="cmd-sub">{item.sub}</span>
                     </span>
-                    {item.shortcut ? (
+                    {showShortcuts && item.shortcut ? (
                       <kbd className="cmd-kbd" aria-hidden="true">{item.shortcut}</kbd>
                     ) : null}
                   </button>

@@ -4,10 +4,15 @@ import { ToggleButton } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
 import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
 import { canStartCloudTrial } from "../../../billing/billingEligibility";
+import { accessibilityClient } from "../../../../lib/api/accessibilityClient";
 
 export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { effectiveLanguage, t } = useLocalization();
   const summaryItems = summaryItemsForFlow(flow, t, effectiveLanguage);
+  // Windows has no menu bar; tracking is paused from the taskbar icon there.
+  const pauseNoteKey = accessibilityClient.detectHostPlatform() === "macos"
+    ? "onboarding.ready.pauseNote"
+    : "onboarding.ready.pauseNoteWindows";
 
   return (
     <>
@@ -15,7 +20,9 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
       {flow.setupChoice === "simple" && !flow.accountSkippedForDev
         && !flow.billingEntitlement?.canUseApp && !canStartCloudTrial(flow.billingEntitlement) ? (
           <div className="dc-onb-inline-status" role="status">
-            <p>{t("billing.trialActivation.unavailable")}</p>
+            <p>{t(flow.billingEntitlement?.lockedReason === "device_limit_reached"
+              ? "onboarding.ready.cloudDeviceLimit"
+              : "billing.trialActivation.unavailable")}</p>
             <button type="button" className="dc-onb-back" disabled={flow.isCompleting} onClick={flow.returnToSetupChoice}>
               {t("onboarding.title.chooseSetup")}
             </button>
@@ -52,7 +59,7 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
         disabled={flow.isCompleting}
         onChange={flow.setBrowserHistoryBootstrapEnabled}
       />
-      <p className="dc-onb-muted-note dc-onb-muted-note--ready">{t("onboarding.ready.pauseNote")}</p>
+      <p className="dc-onb-muted-note dc-onb-muted-note--ready">{t(pauseNoteKey)}</p>
     </>
   );
 }
