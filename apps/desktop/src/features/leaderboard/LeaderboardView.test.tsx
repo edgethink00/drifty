@@ -754,7 +754,62 @@ describe("LeaderboardView", () => {
     expect(within(list).getAllByRole("listitem")).toHaveLength(1);
     expect(within(list).getByText("Sam")).toBeTruthy();
     expect(within(list).queryByText("Alex")).toBeNull();
-    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 1–1 of 1 matches in all ranked/i);
+    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 1–1 of 1 matches from the ranked participants/i);
+  });
+
+  it("names the searched participants in the no-match hint", () => {
+    renderView({ leaderboard: [makeLeaderboardRow({ rank: 1, display_name: "Alex", focus_seconds_7d: 7200 })] });
+    fireEvent.change(screen.getByRole("searchbox", { name: /search leaderboard/i }), { target: { value: "zzz" } });
+
+    expect(screen.getByText("Try a name or rank number from the ranked participants.")).toBeTruthy();
+  });
+
+  it("keeps split-preview refresh status out of the row flow when a list is shown", () => {
+    const { container, rerender } = render(
+      <LeaderboardView
+        isSupabaseEnabled
+        isSignedIn
+        isOptedIn={false}
+        previewLayout="split-v2"
+        leaderboard={[makeLeaderboardRow({ rank: 1, display_name: "Alex", focus_seconds_7d: 7200 })]}
+        statusMessage="Leaderboard update failed: request timed out"
+        statusTone="error"
+      />,
+    );
+
+    const listHeadStatus = container.querySelector(".leaderboard-list-head__status .leaderboard-refresh-status");
+    expect(listHeadStatus?.getAttribute("title")).toBe("Leaderboard update failed: request timed out");
+    expect(listHeadStatus?.closest('[aria-hidden="true"]')).toBeNull();
+    expect(container.querySelector(".leaderboard-toolbar__status-slot--list-backed")).not.toBeNull();
+
+    rerender(
+      <LeaderboardView
+        isSupabaseEnabled
+        isSignedIn
+        isOptedIn={false}
+        previewLayout="split-v2"
+        leaderboard={[]}
+        statusMessage="Refreshing leaderboard"
+      />,
+    );
+
+    expect(container.querySelector(".leaderboard-list-head__status")).toBeNull();
+    expect(container.querySelector(".leaderboard-toolbar__status-slot--list-backed")).toBeNull();
+    expect(within(container.querySelector(".leaderboard-toolbar__status-slot") as HTMLElement).getByRole("status").textContent).toBe("Refreshing leaderboard");
+    expect((screen.getByRole("searchbox", { name: /search leaderboard/i }) as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("keeps a leftover search clearable when the next period's board is empty", () => {
+    const { rerender } = renderView({ leaderboard: [makeLeaderboardRow({ rank: 1, display_name: "Alex", focus_seconds_7d: 7200 })] });
+    fireEvent.change(screen.getByRole("searchbox", { name: /search leaderboard/i }), { target: { value: "ale" } });
+
+    rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn activePeriod="daily" leaderboard={[]} />);
+
+    const search = screen.getByRole("searchbox", { name: /search leaderboard/i }) as HTMLInputElement;
+    expect(search.value).toBe("ale");
+    expect(search.disabled).toBe(false);
+    fireEvent.change(search, { target: { value: "" } });
+    expect(search.disabled).toBe(true);
   });
 
   it("labels the loaded top slice separately from the full participant count", () => {
@@ -803,7 +858,7 @@ describe("LeaderboardView", () => {
 
     const scope = screen.getByLabelText("Leaderboard scope");
     expect(within(scope).getByText("—")).toBeTruthy();
-    expect(within(scope).getByText("All ranked focus")).toBeTruthy();
+    expect(within(scope).getByText("Total focus")).toBeTruthy();
   });
 
   it("keeps an explicit zero participant total for an empty board", () => {

@@ -1,8 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatDateRangeLabel, formatRelativeTime } from "./formatting";
+import { formatCompactDurationFromSeconds, formatDateRangeLabel, formatLocalizedDuration, formatRelativeTime } from "./formatting";
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("duration rounding", () => {
+  it("carries 59.5 rounded minutes into the next hour in English and Korean", () => {
+    expect(formatLocalizedDuration(2008770, "en")).toBe("558h");
+    expect(formatLocalizedDuration(2008770, "ko")).toBe("558시간");
+    expect(formatLocalizedDuration(3570, "en")).toBe("1h");
+    expect(formatLocalizedDuration(7199, "en")).toBe("2h");
+    expect(formatLocalizedDuration(5399, "en")).toBe("1h 30m");
+    expect(formatCompactDurationFromSeconds(3599)).toBe("1h");
+  });
 });
 
 describe("formatRelativeTime", () => {

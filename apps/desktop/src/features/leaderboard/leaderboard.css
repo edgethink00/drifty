@@ -3045,6 +3045,103 @@
   width: 100%;
 }
 
+.content--leaderboard .lb-v2 .leaderboard-board-block .leaderboard-toolbar {
+  display: grid;
+  grid-template-areas: "controls status" "stats stats" "search search";
+  grid-template-columns: minmax(0, 1fr) minmax(0, 11.5rem);
+  gap: var(--space-2) var(--space-1);
+}
+
+.content--leaderboard .lb-v2 .leaderboard-toolbar__control-row {
+  display: contents;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-period-control {
+  grid-area: controls;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-toolbar__status-slot {
+  grid-area: status;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-refresh-status {
+  max-width: 100%;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-refresh-status::before {
+  flex: 0 0 auto;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-toolbar__stats {
+  grid-area: stats;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-search {
+  grid-area: search;
+  margin-left: 0;
+}
+
+@container leaderboard-board (min-width: 40rem) {
+  .content--leaderboard .lb-v2 .leaderboard-board-block .leaderboard-toolbar {
+    grid-template-areas: "controls status" "stats search";
+    grid-template-columns: minmax(0, 1fr) minmax(11rem, 14rem);
+    column-gap: var(--space-4);
+  }
+}
+
+@container leaderboard-board (min-width: 44rem) {
+  .content--leaderboard .lb-v2 .leaderboard-board-block .leaderboard-toolbar {
+    grid-template-areas: "controls stats search";
+    grid-template-columns: max-content minmax(0, 1fr) minmax(11rem, 14rem);
+    align-items: center;
+    column-gap: var(--space-4);
+  }
+
+  .content--leaderboard .lb-v2 .leaderboard-toolbar__stats {
+    flex-wrap: wrap;
+    row-gap: 0.15rem;
+  }
+
+  /* Wide totals drop to a second line instead of clipping their values. */
+  .content--leaderboard .lb-v2 .leaderboard-toolbar__stats > div {
+    flex: none;
+  }
+
+  .content--leaderboard .lb-v2 .leaderboard-toolbar__status-slot {
+    grid-area: 2 / 3;
+    justify-self: end;
+    width: auto;
+  }
+
+  .content--leaderboard .lb-v2 .leaderboard-toolbar__status-slot:empty {
+    display: none;
+  }
+
+  /* With a list on screen, status moves into the list header so rows stay put. */
+  .content--leaderboard .lb-v2 .leaderboard-toolbar__status-slot--list-backed {
+    display: none;
+  }
+}
+
+@container leaderboard-board (max-width: 23rem) {
+  .content--leaderboard .lb-v2 .leaderboard-board-block .leaderboard-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .content--leaderboard .lb-v2 .leaderboard-toolbar__status-slot {
+    justify-content: flex-start;
+  }
+
+  .content--leaderboard .lb-v2 .leaderboard-toolbar__stats,
+  .content--leaderboard .lb-v2 .leaderboard-search {
+    flex: 0 0 auto;
+  }
+}
+
 .content--leaderboard .leaderboard-toolbar__stats .label-mono {
   color: var(--text-muted);
   font-family: var(--font-sans);
@@ -3077,6 +3174,99 @@
   position: sticky;
   top: 0;
   z-index: 2;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head,
+.content--leaderboard .lb-v2 .leaderboard-list-head--daily,
+.content--leaderboard .lb-v2 .leaderboard-row__profile-button {
+  grid-template-columns: minmax(0, 1fr) minmax(12.5rem, 0.34fr) 0.75rem;
+  column-gap: var(--space-2);
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head {
+  padding-inline: var(--space-3);
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head__status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head__status .leaderboard-refresh-status {
+  max-width: 100%;
+  min-height: 1.3rem;
+}
+
+/* Narrow boards keep status beside the period control; the header cell stays
+   in the grid so the metric labels remain over their columns. */
+.content--leaderboard .lb-v2 .leaderboard-list-head__status > .leaderboard-refresh-status {
+  display: none;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head__metrics {
+  grid-column: 2;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head__spacer {
+  grid-column: 3;
+}
+
+/* Daily shows one metric, so its track only needs one value's width. */
+.content--leaderboard .lb-v2 .leaderboard-list-head.leaderboard-list-head--daily,
+.content--leaderboard .lb-v2 .leaderboard-list-frame--daily .leaderboard-row__profile-button {
+  grid-template-columns: minmax(0, 1fr) minmax(6.5rem, 0.17fr) 0.75rem;
+}
+
+/* Narrow boards give names room; two 5.25rem value columns still fit "744h 59m". */
+@container leaderboard-board (max-width: 40rem) {
+  .content--leaderboard .lb-v2 .leaderboard-list-head,
+  .content--leaderboard .lb-v2 .leaderboard-row__profile-button {
+    grid-template-columns: minmax(0, 1fr) 11rem 0.75rem;
+  }
+}
+
+@container leaderboard-board (min-width: 44rem) {
+  .content--leaderboard .lb-v2 .leaderboard-list-head__status > .leaderboard-refresh-status {
+    display: inline-flex;
+  }
+}
+
+/* Size toolbar skeletons like typical totals so loading keeps the one-row toolbar. */
+.lb-v2 .leaderboard-loading-shell__toolbar-value {
+  width: 1.75rem;
+}
+
+.lb-v2 .leaderboard-loading-shell__toolbar-value--wide {
+  width: 3.5rem;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head__metrics span {
+  text-align: right;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head--daily .leaderboard-list-head__metrics,
+.content--leaderboard .lb-v2 .leaderboard-list-frame--daily .leaderboard-row__meta--compact {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.content--leaderboard .lb-v2 .leaderboard-list-head__spacer {
+  display: block;
+  width: 0.75rem;
+}
+
+.content--leaderboard .lb-v2 .leaderboard-row__chevron {
+  width: 0.75rem;
+  text-align: center;
 }
 
 .content--leaderboard .leaderboard-row__profile-button {
@@ -3585,6 +3775,10 @@
   scrollbar-gutter: stable;
 }
 
+.leaderboard-split.lb-v2 .leaderboard-hero {
+  align-items: stretch;
+}
+
 .lb-v2 .leaderboard-profile-block {
   border: 1px solid color-mix(in srgb, var(--line) 65%, transparent) !important;
   border-radius: var(--radius-lg) !important;
@@ -3772,6 +3966,7 @@
   margin: 0 !important;
   flex: 0 0 auto !important;
   overflow-wrap: anywhere !important;
+  text-wrap: balance;
 }
 
 .lb-v2 .capture-recency,

@@ -40,8 +40,10 @@ export { secondsToLabel as formatDuration } from "@drifty/domain";
 
 export function formatRoundedDuration(totalSeconds: number): string {
   if (totalSeconds <= 0) return "0m";
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.round((totalSeconds % 3600) / 60);
+  // Round once at minute precision so 59.5 minutes carries into the hour.
+  const totalMinutes = Math.round(totalSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   if (hours === 0) return `${minutes}m`;
   if (minutes === 0) return `${hours}h`;
   return `${hours}h ${minutes}m`;
@@ -49,7 +51,8 @@ export function formatRoundedDuration(totalSeconds: number): string {
 
 export function formatCompactDurationFromSeconds(totalSeconds: number): string {
   if (totalSeconds <= 0) return "0";
-  const h = Math.floor(totalSeconds / 3600), m = Math.round((totalSeconds % 3600) / 60);
+  const totalMinutes = Math.round(totalSeconds / 60);
+  const h = Math.floor(totalMinutes / 60), m = totalMinutes % 60;
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;

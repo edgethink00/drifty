@@ -226,7 +226,7 @@ export function LeaderboardView({
                     style={{ width: 96, height: 96, borderRadius: "50%", fontSize: "2rem" }}
                   />
                   <div className="leaderboard-hero__identity-copy">
-                    <h3>{previewName}</h3>
+                    <h3 title={previewName}>{previewName}</h3>
                     <span
                       className={`leaderboard-hero__status${isOptedIn && publiclyValid !== false ? " leaderboard-hero__status--live" : ""}${isOptedIn && publiclyValid === false ? " leaderboard-hero__status--fail" : ""}${isParticipationResolved ? "" : " leaderboard-hero__status--pending"}`}
                     >
@@ -460,6 +460,7 @@ export function LeaderboardView({
 
             <LeaderboardBoard
               activePeriod={activePeriod}
+              isSplitPreview
               currentUserRank={currentUserRank}
               filteredLeaderboard={filteredLeaderboard}
               isLoading={isLoading}

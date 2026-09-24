@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatLocalizedDuration } from "../../lib/formatting";
 import { LEADERBOARD_PUBLIC_RESULT_LIMIT } from "./leaderboardConfig";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
@@ -18,6 +18,7 @@ export type LeaderboardBoardProps = {
   readonly currentUserRank: number | null;
   readonly filteredLeaderboard: readonly LeaderboardRow[];
   readonly isLoading?: boolean;
+  readonly isSplitPreview?: boolean;
   readonly isOptedIn: boolean;
   readonly leaderboard: readonly LeaderboardRow[];
   readonly participantCount: number | null;
@@ -35,6 +36,7 @@ export function LeaderboardBoard({
   currentUserRank,
   filteredLeaderboard,
   isLoading = false,
+  isSplitPreview = false,
   isOptedIn,
   leaderboard,
   participantCount,
@@ -46,7 +48,7 @@ export function LeaderboardBoard({
   onSearchQueryChange,
   onSelectProfile,
 }: LeaderboardBoardProps) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const [pageIndex, setPageIndex] = useState(0);
   const listFrameRef = useRef<HTMLDivElement>(null);
   const totalPages = Math.max(1, Math.ceil(filteredLeaderboard.length / LEADERBOARD_PAGE_SIZE));
@@ -74,28 +76,45 @@ export function LeaderboardBoard({
     ? loadedCount >= LEADERBOARD_PUBLIC_RESULT_LIMIT || (currentUserRank ?? 0) > loadedCount
     : participantCount > loadedCount;
   const scopeLabel = hasMoreParticipants ? t("leaderboard.topCount", { count: loadedCount }) : t("leaderboard.allRanked");
+  // Sentence-safe scope for search copy: "ranked participants" or "top 100".
+  const searchScope = hasMoreParticipants
+    ? effectiveLanguage === "en" ? scopeLabel.toLowerCase() : scopeLabel
+    : t("leaderboard.rankedParticipants");
   const firstVisible = filteredLeaderboard.length === 0 ? 0 : safePageIndex * LEADERBOARD_PAGE_SIZE + 1;
   const lastVisible = Math.min((safePageIndex + 1) * LEADERBOARD_PAGE_SIZE, filteredLeaderboard.length);
   const hasPagination = !isLoading && leaderboard.length > 0 && filteredLeaderboard.length > 0;
+  // The split preview shows refresh status in the list header on wide boards so
+  // the rows never shift when a transient status appears or clears.
+  const statusInListHead = isSplitPreview && (isLoading || hasPagination);
+  const status = isLoading ? (
+    <span className="leaderboard-refresh-status leaderboard-loading-shell__status" role="status" aria-live="polite">
+      {t("leaderboard.loadingLatest")}
+    </span>
+  ) : statusMessage ? (
+    <span className="leaderboard-refresh-status" data-tone={statusTone} role="status" aria-live="polite" title={statusMessage}>
+      {statusMessage}
+    </span>
+  ) : null;
 
   return (
     <section className={`leaderboard-board-block${hasPagination ? " leaderboard-board-block--paginated" : ""}`} aria-label={t("leaderboard.globalAria")} aria-busy={isLoading || undefined}>
       <LeaderboardToolbar
         activePeriod={activePeriod}
+        isEmpty={!isLoading && leaderboard.length === 0}
         isLoading={isLoading}
-        loadedCount={loadedCount}
         participantCount={participantCount}
         searchQuery={searchQuery}
         scopeLabel={scopeLabel}
-        statusMessage={statusMessage}
-        statusTone={statusTone}
+        searchScope={searchScope}
+        status={status}
+        statusInListHead={statusInListHead}
         topScopeFocusSeconds={topScopeFocusSeconds}
         onPeriodChange={onPeriodChange}
         onSearchQueryChange={onSearchQueryChange}
       />
 
       {isLoading ? (
-        <LeaderboardLoadingRankList activePeriod={activePeriod} />
+        <LeaderboardLoadingRankList activePeriod={activePeriod} isSplitPreview={isSplitPreview} status={status} />
       ) : leaderboard.length === 0 ? (
         <div className="leaderboard-board__state">
           <StateBlock
@@ -109,7 +128,7 @@ export function LeaderboardBoard({
           <StateBlock
             eyebrow={t("leaderboard.noMatch")}
             title={t("leaderboard.noMatchTitle")}
-            detail={t("leaderboard.noMatchDetail", { scope: scopeLabel })}
+            detail={t("leaderboard.noMatchDetail", { scope: searchScope })}
           />
         </div>
       ) : (
@@ -118,14 +137,16 @@ export function LeaderboardBoard({
             activePeriod={activePeriod}
             currentUserRank={currentUserRank}
             frameRef={listFrameRef}
+            isSplitPreview={isSplitPreview}
             isOptedIn={isOptedIn}
             rows={pageRows}
+            status={status}
             onSelectProfile={onSelectProfile}
           />
           <nav className="leaderboard-pagination" aria-label={t("leaderboard.pagesAria")}>
             <span className="leaderboard-pagination__summary" aria-live="polite">
               {searchQuery.trim()
-                ? t("leaderboard.showingMatches", { first: firstVisible, last: lastVisible, matches: filteredLeaderboard.length, scope: scopeLabel })
+                ? t("leaderboard.showingMatches", { first: firstVisible, last: lastVisible, matches: filteredLeaderboard.length, scope: searchScope })
                 : t("leaderboard.showing", { first: firstVisible, last: lastVisible, total: loadedCount })}
             </span>
             <span className="leaderboard-pagination__position">{t("leaderboard.pagePosition", { current: safePageIndex + 1, total: totalPages })}</span>
@@ -168,35 +189,32 @@ function PaginationArrowIcon({ direction }: { readonly direction: "previous" | "
 
 function LeaderboardToolbar({
   activePeriod,
+  isEmpty,
   isLoading,
-  loadedCount,
   participantCount,
   searchQuery,
   scopeLabel,
-  statusMessage,
-  statusTone,
+  searchScope,
+  status,
+  statusInListHead,
   topScopeFocusSeconds,
   onPeriodChange,
   onSearchQueryChange,
 }: {
   readonly activePeriod: LeaderboardPeriod;
+  readonly isEmpty: boolean;
   readonly isLoading: boolean;
-  readonly loadedCount: number;
   readonly participantCount: number | null;
   readonly searchQuery: string;
   readonly scopeLabel: string;
-  readonly statusMessage: string | null;
-  readonly statusTone: "error" | "neutral";
+  readonly searchScope: string;
+  readonly status: ReactNode;
+  readonly statusInListHead: boolean;
   readonly topScopeFocusSeconds: number;
   readonly onPeriodChange?: (period: LeaderboardPeriod) => void;
   readonly onSearchQueryChange: (query: string) => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
-  const searchScope = scopeLabel === t("leaderboard.allRanked")
-    ? t("leaderboard.rankedParticipants")
-    : effectiveLanguage === "en"
-      ? scopeLabel.toLowerCase()
-      : scopeLabel;
   return (
     <div className="leaderboard-toolbar">
       <div className="leaderboard-toolbar__control-row">
@@ -214,16 +232,8 @@ function LeaderboardToolbar({
             </button>
           ))}
         </div>
-        <div className="leaderboard-toolbar__status-slot">
-          {isLoading ? (
-            <span className="leaderboard-refresh-status leaderboard-loading-shell__status" role="status" aria-live="polite">
-              {t("leaderboard.loadingLatest")}
-            </span>
-          ) : statusMessage ? (
-            <span className="leaderboard-refresh-status" data-tone={statusTone} role="status" aria-live="polite">
-              {statusMessage}
-            </span>
-          ) : null}
+        <div className={`leaderboard-toolbar__status-slot${statusInListHead ? " leaderboard-toolbar__status-slot--list-backed" : ""}`}>
+          {status}
         </div>
       </div>
       <div className="leaderboard-toolbar__stats" aria-label={t("leaderboard.scopeAria")} aria-hidden={isLoading || undefined}>
@@ -234,7 +244,9 @@ function LeaderboardToolbar({
             : participantCount?.toLocaleString(effectiveLanguage === "ko" ? "ko-KR" : "en-US") ?? "—"}</strong>
         </div>
         <div>
-          <span className="label-mono">{t("leaderboard.scopeFocus", { scope: scopeLabel })}</span>
+          <span className="label-mono">{scopeLabel === t("leaderboard.allRanked")
+            ? t("leaderboard.totalFocus")
+            : t("leaderboard.scopeFocus", { scope: scopeLabel })}</span>
           <strong>{isLoading ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value leaderboard-loading-shell__toolbar-value--wide" /> : formatLocalizedDuration(topScopeFocusSeconds, effectiveLanguage)}</strong>
         </div>
       </div>
@@ -243,7 +255,9 @@ function LeaderboardToolbar({
         <input
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
-          disabled={isLoading}
+          // An empty board has nothing to search, but a query left over from
+          // another period must stay clearable.
+          disabled={isLoading || (isEmpty && !searchQuery)}
           placeholder={t("leaderboard.search", { scope: searchScope })}
           type="search"
         />
@@ -252,11 +266,11 @@ function LeaderboardToolbar({
   );
 }
 
-function LeaderboardLoadingRankList({ activePeriod }: { readonly activePeriod: LeaderboardPeriod }) {
+function LeaderboardLoadingRankList({ activePeriod, isSplitPreview, status }: { readonly activePeriod: LeaderboardPeriod; readonly isSplitPreview: boolean; readonly status: ReactNode }) {
   return (
-    <div className="leaderboard-list-frame" aria-hidden="true">
-      <LeaderboardListHeader activePeriod={activePeriod} />
-      <ol className="leaderboard-list">
+    <div className={`leaderboard-list-frame${isSplitPreview && activePeriod === "daily" ? " leaderboard-list-frame--daily" : ""}`} aria-hidden={isSplitPreview ? undefined : "true"}>
+      <LeaderboardListHeader activePeriod={activePeriod} isSplitPreview={isSplitPreview} status={status} />
+      <ol className="leaderboard-list" aria-hidden={isSplitPreview ? "true" : undefined}>
         {Array.from({ length: 5 }, (_, index) => (
           <li className="leaderboard-row leaderboard-loading-shell__row" key={index}>
             <button className="leaderboard-row__profile-button" type="button" tabIndex={-1}>
@@ -278,8 +292,20 @@ function LeaderboardLoadingRankList({ activePeriod }: { readonly activePeriod: L
   );
 }
 
-function LeaderboardListHeader({ activePeriod }: { readonly activePeriod: LeaderboardPeriod }) {
+function LeaderboardListHeader({ activePeriod, isSplitPreview, status }: { readonly activePeriod: LeaderboardPeriod; readonly isSplitPreview: boolean; readonly status: ReactNode }) {
   const { t } = useLocalization();
+  if (isSplitPreview) {
+    return (
+      <div className={`leaderboard-list-head${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`}>
+        <span className="leaderboard-list-head__status">{status}</span>
+        <div className="leaderboard-list-head__metrics" aria-hidden="true">
+          <span>{t("leaderboard.focusTime")}</span>
+          {activePeriod !== "daily" ? <span>{t("leaderboard.dailyAverage")}</span> : null}
+        </div>
+        <span className="leaderboard-list-head__spacer" aria-hidden="true" />
+      </div>
+    );
+  }
   return (
     <div className={`leaderboard-list-head${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`} aria-hidden="true">
       <span>{t("leaderboard.participant")}</span>
@@ -293,21 +319,25 @@ function LeaderboardRankList({
   activePeriod,
   currentUserRank,
   frameRef,
+  isSplitPreview,
   isOptedIn,
   rows,
+  status,
   onSelectProfile,
 }: {
   readonly activePeriod: LeaderboardPeriod;
   readonly currentUserRank: number | null;
   readonly frameRef: React.RefObject<HTMLDivElement>;
+  readonly isSplitPreview: boolean;
   readonly isOptedIn: boolean;
   readonly rows: readonly LeaderboardRow[];
+  readonly status: ReactNode;
   readonly onSelectProfile?: (row: LeaderboardRow) => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
   return (
-    <div className="leaderboard-list-frame" ref={frameRef}>
-      <LeaderboardListHeader activePeriod={activePeriod} />
+    <div className={`leaderboard-list-frame${isSplitPreview && activePeriod === "daily" ? " leaderboard-list-frame--daily" : ""}`} ref={frameRef}>
+      <LeaderboardListHeader activePeriod={activePeriod} isSplitPreview={isSplitPreview} status={status} />
       <ol className="leaderboard-list" aria-label={t("leaderboard.rankingsAria")}>
         {rows.map((row) => {
           const isCurrentUser = isOptedIn && row.rank === currentUserRank;

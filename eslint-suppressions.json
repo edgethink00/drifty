@@ -126,11 +126,6 @@
       "count": 11
     }
   },
-  "apps/desktop/src/features/leaderboard/LeaderboardBoard.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "apps/desktop/src/features/leaderboard/RankEmbedsModal.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2

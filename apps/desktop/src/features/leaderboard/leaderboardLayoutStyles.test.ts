@@ -42,9 +42,17 @@ describe("leaderboard operate layout styles", () => {
     expect(ruleContaining(".leaderboard-list-head", /min-height:/)).toMatch(/min-height:\s*1\.75rem;/);
   });
 
-  it("keeps controls and stats inline while allowing the toolbar to wrap", () => {
-    expect(ruleContaining(".content--leaderboard .leaderboard-board-block .leaderboard-toolbar", /display:/)).toMatch(/display:\s*flex;/);
+  it("keeps status beside period controls so search does not jump during refresh", () => {
+    const previewToolbar = ".content--leaderboard .lb-v2 .leaderboard-board-block .leaderboard-toolbar";
     expect(ruleContaining(".content--leaderboard .leaderboard-board-block .leaderboard-toolbar", /flex-wrap:/)).toMatch(/flex-wrap:\s*wrap;/);
+    expect(rules(previewToolbar).some((body) => /"controls status" "stats stats" "search search"/.test(body))).toBe(true);
+    expect(rules(previewToolbar).some((body) => /"controls status" "stats search"/.test(body))).toBe(true);
+    expect(ruleContaining(previewToolbar, /grid-template-areas:/)).toMatch(/"controls stats search"/);
+    expect(ruleContaining(".content--leaderboard .lb-v2 .leaderboard-toolbar__control-row", /display:/)).toMatch(/display:\s*contents;/);
+    expect(rules(previewToolbar).some((body) => /display:\s*flex;/.test(body))).toBe(true);
+    expect(ruleContaining(".content--leaderboard .lb-v2 .leaderboard-toolbar__status-slot--list-backed", /display:/)).toMatch(/display:\s*none;/);
+    expect(ruleContaining(".content--leaderboard .lb-v2 .leaderboard-list-head__status > .leaderboard-refresh-status", /display:/)).toMatch(/display:\s*inline-flex;/);
+    expect(ruleContaining(".content--leaderboard .lb-v2 .leaderboard-list-head__metrics", /grid-column:/)).toMatch(/grid-column:\s*2;/);
   });
 
 });
