@@ -9734,7 +9734,7 @@ export default function App() {
           trailing={(
             <>
               <AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />
-              {isSettingsTab && titlebarUpdateVersion ? (
+              {titlebarUpdateVersion ? (
                 <TopbarUpdateButton
                   onInstall={() => void handleInstallUpdate()}
                   progress={updaterDownloadProgress}
@@ -9850,15 +9850,6 @@ export default function App() {
         </div>
 
         <div className="sidebar-foot">
-          {hostPlatform === "windows" && titlebarUpdateVersion ? (
-            <div className="sidebar-update-action">
-              <TopbarUpdateButton
-                onInstall={() => void handleInstallUpdate()}
-                status={updateLifecycleStatus}
-                version={titlebarUpdateVersion}
-              />
-            </div>
-          ) : null}
           {shouldShowSidebarCtaSlot && sidebarCtaSlot ? (
             <SidebarCtaSlot
               funnelEnabled={funnelEnabled}

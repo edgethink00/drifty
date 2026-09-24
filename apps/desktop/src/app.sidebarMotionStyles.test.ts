@@ -52,6 +52,15 @@ describe("sidebar motion styles", () => {
     expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.windows-titlebar-nav__history,/);
   });
 
+  it("keeps the Windows titlebar draggable around its trailing pills", () => {
+    // jsdom cannot hit-test, so pin the pair that leaves the gaps between and
+    // around the status and update pills to the drag region underneath.
+    const styles = readStyles();
+
+    expect(cssBlock(styles, ':root[data-platform="windows"] .windows-titlebar__trailing')).toContain("pointer-events: none;");
+    expect(cssBlock(styles, ':root[data-platform="windows"] .windows-titlebar__trailing > *')).toContain("pointer-events: auto;");
+  });
+
   it("moves the titlebar sidebar toggle with transform instead of left", () => {
     const styles = readStyles();
     const toggleBlock = cssBlock(styles, ".window-sidebar-toggle");

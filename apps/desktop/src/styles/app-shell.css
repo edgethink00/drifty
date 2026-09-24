@@ -393,6 +393,13 @@
   align-items: center;
   gap: 8px;
   max-width: min(20rem, 40vw);
+  /* Like the leading group, only the pills take clicks. The gap between them
+     and the strips above and below stay part of the drag surface. */
+  pointer-events: none;
+}
+
+:root[data-platform="windows"] .windows-titlebar__trailing > * {
+  pointer-events: auto;
 }
 
 :root[data-platform="windows"] .windows-titlebar-nav {
@@ -565,6 +572,17 @@
 :root[data-platform="windows"] .windows-titlebar .ai-connection-status__label {
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+/* The update pill sits beside the AI status pill, so it takes the same 24px
+   height and 0.75rem label; the heavier weight keeps it the action. It keeps
+   its own width: when the row runs out of room the status label truncates
+   first, because the update is the action to take. */
+:root[data-platform="windows"] .windows-titlebar .topbar-update-button {
+  flex: none;
+  height: 24px;
+  font-size: 0.75rem;
+  transform: translateY(0.5px);
 }
 
 :root[data-platform="windows"] :is(
@@ -1202,30 +1220,6 @@
   margin: var(--space-1) var(--content-panel-gap) var(--content-panel-gap) 0;
   border: 0;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 9%, transparent);
-}
-
-:root[data-platform="windows"] .sidebar-update-action {
-  display: flex;
-  padding: 0 2px 2px;
-}
-
-:root[data-platform="windows"] .sidebar-update-action .topbar-update-button {
-  justify-content: center;
-  width: 100%;
-  border-radius: 7px;
-}
-
-:root[data-platform="windows"] .sidebar--collapsed .sidebar-update-action {
-  padding-inline: 0;
-}
-
-:root[data-platform="windows"] .sidebar--collapsed .sidebar-update-action .topbar-update-button {
-  width: 34px;
-  padding-inline: 0;
-}
-
-:root[data-platform="windows"] .sidebar--collapsed .sidebar-update-action .topbar-update-button span {
-  display: none;
 }
 
 .content::-webkit-scrollbar {
