@@ -28,6 +28,8 @@ type UseBrowserHistoryBootstrapOptions = {
   readonly shouldStart: boolean;
   readonly selectedDayRef: MutableRefObject<string>;
   readonly clearLocalActivityCaches: () => void;
+  /** The first-day Cloud resume marker can retire its optional import step. */
+  readonly onHistorySettled?: () => void;
   readonly refresh: RefreshDashboard;
   readonly refreshHistoryData: (day?: string) => Promise<boolean>;
   readonly setError: (message: string | null) => void;
@@ -36,6 +38,7 @@ type UseBrowserHistoryBootstrapOptions = {
 export function useBrowserHistoryBootstrap({
   blocked,
   clearLocalActivityCaches,
+  onHistorySettled,
   enabled,
   isPreviewSurface,
   refresh,
@@ -67,6 +70,7 @@ export function useBrowserHistoryBootstrap({
       });
       if (preview.segmentCount <= 0) {
         setState({ status: "empty", preview });
+        if (preview.errorCount === 0) onHistorySettled?.();
         return;
       }
 
@@ -74,6 +78,7 @@ export function useBrowserHistoryBootstrap({
       const result = await trackerClient.importBrowserHistory({
         lookbackDays: BROWSER_HISTORY_BOOTSTRAP_LOOKBACK_DAYS,
       });
+      if (result.errorCount === 0) onHistorySettled?.();
       clearLocalActivityCaches();
       setState({ status: "imported", result });
       await refresh(selectedDayRef.current, { foreground: true });
@@ -85,7 +90,7 @@ export function useBrowserHistoryBootstrap({
       }
       throw error;
     }
-  }, [blocked, clearLocalActivityCaches, refresh, refreshHistoryData, selectedDayRef, setError, state]);
+  }, [blocked, clearLocalActivityCaches, onHistorySettled, refresh, refreshHistoryData, selectedDayRef, setError, state]);
 
   useEffect(() => {
     if (!enabled || blocked || isPreviewSurface || !shouldStart) return;

@@ -17,6 +17,7 @@ export {
   toAnalyticsErrorKind,
   toCountBucket,
   toFirstDayPreparationDurationBucket,
+  toFirstDayPreparationStageDurationBucket,
   toFirstDayPreparationSegmentCountBucket,
   type PostHogEventName,
   type PostHogEventPropertiesByName,

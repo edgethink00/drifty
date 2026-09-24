@@ -9,6 +9,7 @@ export const POSTHOG_EVENT_NAMES = [
   "onboarding_step_viewed",
   "onboarding_completed",
   "first_day_preparation",
+  "first_day_backlog",
   "permission_action",
   "tracker_action",
   "auth_state_changed",
@@ -105,11 +106,16 @@ export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
 export const AI_SETUP_ACTIONS = ["open", "test_connection", "save_provider", "disable"] as const;
 export const AI_PROVIDER_KINDS = ["cloud", "local", "custom", "none"] as const;
 export const FIRST_DAY_PREPARATION_OUTCOMES = ["success", "cloud_not_ready", "classification_incomplete", "preparation_timed_out"] as const;
+export const FIRST_DAY_PREPARATION_PRESENTATIONS = ["dashboard_complete", "dashboard_partial", "retry_screen"] as const;
+export const FIRST_DAY_PREPARATION_FAILURE_KINDS = ["quota", "transient", "content"] as const;
+export const FIRST_DAY_CLOUD_ERROR_TYPES = ["quota", "config", "request", "parse", "schema"] as const;
 export const FIRST_DAY_PREPARATION_PHASES = ["importing", "downloading", "classifying"] as const;
 export const FIRST_DAY_PREPARATION_QUOTA_WINDOWS = ["minute", "hour", "day", "unknown"] as const;
 export const FIRST_DAY_PREPARATION_DURATION_BUCKETS = ["under_30s", "30_90s", "90_180s", "180_300s", "300s_plus"] as const;
+export const FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS = ["under_5s", "5_15s", "15_30s", "30_60s", "60s_plus"] as const;
 export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_50", "51_100", "100_plus"] as const;
-export const CLASSIFICATION_TRIGGERS = ["manual", "background_threshold", "focused_idle", "live", "drift_alarm"] as const;
+export const FIRST_DAY_BACKLOG_SOURCES = ["foreground", "background", "resume"] as const;
+export const CLASSIFICATION_TRIGGERS = ["manual", "background_threshold", "focused_idle", "first_day_resume", "live", "drift_alarm"] as const;
 export const CLASSIFICATION_FAILURE_KINDS = ["transport", "quota", "content"] as const;
 // Mirrors AiConnectionIssueKind. Kept as a local literal list so the analytics
 // taxonomy stays free of feature imports; aiFailureGuidance.test.ts pins the
@@ -204,12 +210,24 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
   first_day_preparation: {
     provider_kind: AI_PROVIDER_KINDS,
     outcome: FIRST_DAY_PREPARATION_OUTCOMES,
+    presentation: FIRST_DAY_PREPARATION_PRESENTATIONS,
+    failure_kind: FIRST_DAY_PREPARATION_FAILURE_KINDS,
+    error_kind: ERROR_KINDS,
+    cloud_error_type: FIRST_DAY_CLOUD_ERROR_TYPES,
     phase: FIRST_DAY_PREPARATION_PHASES,
     quota_window: FIRST_DAY_PREPARATION_QUOTA_WINDOWS,
     quota_wait_count_bucket: COUNT_BUCKETS,
     duration_bucket: FIRST_DAY_PREPARATION_DURATION_BUCKETS,
+    import_duration_bucket: FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS,
+    time_to_first_cloud_request_bucket: FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS,
+    cloud_request_duration_bucket: FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS,
+    cloud_request_count_bucket: COUNT_BUCKETS,
+    classification_batch_count_bucket: COUNT_BUCKETS,
     initial_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
     remaining_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
+  },
+  first_day_backlog: {
+    source: FIRST_DAY_BACKLOG_SOURCES,
   },
   permission_action: {
     permission: PERMISSIONS,

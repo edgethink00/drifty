@@ -4,6 +4,7 @@ import type { TrackerStatus } from "@drifty/domain";
 import { StrictMode, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
+import { beginFirstDayCloudBacklog, readFirstDayCloudBacklog, releaseFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { getOnboardingProgressStorageKey } from "./features/onboarding/onboardingProgress";
 import {
   parsePostOnboardingSidebarGuideRecord,
@@ -245,6 +246,7 @@ vi.mock("./lib/api/trackerClient", () => ({
     getCurrentSnapshot: vi.fn().mockResolvedValue(null),
     getHourlySummary: trackerGetHourlySummary,
     getClassificationMetrics: trackerGetClassificationMetrics,
+    getUnclassifiedSegments: vi.fn().mockResolvedValue([]),
     getTopSites: vi.fn().mockResolvedValue([]),
     getAppIcons: vi.fn().mockResolvedValue({}),
     start: trackerStart,
@@ -2545,6 +2547,21 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
   });
+
+  it("retries an interrupted first-day Cloud import after app restart", async () => {
+    window.localStorage.setItem(
+      getUserOnboardingStorageKey("user-1"),
+      JSON.stringify({ version: 2, completed: true, completedAt: "2026-09-24T00:00:00.000Z" }),
+    );
+    const marker = beginFirstDayCloudBacklog("user-1", "2026-09-24", true)!;
+    releaseFirstDayCloudBacklog(marker.runId); // a new renderer has no live gate
+
+    render(<App />);
+
+    await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledWith({ lookbackDays: 2 }));
+    await waitFor(() => expect(readFirstDayCloudBacklog("user-1")?.importPending).toBe(false));
+    expect(screen.queryByText(/getting your day ready/i)).toBeNull();
+  }, 15_000);
 
   it("keeps completed onboarding hidden until Dev Settings replays it without clearing completion", async () => {
     const onboardingStorageKey = getUserOnboardingStorageKey("user-1");

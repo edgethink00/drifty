@@ -169,7 +169,8 @@ import {
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
 import { isInitialDailyFocusQuietPeriod, isInstallDayReviewEligible } from "./features/onboarding/initialExperiencePolicy";
-import { useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
+import { resolveFirstDayTargetDay, useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
+import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { PostOnboardingSidebarGuide } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
 import { isPostOnboardingSidebarGuideReviewEnabled } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
@@ -4023,6 +4024,11 @@ export default function App() {
   }, []);
 
   const isPreviewSurface = shouldUsePreviewData();
+  const markFirstDayHistorySettled = useCallback(() => {
+    if (!user?.id) return;
+    const marker = readFirstDayCloudBacklog(user.id);
+    if (marker?.importPending) updateFirstDayCloudBacklog(user.id, marker.runId, { importPending: false });
+  }, [user?.id]);
   const shouldStartBrowserHistoryBootstrap =
     activeTab === "dashboard"
     && dashPeriod === "Today"
@@ -4036,6 +4042,7 @@ export default function App() {
     clearLocalActivityCaches,
     enabled: browserHistoryBootstrapEnabled && !preparingFirstDay,
     isPreviewSurface,
+    onHistorySettled: markFirstDayHistorySettled,
     refresh,
     refreshHistoryData,
     selectedDayRef,
@@ -4125,6 +4132,7 @@ export default function App() {
     canUseCloudAiClassificationRef,
     clearLocalActivityCaches,
     cloudAiSelected,
+    cloudBacklogOwnerId: user?.id,
     localAiClassificationOptionsRef,
     managedLocalSelected,
     onBrowserHistoryImportFailed: () => {
@@ -8400,6 +8408,7 @@ export default function App() {
 
   const runAutoAiClassificationBatch = useCallback(async (options: {
     readonly forceBacklogBatch?: boolean;
+    readonly firstDayResume?: boolean;
     readonly query?: UnclassifiedSegmentsQuery;
     readonly analyticsRange?: "current_day" | "recent";
   } = {}): Promise<AiClassificationSummary | null> => {
@@ -8416,11 +8425,13 @@ export default function App() {
 
     const today = logicalTodayIsoDate(startOfDayMinutes);
     const isFocused = rendererFocusedRef.current;
-    const threshold = isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
+    const threshold = forceBacklogBatch ? AI_CLASSIFICATION_BACKGROUND_THRESHOLD
+      : isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
     if (!forceBacklogBatch && isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return null;
     const providerKeyAtStart = aiClassificationProviderKey;
     const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
-    const trigger = isFocused ? "focused_idle" : "background_threshold";
+    const trigger = options.firstDayResume ? "first_day_resume" as const
+      : isFocused ? "focused_idle" as const : "background_threshold" as const;
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
 
     aiClassificationInFlightRef.current = true;
@@ -8480,6 +8491,63 @@ export default function App() {
       aiClassificationInFlightRef.current = false;
     }
   }, [aiClassificationProviderKey, allowAutomaticClassificationAttempt, canUseSelectedCloudAiClassification, classificationActionLoading, classificationAvailability.state, classificationAvailabilityGateEnabled, hasLoadedOnce, preparingFirstDay, recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, selectedLocalAiClassificationOptions, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
+  const firstDayResumeBatchRef = useRef(runAutoAiClassificationBatch);
+  firstDayResumeBatchRef.current = runAutoAiClassificationBatch;
+  const browserHistoryBootstrapTone = browserHistoryBootstrapNotice?.tone ?? null;
+
+  useEffect(() => {
+    if (isPreviewSurface || !user?.id || selectedClassificationRoute !== "cloud"
+      || onboardingOpen || preparingFirstDay || !hasLoadedOnce || shouldBlockLocalTrackerAccess) return undefined;
+    const ownerId = user.id;
+    const dashboardHistoryOwnsImport = browserHistoryBootstrapEnabled
+      && shouldStartBrowserHistoryBootstrap
+      && (browserHistoryBootstrapTone === null || browserHistoryBootstrapTone === "working");
+    let cancelled = false;
+    let nextAttemptAt = 0;
+    const runRecovery = async () => {
+      const marker = readFirstDayCloudBacklog(ownerId);
+      if (cancelled || Date.now() < nextAttemptAt || !marker
+        || (marker.importPending && dashboardHistoryOwnsImport)) return;
+      nextAttemptAt = Date.now() + AUTO_AI_CLASSIFICATION_INTERVAL_MS;
+      try {
+        const outcome = await resumeFirstDayCloudBacklog({
+          ownerId,
+          importHistory: async () => {
+            const result = await trackerClient.importBrowserHistory({ lookbackDays: 2 });
+            if (result.insertedCount > 0) clearLocalActivityCaches();
+            if (result.errorCount > 0) {
+              nextAttemptAt = Date.now() + 30 * 60 * 1000;
+              throw new Error("Browser history import had read errors");
+            }
+          },
+          resolveTargetDay: resolveFirstDayTargetDay,
+          runClassification: async (day) => {
+            const summary = await firstDayResumeBatchRef.current({
+              forceBacklogBatch: true,
+              firstDayResume: true,
+              query: toClassificationQueryForDay(day),
+              analyticsRange: day === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent",
+            });
+            if (summary?.failureKind === "content") nextAttemptAt = Date.now() + 30 * 60 * 1000;
+            return summary;
+          },
+          hasRemainingCandidates: async (day) => {
+            const remaining = await trackerClient.getUnclassifiedSegments({ ...toClassificationQueryForDay(day), limit: 1 });
+            return remaining.length > 0;
+          },
+        });
+        if (outcome === "completed") capturePostHogEvent("first_day_backlog", { source: "resume" });
+      } catch (error) {
+        console.warn("First-day Cloud backlog recovery deferred", error);
+      }
+    };
+    void runRecovery();
+    const intervalId = window.setInterval(() => { void runRecovery(); }, AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [browserHistoryBootstrapEnabled, browserHistoryBootstrapTone, clearLocalActivityCaches, hasLoadedOnce, isPreviewSurface, onboardingOpen, preparingFirstDay, selectedClassificationRoute, shouldBlockLocalTrackerAccess, shouldStartBrowserHistoryBootstrap, startOfDayMinutes, user?.id]);
 
   useEffect(() => {
     const previousState = previousClassificationAvailabilityStateRef.current;

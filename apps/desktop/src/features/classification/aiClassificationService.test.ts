@@ -141,6 +141,19 @@ describe("describeAiClassificationFailure", () => {
     expect(failure).toEqual({
       message: "AI classification failed: AI classification quota is unavailable.",
       failureKind: "transport",
+      serverErrorType: "request",
+    });
+  });
+
+  it("retains the bounded Cloud response error type without changing retry behavior", async () => {
+    const failure = await describeAiClassificationFailure({
+      context: Response.json({ error: "Provider JSON was incomplete.", errorType: "parse" }, { status: 502 }),
+    });
+
+    expect(failure).toEqual({
+      message: "AI classification failed: Provider JSON was incomplete.",
+      failureKind: "transport",
+      serverErrorType: "parse",
     });
   });
 });
@@ -606,6 +619,7 @@ describe("runAiClassification cloud contract", () => {
     });
     const saveClassifications = vi.fn().mockResolvedValue({ saved: 1 });
     const getClassificationMetrics = vi.fn().mockResolvedValue(baseMetrics);
+    const onCloudRequestTiming = vi.fn();
 
     vi.doMock("../../lib/supabase/client", () => ({
       supabase: {
@@ -624,7 +638,7 @@ describe("runAiClassification cloud contract", () => {
 
     try {
       const { runAiClassification } = await import("./aiClassificationService");
-      const result = await runAiClassification({ day: "2026-05-22" });
+      const result = await runAiClassification({ day: "2026-05-22" }, undefined, { onCloudRequestTiming });
 
       expect(result.status).toBe("saved");
       expect(invoke).toHaveBeenCalledWith("classify-activity", {
@@ -633,8 +647,11 @@ describe("runAiClassification cloud contract", () => {
           contractVersion: CLOUD_API_CONTRACT_VERSION,
           items: [expect.objectContaining({ id: "segment-1", appName: "MysteryApp" })],
         }),
+        timeout: 60_000,
       });
       expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(onCloudRequestTiming).toHaveBeenNthCalledWith(1, "started", 0);
+      expect(onCloudRequestTiming).toHaveBeenNthCalledWith(2, "settled", expect.any(Number));
     } finally {
       vi.doUnmock("../../lib/supabase/client");
       vi.doUnmock("../../lib/api/trackerClient");
@@ -729,6 +746,7 @@ describe("runAiClassification cloud contract", () => {
         body: expect.objectContaining({
           items: expect.arrayContaining([expect.objectContaining({ id: "segment-0" })]),
         }),
+        timeout: 60_000,
       });
       const body = invoke.mock.calls[0]?.[1]?.body as { items: unknown[] };
       expect(body.items).toHaveLength(20);

@@ -63,6 +63,9 @@ export { describeLocalAiClassificationFailure } from "./localAiClassificationFai
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
 const CLOUD_CLASSIFICATION_BODY_TARGET_BYTES = 28_000;
+// A stalled Edge request must release the first-day single-flight slot so its
+// background pass can retry without requiring an app restart.
+const CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS = 60_000;
 export const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
@@ -147,6 +150,8 @@ export type AiClassificationRunOptions = {
   persistenceAllowed?: () => boolean;
   /** User-initiated retries may probe immediately after account/device recovery. */
   bypassCloudRequestBackoff?: boolean;
+  /** Bounded first-day diagnostics; never receives activity, request bodies, or provider text. */
+  onCloudRequestTiming?: (phase: "started" | "settled", elapsedMs: number) => void;
 };
 
 type CloudAiClassificationAccess =
@@ -156,6 +161,7 @@ type CloudAiClassificationAccess =
 type CloudAiRequestContext = {
   readonly requestKey: string;
   readonly bypassBackoff: boolean;
+  readonly onRequestTiming?: AiClassificationRunOptions["onCloudRequestTiming"];
 };
 
 type ClassificationCluster = {
@@ -256,6 +262,7 @@ export type AiClassificationStatus = "disabled" | "idle" | "running" | "saved" |
 // reachable while authentication/model/provider HTTP errors are not usable.
 export type AiClassificationFailureKind = "transport" | "quota" | "content";
 export type AiClassificationQuotaWindow = "minute" | "hour" | "day" | "unknown";
+export type AiClassificationCloudErrorType = "quota" | "config" | "request" | "parse" | "schema";
 
 export interface AiClassificationSummary {
   status: AiClassificationStatus;
@@ -265,6 +272,7 @@ export interface AiClassificationSummary {
   metrics?: ClassificationMetrics;
   failureKind?: AiClassificationFailureKind;
   quotaWindow?: AiClassificationQuotaWindow;
+  serverErrorType?: AiClassificationCloudErrorType;
   // Structured cause when the provider rejected the request. Carried here so
   // telemetry reads the value the transport already computed instead of
   // re-deriving a coarser one by matching the message text.
@@ -458,6 +466,7 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
     await classifyCloudPayloadBatches(cloudClient, representatives, workProfile, memoryContext, {
       requestKey: cloudAccess.requestKey,
       bypassBackoff: options.bypassCloudRequestBackoff === true,
+      onRequestTiming: options.onCloudRequestTiming,
     }),
     membersByRepSegmentId,
   );
@@ -586,6 +595,7 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
     {
       requestKey: cloudAccess.requestKey,
       bypassBackoff: options.bypassCloudRequestBackoff === true,
+      onRequestTiming: options.onCloudRequestTiming,
     },
   );
   if (aiRecords.length === 0) {
@@ -1483,9 +1493,19 @@ async function classifyCloudPayloadBatches(
   for (const batch of partitionCloudPayloads(payloads, workProfile, memoryContext)) {
     assertCloudAiRequestAllowed(requestContext);
     const requestRevision = cloudAiRequestBackoffs.revision(requestContext.requestKey);
-    const { data, error } = await cloudClient.functions.invoke("classify-activity", {
-      body: await withCloudDevicePayload(cloudClassificationRequestBody(batch, workProfile, memoryContext)),
-    });
+    const body = await withCloudDevicePayload(cloudClassificationRequestBody(batch, workProfile, memoryContext));
+    const requestStartedAt = Date.now();
+    try { requestContext.onRequestTiming?.("started", 0); } catch { /* Diagnostics cannot block classification. */ }
+    let invocation: Awaited<ReturnType<typeof cloudClient.functions.invoke>>;
+    try {
+      invocation = await cloudClient.functions.invoke("classify-activity", {
+        body,
+        timeout: CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS,
+      });
+    } finally {
+      try { requestContext.onRequestTiming?.("settled", Date.now() - requestStartedAt); } catch { /* Best effort. */ }
+    }
+    const { data, error } = invocation;
     if (error) {
       const edgeError = await edgeFunctionInvocationError(error);
       if (edgeError.status === 402 || edgeError.status === 429) {
@@ -2317,6 +2337,7 @@ export async function describeAiClassificationFailure(error: unknown): Promise<{
   readonly message: string;
   readonly failureKind: AiClassificationFailureKind;
   readonly quotaWindow?: AiClassificationQuotaWindow;
+  readonly serverErrorType?: AiClassificationCloudErrorType;
 }> {
   const detail = error instanceof AiClassificationEdgeError
     ? {
@@ -2327,6 +2348,7 @@ export async function describeAiClassificationFailure(error: unknown): Promise<{
       }
     : await edgeFunctionFailureDetail(error);
   const quotaWindow = detail.quotaWindow ?? legacyQuotaWindowFromMessage(detail.message);
+  const serverErrorType = isAiClassificationCloudErrorType(detail.errorType) ? detail.errorType : undefined;
   if (detail.errorType === "quota" || detail.status === 429 || quotaWindow) {
     return {
       message: detail.message,
@@ -2334,7 +2356,11 @@ export async function describeAiClassificationFailure(error: unknown): Promise<{
       quotaWindow: quotaWindow ?? "unknown",
     };
   }
-  return { message: detail.message, failureKind: "transport" };
+  return { message: detail.message, failureKind: "transport", ...(serverErrorType ? { serverErrorType } : {}) };
+}
+
+function isAiClassificationCloudErrorType(value: string | null): value is AiClassificationCloudErrorType {
+  return value === "quota" || value === "config" || value === "request" || value === "parse" || value === "schema";
 }
 
 async function edgeFunctionFailureDetail(error: unknown): Promise<EdgeFunctionFailureDetail> {

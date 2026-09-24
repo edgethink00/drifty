@@ -12,6 +12,7 @@ import type {
   CLASSIFICATION_RANGES,
   CLASSIFICATION_FAILURE_KINDS,
   CLASSIFICATION_TRIGGERS,
+  FIRST_DAY_BACKLOG_SOURCES,
   CLOUD_AUTH_ACTIONS,
   CLOUD_AUTH_METHODS,
   COUNT_BUCKETS,
@@ -19,8 +20,12 @@ import type {
   ENTITLEMENT_STATUSES,
   ERROR_KINDS,
   FIRST_DAY_PREPARATION_DURATION_BUCKETS,
+  FIRST_DAY_CLOUD_ERROR_TYPES,
+  FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS,
+  FIRST_DAY_PREPARATION_FAILURE_KINDS,
   FIRST_DAY_PREPARATION_OUTCOMES,
   FIRST_DAY_PREPARATION_PHASES,
+  FIRST_DAY_PREPARATION_PRESENTATIONS,
   FIRST_DAY_PREPARATION_QUOTA_WINDOWS,
   FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
   INSTALL_LOCATIONS,
@@ -100,12 +105,24 @@ export type PostHogEventPropertiesByName = {
   readonly first_day_preparation: {
     readonly provider_kind: (typeof AI_PROVIDER_KINDS)[number];
     readonly outcome: (typeof FIRST_DAY_PREPARATION_OUTCOMES)[number];
+    readonly presentation: (typeof FIRST_DAY_PREPARATION_PRESENTATIONS)[number];
+    readonly failure_kind?: (typeof FIRST_DAY_PREPARATION_FAILURE_KINDS)[number];
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+    readonly cloud_error_type?: (typeof FIRST_DAY_CLOUD_ERROR_TYPES)[number];
     readonly phase?: (typeof FIRST_DAY_PREPARATION_PHASES)[number];
     readonly quota_window?: (typeof FIRST_DAY_PREPARATION_QUOTA_WINDOWS)[number];
     readonly quota_wait_count_bucket: (typeof COUNT_BUCKETS)[number];
     readonly duration_bucket: (typeof FIRST_DAY_PREPARATION_DURATION_BUCKETS)[number];
+    readonly import_duration_bucket?: (typeof FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS)[number];
+    readonly time_to_first_cloud_request_bucket?: (typeof FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS)[number];
+    readonly cloud_request_duration_bucket?: (typeof FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS)[number];
+    readonly cloud_request_count_bucket?: (typeof COUNT_BUCKETS)[number];
+    readonly classification_batch_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly initial_segment_count_bucket?: (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
     readonly remaining_segment_count_bucket?: (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
+  };
+  readonly first_day_backlog: {
+    readonly source: (typeof FIRST_DAY_BACKLOG_SOURCES)[number];
   };
   readonly permission_action: {
     readonly permission: (typeof PERMISSIONS)[number];

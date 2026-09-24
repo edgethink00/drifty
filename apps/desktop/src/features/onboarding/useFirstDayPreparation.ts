@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { shiftIsoDate } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { toFirstDayPreparationDurationBucket, toFirstDayPreparationSegmentCountBucket } from "../../lib/analytics/eventHelpers";
+import { toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucket, toFirstDayPreparationSegmentCountBucket, toFirstDayPreparationStageDurationBucket, type AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { logicalTodayIsoDate } from "../../lib/formatting";
 import { getClassificationActivitySnapshot } from "../classification/classificationActivity";
@@ -9,6 +9,7 @@ import {
   describeAiClassificationFailure,
   toClassificationQueryForDay,
   type AiClassificationRunOptions,
+  type AiClassificationCloudErrorType,
   type AiClassificationQuotaWindow,
   type AiClassificationSummary,
   type ClassificationLevel,
@@ -20,6 +21,13 @@ import type {
   FirstDayPreparationFailureReason,
   FirstDayPreparationPhase,
 } from "./FirstDayPreparationScreen";
+import {
+  beginFirstDayCloudBacklog,
+  clearFirstDayCloudBacklog,
+  readFirstDayCloudBacklog,
+  releaseFirstDayCloudBacklog,
+  updateFirstDayCloudBacklog,
+} from "./firstDayCloudBacklog";
 
 const FIRST_DAY_PREPARATION_LOOKBACK_DAYS = 2;
 // Local-model preparation may keep working for longer; Cloud's quota-paced
@@ -53,6 +61,7 @@ const FIRST_DAY_PREPARATION_BACKGROUND_MODEL_POLL_MS = 5_000;
 const FIRST_DAY_PREPARATION_BACKGROUND_MODEL_WAIT_MS = 60 * 60 * 1000;
 export const FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS = 30 * 1000;
 const FIRST_DAY_PREPARATION_CLOUD_READY_POLL_MS = 500;
+const FIRST_DAY_PREPARATION_BACKGROUND_RETRY_MAX_MS = 60 * 1000;
 
 // Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
 // hung AI classification request can never trap the user on the loading screen.
@@ -73,6 +82,13 @@ function cloudQuotaRetryDelay(window: AiClassificationQuotaWindow | undefined): 
   return FIRST_DAY_PREPARATION_MINUTE_QUOTA_RETRY_MS;
 }
 
+function cloudBackgroundRetryDelay(consecutiveFailures: number): number {
+  return Math.min(
+    FIRST_DAY_PREPARATION_BACKGROUND_RETRY_MAX_MS,
+    FIRST_DAY_PREPARATION_RETRY_BASE_MS * (2 ** Math.min(consecutiveFailures - 1, 6)),
+  );
+}
+
 type RunAiClassificationBatch = (
   query: ReturnType<typeof toClassificationQueryForDay>,
   batchSize?: number,
@@ -91,6 +107,7 @@ export type UseFirstDayPreparationOptions = {
   readonly canUseCloudAiClassificationRef: MutableRefObject<boolean>;
   /** True when onboarding selected Drifty Cloud, even while readiness is settling. */
   readonly cloudAiSelected: boolean;
+  readonly cloudBacklogOwnerId?: string | null;
   /**
    * Live view of the local AI options. The managed-model attach watcher fills the
    * AI setup while the gate runs, so the gate reads this ref instead of a snapshot.
@@ -142,6 +159,7 @@ export function useFirstDayPreparation({
   canUseCloudAiClassificationRef,
   clearLocalActivityCaches,
   cloudAiSelected,
+  cloudBacklogOwnerId,
   localAiClassificationOptionsRef,
   managedLocalSelected,
   onBrowserHistoryImportFailed,
@@ -165,6 +183,7 @@ export function useFirstDayPreparation({
 } {
   const runRef = useRef(false);
   const runGenerationRef = useRef(0);
+  const cloudBacklogRunIdRef = useRef<string | null>(null);
   const foregroundBatchRef = useRef<{
     readonly day: string;
     readonly localProvider: AiClassificationRunOptions["localProvider"];
@@ -189,6 +208,7 @@ export function useFirstDayPreparation({
   }, []);
 
   const continueAnyway = useCallback(() => {
+    if (cloudBacklogRunIdRef.current) releaseFirstDayCloudBacklog(cloudBacklogRunIdRef.current);
     setFailure(null);
     onReveal("continue");
   }, [onReveal]);
@@ -204,8 +224,30 @@ export function useFirstDayPreparation({
     let partialCloudReveal = false;
     const attemptStartedAt = Date.now();
     let lastQuotaWindow: AiClassificationQuotaWindow | null = null;
+    let quotaWaitCount = 0;
+    let lastForegroundFailure: "quota" | "transient" | "content" | null = null;
+    let lastForegroundErrorKind: AnalyticsErrorKind | null = null;
+    let lastCloudErrorType: AiClassificationCloudErrorType | null = null;
     let initialSegmentCount: number | null = null;
     let remainingSegmentCount: number | null = null;
+    let importStartedAt: number | null = null;
+    let importFinishedAt: number | null = null;
+    let firstCloudRequestStartedAt: number | null = null;
+    let activeCloudRequestStartedAt: number | null = null;
+    let cloudRequestDurationMs = 0;
+    let cloudRequestCount = 0;
+    let classificationBatchCount = 0;
+    const onCloudRequestTiming: NonNullable<AiClassificationRunOptions["onCloudRequestTiming"]> = (requestPhase, elapsedMs) => {
+      if (requestPhase === "started") {
+        const now = Date.now();
+        firstCloudRequestStartedAt ??= now;
+        activeCloudRequestStartedAt = now;
+        cloudRequestCount += 1;
+      } else {
+        cloudRequestDurationMs += Math.max(0, elapsedMs);
+        activeCloudRequestStartedAt = null;
+      }
+    };
     let currentPhase: Exclude<FirstDayPreparationPhase, "ready"> = browserHistoryImportEnabled ? "importing" : "classifying";
     const markPhase = (phase: Exclude<FirstDayPreparationPhase, "ready">) => {
       currentPhase = phase;
@@ -213,6 +255,32 @@ export function useFirstDayPreparation({
     };
     const selectedProviderKeyAtStart = selectedAiProviderKeyRef.current;
     const runGenerationAtStart = runGenerationRef.current;
+    const cloudBacklog = cloudAiSelected && cloudBacklogOwnerId
+      ? beginFirstDayCloudBacklog(
+        cloudBacklogOwnerId,
+        logicalTodayIsoDate(startOfDayMinutes),
+        browserHistoryImportEnabled,
+      )
+      : null;
+    cloudBacklogRunIdRef.current = cloudBacklog?.runId ?? null;
+    const updateCloudBacklog = (changes: { readonly day?: string; readonly importPending?: boolean }) => {
+      if (cloudBacklog && cloudBacklogOwnerId) {
+        updateFirstDayCloudBacklog(cloudBacklogOwnerId, cloudBacklog.runId, changes);
+      }
+    };
+    const completeCloudBacklogIfEmpty = async (day: string, source: "foreground" | "background") => {
+      if (!cloudBacklog || !cloudBacklogOwnerId || !selectedProviderUnchanged()) return;
+      const current = readFirstDayCloudBacklog(cloudBacklogOwnerId);
+      if (!current || current.runId !== cloudBacklog.runId || current.importPending) return;
+      try {
+        const remaining = await trackerClient.getUnclassifiedSegments({ ...toClassificationQueryForDay(day), limit: 1 });
+        if (remaining.length === 0 && clearFirstDayCloudBacklog(cloudBacklogOwnerId, cloudBacklog.runId)) {
+          capturePostHogEvent("first_day_backlog", { source });
+        }
+      } catch {
+        // Leave the marker for a later probe.
+      }
+    };
     const selectedProviderUnchanged = () => runGenerationRef.current === runGenerationAtStart
       && selectedAiProviderKeyRef.current === selectedProviderKeyAtStart;
     const providerKind = () => {
@@ -223,15 +291,34 @@ export function useFirstDayPreparation({
       if (cloudAiSelected) return "cloud" as const;
       return "none" as const;
     };
-    const captureOutcome = (outcome: "success" | FirstDayPreparationFailureReason) => {
+    const captureOutcome = (
+      outcome: "success" | FirstDayPreparationFailureReason,
+      presentation: "dashboard_complete" | "dashboard_partial" | "retry_screen",
+      errorKind: AnalyticsErrorKind | null = null,
+    ) => {
       try {
         capturePostHogEvent("first_day_preparation", {
           provider_kind: providerKind(),
           outcome,
+          presentation,
           ...(outcome === "success" ? {} : { phase: currentPhase }),
+          ...(outcome !== "success" && lastForegroundFailure ? { failure_kind: lastForegroundFailure } : {}),
+          ...(errorKind ? { error_kind: errorKind } : {}),
+          ...(outcome !== "success" && lastCloudErrorType ? { cloud_error_type: lastCloudErrorType } : {}),
           ...(lastQuotaWindow ? { quota_window: lastQuotaWindow } : {}),
-          quota_wait_count_bucket: "none",
+          quota_wait_count_bucket: toCountBucket(quotaWaitCount),
           duration_bucket: toFirstDayPreparationDurationBucket(Date.now() - attemptStartedAt),
+          ...(importStartedAt === null ? {} : {
+            import_duration_bucket: toFirstDayPreparationStageDurationBucket((importFinishedAt ?? Date.now()) - importStartedAt),
+          }),
+          ...(firstCloudRequestStartedAt === null ? {} : {
+            time_to_first_cloud_request_bucket: toFirstDayPreparationStageDurationBucket(firstCloudRequestStartedAt - attemptStartedAt),
+            cloud_request_duration_bucket: toFirstDayPreparationStageDurationBucket(
+              cloudRequestDurationMs + (activeCloudRequestStartedAt === null ? 0 : Date.now() - activeCloudRequestStartedAt),
+            ),
+          }),
+          cloud_request_count_bucket: toCountBucket(cloudRequestCount),
+          classification_batch_count_bucket: toCountBucket(classificationBatchCount),
           ...(initialSegmentCount === null ? {} : {
             initial_segment_count_bucket: toFirstDayPreparationSegmentCountBucket(initialSegmentCount),
           }),
@@ -249,7 +336,7 @@ export function useFirstDayPreparation({
       revealed = true;
       setFailure(null);
       onReveal("complete");
-      captureOutcome("success");
+      captureOutcome("success", "dashboard_complete");
     };
     const revealPartialCloudDay = (reason: FirstDayPreparationFailureReason) => {
       if (settled || cancelled) return;
@@ -258,14 +345,14 @@ export function useFirstDayPreparation({
       partialCloudReveal = true;
       setFailure(null);
       onReveal("continue");
-      captureOutcome(reason);
+      captureOutcome(reason, "dashboard_partial", lastForegroundErrorKind);
     };
     const fail = (reason: FirstDayPreparationFailureReason, detail?: unknown) => {
       if (settled || cancelled) return;
       settled = true;
       if (detail) console.warn("First-day preparation paused", detail);
       setFailure(reason);
-      captureOutcome(reason);
+      captureOutcome(reason, "retry_screen", detail ? toAnalyticsErrorKind(detail) : lastForegroundErrorKind);
     };
     const safetyTimeout = setTimeout(
       () => cloudAiSelected
@@ -389,9 +476,13 @@ export function useFirstDayPreparation({
         // treated as a hang after the timeout but does NOT abandon the rest — we keep
         // going until nothing is left or several no-progress batches in a row.
         if (!pendingBatch) {
+          classificationBatchCount += 1;
           const nextBatch = classifyOptions
             ? runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...classifyOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
-            : runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
+            : runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, {
+              level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL,
+              onCloudRequestTiming,
+            });
           const entry = { day, localProvider, promise: nextBatch };
           foregroundBatchRef.current = entry;
           void nextBatch.finally(() => {
@@ -437,8 +528,16 @@ export function useFirstDayPreparation({
           || summary.status === "disabled"
           || (summary.status === "error" && summary.failureKind !== "content");
         if (transientFailure) {
+          lastForegroundFailure = summary.failureKind === "quota" ? "quota" : "transient";
+          lastCloudErrorType = summary.serverErrorType ?? null;
+          lastForegroundErrorKind = timedOut
+            ? "timeout"
+            : summary.status === "disabled"
+              ? "unavailable"
+              : toAnalyticsErrorKind(summary.message);
           if (!timedOut && !classifyOptions && summary.failureKind === "quota") {
             lastQuotaWindow = summary.quotaWindow ?? "unknown";
+            quotaWaitCount += 1;
             // A Cloud quota is normal pacing, not a reason to keep onboarding
             // on a 60-second foreground retry loop.
             break;
@@ -453,10 +552,16 @@ export function useFirstDayPreparation({
           continue;
         }
         if (!timedOut && summary.savedRecords > 0) {
+          lastForegroundFailure = null;
+          lastForegroundErrorKind = null;
+          lastCloudErrorType = null;
           consecutiveNoProgress = 0;
           consecutiveTransientFailures = 0;
           continue;
         }
+        lastForegroundFailure = "content";
+        lastForegroundErrorKind = toAnalyticsErrorKind(summary.message);
+        lastCloudErrorType = summary.serverErrorType ?? null;
         consecutiveNoProgress += 1;
         if (consecutiveNoProgress >= FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT) break;
       }
@@ -484,22 +589,27 @@ export function useFirstDayPreparation({
         if (browserHistoryImportEnabled) {
           markPhase("importing");
           setProgress(null);
+          importStartedAt = Date.now();
           try {
             // Import already returns its own preview counts. A separate preview
             // copies and scans every browser database twice on the critical path.
             const result = await trackerClient.importBrowserHistory({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
             if (result.insertedCount > 0) clearLocalActivityCaches();
+            if (result.errorCount === 0) updateCloudBacklog({ importPending: false });
           } catch (error) {
             // Import is optional reconstruction. Continue with activity the
             // tracker already has instead of treating it as a Cloud failure.
             // The dashboard can retry its one-shot import when this attempt failed.
             if (!cancelled && selectedProviderUnchanged()) onBrowserHistoryImportFailed();
             console.warn("First-day browser history import unavailable", error);
+          } finally {
+            importFinishedAt = Date.now();
           }
         }
         // Complete + reveal the most recent logical day that has data, and open the
         // dashboard there — right after the day rolls over "today" is often empty.
         today = await resolveFirstDayTargetDay(today);
+        updateCloudBacklog({ day: today });
         // Once the cap has revealed the dashboard, preserve any day the user
         // selected while the import was still finishing.
         if (!settled) {
@@ -552,8 +662,11 @@ export function useFirstDayPreparation({
             markPhase("classifying");
             setProgress(null);
             const complete = await classifyTodayWithProgress(today, classifyOptions);
+            if (complete) await completeCloudBacklogIfEmpty(today, "foreground");
             if (!complete && !settled) {
-              if (cloudAiSelected && lastQuotaWindow) revealPartialCloudDay("classification_incomplete");
+              // Only quota pacing may bypass the retry choice. A confirmed
+              // non-quota failure remains visible as the product decision requires.
+              if (cloudAiSelected && lastForegroundFailure === "quota") revealPartialCloudDay("classification_incomplete");
               else fail("classification_incomplete");
               return;
             }
@@ -568,12 +681,14 @@ export function useFirstDayPreparation({
       } finally {
         clearTimeout(safetyTimeout);
         if (!settled) reveal();
+        if (!revealed && cloudBacklog) releaseFirstDayCloudBacklog(cloudBacklog.runId);
 
         // Background: classify the rest of the 48h window without blocking the reveal.
         // A managed model that outlived the gate's backstop is awaited here, so the
         // revealed (heuristic) dashboard still fills in with AI classifications.
         if (revealed && aiCouldBecomeAvailable && !shouldBlockLocalTrackerAccess) {
           void (async () => {
+            try {
             if (!selectedProviderUnchanged()) return;
             let backgroundOptions = localAiClassificationOptionsRef.current;
             if (!backgroundOptions && !canUseCloudAiClassificationRef.current && managedLocalSelected) {
@@ -600,6 +715,7 @@ export function useFirstDayPreparation({
                   if (summary.savedRecords > 0 && selectedDayRef.current === day) await refresh(day);
                   continue;
                 }
+                let consecutiveBackgroundFailures = 0;
                 for (let attempt = 0; attempt < FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES; attempt += 1) {
                   if (cancelled || !selectedProviderUnchanged()) return;
                   if (!(await waitForCloudInBackground())) return;
@@ -616,29 +732,57 @@ export function useFirstDayPreparation({
                       await firstDayPreparationDelay(cloudQuotaRetryDelay(failure.quotaWindow));
                       continue;
                     }
-                    break;
+                    if (failure.failureKind === "content") break;
+                    consecutiveBackgroundFailures += 1;
+                    await firstDayPreparationDelay(cloudBackgroundRetryDelay(consecutiveBackgroundFailures));
+                    continue;
                   }
                   if (summary.savedRecords > 0 && selectedDayRef.current === day) await refresh(day);
-                  if (summary.status === "empty" || summary.status === "disabled") break;
+                  if (summary.status === "empty") {
+                    await completeCloudBacklogIfEmpty(day, "background");
+                    break;
+                  }
                   if (summary.failureKind === "quota") {
                     await firstDayPreparationDelay(cloudQuotaRetryDelay(summary.quotaWindow));
                     continue;
                   }
-                  if (summary.status === "error" || summary.savedRecords === 0) break;
-                  const remaining = await trackerClient.getUnclassifiedSegments({ ...toClassificationQueryForDay(day), limit: 1 });
-                  if (remaining.length === 0) break;
+                  if (summary.failureKind === "content") break;
+                  if (summary.status === "error" || summary.status === "disabled" || summary.savedRecords === 0) {
+                    consecutiveBackgroundFailures += 1;
+                    await firstDayPreparationDelay(cloudBackgroundRetryDelay(consecutiveBackgroundFailures));
+                    continue;
+                  }
+                  consecutiveBackgroundFailures = 0;
+                  let remaining;
+                  try {
+                    remaining = await trackerClient.getUnclassifiedSegments({ ...toClassificationQueryForDay(day), limit: 1 });
+                  } catch {
+                    consecutiveBackgroundFailures += 1;
+                    await firstDayPreparationDelay(cloudBackgroundRetryDelay(consecutiveBackgroundFailures));
+                    continue;
+                  }
+                  if (remaining.length === 0) {
+                    await completeCloudBacklogIfEmpty(day, "background");
+                    break;
+                  }
                 }
               } catch {
                 // best-effort background classification
               }
             }
+            } finally {
+              if (cloudBacklog) releaseFirstDayCloudBacklog(cloudBacklog.runId);
+            }
           })();
+        } else if (cloudBacklog) {
+          releaseFirstDayCloudBacklog(cloudBacklog.runId);
         }
       }
     })();
 
     return () => {
       if (!revealed) cancelled = true;
+      if (!revealed && cloudBacklog) releaseFirstDayCloudBacklog(cloudBacklog.runId);
       clearTimeout(safetyTimeout);
     };
     // Retrying is the only dependency besides the gate itself that starts a new

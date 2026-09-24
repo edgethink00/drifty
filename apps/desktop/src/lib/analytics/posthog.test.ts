@@ -15,6 +15,7 @@ import {
   toAnalyticsErrorKind,
   toCountBucket,
   toFirstDayPreparationDurationBucket,
+  toFirstDayPreparationStageDurationBucket,
   toFirstDayPreparationSegmentCountBucket,
   type PostHogIdentity,
   type PostHogEventPropertiesByName,
@@ -123,10 +124,19 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect(POSTHOG_EVENT_PROPERTY_ALLOWLIST.first_day_preparation).toMatchObject({
       provider_kind: expect.any(Array),
       outcome: expect.any(Array),
+      presentation: expect.any(Array),
+      failure_kind: expect.any(Array),
+      error_kind: expect.any(Array),
+      cloud_error_type: expect.any(Array),
       phase: expect.any(Array),
       quota_window: expect.any(Array),
       quota_wait_count_bucket: expect.any(Array),
       duration_bucket: expect.any(Array),
+      import_duration_bucket: expect.any(Array),
+      time_to_first_cloud_request_bucket: expect.any(Array),
+      cloud_request_duration_bucket: expect.any(Array),
+      cloud_request_count_bucket: expect.any(Array),
+      classification_batch_count_bucket: expect.any(Array),
       initial_segment_count_bucket: expect.any(Array),
       remaining_segment_count_bucket: expect.any(Array),
     });
@@ -142,6 +152,8 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect(toFirstDayPreparationDurationBucket(29_999)).toBe("under_30s");
     expect(toFirstDayPreparationDurationBucket(30_000)).toBe("30_90s");
     expect(toFirstDayPreparationDurationBucket(300_000)).toBe("300s_plus");
+    expect(toFirstDayPreparationStageDurationBucket(14_999)).toBe("5_15s");
+    expect(toFirstDayPreparationStageDurationBucket(30_000)).toBe("30_60s");
     expect(toFirstDayPreparationSegmentCountBucket(0)).toBe("none");
     expect(toFirstDayPreparationSegmentCountBucket(20)).toBe("1_20");
     expect(toFirstDayPreparationSegmentCountBucket(100)).toBe("51_100");
@@ -157,11 +169,20 @@ describe("PostHog desktop analytics privacy boundary", () => {
   it("keeps first-day preparation telemetry bounded and strips raw activity fields", () => {
     const properties = {
       provider_kind: "cloud",
-      outcome: "success",
+      outcome: "classification_incomplete",
+      presentation: "dashboard_partial",
+      failure_kind: "quota",
+      error_kind: "rate_limited",
+      cloud_error_type: "parse",
       phase: "classifying",
       quota_window: "minute",
       quota_wait_count_bucket: "1",
       duration_bucket: "30_90s",
+      import_duration_bucket: "5_15s",
+      time_to_first_cloud_request_bucket: "15_30s",
+      cloud_request_duration_bucket: "30_60s",
+      cloud_request_count_bucket: "2_5",
+      classification_batch_count_bucket: "2_5",
       initial_segment_count_bucket: "21_50",
       remaining_segment_count_bucket: "none",
     } satisfies PostHogEventPropertiesByName["first_day_preparation"];

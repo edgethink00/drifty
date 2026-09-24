@@ -5,6 +5,7 @@ export {
   toCountBucket,
   toDailyDedupKey,
   toFirstDayPreparationDurationBucket,
+  toFirstDayPreparationStageDurationBucket,
   toFirstDayPreparationSegmentCountBucket,
 } from "./eventHelpers";
 export type { PostHogEventName } from "./eventTaxonomy";
@@ -13,6 +14,7 @@ export type {
   AnalyticsErrorKind,
   CountBucket,
   FirstDayPreparationDurationBucket,
+  FirstDayPreparationStageDurationBucket,
   FirstDayPreparationSegmentCountBucket,
 } from "./eventHelpers";
 export type { SanitizedPostHogProperties } from "./privacyGuard";
