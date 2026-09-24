@@ -40,6 +40,9 @@ export function useOnboardingConnectionFlow({
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
   const [maskedApiKey, setMaskedApiKey] = useState<string | null>(null);
   const [customEndpointDraft, setCustomEndpointDraft] = useState<CustomEndpointDraft>(initialCustomEndpointDraft ?? CUSTOM_ENDPOINT_DEFAULT_DRAFT);
+  // The endpoint key lives beside the draft instead of inside it: the draft is
+  // written to onboarding progress storage, and secrets must never land there.
+  const [customEndpointApiKey, setCustomEndpointApiKey] = useState(localAiSetup.selfHostedApiKey);
   const [connectionPhase, setConnectionPhase] = useState<ConnectionPhase>("idle");
   const [checkStatuses, setCheckStatuses] = useState<ConnectionCheckStatus[]>([]);
   const [connectionFailureLabel, setConnectionFailureLabel] = useState<string | null>(null);
@@ -102,6 +105,7 @@ export function useOnboardingConnectionFlow({
     apiKeyIsValid,
     connectionChecks,
     customEndpointBaseUrlIssue,
+    customEndpointApiKey,
     customEndpointDraft.baseUrl,
     customEndpointDraft.model,
     customEndpointIsValid,
@@ -146,6 +150,11 @@ export function useOnboardingConnectionFlow({
   // the connection test succeeds, so abandoning setup never leaves a half-configured provider.
   function handleCustomEndpointDraftChange(nextDraft: CustomEndpointDraft) {
     setCustomEndpointDraft(nextDraft);
+    resetConnectionValidation();
+  }
+
+  function handleCustomEndpointApiKeyChange(value: string) {
+    setCustomEndpointApiKey(value);
     resetConnectionValidation();
   }
 
@@ -208,6 +217,7 @@ export function useOnboardingConnectionFlow({
           ...current,
           provider: "self_hosted",
           selfHostedBaseUrl: customEndpointDraft.baseUrl.trim(),
+          selfHostedApiKey: customEndpointApiKey.trim(),
           selfHostedModel: customEndpointDraft.model.trim(),
         }));
       }
@@ -238,6 +248,7 @@ export function useOnboardingConnectionFlow({
         ...DEFAULT_LOCAL_AI_SETUP,
         provider: "self_hosted",
         selfHostedBaseUrl: customEndpointDraft.baseUrl.trim(),
+        selfHostedApiKey: customEndpointApiKey.trim(),
         selfHostedModel: customEndpointDraft.model.trim(),
       };
     }
@@ -269,10 +280,12 @@ export function useOnboardingConnectionFlow({
     connectionFailureLabel,
     connectionPhase,
     customEndpointBaseUrlIssue,
+    customEndpointApiKey,
     customEndpointDraft,
     customEndpointIsValid,
     customEndpointModelIssue,
     handleApiKeyChange,
+    handleCustomEndpointApiKeyChange,
     handleCustomEndpointDraftChange,
     handleSetupChoice,
     isByokSetup,

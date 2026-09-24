@@ -95,3 +95,27 @@ describe("onboarding local model unsupported Mac", () => {
     expect(screen.queryByRole("button", { name: "Switch to Cloud" })).toBeNull();
   });
 });
+
+describe("onboarding custom endpoint", () => {
+  it("offers an optional masked API key field", () => {
+    const handleCustomEndpointApiKeyChange = vi.fn();
+    const flow = {
+      setupChoice: "custom_endpoint",
+      isCustomEndpointSetup: true,
+      customEndpointDraft: { baseUrl: "https://llm.example.com/v1", model: "qwen3" },
+      customEndpointBaseUrlIssue: null,
+      customEndpointModelIssue: null,
+      customEndpointApiKey: "",
+      handleCustomEndpointApiKeyChange,
+      handleCustomEndpointDraftChange: vi.fn(),
+      managedLocalAi: { catalog: [], loading: false, actionModelId: null, installModel: vi.fn(), status: null },
+    } as unknown as OnboardingFlow;
+    render(<ConnectServerStep flow={flow} />);
+
+    const input = screen.getByLabelText("Custom endpoint API key");
+    expect(input.getAttribute("type")).toBe("password");
+    expect(screen.getByText("API key (optional)")).toBeTruthy();
+    fireEvent.change(input, { target: { value: "sk-secret" } });
+    expect(handleCustomEndpointApiKeyChange).toHaveBeenCalledWith("sk-secret");
+  });
+});

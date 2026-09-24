@@ -253,6 +253,22 @@ function CustomEndpointSetup({ flow }: { readonly flow: OnboardingFlow }) {
         </span>
       </label>
       <label className="dc-onb-labeled-input">
+        <span>{t("onboarding.connection.customApiKey")}</span>
+        <input
+          className="dc-onb-input dc-onb-input--mono"
+          type="password"
+          value={flow.customEndpointApiKey}
+          onChange={(event) => flow.handleCustomEndpointApiKeyChange(event.target.value)}
+          placeholder="sk-..."
+          autoCapitalize="none"
+          autoCorrect="off"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label={t("onboarding.connection.customApiKeyAria")}
+        />
+        <span className="dc-onb-input-hint">{t("onboarding.connection.customApiKeyHint")}</span>
+      </label>
+      <label className="dc-onb-labeled-input">
         <span>{t("onboarding.connection.model")}</span>
         <input
           className={modelIssue ? "dc-onb-input dc-onb-input--invalid dc-onb-input--mono" : "dc-onb-input dc-onb-input--mono"}
