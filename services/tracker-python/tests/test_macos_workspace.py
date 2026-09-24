@@ -41,6 +41,30 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(_canonical_macos_app_name("firefox", "org.mozilla.firefox"), "Firefox")
         self.assertEqual(_canonical_macos_app_name("Firefox", "org.mozilla.firefox"), "Firefox")
 
+    def test_canonicalizes_zen_and_floorp_from_their_lowercase_process_names(self) -> None:
+        # Zen 1.22.3b and Floorp 12.18.1 report "zen" and "floorp" through
+        # System Events, the same shape as release Firefox.
+        self.assertEqual(_canonical_macos_app_name("zen", "app.zen-browser.zen"), "Zen")
+        self.assertEqual(_canonical_macos_app_name("floorp", "app.floorp.Floorp"), "Floorp")
+        # Without the bundle identity nothing is renamed.
+        self.assertEqual(_canonical_macos_app_name("zen", None), "zen")
+
+    def test_current_snapshot_captures_firefox_family_pages_under_the_canonical_name(self) -> None:
+        for process_name, bundle_id, app_name in (
+            ("firefox", "org.mozilla.firefox", "Firefox"),
+            ("zen", "app.zen-browser.zen", "Zen"),
+            ("floorp", "app.floorp.Floorp", "Floorp"),
+        ):
+            with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+                 patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=[]), \
+                 patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
+                mock_run.return_value = f'{process_name}\n{bundle_id}\nShorts'
+
+                snapshot = current_snapshot(include_system_transient=False)
+
+            self.assertEqual(snapshot.app_name, app_name)
+            mock_browser_metadata.assert_called_once_with(app_name)
+
     def test_browser_script_matrix(self) -> None:
         safari_script = _browser_script("Safari")
         self.assertIsNotNone(safari_script)

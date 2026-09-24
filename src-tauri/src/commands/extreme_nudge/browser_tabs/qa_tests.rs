@@ -25,6 +25,13 @@ const ENV_BROWSER_QA_WHALE_PROFILE: &str = "DRIFTY_NATIVE_QA_WHALE_PROFILE";
 /// Makes the Firefox matrix target play quiet audio so its tab shows the audio
 /// toggle beside the close button, the shape of a playing video tab.
 const ENV_BROWSER_QA_TARGET_AUDIO: &str = "DRIFTY_NATIVE_QA_TARGET_AUDIO";
+/// Extra Firefox preferences for the matrix profile, as `name=value` pairs
+/// separated by `;` with JavaScript literal values, for example
+/// `sidebar.revamp=true;sidebar.verticalTabs=true` to run it on vertical tabs.
+const ENV_BROWSER_QA_FIREFOX_PREFS: &str = "DRIFTY_NATIVE_QA_FIREFOX_PREFS";
+/// `userChrome.css` for the matrix profile, for layouts users make themselves,
+/// such as `.tab-close-button { display: none !important; }`.
+const ENV_BROWSER_QA_FIREFOX_USER_CHROME: &str = "DRIFTY_NATIVE_QA_FIREFOX_USER_CHROME";
 
 #[test]
 #[ignore = "closes an explicitly selected loopback QA tab in an already running browser"]
@@ -694,30 +701,43 @@ fn qa_exercises_firefox_loopback_tab_close_matrix() {
             "browser=Firefox target_tab_buttons=\n{}",
             describe_firefox_qa_tab_buttons(&target_url)?
         );
-        let hotspot = super::preflight_native_ax_tab_close(
+        let preflight = super::preflight_native_ax_tab_close(
             "Firefox",
             Some(&target_url),
             Some(BROWSER_QA_ORACLE_HOST),
-        )
-        .map_err(|diagnostic| format!("Firefox preflight refused the target: {diagnostic}"))?;
-        eprintln!(
-            "browser=Firefox preflight_hotspot=({:.1},{:.1}) exact={} diagnostic={}",
-            hotspot.x, hotspot.y, hotspot.exact, hotspot.diagnostic
         );
+        match &preflight {
+            Ok(hotspot) => eprintln!(
+                "browser=Firefox preflight_hotspot=({:.1},{:.1}) exact={} diagnostic={}",
+                hotspot.x, hotspot.y, hotspot.exact, hotspot.diagnostic
+            ),
+            Err(diagnostic) => {
+                eprintln!("browser=Firefox preflight_refusal_on_target={diagnostic}")
+            }
+        }
+        // The app still attempts the close after a refused preflight, so the
+        // close must refuse on its own too. Record what either did to the tab.
+        let close_result = super::close_browser_tab(
+            "Firefox",
+            None,
+            Some(&target_url),
+            Some(BROWSER_QA_ORACLE_HOST),
+            false,
+        );
+        eprintln!("browser=Firefox close_result={close_result:?}");
+        eprintln!(
+            "browser=Firefox target_tab_buttons_after_close=\n{}",
+            describe_firefox_qa_tab_buttons(&target_url).unwrap_or_else(|error| error)
+        );
+        let hotspot = preflight
+            .map_err(|diagnostic| format!("Firefox preflight refused the target: {diagnostic}"))?;
         if !hotspot.exact {
             return Err(format!(
                 "Firefox preflight did not locate the close control: {}",
                 hotspot.diagnostic
             ));
         }
-        let diagnostic = super::close_browser_tab(
-            "Firefox",
-            None,
-            Some(&target_url),
-            Some(BROWSER_QA_ORACLE_HOST),
-            false,
-        )
-        .map_err(|error| error.to_string())?;
+        let diagnostic = close_result.map_err(|error| error.to_string())?;
         eprintln!("browser=Firefox diagnostic={diagnostic}");
         wait_for_browser_qa_oracle_roles(
             &marker,
@@ -727,6 +747,79 @@ fn qa_exercises_firefox_loopback_tab_close_matrix() {
 
     cleanup_browser_process(&mut browser, profile.path());
     result.expect("Firefox loopback close matrix passes without an out-of-policy close");
+}
+
+/// Every other Firefox QA run uses a profile with `accessibility.force_disabled`
+/// set to -1. A user's own profile builds no accessibility tree until an
+/// assistive client asks for one, so this run drives the browser the user
+/// already has open, opening tabs through Launch Services only.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "closes a marked loopback tab in the running Firefox-family browser with its own profile"]
+fn qa_closes_firefox_family_tab_in_an_unprepared_profile() {
+    assert_eq!(
+        std::env::var(ENV_BROWSER_QA_OPT_IN).as_deref(),
+        Ok("1"),
+        "set {ENV_BROWSER_QA_OPT_IN}=1 to confirm this native UI action"
+    );
+    let browser_name = std::env::var(ENV_BROWSER_QA_BROWSER)
+        .expect("set DRIFTY_NATIVE_QA_BROWSER to Firefox, Floorp, or Zen");
+    assert!(
+        matches!(browser_name.as_str(), "Firefox" | "Floorp" | "Zen"),
+        "unprepared-profile QA targets Firefox-family browsers"
+    );
+    let run_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock is after Unix epoch")
+        .as_millis();
+    let marker = format!("unprepared-{run_id}");
+    let left_url = browser_qa_url(&marker, "sentinel-left");
+    let right_url = browser_qa_url(&marker, "sentinel-right");
+    let target_url = browser_qa_url(&marker, "target");
+    browser_qa_oracle_roles(&marker)
+        .expect("start scripts/qa/browser-ax-pages/server.mjs on 127.0.0.1:18777 first");
+
+    open_app_qa_tab(&browser_name, &left_url).expect("open left sentinel");
+    open_app_qa_tab(&browser_name, &right_url).expect("open right sentinel");
+    open_app_qa_tab(&browser_name, &target_url).expect("open target");
+    wait_for_browser_qa_oracle_roles(
+        &marker,
+        &[("sentinel-left", 1), ("sentinel-right", 1), ("target", 1)],
+    )
+    .expect("target and both sentinels connect before the close");
+    run_osascript_text(&format!(
+        "tell application \"{}\" to activate",
+        applescript_string_literal(&browser_name)
+    ))
+    .expect("activate the browser");
+    thread::sleep(Duration::from_millis(600));
+
+    let namespace_browser = browser_name.as_str();
+    let preflight = super::preflight_native_ax_tab_close(
+        namespace_browser,
+        Some(&target_url),
+        Some(BROWSER_QA_ORACLE_HOST),
+    );
+    eprintln!("browser={browser_name} preflight={preflight:?}");
+    let close = super::close_browser_tab(
+        namespace_browser,
+        None,
+        Some(&target_url),
+        Some(BROWSER_QA_ORACLE_HOST),
+        false,
+    );
+    eprintln!("browser={browser_name} close={close:?}");
+    let hotspot = preflight.expect("preflight resolves the target in the user's own profile");
+    assert!(
+        hotspot.exact || browser_name == "Zen",
+        "preflight hotspot: {hotspot:?}"
+    );
+    close.expect("close removes the target in the user's own profile");
+    wait_for_browser_qa_oracle_roles(
+        &marker,
+        &[("sentinel-left", 1), ("sentinel-right", 1), ("target", 0)],
+    )
+    .expect("only the target disconnects after the close");
 }
 
 fn dismiss_firefox_startup_overlay() -> Result<(), String> {
@@ -854,8 +947,26 @@ fn prepare_firefox_profile(profile_path: &str) -> Result<(), String> {
         r#"user_pref("app.normandy.first_run", false);"#,
     ]
     .join("\n");
-    fs::write(format!("{profile_path}/user.js"), format!("{prefs}\n"))
-        .map_err(|error| error.to_string())
+    let mut extra_prefs = std::env::var(ENV_BROWSER_QA_FIREFOX_PREFS)
+        .unwrap_or_default()
+        .split(';')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(name, value)| format!("user_pref({:?}, {});", name.trim(), value.trim()))
+        .collect::<Vec<_>>();
+    if let Ok(user_chrome) = std::env::var(ENV_BROWSER_QA_FIREFOX_USER_CHROME) {
+        fs::create_dir_all(format!("{profile_path}/chrome")).map_err(|error| error.to_string())?;
+        fs::write(format!("{profile_path}/chrome/userChrome.css"), user_chrome)
+            .map_err(|error| error.to_string())?;
+        extra_prefs.push(
+            r#"user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);"#
+                .to_string(),
+        );
+    }
+    fs::write(
+        format!("{profile_path}/user.js"),
+        format!("{prefs}\n{}\n", extra_prefs.join("\n")),
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn browser_qa_url(marker: &str, role: &str) -> String {

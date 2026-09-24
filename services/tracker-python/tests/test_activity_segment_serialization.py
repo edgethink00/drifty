@@ -97,6 +97,53 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
         self.assertEqual(full["engagementEvidence"], "foreground-audio")
         self.assertEqual(compact["engagementEvidence"], "foreground-audio")
 
+    def test_segments_recorded_under_an_executable_name_show_the_canonical_app(self) -> None:
+        # Before the tracker canonicalized Firefox-family names, System Events
+        # recorded them as "firefox", "zen", and "floorp". Those rows must share
+        # one app row with segments recorded afterwards.
+        rows = [
+            ("firefox", "org.mozilla.firefox", "Firefox"),
+            ("zen", "app.zen-browser.zen", "Zen"),
+            ("floorp", "app.floorp.Floorp", "Floorp"),
+            ("Firefox", "org.mozilla.firefox", "Firefox"),
+            ("firefox", None, "firefox"),
+            ("Google Chrome", "com.google.Chrome", "Google Chrome"),
+        ]
+        with temp_dir_closing_databases() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            for index, (app_name, bundle_id, _) in enumerate(rows):
+                database.insert_segment(
+                    {
+                        "started_at": f"2026-06-13T00:{index:02d}:00+00:00",
+                        "ended_at": f"2026-06-13T00:{index:02d}:30+00:00",
+                        "duration_seconds": 30,
+                        "app_name": app_name,
+                        "bundle_id": bundle_id,
+                        "platform": "macos",
+                        "source": "accessibility",
+                        "confidence": 1.0,
+                    }
+                )
+
+            local_day = datetime.fromisoformat("2026-06-13T00:00:00+00:00").astimezone().date().isoformat()
+            full = database.fetch_timeline(local_day)
+            compact = database.dashboard_week_timeline(
+                "2026-06-12T00:00:00+00:00",
+                "2026-06-14T00:00:00+00:00",
+            )
+            trend = database.project_trend_timeline(
+                "2026-06-12T00:00:00+00:00",
+                "2026-06-14T00:00:00+00:00",
+            )
+            with database.connect() as connection:
+                stored = sorted(row[0] for row in connection.execute("SELECT app_name FROM activity_segments"))
+
+        expected = sorted(display for _, _, display in rows)
+        for serialized in (full, compact, trend):
+            self.assertEqual(sorted(item["appName"] for item in serialized), expected)
+        # Stored history keeps what was captured.
+        self.assertEqual(stored, sorted(app_name for app_name, _, _ in rows))
+
     def test_raw_context_cannot_claim_passive_engagement_evidence(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
         with temp_dir_closing_databases() as tempdir:

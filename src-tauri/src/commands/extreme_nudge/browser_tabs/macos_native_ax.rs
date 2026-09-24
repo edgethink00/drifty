@@ -12,7 +12,11 @@ use core_foundation::number::CFNumber;
 use core_foundation::string::{CFString, CFStringRef};
 use objc2::rc::autoreleasepool;
 use objc2_app_kit::NSWorkspace;
-use std::{ffi::c_void, ptr, thread, time::Duration};
+use std::{
+    ffi::c_void,
+    ptr, thread,
+    time::{Duration, Instant},
+};
 
 const SCAN_LIMIT: usize = 900;
 const TAB_BUTTON_SCAN_LIMIT: usize = 64;
@@ -27,10 +31,22 @@ const INFERRED_CLOSE_EDGE_INSET: f64 = 14.0;
 /// Pinned and collapsed vertical tabs are icon-sized and never show a close
 /// button; the only button they can expose is the audio toggle.
 const STRUCTURAL_CLOSE_MIN_TAB_WIDTH: f64 = 60.0;
-/// Firefox draws the close button against the tab's end edge, while the audio
-/// toggle sits after the site icon near the start edge.
-const STRUCTURAL_CLOSE_MAX_EDGE_GAP: f64 = 14.0;
+/// Firefox draws the close button against the tab's end edge. Measured gaps in
+/// Firefox 156: 6pt on horizontal tabs, 13pt on vertical tabs, and 17pt on
+/// vertical tabs at touch density. The audio toggle is excluded by its place
+/// before the title, not by this distance.
+const STRUCTURAL_CLOSE_MAX_EDGE_GAP: f64 = 24.0;
 const FRAME_TOLERANCE: f64 = 2.0;
+/// How long a close waits for a Firefox-family browser to build the
+/// accessibility tree it was just asked for. The toolbar appeared within 1s in
+/// Firefox 156 QA.
+const ACCESSIBILITY_WAKE_TIMEOUT: Duration = Duration::from_millis(1500);
+const ACCESSIBILITY_WAKE_POLL: Duration = Duration::from_millis(100);
+/// How long a close waits for the front address to change. Zen 1.22 animates
+/// the tab away and still showed the closed page 250ms after the press, so a
+/// single early check reported a close that did happen as a failure.
+const POST_CLOSE_VERIFY_TIMEOUT: Duration = Duration::from_millis(1500);
+const POST_CLOSE_VERIFY_POLL: Duration = Duration::from_millis(125);
 const KAX_VALUE_CGPOINT: u32 = 1;
 const KAX_VALUE_CGSIZE: u32 = 2;
 
@@ -68,6 +84,11 @@ extern "C" {
         description: *mut CFStringRef,
     ) -> AXError;
     fn AXUIElementPerformAction(element: AXUIElementRef, action: CFStringRef) -> AXError;
+    fn AXUIElementSetAttributeValue(
+        element: AXUIElementRef,
+        attribute: CFStringRef,
+        value: CFTypeRef,
+    ) -> AXError;
     fn AXValueGetValue(value: AXValueRef, the_type: u32, value_ptr: *mut c_void) -> u8;
     fn CFRetain(cf: CFTypeRef) -> CFTypeRef;
     fn CFRelease(cf: CFTypeRef);
@@ -131,13 +152,19 @@ pub(super) fn close_frontmost_tab(
             )?;
             let surface = perform_close(app, window, &resolution.control)
                 .ok_or_else(|| format!("{diagnostic_namespace}_close_action_failed"))?;
-            thread::sleep(Duration::from_millis(250));
-            if current_address(window, allows_search_address_label(browser_name)).as_deref()
-                == Some(resolution.address_before.as_str())
-            {
-                return Err(format!(
-                    "{diagnostic_namespace}_post_close_target_still_frontmost"
-                ));
+            let deadline = Instant::now() + POST_CLOSE_VERIFY_TIMEOUT;
+            loop {
+                thread::sleep(POST_CLOSE_VERIFY_POLL);
+                if current_address(window, allows_search_address_label(browser_name)).as_deref()
+                    != Some(resolution.address_before.as_str())
+                {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "{diagnostic_namespace}_post_close_target_still_frontmost"
+                    ));
+                }
             }
             let suffix = match surface {
                 CloseSurface::Tab => "front_tab",
@@ -165,6 +192,9 @@ fn with_frontmost_window<T>(
         if app.is_null() {
             return Err(format!("{diagnostic_namespace}_application_unavailable"));
         }
+        if builds_accessibility_on_request(browser_name) {
+            wake_accessibility_tree(app, allows_search_address_label(browser_name));
+        }
         let result = match focused_content_window(app) {
             Some(window) => {
                 let result = body(app, window);
@@ -182,12 +212,78 @@ fn allows_search_address_label(browser_name: &str) -> bool {
     browser_name == "Zen"
 }
 
+/// Firefox-family browsers build their accessibility tree only after an
+/// assistive client asks for one. Until then a window exposes nothing but its
+/// title-bar buttons, so neither the address nor the tab controls can be
+/// read. Observed in Firefox 156 with the user's own profile: every close and
+/// preflight failed with `no_address_candidate` until something (VoiceOver, or
+/// Pet Mode's seat scan when the cat happened to sit on the browser) had set
+/// `AXEnhancedUserInterface`. `AXManualAccessibility` is not settable there.
+fn builds_accessibility_on_request(browser_name: &str) -> bool {
+    matches!(
+        browser_name,
+        "Firefox" | "Firefox Developer Edition" | "Floorp" | "Zen"
+    )
+}
+
+/// Asks a Firefox-family browser for its accessibility tree when its focused
+/// window exposes only title-bar buttons, then waits briefly for the address
+/// field. A browser whose tree is already built is left alone.
+unsafe fn wake_accessibility_tree(app: AXUIElementRef, allow_search_label: bool) {
+    let Some(window) = focused_content_window(app) else {
+        return;
+    };
+    let asleep = window_exposes_only_title_bar(window);
+    CFRelease(window as CFTypeRef);
+    if !asleep {
+        return;
+    }
+    let attribute = CFString::new("AXEnhancedUserInterface");
+    if AXUIElementSetAttributeValue(
+        app,
+        attribute.as_concrete_TypeRef(),
+        CFBoolean::true_value().as_CFTypeRef(),
+    ) != 0
+    {
+        return;
+    }
+    let deadline = Instant::now() + ACCESSIBILITY_WAKE_TIMEOUT;
+    while Instant::now() < deadline {
+        thread::sleep(ACCESSIBILITY_WAKE_POLL);
+        let Some(window) = focused_content_window(app) else {
+            continue;
+        };
+        let readable = current_address(window, allow_search_label).is_some();
+        CFRelease(window as CFTypeRef);
+        if readable {
+            return;
+        }
+    }
+}
+
+unsafe fn window_exposes_only_title_bar(window: AXUIElementRef) -> bool {
+    let Some(children) = copy_attribute_array(window, "AXChildren") else {
+        return true;
+    };
+    let roles: Vec<String> = (0..children.len())
+        .filter_map(|index| children.get(index as isize))
+        .map(|child| copy_attribute_string(*child as AXUIElementRef, "AXRole").unwrap_or_default())
+        .collect();
+    exposes_only_title_bar(&roles)
+}
+
+fn exposes_only_title_bar(child_roles: &[String]) -> bool {
+    child_roles.iter().all(|role| role == "AXButton")
+}
+
 /// Browsers whose tab close button can be recognised by its position when its
-/// label is in a language the label matcher does not know.
+/// label is in a language the label matcher does not know. Zen 1.22 shows the
+/// same selected-tab close button inside the same tab strip; its context-menu
+/// close stays as the fallback for builds without one.
 fn uses_structural_close(browser_name: &str) -> bool {
     matches!(
         browser_name,
-        "Firefox" | "Firefox Developer Edition" | "Floorp"
+        "Firefox" | "Firefox Developer Edition" | "Floorp" | "Zen"
     )
 }
 
@@ -458,18 +554,37 @@ fn close_hotspot(
     })
 }
 
-/// Picks the selected tab's close button by structure: it is the tab's last
-/// button and sits against one of the tab's edges. The only other button a
-/// Firefox tab exposes is the audio toggle, which follows the site icon near
-/// the opposite edge, so a lone audio toggle on a pinned or close-less tab is
-/// rejected instead of being pressed. Right-to-left layouts put the close
-/// button against the left edge; the same rule accepts either edge.
-fn structural_close_index(tab: Rect, buttons: &[Option<Rect>]) -> Option<usize> {
+/// The parts of a selected tab that the structural close rule reads, in
+/// document order.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TabPart {
+    /// Text outside any button: the tab's title.
+    Title,
+    /// A button, with its frame when readable.
+    Button(Option<Rect>),
+}
+
+/// Picks the selected tab's close button by structure. A Firefox tab lays out
+/// its site icon and audio toggle, then its title, then its close button, and
+/// a right-to-left layout mirrors only the positions, never that order. The
+/// close button is therefore the last button, it follows the title, and it
+/// sits against one of the tab's edges. Position alone cannot separate the
+/// two: in Firefox 156 the audio toggle sits 10pt from the start edge and the
+/// close button 6pt from the end edge. Requiring the title first rejects a
+/// lone audio toggle on a close-less tab instead of pressing it.
+fn structural_close_index(tab: Rect, parts: &[TabPart]) -> Option<usize> {
     if !tab.is_positive() || tab.width < STRUCTURAL_CLOSE_MIN_TAB_WIDTH {
         return None;
     }
-    let index = buttons.len().checked_sub(1)?;
-    let candidate = buttons[index]?;
+    let index = parts
+        .iter()
+        .rposition(|part| matches!(part, TabPart::Button(_)))?;
+    if !parts[..index].contains(&TabPart::Title) {
+        return None;
+    }
+    let TabPart::Button(Some(candidate)) = parts[index] else {
+        return None;
+    };
     if !candidate.is_positive() || !tab.contains(candidate, FRAME_TOLERANCE) {
         return None;
     }
@@ -480,14 +595,20 @@ fn structural_close_index(tab: Rect, buttons: &[Option<Rect>]) -> Option<usize> 
     if edge_gap > STRUCTURAL_CLOSE_MAX_EDGE_GAP {
         return None;
     }
-    let competitor_at_same_edge = buttons[..index].iter().flatten().any(|other| {
-        let other_gap = if at_trailing_edge {
-            tab.max_x() - other.max_x()
-        } else {
-            other.x - tab.x
-        };
-        other_gap <= edge_gap + FRAME_TOLERANCE
-    });
+    let competitor_at_same_edge = parts[..index]
+        .iter()
+        .filter_map(|part| match part {
+            TabPart::Button(frame) => *frame,
+            TabPart::Title => None,
+        })
+        .any(|other| {
+            let other_gap = if at_trailing_edge {
+                tab.max_x() - other.max_x()
+            } else {
+                other.x - tab.x
+            };
+            other_gap <= edge_gap + FRAME_TOLERANCE
+        });
     (!competitor_at_same_edge).then_some(index)
 }
 
@@ -561,16 +682,15 @@ unsafe fn find_structural_close(window: AXUIElementRef) -> Option<StructuralClos
     let mut visited = 0;
     let tab = find_selected_tab_in_strip(window, false, &mut visited)?;
     let tab_frame = element_frame(tab.get())?;
-    let mut buttons = Vec::new();
+    let mut parts = Vec::new();
     let mut visited = 0;
-    collect_descendant_buttons(tab.get(), &mut buttons, &mut visited);
-    let frames: Vec<Option<Rect>> = buttons
-        .iter()
-        .map(|button| element_frame(button.get()))
-        .collect();
-    let index = structural_close_index(tab_frame, &frames)?;
-    let button_frame = frames[index]?;
-    let button = buttons.swap_remove(index);
+    collect_tab_parts(tab.get(), false, &mut parts, &mut visited);
+    let layout: Vec<TabPart> = parts.iter().map(|collected| collected.part).collect();
+    let index = structural_close_index(tab_frame, &layout)?;
+    let TabPart::Button(Some(button_frame)) = layout[index] else {
+        return None;
+    };
+    let button = parts.swap_remove(index).button?;
     Some(StructuralClose {
         button,
         button_frame,
@@ -615,9 +735,17 @@ unsafe fn find_selected_tab_in_strip(
     None
 }
 
-unsafe fn collect_descendant_buttons(
+struct CollectedTabPart {
+    part: TabPart,
+    button: Option<OwnedElement>,
+}
+
+/// Collects the selected tab's buttons and title text in document order.
+/// Text inside a button is that button's own label, not the tab title.
+unsafe fn collect_tab_parts(
     element: AXUIElementRef,
-    buttons: &mut Vec<OwnedElement>,
+    inside_button: bool,
+    parts: &mut Vec<CollectedTabPart>,
     visited: &mut usize,
 ) {
     let Some(children) = copy_attribute_array(element, "AXChildren") else {
@@ -641,10 +769,19 @@ unsafe fn collect_descendant_buttons(
         if is_skipped_subtree_role(&role) {
             continue;
         }
-        if role == "AXButton" {
-            buttons.push(OwnedElement::retain(child));
+        let is_button = role == "AXButton";
+        if is_button {
+            parts.push(CollectedTabPart {
+                part: TabPart::Button(element_frame(child)),
+                button: Some(OwnedElement::retain(child)),
+            });
+        } else if role == "AXStaticText" && !inside_button {
+            parts.push(CollectedTabPart {
+                part: TabPart::Title,
+                button: None,
+            });
         }
-        collect_descendant_buttons(child, buttons, visited);
+        collect_tab_parts(child, inside_button || is_button, parts, visited);
     }
 }
 
@@ -1102,8 +1239,47 @@ mod tests {
         rect(310.0, 46.0, 24.0, 24.0)
     }
 
-    fn audio_button_after_icon() -> Rect {
-        rect(132.0, 46.0, 24.0, 24.0)
+    /// The selected tab measured in German Firefox 156 while it played audio
+    /// (2026-09-25 QA): 225pt wide, audio toggle 10pt from the start edge,
+    /// title, close button 6pt from the end edge.
+    fn measured_tab() -> Rect {
+        rect(556.0, 25.0, 225.0, 44.0)
+    }
+
+    fn measured_audio_toggle() -> Rect {
+        rect(566.0, 35.0, 24.0, 24.0)
+    }
+
+    fn measured_close_button() -> Rect {
+        rect(757.0, 35.0, 18.0, 24.0)
+    }
+
+    /// The same tab mirrored for a right-to-left layout. Document order is
+    /// unchanged: audio toggle, title, close button.
+    fn mirrored_audio_toggle() -> Rect {
+        rect(747.0, 35.0, 24.0, 24.0)
+    }
+
+    fn mirrored_close_button() -> Rect {
+        rect(562.0, 35.0, 18.0, 24.0)
+    }
+
+    /// A selected vertical tab at touch density, measured in the same QA run:
+    /// its close button sits 17pt from the end edge.
+    fn measured_vertical_touch_tab() -> Rect {
+        rect(0.0, 322.0, 239.0, 50.0)
+    }
+
+    fn measured_vertical_touch_audio_toggle() -> Rect {
+        rect(39.0, 335.0, 24.0, 24.0)
+    }
+
+    fn measured_vertical_touch_close_button() -> Rect {
+        rect(198.0, 335.0, 24.0, 24.0)
+    }
+
+    fn button(frame: Rect) -> TabPart {
+        TabPart::Button(Some(frame))
     }
 
     #[test]
@@ -1169,65 +1345,141 @@ mod tests {
 
     #[test]
     fn structural_close_picks_the_end_edge_button_after_the_audio_toggle() {
-        let buttons = [Some(audio_button_after_icon()), Some(close_button_at_end())];
-        assert_eq!(structural_close_index(horizontal_tab(), &buttons), Some(1));
-        assert_eq!(
-            structural_close_index(horizontal_tab(), &[Some(close_button_at_end())]),
-            Some(0)
-        );
-    }
-
-    #[test]
-    fn structural_close_accepts_the_mirrored_right_to_left_layout() {
-        let close_at_start = rect(104.0, 46.0, 24.0, 24.0);
-        let audio_near_end = rect(284.0, 46.0, 24.0, 24.0);
+        let parts = [
+            button(measured_audio_toggle()),
+            TabPart::Title,
+            button(measured_close_button()),
+        ];
+        assert_eq!(structural_close_index(measured_tab(), &parts), Some(2));
         assert_eq!(
             structural_close_index(
-                horizontal_tab(),
-                &[Some(audio_near_end), Some(close_at_start)]
+                measured_tab(),
+                &[TabPart::Title, button(measured_close_button())]
             ),
             Some(1)
         );
     }
 
     #[test]
-    fn structural_close_never_presses_a_lone_audio_toggle() {
+    fn structural_close_accepts_the_mirrored_right_to_left_layout() {
         assert_eq!(
-            structural_close_index(horizontal_tab(), &[Some(audio_button_after_icon())]),
+            structural_close_index(
+                measured_tab(),
+                &[
+                    button(mirrored_audio_toggle()),
+                    TabPart::Title,
+                    button(mirrored_close_button()),
+                ]
+            ),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn structural_close_accepts_vertical_tabs_at_touch_density() {
+        assert_eq!(
+            structural_close_index(
+                measured_vertical_touch_tab(),
+                &[
+                    button(measured_vertical_touch_audio_toggle()),
+                    TabPart::Title,
+                    button(measured_vertical_touch_close_button()),
+                ]
+            ),
+            Some(2)
+        );
+        assert_eq!(
+            structural_close_index(
+                measured_vertical_touch_tab(),
+                &[
+                    button(measured_vertical_touch_audio_toggle()),
+                    TabPart::Title
+                ]
+            ),
             None
         );
+    }
+
+    #[test]
+    fn structural_close_never_presses_a_lone_audio_toggle() {
+        // The measured toggle is as close to its edge as a close button would
+        // be, so only its place before the title rules it out, in either
+        // direction.
+        for audio in [measured_audio_toggle(), mirrored_audio_toggle()] {
+            assert_eq!(
+                structural_close_index(measured_tab(), &[button(audio), TabPart::Title]),
+                None
+            );
+        }
         // A pinned tab is icon-sized and has no close button at all.
         let pinned_tab = rect(100.0, 40.0, 36.0, 36.0);
         let pinned_audio = rect(106.0, 46.0, 24.0, 24.0);
         assert_eq!(
-            structural_close_index(pinned_tab, &[Some(pinned_audio)]),
+            structural_close_index(pinned_tab, &[button(pinned_audio), TabPart::Title]),
+            None
+        );
+    }
+
+    #[test]
+    fn structural_close_requires_the_title_before_the_button() {
+        // Without a title before it, even an end-edge button is not known to
+        // be the close button.
+        assert_eq!(
+            structural_close_index(measured_tab(), &[button(measured_close_button())]),
+            None
+        );
+        assert_eq!(
+            structural_close_index(
+                measured_tab(),
+                &[button(measured_close_button()), TabPart::Title]
+            ),
             None
         );
     }
 
     #[test]
     fn structural_close_fails_closed_on_unreadable_or_ambiguous_geometry() {
-        assert_eq!(structural_close_index(horizontal_tab(), &[]), None);
+        assert_eq!(structural_close_index(measured_tab(), &[]), None);
         assert_eq!(
-            structural_close_index(horizontal_tab(), &[Some(close_button_at_end()), None]),
+            structural_close_index(measured_tab(), &[TabPart::Title]),
             None
         );
-        let outside_tab = rect(400.0, 46.0, 24.0, 24.0);
-        assert_eq!(
-            structural_close_index(horizontal_tab(), &[Some(outside_tab)]),
-            None
-        );
-        let second_end_button = rect(312.0, 46.0, 24.0, 24.0);
         assert_eq!(
             structural_close_index(
-                horizontal_tab(),
-                &[Some(second_end_button), Some(close_button_at_end())]
+                measured_tab(),
+                &[
+                    TabPart::Title,
+                    button(measured_close_button()),
+                    TabPart::Button(None)
+                ]
             ),
             None
         );
-        let empty = rect(310.0, 46.0, 0.0, 24.0);
+        let outside_tab = rect(790.0, 35.0, 18.0, 24.0);
         assert_eq!(
-            structural_close_index(horizontal_tab(), &[Some(empty)]),
+            structural_close_index(measured_tab(), &[TabPart::Title, button(outside_tab)]),
+            None
+        );
+        let second_end_button = rect(759.0, 35.0, 18.0, 24.0);
+        assert_eq!(
+            structural_close_index(
+                measured_tab(),
+                &[
+                    TabPart::Title,
+                    button(second_end_button),
+                    button(measured_close_button())
+                ]
+            ),
+            None
+        );
+        let empty = rect(757.0, 35.0, 0.0, 24.0);
+        assert_eq!(
+            structural_close_index(measured_tab(), &[TabPart::Title, button(empty)]),
+            None
+        );
+        let middle_button = rect(660.0, 35.0, 18.0, 24.0);
+        assert_eq!(
+            structural_close_index(measured_tab(), &[TabPart::Title, button(middle_button)]),
             None
         );
     }
@@ -1284,14 +1536,39 @@ mod tests {
     }
 
     #[test]
-    fn only_the_firefox_family_uses_the_structural_close_rule() {
-        for name in ["Firefox", "Firefox Developer Edition", "Floorp"] {
+    fn only_gecko_browsers_use_the_structural_close_rule() {
+        for name in ["Firefox", "Firefox Developer Edition", "Floorp", "Zen"] {
             assert!(uses_structural_close(name), "{name}");
+        }
+        for name in ["Firefox", "Firefox Developer Edition", "Floorp"] {
             assert!(!uses_context_menu_close(name), "{name}");
         }
+        assert!(!uses_structural_close("Whale"));
         for name in ["Zen", "Whale"] {
-            assert!(!uses_structural_close(name), "{name}");
             assert!(uses_context_menu_close(name), "{name}");
         }
+    }
+
+    #[test]
+    fn a_window_exposing_only_title_bar_buttons_has_no_tree_yet() {
+        let roles = |values: &[&str]| {
+            values
+                .iter()
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+        };
+        // Firefox 156 before any assistive client asked: close, full screen,
+        // minimize.
+        assert!(exposes_only_title_bar(&roles(&[
+            "AXButton", "AXButton", "AXButton"
+        ])));
+        assert!(exposes_only_title_bar(&[]));
+        assert!(!exposes_only_title_bar(&roles(&[
+            "AXGroup", "AXButton", "AXButton", "AXButton"
+        ])));
+        for name in ["Firefox", "Firefox Developer Edition", "Floorp", "Zen"] {
+            assert!(builds_accessibility_on_request(name), "{name}");
+        }
+        assert!(!builds_accessibility_on_request("Whale"));
     }
 }

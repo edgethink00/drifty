@@ -8,6 +8,7 @@ from app.storage.adaptive_context_serialization import (
     adaptive_content_context_from_mapping,
     sanitized_raw_context_json,
 )
+from app.tracker.macos_app_names import canonical_macos_app_name
 
 RowValue = Union[str, int, float, None]
 SerializedValue = Union[str, int, float, bool, None, list["SerializedValue"], dict[str, "SerializedValue"]]
@@ -15,6 +16,17 @@ SerializedValue = Union[str, int, float, bool, None, list["SerializedValue"], di
 BROWSER_AUTOMATION_STATUSES: Final[frozenset[str]] = frozenset(
     {"granted", "denied", "unavailable", "stale", "empty_result", "not_applicable"}
 )
+
+
+def display_app_name(row: Mapping[str, RowValue]) -> RowValue:
+    """Stored rows keep the name captured at the time. Segments recorded before
+    a browser's name was canonicalized (for example `firefox`) are shown under
+    the canonical name so one app does not split into two rows."""
+    app_name = row["app_name"]
+    bundle_id = row.get("bundle_id")
+    if not isinstance(app_name, str) or not isinstance(bundle_id, str):
+        return app_name
+    return canonical_macos_app_name(app_name, bundle_id)
 
 
 def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
@@ -31,7 +43,7 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "startedAt": row["started_at"],
         "endedAt": row["ended_at"],
         "durationSeconds": row["duration_seconds"],
-        "appName": row["app_name"],
+        "appName": display_app_name(row),
         "bundleId": row.get("bundle_id"),
         "windowTitle": row.get("window_title"),
         "siteDomain": None if hide_site_context else row.get("site_domain"),
@@ -92,7 +104,7 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
         "startedAt": row["started_at"],
         "endedAt": row["ended_at"],
         "durationSeconds": row["duration_seconds"],
-        "appName": row["app_name"],
+        "appName": display_app_name(row),
         "platform": row.get("platform", "macos"),
         "source": row.get("source", "unknown"),
     }
@@ -135,7 +147,7 @@ def serialize_project_trend_activity_row(row: Mapping[str, RowValue]) -> dict[st
         "startedAt": row["started_at"],
         "endedAt": row["ended_at"],
         "durationSeconds": row["duration_seconds"],
-        "appName": row["app_name"],
+        "appName": display_app_name(row),
         "platform": row.get("platform") or "macos",
         "source": row.get("source") or "unknown",
     }
