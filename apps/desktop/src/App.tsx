@@ -9361,9 +9361,17 @@ export default function App() {
     (latestBuildStatusNotice && !latestBuildStatusRenderedInSettings ? latestBuildStatusNotice : null)
     ?? (manualUpdateStatusNotice && !manualUpdateStatusRenderedInSettings ? manualUpdateStatusNotice : null);
   // Keep developer update recovery available even when onboarding or account policy owns the app shell.
-  const latestBuildPrompt = latestBuildPromptUpdate?.version ? (
+  const windowsStablePromptBusy = hostPlatform === "windows" && (updaterChecking || updaterInstalling);
+  const windowsLatestBuildPromptBusy = hostPlatform === "windows" && (
+    developerPreReleaseUpdateController.status === "checking"
+    || developerPreReleaseUpdateController.status === "installing"
+  );
+  const latestBuildPromptContent = latestBuildPromptUpdate?.version
+    && !(hostPlatform === "windows" && visibleUpdate)
+    && !windowsLatestBuildPromptBusy ? (
     <AvailableUpdateDialog
       updateChannel="developer"
+      isWindows={hostPlatform === "windows"}
       backgroundUpdatesEnabled={backgroundUpdatesEnabled}
       policy={fallbackUpdatePolicy(latestBuildPromptUpdate.version)}
       update={{
@@ -9380,9 +9388,10 @@ export default function App() {
     />
   ) : null;
 
-  const availableUpdatePrompt = visibleUpdate ? (
+  const availableUpdatePromptContent = visibleUpdate && !windowsStablePromptBusy ? (
     <AvailableUpdateDialog
       updateChannel="stable"
+      isWindows={hostPlatform === "windows"}
       backgroundUpdatesEnabled={backgroundUpdatesEnabled}
       policy={currentUpdatePolicy}
       update={visibleUpdate}
@@ -9394,6 +9403,14 @@ export default function App() {
       onInstall={() => void handleInstallUpdate()}
     />
   ) : null;
+  // Windows renders an in-app modal. Keep its presence boundary mounted when
+  // Later clears the prompt so the shared exit motion and focus cleanup run.
+  const availableUpdatePrompt = hostPlatform === "windows"
+    ? <ModalPresence>{availableUpdatePromptContent}</ModalPresence>
+    : availableUpdatePromptContent;
+  const latestBuildPrompt = hostPlatform === "windows"
+    ? <ModalPresence>{latestBuildPromptContent}</ModalPresence>
+    : latestBuildPromptContent;
 
   const dashboardDateNavigator = (
     <DateNavigator
@@ -9714,7 +9731,19 @@ export default function App() {
               </span>
             </div>
           )}
-          trailing={<AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />}
+          trailing={(
+            <>
+              <AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />
+              {isSettingsTab && titlebarUpdateVersion ? (
+                <TopbarUpdateButton
+                  onInstall={() => void handleInstallUpdate()}
+                  progress={updaterDownloadProgress}
+                  status={updateLifecycleStatus}
+                  version={titlebarUpdateVersion}
+                />
+              ) : null}
+            </>
+          )}
         />
       ) : null}
     <div className={shellClassName}>

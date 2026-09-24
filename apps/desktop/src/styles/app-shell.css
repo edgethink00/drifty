@@ -391,7 +391,8 @@
   right: calc(var(--windows-caption-controls-current-width) + 8px);
   display: flex;
   align-items: center;
-  max-width: min(15rem, 34vw);
+  gap: 8px;
+  max-width: min(20rem, 40vw);
 }
 
 :root[data-platform="windows"] .windows-titlebar-nav {

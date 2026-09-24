@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { StrictMode } from "react";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 import { AvailableUpdateDialog } from "./AvailableUpdateDialog";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
-const makeProps = () => ({ updateChannel: "stable" as const, backgroundUpdatesEnabled: true, policy: null, update: { version: "1.10.9" }, updaterChecking: false, updaterError: null, updaterInstalling: false, onBackgroundUpdatesEnabledChange: vi.fn(), onDismiss: vi.fn(), onInstall: vi.fn() });
+const makeProps = () => ({ updateChannel: "stable" as const, isWindows: false, backgroundUpdatesEnabled: true, policy: null, update: { version: "1.10.9" }, updaterChecking: false, updaterError: null, updaterInstalling: false, onBackgroundUpdatesEnabledChange: vi.fn(), onDismiss: vi.fn(), onInstall: vi.fn() });
 beforeEach(() => { vi.clearAllMocks(); invokeMock.mockResolvedValue({ confirmed: false, backgroundUpdatesEnabled: true }); });
 afterEach(() => cleanup());
 describe("native update dialog", () => {
@@ -74,5 +74,39 @@ describe("native update dialog", () => {
     expect(invokeMock).not.toHaveBeenCalled();
     rerender(<AvailableUpdateDialog {...props} />);
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("Windows update dialog", () => {
+  it("offers the signed update in the app and installs only after confirmation", () => {
+    const props = { ...makeProps(), isWindows: true };
+    render(<AvailableUpdateDialog {...props} />);
+    expect(screen.getByRole("dialog", { name: "Drifty 1.10.9 update" })).toBeTruthy();
+    expect(screen.getByText(/signed update/i)).toBeTruthy();
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(props.onInstall).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(props.onInstall).toHaveBeenCalledTimes(1);
+    expect(props.onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a Windows user postpone the update without installing", () => {
+    const props = { ...makeProps(), isWindows: true };
+    render(<LocalizationTestProvider language="ko"><AvailableUpdateDialog {...props} /></LocalizationTestProvider>);
+    expect(screen.getByRole("dialog", { name: "Drifty 1.10.9 업데이트" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "나중에" }));
+    expect(props.onDismiss).toHaveBeenCalledTimes(1);
+    expect(props.onInstall).not.toHaveBeenCalled();
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("does not offer a second Windows install while an operation is busy", () => {
+    const props = { ...makeProps(), isWindows: true };
+    const { rerender } = render(<AvailableUpdateDialog {...props} updaterChecking />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    rerender(<AvailableUpdateDialog {...props} updaterInstalling />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    rerender(<AvailableUpdateDialog {...props} />);
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 });

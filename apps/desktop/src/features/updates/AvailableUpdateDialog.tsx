@@ -1,7 +1,10 @@
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import type { UpdatePolicy } from "./updatePolicy";
+import "./AvailableUpdateDialog.css";
 
 type AvailableUpdateDialogUpdate = {
   body?: string | null;
@@ -13,6 +16,7 @@ type UpdateChannel = "stable" | "developer";
 
 export type AvailableUpdateDialogProps = {
   updateChannel: UpdateChannel;
+  isWindows: boolean;
   backgroundUpdatesEnabled: boolean;
   policy: UpdatePolicy | null;
   update: AvailableUpdateDialogUpdate;
@@ -78,6 +82,7 @@ function getNativeUpdatePrompt(
 
 export function AvailableUpdateDialog({
   updateChannel,
+  isWindows,
   backgroundUpdatesEnabled,
   policy,
   update,
@@ -93,7 +98,7 @@ export function AvailableUpdateDialog({
   const message = policy?.message ?? update.body ?? null;
 
   useEffect(() => {
-    if (updaterChecking || updaterInstalling) return;
+    if (isWindows || updaterChecking || updaterInstalling) return;
 
     let subscribed = true;
 
@@ -133,9 +138,61 @@ export function AvailableUpdateDialog({
     onInstall,
     update.version,
     urgent,
+    isWindows,
     updaterChecking,
     updaterInstalling,
   ]);
 
+  if (isWindows && !updaterChecking && !updaterInstalling) {
+    return (
+      <WindowsUpdatePrompt
+        version={update.version}
+        message={message}
+        error={updaterError}
+        onDismiss={onDismiss}
+        onInstall={onInstall}
+      />
+    );
+  }
+
   return null;
+}
+
+function WindowsUpdatePrompt({ version, message, error, onDismiss, onInstall }: {
+  readonly version: string;
+  readonly message: string | null;
+  readonly error: string | null;
+  readonly onDismiss: () => void;
+  readonly onInstall: () => void;
+}) {
+  const { t } = useLocalization();
+  const titleId = useId();
+  const dialogRef = useRef<HTMLElement>(null);
+  useModalDismiss(onDismiss);
+  useModalFocusTrap(dialogRef, { initialFocusSelector: ".windows-update-prompt__later" });
+
+  return (
+    <div className="auth-modal__overlay" onClick={onDismiss}>
+      <section
+        ref={dialogRef}
+        className="auth-modal modal-shell windows-update-prompt"
+        data-modal-variant="compact"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="auth-modal__header">
+          <h2 id={titleId}>{t("updates.promptTitle", { version })}</h2>
+          <p>{t("updates.promptBody")}</p>
+        </div>
+        {message ? <p className="windows-update-prompt__notes">{message}</p> : null}
+        {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}
+        <div className="windows-update-prompt__actions">
+          <button type="button" className="modal-btn modal-btn--ghost windows-update-prompt__later" onClick={onDismiss}>{t("updates.later")}</button>
+          <button type="button" className="modal-btn modal-btn--primary" onClick={() => { onInstall(); onDismiss(); }}>{t("updates.install")}</button>
+        </div>
+      </section>
+    </div>
+  );
 }
