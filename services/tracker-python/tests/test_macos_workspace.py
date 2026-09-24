@@ -35,6 +35,12 @@ class MacosWorkspaceTests(unittest.TestCase):
         )
         self.assertEqual(_canonical_macos_app_name("Safari", "com.apple.Safari"), "Safari")
 
+    def test_canonicalizes_release_firefox_from_its_lowercase_process_name(self) -> None:
+        # System Events reports the executable name; the browser registry,
+        # page capture, and the tab-close path all key on "Firefox".
+        self.assertEqual(_canonical_macos_app_name("firefox", "org.mozilla.firefox"), "Firefox")
+        self.assertEqual(_canonical_macos_app_name("Firefox", "org.mozilla.firefox"), "Firefox")
+
     def test_browser_script_matrix(self) -> None:
         safari_script = _browser_script("Safari")
         self.assertIsNotNone(safari_script)

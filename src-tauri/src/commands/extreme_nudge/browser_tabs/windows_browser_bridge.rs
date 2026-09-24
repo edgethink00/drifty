@@ -65,20 +65,65 @@ pub(super) fn is_supported_browser(browser_name: &str) -> bool {
     matches!(browser_name.trim(), "Firefox" | "Firefox Developer Edition")
 }
 
-pub(super) fn close_browser_tab(
+/// Everything a close command needs that can be checked before issuing it.
+struct PreparedClose {
+    directory: PathBuf,
+    expected_url: String,
+    snapshot: BridgeSnapshot,
+}
+
+fn prepare_close(
     browser_name: &str,
     browser_identity: Option<&str>,
     site_url: Option<&str>,
-) -> Result<String, ExtremeNudgeError> {
+) -> Result<PreparedClose, ExtremeNudgeError> {
+    let directory = bridge_directory().map_err(browser_bridge_error)?;
+    prepare_close_in(&directory, browser_name, browser_identity, site_url)
+}
+
+fn prepare_close_in(
+    directory: &Path,
+    browser_name: &str,
+    browser_identity: Option<&str>,
+    site_url: Option<&str>,
+) -> Result<PreparedClose, ExtremeNudgeError> {
     validate_browser_identity(browser_name, browser_identity)?;
     let expected_url = normalized_http_url(site_url.unwrap_or("")).ok_or_else(|| {
         ExtremeNudgeError::BrowserTabNotFound {
             diagnostic: "windows_browser_bridge_exact_url_required".to_string(),
         }
     })?;
-    let directory = bridge_directory().map_err(browser_bridge_error)?;
     let snapshot = read_snapshot(&directory.join("active-tab.json"), &expected_url)
         .map_err(browser_bridge_error)?;
+    Ok(PreparedClose {
+        directory: directory.to_path_buf(),
+        expected_url,
+        snapshot,
+    })
+}
+
+/// The bridge accepts a close only for the tab its extension reported within
+/// the last few seconds. When the extension is not installed or not running,
+/// no snapshot exists and every close fails; Pet Mode checks this first so
+/// the cat does not act out a close that cannot happen.
+pub(super) fn preflight_close(
+    browser_name: &str,
+    browser_identity: Option<&str>,
+    site_url: Option<&str>,
+) -> Result<(), ExtremeNudgeError> {
+    prepare_close(browser_name, browser_identity, site_url).map(|_| ())
+}
+
+pub(super) fn close_browser_tab(
+    browser_name: &str,
+    browser_identity: Option<&str>,
+    site_url: Option<&str>,
+) -> Result<String, ExtremeNudgeError> {
+    let PreparedClose {
+        directory,
+        expected_url,
+        snapshot,
+    } = prepare_close(browser_name, browser_identity, site_url)?;
     let lock_path = directory.join("pending-command.lock");
     fs::create_dir_all(&directory).map_err(|_| browser_bridge_error("directory_unavailable"))?;
     let _lock = acquire_command_lock(&lock_path).map_err(browser_bridge_error)?;
@@ -328,5 +373,58 @@ mod tests {
         fs::write(&path, serde_json::to_vec(&snapshot).expect("serialize")).expect("snapshot");
         assert!(read_snapshot(&path, "https://example.com/expected").is_ok());
         assert!(read_snapshot(&path, "https://example.com/other").is_err());
+    }
+
+    const FIREFOX_IDENTITY: &str = r"C:\Program Files\Mozilla Firefox\firefox.exe";
+
+    #[test]
+    fn preflight_rejects_a_missing_bridge_before_any_command_is_written() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let result = prepare_close_in(
+            directory.path(),
+            "Firefox",
+            Some(FIREFOX_IDENTITY),
+            Some("https://www.youtube.com/watch?v=drift"),
+        );
+        assert!(matches!(
+            result,
+            Err(ExtremeNudgeError::BrowserTabNotFound { ref diagnostic })
+                if diagnostic == "windows_browser_bridge_snapshot_unavailable"
+        ));
+        assert!(!directory.path().join("pending-command.json").exists());
+    }
+
+    #[test]
+    fn preflight_accepts_only_a_fresh_snapshot_of_the_exact_page() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let snapshot = serde_json::json!({
+            "version": 1,
+            "receivedAtEpochMs": current_epoch_ms().expect("clock"),
+            "browserFamily": "firefox",
+            "tab": { "id": 17, "url": "https://www.youtube.com/watch?v=drift" }
+        });
+        fs::write(
+            directory.path().join("active-tab.json"),
+            serde_json::to_vec(&snapshot).expect("serialize"),
+        )
+        .expect("snapshot");
+        let prepared = prepare_close_in(
+            directory.path(),
+            "Firefox",
+            Some(FIREFOX_IDENTITY),
+            Some("https://www.youtube.com/watch?v=drift"),
+        )
+        .expect("fresh exact snapshot");
+        assert_eq!(prepared.snapshot.tab.id, 17);
+        assert!(matches!(
+            prepare_close_in(
+                directory.path(),
+                "Firefox",
+                Some(FIREFOX_IDENTITY),
+                Some("https://www.youtube.com/watch?v=other"),
+            ),
+            Err(ExtremeNudgeError::BrowserTabNotFound { ref diagnostic })
+                if diagnostic == "windows_browser_bridge_snapshot_mismatch"
+        ));
     }
 }

@@ -57,7 +57,13 @@ COMMAND_TIMEOUT_SECONDS: Final = 5.0
 FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV: Final = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
 FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV: Final = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"
 _BROWSER_HISTORY_FALLBACK_STATUSES: Final = frozenset({"denied", "empty_result", "stale", "unavailable"})
+# System Events names Firefox processes after their lowercase executable
+# (`firefox`), not the bundle name (observed for Firefox 154-156 on macOS 14,
+# and in macOS 26 tracker history). Without this mapping every Firefox segment
+# was an app named "firefox": page capture never ran, and an automatic close
+# fell through to quitting the whole browser instead of closing one tab.
 _CANONICAL_MACOS_APP_NAMES_BY_BUNDLE_ID: Final = {
+    "org.mozilla.firefox": "Firefox",
     "org.mozilla.firefoxdeveloperedition": "Firefox Developer Edition",
 }
 

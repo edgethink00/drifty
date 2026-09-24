@@ -28,6 +28,8 @@ AX_ADDRESS_BAR_BROWSER_APPS: Final = CHROMIUM_BROWSER_APPS | {
 }
 
 AX_NO_PROCESS: Final = "AX_NO_PROCESS"
+# Firefox-family browsers whose address field is found by DOM id first.
+_FIREFOX_DOM_ADDRESS_BAR_APPS: Final = frozenset({"Firefox", "Firefox Developer Edition", "Floorp"})
 AX_NO_FRONT_WINDOW: Final = "AX_NO_FRONT_WINDOW"
 AX_NO_ADDRESS_FIELD: Final = "AX_NO_ADDRESS_FIELD"
 
@@ -125,6 +127,8 @@ def accessibility_address_bar_script(app_name: str) -> str:
         known_address_probe = "my scanKnownOperaAddressBar(targetWindow)"
     elif app_name == "Whale":
         known_address_probe = "my scanKnownWhaleAddressBar(targetWindow)"
+    elif app_name in _FIREFOX_DOM_ADDRESS_BAR_APPS:
+        known_address_probe = "my scanKnownFirefoxAddressBar(targetWindow)"
     else:
         known_address_probe = "my scanKnownChromiumAddressBar(targetWindow)"
     main_window_selection = ""
@@ -275,6 +279,53 @@ def accessibility_address_bar_script(app_name: str) -> str:
             end try
           end tell
         end scanKnownWhaleAddressBar
+
+        -- Firefox-family DOM ids reach Accessibility as AXDOMIdentifier and,
+        -- unlike the address field's placeholder label, do not follow the UI
+        -- language. Resolving them inside System Events keeps the read far
+        -- below the tracker timeout that the generic walk exceeds on video
+        -- pages.
+        on scanKnownFirefoxAddressBar(theWindow)
+          if foundAddress is true then return
+          tell application "System Events"
+            try
+              set navBar to first toolbar of UI element 1 of theWindow whose value of attribute "AXDOMIdentifier" is "nav-bar"
+              set urlbarGroup to first UI element of navBar whose value of attribute "AXDOMIdentifier" is "urlbar"
+              -- The field sits one group below #urlbar; check both levels only.
+              repeat with urlbarChild in UI elements of urlbarGroup
+                my considerFirefoxAddressField(urlbarChild)
+                if foundAddress is true then exit repeat
+                try
+                  repeat with urlbarGrandchild in UI elements of urlbarChild
+                    my considerFirefoxAddressField(urlbarGrandchild)
+                    if foundAddress is true then exit repeat
+                  end repeat
+                end try
+                if foundAddress is true then exit repeat
+              end repeat
+            end try
+          end tell
+        end scanKnownFirefoxAddressBar
+
+        on considerFirefoxAddressField(candidateField)
+          tell application "System Events"
+            set fieldIdentifier to ""
+            try
+              set fieldIdentifier to value of attribute "AXDOMIdentifier" of candidateField as text
+            end try
+            if fieldIdentifier is not "urlbar-input" then return
+            try
+              set candidate to value of candidateField as text
+              if candidate is not "" and candidate is not "missing value" then
+                set bestValue to candidate
+                set bestLength to length of candidate
+                set bestPriority to 2
+                set readableCount to readableCount + 1
+                set foundAddress to true
+              end if
+            end try
+          end tell
+        end considerFirefoxAddressField
 
         on scanElement(theElement)
           if foundAddress is true then return

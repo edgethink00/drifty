@@ -20,6 +20,8 @@ mod windows;
 #[cfg(target_os = "windows")]
 mod windows_browser_bridge;
 
+#[cfg(target_os = "macos")]
+pub(in crate::commands) use macos_native_ax::NativeAxCloseHotspot;
 pub(super) use matching::{normalized_site_domain, site_domain_from_url};
 
 /// Browsers whose automatic close drives the AX selected tab directly instead
@@ -32,6 +34,46 @@ pub(in crate::commands) fn closes_through_native_ax_selection(app_name: &str) ->
         app_name.trim(),
         "Firefox" | "Firefox Developer Edition" | "Floorp" | "Zen" | "Whale"
     )
+}
+
+#[cfg(target_os = "macos")]
+fn native_ax_diagnostic_namespace(browser_name: &str) -> &'static str {
+    if browser_name.trim() == "Whale" {
+        "whale_native_ax"
+    } else {
+        "firefox_native_ax"
+    }
+}
+
+/// Resolves, without acting, the close `close_browser_tab` would perform for
+/// a native-AX browser, and where that close's control is on screen.
+#[cfg(target_os = "macos")]
+pub(super) fn preflight_native_ax_tab_close(
+    browser_name: &str,
+    site_url: Option<&str>,
+    site_domain: Option<&str>,
+) -> Result<NativeAxCloseHotspot, String> {
+    let browser_name = browser_name.trim();
+    if !closes_through_native_ax_selection(browser_name) {
+        return Err("unsupported_browser".to_string());
+    }
+    macos_native_ax::preflight_frontmost_tab(
+        browser_name,
+        site_url.unwrap_or(""),
+        site_domain,
+        native_ax_diagnostic_namespace(browser_name),
+    )
+}
+
+/// Checks, without issuing a command, that the Firefox bridge currently holds
+/// the exact page the close would target.
+#[cfg(target_os = "windows")]
+pub(super) fn preflight_windows_bridge_tab_close(
+    browser_name: &str,
+    browser_identity: Option<&str>,
+    site_url: Option<&str>,
+) -> Result<(), ExtremeNudgeError> {
+    windows_browser_bridge::preflight_close(browser_name, browser_identity, site_url)
 }
 
 const APPLESCRIPT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -77,16 +119,11 @@ pub(super) fn close_browser_tab(
 ) -> Result<String, ExtremeNudgeError> {
     #[cfg(target_os = "macos")]
     if closes_through_native_ax_selection(browser_name) {
-        let diagnostic_namespace = if browser_name.trim() == "Whale" {
-            "whale_native_ax"
-        } else {
-            "firefox_native_ax"
-        };
         return macos_native_ax::close_frontmost_tab(
-            browser_name,
+            browser_name.trim(),
             site_url.unwrap_or(""),
             site_domain,
-            diagnostic_namespace,
+            native_ax_diagnostic_namespace(browser_name),
         )
         .map_err(|diagnostic| ExtremeNudgeError::BrowserTabNotFound { diagnostic });
     }

@@ -23,6 +23,8 @@ use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 use objc2_foundation::NSPoint;
 
 use super::extreme_nudge::closes_through_native_ax_selection;
+#[cfg(target_os = "macos")]
+use super::extreme_nudge::{preflight_native_ax_tab_close, NativeAxCloseHotspot};
 use super::pet_drop::{
     clamp_floor_home_pt, plan_pet_drop_with_floor_home, plan_pet_shake_floor_drop, PetDropKind,
     PetDropPlan, PetRect, PET_DROP_FLOOR_HOME_PT,
@@ -2903,8 +2905,20 @@ fn move_pet_to_target(
     if target.lab_target == Some(PetModeLabTargetKind::BrowserTabX) {
         activate_lab_target_app(&target.app_name)?;
     }
+    // Browsers whose close drives the AX tab selection are preflighted through
+    // the close adapter itself before any choreography, including the
+    // full-screen scene: a refused preflight means the close will fail, and
+    // the cat must not act out a close that cannot happen.
     #[cfg(target_os = "macos")]
-    if target.lab_target.is_none() {
+    let native_ax_point = resolve_native_ax_close_target(&home_monitor, target);
+    #[cfg(not(target_os = "macos"))]
+    let native_ax_point: Option<PetModeTargetPoint> = None;
+    #[cfg(target_os = "macos")]
+    if target.lab_target.is_none()
+        && native_ax_point
+            .as_ref()
+            .map_or(true, |point| point.kind != PetModeTargetKind::Fallback)
+    {
         if let Some(frame) = pet_mode_native_ax::fullscreen_target_frame(
             &target.app_name,
             target.browser_name.as_deref(),
@@ -2914,6 +2928,8 @@ fn move_pet_to_target(
     }
     let point = if target.lab_target == Some(PetModeLabTargetKind::DriftyWindowX) {
         resolve_drifty_lab_window_close_point(app)?
+    } else if let Some(point) = native_ax_point {
+        point
     } else {
         resolve_pet_target_point(&home_monitor, target)
     };
@@ -3280,6 +3296,57 @@ fn fallback_target_point(monitor: &Monitor, diagnostic: &str) -> PetModeTargetPo
         kind: PetModeTargetKind::Fallback,
         confidence: PetModeTargetConfidence::Low,
         diagnostic: diagnostic.to_string(),
+    }
+}
+
+/// The browser whose automatic close will drive the AX tab selection, when
+/// this intervention's close is one. Lab and preview runs never close through
+/// that adapter, so they keep their own targeting.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn native_ax_close_browser(target: &PetModeInterventionTarget) -> Option<&str> {
+    if target.preview || target.lab_target.is_some() {
+        return None;
+    }
+    target
+        .browser_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| closes_through_native_ax_selection(name))
+}
+
+/// Resolves the paw target for a native-AX browser through the close adapter's
+/// own preflight. The hotspot is the control that close will press; a refused
+/// preflight becomes a non-animated fallback carrying the adapter's reason.
+#[cfg(target_os = "macos")]
+fn resolve_native_ax_close_target(
+    monitor: &Monitor,
+    target: &PetModeInterventionTarget,
+) -> Option<PetModeTargetPoint> {
+    let browser_name = native_ax_close_browser(target)?;
+    Some(
+        match preflight_native_ax_tab_close(
+            browser_name,
+            target.site_url.as_deref(),
+            target.site_domain.as_deref(),
+        ) {
+            Ok(hotspot) => native_ax_hotspot_point(hotspot),
+            Err(diagnostic) => fallback_target_point(monitor, &diagnostic),
+        },
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn native_ax_hotspot_point(hotspot: NativeAxCloseHotspot) -> PetModeTargetPoint {
+    PetModeTargetPoint {
+        x: hotspot.x,
+        y: hotspot.y,
+        kind: PetModeTargetKind::BrowserTabClose,
+        confidence: if hotspot.exact {
+            PetModeTargetConfidence::High
+        } else {
+            PetModeTargetConfidence::Medium
+        },
+        diagnostic: hotspot.diagnostic,
     }
 }
 
@@ -5675,6 +5742,69 @@ mod tests {
             classify_selected_tab_cross_check(Some("title:StayFree"), Some("  ")),
             Some("browser_tab_selected_label_missing".to_string()),
         );
+    }
+
+    fn browser_intervention(browser_name: Option<&str>) -> PetModeInterventionTarget {
+        PetModeInterventionTarget {
+            id: "native-ax-preflight".to_string(),
+            app_name: browser_name.unwrap_or("Preview").to_string(),
+            browser_name: browser_name.map(str::to_string),
+            browser_identity: None,
+            site_domain: Some("youtube.com".to_string()),
+            site_url: Some("https://www.youtube.com/watch?v=drift".to_string()),
+            preview: false,
+            lab_target: None,
+        }
+    }
+
+    #[test]
+    fn only_real_native_ax_interventions_are_preflighted_through_the_close_adapter() {
+        for name in ["Firefox", "Firefox Developer Edition", "Floorp", "Zen", "Whale"] {
+            assert_eq!(
+                native_ax_close_browser(&browser_intervention(Some(name))),
+                Some(name),
+                "{name}"
+            );
+        }
+        // Scripted browsers keep their cross-checked hotspot; app targets are
+        // window closes, not tab closes.
+        for name in [Some("Google Chrome"), Some("Safari"), None] {
+            assert_eq!(native_ax_close_browser(&browser_intervention(name)), None);
+        }
+        let preview = PetModeInterventionTarget {
+            preview: true,
+            ..browser_intervention(Some("Firefox"))
+        };
+        assert_eq!(native_ax_close_browser(&preview), None);
+        let lab = PetModeInterventionTarget {
+            lab_target: Some(PetModeLabTargetKind::BrowserTabX),
+            ..browser_intervention(Some("Firefox"))
+        };
+        assert_eq!(native_ax_close_browser(&lab), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_ax_hotspot_confidence_follows_whether_the_control_was_found() {
+        let exact = native_ax_hotspot_point(NativeAxCloseHotspot {
+            x: 322.0,
+            y: 58.0,
+            exact: true,
+            diagnostic: "firefox_native_ax_structural_close_button".to_string(),
+        });
+        assert_eq!(exact.kind, PetModeTargetKind::BrowserTabClose);
+        assert_eq!(exact.confidence, PetModeTargetConfidence::High);
+        assert_eq!((exact.x, exact.y), (322.0, 58.0));
+        assert_eq!(exact.diagnostic, "firefox_native_ax_structural_close_button");
+
+        let inferred = native_ax_hotspot_point(NativeAxCloseHotspot {
+            x: 326.0,
+            y: 58.0,
+            exact: false,
+            diagnostic: "whale_native_ax_selected_tab_edge".to_string(),
+        });
+        assert_eq!(inferred.kind, PetModeTargetKind::BrowserTabClose);
+        assert_eq!(inferred.confidence, PetModeTargetConfidence::Medium);
     }
 
     #[test]

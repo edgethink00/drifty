@@ -146,6 +146,18 @@ fn resolve_browser_tab_close_target(
     }
 
     let located = if process_name == "firefox" {
+        // The Drifty Browser Bridge extension performs the Firefox close. The
+        // tab X can be located without it, but without its fresh snapshot of
+        // this exact page the close is certain to fail, so the paw must not
+        // act it out.
+        if let Err(diagnostic) = super::super::extreme_nudge::preflight_windows_bridge_tab_close(
+            browser_name,
+            target.browser_identity.as_deref(),
+            target.site_url.as_deref(),
+            target.site_domain.as_deref(),
+        ) {
+            return fallback_target_point(monitor, &diagnostic);
+        }
         locate_firefox_tab_close(process_name, &browser_identity, site_url, site_domain)
     } else {
         super::super::windows_browser_uia::locate_foreground_tab_close(

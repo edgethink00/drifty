@@ -110,6 +110,20 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
             script.index("my scanToolbarFirst(targetWindow)"),
         )
 
+    def test_firefox_family_address_bar_is_found_by_dom_id_before_the_generic_walk(self) -> None:
+        for app_name in ("Firefox", "Firefox Developer Edition", "Floorp"):
+            script = accessibility_address_bar_script(app_name)
+
+            self.assertIn("on scanKnownFirefoxAddressBar(theWindow)", script)
+            self.assertIn('whose value of attribute "AXDOMIdentifier" is "nav-bar"', script)
+            self.assertIn('if fieldIdentifier is not "urlbar-input" then return', script)
+            self.assertIn("my scanKnownFirefoxAddressBar(targetWindow)", script)
+            self.assertNotIn("my scanKnownChromiumAddressBar(targetWindow)", script)
+            self.assertLess(
+                script.index("my scanKnownFirefoxAddressBar(targetWindow)"),
+                script.index("my scanToolbarFirst(targetWindow)"),
+            )
+
     def test_accessibility_address_bar_script_has_opera_specific_app_bar_path(self) -> None:
         script = accessibility_address_bar_script("Opera")
 

@@ -22,6 +22,9 @@ const ENV_BROWSER_QA_SKIP_FOCUS: &str = "DRIFTY_NATIVE_QA_SKIP_FOCUS";
 const ENV_BROWSER_QA_SOAK_MARKER: &str = "DRIFTY_NATIVE_QA_SOAK_MARKER";
 const ENV_BROWSER_QA_SOAK_ITERATIONS: &str = "DRIFTY_NATIVE_QA_SOAK_ITERATIONS";
 const ENV_BROWSER_QA_WHALE_PROFILE: &str = "DRIFTY_NATIVE_QA_WHALE_PROFILE";
+/// Makes the Firefox matrix target play quiet audio so its tab shows the audio
+/// toggle beside the close button, the shape of a playing video tab.
+const ENV_BROWSER_QA_TARGET_AUDIO: &str = "DRIFTY_NATIVE_QA_TARGET_AUDIO";
 
 #[test]
 #[ignore = "closes an explicitly selected loopback QA tab in an already running browser"]
@@ -583,6 +586,7 @@ fn qa_closes_firefox_tab_through_native_browser_tab_path() {
     result.expect("native Firefox close_browser_tab closes QA tab");
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 #[ignore = "launches an isolated Firefox profile and proves positive and negative close behavior with a loopback connection oracle"]
 fn qa_exercises_firefox_loopback_tab_close_matrix() {
@@ -603,7 +607,12 @@ fn qa_exercises_firefox_loopback_tab_close_matrix() {
     let marker = format!("firefox-{run_id}");
     let left_url = browser_qa_url(&marker, "sentinel-left");
     let right_url = browser_qa_url_on_host(&marker, "sentinel-right", "negative.localhost");
-    let target_url = browser_qa_url(&marker, "target");
+    let target_audio = std::env::var(ENV_BROWSER_QA_TARGET_AUDIO).as_deref() == Ok("1");
+    let target_url = if target_audio {
+        format!("{}&audio=1", browser_qa_url(&marker, "target"))
+    } else {
+        browser_qa_url(&marker, "target")
+    };
     browser_qa_oracle_roles(&marker)
         .expect("start scripts/qa/browser-ax-pages/server.mjs on 127.0.0.1:18777 first");
 
@@ -635,6 +644,22 @@ fn qa_exercises_firefox_loopback_tab_close_matrix() {
 
         focus_firefox_qa_tab(&target_url)?;
         focus_firefox_qa_tab(&right_url)?;
+        // The preflight Pet Mode runs before the cat approaches must refuse
+        // exactly what the close refuses.
+        match super::preflight_native_ax_tab_close(
+            "Firefox",
+            Some(&target_url),
+            Some(BROWSER_QA_ORACLE_HOST),
+        ) {
+            Err(diagnostic) if diagnostic == "firefox_native_ax_target_mismatch" => {
+                eprintln!("browser=Firefox preflight_refusal={diagnostic}");
+            }
+            other => {
+                return Err(format!(
+                    "Firefox preflight did not refuse the negative tab: {other:?}"
+                ));
+            }
+        }
         let refusal = match super::close_browser_tab(
             "Firefox",
             None,
@@ -661,6 +686,30 @@ fn qa_exercises_firefox_loopback_tab_close_matrix() {
         )?;
 
         focus_firefox_qa_tab(&target_url)?;
+        if target_audio {
+            // Let the tab's audio toggle appear before geometry is read.
+            thread::sleep(Duration::from_secs(2));
+        }
+        eprintln!(
+            "browser=Firefox target_tab_buttons=\n{}",
+            describe_firefox_qa_tab_buttons(&target_url)?
+        );
+        let hotspot = super::preflight_native_ax_tab_close(
+            "Firefox",
+            Some(&target_url),
+            Some(BROWSER_QA_ORACLE_HOST),
+        )
+        .map_err(|diagnostic| format!("Firefox preflight refused the target: {diagnostic}"))?;
+        eprintln!(
+            "browser=Firefox preflight_hotspot=({:.1},{:.1}) exact={} diagnostic={}",
+            hotspot.x, hotspot.y, hotspot.exact, hotspot.diagnostic
+        );
+        if !hotspot.exact {
+            return Err(format!(
+                "Firefox preflight did not locate the close control: {}",
+                hotspot.diagnostic
+            ));
+        }
         let diagnostic = super::close_browser_tab(
             "Firefox",
             None,
@@ -695,6 +744,8 @@ end tell"#,
 }
 
 fn open_firefox_qa_tab(url: &str) -> Result<(), String> {
+    // DOM ids first: Firefox's visible labels follow its UI language, and the
+    // matrix must run on localized builds as well as English and Korean.
     let open_result = run_osascript_text(
         r#"tell application "Firefox" to activate
 delay 0.1
@@ -702,6 +753,17 @@ tell application "System Events"
   tell process "Firefox"
     set frontmost to true
     set allElements to entire contents of front window
+    repeat with currentElement in allElements
+      try
+        if role of currentElement is "AXButton" then
+          set domId to value of attribute "AXDOMIdentifier" of currentElement as text
+          if domId is "tabs-newtab-button" or domId is "new-tab-button" or domId is "vertical-tabs-newtab-button" then
+            perform action "AXPress" of currentElement
+            return "opened"
+          end if
+        end if
+      end try
+    end repeat
     repeat with currentElement in allElements
       try
         if role of currentElement is "AXButton" then
@@ -735,7 +797,11 @@ tell application "System Events"
       try
         if role of currentElement is "AXComboBox" then
           set descriptionText to description of currentElement as text
-          if descriptionText contains "주소" or descriptionText contains "Address" or descriptionText contains "address" or descriptionText contains "URL" or descriptionText contains "url" then
+          set domId to ""
+          try
+            set domId to value of attribute "AXDOMIdentifier" of currentElement as text
+          end try
+          if domId is "urlbar-input" or descriptionText contains "주소" or descriptionText contains "Address" or descriptionText contains "address" or descriptionText contains "URL" or descriptionText contains "url" then
             set value of currentElement to "{url}"
             set value of attribute "AXFocused" of currentElement to true
             key code 36
@@ -772,6 +838,10 @@ fn prepare_firefox_profile(profile_path: &str) -> Result<(), String> {
         r#"user_pref("accessibility.force_disabled", -1);"#,
         r#"user_pref("browser.aboutwelcome.enabled", false);"#,
         r#"user_pref("browser.ctrlTab.sortByRecentlyUsed", false);"#,
+        // Lets the audio QA target play without a click, so its tab shows the
+        // audio toggle.
+        r#"user_pref("media.autoplay.default", 0);"#,
+        r#"user_pref("media.autoplay.blocking_policy", 0);"#,
         r#"user_pref("browser.shell.checkDefaultBrowser", false);"#,
         r#"user_pref("browser.startup.homepage_override.mstone", "ignore");"#,
         r#"user_pref("browser.startup.firstrunSkipsHomepage", true);"#,
@@ -850,16 +920,7 @@ fn browser_qa_oracle_roles(
 }
 
 fn focus_firefox_qa_tab(url: &str) -> Result<(), String> {
-    let parsed = url::Url::parse(url).map_err(|error| error.to_string())?;
-    let marker = parsed
-        .query_pairs()
-        .find_map(|(key, value)| (key == "drifty_browser_qa").then(|| value.into_owned()))
-        .ok_or_else(|| "Firefox QA URL omitted the run marker".to_string())?;
-    let role = parsed
-        .query_pairs()
-        .find_map(|(key, value)| (key == "role").then(|| value.into_owned()))
-        .ok_or_else(|| "Firefox QA URL omitted the role".to_string())?;
-    let expected_title = applescript_string_literal(&format!("Drifty QA {role} {marker}"));
+    let expected_title = applescript_string_literal(&firefox_qa_tab_title(url)?);
     let script = format!(
         r#"tell application "Firefox" to activate
 delay 0.1
@@ -886,6 +947,70 @@ end tell"#
     wait_for_firefox_url_match(url, true)
 }
 
+fn firefox_qa_tab_title(url: &str) -> Result<String, String> {
+    let parsed = url::Url::parse(url).map_err(|error| error.to_string())?;
+    let marker = parsed
+        .query_pairs()
+        .find_map(|(key, value)| (key == "drifty_browser_qa").then(|| value.into_owned()))
+        .ok_or_else(|| "Firefox QA URL omitted the run marker".to_string())?;
+    let role = parsed
+        .query_pairs()
+        .find_map(|(key, value)| (key == "role").then(|| value.into_owned()))
+        .ok_or_else(|| "Firefox QA URL omitted the role".to_string())?;
+    Ok(format!("Drifty QA {role} {marker}"))
+}
+
+/// Records the QA tab's frame and every button inside it, so the structural
+/// close rule's geometry can be checked against the real browser.
+fn describe_firefox_qa_tab_buttons(url: &str) -> Result<String, String> {
+    let expected_title = applescript_string_literal(&firefox_qa_tab_title(url)?);
+    let script = format!(
+        r#"on frameText(theElement)
+  tell application "System Events"
+    set elementPosition to position of theElement
+    set elementSize to size of theElement
+    return ((item 1 of elementPosition) as text) & "," & ((item 2 of elementPosition) as text) & " " & ((item 1 of elementSize) as text) & "x" & ((item 2 of elementSize) as text)
+  end tell
+end frameText
+
+tell application "System Events"
+  tell process "Firefox"
+    set report to "not_found"
+    set allElements to entire contents of front window
+    repeat with currentElement in allElements
+      try
+        if role of currentElement is "AXRadioButton" and title of currentElement is "{expected_title}" then
+          set report to "tab " & my frameText(currentElement)
+          set descendants to {{}}
+          repeat with childElement in (UI elements of currentElement)
+            set end of descendants to contents of childElement
+            try
+              repeat with grandchildElement in (UI elements of childElement)
+                set end of descendants to contents of grandchildElement
+              end repeat
+            end try
+          end repeat
+          repeat with childElement in descendants
+            try
+              set childRole to role of childElement
+              set domId to ""
+              try
+                set domId to value of attribute "AXDOMIdentifier" of childElement as text
+              end try
+              set report to report & linefeed & childRole & " " & my frameText(childElement) & " description=" & (description of childElement as text) & " domId=" & domId
+            end try
+          end repeat
+          return report
+        end if
+      end try
+    end repeat
+    return report
+  end tell
+end tell"#
+    );
+    run_osascript_text(&script)
+}
+
 fn firefox_front_url() -> Result<String, String> {
     run_osascript_text(
         r#"tell application "Firefox" to activate
@@ -899,7 +1024,11 @@ tell application "System Events"
       try
         if role of currentElement is "AXComboBox" then
           set descriptionText to description of currentElement as text
-          if descriptionText contains "주소" or descriptionText contains "Address" or descriptionText contains "address" or descriptionText contains "URL" or descriptionText contains "url" then
+          set domId to ""
+          try
+            set domId to value of attribute "AXDOMIdentifier" of currentElement as text
+          end try
+          if domId is "urlbar-input" or descriptionText contains "주소" or descriptionText contains "Address" or descriptionText contains "address" or descriptionText contains "URL" or descriptionText contains "url" then
             return value of currentElement as text
           end if
         end if
