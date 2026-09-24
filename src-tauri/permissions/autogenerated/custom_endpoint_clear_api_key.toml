@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-custom-endpoint-clear-api-key"
+description = "Enables the custom_endpoint_clear_api_key command without any pre-configured scope."
+commands.allow = ["custom_endpoint_clear_api_key"]
+
+[[permission]]
+identifier = "deny-custom-endpoint-clear-api-key"
+description = "Denies the custom_endpoint_clear_api_key command without any pre-configured scope."
+commands.deny = ["custom_endpoint_clear_api_key"]

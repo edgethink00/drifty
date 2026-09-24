@@ -25,13 +25,15 @@ import {
   type PersistedLocalAiSetupState,
 } from "./localAiSetup";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
+import { resolveInitialAnalysisAiSetup } from "./analysisModelSetup";
+import { loadCustomEndpointApiKey, saveCustomEndpointApiKey } from "./customEndpointApiKeyStore";
 import { getManagedLocalAiStatus, type ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { loadOpenRouterApiKey, saveOpenRouterApiKey } from "./openRouterApiKeyStore";
 import { isPreviewAiMockBaseUrl, PREVIEW_AI_MOCK_BASE_URL, PREVIEW_AI_MOCK_MODELS } from "./previewAiContract";
 import { useAiConnectionTestRunner, type UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
 
 const MANAGED_LOCAL_MEMORY_POLL_MS = 5_000;
-const OPENROUTER_KEY_SAVE_DELAY_MS = 400;
+const PROVIDER_KEY_SAVE_DELAY_MS = 400;
 // Automatic recovery probe while the provider check is failed: back off
 // 30s → 1m → 2m → 4m, capped at 5 minutes between attempts. Each probe is a
 // single ~1-token chat completion, so even a day-long outage stays negligible.
@@ -68,6 +70,18 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   if (keyEditRef.current.value !== localAiSetup.openRouterApiKey) {
     keyEditRef.current = { value: localAiSetup.openRouterApiKey, revision: keyEditRef.current.revision + 1 };
   }
+  const [customEndpointKeyLoaded, setCustomEndpointKeyLoaded] = useState(false);
+  const lastSavedCustomEndpointKeyRef = useRef<string | null>(null);
+  const customEndpointKeyEditRef = useRef({ value: localAiSetup.selfHostedApiKey, revision: 0 });
+  if (customEndpointKeyEditRef.current.value !== localAiSetup.selfHostedApiKey) {
+    customEndpointKeyEditRef.current = {
+      value: localAiSetup.selfHostedApiKey,
+      revision: customEndpointKeyEditRef.current.revision + 1,
+    };
+  }
+  // Intelligence can use the shared custom endpoint while Classification uses
+  // another provider; its key must still be available after a restart.
+  const [analysisUsesCustomEndpoint] = useState(() => resolveInitialAnalysisAiSetup().provider === "self_hosted");
   const localAiRetryAfterMsRef = useRef<number | null>(null);
 
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
@@ -94,6 +108,9 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const aiConnectionTest = useAiConnectionTestRunner({
     localAiSetup,
     onLocalAiConnectionTestResult: recordLocalAiConnectionTestResult,
+    // Probing a key-protected custom endpoint before its stored key is restored
+    // would log a spurious 401 on every launch.
+    autoTestPaused: localAiSetup.provider === "self_hosted" && !customEndpointKeyLoaded,
   });
 
   const currentLocalAiConnectionCheck = useMemo(() => (
@@ -257,9 +274,52 @@ export function useAiSetupController(): UseAiSetupControllerResult {
       void saveOpenRouterApiKey(normalizedApiKey).then(() => {
         lastSavedOpenRouterKeyRef.current = normalizedApiKey;
       });
-    }, OPENROUTER_KEY_SAVE_DELAY_MS);
+    }, PROVIDER_KEY_SAVE_DELAY_MS);
     return () => window.clearTimeout(timeoutId);
   }, [localAiSetup.openRouterApiKey, openRouterKeyLoaded]);
+
+  // Same Keychain gating as the OpenRouter key: only read the custom endpoint key
+  // when a task actually routes through the custom endpoint or the AI setup
+  // dialog is open. Keyless endpoints never create an item, so they never prompt.
+  const shouldLoadCustomEndpointKey = localAiSetup.provider === "self_hosted"
+    || analysisUsesCustomEndpoint
+    || aiSetupDialogOpen;
+  useEffect(() => {
+    if (!shouldLoadCustomEndpointKey || customEndpointKeyLoaded) return;
+    let cancelled = false;
+    const keyAtLoadStart = customEndpointKeyEditRef.current;
+    void loadCustomEndpointApiKey().then((savedApiKey) => {
+      if (cancelled) return;
+      const normalizedApiKey = savedApiKey?.trim() ?? "";
+      lastSavedCustomEndpointKeyRef.current = normalizedApiKey;
+      // Decide outside the state updater: React may invoke an updater twice, and
+      // the edit ref changes once the first result renders, so reading it inside
+      // would make the second invocation discard the restored key.
+      const editedDuringLoad = customEndpointKeyEditRef.current.revision !== keyAtLoadStart.revision;
+      if (normalizedApiKey && !editedDuringLoad) {
+        setLocalAiSetup((current) => current.selfHostedApiKey !== keyAtLoadStart.value
+          || current.selfHostedApiKey.trim() === normalizedApiKey
+          ? current
+          : { ...current, selfHostedApiKey: normalizedApiKey });
+      }
+      setCustomEndpointKeyLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldLoadCustomEndpointKey, customEndpointKeyLoaded]);
+
+  useEffect(() => {
+    if (!customEndpointKeyLoaded) return;
+    const normalizedApiKey = localAiSetup.selfHostedApiKey.trim();
+    if (lastSavedCustomEndpointKeyRef.current === normalizedApiKey) return;
+    const timeoutId = window.setTimeout(() => {
+      void saveCustomEndpointApiKey(normalizedApiKey).then(() => {
+        lastSavedCustomEndpointKeyRef.current = normalizedApiKey;
+      });
+    }, PROVIDER_KEY_SAVE_DELAY_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [localAiSetup.selfHostedApiKey, customEndpointKeyLoaded]);
 
   useEffect(() => {
     if (!localAiConnectionFingerprint || !isManagedLocalAiRoute(localAiSetup)) {

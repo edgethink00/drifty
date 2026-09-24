@@ -10,6 +10,8 @@ import type { LocalAiSetupState } from "./localAiSetup";
 type UseAiConnectionTestRunnerOptions = {
   readonly localAiSetup: LocalAiSetupState;
   readonly onLocalAiConnectionTestResult: (setup: LocalAiSetupState, result: AiConnectionTestResult) => void;
+  /** Defers the automatic probe, e.g. while a stored provider key is still loading. */
+  readonly autoTestPaused?: boolean;
 };
 
 type AiSetupProviderAnalyticsValue = NonNullable<PostHogEventPropertiesByName["ai_setup_action"]["provider_kind"]>;
@@ -30,6 +32,7 @@ export type UseAiConnectionTestRunnerResult = {
 export function useAiConnectionTestRunner({
   localAiSetup,
   onLocalAiConnectionTestResult,
+  autoTestPaused = false,
 }: UseAiConnectionTestRunnerOptions): UseAiConnectionTestRunnerResult {
   const [result, setResult] = useState<AiConnectionTestResult | null>(null);
   const [running, setRunning] = useState(false);
@@ -79,9 +82,9 @@ export function useAiConnectionTestRunner({
   }, [onLocalAiConnectionTestResult]);
 
   const autoFingerprint = useMemo(() => {
-    if (!isActiveProviderTestable(localAiSetup)) return null;
+    if (autoTestPaused || !isActiveProviderTestable(localAiSetup)) return null;
     return localAiSetupFingerprint(localAiSetup);
-  }, [localAiSetup]);
+  }, [autoTestPaused, localAiSetup]);
 
   useEffect(() => {
     setResult(null);

@@ -15,17 +15,32 @@ vi.mock("./openRouterApiKeyStore", () => ({
   saveOpenRouterApiKey: storeMocks.saveOpenRouterApiKey,
 }));
 
+const customEndpointStoreMocks = vi.hoisted(() => ({
+  loadCustomEndpointApiKey: vi.fn<() => Promise<string | null>>(),
+  saveCustomEndpointApiKey: vi.fn<(value: string) => Promise<void>>(),
+}));
+
+vi.mock("./customEndpointApiKeyStore", () => ({
+  loadCustomEndpointApiKey: customEndpointStoreMocks.loadCustomEndpointApiKey,
+  saveCustomEndpointApiKey: customEndpointStoreMocks.saveCustomEndpointApiKey,
+}));
+
 // The connection-test runner and managed-local memory probe both reach native
 // commands; stub them so the controller can mount in isolation.
+const runnerOptions = vi.hoisted(() => ({ autoTestPaused: undefined as boolean | undefined }));
+
 vi.mock("./useAiConnectionTestRunner", () => ({
-  useAiConnectionTestRunner: () => ({
-    result: null,
-    running: false,
-    runningFingerprint: null,
-    clearResult: () => undefined,
-    run: async () => undefined,
-    runAuto: async () => undefined,
-  }),
+  useAiConnectionTestRunner: (options: { autoTestPaused?: boolean }) => {
+    runnerOptions.autoTestPaused = options.autoTestPaused;
+    return {
+      result: null,
+      running: false,
+      runningFingerprint: null,
+      clearResult: () => undefined,
+      run: async () => undefined,
+      runAuto: async () => undefined,
+    };
+  },
 }));
 
 vi.mock("./managedLocalAiClient", () => ({
@@ -40,6 +55,10 @@ describe("useAiSetupController OpenRouter key gating", () => {
     storeMocks.loadOpenRouterApiKey.mockResolvedValue("sk-or-v1-saved");
     storeMocks.saveOpenRouterApiKey.mockReset();
     storeMocks.saveOpenRouterApiKey.mockResolvedValue();
+    customEndpointStoreMocks.loadCustomEndpointApiKey.mockReset();
+    customEndpointStoreMocks.loadCustomEndpointApiKey.mockResolvedValue(null);
+    customEndpointStoreMocks.saveCustomEndpointApiKey.mockReset();
+    customEndpointStoreMocks.saveCustomEndpointApiKey.mockResolvedValue();
     window.localStorage.clear();
   });
 
@@ -114,5 +133,93 @@ describe("useAiSetupController OpenRouter key gating", () => {
     })));
 
     expect(result.current.localAiSetup.driftyRoute).toBe("cloud");
+  });
+});
+
+describe("useAiSetupController custom endpoint key persistence", () => {
+  beforeEach(() => {
+    storeMocks.loadOpenRouterApiKey.mockReset();
+    storeMocks.loadOpenRouterApiKey.mockResolvedValue(null);
+    storeMocks.saveOpenRouterApiKey.mockReset();
+    storeMocks.saveOpenRouterApiKey.mockResolvedValue();
+    customEndpointStoreMocks.loadCustomEndpointApiKey.mockReset();
+    customEndpointStoreMocks.loadCustomEndpointApiKey.mockResolvedValue("sk-custom-saved");
+    customEndpointStoreMocks.saveCustomEndpointApiKey.mockReset();
+    customEndpointStoreMocks.saveCustomEndpointApiKey.mockResolvedValue();
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    window.localStorage.clear();
+  });
+
+  it("does not read the credential store when no task uses the custom endpoint", async () => {
+    renderHook(() => useAiSetupController());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(customEndpointStoreMocks.loadCustomEndpointApiKey).not.toHaveBeenCalled();
+  });
+
+  it("restores the saved key after a restart when Classification uses the custom endpoint", async () => {
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({
+      provider: "self_hosted",
+      selfHostedBaseUrl: "https://llm.example.com/v1",
+      selfHostedModel: "qwen3",
+    }));
+
+    const { result } = renderHook(() => useAiSetupController());
+
+    await waitFor(() => expect(result.current.localAiSetup.selfHostedApiKey).toBe("sk-custom-saved"));
+    expect(customEndpointStoreMocks.loadCustomEndpointApiKey).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem("drifty.aiSetup.v1")).not.toContain("sk-custom-saved");
+  });
+
+  it("holds the automatic connection probe until the stored key has loaded", async () => {
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({
+      provider: "self_hosted",
+      selfHostedBaseUrl: "https://llm.example.com/v1",
+      selfHostedModel: "qwen3",
+    }));
+    let finishLoad: (key: string | null) => void = () => undefined;
+    customEndpointStoreMocks.loadCustomEndpointApiKey.mockImplementation(() => new Promise((resolve) => { finishLoad = resolve; }));
+
+    const { result } = renderHook(() => useAiSetupController());
+
+    await waitFor(() => expect(customEndpointStoreMocks.loadCustomEndpointApiKey).toHaveBeenCalled());
+    expect(runnerOptions.autoTestPaused).toBe(true);
+
+    await act(async () => finishLoad("sk-custom-saved"));
+
+    expect(result.current.localAiSetup.selfHostedApiKey).toBe("sk-custom-saved");
+    expect(runnerOptions.autoTestPaused).toBe(false);
+  });
+
+  it("restores the saved key when only Intelligence uses the custom endpoint", async () => {
+    window.localStorage.setItem("drifty.analysisAiSetup.v1", JSON.stringify({ provider: "self_hosted", selfHostedModel: "qwen3" }));
+
+    const { result } = renderHook(() => useAiSetupController());
+
+    await waitFor(() => expect(result.current.localAiSetup.selfHostedApiKey).toBe("sk-custom-saved"));
+  });
+
+  it("saves a newly entered key and clears the stored key when it is removed", async () => {
+    customEndpointStoreMocks.loadCustomEndpointApiKey.mockResolvedValue(null);
+    const { result } = renderHook(() => useAiSetupController());
+
+    act(() => result.current.setLocalAiSetup((current) => ({
+      ...current,
+      provider: "self_hosted",
+      selfHostedApiKey: "sk-custom-new",
+    })));
+
+    await waitFor(() => expect(customEndpointStoreMocks.saveCustomEndpointApiKey).toHaveBeenCalledWith("sk-custom-new"));
+
+    act(() => result.current.setLocalAiSetup((current) => ({ ...current, selfHostedApiKey: "" })));
+
+    await waitFor(() => expect(customEndpointStoreMocks.saveCustomEndpointApiKey).toHaveBeenLastCalledWith(""));
   });
 });

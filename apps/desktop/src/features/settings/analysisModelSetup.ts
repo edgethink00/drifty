@@ -27,8 +27,9 @@ export interface AnalysisAiSetupState {
   readonly anthropicModel: string;
 }
 
-// Direct-provider keys, like the self-hosted/OpenRouter keys, are session-only:
-// they live in memory but are never written to localStorage (privacy boundary).
+// Keys are never written to localStorage (privacy boundary). The shared
+// custom endpoint and OpenRouter keys persist in the OS credential store;
+// the direct OpenAI/Anthropic keys stay session-only.
 export type PersistedAnalysisAiSetupState = Omit<
   AnalysisAiSetupState,
   "openRouterApiKey" | "selfHostedBaseUrl" | "selfHostedApiKey" | "openaiApiKey" | "anthropicApiKey"

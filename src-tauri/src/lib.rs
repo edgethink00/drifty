@@ -4,6 +4,7 @@ mod auth_session_store;
 mod cloud_device_store;
 mod commands;
 mod correction_evidence_store;
+mod custom_endpoint_key_store;
 mod donut_icon;
 mod living_soul_store;
 mod observability;
@@ -254,6 +255,21 @@ fn openrouter_save_api_key(value: String) -> Result<(), String> {
 #[tauri::command]
 fn openrouter_clear_api_key() -> Result<(), String> {
     openrouter_key_store::clear_api_key()
+}
+
+#[tauri::command]
+fn custom_endpoint_load_api_key() -> Result<Option<String>, String> {
+    custom_endpoint_key_store::load_api_key()
+}
+
+#[tauri::command]
+fn custom_endpoint_save_api_key(value: String) -> Result<(), String> {
+    custom_endpoint_key_store::save_api_key(&value)
+}
+
+#[tauri::command]
+fn custom_endpoint_clear_api_key() -> Result<(), String> {
+    custom_endpoint_key_store::clear_api_key()
 }
 
 #[tauri::command]
@@ -845,6 +861,9 @@ pub fn run() {
             openrouter_load_api_key,
             openrouter_save_api_key,
             openrouter_clear_api_key,
+            custom_endpoint_load_api_key,
+            custom_endpoint_save_api_key,
+            custom_endpoint_clear_api_key,
             cloud_device_identity,
             cloud_device_install_id,
             app_reveal_main_window,
