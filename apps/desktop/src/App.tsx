@@ -56,6 +56,7 @@ import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./feature
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "./features/ai-connection/managedLocalAiRuntimeStatus";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
+import { resolveSidebarLiveActivityLabels } from "./features/sidebar/sidebarLiveActivity";
 import { UpgradePlanModal } from "./features/billing/UpgradePlanModal";
 import { canStartIndividualCheckout } from "./features/billing/billingEligibility";
 import {
@@ -634,6 +635,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [accessibilityRequired, setAccessibilityRequired] = useState(hostPlatform !== "windows");
   const [currentSnapshot, setCurrentSnapshot] = useState<CurrentActivitySnapshot | null>(null);
+  // True until a refresh has settled its first live snapshot; the sidebar keeps
+  // its pre-load placeholder meanwhile (resolveSidebarLiveActivityLabels).
+  const [awaitingFirstCurrentSnapshot, setAwaitingFirstCurrentSnapshot] = useState(true);
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
   const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
   const [historySegments, setHistorySegments] = useState<ActivitySegment[]>([]);
@@ -2530,6 +2534,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const historySearchRequestRef = useRef(0);
   const dashboardRefreshInputsRef = useRef<DashboardRefreshInputs | null>(null);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
+  // The refresh whose deferred live snapshot the sidebar placeholder waits on.
+  const deferredCurrentSnapshotRequestRef = useRef<number | null>(null);
   const dashboardWeekPrefetchRequestRef = useRef(0);
   const compactHistoryCacheRef = useRef<Map<string, CompactHistoryLoad>>(new Map());
   const compactHistoryInFlightRef = useRef<Map<string, { readonly range: CompactHistoryRange; readonly promise: Promise<CompactHistoryLoad> }>>(new Map());
@@ -3608,6 +3614,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     const trackerMutationGeneration = trackerMutationGenerationRef.current;
     historyRefreshRequestRef.current += 1;
     if (isRequiredCurrentSnapshotRefresh) requiredCurrentSnapshotRefreshInFlightRef.current = true;
+    // The live snapshot is a fresh capture of the frontmost app (several
+    // osascript round trips), usually the slowest request here. Only a
+    // required refresh hands its caller the day and the snapshot together;
+    // any other foreground refresh paints the day first and applies the
+    // snapshot when it lands (see the end of the try block below).
+    const defersCurrentSnapshot = isForegroundRefresh && !isRequiredCurrentSnapshotRefresh;
+    let deferredCurrentSnapshotPending = defersCurrentSnapshot;
+    if (defersCurrentSnapshot) deferredCurrentSnapshotRequestRef.current = requestId;
+    // Only the newest deferring refresh releases the sidebar placeholder, so an
+    // older capture settling first cannot expose the day's top app meanwhile.
+    const settleDeferredCurrentSnapshot = () => {
+      deferredCurrentSnapshotPending = false;
+      if (deferredCurrentSnapshotRequestRef.current !== requestId) return;
+      deferredCurrentSnapshotRequestRef.current = null;
+      setAwaitingFirstCurrentSnapshot(false);
+    };
     if (isForegroundRefresh) setLoading(true);
     setError(null);
 
@@ -3704,13 +3726,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               : trackerClient.getCurrentSnapshot().catch(() => null);
           })
         : Promise.resolve(currentSnapshot);
+      if (defersCurrentSnapshot) void currentSnapshotRequest.catch(() => undefined);
 
       const [timeline, archiveTimelineLoad, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
         trackerClient.getTimeline(selectedDayRange),
         archiveTimelineRequest,
         historyHourlySummaryRequest,
         historySiteSummaryRequest,
-        currentSnapshotRequest,
+        defersCurrentSnapshot ? Promise.resolve(null) : currentSnapshotRequest,
         loadClassificationMetrics(day),
         loadAiClassificationUsage(day),
         trendsRecentWeekRequest,
@@ -3725,8 +3748,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const alarmDay = currentDriftAlarmDay();
       const isAlarmDayRefresh = day === alarmDay;
 
-      if (isForegroundRefresh && trackerMutationGenerationRef.current === trackerMutationGeneration) {
+      if (
+        isForegroundRefresh
+        && !defersCurrentSnapshot
+        && trackerMutationGenerationRef.current === trackerMutationGeneration
+      ) {
         setCurrentSnapshot(nextCurrentSnapshot);
+        setAwaitingFirstCurrentSnapshot(false);
       }
       if (isAlarmDayRefresh) {
         liveDriftAlarmSegmentsRef.current = [];
@@ -3777,6 +3805,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       loadMissingSiteIcons(materializedArchiveTimelines === null
         ? materializedTimeline.segments
         : [...materializedTimeline.segments, ...materializedArchiveTimelines.segments]);
+      if (defersCurrentSnapshot) {
+        // The snapshot now settles on its own; finally must not settle it.
+        deferredCurrentSnapshotPending = false;
+        // Same guards the combined update used: a newer refresh or a tracker
+        // start/pause since this request owns the snapshot now.
+        void currentSnapshotRequest.then((deferredSnapshot) => {
+          if (
+            refreshRequestRef.current === requestId
+            && trackerMutationGenerationRef.current === trackerMutationGeneration
+          ) {
+            setCurrentSnapshot(deferredSnapshot);
+          }
+          settleDeferredCurrentSnapshot();
+        }, settleDeferredCurrentSnapshot);
+      }
       return true;
     } catch (nextError) {
       if (refreshRequestRef.current !== requestId) return false;
@@ -3785,6 +3828,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       setError(message);
       return false;
     } finally {
+      // A refresh that failed or was superseded before applying its day never
+      // attaches its snapshot; release the placeholder as main's fallback would.
+      if (deferredCurrentSnapshotPending) settleDeferredCurrentSnapshot();
       if (isRequiredCurrentSnapshotRefresh) {
         requiredCurrentSnapshotRefreshInFlightRef.current = false;
       }
@@ -7189,8 +7235,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, []);
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
   /* Milestones may only read today's figure while the loaded segments are known
-     to belong to today; see canEvaluateCompanionDailyFocus. */
-  const companionDailyFocusEvaluable = canEvaluateCompanionDailyFocus({
+     to belong to today; see canEvaluateCompanionDailyFocus. At launch they also
+     wait for the first live snapshot, which lands after the day's records: its
+     uncaptured seconds belong in the baseline, not in an announced crossing. */
+  const companionDailyFocusEvaluable = !awaitingFirstCurrentSnapshot && canEvaluateCompanionDailyFocus({
     loaded: hasLoadedOnce,
     blocked: shouldBlockLocalTrackerAccess,
     viewingToday: selectedDay === todayDay,
@@ -7361,8 +7409,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const averageSessionMinutes = effectiveDashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / effectiveDashboardSegments.length) : 0;
   const topApp = dashboardTopApps[0];
   const topAppLabel = topApp?.appName ?? localization.t("tracker.noActivity");
-  const liveAppLabel = status?.running && currentSnapshot?.appName ? currentSnapshot.appName : topAppLabel;
-  const liveSiteLabel = status?.running ? (currentSnapshot?.siteDomain || currentSnapshot?.siteTitle || null) : null;
+  const { appLabel: liveAppLabel, siteLabel: liveSiteLabel } = resolveSidebarLiveActivityLabels({
+    running: status?.running === true,
+    snapshot: currentSnapshot,
+    awaitingFirstSnapshot: awaitingFirstCurrentSnapshot,
+    pendingAppLabel: localization.t("tracker.noActivity"),
+    fallbackAppLabel: topAppLabel,
+  });
   const hasTimelineData = effectiveSelectedDaySegments.length > 0;
   const isBootstrappingTracker = loading && status === null;
   const trackerModeLabel = status?.trackerMode ?? "unknown";
