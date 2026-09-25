@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type { OAuthCallbackStatus } from "../auth/AuthContext";
 import type { OnboardingFlow } from "./useOnboardingFlow";
 import { WelcomeStep } from "./components/steps/WelcomeStep";
@@ -39,6 +39,7 @@ export function OnboardingDesignCodeContent({
   const { t } = useLocalization();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const [blockedContinueStep, setBlockedContinueStep] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const scrollEdges = useScrollOverflowEdges(scrollRef, flow.step);
 
@@ -49,11 +50,17 @@ export function OnboardingDesignCodeContent({
   const showBack = flow.stepIndex > 0;
   // Errors sit next to the button they explain. In the fixed 720x540
   // onboarding window, text appended to the end of a long step lands below
-  // the fold where nobody sees it. The "why is Continue off" hint stays
-  // limited to Permissions; other steps explain themselves in their own copy
-  // and must not nag before the user has entered anything.
+  // the fold where nobody sees it. Permissions always says why Continue is
+  // off. Work has no on-screen reason either, so its Continue stays pressable
+  // (aria-disabled) and explains itself only after a press; other steps
+  // explain themselves in their own copy and must not nag before input.
+  const workContinueBlocked = flow.step === "job" && !flow.canAdvance && !flow.isCompleting;
   const footerError = flow.storageError ?? flow.setupError;
-  const footerHint = flow.step === "permissions" ? flow.blockedHint : null;
+  const footerHint = flow.step === "permissions"
+    ? flow.blockedHint
+    : workContinueBlocked && blockedContinueStep === flow.step
+      ? t("onboarding.block.workContext")
+      : null;
   const footerLabel = flow.isCompleting
     ? t("onboarding.action.finishing")
     : flow.footerLabel;
@@ -94,11 +101,20 @@ export function OnboardingDesignCodeContent({
     setConfirmCloseOpen(false);
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (workContinueBlocked) {
+      event.preventDefault();
+      setBlockedContinueStep(flow.step);
+      return;
+    }
+    flow.handleSubmit(event);
+  }
+
   return (
     <>
       <form
         className="onboarding-card dc-onb-card"
-        onSubmit={flow.handleSubmit}
+        onSubmit={handleSubmit}
         aria-busy={flow.isCompleting}
       >
         <div className="dc-onb-scroll" ref={scrollRef} data-overflow={scrollEdges}>
@@ -202,7 +218,8 @@ export function OnboardingDesignCodeContent({
             <button
               type="submit"
               className="onb-button onb-button--primary dc-onb-primary"
-              disabled={!flow.canAdvance || flow.isCompleting}
+              disabled={!workContinueBlocked && (!flow.canAdvance || flow.isCompleting)}
+              aria-disabled={workContinueBlocked || undefined}
             >
               {footerLabel}
             </button>

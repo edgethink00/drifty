@@ -35,14 +35,20 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
             onClick={() => void flow.handleRequestAccessibilityClick()}
           />
         ) : null}
-        <PermissionRow
-          title={t("onboarding.permissions.notifications")}
-          description={t("onboarding.permissions.notificationsDescription")}
-          pill={notificationsEnabled ? t("onboarding.permissions.allowed") : t("common.recommended")}
-          tone={notificationsEnabled ? "success" : "neutral"}
-          disabled={notificationsEnabled}
-          onClick={() => void flow.handleNotificationPermissionClick()}
-        />
+        {/* The desktop notification plugin reports "granted" without asking the
+            OS, so on macOS this row was a button that only flipped its own
+            label. Windows keeps it: without the Accessibility row it would
+            leave this step empty. */}
+        {flow.accessibilityRequired ? null : (
+          <PermissionRow
+            title={t("onboarding.permissions.notifications")}
+            description={t("onboarding.permissions.notificationsDescription")}
+            pill={notificationsEnabled ? t("onboarding.permissions.allowed") : t("common.recommended")}
+            tone={notificationsEnabled ? "success" : "neutral"}
+            disabled={notificationsEnabled}
+            onClick={() => void flow.handleNotificationPermissionClick()}
+          />
+        )}
         {safariHistory.show ? (
           <PermissionRow
             title={t("onboarding.permissions.safariHistory")}

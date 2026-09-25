@@ -21,14 +21,14 @@
   border: 1px solid transparent;
   box-shadow: none;
 }
-.onboarding-card .onb-button--primary:hover:not(:disabled) {
+.onboarding-card .onb-button--primary:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--onb-primary-bg-hover);
   box-shadow: none;
 }
-.onboarding-card .onb-button--primary:active:not(:disabled) {
+.onboarding-card .onb-button--primary:active:not(:disabled, [aria-disabled="true"]) {
   box-shadow: none;
 }
-.onboarding-card .onb-button--primary:disabled {
+.onboarding-card .onb-button--primary:is(:disabled, [aria-disabled="true"]) {
   background: color-mix(in oklch, var(--onb-text) 20%, var(--onb-bg-2));
   color: rgba(255, 255, 255, 0.86);
   box-shadow: none;
@@ -41,12 +41,12 @@
   border-color: var(--onb-primary-bg);
 }
 
-:root[data-theme="dark"] .onboarding-card .onb-button--primary:hover:not(:disabled) {
+:root[data-theme="dark"] .onboarding-card .onb-button--primary:hover:not(:disabled, [aria-disabled="true"]) {
   color: var(--onb-canvas);
   border-color: var(--onb-primary-bg-hover);
 }
 
-:root[data-theme="dark"] .onboarding-card .onb-button--primary:disabled {
+:root[data-theme="dark"] .onboarding-card .onb-button--primary:is(:disabled, [aria-disabled="true"]) {
   background: color-mix(in oklch, var(--onb-surface-strong) 88%, var(--onb-bg-2));
   color: var(--onb-text-soft);
   border-color: var(--onb-line);

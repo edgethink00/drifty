@@ -53,7 +53,7 @@ describe("onboarding design-code reference styles", () => {
 
   it("keeps the design-code continue button static on hover", () => {
     const primaryButtonRule = styles.match(
-      /\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary,\s*\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:hover:not\(:disabled\),\s*\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:active:not\(:disabled\)\s*\{(?<body>[^}]*)\}/,
+      /\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary,\s*\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:hover:not\(:disabled, \[aria-disabled="true"\]\),\s*\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:active:not\(:disabled, \[aria-disabled="true"\]\)\s*\{(?<body>[^}]*)\}/,
     )?.groups?.body ?? "";
 
     expect(primaryButtonRule).toContain("height: 41px;");

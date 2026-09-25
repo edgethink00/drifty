@@ -1955,8 +1955,8 @@
 }
 
 .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary,
-.onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:hover:not(:disabled),
-.onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:active:not(:disabled) {
+.onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:hover:not(:disabled, [aria-disabled="true"]),
+.onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:active:not(:disabled, [aria-disabled="true"]) {
   appearance: none;
   min-width: 0;
   min-height: 0;
@@ -1976,7 +1976,7 @@
   transition: opacity 0.15s;
 }
 
-.dc-onb-card .dc-onb-primary:disabled {
+.dc-onb-card .dc-onb-primary:is(:disabled, [aria-disabled="true"]) {
   border: 0;
   background: var(--dc-onb-accent);
   color: var(--dc-onb-surface);
@@ -2126,8 +2126,8 @@
     .dc-onb-tag
   ),
   .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary,
-  .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:hover:not(:disabled),
-  .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:active:not(:disabled),
+  .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:hover:not(:disabled, [aria-disabled="true"]),
+  .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:active:not(:disabled, [aria-disabled="true"]),
   .dc-onb-confirm .dc-onb-confirm__primary {
     border: 1px solid ButtonText;
     background: ButtonFace;
@@ -2292,6 +2292,18 @@
 
 :root[data-theme="dark"] .dc-onb-pending-dot--failed {
   border-color: rgba(232, 135, 122, 0.6);
+}
+
+/* In dark mode the legacy onboarding button rules supply a near-black
+   disabled fill while this file supplies near-black text, and the 0.4 opacity
+   then hides the button. Define the disabled look once for dark, mirroring the
+   light theme's "dimmed primary". Work's pressable Continue (aria-disabled)
+   shares the same look. */
+:root[data-theme="dark"] .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:is(:disabled, [aria-disabled="true"]) {
+  border: 0;
+  background: color-mix(in srgb, var(--dc-onb-text) 22%, var(--dc-onb-surface));
+  color: var(--dc-onb-soft);
+  opacity: 1;
 }
 
 /* --dc-onb-warn also colours pills and destructive buttons on light fills, so

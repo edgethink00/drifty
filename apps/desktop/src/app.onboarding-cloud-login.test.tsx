@@ -193,6 +193,7 @@ async function clickEnabledAction(name: RegExp = /^continue$/i) {
   const button = (await screen.findByRole("button", { name })) as HTMLButtonElement;
   await waitFor(() => {
     expect(button.disabled).toBe(false);
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
   });
   await act(async () => {
     fireEvent.click(button);

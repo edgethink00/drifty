@@ -398,6 +398,7 @@ async function clickEnabledAction(name: RegExp = /^continue$/i) {
   const button = (await screen.findByRole("button", { name })) as HTMLButtonElement;
   await waitFor(() => {
     expect(button.disabled).toBe(false);
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
   });
   fireEvent.click(button);
 }
@@ -635,14 +636,22 @@ describe("App onboarding", () => {
     expect(screen.getByPlaceholderText(/Write it the way you would say it\. The AI will understand/i)).toBeTruthy();
     const workDescription = screen.getByLabelText(/tell us more about your work/i, { selector: "textarea" });
     expect(workDescription).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
+    const workContinue = screen.getByRole("button", { name: /^continue$/i });
+    const workBlockedHint = /choose at least one item or describe your work to continue/i;
+    expect(workContinue.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByText(workBlockedHint)).toBeNull();
+    fireEvent.click(workContinue);
+    expect(screen.getByText(workBlockedHint)).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: /what kind of work do you do/i })).toBeTruthy();
     fireEvent.change(workDescription, { target: { value: "I advise education teams." } });
-    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect(workContinue.getAttribute("aria-disabled")).toBeNull();
+    expect((workContinue as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(workBlockedHint)).toBeNull();
     expect(screen.queryByText(/24 \/ 240/)).toBeNull();
     fireEvent.change(workDescription, { target: { value: "x".repeat(201) } });
     expect(screen.getByText(/201 \/ 240/)).toBeTruthy();
     fireEvent.change(workDescription, { target: { value: "" } });
-    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(workContinue.getAttribute("aria-disabled")).toBe("true");
     expect(screen.queryByText(/write naturally\. this context helps/i)).toBeNull();
     expect(screen.queryByLabelText(/your field/i)).toBeNull();
     expect(screen.getByText(/no need to include company or client names/i)).toBeTruthy();
@@ -1974,6 +1983,9 @@ describe("App onboarding", () => {
     const continueButton = await screen.findByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
     await waitFor(() => expect(continueButton.disabled).toBe(true));
     expect(screen.getByText(/enable accessibility to continue/i)).toBeTruthy();
+    // The desktop notification plugin never prompts the OS, so macOS
+    // onboarding no longer offers a Notifications "grant" that only relabels.
+    expect(screen.queryByText(/^Notifications$/)).toBeNull();
 
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
       accessibilityGranted: true,
