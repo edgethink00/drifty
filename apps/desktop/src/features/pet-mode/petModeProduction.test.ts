@@ -41,6 +41,7 @@ const petModeCssContract = readFileSync("src/features/pet-mode/petMode.css", "ut
 const petModeDataContract = readFileSync("src/features/pet-mode/petModeData.ts", "utf8");
 const petModeWindowContract = readFileSync("src/features/pet-mode/PetModeWindowApp.tsx", "utf8");
 const petModeRustContract = readFileSync("../../src-tauri/src/commands/pet_mode.rs", "utf8");
+const petFullscreenRustContract = readFileSync("../../src-tauri/src/commands/pet_fullscreen.rs", "utf8");
 const petModeWindowsRustContract = readFileSync("../../src-tauri/src/commands/pet_mode_windows.rs", "utf8");
 const windowsBrowserUiaRustContract = readFileSync("../../src-tauri/src/commands/windows_browser_uia.rs", "utf8");
 const petPanelRustContract = readFileSync("../../src-tauri/src/commands/pet_panel.rs", "utf8");
@@ -275,6 +276,29 @@ describe("pet entry motion contract", () => {
     expect(petModeWindowContract).toContain("runTravelDistance={runTravelDistance}");
     expect(petModeWindowContract).toContain("runDurationMs={runDurationMs}");
     expect(petModeWindowContract).toContain("runStartDelayMs={runStartDelayMs}");
+  });
+
+  it("never gives the native Automatic close approach a reduced-motion shortcut", () => {
+    // Owner decision 2026-09-26: the close run always travels. Windows reports
+    // reduced motion whenever Animation effects is off, and the old instant
+    // move read as a teleport (1.11.18). The renderer side is covered in
+    // PetModeWindowApp.test.tsx and petModeBridge.test.ts; these native entry
+    // points must not accept or branch on the preference again.
+    const signature = (source: string, header: string) => {
+      const start = source.indexOf(header);
+      expect(start, header).toBeGreaterThan(-1);
+      return source.slice(start, source.indexOf("{", start));
+    };
+    for (const header of [
+      "pub async fn pet_mode_move_to_target(",
+      "fn move_pet_to_target(",
+      "fn move_pet_to_preview_target(",
+    ]) {
+      expect(signature(petModeRustContract, header)).not.toMatch(/reduced/i);
+    }
+    expect(signature(petFullscreenRustContract, "pub(super) fn approach(")).not.toMatch(/reduced/i);
+    expect(petFullscreenRustContract).not.toMatch(/\bscene\.reduced\b|\breduced: bool\b/);
+    expect(petModeRustContract).not.toContain("move_pet_window_immediately");
   });
 });
 

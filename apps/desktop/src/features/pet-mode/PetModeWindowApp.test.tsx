@@ -4456,10 +4456,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     let completeNativeDrag!: () => void;
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
       completeNativeDrag = () => resolve({
@@ -4515,10 +4512,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: true }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
     let finishMove!: () => void;
     bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => {
       finishMove = () => resolve({
@@ -4614,10 +4608,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: true }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
@@ -4748,10 +4739,7 @@ describe("PetModeWindowApp", () => {
       targetY: 48,
       motionOutcome: "cancelled",
     });
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: true }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
@@ -4922,10 +4910,7 @@ describe("PetModeWindowApp", () => {
       targetX: 1400,
       targetY: 44,
     });
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: true }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
     await renderResidentPet();
 
     act(() => {
@@ -4957,10 +4942,7 @@ describe("PetModeWindowApp", () => {
       return vi.fn();
     });
     bridge.reportNativePetContact.mockRejectedValueOnce(new Error("contact unavailable"));
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: true }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
@@ -4984,10 +4966,7 @@ describe("PetModeWindowApp", () => {
   it("lets native movement distinguish a cat tap from a real panel drag", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -5021,10 +5000,7 @@ describe("PetModeWindowApp", () => {
   it("does not treat a relocating drag as a petting stroke", async () => {
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.beginNativePetDrag.mockResolvedValueOnce({
       moved: true,
       strokeDetected: false,
@@ -5047,10 +5023,7 @@ describe("PetModeWindowApp", () => {
   it("cancels a pickup flash when native later recognizes a stroke", async () => {
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     let completeNativeDrag!: () => void;
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
       completeNativeDrag = () => resolve({
@@ -5078,10 +5051,7 @@ describe("PetModeWindowApp", () => {
 
   it("turns a tap during motion into petting without flashing the held pose", async () => {
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -5296,10 +5266,7 @@ describe("PetModeWindowApp", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -5893,10 +5860,7 @@ describe("PetModeWindowApp", () => {
         });
       });
     });
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -5939,10 +5903,7 @@ describe("PetModeWindowApp", () => {
   it("keeps manual drag authoritative over a running life action and stale native motion", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -5992,10 +5953,7 @@ describe("PetModeWindowApp", () => {
   it("always completes a moved native drag even when another action invalidates its token", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -6037,10 +5995,7 @@ describe("PetModeWindowApp", () => {
   it("starts release from the native drag-end event before the invoke promise settles", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
     await renderResidentPet();
@@ -6147,10 +6102,7 @@ describe("PetModeWindowApp", () => {
   it("keeps the shipped settle when drop resolution hops", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
     let completeNativeDrag!: () => void;
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
@@ -6180,10 +6132,7 @@ describe("PetModeWindowApp", () => {
   it("waits for a catch drop before returning to idle", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
     let completeNativeDrag!: () => void;
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
@@ -6221,10 +6170,7 @@ describe("PetModeWindowApp", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();

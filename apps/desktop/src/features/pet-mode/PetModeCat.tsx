@@ -181,8 +181,10 @@ export function PetModeCat({
   const selectedSitVariantId = resolvePetModeSitArtworkId();
   const selectedSitVariant = PET_MODE_SIT_VARIANTS[selectedSitVariantId];
   // The stylesheet already stops secondary CSS animations under reduced
-  // motion. The authored run is frame-driven, so its renderer clock needs the
-  // same preference explicitly and holds the approved first frame instead.
+  // motion; this flag trims the frame-driven extras the same way (entry
+  // settle, dance frames, sit gaze and blink). The Automatic close run and paw
+  // deliberately ignore it: the native window always travels, so the legs
+  // must keep moving with it (docs/product-decisions.md, 2026-09-26).
   const reducedMotion = typeof window !== "undefined"
     && typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;

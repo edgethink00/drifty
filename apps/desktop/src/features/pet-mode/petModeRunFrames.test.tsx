@@ -182,6 +182,30 @@ describe("pet mode run frames", () => {
     expect(cat.getAttribute("data-region-id")).toBe("paw-grounded:7");
   });
 
+  it("keeps the fast-run legs cycling when the system asks for reduced motion", async () => {
+    // Native always travels to the close target now, so a renderer that held
+    // frame 0 under reduced motion would slide a frozen cat across the screen.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: vi.fn().mockResolvedValue({ frames: ["M0 0 L150 0 L150 120 Z"], cycleSeconds: 1 }),
+    }));
+    vi.stubGlobal("Image", class {
+      src = "";
+      decode() { return Promise.resolve(); }
+    });
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+
+    const view = render(
+      <PetModeCat phase="run" facing="right" pawFrame={0} fastRunBetaEnabled publishHitRegion={false} />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".pet-mode-cat__raster--run")).not.toBeNull());
+    const firstFrame = getPetModeRunFrameSource(0);
+    expect(view.container.querySelector(".pet-mode-cat__raster--run")?.getAttribute("src")).toBe(firstFrame);
+
+    await waitFor(() => {
+      expect(view.container.querySelector(".pet-mode-cat__raster--run")?.getAttribute("src")).not.toBe(firstFrame);
+    }, { timeout: 1_000 });
+  });
+
   it("falls back to the vector gait when beta frame decoding fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       json: vi.fn().mockResolvedValue({ frames: ["M0 0 L150 0 L150 120 Z"], cycleSeconds: 1 }),
