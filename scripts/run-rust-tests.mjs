@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, mkdirSync } from "node:fs";
+import { constants } from "node:os";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,5 +29,22 @@ const result = spawnSync(
   ["test", "--manifest-path", "src-tauri/Cargo.toml", ...process.argv.slice(2)],
   { cwd: repoRoot, env: process.env, stdio: "inherit" },
 );
-if (result.error) throw result.error;
+if (result.error) {
+  // Report a cargo that cannot start the way a shell does instead of a stack
+  // trace: 127 when it is missing, 126 when it is not executable.
+  const shellFailure = { ENOENT: [127, "command not found"], EACCES: [126, "Permission denied"] }[result.error.code];
+  if (shellFailure) {
+    const [status, message] = shellFailure;
+    console.error(`cargo: ${message}`);
+    process.exit(status);
+  }
+  throw result.error;
+}
+// A cargo killed by a signal reports status null. Exit the way a shell reports
+// that death (128 + signal number) so callers such as the pre-push hook still
+// record which signal ended the run; an unknown signal name is a plain failure.
+if (result.signal) {
+  const signalNumber = constants.signals[result.signal];
+  process.exit(signalNumber ? 128 + signalNumber : 1);
+}
 process.exit(result.status ?? 1);
