@@ -99,8 +99,8 @@ describe("pet expressions", () => {
       src = "";
       decode() { return Promise.resolve(); }
     });
-    // Reduced motion skips the launch entry and compresses the paw timeline,
-    // keeping the state boundary under test deterministic.
+    // Reduced motion skips the launch entry, keeping the state boundary under
+    // test deterministic. The close scene's paw keeps its authored ~1s beat.
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
   });
 
@@ -144,7 +144,7 @@ describe("pet expressions", () => {
         },
       });
     });
-    await act(async () => { await vi.advanceTimersByTimeAsync(240); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_100); });
 
     expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
     expect(phase()).toBe("walk");
@@ -203,7 +203,7 @@ describe("pet expressions", () => {
     expect(document.querySelector(".pet-mode-cat__walk-eyes--proud")).toBeNull();
 
     await act(async () => { finishMove(); });
-    await act(async () => { await vi.advanceTimersByTimeAsync(240); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_100); });
     expect(phase()).toBe("idle");
     expect(document.querySelector(".pet-mode-cat__walk-eyes--proud")).toBeNull();
   });

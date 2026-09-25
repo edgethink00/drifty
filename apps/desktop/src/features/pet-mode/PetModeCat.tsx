@@ -465,13 +465,14 @@ export function PetModeCat({
 
   useLayoutEffect(() => {
     if (suspended) return undefined;
+    // Part of the close scene, which ignores prefers-reduced-motion (see
+    // playIntervention): native always travels, so the legs must keep up.
     if (
       phase !== "run"
       || !fastRunBetaEnabled
       || !runFramesReady
       || runFramesFailed
       || frameOverride !== undefined
-      || reducedMotion
     ) {
       if (phase === "run") setRunFrame(0);
       return undefined;
@@ -531,7 +532,7 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, reducedMotion, runDurationMs, runFramesFailed, runFramesReady, runSequence, runStartDelayMs, runTravelDistance, sizeScale, suspended]);
+  }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, runDurationMs, runFramesFailed, runFramesReady, runSequence, runStartDelayMs, runTravelDistance, sizeScale, suspended]);
 
   useLayoutEffect(() => {
     if (suspended || phase !== "dance" || reducedMotion) return undefined;
@@ -632,8 +633,7 @@ export function PetModeCat({
     && fastRunPawArrival
     && fastRunBetaEnabled
     && runFramesReady
-    && !runFramesFailed
-    && !reducedMotion;
+    && !runFramesFailed;
   const bridgesFastRunPawArrival = groundsFastRunPawArrival
     && pawFrame < PET_MODE_PAW_PREP_FRAME_COUNT;
   const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${drowsyWalk ? " is-sleepwalking" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${entrySettled ? " is-entry-settled" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${groundsFastRunPawArrival ? " is-fast-run-paw-grounded" : ""}${bridgesFastRunPawArrival ? " is-fast-run-paw-arrival" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;

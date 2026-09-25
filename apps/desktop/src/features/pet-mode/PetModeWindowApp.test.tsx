@@ -265,6 +265,11 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ onMoved: bridge.onMoved }),
 }));
 
+// The authored paw beat (prep, lift, contact paint, return) lasts about one
+// second, and the close scene keeps it even when the system asks for reduced
+// motion. Advance past it before asserting what follows the close.
+const PAW_SCENE_SETTLE_MS = 1_100;
+
 describe("PetModeWindowApp", () => {
   async function renderResidentPet() {
     const view = render(<PetModeWindowApp />);
@@ -1082,7 +1087,7 @@ describe("PetModeWindowApp", () => {
     expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(PAW_SCENE_SETTLE_MS + 1_000);
       await Promise.resolve();
     });
     expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(2);
@@ -1730,11 +1735,14 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
   });
 
-  it("starts paw preparation 150ms before the native run arrives", async () => {
+  it.each([
+    ["off", false],
+    ["on", true],
+  ])("starts paw preparation 150ms before the native run arrives (system reduced motion %s)", async (_label, reducedMotion) => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    vi.stubGlobal("matchMedia", () => ({ matches: reducedMotion }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -4501,7 +4509,7 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
-  it("settles contact alignment on arrival, then reports contact only on frame 15", async () => {
+  it("settles contact alignment on arrival, then reports contact on frame 15 at the authored beat even with reduced motion", async () => {
     vi.useFakeTimers();
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -4583,7 +4591,15 @@ describe("PetModeWindowApp", () => {
     }));
     expect(bridge.reportNativePetContact).not.toHaveBeenCalled();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(14 * 8 + 4); });
+    // The system asks for reduced motion here, yet the paw keeps its authored
+    // beat: seven prep frames at 2/3 of 1/24s, seven lift frames at 1/24s, and
+    // a 34ms paint wait put contact about 520ms after arrival. The old
+    // reduced-motion shortcut made contact after ~116ms, which together with
+    // the native jump read as a teleport on Windows.
+    await act(async () => { await vi.advanceTimersByTimeAsync(480); });
+    expect(bridge.reportNativePetContact).not.toHaveBeenCalled();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(80); });
     expect(bridge.alignNativePetContact).toHaveBeenCalledTimes(1);
     expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
     expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-1");
@@ -4619,18 +4635,18 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); });
     expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
 
-    // In reduced motion (matches: true), paw reach to contact is 14 * 8 + 4 ms
-    await act(async () => { await vi.advanceTimersByTimeAsync(14 * 8 + 4); });
+    // Reduced motion (matches: true) keeps the authored paw beat: contact
+    // lands about 520ms after arrival.
+    await act(async () => { await vi.advanceTimersByTimeAsync(560); });
     expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-dance-1");
 
-    // Complete remaining paw return frames (14 * 0.75 * 8ms = ~84ms)
-    // In reduced motion, dance hold is 40ms.
-    // Advancing 85ms finishes paw return and enters dance hold
-    await act(async () => { await vi.advanceTimersByTimeAsync(85); });
+    // The paw return ends about 1000ms after arrival. The decorative dance
+    // still honors reduced motion, so its hold is only 40ms after that.
+    await act(async () => { await vi.advanceTimersByTimeAsync(420); });
     expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
 
-    // Advancing past 40ms dance hold triggers returnNativePetHome!
-    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    // Advancing past the paw return and the 40ms dance hold starts the walk home.
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
     // The panel borrowed headroom for the 1:1 upright pose and gave it back
     // before the walk home started.
@@ -4960,7 +4976,7 @@ describe("PetModeWindowApp", () => {
       });
     });
     await act(async () => { await Promise.resolve(); });
-    await act(async () => { await vi.advanceTimersByTimeAsync(240); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PAW_SCENE_SETTLE_MS); });
 
     expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
   });

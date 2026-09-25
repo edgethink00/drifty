@@ -272,7 +272,6 @@ describe("pet entry motion contract", () => {
     expect(petModeRustContract).toContain('"travelDistance": travel_distance');
     expect(petModeRustContract).toContain('"durationMs": duration_ms');
     expect(petModeRustContract).toContain('"startDelayMs": start_delay_ms');
-    expect(petModeRustContract).toContain("move_pet_window_immediately(&window, target_position, facing)");
     expect(petModeWindowContract).toContain("runTravelDistance={runTravelDistance}");
     expect(petModeWindowContract).toContain("runDurationMs={runDurationMs}");
     expect(petModeWindowContract).toContain("runStartDelayMs={runStartDelayMs}");

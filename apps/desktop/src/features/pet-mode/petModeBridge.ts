@@ -350,10 +350,9 @@ export async function listenToNativePetModeLabStateRequest(
 export async function moveNativePetToTarget(
   target: PetModeInterventionTarget,
 ): Promise<PetModeResolvedTarget> {
-  return invoke<PetModeResolvedTarget>("pet_mode_move_to_target", {
-    target,
-    reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
-  });
+  // The close run is not gated on prefers-reduced-motion; see
+  // `move_pet_to_target` in src-tauri/src/commands/pet_mode.rs.
+  return invoke<PetModeResolvedTarget>("pet_mode_move_to_target", { target });
 }
 
 export async function alignNativePetContact(request: {

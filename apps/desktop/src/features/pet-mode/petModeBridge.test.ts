@@ -224,6 +224,30 @@ describe("pet mode enabled bridge", () => {
     expect(tauri.invoke).toHaveBeenNthCalledWith(3, "pet_mode_probe_ax_seat");
   });
 
+  it("runs to a close target without forwarding the system reduced-motion preference", async () => {
+    // Windows reports reduced motion whenever Animation effects is off; the
+    // close run must still animate there (1.11.18 teleport report).
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    tauri.invoke.mockResolvedValueOnce({
+      facing: "right",
+      targetKind: "window_close",
+      motionOutcome: "completed",
+      confidence: "high",
+      diagnostic: "windows_dwm_caption_close_button",
+      targetX: 1715,
+      targetY: 502,
+    });
+    const { moveNativePetToTarget } = await import("./petModeBridge");
+    const target = { id: "close-1", appName: "javaw", browserName: null, preview: false };
+
+    try {
+      await moveNativePetToTarget(target);
+      expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_move_to_target", { target });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("publishes the versioned frame region to the native controller", async () => {
     tauri.invoke.mockResolvedValueOnce(undefined);
     const { updateNativePetHitRegion } = await import("./petModeBridge");

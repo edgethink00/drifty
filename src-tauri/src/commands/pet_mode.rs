@@ -1704,14 +1704,11 @@ pub fn pet_mode_cancel_motion(app: AppHandle) -> Result<(), String> {
 pub async fn pet_mode_move_to_target(
     app: AppHandle,
     target: PetModeInterventionTarget,
-    reduced_motion: Option<bool>,
 ) -> Result<PetModeResolvedTarget, String> {
     let target = take_pet_mode_intervention(target);
-    async_runtime::spawn_blocking(move || {
-        move_pet_to_target(&app, &target, reduced_motion.unwrap_or(false))
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    async_runtime::spawn_blocking(move || move_pet_to_target(&app, &target))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -2889,10 +2886,18 @@ fn probe_current_pet_ax_seat(
     ))
 }
 
+/// Runs the cat to the close control it is about to press.
+///
+/// The run always animates, whatever the system reduced-motion preference
+/// says. The run is what explains why a window is about to close; an instant
+/// jump to the X reads as a broken teleport instead. Windows reports reduced
+/// motion whenever its system-wide Animation effects switch is off, which many
+/// people turn off for speed rather than motion sensitivity (1.11.18 report).
+/// The rest of the pet already walks regardless of that preference, and anyone
+/// who wants no travel at all can turn off the pet or Automatic close.
 fn move_pet_to_target(
     app: &AppHandle,
     target: &PetModeInterventionTarget,
-    reduced_motion: bool,
 ) -> Result<PetModeResolvedTarget, String> {
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
@@ -2900,7 +2905,7 @@ fn move_pet_to_target(
     let home_monitor = resolve_pet_home_monitor(app)
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     if target.preview {
-        return move_pet_to_preview_target(&window, &home_monitor, reduced_motion);
+        return move_pet_to_preview_target(&window, &home_monitor);
     }
     if target.lab_target == Some(PetModeLabTargetKind::BrowserTabX) {
         activate_lab_target_app(&target.app_name)?;
@@ -2923,7 +2928,7 @@ fn move_pet_to_target(
             &target.app_name,
             target.browser_name.as_deref(),
         ) {
-            return pet_fullscreen::approach(app, &window, target, frame, reduced_motion);
+            return pet_fullscreen::approach(app, &window, target, frame);
         }
     }
     let point = if target.lab_target == Some(PetModeLabTargetKind::DriftyWindowX) {
@@ -2965,19 +2970,15 @@ fn move_pet_to_target(
     // while it runs. The actual close action is performed by the native nudge
     // bridge after the contact frame, so the pet never needs to pass a user's
     // click into Drifty's main dashboard while crossing the target.
-    let motion_completed = if reduced_motion {
-        move_pet_window_immediately(&window, target_position, facing)?
-    } else {
-        animate_pet_window_with_facing_guarded(
-            &window,
-            target_position,
-            facing,
-            PET_MODE_INTERVENTION_RUN_SPEED,
-            PET_MODE_RUN_MAX_SECONDS,
-            "run",
-            None,
-        )?
-    };
+    let motion_completed = animate_pet_window_with_facing_guarded(
+        &window,
+        target_position,
+        facing,
+        PET_MODE_INTERVENTION_RUN_SPEED,
+        PET_MODE_RUN_MAX_SECONDS,
+        "run",
+        None,
+    )?;
 
     Ok(PetModeResolvedTarget {
         facing,
@@ -2997,7 +2998,6 @@ fn move_pet_to_target(
 fn move_pet_to_preview_target(
     window: &WebviewWindow,
     monitor: &Monitor,
-    reduced_motion: bool,
 ) -> Result<PetModeResolvedTarget, String> {
     let current = current_pet_logical_position(window)?;
     *PET_MODE_PREVIEW_RETURN_POSITION
@@ -3025,19 +3025,15 @@ fn move_pet_to_preview_target(
         work_size.width,
         work_size.height,
     );
-    let motion_completed = if reduced_motion {
-        move_pet_window_immediately(window, target_position, facing)?
-    } else {
-        animate_pet_window_with_facing_guarded(
-            window,
-            target_position,
-            facing,
-            PET_MODE_INTERVENTION_RUN_SPEED,
-            0.8,
-            "run",
-            None,
-        )?
-    };
+    let motion_completed = animate_pet_window_with_facing_guarded(
+        window,
+        target_position,
+        facing,
+        PET_MODE_INTERVENTION_RUN_SPEED,
+        0.8,
+        "run",
+        None,
+    )?;
     Ok(PetModeResolvedTarget {
         facing,
         target_kind: PetModeTargetKind::Fallback,
@@ -5392,19 +5388,6 @@ fn finish_pet_window_motion(motion_revision: u64) {
     }
 }
 
-fn move_pet_window_immediately(
-    window: &WebviewWindow,
-    target: LogicalPosition<f64>,
-    facing: &'static str,
-) -> Result<bool, String> {
-    cancel_pet_motion();
-    emit_pet_event(window, json!({ "kind": "facing", "facing": facing }))?;
-    window
-        .set_position(target)
-        .map_err(|error| error.to_string())?;
-    Ok(true)
-}
-
 fn animate_pet_window(
     window: &WebviewWindow,
     start: LogicalPosition<f64>,
@@ -5502,10 +5485,11 @@ fn should_recover_cancelled_pet_entry(entry_was_active: bool, enabled: bool) -> 
 }
 
 fn movement_duration_seconds(distance: f64, speed: f64, max_duration_seconds: f64) -> f64 {
-    // Reduced-motion callers (pet_fullscreen) pass a ceiling below the usual
-    // 0.18s floor. `f64::clamp` panics when min > max or either is NaN, and a
-    // panic here aborts the whole app (Sentry DRIFTY-MAC-NATIVE-5), so fold the
-    // floor under the ceiling and never hand NaN to `clamp`.
+    // A caller's ceiling can sit below the usual 0.18s floor (the old
+    // reduced-motion full-screen run passed 0.01s). `f64::clamp` panics when
+    // min > max or either is NaN, and a panic here aborts the whole app (Sentry
+    // DRIFTY-MAC-NATIVE-5), so fold the floor under the ceiling and never hand
+    // NaN to `clamp`.
     let max_duration_seconds = if max_duration_seconds.is_nan() {
         PET_MODE_MIN_MOVEMENT_SECONDS
     } else {

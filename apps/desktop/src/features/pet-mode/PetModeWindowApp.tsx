@@ -1489,8 +1489,11 @@ export function PetModeWindowApp() {
       }
       await revealForAction();
       if (token !== actionTokenRef.current) return;
-      const reducedMotion = prefersReducedMotion();
-      const overlapsRunAndPaw = fastRunBetaEnabled && !reducedMotion;
+      // The run and paw are the visible reason a window closes, so this scene
+      // keeps its authored cadence even when the system asks for reduced
+      // motion. Windows reports that whenever its Animation effects switch is
+      // off, and the old 8ms paw plus native jump read as a teleport.
+      const overlapsRunAndPaw = fastRunBetaEnabled;
       let resolveRunTiming: ((timing: PetModeInterventionRunTiming) => void) | null = null;
       const runTimingPromise = overlapsRunAndPaw
         ? new Promise<PetModeInterventionRunTiming>((resolve) => {
@@ -1594,7 +1597,7 @@ export function PetModeWindowApp() {
         void commitPhase("paw");
       }
 
-      const unitMilliseconds = reducedMotion ? 8 : 1000 / PET_MODE_PAW_FPS;
+      const unitMilliseconds = 1000 / PET_MODE_PAW_FPS;
       for (const step of PET_MODE_PAW_TIMELINE.slice(pawTimelineStartIndex)) {
         if (token !== actionTokenRef.current) return;
         // Paw frames are advanced by this parent loop rather than the cat's
@@ -1610,7 +1613,7 @@ export function PetModeWindowApp() {
           contacted = true;
           // Let React commit and the WebView paint the exact contact silhouette
           // before the native target disappears.
-          if (!reducedMotion) await delay(34);
+          await delay(34);
           await reportNativePetContact(target.id).catch(() => undefined);
         }
         await delay(step.durationUnits * unitMilliseconds);

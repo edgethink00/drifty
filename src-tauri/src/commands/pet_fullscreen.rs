@@ -56,7 +56,6 @@ struct Scene {
     id: String,
     generation: u64,
     layout: Layout,
-    reduced: bool,
     contacted: bool,
     close_completed: bool,
     motion_revision: u64,
@@ -225,12 +224,15 @@ fn position_entry_frame(
     })
 }
 
+/// Plays the full-screen close scene: enter from the edge, pause, notice, run
+/// to the virtual X. Like the ordinary approach in `move_pet_to_target`, the
+/// scene animates regardless of the system reduced-motion preference, because
+/// the travel is what explains the close.
 pub(super) fn approach(
     app: &AppHandle,
     window: &WebviewWindow,
     target: &PetModeInterventionTarget,
     frame: (f64, f64, f64, f64),
-    reduced: bool,
 ) -> Result<PetModeResolvedTarget, String> {
     let layout = layout(frame, pet_size(), pet_contact_offsets("left"))
         .ok_or_else(|| "Full-screen target has invalid bounds".to_string())?;
@@ -238,7 +240,6 @@ pub(super) fn approach(
         id: target.id.clone(),
         generation: GENERATION.fetch_add(1, Ordering::Relaxed) + 1,
         layout,
-        reduced,
         contacted: false,
         close_completed: false,
         motion_revision: 0,
@@ -262,11 +263,7 @@ pub(super) fn approach(
     let result = (|| {
         let revision = scene.motion_revision;
         set_panel_style(app, Some(generation), true, 0.0)?;
-        let entry_start = if reduced {
-            layout.entry_end
-        } else {
-            layout.start
-        };
+        let entry_start = layout.start;
         show_pet_panel_at_position(app, window, entry_start)?;
         emit_pet_event(window, json!({ "kind": "facing", "facing": "left" }))?;
         emit_pet_event(window, json!({ "kind": "motion", "motion": "walk" }))?;
@@ -281,7 +278,7 @@ pub(super) fn approach(
         )?;
         thread::sleep(Duration::from_millis(34));
         set_panel_style(app, Some(generation), true, 1.0)?;
-        let steps = if reduced { 1 } else { 36 };
+        let steps = 36;
         for step in 1..=steps {
             if !current(generation)
                 || !PET_MODE_ENABLED.load(Ordering::Relaxed)
@@ -301,9 +298,7 @@ pub(super) fn approach(
                 ),
                 layout.start.x,
             )?;
-            if !reduced {
-                thread::sleep(Duration::from_millis(16));
-            }
+            thread::sleep(Duration::from_millis(16));
         }
         if !current(generation) || !pet_window_motion_is_current(revision, None) {
             return Ok(false);
@@ -332,12 +327,8 @@ pub(super) fn approach(
             window,
             layout.contact,
             "left",
-            if reduced {
-                f64::MAX
-            } else {
-                (distance / 2.0).max(PET_MODE_RUN_SPEED)
-            },
-            if reduced { 0.01 } else { 2.0 },
+            (distance / 2.0).max(PET_MODE_RUN_SPEED),
+            2.0,
             "run",
             None,
             None,
@@ -418,7 +409,7 @@ pub(super) fn finish(app: &AppHandle, id: &str, interrupted: bool) -> Result<boo
         {
             if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
                 let suppressed = super::super::companion_context::companion_informational_moments_suppressed();
-                if suppressed && !scene.reduced {
+                if suppressed {
                     if !animate_pet_window_with_facing_guarded_and_purpose(
                         &window, scene.layout.entry_end, "right", 1400.0, 0.8,
                         "run", None, None, Some(motion_revision),
@@ -436,7 +427,7 @@ pub(super) fn finish(app: &AppHandle, id: &str, interrupted: bool) -> Result<boo
                 let monitor = resolve_pet_home_monitor(app)
                     .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
                 let home = calculate_pet_home_position_with_nudge(Some(app), &monitor);
-                let moved = if suppressed || scene.reduced {
+                let moved = if suppressed {
                     set_pet_window_position_if_motion_current(&window, home, motion_revision)?
                 } else {
                     let start = current_pet_logical_position(&window)?;
