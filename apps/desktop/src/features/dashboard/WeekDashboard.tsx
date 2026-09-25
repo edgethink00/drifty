@@ -362,7 +362,7 @@ export function WeekDashboard({
   const calendarHourHeight = weekDashboardAxisScalePercentToHourHeight(effectiveAxisScalePercent);
   const calendarHours = Array.from({ length: calendarEndHour - calendarStartHour }, (_, index) => calendarStartHour + index);
   const calendarRows = rows;
-  const canMountIdentityIcons = useDeferredWeekIdentityIcons({ calendarEvents, endDay, startDay });
+  const canMountIdentityIcons = useDeferredWeekIdentityIcons({ endDay, startDay });
   const minCalendarMinute = calendarStartHour * 60;
   const maxCalendarMinute = calendarEndHour * 60;
   const isRealCurrentCalendarWeek = startDay <= todayDay && todayDay <= endDay;

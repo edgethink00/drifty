@@ -462,7 +462,7 @@ import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord
 import { captureCorrectionEvidence } from "./features/classification/correctionEvidence";
 import { learnLivingSoulFromFeedback, type SoulLearningProvider } from "./features/classification/soulLearning";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
-import { compactHistoryRangeContains, compactHistoryRangeKey, findFreshCompactHistoryLoad, pruneStaleCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
+import { compactHistoryRangeContains, compactHistoryRangeKey, findDisplayableCompactHistoryLoad, findFreshCompactHistoryLoad, pruneCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
 import { getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
 import { EMPTY_ACTIVITY_SEGMENTS, latestActivitySegmentCursor, mergeActivitySegments } from "./lib/activitySegments";
 import { scheduleIdleWork } from "./lib/scheduleIdleWork";
@@ -2598,8 +2598,8 @@ export default function App() {
         materialized: materializeBuiltInHeuristicTimeline(archiveTimelines),
       };
       if (compactHistoryCacheGenerationRef.current === generation) {
-        pruneStaleCompactHistoryLoads(compactHistoryCacheRef.current);
         compactHistoryCacheRef.current.set(key, nextLoad);
+        pruneCompactHistoryLoads(compactHistoryCacheRef.current);
         setCompactHistoryCacheRevision((revision) => revision + 1);
       }
       return nextLoad;
@@ -4294,13 +4294,21 @@ export default function App() {
 
       updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
       scheduleAvailableBuiltInHeuristicPersistence(materializedArchiveTimelines.classifications);
+      // Resolve the week's app icons (a local lookup) with its segments so Week
+      // does not swap initials for icons after its own entry request. Site
+      // icons stay on Week entry: an uncached domain is fetched from a remote
+      // favicon service, which should not happen for a view nobody opened.
+      loadMissingAppIcons({
+        segments: materializedArchiveTimelines.segments,
+        failureMessage: "Failed to prefetch current week app icons",
+      });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
       console.warn("Failed to prefetch current week history", message);
       return false;
     }
-  }, [loadCompactHistoryRange, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+  }, [loadCompactHistoryRange, loadMissingAppIcons, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
     if (liveDriftAlarmRefreshInFlightRef.current) return false;
@@ -6385,8 +6393,11 @@ export default function App() {
       trendsRange,
     }).historyTimelineRange;
   }, [selectedDay, startOfDayMinutes, startOfWeek, trendsRange]);
+  // An expired load still paints every closed day while the entry refresh
+  // replaces it; requiring a fresh one blanked those days after five minutes
+  // on Today, or while Week stayed open, until the reload landed.
   const dashboardWeekCompactHistoryLoad = dashPeriod === "Week"
-    ? findFreshCompactHistoryLoad(compactHistoryCacheRef.current, dashboardWeekHistoryRange)
+    ? findDisplayableCompactHistoryLoad(compactHistoryCacheRef.current, dashboardWeekHistoryRange)
     : null;
   const dashboardPreviousWeekRange = useMemo(() => {
     const startDay = shiftIsoDate(dashboardWeekRange.startDay, -7);
@@ -6567,7 +6578,11 @@ export default function App() {
     loadMissingSiteIcons(dashboardSegments);
   }, [activeTab, dashPeriod, dashboardSegments, loadMissingAppIcons, loadMissingSiteIcons, shouldBlockLocalTrackerAccess]);
   const dashboardWeekRefreshKey = compactHistoryRangeKey(dashboardWeekHistoryRange);
-  const weekRefreshStatus: DashboardWeekRefreshStatus = dashPeriod !== "Week" || dashboardWeekCompactHistoryLoad
+  // Status follows freshness, not what is painted: an expired copy on screen
+  // still shows "Updating" while its reload runs and the error chip if it fails.
+  const dashboardWeekHasFreshHistory = dashPeriod === "Week"
+    && findFreshCompactHistoryLoad(compactHistoryCacheRef.current, dashboardWeekHistoryRange) !== null;
+  const weekRefreshStatus: DashboardWeekRefreshStatus = dashPeriod !== "Week" || dashboardWeekHasFreshHistory
     ? "idle"
     : dashboardWeekRefreshState.key === dashboardWeekRefreshKey
       ? dashboardWeekRefreshState.status
