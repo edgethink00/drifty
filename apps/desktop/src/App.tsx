@@ -151,7 +151,7 @@ import {
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
 import { useProjectClassification } from "./features/classification/useProjectClassification";
 import { CommandBar } from "./features/command-bar/CommandBar";
-import { NO_PROJECT_COLOR, NO_PROJECT_LABEL as FLOW_NO_PROJECT_LABEL, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
+import { NO_PROJECT_COLOR, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
 import {
   DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES,
   persistDashboardFlowIntervalMinutes,
@@ -406,13 +406,13 @@ import { buildSelectedDashboardReplayAnchor } from "./features/dashboard/dashboa
 import type { DemoDashboardReplayKind } from "./features/dashboard/demoDashboardReplay";
 import { buildSelectedDayDashboardClassificationOptions, isDashboardDemoReplayUpdateDialogBlocking, resolveDashboardDemoReplayEffectiveData } from "./features/dashboard/dashboardDemoReplayEffectiveData";
 import { buildDashboardDemoReplaySidebarCard } from "./features/dashboard/dashboardDemoReplaySidebarCard";
-import { buildAttentionRhythm, buildInsightSourceLists, buildWeeklyBreakdown, NO_PROJECT_KEY, NO_PROJECT_LABEL, type WeeklyChartMode } from "./features/insights/insightData";
+import { buildAttentionRhythm, buildInsightSourceLists, buildWeeklyBreakdown, NO_PROJECT_KEY, type WeeklyChartMode } from "./features/insights/insightData";
 import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedLocalAiStatusObserver";
 import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } from "./features/settings/localAiSetup";
-import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
+import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
 import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, persistLeaderboardPreviewEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialLeaderboardPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
@@ -546,8 +546,24 @@ function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
 }
 
+/**
+ * Creates the display-language controller and provides it before any other
+ * app hook runs. AppBody's own body calls hooks that translate (billing,
+ * leaderboard); when App created the controller and provided it only in the
+ * tree it returned, those hooks read the English default in a Korean app.
+ * AppBody's return paths still wrap their trees in the same controller; this
+ * outer provider is the one its hooks depend on.
+ */
 export default function App() {
   const localization = useLocalizationController();
+  return (
+    <LocalizationProvider controller={localization}>
+      <AppBody localization={localization} />
+    </LocalizationProvider>
+  );
+}
+
+function AppBody({ localization }: { readonly localization: LocalizationController }) {
   /* Companion cards and macOS notifications are built here as strings before
      they cross to another window, so their wording follows the display
      language at build time. */
@@ -2336,7 +2352,6 @@ export default function App() {
     startOfDayMinutes,
     user,
     onAuthRequired: requestLeaderboardAuth,
-    translate: localization.t,
   });
   const focusCard = useFocusCard({
     windowEndDay: leaderboardWindowEndDay,
@@ -7887,9 +7902,9 @@ export default function App() {
     // Append a gray "No project" series so the Project lens covers all classified
     // time (assigned + unassigned) and matches the Category/Productivity totals.
     const series = available ? [...realSeries, { key: NO_PROJECT_KEY, color: NO_PROJECT_SERIES_COLOR }] : [];
-    if (available) meta.set(NO_PROJECT_KEY, { label: NO_PROJECT_LABEL, color: NO_PROJECT_SERIES_COLOR });
+    if (available) meta.set(NO_PROJECT_KEY, { label: localization.t("projects.chart.noProject"), color: NO_PROJECT_SERIES_COLOR });
     return { series, meta, available };
-  }, [insightProjectBySegmentId, insightProjectProjection.segments, projectClassification.projects]);
+  }, [insightProjectBySegmentId, insightProjectProjection.segments, localization, projectClassification.projects]);
   const weeklyBreakdown = useMemo(
     () => buildWeeklyBreakdown(
       activeInsightSegments,
@@ -7933,11 +7948,11 @@ export default function App() {
         (segment) => !selectedDayProjectProjection.projectBySegmentId.has(segment.id),
       );
       if (hasUnassigned || entries.length === 0) {
-        entries.push({ projectId: null, name: FLOW_NO_PROJECT_LABEL, color: NO_PROJECT_COLOR });
+        entries.push({ projectId: null, name: localization.t("projects.chart.noProject"), color: NO_PROJECT_COLOR });
       }
       return entries;
     },
-    [projectClassification.projects, selectedDayProjectProjection.projectBySegmentId, selectedDayProjectProjection.segments],
+    [localization, projectClassification.projects, selectedDayProjectProjection.projectBySegmentId, selectedDayProjectProjection.segments],
   );
   const selectedDayProjectBySegmentId = selectedDayProjectProjection.projectBySegmentId;
   // The Projects tab isn't the Trends tab, so the rolling insight segments aren't

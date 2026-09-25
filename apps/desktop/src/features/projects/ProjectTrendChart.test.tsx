@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ActivitySegment, Project } from "@drifty/domain";
 
 import { ProjectTrendChart } from "./ProjectTrendChart";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 // Local (no "Z") midday timestamps so each segment buckets into the expected
 // calendar day regardless of the test machine's timezone.
@@ -60,6 +61,23 @@ describe("ProjectTrendChart", () => {
     expect(screen.getByText("Project Alpha")).toBeTruthy();
     expect(screen.getByText("Project Beta")).toBeTruthy();
     expect(screen.getByText("No project")).toBeTruthy();
+  });
+
+  it("names the No project band in the display language", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <ProjectTrendChart
+          segments={SEGMENTS}
+          projectBySegmentId={ASSIGNMENTS}
+          projects={PROJECTS}
+          days={7}
+          endDay="2026-07-06"
+        />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByText("프로젝트 없음")).toBeTruthy();
+    expect(screen.queryByText("No project")).toBeNull();
   });
 
   it("renders the library overview as a compact 14-day fixed-window panel", () => {

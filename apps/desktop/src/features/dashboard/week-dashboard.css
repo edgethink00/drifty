@@ -2770,6 +2770,47 @@
   padding-inline: 4px;
 }
 
+/* A narrow block shows its time as "start–end", then only "start", then
+   nothing, and its detail (the category name or record count) whole or not
+   at all, instead of cutting either mid-word ("1:0…", "Wor…"). Each part is a
+   flex item on a one-line box; a part that does not fit wraps onto the hidden
+   second line. The zero-width, full-height ::before holds line one (a
+   zero-height anchor would leave line one zero pixels tall and the wrapped
+   part still on screen), so even the first part wraps away when it cannot
+   fit. A line whose parts all wrap away keeps its one-line height as an empty
+   band; CSS cannot collapse it without measuring. The full range and detail
+   stay in the block's title, hover card, and accessible name. The :not() list
+   keeps every variant whose older rules hide these lines (short, dense,
+   compact, tiny, micro) hidden, whatever this rule's specificity. */
+.week-v2-calendar__event:not(.week-v2-calendar__event--short, .week-v2-calendar__event--dense, .week-v2-calendar__event--compact, .week-v2-calendar__event--tiny, .week-v2-calendar__event--micro) :is(.week-v2-calendar__event-time, .week-v2-calendar__event-detail) {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  height: 1.1em;
+  line-height: 1.1;
+  overflow: hidden;
+}
+
+:is(.week-v2-calendar__event-time, .week-v2-calendar__event-detail)::before {
+  content: "";
+  flex: 0 0 0;
+  height: 100%;
+}
+
+:is(.week-v2-calendar__event-time, .week-v2-calendar__event-detail) > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* The time and detail lines above never shrink, so the name must not either:
+   as the column's only shrinkable line it would absorb any shortfall and
+   vanish. The layout renders those lines only when the card is tall enough
+   for them (weekCalendarEventLayout.ts); this keeps the name if it ever is not. */
+.week-v2-calendar__event:not(.week-v2-calendar__event--short, .week-v2-calendar__event--dense, .week-v2-calendar__event--compact, .week-v2-calendar__event--tiny, .week-v2-calendar__event--micro) .week-v2-calendar__event-open > strong {
+  flex-shrink: 0;
+}
+
 
 .week-activity-inspector {
   --week-inspector-border: color-mix(in srgb, var(--line-strong) 82%, transparent);

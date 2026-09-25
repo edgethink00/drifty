@@ -16,7 +16,11 @@ import {
   type ActivityInspectorView,
 } from "./WeekActivityInspector";
 import { buildWeekActivityInspectorEvent } from "./weekActivityInspectorEvent";
-import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
+import {
+  buildWeekCalendarEventLayout,
+  planWeekIdentityStrip,
+  WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX,
+} from "./weekCalendarEventLayout";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { WeekCalendarBoard } from "./weekCalendarBoard";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
@@ -40,10 +44,16 @@ import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 import { WeekDashboardLoadingBreakdown, WeekDashboardLoadingLegend } from "./WeekDashboardLoadingState";
 
-/* Width of .week-v2-calendar__time-rail (2.5rem at the 16px root font size). */
-const WEEK_CALENDAR_TIME_RAIL_PX = 40;
+/* Width of .week-v2-calendar__time-rail: the calendar body's first grid column. */
+const WEEK_CALENDAR_TIME_RAIL_REM = 2.5;
 /* Longer than one animation frame, well under the 340ms panel transition. */
 const WEEK_CALENDAR_RESIZE_SETTLE_MS = 120;
+
+function readRootFontSizePx(): number {
+  if (typeof window === "undefined") return WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX;
+  const size = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(size) && size > 0 ? size : WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX;
+}
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
 
@@ -436,29 +446,52 @@ export function WeekDashboard({
   // open, so the identity strips must adapt to the live day-column width
   // instead of always showing the model's 4-icon cap.
   const [dayColumnWidth, setDayColumnWidth] = useState<number | null>(null);
+  // Event text is sized in rem, and the root font size steps up on wide windows
+  // (tokens-base.css), so the card heights that fit each line move with it.
+  const [rootFontSizePx, setRootFontSizePx] = useState(readRootFontSizePx);
   useLayoutEffect(() => {
     const body = calendarBodyRef.current;
     if (!body) return undefined;
 
     const updateDayColumnWidth = () => {
       const bodyWidth = body.getBoundingClientRect().width;
-      const nextWidth = bodyWidth > 0 ? Math.round((bodyWidth - WEEK_CALENDAR_TIME_RAIL_PX) / 7) : null;
+      const railWidth = WEEK_CALENDAR_TIME_RAIL_REM * readRootFontSizePx();
+      const nextWidth = bodyWidth > 0 ? Math.round((bodyWidth - railWidth) / 7) : null;
       setDayColumnWidth(nextWidth);
     };
 
+    // The root size last applied, so a window resize can tell a breakpoint crossing.
+    let appliedRootFontSizePx = readRootFontSizePx();
+    setRootFontSizePx(appliedRootFontSizePx);
     updateDayColumnWidth();
-    if (typeof ResizeObserver !== "function") return undefined;
     // The Breakdown panel animates grid-template-columns for 340ms, which fires
     // the observer every frame; re-rendering the calendar per frame would fight
     // that layout animation, so wait for the size to settle and apply once.
     let settleTimeout = 0;
-    const observer = new ResizeObserver(() => {
+    const scheduleDayColumnWidth = () => {
       window.clearTimeout(settleTimeout);
       settleTimeout = window.setTimeout(updateDayColumnWidth, WEEK_CALENDAR_RESIZE_SETTLE_MS);
-    });
-    observer.observe(body);
+    };
+    // The root font size steps at window widths (tokens-base.css), even where
+    // the calendar body keeps its width. Read it on every window resize so cards
+    // never lay out lines for the previous size. The time rail is sized in rem
+    // too, so a new root size re-measures the day columns in the same render
+    // instead of after the settle delay.
+    const handleWindowResize = () => {
+      const nextRootFontSizePx = readRootFontSizePx();
+      if (nextRootFontSizePx !== appliedRootFontSizePx) {
+        appliedRootFontSizePx = nextRootFontSizePx;
+        setRootFontSizePx(nextRootFontSizePx);
+        updateDayColumnWidth();
+      }
+      scheduleDayColumnWidth();
+    };
+    window.addEventListener("resize", handleWindowResize);
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(scheduleDayColumnWidth) : null;
+    observer?.observe(body);
     return () => {
-      observer.disconnect();
+      window.removeEventListener("resize", handleWindowResize);
+      observer?.disconnect();
       window.clearTimeout(settleTimeout);
     };
   }, []);
@@ -743,7 +776,7 @@ export function WeekDashboard({
                       );
                     })}
                     {events.map((event) => {
-                      const eventLayout = buildWeekCalendarEventLayout(event, calendarHourHeight);
+                      const eventLayout = buildWeekCalendarEventLayout(event, calendarHourHeight, rootFontSizePx);
                       const identityStrip = planWeekIdentityStrip(
                         event.identities.length,
                         event.hiddenIdentityCount,
@@ -804,8 +837,13 @@ export function WeekDashboard({
                               </span>
                             ) : null}
                             {eventLayout.hidesInlineText ? null : <strong className={event.isGroupedCluster && eventLayout.showsIdentityStrip ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
-                            {!eventLayout.isCompactEvent ? <small>{event.startLabel}–{event.endLabel}</small> : null}
-                          {eventLayout.showsInlineDetail ? <em>{event.detailSummary}</em> : null}
+                            {!eventLayout.isCompactEvent ? (
+                              <small className="week-v2-calendar__event-time">
+                                <span>{event.startLabel}</span>
+                                <span>–{event.endLabel}</span>
+                              </small>
+                            ) : null}
+                            {eventLayout.showsInlineDetail ? <em className="week-v2-calendar__event-detail"><span>{event.detailSummary}</span></em> : null}
                           </button>
                         </article>
                       );

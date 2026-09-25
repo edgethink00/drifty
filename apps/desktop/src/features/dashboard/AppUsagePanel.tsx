@@ -175,6 +175,9 @@ export function AppUsagePanel({
                 const shareStyle: ShareStyle = { "--app-usage-share": `${sharePercent}%` };
                 const iconSrc = resolveIconSrc(item, appIcons);
                 const name = displayName(item);
+                // A site's line (page title · browser · last used) is often wider
+                // than the row; the title keeps the cut part reachable on hover.
+                const usageContext = formatUsageContext(item, effectiveLanguage, t);
 
                 return (
                   <li className="app-usage-row" key={`${item.rank}-${item.usageKind}-${item.siteDomain ?? item.bundleId ?? item.appName}`}>
@@ -187,7 +190,7 @@ export function AppUsagePanel({
                         <div className="app-usage-row__title">
                           <strong>{name}</strong>
                         </div>
-                        <small>{formatUsageContext(item, effectiveLanguage, t)}</small>
+                        <small title={usageContext}>{usageContext}</small>
                       </div>
                     </div>
                     <div className="app-usage-row__bar" aria-label={effectiveLanguage === "ko" ? t("dashboard.today.usageShareAria", { percent: Math.round(normalizeShare(item.shareOfTotal)) }) : `${name} accounts for ${formatShare(item.shareOfTotal)} of tracked time`}>

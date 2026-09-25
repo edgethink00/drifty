@@ -20,7 +20,7 @@ import type { AuthState } from "../auth/AuthContext";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "../profile/ProfileModals";
 import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
-import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { useLocalization } from "../localization/LocalizationContext";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
 import type { ClassificationAvailabilityReason, ClassificationAvailabilityState } from "../classification/classificationAvailability";
 import {
@@ -84,12 +84,6 @@ type UseLeaderboardProfileControllerInput = {
   readonly startOfDayMinutes: number;
   readonly user: AuthState["user"];
   readonly onAuthRequired: () => void;
-  /**
-   * The app's translator. App calls this hook in its own body, above the
-   * LocalizationProvider it renders, so the context there is the English
-   * default; without this every message below stayed English in Korean.
-   */
-  readonly translate?: LocalizationController["t"];
 };
 
 type UseLeaderboardProfileControllerResult = {
@@ -403,10 +397,8 @@ export function useLeaderboardProfileController({
   startOfDayMinutes,
   user,
   onAuthRequired,
-  translate,
 }: UseLeaderboardProfileControllerInput): UseLeaderboardProfileControllerResult {
-  const contextLocalization = useLocalization();
-  const t = translate ?? contextLocalization.t;
+  const { t } = useLocalization();
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [ownLeaderboardEntry, setOwnLeaderboardEntry] = useState<OwnLeaderboardEntry | null>(null);
   const [activeLeaderboardPeriod, setActiveLeaderboardPeriod] = useState<LeaderboardPeriod>(DEFAULT_LEADERBOARD_PERIOD);

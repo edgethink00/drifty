@@ -88,9 +88,9 @@ function hiddenWeekdayIndexes(visibility?: InsightWeekVisibility): ReadonlySet<n
   return hidden;
 }
 
-/** Stacked-bar key + label for classified time not assigned to any project. */
+/** Stacked-bar key for classified time not assigned to any project. Its label
+ *  comes from the display language (projects.chart.noProject) where it is shown. */
 export const NO_PROJECT_KEY = "__no_project__";
-export const NO_PROJECT_LABEL = "No project";
 
 export function buildWeeklyBreakdown(
   segments: ActivitySegment[],

@@ -134,6 +134,7 @@ describe("AccountMenu", () => {
   });
 
   it("renders signed-out users with the branded fallback label and the default profile avatar", () => {
+    // "Unknown" is the intended English label (docs/product-decisions.md).
     const { container } = renderAccountMenu();
     const trigger = screen.getByRole("button", { name: /^unknown$/i });
     const chevrons = container.querySelector(".account-trigger__chevrons");

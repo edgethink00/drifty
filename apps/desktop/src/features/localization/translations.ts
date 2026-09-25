@@ -414,6 +414,9 @@ export const ENGLISH_TRANSLATIONS = {
   "command.empty": "No matching commands found",
   "command.emptyHint": "Try searching for tabs, actions, or preferences",
   "account.menu": "Account menu",
+  // Owner decision (2026-09-25): the signed-out account name reads "Unknown" in
+  // English on purpose; do not rename it to "Guest" or "Not signed in". Korean
+  // keeps "게스트". See docs/product-decisions.md.
   "account.guest": "Unknown",
   "account.notSignedIn": "Not signed in",
   "account.aiSettings": "AI settings",

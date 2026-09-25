@@ -6,7 +6,6 @@ import {
   buildProjectIntradayTrendView,
   buildProjectTrendView,
   NO_PROJECT_KEY,
-  NO_PROJECT_LABEL,
   type ProjectTrendColumn,
 } from "./projectTrendView";
 import "./project-trend-chart.css";
@@ -90,7 +89,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
     const fullDay = formatLocalizedDayLabel(column.day, effectiveLanguage);
     if (column.segments.length === 0) return `${fullDay}: ${t("projects.chart.noTrackedTime")}`;
     const segments = column.segments.map((segment) => {
-      const label = segment.key === NO_PROJECT_KEY ? t("projects.chart.noProject") : labelByKey.get(segment.key) ?? NO_PROJECT_LABEL;
+      const label = segment.key === NO_PROJECT_KEY ? t("projects.chart.noProject") : labelByKey.get(segment.key) ?? t("projects.chart.noProject");
       return `${label} ${formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage)}`;
     });
     return `${fullDay}: ${segments.join(", ")}`;
@@ -101,7 +100,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
     const fullDay = column.hoverLabel ?? formatLocalizedDayLabel(column.day, effectiveLanguage);
     const rows: HoverRow[] = column.segments.map((segment) => ({
       key: segment.key,
-      label: segment.key === NO_PROJECT_KEY ? t("projects.chart.noProject") : labelByKey.get(segment.key) ?? NO_PROJECT_LABEL,
+      label: segment.key === NO_PROJECT_KEY ? t("projects.chart.noProject") : labelByKey.get(segment.key) ?? t("projects.chart.noProject"),
       color: segment.color,
       durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
     }));
@@ -127,7 +126,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
               {view.series.map((item) => (
                 <span className={`chip ptc-chip${item.key === NO_PROJECT_KEY ? " ptc-chip--none" : ""}`} key={item.key}>
                   <span className="sw" style={{ background: item.color }} />
-                  {item.label}
+                  {item.key === NO_PROJECT_KEY ? t("projects.chart.noProject") : item.label}
                 </span>
               ))}
             </div>

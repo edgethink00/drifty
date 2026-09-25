@@ -136,6 +136,21 @@ vi.mock("./features/share/focusCardService", () => ({
   setFocusCardDetailFlags: vi.fn().mockResolvedValue({ success: true, error: null }),
 }));
 
+// Records the display language the billing controller sees from inside App's
+// body, where it runs before App's returned tree.
+const { billingControllerLanguages } = vi.hoisted(() => ({ billingControllerLanguages: [] as string[] }));
+vi.mock("./features/billing/useCloudBillingController", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./features/billing/useCloudBillingController")>();
+  const { useLocalization } = await import("./features/localization/LocalizationContext");
+  return {
+    ...actual,
+    useCloudBillingController: (...args: Parameters<typeof actual.useCloudBillingController>) => {
+      billingControllerLanguages.push(useLocalization().effectiveLanguage);
+      return actual.useCloudBillingController(...args);
+    },
+  };
+});
+
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   fetchIndividualPricingQuote: vi.fn().mockResolvedValue({ success: false, error: "Pricing unavailable in this test." }),
@@ -1334,10 +1349,11 @@ describe("App leaderboard participation", () => {
   });
 
   it("shows leaderboard status text in Korean when the display language is Korean", async () => {
-    // App calls the leaderboard controller in its own body, above the
-    // LocalizationProvider it renders; the controller must use App's
-    // translator or these messages stay English in a Korean app.
+    // App's hooks run inside the localization provider App creates first; if
+    // they ran above it (as they once did) these messages and the billing
+    // controller's errors stayed English in a Korean app.
     window.localStorage.setItem("drifty.displayLanguage.v2", "ko");
+    billingControllerLanguages.length = 0;
     const deferredLeaderboard = createDeferred<LeaderboardResult<LeaderboardRow[]>>();
     getTimeline.mockResolvedValue([]);
     fetchGlobalLeaderboard
@@ -1364,6 +1380,8 @@ describe("App leaderboard participation", () => {
 
     expect(refreshStatus).toBeTruthy();
     expect(englishStatus).toBeNull();
+    expect(billingControllerLanguages.length).toBeGreaterThan(0);
+    expect(new Set(billingControllerLanguages)).toEqual(new Set(["ko"]));
   });
 
   it("ignores a late profile response after the viewer switches to another leaderboard member", async () => {

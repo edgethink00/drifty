@@ -3,7 +3,7 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import type { FocusDriftPoint } from "./focusDriftChart";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds, formatQuarterHourLabel } from "../../lib/formatting";
-import type { DisplayLanguage } from "../localization/LocalizationContext";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { secondsToLabel } from "@drifty/domain";
 import type { AppIconMap, DayRibbonSegment } from "@drifty/domain";
 import { ClassificationSourceBadge } from "../classification/ClassificationSourceBadge";
@@ -50,7 +50,12 @@ export type CompactClassificationBreakdownRow = {
   totalSeconds: number;
 };
 
-export function CompactClassificationHoverCard({ hover, appIcons, language = "en" }: { hover: CompactClassificationHoverState; appIcons: AppIconMap; language?: DisplayLanguage }) {
+export function CompactClassificationHoverCard({ hover, appIcons, language: languageOverride }: { hover: CompactClassificationHoverState; appIcons: AppIconMap; language?: DisplayLanguage }) {
+  // Follows the display language unless a caller pins one. With an English
+  // default, the Insights cards and the Your Week breakdown, which pass
+  // nothing, showed "38% of tracked time" and "38m" in Korean.
+  const { effectiveLanguage } = useLocalization();
+  const language = languageOverride ?? effectiveLanguage;
   const cardRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<FixedHoverPosition>(() => getViewportSafeHoverPosition(hover.x, hover.y, 0, 0));
 

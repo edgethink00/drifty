@@ -6,6 +6,37 @@ import { SiteIconProvider } from "../../components/SiteIconContext";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 describe("AppUsagePanel", () => {
+  it("keeps a site row's full context line reachable on hover", () => {
+    const site = (rank: number, siteDomain: string, siteTitle: string) => ({
+      rank,
+      appName: "Arc",
+      bundleId: null,
+      usageKind: "site" as const,
+      siteDomain,
+      siteTitle,
+      browserName: "Arc",
+      totalSeconds: 1800,
+      sessionCount: 2,
+      activeDays: 1,
+      averageSessionSeconds: 900,
+      shareOfTotal: 0.5,
+      firstStartedAt: "2026-04-06T09:00:00.000Z",
+      lastEndedAt: "2026-04-06T11:00:00.000Z",
+    });
+    const { container } = render(
+      <AppUsagePanel
+        periodLabel="today"
+        totalSeconds={3600}
+        appIcons={{}}
+        items={[site(1, "docs.example.com", "Release checklist"), site(2, "youtube.com", "Product teardown")]}
+      />,
+    );
+
+    const rowLine = container.querySelector(".app-usage-row__copy small");
+    expect(rowLine?.textContent).toMatch(/^Product teardown · via Arc · Last used /);
+    expect(rowLine?.getAttribute("title")).toBe(rowLine?.textContent);
+  });
+
   it("renders ranked app usage details", () => {
     render(
       <AppUsagePanel

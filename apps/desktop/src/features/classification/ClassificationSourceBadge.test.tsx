@@ -2,6 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { readAppStyles } from "../../test/readStyles";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { ClassificationSourceBadge } from "./ClassificationSourceBadge";
 
 const styles = readAppStyles();
@@ -29,6 +30,26 @@ describe("ClassificationSourceBadge", () => {
     const { container } = render(<ClassificationSourceBadge source="llm" />);
 
     expect(container.childElementCount).toBe(0);
+  });
+
+  it("follows the display language when the caller passes none", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <ClassificationSourceBadge source="manual" />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByText("수동").getAttribute("aria-label")).toBe("분류 출처: 수동");
+  });
+
+  it("still honors an explicitly pinned language", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <ClassificationSourceBadge source="manual" language="en" />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByText("Manual").getAttribute("aria-label")).toBe("Classification source: Manual");
   });
 
   it("keeps automatic provenance available for Dev inspection", () => {

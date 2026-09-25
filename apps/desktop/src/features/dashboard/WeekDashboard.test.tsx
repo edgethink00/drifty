@@ -281,6 +281,93 @@ describe("WeekDashboard calendar board", () => {
     expect(scrollerRules.some((rule) => /overscroll-behavior-y:\s*auto;/.test(rule))).toBe(true);
     expect(boardRules.every((rule) => !/overscroll-behavior-y:\s*none;/.test(rule))).toBe(true);
   });
+
+  it("lets a narrow block drop its end time, then its start time, whole instead of cutting them", () => {
+    const { container } = renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [makeWeekCalendarEvent()]]]),
+    });
+    const time = container.querySelector(".week-v2-calendar__event-time");
+    expect(Array.from(time?.children ?? [], (part) => part.textContent)).toEqual(["9:00 AM", "–10:00 AM"]);
+
+    // The anchor that holds line one must be a full line tall: at zero height,
+    // a start time that wrapped off line one still rendered at the top, cut off.
+    const anchor = /:is\(\.week-v2-calendar__event-time, \.week-v2-calendar__event-detail\)::before\s*\{(?<body>[^}]*)\}/.exec(styles)?.groups?.body ?? "";
+    expect(anchor).toMatch(/flex:\s*0 0 0;/);
+    expect(anchor).toMatch(/height:\s*100%;/);
+  });
+
+  it("drops a card's time line when a wide window's larger root font size no longer fits it", () => {
+    // The default 60 minute block is 38px tall on the 75% axis: enough for the
+    // name and time at a 16px root, but not at the 19px root of a 2400px window.
+    const calendarEvents = new Map([["2024-01-03", [makeWeekCalendarEvent()]]]);
+    const resized = renderWeekDashboard({ calendarEvents });
+    expect(resized.container.querySelector(".week-v2-calendar__event-time")).not.toBeNull();
+
+    document.documentElement.style.fontSize = "19px";
+    try {
+      // Widening the window re-reads the root size at once, without waiting
+      // for the resize to settle.
+      act(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(resized.container.querySelector(".week-v2-calendar__event-time")).toBeNull();
+      resized.unmount();
+
+      // A dashboard opened in an already wide window reads it on mount.
+      const { container } = renderWeekDashboard({ calendarEvents });
+      const block = container.querySelector(".week-v2-calendar__event");
+      expect(block?.classList.contains("week-v2-calendar__event--compact")).toBe(true);
+      expect(container.querySelector(".week-v2-calendar__event-time")).toBeNull();
+    } finally {
+      document.documentElement.style.fontSize = "";
+    }
+  });
+
+  it("sizes day columns beside the time rail's rem width, which grows with the root font size", () => {
+    // Four full-size identity icons need a 114px day column (81px strip + 33px
+    // chrome). An 838px calendar body leaves 114px per day beside the 40px rail
+    // of a 16px root, but 113px beside the 47.5px rail of a 19px root.
+    const identities = ["a", "b", "c", "d"].map((id, index) => ({
+      id,
+      label: id,
+      appName: id,
+      bundleId: null,
+      browserName: null,
+      siteDomain: null,
+      siteTitle: null,
+      seconds: 600,
+      firstStartMinute: index,
+    }));
+    const calendarEvents = new Map([["2024-01-03", [makeWeekCalendarEvent({ isGroupedCluster: true, identities, sessionCount: 4 })]]]);
+    const measureElement = HTMLElement.prototype.getBoundingClientRect;
+    const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (!this.classList.contains("week-v2-calendar__body")) return measureElement.call(this);
+      return { x: 0, y: 0, left: 0, top: 0, right: 838, bottom: 0, width: 838, height: 0, toJSON: () => ({}) } as DOMRect;
+    });
+    const visibleIcons = (container: HTMLElement) => container.querySelectorAll(".week-v2-calendar__identity").length;
+    try {
+      const resized = renderWeekDashboard({ calendarEvents });
+      expect(visibleIcons(resized.container)).toBe(4);
+
+      document.documentElement.style.fontSize = "19px";
+      // Crossing a root-size breakpoint re-measures the columns at once, in the
+      // same render as the cards' line fits, not after the resize settles.
+      act(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(visibleIcons(resized.container)).toBe(2);
+      expect(resized.container.querySelector(".week-v2-calendar__identity-more")?.textContent).toBe("+2");
+      resized.unmount();
+
+      // A dashboard opened in an already wide window measures it on mount.
+      const { container } = renderWeekDashboard({ calendarEvents });
+      expect(visibleIcons(container)).toBe(2);
+      expect(container.querySelector(".week-v2-calendar__identity-more")?.textContent).toBe("+2");
+    } finally {
+      document.documentElement.style.fontSize = "";
+      rects.mockRestore();
+    }
+  });
 });
 
 describe("WeekDashboard axis scale", () => {

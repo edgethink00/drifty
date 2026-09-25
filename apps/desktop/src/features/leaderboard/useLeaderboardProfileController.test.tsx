@@ -2,7 +2,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLeaderboardProfileController } from "./useLeaderboardProfileController";
-import { LocalizationTestProvider, useLocalization } from "../localization/LocalizationContext";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 vi.mock("./leaderboardService", () => ({
   DEFAULT_LEADERBOARD_PERIOD: "weekly",
@@ -186,12 +186,10 @@ describe("useLeaderboardProfileController - leave privacy", () => {
 });
 
 describe("useLeaderboardProfileController - share message", () => {
-  it("uses the app's Korean translator even though App calls it outside the localization provider", async () => {
-    const { result: korean } = renderHook(() => useLocalization(), {
+  it("tells a Korean user in Korean that a public profile is needed before sharing", async () => {
+    const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()), {
       wrapper: ({ children }) => <LocalizationTestProvider language="ko">{children}</LocalizationTestProvider>,
     });
-    // No wrapper here, exactly like App, whose provider sits below this hook.
-    const { result } = renderHook(() => useLeaderboardProfileController({ ...defaultProps(), translate: korean.current.t }));
 
     await act(async () => {
       await result.current.handleShareLeaderboardProfile();

@@ -3,7 +3,7 @@ import type { MouseEvent } from "react";
 import type { AppIconMap, FlowBlock } from "@drifty/domain";
 import { DONUT_CIRCUMFERENCE } from "../insights/insightData";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
-import type { DisplayLanguage } from "../localization/LocalizationContext";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationBreakdownRow, CompactClassificationHoverState } from "./HoverCards";
@@ -49,8 +49,10 @@ export function CompactRingChart({
   flowBlocks,
   appIcons,
   getAppBreakdown,
-  language = "en",
+  language: languageOverride,
 }: CompactRingChartProps) {
+  const { effectiveLanguage } = useLocalization();
+  const language = languageOverride ?? effectiveLanguage;
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const activeEntries = entries.filter((entry) => entry.totalSeconds > 0 && entry.ratio > 0);
   const summaryEntries = activeEntries.length > 0 ? activeEntries : entries;

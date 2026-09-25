@@ -15,11 +15,60 @@ const MICRO_EVENT_MAX_ACTIVE_MINUTES = 3;
 const TINY_EVENT_MAX_ACTIVE_MINUTES = 10;
 const MICRO_EVENT_HEIGHT_PX = 6;
 const TINY_EVENT_HEIGHT_PX = 12;
-// Grouped cards reserve an 18px identity strip. These thresholds keep the
-// optional text rows within the card instead of asking flexbox to compress the
-// icon strip below its tile height.
-const GROUPED_IDENTITY_AND_TIME_MIN_HEIGHT_PX = 37;
-const GROUPED_IDENTITY_TIME_AND_DETAIL_MIN_HEIGHT_PX = 49;
+
+// A card renders its time line, then its detail line, only when it is tall
+// enough for them; a line that does not fit would squeeze the app name or the
+// identity strip, or be clipped. The lines are sized in rem
+// (features/dashboard/week-dashboard.css: name 0.75rem at line-height 1.12, time
+// 0.75rem and detail 0.6875rem at 1.1em), so they grow with the root font size,
+// which tokens-base.css steps up from 16px to 17, 18 and 19px on wide windows.
+// The chrome around them is fixed px. scripts/qa/week-calendar-identity-layout.test.mjs
+// checks these sums against browser layout at every root size (16-19px), in
+// Chromium and WebKit.
+export const WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX = 16;
+const NAME_LINE_REM = 0.84;
+const TIME_LINE_REM = 0.825;
+const DETAIL_LINE_REM = 0.75625;
+// Ungrouped card: 1px border and 5px padding above the name, 1px gaps between
+// lines, a 1px border below. The last line must end at least 3px above that
+// border (most of the 5px bottom padding), which at a 16px root is 38px for
+// name + time and 51px with the detail.
+const UNGROUPED_CHROME_ABOVE_PX = 1 + 5;
+const UNGROUPED_LINE_GAP_PX = 1;
+const UNGROUPED_CHROME_BELOW_PX = 3 + 1;
+// Grouped card: 1px border, 1px padding and the 18px identity strip above the
+// time line (the name is visually hidden), no gaps, and the whole 2px padding
+// and 1px border below, so flexbox never compresses the strip below its tile
+// height. At a 16px root that is 37px for strip + time and 49px with the detail.
+const GROUPED_CHROME_ABOVE_PX = 1 + 1 + 18;
+const GROUPED_CHROME_BELOW_PX = 2 + 1;
+
+/** Smallest card heights (px) at which the time line, and then the detail line,
+ *  fit at the given root font size. */
+export type WeekCalendarEventLineFitHeights = {
+  readonly groupedTime: number;
+  readonly groupedDetail: number;
+  readonly ungroupedTime: number;
+  readonly ungroupedDetail: number;
+};
+
+export function weekCalendarEventLineFitHeights(rootFontSizePx: number): WeekCalendarEventLineFitHeights {
+  const rem = Number.isFinite(rootFontSizePx) && rootFontSizePx > 0
+    ? rootFontSizePx
+    : WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX;
+  const groupedTime = GROUPED_CHROME_ABOVE_PX + TIME_LINE_REM * rem + GROUPED_CHROME_BELOW_PX;
+  const ungroupedTime = UNGROUPED_CHROME_ABOVE_PX
+    + NAME_LINE_REM * rem
+    + UNGROUPED_LINE_GAP_PX
+    + TIME_LINE_REM * rem
+    + UNGROUPED_CHROME_BELOW_PX;
+  return {
+    groupedTime,
+    groupedDetail: groupedTime + DETAIL_LINE_REM * rem,
+    ungroupedTime,
+    ungroupedDetail: ungroupedTime + UNGROUPED_LINE_GAP_PX + DETAIL_LINE_REM * rem,
+  };
+}
 
 export type WeekIdentityStripPlan = {
   readonly visibleCount: number;
@@ -110,6 +159,7 @@ export function planWeekIdentityStrip(
 export function buildWeekCalendarEventLayout(
   event: WeekCalendarEvent,
   calendarHourHeight: number,
+  rootFontSizePx: number = WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX,
 ): WeekCalendarEventLayout {
   // The micro/tiny pixel heights below are fixed because they are sized to fit
   // the identity icons. They were tuned against the baseline hour height, so
@@ -148,13 +198,14 @@ export function buildWeekCalendarEventLayout(
             Math.min(shortEventMaxHeight, Math.round(8 + Math.sqrt(event.durationMinutes) * 4)),
           )
         : Math.max(28, rawEventHeight - 4);
+  const lineFitHeights = weekCalendarEventLineFitHeights(rootFontSizePx);
   const isCompactEvent = event.isShort
-    || eventHeight < (event.isGroupedCluster ? GROUPED_IDENTITY_AND_TIME_MIN_HEIGHT_PX : 36)
+    || eventHeight < (event.isGroupedCluster ? lineFitHeights.groupedTime : lineFitHeights.ungroupedTime)
     || event.laneCount > 2;
   const showsIdentityStrip = event.isGroupedCluster && !isTinyEvent;
   const showsInlineDetail = !isCompactEvent
     && event.sessionCount <= 1
-    && (!showsIdentityStrip || eventHeight >= GROUPED_IDENTITY_TIME_AND_DETAIL_MIN_HEIGHT_PX);
+    && eventHeight >= (showsIdentityStrip ? lineFitHeights.groupedDetail : lineFitHeights.ungroupedDetail);
 
   return {
     eventHeight,

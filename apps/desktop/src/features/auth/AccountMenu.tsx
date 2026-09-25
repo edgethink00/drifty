@@ -196,6 +196,8 @@ export function AccountMenu({
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const isSignedIn = Boolean(userEmail);
+  // "Unknown" (English) for signed-out users is an owner decision; see the
+  // "account.guest" entry in docs/product-decisions.md before changing it.
   const displayName = isSignedIn ? getAccountDisplayName(userEmail) : t("account.guest");
   const triggerLabel = displayName;
   const trimmedUserAvatarUrl = userAvatarUrl?.trim();

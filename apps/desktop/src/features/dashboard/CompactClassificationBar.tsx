@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import type { AppIconMap } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
-import type { DisplayLanguage } from "../localization/LocalizationContext";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationBreakdownRow, CompactClassificationHoverState } from "./HoverCards";
 import { formatCompactBarLabel } from "./compactChartLabels";
@@ -40,8 +40,10 @@ export function CompactClassificationBar<TEntry extends CompactClassificationEnt
   getAppBreakdown,
   appIcons,
   visibleLimit = 3,
-  language = "en",
+  language: languageOverride,
 }: CompactClassificationBarProps<TEntry>) {
+  const { effectiveLanguage } = useLocalization();
+  const language = languageOverride ?? effectiveLanguage;
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const activeEntries = entries.filter((entry) => entry.totalSeconds > 0);
   const summaryEntries = activeEntries.length > 0 ? activeEntries : entries;

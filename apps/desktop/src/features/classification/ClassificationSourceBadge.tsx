@@ -1,12 +1,12 @@
 import type { ClassificationSource } from "@drifty/domain";
 import { classificationSourceLabel } from "./classificationViewData";
-import type { DisplayLanguage } from "../localization/LocalizationContext";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 
 export function ClassificationSourceBadge({
   source,
   ai,
   aiCached,
-  language = "en",
+  language: languageOverride,
   showAutomaticSources = false,
 }: {
   source?: ClassificationSource | string | null;
@@ -16,6 +16,10 @@ export function ClassificationSourceBadge({
   /** Dev-only provenance inspection. Normal product UI shows only user-owned decisions. */
   showAutomaticSources?: boolean;
 }) {
+  // Follows the display language unless a caller pins one, like the other
+  // hover-card pieces.
+  const { effectiveLanguage } = useLocalization();
+  const language = languageOverride ?? effectiveLanguage;
   const userOwnedSource = source === "manual" || source === "rule";
   if (!userOwnedSource && !showAutomaticSources) return null;
   const isAi = Boolean(ai || source === "llm");

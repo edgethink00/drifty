@@ -171,6 +171,79 @@ describe("buildWeekCalendarEventLayout", () => {
     expect(atDetailThreshold.eventHeight).toBe(49);
     expect(atDetailThreshold.showsInlineDetail).toBe(true);
   });
+
+  it("renders an ungrouped card's time and detail lines only when they fit under its name", () => {
+    // At 60px per hour an ungrouped card is duration - 4px tall.
+    const layoutAtHeight = (durationMinutes: number) => buildWeekCalendarEventLayout(makeWeekCalendarEvent({
+      activeDurationMinutes: durationMinutes,
+      durationMinutes,
+      sessionCount: 1,
+      isGroupedCluster: false,
+      isShort: false,
+    }), 60);
+
+    const belowTimeThreshold = layoutAtHeight(41);
+    expect(belowTimeThreshold.eventHeight).toBe(37);
+    expect(belowTimeThreshold.isCompactEvent).toBe(true);
+
+    const atTimeThreshold = layoutAtHeight(42);
+    expect(atTimeThreshold.eventHeight).toBe(38);
+    expect(atTimeThreshold.isCompactEvent).toBe(false);
+    expect(atTimeThreshold.showsInlineDetail).toBe(false);
+
+    const belowDetailThreshold = layoutAtHeight(54);
+    expect(belowDetailThreshold.eventHeight).toBe(50);
+    expect(belowDetailThreshold.showsInlineDetail).toBe(false);
+
+    const atDetailThreshold = layoutAtHeight(55);
+    expect(atDetailThreshold.eventHeight).toBe(51);
+    expect(atDetailThreshold.showsInlineDetail).toBe(true);
+  });
+
+  it("needs taller cards for each line when a wide window raises the root font size to 19px", () => {
+    // At 60px per hour a card is duration - 4px tall. The rem-sized lines are
+    // 19/16 as tall as at the base root, so both thresholds move up.
+    const expectLayout = (
+      durationMinutes: number,
+      isGroupedCluster: boolean,
+      expected: { eventHeight: number; isCompactEvent?: boolean; showsInlineDetail?: boolean },
+    ) => {
+      const { eventHeight, ...flags } = expected;
+      const layout = buildWeekCalendarEventLayout(
+        makeWeekCalendarEvent({
+          activeDurationMinutes: durationMinutes,
+          durationMinutes,
+          sessionCount: 1,
+          isGroupedCluster,
+          isShort: false,
+        }),
+        60,
+        19,
+      );
+      expect(layout.eventHeight).toBeCloseTo(eventHeight, 6);
+      expect(layout).toMatchObject(flags);
+    };
+
+    // Ungrouped: name + time need 42.6px, and with the detail 58.0px.
+    expectLayout(46, false, { eventHeight: 42, isCompactEvent: true });
+    expectLayout(47, false, { eventHeight: 43, isCompactEvent: false, showsInlineDetail: false });
+    expectLayout(62, false, { eventHeight: 58, showsInlineDetail: false });
+    expectLayout(63, false, { eventHeight: 59, showsInlineDetail: true });
+
+    // Grouped: strip + time need 38.7px, and with the detail 53.0px.
+    expectLayout(42, true, { eventHeight: 38, isCompactEvent: true });
+    expectLayout(43, true, { eventHeight: 39, isCompactEvent: false, showsInlineDetail: false });
+    expectLayout(57, true, { eventHeight: 53, showsInlineDetail: false });
+    expectLayout(58, true, { eventHeight: 54, showsInlineDetail: true });
+  });
+
+  it("falls back to the 16px root thresholds when the root font size is unusable", () => {
+    const event = makeWeekCalendarEvent({ sessionCount: 1, isGroupedCluster: false, activeDurationMinutes: 42, durationMinutes: 42 });
+    for (const rootFontSizePx of [Number.NaN, 0, -4]) {
+      expect(buildWeekCalendarEventLayout(event, 60, rootFontSizePx)).toEqual(buildWeekCalendarEventLayout(event, 60, 16));
+    }
+    expect(buildWeekCalendarEventLayout(event, 60, 16).isCompactEvent).toBe(false);
+  });
 });
 
 describe("planWeekIdentityStrip", () => {
