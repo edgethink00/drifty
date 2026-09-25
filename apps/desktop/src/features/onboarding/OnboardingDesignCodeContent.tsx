@@ -17,6 +17,7 @@ import { DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 
 type OnboardingDesignCodeContentProps = {
   readonly flow: OnboardingFlow;
@@ -38,12 +39,21 @@ export function OnboardingDesignCodeContent({
   const { t } = useLocalization();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollEdges = useScrollOverflowEdges(scrollRef, flow.step);
 
   const title = flow.title;
   const showTitle = flow.step !== "welcome" && flow.step !== "account";
   const showFooter = flow.step !== "account";
   const showDots = flow.step !== "welcome" && flow.step !== "account";
   const showBack = flow.stepIndex > 0;
+  // Errors sit next to the button they explain. In the fixed 720x540
+  // onboarding window, text appended to the end of a long step lands below
+  // the fold where nobody sees it. The "why is Continue off" hint stays
+  // limited to Permissions; other steps explain themselves in their own copy
+  // and must not nag before the user has entered anything.
+  const footerError = flow.storageError ?? flow.setupError;
+  const footerHint = flow.step === "permissions" ? flow.blockedHint : null;
   const footerLabel = flow.isCompleting
     ? t("onboarding.action.finishing")
     : flow.footerLabel;
@@ -91,7 +101,7 @@ export function OnboardingDesignCodeContent({
         onSubmit={flow.handleSubmit}
         aria-busy={flow.isCompleting}
       >
-        <div className="dc-onb-scroll">
+        <div className="dc-onb-scroll" ref={scrollRef} data-overflow={scrollEdges}>
           <div className={contentClassName}>
             {showTitle ? (
               <h1 className="dc-onb-title" id="onboarding-title" ref={flow.titleRef} tabIndex={-1}>
@@ -154,21 +164,17 @@ export function OnboardingDesignCodeContent({
               {flow.step === "test_connection" ? <TestConnectionStep flow={flow} /> : null}
               {flow.step === "self_data_review" ? <SelfDataReviewStep flow={flow} /> : null}
               {flow.step === "ready" ? <ReadyStep flow={flow} /> : null}
-
-              {flow.storageError ? (
-                <p className="dc-onb-error" role="alert">
-                  {flow.storageError}
-                </p>
-              ) : null}
-              {flow.setupError ? (
-                <p className="dc-onb-error" role="alert">
-                  {flow.setupError}
-                </p>
-              ) : null}
             </div>
           </div>
         </div>
 
+        {footerError ? (
+          <p className="dc-onb-footer-status dc-onb-footer-status--error" role="alert">
+            {footerError}
+          </p>
+        ) : (
+          <p className="dc-onb-footer-status" aria-live="polite">{footerHint}</p>
+        )}
         {showFooter ? (
           <div className="onb-actions dc-onb-actions">
             {flow.step === "welcome" ? <OnboardingLanguageToggle /> : null}
@@ -193,7 +199,6 @@ export function OnboardingDesignCodeContent({
               </div>
             ) : null}
             <span className="dc-onb-actions-spacer" />
-            {flow.step === "permissions" && flow.blockedHint ? <p className="dc-onb-hint">{flow.blockedHint}</p> : null}
             <button
               type="submit"
               className="onb-button onb-button--primary dc-onb-primary"

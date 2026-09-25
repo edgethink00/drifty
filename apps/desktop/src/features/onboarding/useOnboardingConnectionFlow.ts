@@ -7,6 +7,7 @@ import { testLocalAiConnection } from "../settings/aiConnectionTest";
 import { saveOpenRouterApiKey } from "../settings/openRouterApiKeyStore";
 import { useManagedLocalAiSetup } from "../settings/useManagedLocalAiSetup";
 import type { CustomEndpointDraft } from "./OnboardingCustomEndpointSetup";
+import type { TranslationKey } from "../localization/translations";
 import {
   connectionChecksForSetup,
   CUSTOM_ENDPOINT_DEFAULT_DRAFT,
@@ -14,6 +15,7 @@ import {
   customEndpointModelError,
   maskApiKey,
   type ConnectionCheckStatus,
+  type ConnectionFailure,
   type ConnectionPhase,
   type OnboardingStep,
   type SetupChoice,
@@ -45,7 +47,7 @@ export function useOnboardingConnectionFlow({
   const [customEndpointApiKey, setCustomEndpointApiKey] = useState(localAiSetup.selfHostedApiKey);
   const [connectionPhase, setConnectionPhase] = useState<ConnectionPhase>("idle");
   const [checkStatuses, setCheckStatuses] = useState<ConnectionCheckStatus[]>([]);
-  const [connectionFailureLabel, setConnectionFailureLabel] = useState<string | null>(null);
+  const [connectionFailure, setConnectionFailure] = useState<ConnectionFailure | null>(null);
   const [testRunId, setTestRunId] = useState(0);
 
   const isByokSetup = setupChoice === "byok";
@@ -121,14 +123,14 @@ export function useOnboardingConnectionFlow({
   function resetConnectionValidation() {
     setConnectionPhase("idle");
     setCheckStatuses([]);
-    setConnectionFailureLabel(null);
+    setConnectionFailure(null);
   }
 
   const handleSetupChoice = useCallback((nextChoice: SetupChoice) => {
     setSetupChoice(nextChoice);
     setConnectionPhase("idle");
     setCheckStatuses([]);
-    setConnectionFailureLabel(null);
+    setConnectionFailure(null);
     setMaskedApiKey(null);
   }, []);
 
@@ -171,12 +173,11 @@ export function useOnboardingConnectionFlow({
     let cancelled = false;
 
     setConnectionPhase("testing");
-    setConnectionFailureLabel(null);
+    setConnectionFailure(null);
 
     if (failIndex >= 0) {
-      const message = localValidationFailureMessage(failIndex);
       setCheckStatuses(checks.map((_, statusIndex) => statusIndex < failIndex ? "success" : statusIndex === failIndex ? "error" : "pending"));
-      setConnectionFailureLabel(message);
+      setConnectionFailure({ kind: "local", key: localValidationFailureKey(failIndex) });
       setConnectionPhase("failed");
       return () => {
         cancelled = true;
@@ -187,7 +188,7 @@ export function useOnboardingConnectionFlow({
     setCheckStatuses(checks.map((_, statusIndex) => statusIndex < localSuccessCount ? "success" : statusIndex === localSuccessCount ? "loading" : "pending"));
     const setupSnapshot = connectionTestSetup();
     if (!setupSnapshot) {
-      setConnectionFailureLabel("Complete the selected provider settings before testing.");
+      setConnectionFailure({ kind: "local", key: "settings.ai.connection.completeSettings" });
       setConnectionPhase("failed");
       return () => {
         cancelled = true;
@@ -199,7 +200,7 @@ export function useOnboardingConnectionFlow({
       if (result.kind === "error") {
         const failedIndex = remoteFailureIndex(result.message, checks.length);
         setCheckStatuses(checks.map((_, statusIndex) => statusIndex < failedIndex ? "success" : statusIndex === failedIndex ? "error" : "pending"));
-        setConnectionFailureLabel(result.message);
+        setConnectionFailure({ kind: "remote", message: result.message });
         setConnectionPhase("failed");
         return;
       }
@@ -226,7 +227,7 @@ export function useOnboardingConnectionFlow({
       if (cancelled) return;
       const failedIndex = isByokSetup ? 1 : checks.length - 1;
       setCheckStatuses(checks.map((_, statusIndex) => statusIndex < failedIndex ? "success" : statusIndex === failedIndex ? "error" : "pending"));
-      setConnectionFailureLabel(messageFromUnknownError(error));
+      setConnectionFailure({ kind: "remote", message: messageFromUnknownError(error) });
       setConnectionPhase("failed");
     });
 
@@ -255,10 +256,10 @@ export function useOnboardingConnectionFlow({
     return null;
   }
 
-  function localValidationFailureMessage(index: number): string {
-    if (isByokSetup) return "OpenRouter key should start with sk-or-.";
-    if (index === 0) return customEndpointBaseUrlIssue ?? "Endpoint URL is invalid.";
-    return customEndpointModelIssue ?? "Model id is required.";
+  function localValidationFailureKey(index: number): TranslationKey {
+    if (isByokSetup) return "onboarding.connection.invalidKey";
+    if (index === 0) return customEndpointBaseUrlIssue ?? "onboarding.connection.baseUrlScheme";
+    return customEndpointModelIssue ?? "onboarding.connection.modelMissing";
   }
 
   function remoteFailureIndex(message: string, checksLength: number): number {
@@ -277,7 +278,7 @@ export function useOnboardingConnectionFlow({
     apiKeyIsValid,
     checkStatuses,
     connectionChecks,
-    connectionFailureLabel,
+    connectionFailure,
     connectionPhase,
     customEndpointBaseUrlIssue,
     customEndpointApiKey,
@@ -297,6 +298,7 @@ export function useOnboardingConnectionFlow({
     managedLocalReady,
     managedLocalStarted,
     maskedApiKey,
+    retryConnectionTest: () => setTestRunId((current) => current + 1),
     setTestRunId,
     setupChoice,
     testRunId,

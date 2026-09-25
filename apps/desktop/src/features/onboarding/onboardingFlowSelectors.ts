@@ -61,8 +61,6 @@ export function blockedHintForStep({
   accessibilityRecheckPending,
   canAdvance,
   connectionPhase,
-  customEndpointBaseUrlIssue,
-  customEndpointModelIssue,
   hasInstallableLocalModel = true,
   isCustomEndpointSetup,
   isManagedProviderSetup,
@@ -71,8 +69,6 @@ export function blockedHintForStep({
   readonly accessibilityRecheckPending: boolean;
   readonly canAdvance: boolean;
   readonly connectionPhase: ConnectionPhase;
-  readonly customEndpointBaseUrlIssue: string | null;
-  readonly customEndpointModelIssue: string | null;
   readonly hasInstallableLocalModel?: boolean;
   readonly isCustomEndpointSetup: boolean;
   readonly isManagedProviderSetup: boolean;
@@ -88,7 +84,9 @@ export function blockedHintForStep({
           ? t?.("onboarding.block.localModel") ?? "Start a local model download to continue."
           : t?.("onboarding.block.localModelInsufficient") ?? "No local model can run on this device. Switch to Cloud to continue.";
       }
-      if (isCustomEndpointSetup) return customEndpointBaseUrlIssue ?? customEndpointModelIssue ?? (t?.("onboarding.block.customEndpoint") ?? "Enter your custom endpoint details.");
+      // Field-level problems are already shown under each input; the footer
+      // only says why Continue is off, so it never repeats the same sentence.
+      if (isCustomEndpointSetup) return t?.("onboarding.block.customEndpoint") ?? "Enter your custom endpoint details.";
       return t?.("onboarding.block.openRouter") ?? "Enter an OpenRouter key that starts with sk-or-.";
     case "test_connection":
       if (connectionPhase === "failed") return t?.("onboarding.block.connectionFailed") ?? "Connection failed. Try again or edit your details.";
@@ -142,7 +140,7 @@ export function titleForStep({
     case "permissions":
       return t?.("onboarding.title.permissions") ?? "Set up permissions";
     case "nudges":
-      return t?.("onboarding.title.nudges") ?? "Set up drift alerts";
+      return t?.("onboarding.title.nudges") ?? "How should Drifty support your focus?";
     case "ready":
       return setupChoice === "simple" && accountConnected
         ? t?.("onboarding.title.readyGo") ?? "You're ready to go"

@@ -33,7 +33,9 @@ export function NudgesStep({
       </div>
 
       <fieldset className="dc-onb-intervene">
-        <legend className="dc-onb-intervene__label">{t("onboarding.nudges.interventionGroup")}</legend>
+        {/* One option left after the Drift alert choice moved to settings: a
+            visible group heading over a single row reads as a leftover. */}
+        <legend className="onb-visually-hidden">{t("onboarding.nudges.interventionGroup")}</legend>
         <div className={`dc-onb-intervene__option${extremeNudgeEnabled ? " dc-onb-intervene__option--selected dc-onb-intervene__option--close" : ""}`}>
           <span className="dc-onb-intervene__copy">
             <span className="dc-onb-intervene__title">

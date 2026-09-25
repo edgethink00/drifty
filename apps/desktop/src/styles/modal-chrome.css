@@ -497,6 +497,12 @@
   font-weight: 500;
 }
 
+/* Wide tracking is an uppercase Latin eyebrow treatment. Applied to Hangul it
+   spreads a word into separate syllables ("이 메 일"). */
+.auth-modal .auth-modal__field > span:lang(ko) {
+  letter-spacing: 0.02em;
+}
+
 .auth-modal .settings-input {
   font-family: var(--font-sans);
   font-size: 0.8rem;

@@ -53,11 +53,12 @@ describe("onboarding design-code accessibility styles", () => {
   it("keeps the nudge spacing balance explicit", () => {
     const nudgeCopyBlock = styles.match(/\.dc-onb-content--nudges \.dc-onb-copy \{[\s\S]*?\n\}/)?.[0] ?? "";
     const interventionBlock = styles.match(/\.dc-onb-intervene \{[\s\S]*?\n\}/)?.[0] ?? "";
-    const interventionLabelBlock = styles.match(/\.dc-onb-intervene__label \{[\s\S]*?\n\}/)?.[0] ?? "";
 
     expect(nudgeCopyBlock).toContain("margin-bottom: 9px");
     expect(interventionBlock).toContain("gap: 6px");
-    expect(interventionLabelBlock).toContain("margin: 0 0 3px");
+    // The single automatic-close row has no visible group label, so the gap
+    // above it matches the space between the other onboarding cards.
+    expect(interventionBlock).toContain("margin: 12px 0 0");
   });
 });
 

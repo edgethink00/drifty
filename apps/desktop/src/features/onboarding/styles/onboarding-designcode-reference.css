@@ -84,8 +84,30 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Cards and inputs span the full content width, so a selection ring or
+     focus outline drawn outside their box needs a few pixels of room before
+     overflow-x clips it. The negative margin keeps content where it was. */
+  margin: 0 -4px;
+  padding: 0 4px 4px;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* The onboarding window is a fixed 720x540 and macOS hides scrollbars, so a
+   fade on the edge that hides content is the only cue that more exists. */
+.dc-onb-scroll[data-overflow="bottom"] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+}
+
+.dc-onb-scroll[data-overflow="top"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px);
+  mask-image: linear-gradient(to bottom, transparent, #000 28px);
+}
+
+.dc-onb-scroll[data-overflow="both"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 36px), transparent);
 }
 
 .dc-onb-scroll::-webkit-scrollbar {
@@ -489,7 +511,7 @@
 .dc-onb-divider span {
   flex: 1;
   height: 1px;
-  background: rgba(28, 28, 25, 0.1);
+  background: var(--dc-onb-line);
 }
 
 .dc-onb-account__helper {
@@ -954,20 +976,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   padding: 0;
   border: 0;
-}
-
-.dc-onb-intervene__label {
-  margin: 0 0 3px;
-  padding: 0;
-  color: var(--dc-onb-soft);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.055em;
-  line-height: 1.4;
-  text-transform: uppercase;
 }
 
 .dc-onb-intervene__option {
@@ -1727,6 +1738,21 @@
   font-size: 14px;
 }
 
+/* A summary row with detail lines keeps its check on the heading line, the
+   way the single-line rows read, instead of floating mid-paragraph. */
+.dc-onb-ready-item--stacked {
+  align-items: flex-start;
+}
+
+.dc-onb-ready-item--stacked > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.dc-onb-ready-item > svg {
+  color: var(--dc-onb-text);
+}
+
 .dc-onb-ready-item__label,
 .dc-onb-ready-item__stack strong {
   color: var(--dc-onb-text);
@@ -1898,10 +1924,34 @@
   flex: 1;
 }
 
-.dc-onb-card .dc-onb-hint {
+/* Why Continue is off, or what just failed, sits right above the button it
+   explains instead of at the end of a step that may be scrolled out of view. */
+.dc-onb-card .dc-onb-footer-status {
+  width: min(100%, 640px);
+  flex-shrink: 0;
+  margin: 0;
+  padding-top: 10px;
+  /* Same warn tone the inline Permissions hint used before it moved here. */
   color: var(--dc-onb-warn);
   font-size: 13px;
+  line-height: 1.4;
   text-align: right;
+}
+
+.dc-onb-card .dc-onb-footer-status:empty {
+  padding-top: 0;
+}
+
+.dc-onb-test-retry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.dc-onb-test-retry span {
+  color: var(--dc-onb-soft);
+  font-size: 13px;
 }
 
 .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary,
@@ -2202,6 +2252,53 @@
 :root[data-theme="dark"] .dc-onb-setup-card--disabled:hover {
   border-color: color-mix(in srgb, var(--dc-onb-text) 20%, transparent);
   background: var(--dc-onb-raised);
+}
+
+/* The Ready summary and the connection check rows were hard-coded white, so
+   the dark theme's light text sat on white and all but vanished. */
+:root[data-theme="dark"] .dc-onb-ready-list,
+:root[data-theme="dark"] .dc-onb-check-row {
+  border-color: color-mix(in srgb, var(--dc-onb-text) 14%, transparent);
+  background: var(--dc-onb-raised);
+}
+
+/* Same hard-coded white on the Permissions rows and the two secondary
+   buttons, which left "이메일로 계속" and "사용 안 함" at about 1.2:1. */
+:root[data-theme="dark"] .dc-onb-row,
+:root[data-theme="dark"] .dc-onb-account__email,
+:root[data-theme="dark"] .dc-onb-confirm__secondary {
+  border-color: color-mix(in srgb, var(--dc-onb-text) 20%, transparent);
+  background: var(--dc-onb-raised);
+  color: var(--dc-onb-text);
+}
+
+:root[data-theme="dark"] .dc-onb-account__email:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dc-onb-text) 8%, var(--dc-onb-raised));
+}
+
+/* The neutral pill's light-theme border disappears once its row is dark. */
+:root[data-theme="dark"] .dc-onb-pill--neutral {
+  border-color: color-mix(in srgb, var(--dc-onb-text) 20%, transparent);
+}
+
+/* Dark surface text on the warn fill is about 2.9:1; light text is about 5:1. */
+:root[data-theme="dark"] .dc-onb-confirm__primary {
+  color: var(--dc-onb-text);
+}
+
+:root[data-theme="dark"] .dc-onb-pending-dot {
+  border-color: color-mix(in srgb, var(--dc-onb-text) 28%, transparent);
+}
+
+:root[data-theme="dark"] .dc-onb-pending-dot--failed {
+  border-color: rgba(232, 135, 122, 0.6);
+}
+
+/* --dc-onb-warn also colours pills and destructive buttons on light fills, so
+   only error text is lifted: #9e4238 on the dark surface is about 2.9:1. */
+:root[data-theme="dark"] .dc-onb-card .dc-onb-footer-status,
+:root[data-theme="dark"] .dc-onb-input-hint--error {
+  color: #e8877a;
 }
 
 /* Onboarding fills the whole Windows window, so its canvas matches the shell

@@ -199,8 +199,6 @@ export function useOnboardingFlow({
     accessibilityRecheckPending: permissions.accessibilityRecheckPending,
     canAdvance,
     connectionPhase: connection.connectionPhase,
-    customEndpointBaseUrlIssue: connection.customEndpointBaseUrlIssue,
-    customEndpointModelIssue: connection.customEndpointModelIssue,
     hasInstallableLocalModel: connection.managedLocalAi.loading || catalogInstallable,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
@@ -209,8 +207,6 @@ export function useOnboardingFlow({
     canAdvance,
     catalogInstallable,
     connection.connectionPhase,
-    connection.customEndpointBaseUrlIssue,
-    connection.customEndpointModelIssue,
     connection.isCustomEndpointSetup,
     connection.isManagedProviderSetup,
     connection.managedLocalAi.loading,
@@ -336,7 +332,7 @@ export function useOnboardingFlow({
         assertCurrentAccount,
         onStartTracking: async () => {
           assertCurrentAccount();
-          const storageFailure = "Unable to save AI setup locally. Check storage permissions and try again.";
+          const storageFailure = t("onboarding.error.aiSetupStorage");
           if (connection.setupChoice === "simple" && !persistLocalAiSetup(latestAiSetupRef.current)) {
             throw new Error(storageFailure);
           }

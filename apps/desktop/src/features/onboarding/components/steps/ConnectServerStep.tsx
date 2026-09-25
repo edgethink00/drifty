@@ -230,8 +230,8 @@ function localModelDescription({
 
 function CustomEndpointSetup({ flow }: { readonly flow: OnboardingFlow }) {
   const { t } = useLocalization();
-  const baseIssue = flow.customEndpointDraft.baseUrl.trim() ? flow.customEndpointBaseUrlIssue : null;
-  const modelIssue = flow.customEndpointDraft.model.trim() ? flow.customEndpointModelIssue : null;
+  const baseIssue = flow.customEndpointDraft.baseUrl.trim() && flow.customEndpointBaseUrlIssue ? t(flow.customEndpointBaseUrlIssue) : null;
+  const modelIssue = flow.customEndpointDraft.model.trim() && flow.customEndpointModelIssue ? t(flow.customEndpointModelIssue) : null;
 
   return (
     <div className="dc-onb-server-form">

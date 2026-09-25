@@ -1,4 +1,5 @@
 import type { CustomEndpointDraft } from "./OnboardingCustomEndpointSetup";
+import type { TranslationKey } from "../localization/translations";
 
 export type OnboardingStep =
   | "welcome"
@@ -17,7 +18,11 @@ export type OnboardingStepsOptions = { readonly skipAccountStep?: boolean };
 export type SetupChoice = "simple" | "local_ai" | "byok" | "custom_endpoint";
 export type ConnectionCheckStatus = "pending" | "loading" | "success" | "error";
 export type ConnectionPhase = "idle" | "testing" | "success" | "failed";
-export type ConnectionCheck = { id: string; label: string };
+export type ConnectionCheck = { id: string; labelKey: TranslationKey };
+/** A failed connection test: either local input validation or the provider's own message. */
+export type ConnectionFailure =
+  | { readonly kind: "local"; readonly key: TranslationKey }
+  | { readonly kind: "remote"; readonly message: string };
 export type NotificationPermissionState = "unknown" | "checking" | "granted" | "denied" | "unavailable";
 
 const BASE_STEPS: OnboardingStepDef[] = [
@@ -103,15 +108,15 @@ export const PRIVACY_NOT_RECORDED = [
 ];
 
 const BYOK_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
-  { id: "key", label: "OpenRouter key shape valid" },
-  { id: "provider", label: "Provider reachable" },
-  { id: "classifier", label: "Classification ready" },
+  { id: "key", labelKey: "onboarding.test.check.key" },
+  { id: "provider", labelKey: "onboarding.test.check.provider" },
+  { id: "classifier", labelKey: "onboarding.test.check.classifier" },
 ];
 
 const CUSTOM_ENDPOINT_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
-  { id: "url", label: "Endpoint URL valid" },
-  { id: "model", label: "Model selected" },
-  { id: "classifier", label: "OpenAI-compatible route ready" },
+  { id: "url", labelKey: "onboarding.test.check.url" },
+  { id: "model", labelKey: "onboarding.test.check.model" },
+  { id: "classifier", labelKey: "onboarding.test.check.route" },
 ];
 
 export const CUSTOM_ENDPOINT_DEFAULT_DRAFT: CustomEndpointDraft = {
@@ -125,15 +130,15 @@ export function maskApiKey(key: string): string {
   return `sk-or-••••••${last4}`;
 }
 
-export function customEndpointBaseUrlError(baseUrl: string): string | null {
+export function customEndpointBaseUrlError(baseUrl: string): TranslationKey | null {
   const trimmedBaseUrl = baseUrl.trim();
-  if (!trimmedBaseUrl) return "Enter a base URL.";
-  if (!/^https?:\/\/\S+$/u.test(trimmedBaseUrl)) return "Base URL should start with http:// or https://.";
+  if (!trimmedBaseUrl) return "onboarding.connection.baseUrlMissing";
+  if (!/^https?:\/\/\S+$/u.test(trimmedBaseUrl)) return "onboarding.connection.baseUrlScheme";
   return null;
 }
 
-export function customEndpointModelError(model: string): string | null {
-  return model.trim() ? null : "Enter a model id.";
+export function customEndpointModelError(model: string): TranslationKey | null {
+  return model.trim() ? null : "onboarding.connection.modelMissing";
 }
 
 export function connectionChecksForSetup(setupChoice: SetupChoice | null): ReadonlyArray<ConnectionCheck> {

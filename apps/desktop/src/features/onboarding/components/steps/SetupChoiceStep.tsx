@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { TRIAL_DAYS } from "./shared";
 import { useLocalization } from "../../../localization/LocalizationContext";
@@ -29,6 +29,36 @@ export function SetupChoiceStep({
   const promotionEndLabel = formatBillingAccessEndDate(flow.promotionEndsAt, effectiveLanguage)
     ?? t("onboarding.promo.activePeriod");
   const localUnsupported = isLocalModelUnsupported(flow.managedLocalAi.catalog, flow.managedLocalAi.loading);
+  const advancedCardsRef = useRef<HTMLDivElement | null>(null);
+  const advancedWasVisibleRef = useRef(advancedVisible);
+  useEffect(() => {
+    if (!advancedVisible) {
+      advancedWasVisibleRef.current = false;
+      return;
+    }
+    if (advancedWasVisibleRef.current) return;
+    const cards = advancedCardsRef.current;
+    if (!cards) return;
+    // In the fixed 720x540 onboarding window the expanded cards open below the
+    // fold; bring them into view so the options the user asked for are seen.
+    // The cards pop in from a slightly raised, shrunken transform, so measure
+    // only after that animation settles or the scroll stops a few pixels short.
+    let cancelled = false;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const reveal = () => {
+      if (cancelled) return;
+      // Marked only once the scroll runs, so a StrictMode effect replay (or a
+      // quick close before the animation ends) cannot swallow the reveal.
+      advancedWasVisibleRef.current = true;
+      cards.scrollIntoView?.({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
+    };
+    const entering = cards.getAnimations?.() ?? [];
+    if (entering.length === 0) reveal();
+    else void Promise.allSettled(entering.map((animation) => animation.finished)).then(reveal);
+    return () => {
+      cancelled = true;
+    };
+  }, [advancedVisible]);
   return (
     <div className="dc-onb-setup">
       <SetupCard
@@ -61,7 +91,7 @@ export function SetupChoiceStep({
         {t("onboarding.setup.ownProvider")}
       </button>
       {advancedVisible ? (
-        <div className="dc-onb-advanced-cards">
+        <div className="dc-onb-advanced-cards" ref={advancedCardsRef}>
           <SetupCard
             description={t("onboarding.setup.byokDescription")}
             icon={<KeyIcon />}
