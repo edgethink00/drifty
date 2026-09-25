@@ -586,6 +586,7 @@ export default function App() {
   const activeTab = rawActiveTab === "profile" ? "leaderboard" : rawActiveTab;
   const socialSection: SocialSection = rawActiveTab === "profile" ? "profile" : "leaderboard";
   const dashPeriod = activeSnapshot.dashPeriod;
+  const isDashboardWeekView = activeTab === "dashboard" && dashPeriod === "Week";
   const isDeferredTabBodyReady = useDeferredTabBodyReady(activeTab);
   const canNavigateBack = navigationHistory.index > 0;
   const canNavigateForward = navigationHistory.index < navigationHistory.entries.length - 1;
@@ -3597,7 +3598,13 @@ export default function App() {
       activeTab,
       dashPeriod,
       day,
-      shouldLoadHistory: isForegroundRefresh && shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange),
+      // Before the first day load finishes, a dashboard Week load here is
+      // always wasted: clearLocalActivityCaches runs at mount and again when
+      // the classification rules arrive, so its result never reaches the
+      // cache. Leave it to the history effect, which asks after that load.
+      shouldLoadHistory: isForegroundRefresh
+        && !(isDashboardWeekView && !hasLoadedOnce)
+        && shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange),
       startOfDayMinutes,
       startOfWeek,
       trendsRange,
@@ -4461,11 +4468,23 @@ export default function App() {
     if (activeTab !== "dashboard" || dashPeriod !== "Today") return undefined;
     if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return undefined;
 
-    const timeoutId = window.setTimeout(() => {
+    // Until this prefetch lands, entering Week paints only today, so start it
+    // in a microtask right after this effect flush. That keeps it out of the
+    // commit that set hasLoadedOnce and behind Today's own follow-up requests
+    // (hourly summary, icons), which were queued first on the one-at-a-time
+    // tracker. A timer only adds idle time, and an animation frame does not
+    // fire while the window is still hidden after launch. A cleanup before the
+    // microtask still cancels it; a later day or period change leaves the
+    // request running, and Week entry reuses it while it is in flight.
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
       void prefetchCurrentWeekHistory(selectedDay);
-    }, 300);
+    });
 
-    return () => window.clearTimeout(timeoutId);
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, dashPeriod, hasLoadedOnce, prefetchCurrentWeekHistory, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
