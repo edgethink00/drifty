@@ -810,9 +810,18 @@ mod tests {
 
     #[test]
     fn undersized_work_areas_never_break_the_existing_minimum() {
+        // The floor is per platform: 960x680 on macOS, 900x600 on Windows.
         assert_size(calibrated_main_window_size(980.0, 700.0), 980.0, 700.0);
-        assert_size(calibrated_main_window_size(900.0, 640.0), 960.0, 680.0);
-        assert_size(calibrated_main_window_size(0.0, 0.0), 960.0, 680.0);
+        assert_size(
+            calibrated_main_window_size(DEFAULT_MIN_WIDTH - 60.0, DEFAULT_MIN_HEIGHT - 40.0),
+            DEFAULT_MIN_WIDTH,
+            DEFAULT_MIN_HEIGHT,
+        );
+        assert_size(
+            calibrated_main_window_size(0.0, 0.0),
+            DEFAULT_MIN_WIDTH,
+            DEFAULT_MIN_HEIGHT,
+        );
     }
 
     #[test]
