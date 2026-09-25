@@ -62,9 +62,10 @@ describe("FocusDriftHoverCard", () => {
       </SiteIconProvider>,
     );
 
-    const card = screen.getByText("12:00").closest(".focus-drift-hover-card");
+    const card = screen.getByText("12:00 PM").closest(".focus-drift-hover-card");
     expect(card).toBeTruthy();
     if (!(card instanceof HTMLElement)) throw new Error("Expected focus drift hover card to render.");
+    expect(within(card).queryByText("12:00")).toBeNull();
 
     expect(within(card).getByText("Focus-heavy")).toBeTruthy();
     expect(within(card).getByText("30m focus")).toBeTruthy();

@@ -1333,6 +1333,39 @@ describe("App leaderboard participation", () => {
     expect(compactRefreshStatus?.closest(".capture-recency--error")).toBeNull();
   });
 
+  it("shows leaderboard status text in Korean when the display language is Korean", async () => {
+    // App calls the leaderboard controller in its own body, above the
+    // LocalizationProvider it renders; the controller must use App's
+    // translator or these messages stay English in a Korean app.
+    window.localStorage.setItem("drifty.displayLanguage.v2", "ko");
+    const deferredLeaderboard = createDeferred<LeaderboardResult<LeaderboardRow[]>>();
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard
+      .mockResolvedValueOnce({ success: true, error: null, data: [makeLeaderboardRow("weekly")] })
+      .mockReturnValueOnce(deferredLeaderboard.promise);
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: makeOwnLeaderboardEntry("weekly") });
+
+    render(<App />);
+
+    const nav = await screen.findByRole("navigation", { name: "소셜 메뉴" });
+    fireEvent.click(within(nav).getByRole("button", { name: /^리더보드$/ }));
+    await screen.findByRole("region", { name: /^리더보드$/ });
+    expect(await screen.findByText("Alex")).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^월간$/ }));
+    await waitFor(() => {
+      expect(fetchGlobalLeaderboard).toHaveBeenCalledWith("monthly", 100);
+    });
+
+    const refreshStatus = screen.queryByText("리더보드 새로고침 중");
+    const englishStatus = screen.queryByText(/refreshing leaderboard/i);
+    deferredLeaderboard.resolve({ success: true, error: null, data: [makeLeaderboardRow("monthly")] });
+    await screen.findByText("Alex");
+
+    expect(refreshStatus).toBeTruthy();
+    expect(englishStatus).toBeNull();
+  });
+
   it("ignores a late profile response after the viewer switches to another leaderboard member", async () => {
     const firstProfile = createDeferred<{
       success: boolean;

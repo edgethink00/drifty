@@ -44,9 +44,9 @@ export function FocusDriftHoverCard({ hover, appIcons, startOfDayMinutes = 0 }: 
   const isFocusHeavy = point.focusScore >= point.driftScore;
   const verdict = isFocusHeavy ? t("dashboard.today.focusHeavy") : t("dashboard.today.driftHeavy");
   const metrics = buildFocusDriftMetrics(focusDuration, driftDuration, focusPercent, driftPercent, effectiveLanguage);
-  const pointLabel = effectiveLanguage === "ko"
-    ? formatLocalizedQuarterHourLabel(point.bucketStartMinute + startOfDayMinutes, effectiveLanguage)
-    : point.label;
+  // The same clock format as the summary tiles; point.label is the chart's
+  // 24-hour bucket key, not a display time.
+  const pointLabel = formatLocalizedQuarterHourLabel(point.bucketStartMinute + startOfDayMinutes, effectiveLanguage);
   const position = getViewportSafeHoverPosition(hover.x, hover.y, cardSize.width, cardSize.height);
 
   useLayoutEffect(() => {
@@ -77,7 +77,7 @@ export function FocusDriftHoverCard({ hover, appIcons, startOfDayMinutes = 0 }: 
     focusDuration,
     focusPercent,
     point.id,
-    point.label,
+    pointLabel,
     point.trackedSeconds,
     point.topDriftSource?.captures,
     point.topDriftSource?.id,
@@ -196,8 +196,9 @@ function formatFocusDriftSourceShare(
   return kindSeconds > 0 ? `${Math.round((source.seconds / kindSeconds) * 100)}%` : "0%";
 }
 
-export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDriftHoverKind, language: DisplayLanguage = "en"): string {
+export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDriftHoverKind, language: DisplayLanguage = "en", startOfDayMinutes = 0): string {
   const kindLabel = language === "ko" ? (kind === "focus" ? "집중" : "딴짓") : HOVER_KIND_LABELS[kind];
+  const pointLabel = formatLocalizedQuarterHourLabel(point.bucketStartMinute + startOfDayMinutes, language);
   const focusPercent = formatSharePercent(point.focusScore);
   const driftPercent = formatSharePercent(point.driftScore);
   const focusDuration = formatLocalizedDuration(point.focusSeconds, language);
@@ -208,7 +209,7 @@ export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDr
   const topDriftSource = point.topDriftSource ? language === "ko" ? ` 주요 딴짓 활동: ${point.topDriftSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topDriftSource.seconds, language)}, 캡처 ${point.topDriftSource.captures}개.` : ` Top drift source: ${point.topDriftSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topDriftSource.seconds, language)} across ${point.topDriftSource.captures} ${point.topDriftSource.captures === 1 ? "capture" : "captures"}.` : "";
 
   if (language === "ko") {
-    return `${point.label} ${kindLabel} 지점. 집중 ${focusPercent}, ${focusDuration}; 딴짓 ${driftPercent}, ${driftDuration}; 기록 시간 ${trackedDuration}. 이 구간은 ${verdict}입니다.${topFocusSource}${topDriftSource}`;
+    return `${pointLabel} ${kindLabel} 지점. 집중 ${focusPercent}, ${focusDuration}; 딴짓 ${driftPercent}, ${driftDuration}; 기록 시간 ${trackedDuration}. 이 구간은 ${verdict}입니다.${topFocusSource}${topDriftSource}`;
   }
-  return `${kindLabel} point for ${point.label}. Focus is ${focusPercent}, ${focusDuration}; drift is ${driftPercent}, ${driftDuration}; tracked time is ${trackedDuration}. This ${point.unit} is ${verdict}.${topFocusSource}${topDriftSource}`;
+  return `${kindLabel} point for ${pointLabel}. Focus is ${focusPercent}, ${focusDuration}; drift is ${driftPercent}, ${driftDuration}; tracked time is ${trackedDuration}. This ${point.unit} is ${verdict}.${topFocusSource}${topDriftSource}`;
 }

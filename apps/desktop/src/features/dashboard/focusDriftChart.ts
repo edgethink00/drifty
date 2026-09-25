@@ -304,7 +304,11 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
   const focusAreaPath = buildSeriesAreaPath(seriesPointRuns, "focusY");
   const driftAreaPath = buildSeriesAreaPath(seriesPointRuns, "driftY");
   const peakFocusPoint = activePoints.reduce<FocusDriftPoint | null>((current, point) => (!current || point.focusScore > current.focusScore ? point : current), null);
-  const peakDriftPoint = activePoints.reduce<FocusDriftPoint | null>((current, point) => (!current || point.driftScore > current.driftScore ? point : current), null);
+  // A day without drift has no drift peak. Reducing over every active window
+  // would otherwise name the first focused window as the drift peak.
+  const peakDriftPoint = activePoints
+    .filter((point) => point.driftSeconds > 0)
+    .reduce<FocusDriftPoint | null>((current, point) => (!current || point.driftScore > current.driftScore ? point : current), null);
 
   return {
     points,

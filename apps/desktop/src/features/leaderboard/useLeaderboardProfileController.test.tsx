@@ -2,6 +2,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLeaderboardProfileController } from "./useLeaderboardProfileController";
+import { LocalizationTestProvider, useLocalization } from "../localization/LocalizationContext";
 
 vi.mock("./leaderboardService", () => ({
   DEFAULT_LEADERBOARD_PERIOD: "weekly",
@@ -181,5 +182,21 @@ describe("useLeaderboardProfileController - leave privacy", () => {
       await result.current.handleLeaderboardOptOut({ makeProfilePrivate: true });
     });
     expect(result.current.leaderboardActionError).toMatch(/public profile page is still on/i);
+  });
+});
+
+describe("useLeaderboardProfileController - share message", () => {
+  it("uses the app's Korean translator even though App calls it outside the localization provider", async () => {
+    const { result: korean } = renderHook(() => useLocalization(), {
+      wrapper: ({ children }) => <LocalizationTestProvider language="ko">{children}</LocalizationTestProvider>,
+    });
+    // No wrapper here, exactly like App, whose provider sits below this hook.
+    const { result } = renderHook(() => useLeaderboardProfileController({ ...defaultProps(), translate: korean.current.t }));
+
+    await act(async () => {
+      await result.current.handleShareLeaderboardProfile();
+    });
+
+    expect(result.current.profileShareMessage).toBe("먼저 프로필을 저장하거나 리더보드에 참여하면 공개 링크가 만들어집니다.");
   });
 });

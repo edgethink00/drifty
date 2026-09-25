@@ -175,7 +175,7 @@ export function SnippetCopyRow({
       />
       <button
         type="button"
-        className={buttonClassName}
+        className={`${buttonClassName} profile-copy-row__copy`}
         disabled={cardLocked}
         title={cardLocked ? "Turn on your public focus card first" : undefined}
         onClick={onCopy}

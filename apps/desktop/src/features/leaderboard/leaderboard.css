@@ -2630,7 +2630,10 @@
 }
 
 /* ── Embeds modal ─────────────────────────────────────────────────────────── */
-.profile-embeds-modal {
+/* Must outrank the 470px `.auth-modal.profile-modal` cap it shares a shell
+   with; at single-class specificity the dialog collapsed to 470px and its
+   left column squeezed the link field to a sliver (same fix as rank embeds). */
+.auth-modal.profile-modal.profile-embeds-modal {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -2638,9 +2641,10 @@
   max-width: 940px;
   width: calc(100vw - 2rem);
   height: min(calc(100vh - 4rem), 720px);
-  padding-top: var(--space-4);
-  padding-bottom: 0;
 }
+/* Padding comes from modal-chrome's .auth-modal.profile-embeds-modal.modal-shell
+   rule; restating it here would tie at the same specificity and leave the
+   result to stylesheet import order. */
 
 .profile-embeds-modal .profile-modal__header { margin-bottom: var(--space-3); align-items: center; }
 .profile-embeds-modal .profile-modal__header h2 { font-size: 1.05rem; display: inline; }
@@ -2802,6 +2806,10 @@
 .embeds-rail__hint { margin: 0; font-size: 0.75rem; line-height: 1.5; color: var(--text-soft); }
 
 .profile-copy-row .app-btn { min-width: 4.9rem; white-space: nowrap; }
+/* A copy button whose label swaps to "Copied" keeps one width through the
+   swap so the snippet field beside it does not shrink while the confirmation
+   shows. Buttons that always read "Copy" keep their natural width. */
+.profile-copy-row > .profile-copy-row__copy { min-width: 5rem; }
 
 @media (max-width: 760px) {
   .embeds-layout { grid-template-columns: 1fr; }

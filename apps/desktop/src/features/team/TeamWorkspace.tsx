@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import type { AuthState } from "../auth/AuthContext";
+import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import TeamDashboardsView from "./TeamDashboardsView";
 import TeamProjectsView, { type TeamProjectDraft } from "./TeamProjectsView";
 import type { PendingTeamInvite } from "./teamInviteDeepLinks";
@@ -111,8 +112,7 @@ export function TeamWorkspace({
   const [addTab, setAddTab] = useState<"create" | "join">("create");
   const [teamName, setTeamName] = useState("");
   const [inviteKey, setInviteKey] = useState("");
-  const [copiedKey, setCopiedKey] = useState<"link" | "code" | null>(null);
-  const copyTimerRef = useRef<number | null>(null);
+  const { copiedKey, showCopied } = useCopyFeedback<"link" | "code">();
   const addSubmittedRef = useRef(false);
   const inviteRequestedRef = useRef(false);
 
@@ -194,15 +194,9 @@ export function TeamWorkspace({
     setInviteKey("");
   }, [teamActionError, teamActionLoading, teams]);
 
-  useEffect(() => () => {
-    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
-  }, []);
-
   const copyValue = (key: "link" | "code", value: string) => {
     void onCopyInvite(value);
-    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
-    setCopiedKey(key);
-    copyTimerRef.current = window.setTimeout(() => setCopiedKey(null), 1500);
+    showCopied(key);
   };
 
   const submitCreateTeam = () => {

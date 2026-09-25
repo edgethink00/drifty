@@ -9,6 +9,7 @@ import {
   type DeveloperToolsClient,
   type DeveloperToolsStatus,
 } from "../../lib/api/developerToolsClient";
+import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import type { TranslationKey } from "../localization/translations";
@@ -92,8 +93,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
   const [busy, setBusy] = useState<{ artifact: ArtifactKey; operation: Operation } | null>(null);
   const [selectedSkillTarget, setSelectedSkillTarget] = useState<DeveloperSkillTarget>("codex");
   const [error, setError] = useState<string | null>(null);
-  const [copiedValue, setCopiedValue] = useState<string | null>(null);
-  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { copiedKey: copiedValue, showCopied } = useCopyFeedback<string>();
 
   const refresh = useCallback(async () => {
     if (!client.isAvailable()) {
@@ -111,10 +111,6 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  useEffect(() => () => {
-    if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
-  }, []);
 
   const run = useCallback(async (artifact: ArtifactKey, operation: Operation) => {
     setBusy({ artifact, operation });
@@ -136,13 +132,11 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
   const copy = useCallback(async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      setCopiedValue(value);
-      if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
-      copyResetTimer.current = setTimeout(() => setCopiedValue(null), 1800);
+      showCopied(value);
     } catch {
       setError(t("settings.developer.copyError"));
     }
-  }, [t]);
+  }, [showCopied, t]);
 
   const cliStatus = status?.cli;
   const selectedTarget = SKILL_TARGETS.find((target) => target.id === selectedSkillTarget) ?? SKILL_TARGETS[0];

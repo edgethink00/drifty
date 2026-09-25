@@ -60,9 +60,17 @@ export function CloudTrialStartedNotice({
 }: CloudTrialStartedNoticeProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [isTimerPaused, setIsTimerPaused] = useState(false);
+  // Mirrors isTimerPaused synchronously: hover and focus can both arrive
+  // before React re-renders, and a stale "not paused" read would subtract the
+  // same elapsed time twice from the remaining countdown.
+  const isTimerPausedRef = useRef(false);
   const timeoutIdRef = useRef<number | null>(null);
   const timerStartedAtRef = useRef(Date.now());
   const remainingDismissMsRef = useRef(CLOUD_TRIAL_STARTED_NOTICE_AUTO_DISMISS_MS);
+  // Pointer hover and keyboard focus both hold the notice open; it resumes
+  // only once neither is inside it, so a keyboard user reaching the action
+  // button does not lose the notice mid-read.
+  const pauseSourcesRef = useRef({ hover: false, focus: false });
 
   const clearDismissTimer = useCallback(() => {
     if (timeoutIdRef.current === null) return;
@@ -71,17 +79,28 @@ export function CloudTrialStartedNotice({
   }, []);
 
   const pauseDismissTimer = useCallback(() => {
-    if (isTimerPaused) return;
+    if (isTimerPausedRef.current) return;
 
+    isTimerPausedRef.current = true;
     clearDismissTimer();
     remainingDismissMsRef.current = Math.max(0, remainingDismissMsRef.current - (Date.now() - timerStartedAtRef.current));
     setIsTimerPaused(true);
-  }, [clearDismissTimer, isTimerPaused]);
+  }, [clearDismissTimer]);
 
   const resumeDismissTimer = useCallback(() => {
-    if (!isTimerPaused) return;
+    if (!isTimerPausedRef.current) return;
+    isTimerPausedRef.current = false;
     setIsTimerPaused(false);
-  }, [isTimerPaused]);
+  }, []);
+
+  const setPauseSource = useCallback((source: "hover" | "focus", active: boolean) => {
+    pauseSourcesRef.current = { ...pauseSourcesRef.current, [source]: active };
+    if (active) {
+      pauseDismissTimer();
+      return;
+    }
+    if (!pauseSourcesRef.current.hover && !pauseSourcesRef.current.focus) resumeDismissTimer();
+  }, [pauseDismissTimer, resumeDismissTimer]);
 
   useEffect(() => {
     if (isTimerPaused) return undefined;
@@ -100,8 +119,17 @@ export function CloudTrialStartedNotice({
       className={isTimerPaused ? "cloud-trial-started-notice is-paused" : "cloud-trial-started-notice"}
       role="status"
       aria-label={t(isPromotion ? "billing.trialNotice.promoAria" : "billing.trialNotice.trialAria")}
-      onMouseEnter={pauseDismissTimer}
-      onMouseLeave={resumeDismissTimer}
+      onMouseEnter={() => setPauseSource("hover", true)}
+      onMouseLeave={() => setPauseSource("hover", false)}
+      onFocus={() => setPauseSource("focus", true)}
+      onBlur={(event) => {
+        // Focus moving between the notice's own buttons keeps it held.
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        // Switching to another app blurs the focused button without moving
+        // focus out of the notice; it returns there when the window does.
+        if (!document.hasFocus()) return;
+        setPauseSource("focus", false);
+      }}
     >
       <span className="cloud-trial-started-notice__signal" aria-hidden="true">
         <span className="cloud-trial-started-notice__signal-dot" />

@@ -1342,7 +1342,14 @@
 .weekly-productivity-trend-card__head .insight-section__label {
   margin-bottom: 0;
   letter-spacing: 0.07em;
-  white-space: nowrap;
+  /* The title is kept short ("Weekly" / "주간 분석") so it shares one row with
+     the three-mode toggle. If a longer translation ever does not fit, it
+     folds between words instead of being clipped mid-word; two lines at this
+     size stay within the toggle's height, so the card keeps the height its
+     loading skeleton reserves and nothing below it moves when the body loads. */
+  white-space: normal;
+  overflow-wrap: normal;
+  line-height: 1;
   overflow: hidden;
 }
 

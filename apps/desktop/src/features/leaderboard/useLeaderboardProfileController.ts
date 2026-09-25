@@ -15,11 +15,12 @@ function captureLeaderboardActionOncePerDay(properties: LeaderboardActionPropert
   capturePostHogDailyEvent("leaderboard_action", toDailyDedupKey(properties), properties);
 }
 import { getLogicalDayRange, logicalTodayIsoDate, toErrorMessage } from "../../lib/formatting";
+import { COPY_FEEDBACK_VISIBLE_MS } from "../../lib/useCopyFeedback";
 import type { AuthState } from "../auth/AuthContext";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "../profile/ProfileModals";
 import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
-import { useLocalization } from "../localization/LocalizationContext";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
 import type { ClassificationAvailabilityReason, ClassificationAvailabilityState } from "../classification/classificationAvailability";
 import {
@@ -83,6 +84,12 @@ type UseLeaderboardProfileControllerInput = {
   readonly startOfDayMinutes: number;
   readonly user: AuthState["user"];
   readonly onAuthRequired: () => void;
+  /**
+   * The app's translator. App calls this hook in its own body, above the
+   * LocalizationProvider it renders, so the context there is the English
+   * default; without this every message below stayed English in Korean.
+   */
+  readonly translate?: LocalizationController["t"];
 };
 
 type UseLeaderboardProfileControllerResult = {
@@ -396,8 +403,10 @@ export function useLeaderboardProfileController({
   startOfDayMinutes,
   user,
   onAuthRequired,
+  translate,
 }: UseLeaderboardProfileControllerInput): UseLeaderboardProfileControllerResult {
-  const { t } = useLocalization();
+  const contextLocalization = useLocalization();
+  const t = translate ?? contextLocalization.t;
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [ownLeaderboardEntry, setOwnLeaderboardEntry] = useState<OwnLeaderboardEntry | null>(null);
   const [activeLeaderboardPeriod, setActiveLeaderboardPeriod] = useState<LeaderboardPeriod>(DEFAULT_LEADERBOARD_PERIOD);
@@ -415,6 +424,7 @@ export function useLeaderboardProfileController({
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileShareMessage, setProfileShareMessage] = useState<string | null>(null);
+  const profileShareMessageTimerRef = useRef<number | null>(null);
   const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
   const [selectedLeaderboardRow, setSelectedLeaderboardRow] = useState<LeaderboardRow | null>(null);
   const [selectedPublicProfile, setSelectedPublicProfile] = useState<PublicProfile | null>(null);
@@ -1412,20 +1422,33 @@ export function useLeaderboardProfileController({
   }, []);
 
   const handleShareLeaderboardProfile = useCallback(async () => {
+    // Every click restarts the message window so an earlier confirmation's timer
+    // cannot erase a newer message (or an error) partway through.
+    if (profileShareMessageTimerRef.current !== null) {
+      window.clearTimeout(profileShareMessageTimerRef.current);
+      profileShareMessageTimerRef.current = null;
+    }
     const publicId = profile?.public_id?.trim();
     if (!publicId) {
-      setProfileShareMessage("Save or join first to create your public profile link.");
+      setProfileShareMessage(t("leaderboard.share.needsProfile"));
       return;
     }
 
     try {
       await copyTextToClipboard(buildPublicProfileUrl(publicId));
-      setProfileShareMessage("Copied to clipboard.");
-      window.setTimeout(() => setProfileShareMessage(null), 2200);
+      setProfileShareMessage(t("leaderboard.share.copied"));
+      profileShareMessageTimerRef.current = window.setTimeout(() => {
+        profileShareMessageTimerRef.current = null;
+        setProfileShareMessage(null);
+      }, COPY_FEEDBACK_VISIBLE_MS);
     } catch (nextError) {
       setProfileShareMessage(toErrorMessage(nextError));
     }
-  }, [profile?.public_id]);
+  }, [profile?.public_id, t]);
+
+  useEffect(() => () => {
+    if (profileShareMessageTimerRef.current !== null) window.clearTimeout(profileShareMessageTimerRef.current);
+  }, []);
 
   const totalLeaderboardFocusSeconds = useMemo(
     () => leaderboardRows.reduce((sum, row) => sum + Math.max(0, row.focus_seconds_7d), 0),

@@ -48,6 +48,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
   const [deleting, setDeleting] = useState(false);
   const [done, setDone] = useState<DeleteHistoryRangeResult | null>(null);
   const armTimer = useRef<number | null>(null);
+  const doneButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const bounds = rangeBounds(preset, customStart, customEnd);
 
@@ -62,6 +63,13 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
   useEffect(() => {
     setArmed(false);
   }, [preset, customStart, customEnd]);
+
+  // The delete button unmounts with the form, so hand focus to the result's
+  // own action (once the post-delete refresh has finished and it is enabled)
+  // instead of dropping it on the page behind the dialog.
+  useEffect(() => {
+    if (done && !deleting) doneButtonRef.current?.focus();
+  }, [done, deleting]);
 
   const canDelete = Boolean(bounds) && !deleting && !done;
   const needsArm = preset === "all";
@@ -85,9 +93,13 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
       const result = await trackerClient.deleteHistoryRange({ ...bounds, scopes: DELETE_SCOPES, dryRun: false });
       setDone(result);
       await onDeleted();
-      window.setTimeout(onClose, 1600);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+    } finally {
+      // The result stays until the user closes it: this is an irreversible
+      // action, and its counts are the only confirmation of what was removed.
+      // Closing stays locked until the refresh settles so its error, if any,
+      // lands in a dialog that is still open.
       setDeleting(false);
     }
   };
@@ -102,7 +114,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
         role="dialog"
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton label={t("settings.deleteHistory.cancel")} onClick={onClose} />
+        <ModalCloseButton disabled={deleting} label={t("settings.deleteHistory.cancel")} onClick={onClose} />
         <div className="modal-head">
           <div className="modal-head__copy">
             <h2 id="delete-history-modal-title">{t("settings.deleteHistory.title")}</h2>
@@ -116,9 +128,16 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
         {error ? <p className="auth-modal__error" role="alert">{localizeSettingsError(error, effectiveLanguage, t)}</p> : null}
 
         {done ? (
-          <p className="auth-modal__success" role="status">
-            {t("settings.deleteHistory.deleted", { summary: summarizeCounts(done, effectiveLanguage, t) })}
-          </p>
+          <>
+            <p className="auth-modal__success" role="status">
+              {t("settings.deleteHistory.deleted", { summary: summarizeCounts(done, effectiveLanguage, t) })}
+            </p>
+            <div className="modal-foot">
+              <button ref={doneButtonRef} className="modal-btn modal-btn--primary" disabled={deleting} type="button" onClick={onClose}>
+                {t("settings.deleteHistory.done")}
+              </button>
+            </div>
+          </>
         ) : (
           <>
             <div className="delete-history-modal__range-row">

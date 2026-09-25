@@ -54,6 +54,14 @@ export function FocusDriftSummaryTiles({
   startOfDayMinutes = 0,
 }: FocusDriftSummaryTilesProps) {
   const { effectiveLanguage, t } = useLocalization();
+  // A day with tracked time but nothing classified has no drift reading yet,
+  // which is different from a day that was classified and had no drift. A day
+  // with nothing tracked keeps the tile hidden, as before: there is no
+  // measurement to report either way. (chart.hasData counts classified time
+  // only, so it cannot tell these apart.)
+  const trackedChartSeconds = chart.points.reduce((sum, point) => sum + point.trackedSeconds, 0);
+  const classifiedChartSeconds = chart.points.reduce((sum, point) => sum + point.classifiedSeconds, 0);
+  const driftAwaitsClassification = classifiedChartSeconds === 0;
   return (
     <div className="kpi-row kpi-row--insights insight-summary" aria-label={t("dashboard.today.insightSummary")}>
       <MetricTile className="insight-summary__tile insight-summary__tile--tracked" label={t("dashboard.today.tracked")} value={effectiveLanguage === "ko" ? formatLocalizedDuration(totalSeconds, effectiveLanguage) : formatDuration(totalSeconds)} detail={t("dashboard.today.activeHours", { duration: effectiveLanguage === "ko" ? `${activeHourCount}시간` : `${activeHourCount}h` })} />
@@ -61,7 +69,13 @@ export function FocusDriftSummaryTiles({
       <MetricTile className="insight-summary__tile insight-summary__tile--peak" label={t("dashboard.today.peak")} value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(peakTrackedSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "—" : "No peak"} />
       <MetricTile className="insight-summary__tile insight-summary__tile--apps" label={t("dashboard.today.apps")} value={String(uniqueAppsCount)} detail={topAppLabel} />
       <MetricTile className="insight-summary__tile insight-summary__tile--focus" label={t("dashboard.today.focusScore")} value={`${chart.focusConsistency}%`} detail={t("dashboard.today.score")} />
-      {chart.peakDriftPoint ? <MetricTile className="insight-summary__tile insight-summary__tile--drift" label={t("dashboard.today.driftPeak")} value={effectiveLanguage === "ko" ? formatLocalizedQuarterHourLabel(chart.peakDriftPoint.bucketStartMinute + startOfDayMinutes, effectiveLanguage) : chart.peakDriftPoint.label} detail={t("dashboard.today.peakDetail")} /> : null}
+      {/* Same clock format as the Peak tile beside it; the chart's 24-hour bucket label is an axis label, not a display time.
+          Without drift the tile keeps its place and uses the Peak tile's empty form. */}
+      {chart.peakDriftPoint ? (
+        <MetricTile className="insight-summary__tile insight-summary__tile--drift" label={t("dashboard.today.driftPeak")} value={formatLocalizedQuarterHourLabel(chart.peakDriftPoint.bucketStartMinute + startOfDayMinutes, effectiveLanguage)} detail={t("dashboard.today.peakDetail")} />
+      ) : trackedChartSeconds > 0 ? (
+        <MetricTile className="insight-summary__tile insight-summary__tile--drift" label={t("dashboard.today.driftPeak")} value={"\u2014"} detail={driftAwaitsClassification ? t("dashboard.today.driftNotClassified") : t("dashboard.today.noDrift")} />
+      ) : null}
     </div>
   );
 }
@@ -285,8 +299,8 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                 <rect className="focus-drift__line-target" x={FOCUS_DRIFT_CHART_BOUNDS.left} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left} height={100 - FOCUS_DRIFT_CHART_BOUNDS.top} aria-label={t("dashboard.today.focusDriftHoverTarget")} onMouseEnter={updateLineHover} onMouseMove={updateLineHover} onMouseLeave={clearHover} />
                 {hoverPoints.map((point) => (
                   <g key={point.id}>
-                    <circle className="focus-drift__target focus-drift__target--focus" cx={point.x} cy={point.focusY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "focus", effectiveLanguage)} onFocus={(event) => updateKeyboardHover("focus", point, event)} onBlur={clearHover} />
-                    <circle className="focus-drift__target focus-drift__target--drift" cx={point.x} cy={point.driftY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "drift", effectiveLanguage)} onFocus={(event) => updateKeyboardHover("drift", point, event)} onBlur={clearHover} />
+                    <circle className="focus-drift__target focus-drift__target--focus" cx={point.x} cy={point.focusY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "focus", effectiveLanguage, startOfDayMinutes)} onFocus={(event) => updateKeyboardHover("focus", point, event)} onBlur={clearHover} />
+                    <circle className="focus-drift__target focus-drift__target--drift" cx={point.x} cy={point.driftY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "drift", effectiveLanguage, startOfDayMinutes)} onFocus={(event) => updateKeyboardHover("drift", point, event)} onBlur={clearHover} />
                   </g>
                 ))}
               </svg>

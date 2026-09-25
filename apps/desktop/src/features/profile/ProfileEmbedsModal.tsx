@@ -14,6 +14,7 @@ import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from ".
 import { buildEmbedGroups, SnippetCopyRow, summarizeDailyProductivity } from "./ProfileEmbedGroups";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useCopyFeedback } from "../../lib/useCopyFeedback";
 
 export type ProfileEmbedFormat = "badge" | "card" | "chart" | "data";
 
@@ -54,7 +55,7 @@ export function ProfileEmbedsModal({
   const [activeFormat, setActiveFormat] = useState<ProfileEmbedFormat>(initialFormat);
   const [embedTheme, setEmbedTheme] = useState<BadgeThemeOption>("light");
   const [cardRange, setCardRange] = useState<CardRangeOption>(7);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const { copiedKey, showCopied, clearCopied } = useCopyFeedback<string>();
 
   useModalDismiss(onClose);
 
@@ -98,12 +99,11 @@ export function ProfileEmbedsModal({
   const copy = async (key: string, text: string) => {
     try {
       await copyTextToClipboard(text);
-      setCopiedKey(key);
-      window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1600);
+      showCopied(key);
     } catch {
       // Clipboard failures are non-fatal and handled locally so this
       // fire-and-forget path does not emit a noisy global rejection.
-      setCopiedKey(null);
+      clearCopied();
     }
   };
 

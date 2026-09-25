@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import type { ActivitySegment } from "@drifty/domain";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { FocusDriftSection } from "./FocusDriftSection";
+import { FocusDriftSection, FocusDriftSummaryTiles } from "./FocusDriftSection";
 import {
   applyFocusDriftReplayReveal,
   buildFocusDriftChart,
@@ -41,7 +41,140 @@ function renderFocusDriftSection(chart: ReturnType<typeof buildFocusDriftChart>,
   );
 }
 
+// A drift stretch after midnight on a logical day that starts at 04:00: the
+// bucket sits 22 hours into the logical day but happens at 02:00 on the clock.
+const LATE_START_OF_DAY_MINUTES = 4 * 60;
+
+function lateNightDriftSegment(): ActivitySegment {
+  return {
+    id: "late-night-drift",
+    startedAt: "2026-06-30T02:00:00",
+    endedAt: "2026-06-30T02:30:00",
+    durationSeconds: 30 * 60,
+    appName: "Safari",
+    bundleId: "com.apple.Safari",
+    windowTitle: "Late feed",
+    platform: "macos",
+    source: "manual",
+    classification: {
+      category: "social_media",
+      productivity: "drift",
+      source: "manual",
+      confidence: 1,
+    },
+  };
+}
+
+function unclassifiedSegment(): ActivitySegment {
+  return {
+    id: "unclassified-work",
+    startedAt: "2026-06-29T10:00:00",
+    endedAt: "2026-06-29T10:30:00",
+    durationSeconds: 30 * 60,
+    appName: "Unlabeled Tool",
+    bundleId: "com.example.unlabeled-tool",
+    windowTitle: "Untitled",
+    platform: "macos",
+    source: "manual",
+  };
+}
+
+function renderDriftSummary(language: DisplayLanguage, segments: ActivitySegment[] = [lateNightDriftSegment()]) {
+  const chart = buildFocusDriftChart(segments, "2026-06-29", undefined, null, LATE_START_OF_DAY_MINUTES);
+  const view = render(
+    <LocalizationTestProvider language={language}>
+      <FocusDriftSummaryTiles
+        activeHourCount={1}
+        averageSessionMinutes={30}
+        chart={chart}
+        peakTrackedSeconds={30 * 60}
+        peakWindowLabel="—"
+        sessionCount={1}
+        topAppLabel="Safari"
+        totalSeconds={30 * 60}
+        uniqueAppsCount={1}
+        startOfDayMinutes={LATE_START_OF_DAY_MINUTES}
+      />
+    </LocalizationTestProvider>,
+  );
+  const tile = view.container.querySelector<HTMLElement>(".insight-summary__tile--drift");
+  if (!tile) throw new Error("Drift tile did not render");
+  return { chart, tile };
+}
+
 describe("FocusDriftSection", () => {
+  it("shows the drift peak on the wall clock in the same format as the Peak tile", () => {
+    const { chart, tile } = renderDriftSummary("en");
+
+    expect(chart.peakDriftPoint?.bucketStartMinute).toBe(22 * 60);
+    expect(within(tile).getByText("2:00 AM")).toBeTruthy();
+    // The chart's 24-hour bucket key is not a display time.
+    expect(within(tile).queryByText("02:00")).toBeNull();
+  });
+
+  it("keeps the Korean drift peak on the same wall clock", () => {
+    const { tile } = renderDriftSummary("ko");
+
+    // The exact Korean day-period text comes from the runtime's Intl data, so
+    // assert the clock time itself: 2:00, not the 24-hour bucket key and not
+    // the logical minute without the day-start offset (22:00 / 10:00).
+    const value = tile.textContent ?? "";
+    expect(value).toMatch(/(?:^|\D)2:00/u);
+    expect(value).not.toMatch(/02:00|10:00|22:00/u);
+  });
+
+  it("keeps the Drift tile in its empty form on a classified day without drift", () => {
+    // The tile once named the first focused window as the drift peak.
+    const { chart, tile } = renderDriftSummary("en", [focusSegment()]);
+
+    expect(chart.peakDriftPoint).toBeNull();
+    expect(within(tile).getByText("\u2014")).toBeTruthy();
+    expect(within(tile).getByText("No drift")).toBeTruthy();
+    expect(within(tile).queryByText("peak")).toBeNull();
+  });
+
+  it("tells a day that is not classified yet apart from a day without drift", () => {
+    const { chart, tile } = renderDriftSummary("ko", [unclassifiedSegment()]);
+
+    expect(chart.peakDriftPoint).toBeNull();
+    expect(within(tile).getByText("분류 전")).toBeTruthy();
+    expect(within(tile).queryByText("딴짓 없음")).toBeNull();
+  });
+
+  it("keeps the Drift tile hidden on a day with nothing tracked", () => {
+    const chart = buildFocusDriftChart([], "2026-06-29", undefined, null, LATE_START_OF_DAY_MINUTES);
+    const { container } = render(
+      <LocalizationTestProvider language="en">
+        <FocusDriftSummaryTiles
+          activeHourCount={0}
+          averageSessionMinutes={0}
+          chart={chart}
+          peakTrackedSeconds={0}
+          peakWindowLabel="—"
+          sessionCount={0}
+          topAppLabel="—"
+          totalSeconds={0}
+          uniqueAppsCount={0}
+          startOfDayMinutes={LATE_START_OF_DAY_MINUTES}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    expect(container.querySelector(".insight-summary__tile--drift")).toBeNull();
+  });
+
+  it("names chart points on the wall clock for keyboard and screen reader users", () => {
+    const chart = buildFocusDriftChart([lateNightDriftSegment()], "2026-06-29", undefined, null, LATE_START_OF_DAY_MINUTES);
+    render(
+      <LocalizationTestProvider language="en">
+        <FocusDriftSection appIcons={{}} chart={chart} startOfDayMinutes={LATE_START_OF_DAY_MINUTES} />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByRole("img", { name: /^Drift point for 2:00 AM\./ })).toBeTruthy();
+    expect(screen.queryByRole("img", { name: /point for 02:00/ })).toBeNull();
+  });
+
   it("renders the chart title and legend in natural Korean", () => {
     const chart = buildFocusDriftChart([focusSegment()], "2026-06-29");
     renderFocusDriftSection(chart, "ko");

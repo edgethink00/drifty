@@ -2335,6 +2335,7 @@ export default function App() {
     startOfDayMinutes,
     user,
     onAuthRequired: requestLeaderboardAuth,
+    translate: localization.t,
   });
   const focusCard = useFocusCard({
     windowEndDay: leaderboardWindowEndDay,
