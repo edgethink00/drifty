@@ -613,9 +613,10 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         domains: &[String],
+        cached_only: bool,
     ) -> Result<Value, TrackerError> {
         let mut icons = serde_json::Map::new();
-        for (domain, icon) in resolve_site_icons_batch(app, domains)? {
+        for (domain, icon) in resolve_site_icons_batch(app, domains, cached_only)? {
             icons.insert(domain, icon.map(Value::String).unwrap_or(Value::Null));
         }
         Ok(Value::Object(icons))

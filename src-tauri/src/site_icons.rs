@@ -323,11 +323,17 @@ fn resolve_site_icon_data_in(
 /// Cache hits are free, so they are never subject to the batch limit; only
 /// network work is capped and parallelized. Domains beyond the limit are
 /// returned unresolved and picked up by a later pass.
+///
+/// With `cached_only`, the batch settles only what the on-disk cache already
+/// knows (hits and recorded misses) and omits every domain that would need a
+/// fetch. It never reaches the network, so it is safe for prefetching a view
+/// the user has not opened yet.
 pub(crate) fn resolve_site_icons_batch(
     app: &AppHandle,
     raw_domains: &[String],
+    cached_only: bool,
 ) -> Result<Vec<(String, Option<String>)>, TrackerError> {
-    resolve_site_icons_batch_in(&cache_generation_dir(app), raw_domains)
+    resolve_site_icons_batch_in(&cache_generation_dir(app), raw_domains, cached_only)
 }
 
 /// A domain the batch did not settle this pass is **omitted** from the result
@@ -337,7 +343,22 @@ pub(crate) fn resolve_site_icons_batch(
 fn resolve_site_icons_batch_in(
     cache_dir: &Path,
     raw_domains: &[String],
+    cached_only: bool,
 ) -> Result<Vec<(String, Option<String>)>, TrackerError> {
+    resolve_site_icons_batch_with(cache_dir, raw_domains, cached_only, &fetch_site_icon_bytes)
+}
+
+/// The batch body, with the network fetch injected so tests can prove which
+/// paths reach it.
+fn resolve_site_icons_batch_with<F>(
+    cache_dir: &Path,
+    raw_domains: &[String],
+    cached_only: bool,
+    fetch: &F,
+) -> Result<Vec<(String, Option<String>)>, TrackerError>
+where
+    F: Fn(&str) -> Result<SiteIconFetch, TrackerError> + Sync,
+{
     fs::create_dir_all(cache_dir).map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
 
     let mut resolved: Vec<(String, Option<String>)> = Vec::with_capacity(raw_domains.len());
@@ -355,6 +376,10 @@ fn resolve_site_icons_batch_in(
                 raw_domain.clone(),
                 if lookup == SiteIconLookup::Hit { value } else { None },
             ));
+            continue;
+        }
+        if cached_only {
+            // Would need a fetch: omitted so a normal request resolves it later.
             continue;
         }
         // Collapse duplicates so one batch never fetches a domain twice.
@@ -381,7 +406,7 @@ fn resolve_site_icons_batch_in(
                 .iter()
                 .map(|(raw_domain, domain)| {
                     scope.spawn(move || {
-                        (raw_domain.clone(), domain.clone(), fetch_site_icon_bytes(domain))
+                        (raw_domain.clone(), domain.clone(), fetch(domain))
                     })
                 })
                 .collect();
@@ -757,13 +782,63 @@ mod tests {
             fs::write(&data_url, format!("data:image/png;base64,{domain}")).expect("seed");
         }
 
-        let resolved = resolve_site_icons_batch_in(cache_dir.path(), &domains).expect("resolve");
+        let resolved =
+            resolve_site_icons_batch_in(cache_dir.path(), &domains, false).expect("resolve");
 
         assert_eq!(resolved.len(), count);
         assert!(
             resolved.iter().all(|(_, icon)| icon.is_some()),
             "cache hits are free and must never be limited by the fetch batch size"
         );
+    }
+
+    #[test]
+    fn cached_only_batch_settles_cache_entries_and_never_fetches() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let cache_dir = tempfile::tempdir().expect("temp dir");
+        let hit = "cached-hit.com".to_string();
+        let miss = "cached-miss.com".to_string();
+        let uncached = "not-cached-yet.com".to_string();
+        let (hit_data_url, _) = cached_paths(cache_dir.path(), &hit);
+        fs::write(&hit_data_url, "data:image/png;base64,hit").expect("seed hit");
+        let (_, miss_marker) = cached_paths(cache_dir.path(), &miss);
+        fs::write(&miss_marker, []).expect("seed miss");
+
+        let fetches = AtomicUsize::new(0);
+        let counting_fetch = |_: &str| -> Result<SiteIconFetch, TrackerError> {
+            fetches.fetch_add(1, Ordering::SeqCst);
+            Ok(SiteIconFetch::ConfirmedMiss)
+        };
+        let domains = vec![hit.clone(), miss.clone(), uncached.clone()];
+
+        let resolved =
+            resolve_site_icons_batch_with(cache_dir.path(), &domains, true, &counting_fetch)
+                .expect("resolve cached only");
+
+        assert_eq!(
+            resolved,
+            vec![
+                (hit.clone(), Some("data:image/png;base64,hit".to_string())),
+                (miss.clone(), None),
+            ],
+            "a cached hit and a recorded miss are settled; the uncached domain is omitted"
+        );
+        assert_eq!(
+            fetches.load(Ordering::SeqCst),
+            0,
+            "cached-only must not fetch"
+        );
+        let (uncached_data_url, uncached_miss) = cached_paths(cache_dir.path(), &uncached);
+        assert!(!uncached_data_url.exists() && !uncached_miss.exists());
+
+        // The same batch without the flag does reach the fetcher for the
+        // uncached domain, so the zero count above is meaningful.
+        let resolved =
+            resolve_site_icons_batch_with(cache_dir.path(), &domains, false, &counting_fetch)
+                .expect("resolve normally");
+        assert_eq!(fetches.load(Ordering::SeqCst), 1);
+        assert!(resolved.contains(&(uncached, None)));
     }
 
     /// Measures the batch against a realistic cold-cache load. A 90-day
@@ -778,7 +853,8 @@ mod tests {
             .collect();
 
         let started = std::time::Instant::now();
-        let resolved = resolve_site_icons_batch_in(cache_dir.path(), &domains).expect("resolve");
+        let resolved =
+            resolve_site_icons_batch_in(cache_dir.path(), &domains, false).expect("resolve");
         let elapsed = started.elapsed();
 
         // Only the capped slice is settled in one pass; the rest are omitted
@@ -811,7 +887,8 @@ mod tests {
             .map(|i| format!("localhost{i}"))
             .collect();
 
-        let resolved = resolve_site_icons_batch_in(cache_dir.path(), &domains).expect("resolve");
+        let resolved =
+            resolve_site_icons_batch_in(cache_dir.path(), &domains, false).expect("resolve");
 
         // Rejected domains are settled, so they are all reported.
         assert_eq!(resolved.len(), domains.len());
@@ -836,7 +913,8 @@ mod tests {
             (0..(SITE_ICON_FETCH_BATCH_LIMIT * 2)).map(|i| format!("deferred-probe-{i}.com")),
         );
 
-        let resolved = resolve_site_icons_batch_in(cache_dir.path(), &domains).expect("resolve");
+        let resolved =
+            resolve_site_icons_batch_in(cache_dir.path(), &domains, false).expect("resolve");
         let reported: Vec<&String> = resolved.iter().map(|(domain, _)| domain).collect();
 
         // The cache hit is always reported.
@@ -868,7 +946,8 @@ mod tests {
         ];
 
         let started = std::time::Instant::now();
-        let resolved = resolve_site_icons_batch_in(cache_dir.path(), &domains).expect("resolve");
+        let resolved =
+            resolve_site_icons_batch_in(cache_dir.path(), &domains, false).expect("resolve");
         let elapsed = started.elapsed();
 
         assert_eq!(resolved.len(), domains.len());
@@ -890,7 +969,8 @@ mod tests {
         );
 
         // Second pass is served entirely from disk.
-        let cached = resolve_site_icons_batch_in(cache_dir.path(), &domains).expect("resolve");
+        let cached =
+            resolve_site_icons_batch_in(cache_dir.path(), &domains, false).expect("resolve");
         assert_eq!(cached, resolved, "the second pass must match the first");
     }
 

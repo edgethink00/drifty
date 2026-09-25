@@ -293,9 +293,9 @@ export const trackerClient: TrackerApi = {
     if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) return previewAppIcons(apps);
     return {};
   },
-  async getSiteIcons(domains: string[]) {
+  async getSiteIcons(domains: string[], options?: { cachedOnly?: boolean }) {
     if (shouldUsePreviewData()) return {};
-    const result = await safeInvoke("tracker_get_site_icons", { query: { domains } });
+    const result = await safeInvoke("tracker_get_site_icons", { query: { domains, cachedOnly: options?.cachedOnly === true } });
     return result ?? {};
   },
   async clearIconCaches(): Promise<{ reclaimedBytes: number }> {

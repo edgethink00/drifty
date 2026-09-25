@@ -2567,6 +2567,7 @@ export default function App() {
   const driftAlarmSourceSegmentsRef = useRef<Map<string, ActivitySegment>>(new Map());
   const appIconRequestsInFlightRef = useRef<Set<string>>(new Set());
   const siteIconRequestsInFlightRef = useRef<Set<string>>(new Set());
+  const siteIconCachedOnlyRequestsInFlightRef = useRef<Set<string>>(new Set());
   const driftAlarmRequestInFlightRef = useRef(false);
   const liveDriftAlarmRefreshInFlightRef = useRef(false);
   const liveDriftAlarmAiRequestInFlightRef = useRef<string | null>(null);
@@ -2643,31 +2644,38 @@ export default function App() {
   // Site icons follow the same path as app icons: ask the native layer only
   // for domains that are not already resolved, and let it serve them from the
   // on-disk cache. Resolved misses stay in the map so they are not retried.
-  const loadMissingSiteIconDomains = useCallback((domains: readonly string[]) => {
+  // A cached-only request settles on-disk cache entries without any network
+  // fetch and omits the rest. It keeps its own in-flight set so it never holds
+  // back a normal request for the domains it is about to omit.
+  const loadMissingSiteIconDomains = useCallback((domains: readonly string[], options?: { readonly cachedOnly?: boolean }) => {
+    const cachedOnly = options?.cachedOnly === true;
+    const inFlight = cachedOnly ? siteIconCachedOnlyRequestsInFlightRef.current : siteIconRequestsInFlightRef.current;
     void (async () => {
       const missingDomains = domains.filter((domain) => {
-        if (siteIconRequestsInFlightRef.current.has(domain)) return false;
-        siteIconRequestsInFlightRef.current.add(domain);
+        if (siteIconRequestsInFlightRef.current.has(domain) || inFlight.has(domain)) return false;
+        inFlight.add(domain);
         return true;
       });
       if (missingDomains.length === 0) return;
 
       try {
-        const rawIconMap = await trackerClient.getSiteIcons(missingDomains);
+        const rawIconMap = cachedOnly
+          ? await trackerClient.getSiteIcons(missingDomains, { cachedOnly: true })
+          : await trackerClient.getSiteIcons(missingDomains);
         setSiteIcons((current) => mergeSiteIconResults(current, missingDomains, rawIconMap));
       } catch (error) {
         const message = error instanceof Error ? error.message : "unknown error";
         console.warn("Failed to load site icons.", message);
       } finally {
         for (const domain of missingDomains) {
-          siteIconRequestsInFlightRef.current.delete(domain);
+          inFlight.delete(domain);
         }
       }
     })();
   }, []);
 
-  const loadMissingSiteIcons = useCallback((segmentsToInspect: readonly ActivitySegment[]) => {
-    loadMissingSiteIconDomains(collectMissingSiteIconRequests(segmentsToInspect, siteIconsRef.current));
+  const loadMissingSiteIcons = useCallback((segmentsToInspect: readonly ActivitySegment[], options?: { readonly cachedOnly?: boolean }) => {
+    loadMissingSiteIconDomains(collectMissingSiteIconRequests(segmentsToInspect, siteIconsRef.current), options);
   }, [loadMissingSiteIconDomains]);
 
   // Saved classification rules name domains directly rather than through
@@ -4304,19 +4312,21 @@ export default function App() {
       scheduleAvailableBuiltInHeuristicPersistence(materializedArchiveTimelines.classifications);
       // Resolve the week's app icons (a local lookup) with its segments so Week
       // does not swap initials for icons after its own entry request. Site
-      // icons stay on Week entry: an uncached domain is fetched from a remote
-      // favicon service, which should not happen for a view nobody opened.
+      // icons are resolved from the on-disk cache only: an uncached domain is
+      // fetched from a remote favicon service, which should not happen for a
+      // view nobody opened, so those stay omitted and Week entry requests them.
       loadMissingAppIcons({
         segments: materializedArchiveTimelines.segments,
         failureMessage: "Failed to prefetch current week app icons",
       });
+      loadMissingSiteIcons(materializedArchiveTimelines.segments, { cachedOnly: true });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
       console.warn("Failed to prefetch current week history", message);
       return false;
     }
-  }, [loadCompactHistoryRange, loadMissingAppIcons, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+  }, [loadCompactHistoryRange, loadMissingAppIcons, loadMissingSiteIcons, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
     if (liveDriftAlarmRefreshInFlightRef.current) return false;

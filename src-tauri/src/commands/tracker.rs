@@ -284,6 +284,10 @@ pub struct AppIconsQuery {
 #[serde(rename_all = "camelCase")]
 pub struct SiteIconsQuery {
     pub domains: Vec<String>,
+    /// Settle only domains already in the on-disk cache and omit the rest,
+    /// without any network fetch. Used to prefetch icons for an unopened view.
+    #[serde(default)]
+    pub cached_only: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -763,7 +767,7 @@ pub async fn tracker_get_site_icons(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .get_site_icons(&app, &query.domains)
+            .get_site_icons(&app, &query.domains, query.cached_only)
             .map_err(|error| error.to_string())
     })
     .await

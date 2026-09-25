@@ -106,7 +106,7 @@ export type TrackerCommandMap = {
   tracker_set_developer_diagnostics: { args: { query: DeveloperDiagnosticsSettings }; result: unknown };
   tracker_get_app_icons: { args: { query: { apps: AppIdentity[] } }; result: AppIconMap };
   tracker_get_site_icons: {
-    args: { query: { domains: string[] } };
+    args: { query: { domains: string[]; cachedOnly?: boolean } };
     result: Readonly<Record<string, string | null>>;
   };
   tracker_clear_icon_caches: { args: undefined; result: { reclaimedBytes: number } };
@@ -870,7 +870,12 @@ export interface TrackerApi {
   getTopSites(query: TopSitesQuery): Promise<SiteDuration[]>;
   setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings): Promise<void>;
   getAppIcons(apps: AppIdentity[]): Promise<AppIconMap>;
-  getSiteIcons(domains: string[]): Promise<Readonly<Record<string, string | null>>>;
+  /**
+   * Domains the native layer did not settle are omitted from the result.
+   * With `cachedOnly`, only on-disk cache entries are settled and nothing is
+   * fetched from the network.
+   */
+  getSiteIcons(domains: string[], options?: { cachedOnly?: boolean }): Promise<Readonly<Record<string, string | null>>>;
   clearIconCaches(): Promise<{ reclaimedBytes: number }>;
   getUnclassifiedSegments(query: UnclassifiedSegmentsQuery): Promise<ActivitySegment[]>;
   getReusableAiClassifications(inputFingerprints: string[]): Promise<Record<string, ActivityClassificationRecord>>;
