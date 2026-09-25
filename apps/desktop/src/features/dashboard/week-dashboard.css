@@ -2394,7 +2394,12 @@
   gap: 0;
   border: 0;
   box-shadow: none;
-  padding: 0;
+  /* The page head sits flush at the top of this clipped panel. Grow the panel
+     4px upward (same height below) so the head buttons' focus ring shows
+     without moving anything. */
+  height: calc(100% + 4px);
+  margin-top: -4px;
+  padding: 4px 0 0;
 }
 
 .page--week-dashboard .week-v2-calendar > .pg-head {

@@ -834,11 +834,16 @@
 }
 
 .contribution-grid-shell {
-  max-width: 100%;
+  /* The negative inline margins below widen the shell by
+     8px - edge buffer; let max-width follow so the content box is unchanged. */
+  max-width: calc(100% + 8px - var(--cadence-edge-buffer));
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 1px var(--cadence-edge-buffer) 5px 0;
+  /* Day cells show a 4px focus ring; give every edge that much room and pull
+     the shell back by the same amount so the grid stays where it was. */
+  margin: -3px calc(var(--cadence-edge-buffer) - 4px) 0 -4px;
+  padding: 4px 4px 5px;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--accent) 34%, transparent) transparent;
 }
@@ -2481,7 +2486,8 @@
 .focus-calendar__head .insight-section__label { margin: 0; }
 .focus-calendar__head > span { font-size: var(--type-setting-desc-size); color: var(--text-soft); }
 .focus-calendar .contribution-grid-shell {
-  padding-block: var(--focus-calendar-shell-padding-block-start) var(--focus-calendar-shell-padding-block-end);
+  /* +3px matches the shell's -3px top margin, so the ready height is unchanged. */
+  padding-block: calc(var(--focus-calendar-shell-padding-block-start) + 3px) var(--focus-calendar-shell-padding-block-end);
 }
 .focus-calendar .contribution-grid__layout {
   --cadence-grid-min: calc(var(--cadence-cell) * var(--cadence-week-count) + var(--cadence-gap) * (var(--cadence-week-count) - 1));

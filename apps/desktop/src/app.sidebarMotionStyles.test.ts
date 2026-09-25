@@ -170,7 +170,13 @@ describe("sidebar motion styles", () => {
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-settings-icon-align-x: 1px;");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-tracker-align-x: 1px;");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-account-align-x: 0px;");
-    expect(collapsedScrollBlock).toContain("width: 100%;");
+    // The scroll box lends 4px per side to focus rings (margin-inline -4px,
+    // padding-inline 4px), so the collapsed box is 8px wider and its content
+    // box still matches the rail.
+    const scrollBlock = cssBlock(styles, ".sidebar-scroll");
+    expect(scrollBlock).toContain("margin-inline: -4px;");
+    expect(scrollBlock).toContain("padding-inline: 4px;");
+    expect(collapsedScrollBlock).toContain("width: calc(100% + 8px);");
     expect(collapsedScrollBlock).toContain("min-width: 0;");
     expect(collapsedBrandBlock).toContain("transform: translateX(var(--sidebar-collapse-brand-align-x));");
     expect(collapsedBrandLogoBlock).not.toContain("transform:");

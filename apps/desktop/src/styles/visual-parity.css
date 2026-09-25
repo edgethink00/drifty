@@ -194,7 +194,9 @@
 }
 
 .sidebar--collapsed .sidebar-scroll {
-  width: 100%;
+  /* app-shell.css gives the scroll box 4px of focus-ring room per side;
+     widen it by the same 8px so the collapsed chips keep their width. */
+  width: calc(100% + 8px);
   min-width: 0;
 }
 
