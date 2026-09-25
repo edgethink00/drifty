@@ -2,7 +2,18 @@ export const POST_ONBOARDING_SIDEBAR_GUIDE_STORAGE_KEY_PREFIX = "drifty.postOnbo
 export const POST_ONBOARDING_SIDEBAR_GUIDE_REVIEW_QUERY_PARAM = "driftySidebarGuideReview";
 export const POST_ONBOARDING_SIDEBAR_GUIDE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
 
-export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["dashboard", "activity", "tracking", "account"] as const;
+/**
+ * Where things live, nothing more. The user lands on Today with their first
+ * result already on screen, so the tour skips the dashboard and covers only
+ * the menus they would otherwise have to discover: Activity, tracking, and
+ * the Account menu.
+ */
+export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["activity", "tracking", "account"] as const;
+
+/** Records saved before the dashboard step was dropped resume at the next step. */
+const RETIRED_GUIDE_STEPS: Readonly<Record<string, PostOnboardingSidebarGuideStep>> = {
+  dashboard: "activity",
+};
 
 export type PostOnboardingSidebarGuideStep = typeof POST_ONBOARDING_SIDEBAR_GUIDE_STEPS[number];
 export type PostOnboardingSidebarGuideStatus = "active" | "completed" | "dismissed" | "expired";
@@ -29,7 +40,9 @@ export function parsePostOnboardingSidebarGuideRecord(value: string | null): Pos
   try {
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== "object") return null;
-    const candidate = parsed as Partial<PostOnboardingSidebarGuideRecord>;
+    const stored = parsed as Partial<PostOnboardingSidebarGuideRecord>;
+    const retiredStep = typeof stored.step === "string" ? RETIRED_GUIDE_STEPS[stored.step] : undefined;
+    const candidate = retiredStep ? { ...stored, step: retiredStep } : stored;
     if (
       candidate.version !== 1
       || !POST_ONBOARDING_SIDEBAR_GUIDE_STEPS.includes(candidate.step as PostOnboardingSidebarGuideStep)
@@ -90,7 +103,7 @@ export function beginPostOnboardingSidebarGuide(
   return {
     version: 1,
     status: "active",
-    step: "dashboard",
+    step: "activity",
     startedAt: timestamp,
     updatedAt: timestamp,
   };

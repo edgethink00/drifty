@@ -10104,15 +10104,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </aside>
       )}
 
-      {shouldShowPostOnboardingSidebarGuide && postOnboardingSidebarGuideStep ? (
-        <PostOnboardingSidebarGuide
-          step={postOnboardingSidebarGuideStep}
-          navigationRefreshEnabled={canUseNavigationRefresh}
-          onAdvance={advancePostOnboardingSidebarGuide}
-          onBack={retreatPostOnboardingSidebarGuide}
-          onDismiss={dismissPostOnboardingSidebarGuide}
-        />
-      ) : null}
+      <PostOnboardingSidebarGuide
+        step={shouldShowPostOnboardingSidebarGuide ? postOnboardingSidebarGuideStep : null}
+        navigationRefreshEnabled={canUseNavigationRefresh}
+        onAdvance={advancePostOnboardingSidebarGuide}
+        onBack={retreatPostOnboardingSidebarGuide}
+        onDismiss={dismissPostOnboardingSidebarGuide}
+      />
 
       {/* ── Main content ── */}
       <MainContentShell activeTab={activeTab} loading={loading} hasLoadedOnce={hasLoadedOnce} error={error} contentRef={contentRef}>

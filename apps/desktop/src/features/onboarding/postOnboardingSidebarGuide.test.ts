@@ -14,20 +14,29 @@ import {
 const NOW = new Date("2026-09-04T08:00:00.000Z");
 
 describe("postOnboardingSidebarGuide", () => {
-  it("walks dashboard, activity, tracking, and account before completing", () => {
-    const dashboard = beginPostOnboardingSidebarGuide(null, NOW);
-    const activity = advancePostOnboardingSidebarGuide(dashboard, NOW);
+  it("walks activity, tracking, and account before completing", () => {
+    const activity = beginPostOnboardingSidebarGuide(null, NOW);
     const tracking = advancePostOnboardingSidebarGuide(activity, NOW);
     const account = advancePostOnboardingSidebarGuide(tracking, NOW);
     const completed = advancePostOnboardingSidebarGuide(account, NOW);
 
-    expect(dashboard).toMatchObject({ status: "active", step: "dashboard" });
     expect(activity).toMatchObject({ status: "active", step: "activity" });
     expect(tracking).toMatchObject({ status: "active", step: "tracking" });
     expect(account).toMatchObject({ status: "active", step: "account" });
     expect(completed).toMatchObject({ status: "completed", step: "account" });
     expect(retreatPostOnboardingSidebarGuide(tracking, NOW).step).toBe("activity");
     expect(retreatPostOnboardingSidebarGuide(account, NOW).step).toBe("tracking");
+    expect(retreatPostOnboardingSidebarGuide(activity, NOW).step).toBe("activity");
+  });
+
+  it("resumes a guide saved on the retired dashboard step at Activity", () => {
+    expect(parsePostOnboardingSidebarGuideRecord(JSON.stringify({
+      version: 1,
+      status: "active",
+      step: "dashboard",
+      startedAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+    }))).toMatchObject({ status: "active", step: "activity" });
   });
 
   it("does not reopen a guide the user already completed or dismissed", () => {
@@ -35,7 +44,7 @@ describe("postOnboardingSidebarGuide", () => {
     const dismissed = dismissPostOnboardingSidebarGuide(active, NOW);
 
     expect(beginPostOnboardingSidebarGuide(dismissed, NOW)).toBe(dismissed);
-    expect(restartPostOnboardingSidebarGuide(NOW)).toMatchObject({ status: "active", step: "dashboard" });
+    expect(restartPostOnboardingSidebarGuide(NOW)).toMatchObject({ status: "active", step: "activity" });
   });
 
   it("expires an abandoned active guide after seven days", () => {

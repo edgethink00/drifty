@@ -1152,7 +1152,7 @@ describe("App onboarding", () => {
     });
     expect(parsePostOnboardingSidebarGuideRecord(
       window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
-    )).toMatchObject({ status: "active", step: "dashboard" });
+    )).toMatchObject({ status: "active", step: "activity" });
 
     const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
     expect(storedValue).toBeTruthy();
@@ -2651,11 +2651,11 @@ describe("App onboarding", () => {
     fireEvent.click(await screen.findByRole("tab", { name: /^Previews$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^Replay tutorial$/i }));
 
-    expect(await screen.findByRole("region", { name: /start with the shape of your day/i })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: /go deeper only when you need to/i })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Settings$/ })).toBeNull();
     expect(parsePostOnboardingSidebarGuideRecord(
       window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
-    )).toMatchObject({ status: "active", step: "dashboard" });
+    )).toMatchObject({ status: "active", step: "activity" });
     expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
   });
 

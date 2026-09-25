@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 const styles = readFileSync(new URL("./post-onboarding-sidebar-guide.css", import.meta.url), "utf8");
 
 describe("post-onboarding sidebar guide styles", () => {
-  it("keeps the current section crisp while gently blurring the four surrounding regions", () => {
+  it("dims the four surrounding regions without blurring the user's day", () => {
     expect(styles).toContain('data-edge="top"');
     expect(styles).toContain('data-edge="bottom"');
-    expect(styles).toContain("backdrop-filter: blur(2px) saturate(0.76)");
+    expect(styles).not.toMatch(/\.post-onboarding-sidebar-guide__scrim\s*\{[^}]*backdrop-filter/s);
+    expect(styles).toMatch(/\.post-onboarding-sidebar-guide__scrim\s*\{[^}]*pointer-events: auto/s);
     expect(styles).not.toMatch(/\.post-onboarding-sidebar-guide__highlight\s*\{[^}]*backdrop-filter/s);
   });
 
