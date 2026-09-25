@@ -43,6 +43,37 @@ class ExeDisplayNameTests(unittest.TestCase):
     def test_keeps_non_exe_names(self) -> None:
         self.assertEqual(exe_display_name("C:\\Tools\\helper.bin"), "helper.bin")
 
+    def test_names_every_browser_executable_it_knows(self) -> None:
+        # An unnamed browser is recorded as an ordinary app ("zen"), so page
+        # capture never runs and a drift verdict closes the whole browser.
+        cases = {
+            r"C:\Program Files\Zen Browser\zen.exe": "Zen",
+            r"C:\Program Files\Ablaze Floorp\floorp.exe": "Floorp",
+            r"C:\Program Files\LibreWolf\librewolf.exe": "LibreWolf",
+            r"C:\Program Files\Waterfox\waterfox.exe": "Waterfox",
+            r"C:\Users\qa\AppData\Local\Mullvad\mullvadbrowser.exe": "Mullvad Browser",
+            r"C:\Program Files\WindowsApps\TheBrowserCompany.Arc_1.0.0.0_x64__ttt1ap7aakyb4\Arc.exe": "Arc",
+            r"C:\Users\qa\AppData\Local\Perplexity\Comet\Application\comet.exe": "Comet",
+            r"C:\Users\qa\AppData\Local\Thorium\Application\thorium.exe": "Thorium",
+            r"C:\Users\qa\AppData\Local\Yandex\YandexBrowser\Application\browser.exe": "Yandex Browser",
+            r"C:\Program Files\Mozilla Firefox\firefox.exe": "Firefox",
+            r"C:\Program Files\Firefox Developer Edition\firefox.exe": "Firefox",
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(exe_display_name(path), expected)
+
+    def test_tor_browser_is_not_firefox(self) -> None:
+        # Tor Browser ships firefox.exe; it must not reach Firefox page capture
+        # or tab closing.
+        self.assertEqual(
+            exe_display_name(r"C:\Users\qa\Desktop\Tor Browser\Browser\firefox.exe"),
+            "Tor Browser",
+        )
+
+    def test_generic_browser_basename_needs_its_install_path(self) -> None:
+        self.assertEqual(exe_display_name(r"C:\Tools\browser.exe"), "browser")
+
     def test_none_and_empty_are_none(self) -> None:
         self.assertIsNone(exe_display_name(None))
         self.assertIsNone(exe_display_name(""))
@@ -270,6 +301,43 @@ class BrowserEnrichmentTests(unittest.TestCase):
         )
         self.assertIs(unchanged, snapshot)
         self.assertIsNone(unchanged.browser_name)
+
+    def test_browser_without_a_history_root_is_still_a_browser(self) -> None:
+        snapshot = build_snapshot(
+            ForegroundWindow(hwnd=44, title="YouTube — Zen Browser", pid=5),
+            ProcessIdentity(exe_path=r"C:\Program Files\Zen Browser\zen.exe", exe_name="zen.exe", aumid=None),
+            observed_at="2026-09-25T00:00:00+00:00",
+        )
+        self.assertEqual(snapshot.app_name, "Zen")
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult(None, "Windows UIA is not applicable."),
+            history_reader=lambda *_: self.fail("an unverified browser must not read history"),
+            bridge_reader=lambda *_: None,
+        )
+        self.assertEqual(enriched.browser_name, "Zen")
+        self.assertIsNone(enriched.site_url)
+        self.assertIsNone(enriched.site_domain)
+
+    def test_packaged_arc_is_a_browser(self) -> None:
+        snapshot = build_snapshot(
+            ForegroundWindow(hwnd=44, title="Arc", pid=5),
+            ProcessIdentity(
+                exe_path=r"C:\Program Files\WindowsApps\TheBrowserCompany.Arc_1.0.0.0_x64__ttt1ap7aakyb4\Arc.exe",
+                exe_name="Arc.exe",
+                aumid="TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc",
+            ),
+            observed_at="2026-09-25T00:00:00+00:00",
+        )
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult(None, "Windows UIA is not applicable."),
+            history_reader=lambda *_: self.fail("an unverified browser must not read history"),
+            bridge_reader=lambda *_: None,
+        )
+        self.assertEqual(enriched.browser_name, "Arc")
 
     def test_exact_firefox_bridge_skips_uia_and_history(self) -> None:
         snapshot = self._snapshot("Firefox")

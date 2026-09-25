@@ -146,6 +146,40 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
         # Stored history keeps what was captured.
         self.assertEqual(stored, sorted(app_name for app_name, _, _ in rows))
 
+    def test_windows_segments_recorded_under_an_executable_name_show_the_browser(self) -> None:
+        # Windows capture named unknown executables after their stem, so Zen
+        # and Floorp were stored as "zen" and "floorp". Rows are matched on the
+        # stored executable path, and any other stored name is left alone.
+        rows = [
+            ("zen", r"c:\program files\zen browser\zen.exe", "Zen"),
+            ("floorp", r"c:\program files\ablaze floorp\floorp.exe", "Floorp"),
+            ("Zen", r"c:\program files\zen browser\zen.exe", "Zen"),
+            ("Firefox", r"c:\users\qa\desktop\tor browser\browser\firefox.exe", "Tor Browser"),
+            ("Firefox", r"c:\program files\mozilla firefox\firefox.exe", "Firefox"),
+            ("notepad", r"c:\windows\system32\notepad.exe", "notepad"),
+            ("Renamed App", r"c:\program files\zen browser\zen.exe", "Renamed App"),
+            ("zen", "Some.Package_abc!App", "zen"),
+        ]
+        with temp_dir_closing_databases() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            for index, (app_name, bundle_id, _) in enumerate(rows):
+                database.insert_segment(
+                    {
+                        "started_at": f"2026-06-13T00:{index:02d}:00+00:00",
+                        "ended_at": f"2026-06-13T00:{index:02d}:30+00:00",
+                        "duration_seconds": 30,
+                        "app_name": app_name,
+                        "bundle_id": bundle_id,
+                        "platform": "windows",
+                        "source": "win32-foreground",
+                        "confidence": 1.0,
+                    }
+                )
+            local_day = datetime.fromisoformat("2026-06-13T00:00:00+00:00").astimezone().date().isoformat()
+            full = database.fetch_timeline(local_day)
+
+        self.assertEqual(sorted(item["appName"] for item in full), sorted(display for _, _, display in rows))
+
     def test_raw_context_cannot_claim_passive_engagement_evidence(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
         with temp_dir_closing_databases() as tempdir:

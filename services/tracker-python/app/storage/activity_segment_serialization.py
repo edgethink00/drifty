@@ -9,6 +9,7 @@ from app.storage.adaptive_context_serialization import (
     sanitized_raw_context_json,
 )
 from app.tracker.macos_app_names import canonical_macos_app_name
+from app.tracker.windows_app_names import canonical_windows_app_name
 
 RowValue = Union[str, int, float, None]
 SerializedValue = Union[str, int, float, bool, None, list["SerializedValue"], dict[str, "SerializedValue"]]
@@ -20,13 +21,14 @@ BROWSER_AUTOMATION_STATUSES: Final[frozenset[str]] = frozenset(
 
 def display_app_name(row: Mapping[str, RowValue]) -> RowValue:
     """Stored rows keep the name captured at the time. Segments recorded before
-    a browser's name was canonicalized (for example `firefox`) are shown under
-    the canonical name so one app does not split into two rows."""
+    a browser's name was canonicalized (for example `firefox` on macOS or `zen`
+    on Windows) are shown under the canonical name so one app does not split
+    into two rows."""
     app_name = row["app_name"]
     bundle_id = row.get("bundle_id")
     if not isinstance(app_name, str) or not isinstance(bundle_id, str):
         return app_name
-    return canonical_macos_app_name(app_name, bundle_id)
+    return canonical_windows_app_name(canonical_macos_app_name(app_name, bundle_id), bundle_id)
 
 
 def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:

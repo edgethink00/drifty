@@ -39,6 +39,7 @@ from typing import Callable
 from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
 from app.tracker.browser_history import browser_history_metadata, is_browser_history_supported_app
 from app.tracker.capture_contract import Snapshot, utc_now_iso
+from app.tracker.windows_app_names import exe_display_name, is_windows_browser_app
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult, read_live_browser_url
 from app.tracker.windows_browser_bridge import read_browser_bridge_metadata
 
@@ -53,17 +54,6 @@ _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _APPMODEL_ERROR_NO_APPLICATION = 15703
 _LIVE_UIA_CONFIDENCE = 0.8
 _HISTORY_FALLBACK_CONFIDENCE = 0.45
-
-_EXE_DISPLAY_NAME_OVERRIDES = {
-    "chrome.exe": "Google Chrome",
-    "msedge.exe": "Microsoft Edge",
-    "brave.exe": "Brave Browser",
-    "chromium.exe": "Chromium",
-    "vivaldi.exe": "Vivaldi",
-    "opera.exe": "Opera",
-    "whale.exe": "Whale",
-    "firefox.exe": "Firefox",
-}
 
 _VERIFIED_HISTORY_BROWSER_PATHS: dict[str, tuple[tuple[str, str], ...]] = {
     "Google Chrome": (
@@ -224,28 +214,6 @@ def resolve_uwp_hosted_pid(frame_hwnd: int, host_pid: int) -> int | None:  # pra
     return found[0] if found else None
 
 
-def exe_display_name(exe_path: str | None) -> str | None:
-    if not exe_path:
-        return None
-    name = exe_path.replace("\\", "/").rsplit("/", 1)[-1]
-    normalized_path = exe_path.replace("\\", "/").lower()
-    if name.lower() == "chrome.exe":
-        chrome_channels = (
-            ("/google/chrome beta/application/chrome.exe", "Google Chrome Beta"),
-            ("/google/chrome dev/application/chrome.exe", "Google Chrome Dev"),
-            ("/google/chrome sxs/application/chrome.exe", "Google Chrome Canary"),
-        )
-        for suffix, display_name in chrome_channels:
-            if normalized_path.endswith(suffix):
-                return display_name
-    override = _EXE_DISPLAY_NAME_OVERRIDES.get(name.lower())
-    if override:
-        return override
-    if name.lower().endswith(".exe"):
-        name = name[: -len(".exe")]
-    return name or None
-
-
 def identity_key_for(exe_path: str | None, aumid: str | None) -> str | None:
     """Stable identity carried in the Snapshot ``bundle_id`` field (§4.2)."""
     if aumid:
@@ -374,7 +342,10 @@ def enrich_browser_snapshot(
     bridge_reader: Callable[[str], BrowserMetadata | None] = read_browser_bridge_metadata,
 ) -> Snapshot:
     """Attach exact bridge context, then UIA, then conservative history."""
-    if not is_browser_history_supported_app(snapshot.app_name):
+    # A browser without a history root is still a browser: it gets
+    # browser_name, so an automatic close refuses its tab instead of treating
+    # the whole browser as an app. Its live and history readers stay off.
+    if not (is_browser_history_supported_app(snapshot.app_name) or is_windows_browser_app(snapshot.app_name)):
         return snapshot
 
     bridge = bridge_reader(snapshot.app_name)

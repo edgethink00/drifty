@@ -43,6 +43,30 @@ const PROTECTED_AUMID_FRAGMENTS: &[&str] = &[
     "shellexperiencehost",
     "startmenuexperiencehost",
 ];
+// A browser is closed one verified tab at a time or not at all. The tracker
+// names these executables as browsers (windows_app_names.py), so an app-level
+// target for one means its browser context was lost, not that the user's drift
+// was the whole browser; quitting it would close every unrelated tab too.
+const BROWSER_EXE_NAMES: &[&str] = &[
+    "chrome.exe",
+    "msedge.exe",
+    "brave.exe",
+    "chromium.exe",
+    "vivaldi.exe",
+    "opera.exe",
+    "whale.exe",
+    "firefox.exe",
+    "zen.exe",
+    "floorp.exe",
+    "librewolf.exe",
+    "waterfox.exe",
+    "mullvadbrowser.exe",
+    "arc.exe",
+    "comet.exe",
+    "thorium.exe",
+];
+const BROWSER_PATH_SUFFIXES: &[&str] = &[r"\yandex\yandexbrowser\application\browser.exe"];
+const BROWSER_AUMID_PREFIXES: &[&str] = &["thebrowsercompany.arc_"];
 
 pub(super) fn is_protected_identity(identity: &str) -> bool {
     let key = normalize_identity(identity);
@@ -67,9 +91,29 @@ pub(super) fn is_protected_identity(identity: &str) -> bool {
         .is_some_and(|current| normalize_path(&current) == key)
 }
 
+pub(super) fn is_browser_identity(identity: &str) -> bool {
+    let key = normalize_identity(identity);
+    if BROWSER_AUMID_PREFIXES
+        .iter()
+        .any(|prefix| key.starts_with(prefix))
+        || BROWSER_PATH_SUFFIXES
+            .iter()
+            .any(|suffix| key.ends_with(suffix))
+    {
+        return true;
+    }
+    let exe_name = key.rsplit('\\').next().unwrap_or(&key);
+    BROWSER_EXE_NAMES.contains(&exe_name)
+}
+
 pub(super) fn terminate_app_by_identity(identity: &str) -> Result<(), ExtremeNudgeError> {
     if is_protected_identity(identity) {
         return Err(ExtremeNudgeError::ProtectedBundle(identity.to_string()));
+    }
+    if is_browser_identity(identity) {
+        return Err(ExtremeNudgeError::BrowserTabNotFound {
+            diagnostic: "unsupported_browser".to_string(),
+        });
     }
     let target = normalize_identity(identity);
     let target_is_aumid = is_aumid(&target);
@@ -273,6 +317,32 @@ mod tests {
     fn allows_normal_apps_and_explicit_system32_utilities() {
         assert!(!is_protected_identity(r"C:\Windows\System32\notepad.exe"));
         assert!(!is_protected_identity(r"C:\Apps\Editor\editor.exe"));
+    }
+
+    #[test]
+    fn browsers_are_refused_before_any_process_is_touched() {
+        for identity in [
+            r"C:\Program Files\Zen Browser\zen.exe",
+            r"C:\Program Files\Ablaze Floorp\floorp.exe",
+            r"C:\Program Files\LibreWolf\librewolf.exe",
+            r"C:\Program Files\Mozilla Firefox\firefox.exe",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Users\qa\AppData\Local\Yandex\YandexBrowser\Application\browser.exe",
+            "TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc",
+        ] {
+            assert!(is_browser_identity(identity), "{identity}");
+            assert!(
+                matches!(
+                    terminate_app_by_identity(identity),
+                    Err(ExtremeNudgeError::BrowserTabNotFound { ref diagnostic })
+                        if diagnostic == "unsupported_browser"
+                ),
+                "{identity}"
+            );
+        }
+        assert!(!is_browser_identity(r"C:\Tools\browser.exe"));
+        assert!(!is_browser_identity(r"C:\Apps\Editor\editor.exe"));
+        assert!(!is_browser_identity(r"C:\Windows\System32\notepad.exe"));
     }
 
     #[test]
