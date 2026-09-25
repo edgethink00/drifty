@@ -1,7 +1,9 @@
 import json
+import sqlite3
 import subprocess
 import sys
 import unittest
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,7 +12,7 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from app.storage.db import TrackerDatabase
+from app.storage.db import TrackerDatabase, fetch_row_dicts
 from app.tracker.macos_workspace import Snapshot
 from tests.support_cleanup import temp_dir_closing_databases
 
@@ -327,6 +329,50 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
         self.assertIsNone(segment["siteDomain"])
         self.assertIsNone(segment["siteTitle"])
         self.assertIsNone(segment["siteUrl"])
+
+class FetchRowDictsTests(unittest.TestCase):
+    def test_matches_sqlite_row_dicts_and_leaves_the_connection_row_factory_alone(self) -> None:
+        with temp_dir_closing_databases() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            for index in range(3):
+                database.insert_segment(
+                    {
+                        "started_at": f"2026-06-13T00:{index:02d}:00+00:00",
+                        "ended_at": f"2026-06-13T00:{index:02d}:30+00:00",
+                        "duration_seconds": 30,
+                        "app_name": "Code",
+                        "bundle_id": None if index == 1 else "com.example.code",
+                        "platform": "macos",
+                        "source": "accessibility",
+                        "confidence": 1.0,
+                    }
+                )
+            query = """
+                SELECT activity_segments.*, activity_classifications.category AS classification_category
+                FROM activity_segments
+                LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
+                WHERE activity_segments.duration_seconds >= ?
+                ORDER BY activity_segments.started_at ASC
+            """
+            with database.connect() as connection:
+                expected = [dict(row) for row in connection.execute(query, (30,)).fetchall()]
+                actual = fetch_row_dicts(connection, query, (30,))
+                self.assertIsInstance(connection.execute("SELECT 1 AS one").fetchone(), sqlite3.Row)
+
+        self.assertEqual(len(actual), 3)
+        self.assertEqual(actual, expected)
+        self.assertEqual([list(row) for row in actual], [list(row) for row in expected])
+
+    def test_keeps_the_first_value_of_a_repeated_column_name_like_sqlite_row(self) -> None:
+        with closing(sqlite3.connect(":memory:")) as connection:
+            connection.row_factory = sqlite3.Row
+            query = "SELECT 1 AS a, 2 AS b, 3 AS a"
+            expected = [dict(row) for row in connection.execute(query).fetchall()]
+            actual = fetch_row_dicts(connection, query, ())
+
+        self.assertEqual(expected, [{"a": 1, "b": 2}])
+        self.assertEqual(actual, expected)
+
 
 
 if __name__ == "__main__":

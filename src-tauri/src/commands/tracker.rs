@@ -554,7 +554,7 @@ pub async fn tracker_get_dashboard_week_timeline(
     app: AppHandle,
     controller: State<'_, TrackerController>,
     query: DayQuery,
-) -> Result<serde_json::Value, String> {
+) -> Result<Box<serde_json::value::RawValue>, String> {
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
@@ -570,7 +570,7 @@ pub async fn tracker_get_project_trend_timeline(
     app: AppHandle,
     controller: State<'_, TrackerController>,
     query: DayQuery,
-) -> Result<serde_json::Value, String> {
+) -> Result<Box<serde_json::value::RawValue>, String> {
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller

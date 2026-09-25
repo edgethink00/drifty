@@ -1756,6 +1756,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn raw_timeline_envelope_passes_data_through_unchanged() {
+        let raw = br#"{"ok": true, "data": [{"id": "42", "appName": "\uc54c\ub9bc", "durationSeconds": 30}], "error": null}"#;
+
+        let timeline =
+            parse_envelope::<Box<serde_json::value::RawValue>>(raw).expect("raw envelope");
+
+        assert_eq!(
+            timeline.get(),
+            r#"[{"id": "42", "appName": "\uc54c\ub9bc", "durationSeconds": 30}]"#
+        );
+        assert_eq!(
+            serde_json::to_string(&timeline).expect("serialize"),
+            timeline.get()
+        );
+        let parsed: Value = serde_json::from_str(timeline.get()).expect("valid json");
+        assert_eq!(parsed[0]["appName"], Value::String("알림".into()));
+    }
+
+    #[test]
+    fn raw_timeline_envelope_still_reports_tracker_errors() {
+        let raw = br#"{"ok": false, "data": null, "error": "database is locked"}"#;
+
+        let error =
+            parse_envelope::<Box<serde_json::value::RawValue>>(raw).expect_err("tracker error");
+
+        assert!(
+            matches!(error, TrackerError::TrackerReturnedError(message) if message == "database is locked")
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn duplicated_windows_child_handle_terminates_the_original_process_object() {

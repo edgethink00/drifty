@@ -1,4 +1,5 @@
 use super::{build_period_payload, TrackerController, TrackerError};
+use serde_json::value::RawValue;
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
@@ -61,8 +62,11 @@ impl TrackerController {
         app: &AppHandle,
         start: Option<String>,
         end: Option<String>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
+    ) -> Result<Box<RawValue>, TrackerError> {
+        // Multi-day timelines go to the webview untouched: parsing thousands of
+        // segments into a Value tree only to serialize them again cost about
+        // 25ms in release and 300ms in debug builds on a 12.9k-segment week.
+        self.invoke::<Box<RawValue>>(
             app,
             "get_dashboard_week_timeline",
             build_dashboard_week_timeline_payload(start, end),
@@ -74,8 +78,8 @@ impl TrackerController {
         app: &AppHandle,
         start: Option<String>,
         end: Option<String>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
+    ) -> Result<Box<RawValue>, TrackerError> {
+        self.invoke::<Box<RawValue>>(
             app,
             "get_project_trend_timeline",
             build_period_payload(None, start, end),
