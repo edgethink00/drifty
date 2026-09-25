@@ -334,6 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const passwordRecoveryExchangeRef = useRef(false);
   const tauriInvokeRef = useRef<TauriInvoke | null>(null);
   const saveSequenceRef = useRef(0);
+  const nativeSessionWriteRef = useRef<Promise<void>>(Promise.resolve());
   const googleOAuthAttemptSequenceRef = useRef(0);
   const googleOAuthAttemptRef = useRef<GoogleOAuthAttempt | null>(null);
   const googleOAuthExpiryTimeoutRef = useRef<number | null>(null);
@@ -511,11 +512,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const saveId = saveSequenceRef.current + 1;
     saveSequenceRef.current = saveId;
     const operation = nextSession ? "save" : "clear";
-    recordAuthDiagnostic("auth.native_save.start", {
-      saveId,
-      operation,
-      ...getSessionDiagnosticSummary(nextSession),
-    });
     if (!nextSession && options.allowClear === false) {
       recordAuthDiagnostic("auth.native_save.skipped", {
         saveId,
@@ -532,25 +528,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return;
     }
-    try {
-      if (nextSession) {
-        await invoke<void>("auth_save_session", { value: serializeDesktopAuthSession(nextSession) });
-      } else {
-        await invoke<void>("auth_clear_saved_session");
-      }
-      recordAuthDiagnostic("auth.native_save.success", {
+    const write = async () => {
+      recordAuthDiagnostic("auth.native_save.start", {
         saveId,
         operation,
         ...getSessionDiagnosticSummary(nextSession),
       });
-    } catch (error) {
-      recordAuthDiagnostic("auth.native_save.error", {
-        saveId,
-        operation,
-        ...getAuthDiagnosticError(error),
-      });
-      console.warn("Unable to persist desktop auth session.", error);
-    }
+      try {
+        if (nextSession) {
+          await invoke<void>("auth_save_session", { value: serializeDesktopAuthSession(nextSession) });
+        } else {
+          await invoke<void>("auth_clear_saved_session");
+        }
+        recordAuthDiagnostic("auth.native_save.success", {
+          saveId,
+          operation,
+          ...getSessionDiagnosticSummary(nextSession),
+        });
+      } catch (error) {
+        recordAuthDiagnostic("auth.native_save.error", {
+          saveId,
+          operation,
+          ...getAuthDiagnosticError(error),
+        });
+        console.warn("Unable to persist desktop auth session.", error);
+      }
+    };
+    // OS credential writes can finish out of order when auth events arrive close together.
+    const queuedWrite = nativeSessionWriteRef.current.then(write, write);
+    nativeSessionWriteRef.current = queuedWrite;
+    await queuedWrite;
   };
 
   useEffect(() => {
@@ -1074,10 +1081,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const handlePendingDeepLinkUrls = async () => {
           try {
             const pendingUrls = await invoke<string[]>("auth_take_pending_deep_links");
-            recordAuthDiagnostic("auth.pending_deep_links.loaded", {
-              pendingUrlCount: pendingUrls.length,
-            });
             if (pendingUrls.length > 0) {
+              recordAuthDiagnostic("auth.pending_deep_links.loaded", {
+                pendingUrlCount: pendingUrls.length,
+              });
               await handleAuthCallbackUrls(pendingUrls);
             }
           } catch (error) {
@@ -1418,10 +1425,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPasswordRecoveryState({ phase: "idle", email: null });
     clearGoogleOAuthAttempt();
     setCallbackStatus(null);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    if (!error && data.session) {
+      await saveDesktopSession(data.session);
+    }
     capturePostHogEvent("cloud_auth_action", {
       action: "sign_in_completed",
       method: "email",

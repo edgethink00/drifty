@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type AuthChangeHandler = (event: string, session: Session | null) => void;
 
-const { authMocks, getSession, onAuthStateChange, setSession, invoke } = vi.hoisted(() => {
+const { authMocks, getSession, onAuthStateChange, setSession, signInWithPassword, invoke } = vi.hoisted(() => {
   const mocks: { authChangeHandler: AuthChangeHandler | null } = {
     authChangeHandler: null,
   };
@@ -25,6 +25,7 @@ const { authMocks, getSession, onAuthStateChange, setSession, invoke } = vi.hois
       };
     }),
     setSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+    signInWithPassword: vi.fn(),
     invoke: vi.fn().mockResolvedValue([]),
   };
 });
@@ -54,7 +55,7 @@ vi.mock("../../lib/supabase/client", () => ({
       setSession,
       signInAnonymously: vi.fn().mockResolvedValue({ data: { session: null, user: null }, error: null }),
       signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: null }, error: null }),
-      signInWithPassword: vi.fn(),
+      signInWithPassword,
       signOut: vi.fn().mockResolvedValue({ error: null }),
       signUp: vi.fn(),
     },
@@ -127,6 +128,7 @@ describe("AuthContext desktop session persistence", () => {
   beforeEach(() => {
     getSession.mockResolvedValue({ data: { session: null } });
     setSession.mockResolvedValue({ data: { session: null }, error: null });
+    signInWithPassword.mockReset();
     invoke.mockResolvedValue([]);
     authMocks.authChangeHandler = null;
     tauriMocks.getCurrent.mockResolvedValue(null);
@@ -196,5 +198,64 @@ describe("AuthContext desktop session persistence", () => {
       expect(latestAuth.current?.session).toEqual(restoredSession);
     });
     expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+  });
+
+  it("finishes a pending native save before a later sign-out clear", async () => {
+    const pendingSave = createDeferred<void>();
+    invoke.mockImplementation((command: string) => {
+      if (command === "auth_take_pending_deep_links") return Promise.resolve([]);
+      if (command === "auth_load_saved_session") return Promise.resolve(null);
+      if (command === "auth_save_session") return pendingSave.promise;
+      return Promise.resolve(undefined);
+    });
+
+    render(<AuthProvider><CaptureAuth onReady={() => {}} /></AuthProvider>);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session"));
+    invoke.mockClear();
+
+    act(() => authMocks.authChangeHandler?.("SIGNED_IN", createSession()));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+    act(() => authMocks.authChangeHandler?.("SIGNED_OUT", null));
+    expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+
+    await act(async () => {
+      pendingSave.resolve();
+      await pendingSave.promise;
+    });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session"));
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      "auth_save_session",
+      "auth_clear_saved_session",
+    ]);
+  });
+
+  it("waits for native session persistence before email sign-in completes", async () => {
+    const pendingSave = createDeferred<void>();
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    const signedInSession = createSession();
+    signInWithPassword.mockResolvedValue({ data: { session: signedInSession }, error: null });
+    invoke.mockImplementation((command: string) => {
+      if (command === "auth_take_pending_deep_links") return Promise.resolve([]);
+      if (command === "auth_load_saved_session") return Promise.resolve(null);
+      if (command === "auth_save_session") return pendingSave.promise;
+      return Promise.resolve(undefined);
+    });
+
+    render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+    await waitFor(() => expect(latestAuth.current?.status).toBe("unauthenticated"));
+    let completed = false;
+    const signIn = latestAuth.current!.signInWithEmail("person@example.com", "password").then((result) => {
+      completed = true;
+      return result;
+    });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+    expect(completed).toBe(false);
+
+    await act(async () => {
+      pendingSave.resolve();
+      await pendingSave.promise;
+    });
+    await expect(signIn).resolves.toEqual({ error: null });
+    expect(completed).toBe(true);
   });
 });
