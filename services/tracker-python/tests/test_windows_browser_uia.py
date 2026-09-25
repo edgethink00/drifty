@@ -18,14 +18,39 @@ from app.tracker.windows_browser_uia import (
 
 
 class WindowsBrowserUiaTests(unittest.TestCase):
-    def test_only_measured_chromium_browsers_use_live_uia(self) -> None:
+    def test_only_measured_browsers_use_live_uia(self) -> None:
         self.assertTrue(is_live_uia_browser("Google Chrome"))
         self.assertTrue(is_live_uia_browser("Google Chrome Beta"))
         self.assertTrue(is_live_uia_browser("Google Chrome Dev"))
         self.assertTrue(is_live_uia_browser("Google Chrome Canary"))
         self.assertTrue(is_live_uia_browser("Microsoft Edge"))
         self.assertTrue(is_live_uia_browser("Brave Browser"))
-        self.assertFalse(is_live_uia_browser("Firefox"))
+        self.assertTrue(is_live_uia_browser("Firefox"))
+        self.assertTrue(is_live_uia_browser("Floorp"))
+        self.assertTrue(is_live_uia_browser("LibreWolf"))
+        self.assertTrue(is_live_uia_browser("Zen"))
+        self.assertTrue(is_live_uia_browser("Waterfox"))
+        self.assertFalse(is_live_uia_browser("Tor Browser"))
+
+    def test_firefox_requests_the_gecko_document_rules(self) -> None:
+        self.assertEqual(windows_browser_uia._uia_family("Firefox"), "gecko")
+        self.assertEqual(windows_browser_uia._uia_family("Firefox Developer Edition"), "gecko")
+        self.assertEqual(windows_browser_uia._uia_family("Zen"), "gecko")
+        self.assertEqual(windows_browser_uia._uia_family("Waterfox"), "gecko")
+        self.assertEqual(windows_browser_uia._uia_family("Microsoft Edge"), "chromium")
+        script = windows_browser_uia._POWERSHELL_UIA_HOST
+        self.assertIn("'tabbrowser-tabpanels'", script)
+        self.assertIn("'private-browsing-indicator-icon'", script)
+        self.assertIn("'private-browsing-indicator-label'", script)
+        self.assertIn("^READ ([0-9]+)(?: (chromium|gecko))?$", script)
+
+    def test_private_window_reply_carries_no_page(self) -> None:
+        result = parse_uia_response(
+            '{"found":false,"url":"https://example.com/private","error":"private browsing window","private":true}'
+        )
+        self.assertIsNone(result.url)
+        self.assertTrue(result.private_window)
+        self.assertFalse(parse_uia_response('{"found":false,"url":"","error":"x","private":"true"}').private_window)
 
     def test_requires_explicit_http_and_preserves_url_identity(self) -> None:
         self.assertIsNone(normalize_uia_url("example.com/docs"))
@@ -182,11 +207,13 @@ class WindowsBrowserUiaTests(unittest.TestCase):
             side_effect=replies,
         ) as read_reply:
             first = host.read(101)
-            second = host.read(202)
+            second = host.read(202, "gecko")
 
         self.assertEqual(first.url, "https://example.com/first")
         self.assertEqual(second.url, "https://example.com/second")
-        self.assertEqual(host._process.stdin.writes, ["READ 101\n", "READ 202\n"])
+        self.assertEqual(host._process.stdin.writes, ["READ 101 chromium\n", "READ 202 gecko\n"])
+        with self.assertRaises(ValueError):
+            host.read(303, "webkit")
         self.assertEqual(
             [call.args[1] for call in read_reply.call_args_list],
             [

@@ -33,6 +33,22 @@ const UIA_CLOSE_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
 // checking that the closed runtime ID vanished and a survivor became selected.
 const POST_CLOSE_SETTLE: Duration = Duration::from_millis(500);
 static UIA_OPERATION_ACTIVE: AtomicBool = AtomicBool::new(false);
+// Firefox's native UI Automation provider exposes DOM ids as AutomationId and
+// DOM classes as ClassName, independent of the UI language (measured on
+// Firefox 154, Windows 11). Floorp 12.18 and Waterfox 6.7 expose the same tab
+// strip, close button, and tab panels. The tab close button therefore has
+// a stable name, which matters because position cannot identify it: a playing
+// tab's audio toggle is the rightmost button in a right-to-left layout, and
+// the only button left when a userChrome.css hides the close button.
+const FIREFOX_TAB_CLASS: &str = "tabbrowser-tab";
+const FIREFOX_TAB_STRIP_ID: &str = "tabbrowser-tabs";
+const FIREFOX_TAB_PANELS_ID: &str = "tabbrowser-tabpanels";
+// The selected tab's panel carries this class. After a tab switch LibreWolf
+// 156 kept reporting the previous tab's Document as on-screen with an empty
+// rectangle, so visibility alone cannot pick the page.
+const FIREFOX_SELECTED_PANEL_CLASS: &str = "deck-selected";
+const FIREFOX_CLOSE_BUTTON_CLASS: &str = "tab-close-button";
+const FIREFOX_GEOMETRY_REREAD_DELAY: Duration = Duration::from_millis(50);
 
 #[derive(Clone, Debug)]
 struct TargetRequest {
@@ -114,7 +130,10 @@ fn owned_request(
     site_domain: &str,
 ) -> Result<TargetRequest, String> {
     let process_name = process_name.trim().to_ascii_lowercase();
-    if !matches!(process_name.as_str(), "chrome" | "msedge" | "brave") {
+    if !matches!(
+        process_name.as_str(),
+        "chrome" | "msedge" | "brave" | "firefox" | "floorp" | "waterfox"
+    ) {
         return Err("windows_uia_unsupported_browser".to_string());
     }
     let browser_identity = browser_identity.trim();
@@ -285,7 +304,7 @@ fn resolve_selected_tab(
         return Err("windows_uia_ambiguous_selected_tab".to_string());
     }
     let (tab, selection) = selected.pop().expect("one selected tab");
-    let actual_url = read_page_url(&automation, &walker, &window)?;
+    let actual_url = read_page_url(&automation, &walker, &window, &request.process_name)?;
     let match_kind = target_match_kind(request, &actual_url)?;
     let tab_rect = tab
         .get_bounding_rectangle()
@@ -318,17 +337,19 @@ fn resolve_selected_tab(
         let Ok(invoke) = button.get_pattern::<UIInvokePattern>() else {
             continue;
         };
-        close_buttons.push((rect, invoke));
+        let class_name = button.get_classname().unwrap_or_default();
+        close_buttons.push((rect, invoke, class_name));
     }
-    close_buttons.sort_by_key(|(rect, _)| rect.get_right());
-    let Some((close_rect, close_invoke)) = close_buttons.pop() else {
-        return Err("windows_uia_no_close_button".to_string());
-    };
+    let (close_rect, close_invoke) = select_close_button(&request.process_name, close_buttons)
+        .ok_or_else(|| "windows_uia_no_close_button".to_string())?;
 
     ensure_deadline(deadline)?;
     verify_foreground_snapshot(request, snapshot)?;
     if !selection.is_selected().unwrap_or(false)
-        || read_page_url(&automation, &walker, &window).ok().as_deref() != Some(&actual_url)
+        || read_page_url(&automation, &walker, &window, &request.process_name)
+            .ok()
+            .as_deref()
+            != Some(&actual_url)
     {
         return Err("windows_uia_stale_target".to_string());
     }
@@ -345,6 +366,38 @@ fn resolve_selected_tab(
             .map_err(|_| "windows_uia_stale_target".to_string())?,
         match_kind,
     })
+}
+
+/// The selected tab's close control. Chromium tabs expose one close button
+/// at their trailing edge. Firefox is identified only by its close button's
+/// class: exactly one, or no close at all.
+fn select_close_button<T>(
+    process_name: &str,
+    mut candidates: Vec<(uiautomation::types::Rect, T, String)>,
+) -> Option<(uiautomation::types::Rect, T)> {
+    if is_gecko_process(process_name) {
+        candidates.retain(|(_, _, class_name)| {
+            class_tokens_contain(class_name, FIREFOX_CLOSE_BUTTON_CLASS)
+        });
+        if candidates.len() != 1 {
+            return None;
+        }
+        return candidates.pop().map(|(rect, invoke, _)| (rect, invoke));
+    }
+    candidates.sort_by_key(|(rect, _, _)| rect.get_right());
+    candidates.pop().map(|(rect, invoke, _)| (rect, invoke))
+}
+
+fn class_tokens_contain(class_name: &str, token: &str) -> bool {
+    class_name.split_whitespace().any(|value| value == token)
+}
+
+/// Firefox and the forks whose tab close was measured end to end. Zen's
+/// selected tab exposes no close button, and LibreWolf 156 ignored Invoke on
+/// its close button under its default fingerprinting resistance, so both keep
+/// page capture only.
+fn is_gecko_process(process_name: &str) -> bool {
+    matches!(process_name, "firefox" | "floorp" | "waterfox")
 }
 
 fn browser_tabs(
@@ -366,7 +419,7 @@ fn browser_tabs(
     let mut tabs = Vec::new();
     for tab in candidates {
         if !expected_tab_shape(walker, &tab, process_name)
-            || !has_exact_window_ancestry(automation, walker, &tab, window, true, false)
+            || !has_exact_window_ancestry(automation, walker, &tab, window, true, false, None)
         {
             continue;
         }
@@ -391,6 +444,16 @@ fn expected_tab_shape(walker: &UITreeWalker, tab: &UIElement, process_name: &str
     let Ok(class_name) = tab.get_classname() else {
         return false;
     };
+    if is_gecko_process(process_name) {
+        if !class_tokens_contain(&class_name, FIREFOX_TAB_CLASS) {
+            return false;
+        }
+        let Ok(parent) = walker.get_parent(tab) else {
+            return false;
+        };
+        return parent.get_control_type().ok() == Some(ControlType::Tab)
+            && parent.get_automation_id().ok().as_deref() == Some(FIREFOX_TAB_STRIP_ID);
+    }
     let expected = match process_name {
         "chrome" => ("Tab", "TabContainerImpl"),
         "msedge" => ("EdgeTab", "EdgeTabContainerImpl"),
@@ -411,7 +474,13 @@ fn read_page_url(
     automation: &UIAutomation,
     walker: &UITreeWalker,
     window: &UIElement,
+    process_name: &str,
 ) -> Result<String, String> {
+    // Firefox shows its own panels (translations, for example) as Documents
+    // directly under the window. Only a Document inside the selected tab
+    // panel is the page.
+    let required_ancestor = is_gecko_process(process_name)
+        .then_some((FIREFOX_TAB_PANELS_ID, FIREFOX_SELECTED_PANEL_CLASS));
     let condition = automation
         .create_property_condition(
             UIProperty::ControlType,
@@ -425,12 +494,31 @@ fn read_page_url(
     let mut values = Vec::new();
     for document in documents {
         if document.is_offscreen().unwrap_or(true)
-            || !has_exact_window_ancestry(automation, walker, &document, window, true, true)
+            || !has_exact_window_ancestry(
+                automation,
+                walker,
+                &document,
+                window,
+                true,
+                true,
+                required_ancestor,
+            )
         {
             continue;
         }
         let Ok(rect) = document.get_bounding_rectangle() else {
             continue;
+        };
+        // Firefox can answer the first bounds query for a page it has just
+        // exposed with an empty rectangle and the real bounds on the next.
+        let rect = if required_ancestor.is_some() && !positive_rect(&rect) {
+            thread::sleep(FIREFOX_GEOMETRY_REREAD_DELAY);
+            match document.get_bounding_rectangle() {
+                Ok(rect) => rect,
+                Err(_) => continue,
+            }
+        } else {
+            rect
         };
         let Ok(window_rect) = window.get_bounding_rectangle() else {
             return Err("windows_uia_stale_window".to_string());
@@ -463,12 +551,17 @@ fn has_exact_window_ancestry(
     window: &UIElement,
     reject_document_ancestor: bool,
     reject_toolbar_ancestor: bool,
+    required_ancestors: Option<(&str, &str)>,
 ) -> bool {
     let mut cursor = match walker.get_parent(element) {
         Ok(parent) => parent,
         Err(_) => return false,
     };
     let mut toolbar_seen = false;
+    let (mut required_id_seen, mut required_class_seen) = match required_ancestors {
+        Some(_) => (false, false),
+        None => (true, true),
+    };
     for _ in 0..64 {
         let Ok(control_type) = cursor.get_control_type() else {
             return false;
@@ -479,8 +572,22 @@ fn has_exact_window_ancestry(
         if reject_toolbar_ancestor && control_type == ControlType::ToolBar {
             toolbar_seen = true;
         }
+        if let Some((id, class)) = required_ancestors {
+            if !required_id_seen && cursor.get_automation_id().ok().as_deref() == Some(id) {
+                required_id_seen = true;
+            }
+            if !required_class_seen
+                && cursor
+                    .get_classname()
+                    .is_ok_and(|class_name| class_tokens_contain(&class_name, class))
+            {
+                required_class_seen = true;
+            }
+        }
         if control_type == ControlType::Window {
             return !toolbar_seen
+                && required_id_seen
+                && required_class_seen
                 && automation
                     .compare_elements(&cursor, window)
                     .unwrap_or(false);
@@ -695,6 +802,79 @@ mod tests {
         assert!(!post_close_runtime_ids_verify(
             &[vec![4, 5, 6], closed.clone()],
             &closed,
+        ));
+    }
+
+    fn rect(left: i32, right: i32) -> uiautomation::types::Rect {
+        uiautomation::types::Rect::new(left, 13, right, 43)
+    }
+
+    #[test]
+    fn firefox_close_is_the_close_button_class_not_the_rightmost_button() {
+        // Measured Firefox 154 selected tab with the UI mirrored right to left:
+        // the audio toggle (no class) is rightmost, the close button leftmost.
+        let rtl = vec![
+            (rect(1315, 1345), "audio", String::new()),
+            (
+                rect(1084, 1114),
+                "close",
+                "tab-close-button close-icon".to_string(),
+            ),
+        ];
+        assert_eq!(
+            select_close_button("firefox", rtl).map(|(_, id)| id),
+            Some("close")
+        );
+        // Chromium keeps its trailing-edge rule.
+        let chromium = vec![
+            (rect(10, 30), "alert", String::new()),
+            (rect(250, 270), "close", String::new()),
+        ];
+        assert_eq!(
+            select_close_button("chrome", chromium).map(|(_, id)| id),
+            Some("close")
+        );
+    }
+
+    #[test]
+    fn firefox_without_its_close_button_refuses_instead_of_pressing_the_audio_toggle() {
+        // userChrome.css hiding .tab-close-button removes it from the tree and
+        // leaves the audio toggle as the only button.
+        let hidden = vec![(rect(575, 605), "audio", String::new())];
+        assert_eq!(
+            select_close_button("firefox", hidden).map(|(_, id)| id),
+            None
+        );
+        let ambiguous = vec![
+            (rect(575, 605), "close-a", "tab-close-button".to_string()),
+            (rect(806, 836), "close-b", "tab-close-button".to_string()),
+        ];
+        assert_eq!(
+            select_close_button("firefox", ambiguous).map(|(_, id)| id),
+            None
+        );
+        let floorp = vec![
+            (rect(1116, 1137), "audio", String::new()),
+            (
+                rect(1364, 1388),
+                "close",
+                "tab-close-button close-icon".to_string(),
+            ),
+        ];
+        assert_eq!(
+            select_close_button("floorp", floorp).map(|(_, id)| id),
+            Some("close")
+        );
+        assert!(is_gecko_process("waterfox"));
+        assert!(!is_gecko_process("librewolf"));
+        assert!(!is_gecko_process("zen"));
+        assert!(!class_tokens_contain(
+            "tab-close-button-extra",
+            "tab-close-button"
+        ));
+        assert!(class_tokens_contain(
+            "tab-close-button close-icon",
+            "tab-close-button"
         ));
     }
 }

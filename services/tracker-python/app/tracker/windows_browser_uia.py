@@ -39,7 +39,17 @@ _SUPPORTED_BROWSERS = {
     "Google Chrome Canary",
     "Microsoft Edge",
     "Brave Browser",
+    "Firefox",
+    "Firefox Developer Edition",
+    "Floorp",
+    "LibreWolf",
+    "Waterfox",
+    "Zen",
 }
+# Firefox's native UI Automation provider exposes the page Document inside its
+# tab panels, and browser-owned panels as other Documents under the window.
+# Floorp 12.18, LibreWolf 156, Waterfox 6.7, and Zen 1.22 measured the same way.
+_GECKO_BROWSERS = {"Firefox", "Firefox Developer Edition", "Floorp", "LibreWolf", "Waterfox", "Zen"}
 
 _POWERSHELL_UIA_HOST = r"""
 $ErrorActionPreference = 'Stop'
@@ -59,6 +69,12 @@ $auto = [System.Windows.Automation.AutomationElement]
 $documentCondition = New-Object System.Windows.Automation.PropertyCondition(
   $auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
 $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+# Firefox draws its private-browsing indicator only in private windows; normal
+# windows expose no element with these DOM classes. They are language
+# independent, unlike the window title.
+$privateIndicatorCondition = New-Object System.Windows.Automation.OrCondition(
+  (New-Object System.Windows.Automation.PropertyCondition($auto::ClassNameProperty, 'private-browsing-indicator-icon')),
+  (New-Object System.Windows.Automation.PropertyCondition($auto::ClassNameProperty, 'private-browsing-indicator-label')))
 
 function Test-SameAutomationElement($left, $right) {
   try {
@@ -83,16 +99,27 @@ function Test-ExplicitHttpUrl($value) {
   } catch { return $false }
 }
 
-function Read-ValidatedDocumentUrl($document, $rootRect) {
+function Test-FiniteRectangle($rect) {
+  foreach ($field in @('Left', 'Top', 'Width', 'Height')) {
+    $component = $rect.$field
+    if ($null -eq $component -or [double]::IsNaN([double]$component) -or
+        [double]::IsInfinity([double]$component)) { return $false }
+  }
+  return $true
+}
+
+function Read-ValidatedDocumentUrl($document, $rootRect, [bool]$rereadGeometry = $false) {
   $offscreen = $document.Current.IsOffscreen
   if ($offscreen -eq $true) { throw 'document visibility unavailable' }
   if ($offscreen -ne $false) { throw 'document visibility unavailable' }
   $rect = $document.Current.BoundingRectangle
-  foreach ($field in @('Left', 'Top', 'Width', 'Height')) {
-    $component = $rect.$field
-    if ($null -eq $component -or [double]::IsNaN([double]$component) -or
-        [double]::IsInfinity([double]$component)) { throw 'document geometry unavailable' }
+  if ($rereadGeometry -and -not (Test-FiniteRectangle $rect)) {
+    # Firefox can answer the first bounds query for a page it has just exposed
+    # with an empty rectangle and the real bounds on the next query.
+    Start-Sleep -Milliseconds 50
+    $rect = $document.Current.BoundingRectangle
   }
+  if (-not (Test-FiniteRectangle $rect)) { throw 'document geometry unavailable' }
   if ($rect.Width -le 0 -or $rect.Height -le 0 -or
       $rect.Left -ge ($rootRect.Left + $rootRect.Width) -or
       ($rect.Left + $rect.Width) -le $rootRect.Left -or
@@ -107,11 +134,21 @@ function Read-ValidatedDocumentUrl($document, $rootRect) {
   return $url
 }
 
-function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement) {
+function Test-GeckoPrivateWindow($root) {
+  return ($null -ne $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $privateIndicatorCondition))
+}
+
+function Test-ClassToken($element, [string]$token) {
+  return (@(([string]$element.Current.ClassName) -split '\s+') -contains $token)
+}
+
+function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement, [string]$requiredAncestorId = '', [string]$requiredAncestorClass = '') {
   if ($null -eq $focusedElement) { return $null }
   $document = $null
   $cursor = $focusedElement
   $exactWindow = $false
+  $requiredSeen = [string]::IsNullOrEmpty($requiredAncestorId)
+  $requiredClassSeen = [string]::IsNullOrEmpty($requiredAncestorClass)
   for ($depth = 0; $depth -lt 64 -and $null -ne $cursor; $depth++) {
     if (Test-SameAutomationElement $cursor $root) { $exactWindow = $true; break }
     if ($cursor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) { break }
@@ -120,14 +157,19 @@ function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement) {
     # foreground window rather than exposing the nested frame URL.
     if ($cursor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Document) {
       $document = $cursor
+    } elseif (-not $requiredSeen -and [string]::Equals([string]$cursor.Current.AutomationId, $requiredAncestorId, [StringComparison]::Ordinal)) {
+      $requiredSeen = $true
     }
+    if (-not $requiredClassSeen -and (Test-ClassToken $cursor $requiredAncestorClass)) { $requiredClassSeen = $true }
     $cursor = $treeWalker.GetParent($cursor)
   }
   if (-not $exactWindow) { throw 'document ancestry unavailable' }
+  # Focus inside a browser-owned panel is not the page; use the scan instead.
+  if (-not $requiredSeen -or -not $requiredClassSeen) { return $null }
   return $document
 }
 
-function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement = $null) {
+function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement = $null, [string]$family = 'chromium') {
   try {
     if ($null -eq $root -or $root.Current.ControlType -ne [System.Windows.Automation.ControlType]::Window -or
         $root.Current.IsOffscreen -ne $false) { throw 'document window unavailable' }
@@ -138,15 +180,27 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
           [double]::IsInfinity([double]$component)) { throw 'document geometry unavailable' }
     }
     if ($rootRect.Width -le 0 -or $rootRect.Height -le 0) { throw 'document geometry unavailable' }
+    $requiredAncestorId = ''
+    $requiredAncestorClass = ''
+    if ($family -eq 'gecko') {
+      # The browser extension never reported private tabs; neither does this.
+      if (Test-GeckoPrivateWindow $root) {
+        return [pscustomobject]@{ found = $false; url = ''; error = 'private browsing window'; private = $true }
+      }
+      $requiredAncestorId = 'tabbrowser-tabpanels'
+      # Only the selected tab's panel holds the page. LibreWolf 156 kept the
+      # previous tab's Document on-screen with an empty rectangle after a switch.
+      $requiredAncestorClass = 'deck-selected'
+    }
 
     # Chromium can briefly enumerate more than one visible Document while its
     # accessibility tree warms up. A focused Document is a stronger identity
     # signal, but only after its full ancestry is proven to terminate at this
     # exact foreground root. Chrome focus (tab strip/omnibox) has no Document
     # ancestor and deliberately falls back to the strict enumeration below.
-    $focusedDocument = Find-FocusedTopLevelDocument $root $treeWalker $focusedElement
+    $focusedDocument = Find-FocusedTopLevelDocument $root $treeWalker $focusedElement $requiredAncestorId $requiredAncestorClass
     if ($null -ne $focusedDocument) {
-      $focusedUrl = Read-ValidatedDocumentUrl $focusedDocument $rootRect
+      $focusedUrl = Read-ValidatedDocumentUrl $focusedDocument $rootRect ($family -eq 'gecko')
       return [pscustomobject]@{ found = $true; url = $focusedUrl; error = '' }
     }
 
@@ -162,17 +216,26 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
       $ancestor = $treeWalker.GetParent($document)
       $nested = $false
       $exactWindow = $false
+      $requiredSeen = [string]::IsNullOrEmpty($requiredAncestorId)
+      $requiredClassSeen = [string]::IsNullOrEmpty($requiredAncestorClass)
       for ($depth = 0; $depth -lt 64 -and $null -ne $ancestor; $depth++) {
         if (Test-SameAutomationElement $ancestor $root) { $exactWindow = $true; break }
         if ($ancestor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) { break }
         if ($ancestor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Document) { $nested = $true }
+        if (-not $requiredSeen -and [string]::Equals([string]$ancestor.Current.AutomationId, $requiredAncestorId, [StringComparison]::Ordinal)) {
+          $requiredSeen = $true
+        }
+        if (-not $requiredClassSeen -and (Test-ClassToken $ancestor $requiredAncestorClass)) { $requiredClassSeen = $true }
         $ancestor = $treeWalker.GetParent($ancestor)
       }
       if (-not $exactWindow) { throw 'document ancestry unavailable' }
       if ($nested) { continue }
+      # A Firefox Document outside the selected tab panel is browser chrome
+      # or a background tab.
+      if (-not $requiredSeen -or -not $requiredClassSeen) { continue }
       $count++
       if ($count -gt 1) { throw 'multiple visible top-level documents' }
-      $url = Read-ValidatedDocumentUrl $document $rootRect
+      $url = Read-ValidatedDocumentUrl $document $rootRect ($family -eq 'gecko')
     }
     if ($count -ne 1) { throw 'document URL unavailable' }
     return [pscustomobject]@{ found = $true; url = $url; error = '' }
@@ -188,7 +251,7 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
   }
 }
 
-function Read-Document([IntPtr]$handle) {
+function Read-Document([IntPtr]$handle, [string]$family) {
   try {
     if ($handle -eq [IntPtr]::Zero -or [DriftyTrackerUiaNative]::GetForegroundWindow() -ne $handle) {
       throw 'foreground changed'
@@ -198,7 +261,7 @@ function Read-Document([IntPtr]$handle) {
     $root = $auto::FromHandle($handle)
     if ($ownerPid -eq 0 -or $null -eq $root -or $root.Current.ProcessId -ne $ownerPid -or
         $root.Current.NativeWindowHandle -ne $handle.ToInt64()) { throw 'window changed' }
-    $result = Read-TopLevelDocument $root $walker $documentCondition ($auto::FocusedElement)
+    $result = Read-TopLevelDocument $root $walker $documentCondition ($auto::FocusedElement) $family
     [uint32]$afterPid = 0
     [void][DriftyTrackerUiaNative]::GetWindowThreadProcessId($handle, [ref]$afterPid)
     if ($afterPid -ne $ownerPid -or [DriftyTrackerUiaNative]::GetForegroundWindow() -ne $handle -or
@@ -217,11 +280,13 @@ while ($true) {
   if ($line -eq '') { continue }
   if ($line -eq 'QUIT') { break }
   try {
-    if ($line -notmatch '^READ ([0-9]+)$') {
+    if ($line -notmatch '^READ ([0-9]+)(?: (chromium|gecko))?$') {
       [pscustomobject]@{ found = $false; url = ''; error = 'invalid request' } | ConvertTo-Json -Compress
       continue
     }
-    Read-Document ([IntPtr][long]$Matches[1]) | ConvertTo-Json -Compress
+    $requestedHandle = [IntPtr][long]$Matches[1]
+    $requestedFamily = if ($Matches[2]) { $Matches[2] } else { 'chromium' }
+    Read-Document $requestedHandle $requestedFamily | ConvertTo-Json -Compress
   } catch {
     [pscustomobject]@{ found = $false; url = ''; error = 'invalid request' } | ConvertTo-Json -Compress
   }
@@ -233,10 +298,15 @@ while ($true) {
 class WindowsBrowserUiaResult:
     url: str | None
     error: str | None
+    private_window: bool = False
 
 
 def is_live_uia_browser(app_name: str | None) -> bool:
     return app_name in _SUPPORTED_BROWSERS
+
+
+def _uia_family(app_name: str | None) -> str:
+    return "gecko" if app_name in _GECKO_BROWSERS else "chromium"
 
 
 def normalize_uia_url(value: str | None) -> str | None:
@@ -274,6 +344,8 @@ def parse_uia_response(line: str) -> WindowsBrowserUiaResult:
         return WindowsBrowserUiaResult(None, "Windows UIA returned invalid JSON.")
     if not isinstance(payload, dict):
         return WindowsBrowserUiaResult(None, "Windows UIA returned an invalid response.")
+    if payload.get("private") is True:
+        return WindowsBrowserUiaResult(None, "private browsing window", private_window=True)
     normalized = normalize_uia_url(payload.get("url") if payload.get("found") is True else None)
     if normalized:
         return WindowsBrowserUiaResult(normalized, None)
@@ -351,10 +423,12 @@ class _WindowsUiaHost:
             self.close()
             raise
 
-    def read(self, hwnd: int) -> WindowsBrowserUiaResult:
+    def read(self, hwnd: int, family: str = "chromium") -> WindowsBrowserUiaResult:
         if self._process.poll() is not None or self._process.stdin is None or self._process.stdout is None:
             raise RuntimeError("Windows UIA host is not running.")
-        self._process.stdin.write(f"READ {int(hwnd)}\n")
+        if family not in {"chromium", "gecko"}:
+            raise ValueError("Unsupported Windows UIA browser family.")
+        self._process.stdin.write(f"READ {int(hwnd)} {family}\n")
         self._process.stdin.flush()
         timeout_seconds = (
             _REQUEST_TIMEOUT_SECONDS
@@ -409,7 +483,7 @@ def read_live_browser_url(hwnd: int, app_name: str | None) -> WindowsBrowserUiaR
             try:
                 if _host is None:
                     _host = _WindowsUiaHost()
-                return _host.read(hwnd)
+                return _host.read(hwnd, _uia_family(app_name))
             except Exception as error:
                 if _host is not None:
                     _host.close()

@@ -519,10 +519,17 @@ describe("catching the cat cancels the close", () => {
   });
 
   it("uses the fast native Chromium locator without regressing Firefox exact-X geometry", () => {
-    expect(petModeWindowsRustContract).toContain('if process_name == "firefox"');
-    expect(petModeWindowsRustContract).toContain("locate_firefox_tab_close");
+    // The paw and the automatic close share one UI Automation resolver, so the
+    // cat never acts out a close the resolver would refuse. The PowerShell
+    // geometry probe it replaced must not come back as a second Firefox path.
     expect(petModeWindowsRustContract).toContain("windows_browser_uia::locate_foreground_tab_close");
-    expect(windowsBrowserUiaRustContract).toContain('matches!(process_name.as_str(), "chrome" | "msedge" | "brave")');
+    expect(petModeWindowsRustContract).not.toContain('if process_name == "firefox"');
+    expect(petModeWindowsRustContract).not.toContain("locate_firefox_tab_close");
+    expect(windowsBrowserUiaRustContract).toContain('"chrome" | "msedge" | "brave" | "firefox" | "floorp" | "waterfox"');
+    // Firefox's X is its close-button class, never the rightmost button: that
+    // is the audio toggle in a right-to-left layout or with the X hidden.
+    expect(windowsBrowserUiaRustContract).toContain('const FIREFOX_CLOSE_BUTTON_CLASS: &str = "tab-close-button";');
+    expect(windowsBrowserUiaRustContract).toContain("class_tokens_contain(class_name, FIREFOX_CLOSE_BUTTON_CLASS)");
     expect(windowsBrowserUiaRustContract).toContain('format!("windows_uia_{match_kind}")');
   });
 

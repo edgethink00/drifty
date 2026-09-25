@@ -28,13 +28,16 @@ pub(super) fn close_browser_tab(
     .map_err(|diagnostic| ExtremeNudgeError::BrowserTabNotFound { diagnostic })
 }
 
-fn browser_process_name(browser_name: &str) -> Option<&'static str> {
+pub(super) fn browser_process_name(browser_name: &str) -> Option<&'static str> {
     match browser_name.trim() {
         "Google Chrome" | "Google Chrome Beta" | "Google Chrome Dev" | "Google Chrome Canary" => {
             Some("chrome")
         }
         "Microsoft Edge" => Some("msedge"),
         "Brave Browser" => Some("brave"),
+        "Firefox" | "Firefox Developer Edition" => Some("firefox"),
+        "Floorp" => Some("floorp"),
+        "Waterfox" => Some("waterfox"),
         _ => None,
     }
 }
@@ -74,6 +77,11 @@ fn normalized_browser_identity(
         "Brave Browser" => {
             normalized.ends_with(r"\bravesoftware\brave-browser\application\brave.exe")
         }
+        // Tor Browser ships firefox.exe; a privacy browser is never a Firefox
+        // close target even if capture misnamed it.
+        "Firefox" | "Firefox Developer Edition" => {
+            !normalized.ends_with(r"\tor browser\browser\firefox.exe")
+        }
         _ => true,
     };
     if !path.is_absolute() || !matches_process || !browser_identity_matches {
@@ -96,7 +104,16 @@ mod tests {
         assert_eq!(browser_process_name("Google Chrome Canary"), Some("chrome"));
         assert_eq!(browser_process_name("Microsoft Edge"), Some("msedge"));
         assert_eq!(browser_process_name("Brave Browser"), Some("brave"));
-        assert_eq!(browser_process_name("Firefox"), None);
+        assert_eq!(browser_process_name("Firefox"), Some("firefox"));
+        assert_eq!(
+            browser_process_name("Firefox Developer Edition"),
+            Some("firefox")
+        );
+        assert_eq!(browser_process_name("Floorp"), Some("floorp"));
+        assert_eq!(browser_process_name("Waterfox"), Some("waterfox"));
+        assert_eq!(browser_process_name("LibreWolf"), None);
+        assert_eq!(browser_process_name("Zen"), None);
+        assert_eq!(browser_process_name("Tor Browser"), None);
     }
 
     #[test]
@@ -147,6 +164,24 @@ mod tests {
         assert!(
             normalized_browser_identity(Some("chrome.exe"), "Google Chrome", "chrome").is_err()
         );
+        assert!(normalized_browser_identity(
+            Some(r"C:\Program Files\Mozilla Firefox\firefox.exe"),
+            "Firefox",
+            "firefox"
+        )
+        .is_ok());
+        assert!(normalized_browser_identity(
+            Some(r"C:\Users\qa\Desktop\Tor Browser\Browser\firefox.exe"),
+            "Firefox",
+            "firefox"
+        )
+        .is_err());
+        assert!(normalized_browser_identity(
+            Some(r"C:\Program Files\Zen Browser\zen.exe"),
+            "Firefox",
+            "firefox"
+        )
+        .is_err());
         assert!(matches!(
             normalized_browser_identity(None, "Google Chrome", "chrome"),
             Err(ExtremeNudgeError::MissingBrowserIdentity),

@@ -285,31 +285,6 @@ pub(in crate::commands) fn preflight_native_ax_tab_close(
     )
 }
 
-/// Pet Mode's preflight for Windows Firefox, whose close is performed by the
-/// Drifty Browser Bridge extension. Without a fresh bridge snapshot of the
-/// exact page the close is certain to fail, so the cat must not act it out.
-#[cfg(target_os = "windows")]
-pub(in crate::commands) fn preflight_windows_bridge_tab_close(
-    browser_name: &str,
-    browser_identity: Option<&str>,
-    site_url: Option<&str>,
-    site_domain: Option<&str>,
-) -> Result<(), String> {
-    BrowserPage::normalize(site_url, site_domain)
-        .and_then(|page| {
-            browser_tabs::preflight_windows_bridge_tab_close(
-                browser_name,
-                browser_identity,
-                page.site_url.as_deref(),
-            )
-        })
-        .map_err(|error| {
-            ExtremeNudgeFailure::from(error)
-                .diagnostic
-                .unwrap_or_else(|| "windows_browser_bridge_unavailable".to_string())
-        })
-}
-
 fn normalized_optional_text(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -321,31 +296,6 @@ fn safe_failure_diagnostic(value: &str) -> Option<String> {
     let normalized = value.trim();
     if normalized.is_empty() || normalized.len() > 96 {
         return None;
-    }
-    // The extension's close-tab protocol uses hyphens; renderer diagnostics
-    // use underscores. Translate only known protocol reasons, not free text.
-    if let Some(reason) = normalized.strip_prefix("windows_browser_bridge_") {
-        if matches!(
-            reason,
-            "target-missing"
-                | "private-tab"
-                | "target-id-mismatch"
-                | "target-url-mismatch"
-                | "target-not-active"
-                | "browser-unfocused"
-                | "browser-api-failed"
-                | "last-tab-refused"
-                | "target-window-changed"
-                | "target-context-changed"
-                | "postcondition-failed"
-                | "close-failed"
-                | "command-busy"
-        ) {
-            return Some(format!(
-                "windows_browser_bridge_{}",
-                reason.replace('-', "_")
-            ));
-        }
     }
     normalized
         .chars()
@@ -583,38 +533,7 @@ mod tests {
     }
 
     #[test]
-    fn windows_bridge_refusals_keep_safe_renderer_diagnostics() {
-        for (reason, expected) in [
-            ("target-missing", "target_missing"),
-            ("private-tab", "private_tab"),
-            ("target-id-mismatch", "target_id_mismatch"),
-            ("target-url-mismatch", "target_url_mismatch"),
-            ("target-not-active", "target_not_active"),
-            ("browser-unfocused", "browser_unfocused"),
-            ("browser-api-failed", "browser_api_failed"),
-            ("last-tab-refused", "last_tab_refused"),
-            ("target-window-changed", "target_window_changed"),
-            ("target-context-changed", "target_context_changed"),
-            ("postcondition-failed", "postcondition_failed"),
-            ("close-failed", "close_failed"),
-            ("command-busy", "command_busy"),
-        ] {
-            let failure = ExtremeNudgeFailure::from(ExtremeNudgeError::BrowserTabNotFound {
-                diagnostic: format!("windows_browser_bridge_{reason}"),
-            });
-            assert_eq!(
-                serde_json::to_value(failure).expect("serialize bridge refusal"),
-                serde_json::json!({
-                    "code": "browser_tab_not_found",
-                    "diagnostic": format!("windows_browser_bridge_{expected}"),
-                }),
-                "{reason}",
-            );
-        }
-    }
-
-    #[test]
-    fn windows_bridge_refusal_mapping_does_not_accept_arbitrary_messages() {
+    fn failure_diagnostics_reject_free_text() {
         for diagnostic in [
             "windows_browser_bridge_unknown-reason",
             "windows_browser_bridge_last-tab-refused-extra",

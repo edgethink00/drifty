@@ -28,7 +28,9 @@ function New-TestElement(
   [object[]]$children = @(),
   [string]$value = '',
   [bool]$patternAvailable = $true,
-  [bool]$providerFailure = $false
+  [bool]$providerFailure = $false,
+  [string]$automationId = '',
+  [string]$className = ''
 ) {
   if ($null -eq $rectangle) {
     $rectangle = [pscustomobject]@{ Left = 0; Top = 0; Width = 800; Height = 600 }
@@ -39,17 +41,24 @@ function New-TestElement(
       ControlType = $controlType
       IsOffscreen = $isOffscreen
       BoundingRectangle = $rectangle
+      AutomationId = $automationId
+      ClassName = $className
     }
     Parent = $parent
     Children = $children
     TestValue = $value
     PatternAvailable = $patternAvailable
     ProviderFailure = $providerFailure
+    PrivateMarker = $null
   }
   $element | Add-Member ScriptMethod GetRuntimeId { return @($this.Id.ToCharArray() | ForEach-Object { [int]$_ }) }
   $element | Add-Member ScriptMethod FindAll {
     param($scope, $condition)
     return @($this.Children)
+  }
+  $element | Add-Member ScriptMethod FindFirst {
+    param($scope, $condition)
+    return $this.PrivateMarker
   }
   $element | Add-Member ScriptMethod TryGetCurrentPattern {
     param($patternId, [ref]$result)
@@ -89,7 +98,10 @@ try {
   $requiredFunctions = @(
     'Test-SameAutomationElement',
     'Test-ExplicitHttpUrl',
+    'Test-FiniteRectangle',
     'Read-ValidatedDocumentUrl',
+    'Test-GeckoPrivateWindow',
+    'Test-ClassToken',
     'Find-FocusedTopLevelDocument',
     'Read-TopLevelDocument'
   )
@@ -117,6 +129,7 @@ try {
     $auto::ControlTypeProperty,
     $documentType
   )
+  $privateIndicatorCondition = 'synthetic private indicator condition'
 
   Assert-Equal 'explicit-http-preserved' (Test-ExplicitHttpUrl 'http://127.0.0.1:4173/Docs/?Q=Case#Fragment') $true
   Assert-Equal 'explicit-https-preserved' (Test-ExplicitHttpUrl 'https://example.com/Path/') $true
@@ -232,6 +245,66 @@ try {
   $document.Current.IsOffscreen = $null
   Assert-Equal 'unknown-visibility-refused' (Read-TopLevelDocument $root $walker $documentCondition).found $false
   $document.Current.IsOffscreen = $false
+
+  # Firefox (measured 154): the selected page is a visible Document inside the
+  # tabbrowser-tabpanels pane, background pages there are offscreen, and
+  # browser panels such as translations are Documents directly under the window.
+  $ffRoot = New-TestElement 'fr' $windowType
+  $panels = New-TestElement 'fp' $paneType $false $null $ffRoot @() '' $true $false 'tabbrowser-tabpanels'
+  $deck = New-TestElement 'fd' $paneType $false $null $panels @() '' $true $false '' 'browserSidebarContainer deck-selected'
+  $page = New-TestElement 'fg' $documentType $false $null $deck @() 'https://www.youtube.com/watch?v=abc'
+  $background = New-TestElement 'fb' $documentType $true $null $deck @() 'https://example.com/background'
+  $browserPanel = New-TestElement 'fc' $documentType $false $null $ffRoot @() 'https://translations.example/'
+  $ffRoot.Children = @($browserPanel, $background, $page)
+  Assert-Equal 'gecko-page-under-tab-panels' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko').url 'https://www.youtube.com/watch?v=abc'
+  Assert-Equal 'chromium-rules-refuse-the-same-tree' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'chromium').found $false
+  $panelFocus = New-TestElement 'fq' $paneType $false $null $browserPanel
+  Assert-Equal 'gecko-panel-focus-falls-back-to-page' (Read-TopLevelDocument $ffRoot $walker $documentCondition $panelFocus 'gecko').url 'https://www.youtube.com/watch?v=abc'
+  $pageFocus = New-TestElement 'fx' $paneType $false $null $page
+  Assert-Equal 'gecko-focused-page' (Read-TopLevelDocument $ffRoot $walker $documentCondition $pageFocus 'gecko').url 'https://www.youtube.com/watch?v=abc'
+  $ffRoot.Children = @($browserPanel)
+  Assert-Equal 'gecko-without-a-page-refused' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko').found $false
+  $ffRoot.Children = @($browserPanel, $page)
+  $ffRoot.PrivateMarker = New-TestElement 'pm' $paneType $false $null $ffRoot
+  $privateRead = Read-TopLevelDocument $ffRoot $walker $documentCondition $pageFocus 'gecko'
+  Assert-Equal 'gecko-private-window-not-found' $privateRead.found $false
+  Assert-Equal 'gecko-private-window-flagged' $privateRead.private $true
+  Assert-Equal 'gecko-private-window-has-no-url' $privateRead.url ''
+  Assert-Equal 'chromium-ignores-gecko-private-marker' (Read-TopLevelDocument $ffRoot $walker $documentCondition $pageFocus 'chromium').url 'https://www.youtube.com/watch?v=abc'
+
+  # LibreWolf 156 kept the previous tab's Document on-screen with an empty
+  # rectangle after a switch. Only the selected panel's Document is the page.
+  $ffRoot.PrivateMarker = $null
+  $previousDeck = New-TestElement 'fe' $paneType $false $null $panels @() '' $true $false '' 'browserSidebarContainer'
+  $emptyRect = [pscustomobject]@{ Left = [double]::PositiveInfinity; Top = [double]::PositiveInfinity; Width = [double]::NegativeInfinity; Height = [double]::NegativeInfinity }
+  $previous = New-TestElement 'fo' $documentType $false $emptyRect $previousDeck @() 'https://example.com/previous'
+  $ffRoot.Children = @($previous, $page)
+  Assert-Equal 'gecko-previous-tab-left-on-screen-is-skipped' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko').url 'https://www.youtube.com/watch?v=abc'
+  $previousFocus = New-TestElement 'fp2' $paneType $false $null $previous
+  Assert-Equal 'gecko-focus-in-a-background-panel-falls-back-to-page' (Read-TopLevelDocument $ffRoot $walker $documentCondition $previousFocus 'gecko').url 'https://www.youtube.com/watch?v=abc'
+  $deck.Current.ClassName = 'browserSidebarContainer'
+  Assert-Equal 'gecko-without-a-selected-panel-refused' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko').found $false
+  $deck.Current.ClassName = 'browserSidebarContainer deck-selected'
+
+  # Firefox can report an empty rectangle for a page on the first bounds query
+  # and its real bounds on the next. Gecko reads re-query once; Chromium and a
+  # rectangle that stays empty are still refused.
+  $ffRoot.PrivateMarker = $null
+  $ffRoot.Children = @($page)
+  $emptyThenReal = [pscustomobject]@{ Reads = 0 }
+  $page.Current = [pscustomobject]@{ ControlType = $documentType; IsOffscreen = $false; AutomationId = ''; BoundingRectangle = $null }
+  $page.Current | Add-Member -Force ScriptProperty BoundingRectangle {
+    $emptyThenReal.Reads++
+    if ($emptyThenReal.Reads -eq 1) { return [pscustomobject]@{ Left = [double]::PositiveInfinity; Top = [double]::PositiveInfinity; Width = [double]::NegativeInfinity; Height = [double]::NegativeInfinity } }
+    return [pscustomobject]@{ Left = 0; Top = 106; Width = 800; Height = 494 }
+  }
+  Assert-Equal 'gecko-rereads-a-first-empty-rectangle' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko').url 'https://www.youtube.com/watch?v=abc'
+  $emptyThenReal.Reads = 0
+  Assert-Equal 'chromium-does-not-reread-geometry' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'chromium').error 'document geometry unavailable'
+  $page.Current | Add-Member -Force ScriptProperty BoundingRectangle {
+    return [pscustomobject]@{ Left = [double]::PositiveInfinity; Top = [double]::PositiveInfinity; Width = [double]::NegativeInfinity; Height = [double]::NegativeInfinity }
+  }
+  Assert-Equal 'gecko-persistently-empty-rectangle-refused' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko').error 'document geometry unavailable'
 } catch {
   Add-Case 'suite-execution' $false $_.Exception.Message
 }

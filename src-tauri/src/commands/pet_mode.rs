@@ -6996,19 +6996,14 @@ mod tests {
     }
 
     #[test]
-    fn firefox_geometry_helper_receives_the_parent_foreground_identity() {
+    fn windows_tab_close_hotspot_comes_from_the_close_resolver_for_every_browser() {
+        // The paw points at the control the close presses, so the hotspot and
+        // the close share one UIA resolver on Windows, Firefox included. A
+        // separate geometry path could approve a close the resolver refuses.
         let windows_source = include_str!("pet_mode_windows.rs");
-        for variable in [
-            "DRIFTY_NUDGE_FOREGROUND_HWND",
-            "DRIFTY_NUDGE_FOREGROUND_PID",
-            "DRIFTY_NUDGE_FOREGROUND_DPI",
-        ] {
-            assert!(
-                windows_source.contains(&format!(".env(\"{variable}\""))
-                    || windows_source.contains(&format!("\"{variable}\",")),
-                "Firefox geometry subprocess is missing {variable}"
-            );
-        }
+        assert!(windows_source.contains("windows_browser_uia::locate_foreground_tab_close("));
+        assert!(!windows_source.contains("process_name == \"firefox\""));
+        assert!(!windows_source.to_ascii_lowercase().contains("powershell"));
     }
 
     #[test]

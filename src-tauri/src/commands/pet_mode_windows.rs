@@ -1,15 +1,5 @@
-use std::{
-    env,
-    ffi::c_void,
-    fs::{self, OpenOptions},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant},
-};
+use std::{ffi::c_void, path::Path};
 
-use serde::Deserialize;
 use tauri::Monitor;
 use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT};
@@ -35,57 +25,6 @@ use super::{
 const DWMWA_CAPTION_BUTTON_BOUNDS: u32 = 5;
 const MIN_WINDOW_WIDTH: i32 = 80;
 const MIN_WINDOW_HEIGHT: i32 = 48;
-const WINDOWS_TAB_CLOSE_SCRIPT: &str =
-    include_str!("extreme_nudge/browser_tabs/windows_tab_close.ps1");
-// Firefox exposes a different accessibility tree from Chromium. Its packaged
-// native-message bridge performs the close itself, while this already-proven
-// locate-only UIA path supplies the exact visible tab close-button geometry.
-const FIREFOX_GEOMETRY_TIMEOUT: Duration = Duration::from_secs(7);
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-const MAX_OUTPUT_BYTES: usize = 64 * 1024;
-
-struct TemporaryPowerShellScript {
-    path: PathBuf,
-}
-
-impl TemporaryPowerShellScript {
-    fn create() -> Result<Self, std::io::Error> {
-        let path = env::temp_dir().join(format!(
-            "drifty-firefox-tab-geometry-{}-{}.ps1",
-            std::process::id(),
-            uuid::Uuid::new_v4()
-        ));
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)?;
-        if let Err(error) = file
-            .write_all(WINDOWS_TAB_CLOSE_SCRIPT.as_bytes())
-            .and_then(|_| file.sync_all())
-        {
-            drop(file);
-            let _ = fs::remove_file(&path);
-            return Err(error);
-        }
-        Ok(Self { path })
-    }
-}
-
-impl Drop for TemporaryPowerShellScript {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WindowsTabGeometryResult {
-    located: bool,
-    x: Option<f64>,
-    y: Option<f64>,
-    diagnostic: Option<String>,
-    error: Option<String>,
-}
 
 struct Candidate {
     hwnd: HWND,
@@ -145,169 +84,28 @@ fn resolve_browser_tab_close_target(
         return fallback_target_point(monitor, "windows_uia_missing_target");
     }
 
-    let located = if process_name == "firefox" {
-        // The Drifty Browser Bridge extension performs the Firefox close. The
-        // tab X can be located without it, but without its fresh snapshot of
-        // this exact page the close is certain to fail, so the paw must not
-        // act it out.
-        if let Err(diagnostic) = super::super::extreme_nudge::preflight_windows_bridge_tab_close(
-            browser_name,
-            target.browser_identity.as_deref(),
-            target.site_url.as_deref(),
-            target.site_domain.as_deref(),
-        ) {
-            return fallback_target_point(monitor, &diagnostic);
-        }
-        locate_firefox_tab_close(process_name, &browser_identity, site_url, site_domain)
-    } else {
-        super::super::windows_browser_uia::locate_foreground_tab_close(
-            process_name,
-            &browser_identity,
-            site_url,
-            site_domain,
-        )
-        .map(|result| WindowsTabGeometryResult {
-            located: true,
-            x: Some(result.x),
-            y: Some(result.y),
-            diagnostic: Some(result.diagnostic),
-            error: None,
-        })
-    };
-
-    match located {
+    // The paw points at the exact control the close will press. Both come from
+    // the same UIA resolver, so a close it would refuse is never acted out.
+    match super::super::windows_browser_uia::locate_foreground_tab_close(
+        process_name,
+        &browser_identity,
+        site_url,
+        site_domain,
+    ) {
         Ok(result) => {
-            if !result.located {
-                return fallback_target_point(
-                    monitor,
-                    result
-                        .diagnostic
-                        .as_deref()
-                        .filter(|value| !value.trim().is_empty())
-                        .or(result.error.as_deref())
-                        .unwrap_or("windows_uia_geometry_unavailable"),
-                );
-            }
-            let (Some(x), Some(y)) = (result.x, result.y) else {
-                return fallback_target_point(monitor, "windows_uia_invalid_geometry");
-            };
-            if !x.is_finite() || !y.is_finite() {
+            if !result.x.is_finite() || !result.y.is_finite() {
                 return fallback_target_point(monitor, "windows_uia_invalid_geometry");
             }
             PetModeTargetPoint {
-                x,
-                y,
+                x: result.x,
+                y: result.y,
                 kind: PetModeTargetKind::BrowserTabClose,
                 confidence: PetModeTargetConfidence::High,
-                diagnostic: result
-                    .diagnostic
-                    .filter(|value| !value.trim().is_empty())
-                    .unwrap_or_else(|| "windows_uia_browser_tab_close_button".to_string()),
+                diagnostic: result.diagnostic,
             }
         }
         Err(diagnostic) => fallback_target_point(monitor, &diagnostic),
     }
-}
-
-fn locate_firefox_tab_close(
-    process_name: &str,
-    browser_identity: &str,
-    site_url: &str,
-    site_domain: &str,
-) -> Result<WindowsTabGeometryResult, String> {
-    use std::os::windows::process::CommandExt;
-
-    // The locate-only PowerShell path cannot call GetForegroundWindow itself:
-    // it consumes the foreground identity captured by the parent immediately
-    // before spawning so the later UIA lookup stays bound to that exact HWND.
-    // Keep all three values together; omitting them makes the helper safely
-    // reject every Firefox target as `windows_uia_geometry_no_foreground`.
-    let foreground_hwnd = unsafe { GetForegroundWindow() };
-    if foreground_hwnd.is_null() {
-        return Err("windows_uia_geometry_no_foreground".to_string());
-    }
-    let mut foreground_pid = 0_u32;
-    unsafe {
-        GetWindowThreadProcessId(foreground_hwnd, &mut foreground_pid);
-    }
-    if foreground_pid == 0 {
-        return Err("windows_uia_geometry_no_foreground".to_string());
-    }
-    let foreground_dpi = unsafe { GetDpiForWindow(foreground_hwnd) };
-
-    let powershell = trusted_powershell_path()?;
-    let script = TemporaryPowerShellScript::create()
-        .map_err(|_| "windows_uia_geometry_script_create_failed".to_string())?;
-    let mut command = Command::new(powershell);
-    command
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-        ])
-        .arg(&script.path)
-        .env("DRIFTY_NUDGE_OPERATION", "locate")
-        .env("DRIFTY_NUDGE_BROWSER_PROCESS", process_name)
-        .env("DRIFTY_NUDGE_BROWSER_IDENTITY", browser_identity)
-        .env("DRIFTY_NUDGE_SITE_URL", site_url)
-        .env("DRIFTY_NUDGE_SITE_DOMAIN", site_domain)
-        .env(
-            "DRIFTY_NUDGE_FOREGROUND_HWND",
-            (foreground_hwnd as isize).to_string(),
-        )
-        .env("DRIFTY_NUDGE_FOREGROUND_PID", foreground_pid.to_string())
-        .env("DRIFTY_NUDGE_FOREGROUND_DPI", foreground_dpi.to_string())
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW);
-    let mut child = command
-        .spawn()
-        .map_err(|_| "windows_uia_geometry_spawn_failed".to_string())?;
-    let deadline = Instant::now() + FIREFOX_GEOMETRY_TIMEOUT;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(25)),
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("windows_uia_geometry_timeout".to_string());
-            }
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("windows_uia_geometry_wait_failed".to_string());
-            }
-        }
-    }
-
-    let mut stdout = Vec::new();
-    if let Some(pipe) = child.stdout.take() {
-        let _ = pipe.take(MAX_OUTPUT_BYTES as u64).read_to_end(&mut stdout);
-    }
-    serde_json::from_slice::<WindowsTabGeometryResult>(&stdout)
-        .map_err(|_| "windows_uia_geometry_invalid_response".to_string())
-}
-
-fn trusted_powershell_path() -> Result<PathBuf, String> {
-    let system_root = env::var_os("SystemRoot")
-        .ok_or_else(|| "windows_uia_system_root_unavailable".to_string())?;
-    let root = PathBuf::from(system_root);
-    if !root.is_absolute() {
-        return Err("windows_uia_system_root_not_absolute".to_string());
-    }
-    let candidate = root
-        .join("System32")
-        .join("WindowsPowerShell")
-        .join("v1.0")
-        .join("powershell.exe");
-    if !candidate.is_file() {
-        return Err("windows_uia_trusted_powershell_unavailable".to_string());
-    }
-    Ok(candidate)
 }
 
 fn browser_process_name(browser_name: &str) -> Option<&'static str> {
@@ -318,6 +116,8 @@ fn browser_process_name(browser_name: &str) -> Option<&'static str> {
         "Microsoft Edge" => Some("msedge"),
         "Brave Browser" => Some("brave"),
         "Firefox" | "Firefox Developer Edition" => Some("firefox"),
+        "Floorp" => Some("floorp"),
+        "Waterfox" => Some("waterfox"),
         _ => None,
     }
 }
@@ -353,6 +153,9 @@ fn normalized_browser_identity(
         .any(|suffix| normalized.ends_with(suffix)),
         "Brave Browser" => {
             normalized.ends_with(r"\bravesoftware\brave-browser\application\brave.exe")
+        }
+        "Firefox" | "Firefox Developer Edition" => {
+            !normalized.ends_with(r"\tor browser\browser\firefox.exe")
         }
         _ => true,
     };

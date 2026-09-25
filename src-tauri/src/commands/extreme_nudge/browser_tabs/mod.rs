@@ -17,8 +17,8 @@ mod qa_tests;
 mod safari;
 #[cfg(target_os = "windows")]
 mod windows;
-#[cfg(target_os = "windows")]
-mod windows_browser_bridge;
+#[cfg(all(test, target_os = "windows"))]
+mod windows_qa_tests;
 
 #[cfg(target_os = "macos")]
 pub(in crate::commands) use macos_native_ax::NativeAxCloseHotspot;
@@ -65,17 +65,6 @@ pub(super) fn preflight_native_ax_tab_close(
     )
 }
 
-/// Checks, without issuing a command, that the Firefox bridge currently holds
-/// the exact page the close would target.
-#[cfg(target_os = "windows")]
-pub(super) fn preflight_windows_bridge_tab_close(
-    browser_name: &str,
-    browser_identity: Option<&str>,
-    site_url: Option<&str>,
-) -> Result<(), ExtremeNudgeError> {
-    windows_browser_bridge::preflight_close(browser_name, browser_identity, site_url)
-}
-
 const APPLESCRIPT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -88,8 +77,7 @@ enum BrowserTabScriptKind {
 pub(super) fn is_supported_browser_tab_target(app_name: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
-        return windows::is_supported_browser(app_name)
-            || windows_browser_bridge::is_supported_browser(app_name);
+        return windows::is_supported_browser(app_name);
     }
     #[cfg(not(target_os = "windows"))]
     browser_tab_script_kind(app_name).is_some()
@@ -103,9 +91,6 @@ pub(super) fn close_browser_tab(
     site_domain: Option<&str>,
     _force_chromium_ax_tab_close: bool,
 ) -> Result<String, ExtremeNudgeError> {
-    if windows_browser_bridge::is_supported_browser(browser_name) {
-        return windows_browser_bridge::close_browser_tab(browser_name, browser_identity, site_url);
-    }
     windows::close_browser_tab(browser_name, browser_identity, site_url, site_domain)
 }
 

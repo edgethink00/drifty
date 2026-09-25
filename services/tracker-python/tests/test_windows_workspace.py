@@ -361,6 +361,35 @@ class BrowserEnrichmentTests(unittest.TestCase):
         self.assertEqual(enriched.site_source, "browser-extension")
         self.assertEqual(enriched.capture_confidence, 1.0)
 
+    def test_firefox_private_window_records_no_page_and_skips_history(self) -> None:
+        snapshot = self._snapshot("Firefox")
+        snapshot.app_name = "Firefox"
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult(None, "private browsing window", private_window=True),
+            history_reader=lambda *_: self.fail("a private window must not be matched against history"),
+            history_identity_checker=lambda *_: True,
+            bridge_reader=lambda *_: None,
+        )
+        self.assertEqual(enriched.browser_name, "Firefox")
+        self.assertIsNone(enriched.site_url)
+        self.assertEqual(enriched.browser_automation_error, "private browsing window")
+
+    def test_firefox_live_document_url_is_used_without_the_bridge(self) -> None:
+        snapshot = self._snapshot("Firefox")
+        snapshot.app_name = "Firefox"
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult("https://www.youtube.com/watch?v=abc", None),
+            history_reader=lambda *_: self.fail("history must not replace a live Document URL"),
+            bridge_reader=lambda *_: None,
+        )
+        self.assertEqual(enriched.site_url, "https://www.youtube.com/watch?v=abc")
+        self.assertEqual(enriched.site_source, "windows-uia-document")
+        self.assertEqual(enriched.youtube_video_id, "abc")
+
 
 class BrowserHistoryIdentityTests(unittest.TestCase):
     def test_accepts_exact_vendor_install_path(self) -> None:

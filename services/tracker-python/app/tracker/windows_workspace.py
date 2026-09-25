@@ -352,10 +352,20 @@ def enrich_browser_snapshot(
     live = BrowserMetadata(browser_name=snapshot.app_name)
     history = None
     metadata = bridge or live
+    private_window = False
     if bridge is None:
-        live = _browser_metadata_from_live_uia(snapshot.app_name, live_reader(hwnd, snapshot.app_name))
+        live_result = live_reader(hwnd, snapshot.app_name)
+        private_window = live_result.private_window
+        live = _browser_metadata_from_live_uia(snapshot.app_name, live_result)
         metadata = live
-    if bridge is None and not live.site_url and history_identity_checker(snapshot.app_name, snapshot.bundle_id):
+    # A private window records no page. Guessing one from history by its title
+    # would attribute private browsing to a normal visit.
+    if (
+        bridge is None
+        and not live.site_url
+        and not private_window
+        and history_identity_checker(snapshot.app_name, snapshot.bundle_id)
+    ):
         history = history_reader(snapshot.app_name, snapshot.window_title, snapshot.observed_at)
         if history.site_url:
             metadata = history
