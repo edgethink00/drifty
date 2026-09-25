@@ -1,13 +1,153 @@
 use std::sync::{Mutex, OnceLock};
 
-use tauri::{AppHandle, LogicalSize, Manager, Theme};
+use serde::Serialize;
+use tauri::{AppHandle, LogicalSize, Manager, State, Theme};
 
+#[cfg(target_os = "windows")]
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(target_os = "windows")]
+use std::time::Duration;
 #[cfg(target_os = "windows")]
 use tauri::{PhysicalPosition, PhysicalSize, Runtime, WebviewWindow};
 
 #[cfg(target_os = "windows")]
+unsafe extern "C" {
+    fn drifty_windows_blur_start(ui_window: *mut std::ffi::c_void) -> bool;
+    fn drifty_windows_blur_sync() -> bool;
+    fn drifty_windows_blur_is_healthy() -> bool;
+    fn drifty_windows_blur_stop();
+}
+
+#[cfg(target_os = "windows")]
+static WINDOWS_NATIVE_BLUR_IO: Mutex<()> = Mutex::new(());
+#[cfg(target_os = "windows")]
+static WINDOWS_NATIVE_BLUR_MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "windows")]
+static WINDOWS_NATIVE_BLUR_GENERATION: AtomicU64 = AtomicU64::new(0);
+#[cfg(target_os = "windows")]
+static WINDOWS_NATIVE_BLUR_FAILED: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "windows")]
+static WINDOWS_NATIVE_BLUR_SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "windows")]
+pub(crate) fn start_windows_native_blur<R: Runtime>(window: &WebviewWindow<R>) -> bool {
+    if WINDOWS_NATIVE_BLUR_FAILED.load(Ordering::Acquire)
+        || WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
+    {
+        return false;
+    }
+    let is_translucent = window
+        .app_handle()
+        .state::<MainWindowMaterialState>()
+        .read()
+        .kind
+        == MainWindowMaterialKind::Translucent;
+    if is_translucent {
+        if let Ok(hwnd) = window.hwnd() {
+            // Safety: the revealed Tauri main window owns this live HWND.
+            let started = {
+                let _guard = WINDOWS_NATIVE_BLUR_IO
+                    .lock()
+                    .expect("Windows blur lock poisoned");
+                unsafe { drifty_windows_blur_start(hwnd.0) }
+            };
+            if started {
+                // Only the successful native-blur path may use the lighter tint.
+                // A failed opt-in and the ordinary transparent fallback retain
+                // their stronger tint so desktop detail does not show sharply.
+                if let Err(error) =
+                    window.eval("document.documentElement.dataset.windowsNativeBlur = 'active'; document.documentElement.dataset.windowMaterial = 'translucent'")
+                {
+                    eprintln!("could not reveal the experimental Windows blur tint: {error}");
+                }
+                if !WINDOWS_NATIVE_BLUR_MONITOR_STARTED.swap(true, Ordering::AcqRel) {
+                    let generation = WINDOWS_NATIVE_BLUR_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+                    let monitored_window = (*window).clone();
+                    std::thread::spawn(move || {
+                        while !WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
+                            && WINDOWS_NATIVE_BLUR_GENERATION.load(Ordering::Acquire) == generation
+                        {
+                            std::thread::sleep(Duration::from_millis(100));
+                            if WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
+                                || WINDOWS_NATIVE_BLUR_GENERATION.load(Ordering::Acquire) != generation
+                            {
+                                break;
+                            }
+                            let healthy = {
+                                let _guard = WINDOWS_NATIVE_BLUR_IO
+                                    .lock()
+                                    .expect("Windows blur lock poisoned");
+                                // Safety: the native health flag is atomic and the FFI lock
+                                // serializes this check with start, sync, and shutdown.
+                                unsafe { drifty_windows_blur_is_healthy() }
+                            };
+                            if healthy || WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
+                                || WINDOWS_NATIVE_BLUR_GENERATION.load(Ordering::Acquire) != generation
+                            {
+                                continue;
+                            }
+                            WINDOWS_NATIVE_BLUR_FAILED.store(true, Ordering::Release);
+                            monitored_window.app_handle().state::<MainWindowMaterialState>()
+                                .replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+                            if let Err(error) = monitored_window.eval(
+                                "document.documentElement.dataset.windowMaterial = 'solid'; document.documentElement.removeAttribute('data-windows-native-blur')",
+                            ) {
+                                eprintln!("could not restore the Windows blur fallback tint: {error}");
+                            }
+                            eprintln!("Windows blur stopped after startup; restored opaque shell");
+                            let _guard = WINDOWS_NATIVE_BLUR_IO
+                                .lock()
+                                .expect("Windows blur lock poisoned");
+                            // Safety: this monitor owns the failed opt-in surface until exit.
+                            unsafe { drifty_windows_blur_stop() };
+                            break;
+                        }
+                    });
+                }
+                return true;
+            } else {
+                eprintln!("could not activate Windows native blur; restoring opaque shell");
+                window.app_handle().state::<MainWindowMaterialState>()
+                    .replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+                let _ = window.eval("document.documentElement.dataset.windowMaterial = 'solid'; document.documentElement.removeAttribute('data-windows-native-blur')");
+                let _guard = WINDOWS_NATIVE_BLUR_IO.lock().expect("Windows blur lock poisoned");
+                // Safety: a failed native start can leave worker handles that must be released.
+                unsafe { drifty_windows_blur_stop() };
+            }
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn sync_windows_native_blur() {
+    if !WINDOWS_NATIVE_BLUR_FAILED.load(Ordering::Acquire)
+        && !WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
+    {
+        let _guard = WINDOWS_NATIVE_BLUR_IO
+            .lock()
+            .expect("Windows blur lock poisoned");
+        // Safety: the native helper owns its HWNDs and checks their lifetime.
+        let _ = unsafe { drifty_windows_blur_sync() };
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn stop_windows_native_blur() {
+    WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.store(true, Ordering::Release);
+    WINDOWS_NATIVE_BLUR_GENERATION.fetch_add(1, Ordering::AcqRel);
+    let _guard = WINDOWS_NATIVE_BLUR_IO.lock().expect("Windows blur lock poisoned");
+    // Safety: called by the Tauri event loop before process shutdown.
+    unsafe { drifty_windows_blur_stop() };
+}
+
+#[cfg(target_os = "windows")]
 use windows_sys::Win32::{
     Foundation::{HWND, POINT},
+    Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMSBT_NONE, DWMWA_SYSTEMBACKDROP_TYPE,
+        DWMWA_USE_IMMERSIVE_DARK_MODE,
+    },
     UI::WindowsAndMessaging::{
         GetCursorPos, GetSystemMenu, PostMessageW, SetForegroundWindow, TrackPopupMenu,
         TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_NULL, WM_SYSCOMMAND,
@@ -18,6 +158,138 @@ use windows_sys::Win32::{
 use objc2_app_kit::{NSWindow, NSWindowButton};
 
 use crate::MAIN_WINDOW_LABEL;
+
+/// `DWM_SYSTEMBACKDROP_TYPE` became a documented, supported API in Windows 11
+/// 22H2. On supported builds Drifty disables an opaque system backdrop so the
+/// transparent WebView can transmit real desktop pixels through the tinted
+/// shell. Older releases keep the existing solid shell.
+#[cfg(any(target_os = "windows", test))]
+const WINDOWS_TRANSLUCENT_SHELL_MIN_BUILD: u32 = 22_621;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MainWindowMaterialKind {
+    Native,
+    Solid,
+    Translucent,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MainWindowMaterialStatus {
+    kind: MainWindowMaterialKind,
+}
+
+impl MainWindowMaterialStatus {
+    const fn native() -> Self {
+        Self {
+            kind: MainWindowMaterialKind::Native,
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    const fn windows(kind: MainWindowMaterialKind) -> Self {
+        Self { kind }
+    }
+}
+
+pub struct MainWindowMaterialState(Mutex<MainWindowMaterialStatus>);
+
+impl Default for MainWindowMaterialState {
+    fn default() -> Self {
+        Self(Mutex::new(MainWindowMaterialStatus::native()))
+    }
+}
+
+impl MainWindowMaterialState {
+    fn read(&self) -> MainWindowMaterialStatus {
+        self.0
+            .lock()
+            .map(|status| *status)
+            .unwrap_or_else(|poisoned| *poisoned.into_inner())
+    }
+
+    #[cfg(target_os = "windows")]
+    fn replace(&self, status: MainWindowMaterialStatus) {
+        match self.0.lock() {
+            Ok(mut current) => *current = status,
+            Err(poisoned) => *poisoned.into_inner() = status,
+        }
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_material_kind_for_build(build: u32) -> MainWindowMaterialKind {
+    if build >= WINDOWS_TRANSLUCENT_SHELL_MIN_BUILD {
+        MainWindowMaterialKind::Translucent
+    } else {
+        MainWindowMaterialKind::Solid
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_blur_preview_requested(build: u32, enabled: bool, failed: bool) -> bool {
+    enabled && !failed && windows_material_kind_for_build(build) == MainWindowMaterialKind::Translucent
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn resolved_windows_material_kind(
+    requested: MainWindowMaterialKind,
+    activation_succeeded: bool,
+) -> MainWindowMaterialKind {
+    if requested == MainWindowMaterialKind::Translucent && activation_succeeded {
+        MainWindowMaterialKind::Translucent
+    } else {
+        MainWindowMaterialKind::Solid
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn set_dwm_window_attribute<T>(hwnd: HWND, attribute: u32, value: &T) -> Result<(), String> {
+    // Safety: `hwnd` belongs to the live main window. DWM copies exactly
+    // `size_of::<T>()` bytes during this call and retains no pointer.
+    let result = unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            attribute,
+            std::ptr::from_ref(value).cast(),
+            std::mem::size_of::<T>() as u32,
+        )
+    };
+    if result < 0 {
+        Err(format!(
+            "DwmSetWindowAttribute({attribute}) failed with HRESULT 0x{:08X}",
+            result as u32
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_windows_translucent_shell<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    set_dwm_window_attribute(hwnd.0, DWMWA_SYSTEMBACKDROP_TYPE as u32, &DWMSBT_NONE)
+}
+
+#[cfg(target_os = "windows")]
+fn set_windows_backdrop_theme<R: Runtime>(
+    window: &WebviewWindow<R>,
+    dark: bool,
+) -> Result<(), String> {
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    let use_dark_mode = u32::from(dark);
+    set_dwm_window_attribute(hwnd.0, DWMWA_USE_IMMERSIVE_DARK_MODE as u32, &use_dark_mode)
+}
+
+/// The native window may be transparent, but the renderer starts with an
+/// opaque CSS shell. Only an explicit per-install Preview opt-in may activate
+/// the blur helper and reveal the translucent tint.
+#[cfg(target_os = "windows")]
+pub(crate) fn configure_main_window_material(app: &AppHandle) {
+    app.state::<MainWindowMaterialState>()
+        .replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+}
 
 /// Logical size of the v2.1 onboarding card. In compact mode the whole window
 /// shrinks to this so the card itself reads as the macOS window.
@@ -381,10 +653,53 @@ fn set_titlebar_controls_visible(_app: &AppHandle, _visible: bool) -> Result<(),
 ///
 /// The native shell material renders in the window's effective appearance. When
 /// the app runs its dark theme on a light system (or the reverse), an unpinned
-/// window makes macOS draw the light material under a dark tint, which reads as
-/// a flat opaque slab instead of glass.
+/// window draws the wrong native material under the app tint, which reads as a
+/// flat opaque slab instead of glass.
 #[tauri::command]
-pub fn window_set_theme_appearance(app: AppHandle, dark: bool) -> Result<(), String> {
+pub fn window_set_theme_appearance(
+    app: AppHandle,
+    material_state: State<'_, MainWindowMaterialState>,
+    dark: bool,
+    windows_blur_preview_enabled: bool,
+) -> Result<MainWindowMaterialStatus, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let window = app
+            .get_webview_window(MAIN_WINDOW_LABEL)
+            .ok_or_else(|| "main window is unavailable".to_string())?;
+        let requested = windows_blur_preview_requested(
+            windows_version::OsVersion::current().build,
+            windows_blur_preview_enabled,
+            WINDOWS_NATIVE_BLUR_FAILED.load(Ordering::Acquire),
+        );
+        if requested {
+            if let Err(error) = apply_windows_translucent_shell(&window)
+                .and_then(|_| set_windows_backdrop_theme(&window, dark))
+            {
+                eprintln!("could not activate Windows blur Preview; using opaque shell: {error}");
+                material_state.replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+            } else {
+                material_state.replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Translucent));
+                if window.is_visible().unwrap_or(false) && !start_windows_native_blur(&window) {
+                    material_state.replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+                }
+            }
+        } else {
+            // The renderer makes the shell opaque synchronously before IPC.
+            // Remove native blur only after its replacement is in place.
+            material_state.replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+            WINDOWS_NATIVE_BLUR_GENERATION.fetch_add(1, Ordering::AcqRel);
+            WINDOWS_NATIVE_BLUR_MONITOR_STARTED.store(false, Ordering::Release);
+            let _ = window.eval("document.documentElement.dataset.windowMaterial = 'solid'; document.documentElement.removeAttribute('data-windows-native-blur')");
+            let _guard = WINDOWS_NATIVE_BLUR_IO.lock().expect("Windows blur lock poisoned");
+            // Safety: the disabled Preview has no remaining native blur owner.
+            unsafe { drifty_windows_blur_stop() };
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = windows_blur_preview_enabled;
+
     let handle = app.clone();
     app.run_on_main_thread(move || {
         let Some(window) = handle.get_webview_window(MAIN_WINDOW_LABEL) else {
@@ -393,7 +708,22 @@ pub fn window_set_theme_appearance(app: AppHandle, dark: bool) -> Result<(), Str
         // Appearance is cosmetic; a failure must not take down theming.
         let _ = window.set_theme(Some(if dark { Theme::Dark } else { Theme::Light }));
     })
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "windows")]
+    {
+        let status = material_state.read();
+        if status.kind == MainWindowMaterialKind::Translucent {
+            let visible = app.get_webview_window(MAIN_WINDOW_LABEL)
+                .and_then(|window| window.is_visible().ok())
+                .unwrap_or(false);
+            if !visible {
+                return Ok(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+            }
+        }
+        Ok(status)
+    }
+    #[cfg(not(target_os = "windows"))]
+    Ok(material_state.read())
 }
 
 #[cfg(target_os = "windows")]
@@ -549,5 +879,41 @@ mod tests {
         assert_eq!((fit.inner_width, fit.inner_height), (1006, 653));
         assert!((fit.minimum_width - 670.666_666_666_666_6).abs() < 0.001);
         assert!((fit.minimum_height - 435.333_333_333_333_3).abs() < 0.001);
+    }
+
+    #[test]
+    fn translucent_shell_requires_the_documented_windows_11_dwm_api() {
+        assert!(!windows_blur_preview_requested(26_200, false, false));
+        assert!(!windows_blur_preview_requested(22_000, true, false));
+        assert!(!windows_blur_preview_requested(26_200, true, true));
+        assert!(windows_blur_preview_requested(26_200, true, false));
+        assert_eq!(
+            windows_material_kind_for_build(22_000),
+            MainWindowMaterialKind::Solid
+        );
+        assert_eq!(
+            windows_material_kind_for_build(WINDOWS_TRANSLUCENT_SHELL_MIN_BUILD - 1),
+            MainWindowMaterialKind::Solid
+        );
+        assert_eq!(
+            windows_material_kind_for_build(WINDOWS_TRANSLUCENT_SHELL_MIN_BUILD),
+            MainWindowMaterialKind::Translucent
+        );
+        assert_eq!(
+            windows_material_kind_for_build(26_200),
+            MainWindowMaterialKind::Translucent
+        );
+        assert_eq!(
+            resolved_windows_material_kind(MainWindowMaterialKind::Translucent, true),
+            MainWindowMaterialKind::Translucent
+        );
+        assert_eq!(
+            resolved_windows_material_kind(MainWindowMaterialKind::Translucent, false),
+            MainWindowMaterialKind::Solid
+        );
+        assert_eq!(
+            resolved_windows_material_kind(MainWindowMaterialKind::Solid, true),
+            MainWindowMaterialKind::Solid
+        );
     }
 }

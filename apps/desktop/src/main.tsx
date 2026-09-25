@@ -28,7 +28,10 @@ import "./features/profile/profile-page.css";
 import "./styles/chartHoverMotion.css";
 import "./styles/popover-motion.css";
 import "./styles/modal-chrome.css";
-import { hideBootShell } from "./features/loading/bootShell";
+import {
+  hideBootShell,
+  shouldDeferBootShellForNativeMaterial,
+} from "./features/loading/bootShell";
 import { DEV_SETTINGS_ENABLED } from "./appFeatureSwitches";
 import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
 import { installDarkPalettePreviewStorageSync } from "./features/settings/darkPalettePreview";
@@ -173,8 +176,13 @@ function BootstrapLoader() {
   React.useEffect(() => {
     if (LoadedApp) {
       window.__DRIFTY_SET_BOOT_STATUS__?.("App component ready");
-      window.__DRIFTY_BOOTSTRAPPED__ = true;
-      hideBootShell();
+      if (!shouldDeferBootShellForNativeMaterial(
+        initialSurface,
+        document.documentElement.dataset.platform,
+      )) {
+        window.__DRIFTY_BOOTSTRAPPED__ = true;
+        hideBootShell();
+      }
       document.getElementById("boot-error")?.remove();
       if (shouldInitializePostHogRef.current) {
         void import("./lib/analytics/posthogClient")

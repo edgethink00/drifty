@@ -1,4 +1,23 @@
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        println!("cargo:rerun-if-changed=src/windows_material_blur.cpp");
+        cc::Build::new()
+            .cpp(true)
+            .file("src/windows_material_blur.cpp")
+            .flag_if_supported("/std:c++17")
+            .compile("drifty_windows_material_blur");
+        for library in [
+            "dcomp",
+            "d3d11",
+            "dxgi",
+            "dwmapi",
+            "magnification",
+            "user32",
+            "gdi32",
+        ] {
+            println!("cargo:rustc-link-lib={library}");
+        }
+    }
     println!("cargo:rerun-if-changed=tauri.conf.json");
     println!("cargo:rerun-if-changed=icons/icon.png");
     println!("cargo:rerun-if-changed=icons/icon.icns");

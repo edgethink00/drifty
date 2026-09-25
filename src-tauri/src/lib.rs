@@ -25,7 +25,8 @@ use std::{
 };
 
 use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_menu};
-use quit_confirmation::{quit_confirmation_set_language, QuitConfirmationState};
+#[cfg(target_os = "windows")]
+use commands::configure_main_window_material;
 use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
     ai_classification_openai_chat, ai_list_openai_models, cloud_sync_http_post,
@@ -97,8 +98,9 @@ use commands::{
     watcher_peek_extreme_nudge_action, watcher_peek_hide, watcher_peek_respond,
     watcher_peek_set_interactive, watcher_peek_show,
     calibrate_main_window_to_work_area, window_set_onboarding_presentation,
-    window_set_theme_appearance, window_show_system_menu,
+    window_set_theme_appearance, window_show_system_menu, MainWindowMaterialState,
 };
+use quit_confirmation::{quit_confirmation_set_language, QuitConfirmationState};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
 use tracker_recovery::{setup_tracker_recovery, shutdown_tracker_recovery, TrackerRecoveryWorker};
@@ -437,6 +439,8 @@ pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
             eprintln!("could not fit Drifty inside the Windows work area: {error}");
         }
         let _ = window.set_focus();
+        #[cfg(target_os = "windows")]
+        commands::start_windows_native_blur(&window);
         #[cfg(target_os = "macos")]
         activate_drifty_application(app);
     }
@@ -553,6 +557,7 @@ pub fn run() {
         .manage(QuitConfirmationState::default())
         .manage(AppExitCoordinator::default())
         .manage(GoogleCalendarState::default())
+        .manage(MainWindowMaterialState::default())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
                 .on_event(|app, event| match event {
@@ -568,7 +573,11 @@ pub fn run() {
                     }
                     // ExitRequested can still be prevented by another listener. Run irreversible
                     // cleanup only once the runtime commits to Exit.
-                    tauri::RunEvent::Exit => shutdown_app_for_exit(app),
+                    tauri::RunEvent::Exit => {
+                        #[cfg(target_os = "windows")]
+                        commands::stop_windows_native_blur();
+                        shutdown_app_for_exit(app);
+                    }
                     tauri::RunEvent::WindowEvent {
                         label,
                         event: tauri::WindowEvent::CloseRequested { api, .. },
@@ -592,7 +601,14 @@ pub fn run() {
                                 "could not refit Drifty after a window size or scale change: {error}"
                             );
                         }
+                        commands::sync_windows_native_blur();
                     }
+                    #[cfg(target_os = "windows")]
+                    tauri::RunEvent::WindowEvent {
+                        label,
+                        event: tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Focused(_),
+                        ..
+                    } if label == MAIN_WINDOW_LABEL => commands::sync_windows_native_blur(),
                     #[cfg(target_os = "macos")]
                     tauri::RunEvent::Reopen {
                         has_visible_windows,
@@ -656,6 +672,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             repair_windows_deep_link_registration(app.handle());
             setup_app_menu(app.handle())?;
+            #[cfg(target_os = "windows")]
+            configure_main_window_material(app.handle());
             if let Err(error) = calibrate_main_window_to_work_area(app.handle()) {
                 // The configured 1254×800 fallback is already usable. Monitor
                 // discovery is a launch refinement and must not block startup.

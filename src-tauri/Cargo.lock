@@ -988,6 +988,7 @@ version = "1.11.18"
 dependencies = [
  "base64 0.22.1",
  "block2",
+ "cc",
  "chrono",
  "core-foundation 0.10.1",
  "core-graphics 0.24.0",
@@ -1027,6 +1028,7 @@ dependencies = [
  "uuid",
  "window-vibrancy",
  "windows-sys 0.61.2",
+ "windows-version",
  "winreg 0.56.0",
  "zip",
 ]

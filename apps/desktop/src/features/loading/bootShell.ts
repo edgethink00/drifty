@@ -3,6 +3,13 @@ export const BOOT_SHELL_PREVIEW_DURATION_SECONDS = BOOT_SHELL_PREVIEW_DURATION_M
 
 let previewTimeoutId: number | null = null;
 
+export function shouldDeferBootShellForNativeMaterial(
+  surface: string,
+  platform: string | undefined,
+): boolean {
+  return surface === "app" && platform === "windows";
+}
+
 export function hideBootShell(): void {
   if (previewTimeoutId !== null) {
     window.clearTimeout(previewTimeoutId);

@@ -4,6 +4,7 @@ import {
   BOOT_SHELL_PREVIEW_DURATION_MS,
   BOOT_SHELL_PREVIEW_DURATION_SECONDS,
   hideBootShell,
+  shouldDeferBootShellForNativeMaterial,
   showBootShellPreview,
 } from "./bootShell";
 
@@ -66,5 +67,11 @@ describe("boot shell preview", () => {
     document.body.replaceChildren();
 
     expect(showBootShellPreview()).toBe(false);
+  });
+
+  it("keeps only the native Windows main window covered until its material is ready", () => {
+    expect(shouldDeferBootShellForNativeMaterial("app", "windows")).toBe(true);
+    expect(shouldDeferBootShellForNativeMaterial("app", "macos")).toBe(false);
+    expect(shouldDeferBootShellForNativeMaterial("companion", "windows")).toBe(false);
   });
 });

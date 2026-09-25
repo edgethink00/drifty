@@ -10,8 +10,8 @@
         "minHeight": 600,
         "resizable": true,
         "decorations": false,
-        "transparent": false,
-        "backgroundColor": "#111111",
+        "transparent": true,
+        "backgroundColor": "#00000000",
         "visible": false,
         "label": "main"
       }

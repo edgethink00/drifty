@@ -33,6 +33,15 @@ describe("boot shell markup", () => {
     expect(indexSource).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*{[^}]*\.boot-loading__content\s*{[^}]*animation:\s*none;/s);
   });
 
+  it("keeps every Windows startup and startup-error frame opaque", () => {
+    expect(indexSource).toMatch(
+      /html\[data-platform="windows"\]\[data-boot-active="true"\],\s*html\[data-platform="windows"\]\[data-boot-active="true"\] body\s*\{[^}]*background:\s*var\(--boot-canvas\);/s,
+    );
+    expect(indexSource).toMatch(
+      /html\[data-platform="windows"\]\[data-boot-active="true"\] #boot-shell\s*\{[^}]*background:\s*var\(--boot-canvas\);[^}]*backdrop-filter:\s*none;/s,
+    );
+  });
+
   it("centers the enlarged mark and reveals smaller loading copy after 3.5 seconds", () => {
     expect(indexSource).toMatch(/\.boot-loading__content\s*\{[^}]*position:\s*relative;/s);
     expect(indexSource).toMatch(/\.boot-loading__mark\s*\{[^}]*width:\s*56\.8491px;[^}]*height:\s*56\.8491px;/s);

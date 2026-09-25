@@ -16,14 +16,20 @@ export async function setOnboardingWindowPresentation(active: boolean, compact: 
   return true;
 }
 
+export type MainWindowMaterialKind = "native" | "solid" | "translucent";
+
+export interface MainWindowMaterialStatus {
+  kind: MainWindowMaterialKind;
+}
+
 /**
- * Keep the window's macOS appearance in step with the app's own theme. The
+ * Keep the native window appearance in step with the app's own theme. The
  * native shell material renders in the window appearance, so a dark app on a
  * light system would otherwise get a light material under a dark tint and read
- * as a flat opaque panel instead of glass.
+ * as a flat opaque panel instead of glass. Windows also returns the material it
+ * successfully activated so CSS never exposes a transparent fallback window.
  */
-export async function setMainWindowThemeAppearance(dark: boolean): Promise<boolean> {
-  if (!isTauriRuntime()) return false;
-  await invoke("window_set_theme_appearance", { dark });
-  return true;
+export async function setMainWindowThemeAppearance(dark: boolean, windowsBlurPreviewEnabled = false): Promise<MainWindowMaterialStatus | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<MainWindowMaterialStatus>("window_set_theme_appearance", { dark, windowsBlurPreviewEnabled });
 }

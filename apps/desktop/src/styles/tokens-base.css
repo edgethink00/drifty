@@ -269,6 +269,10 @@ html {
      material read as an opaque panel. Tuned against the legacy shell over a
      saturated backdrop; the legacy preview pins the original value back. */
   --shell-glass-bg: rgba(236, 240, 230, 0.64);
+  /* Keep the unblurred Windows fallback quiet. On the opt-in native-blur path,
+     match the Mac material's white-to-black backdrop response while keeping
+     the background color visible through the diffused shell. */
+  --windows-native-blurred-shell-bg: rgba(236, 240, 230, 0.83);
   --shell-glass-control: #fafaf8;
   --shell-glass-control-strong: #fafaf8;
   --shell-floating-surface: rgba(250,250,248,.62);
@@ -355,6 +359,7 @@ html {
   --window-chrome-icon-hover: #fffaf0;
   /* See the light-theme note: the material carries the frost here too. */
   --shell-glass-bg: rgba(38, 40, 35, 0.64);
+  --windows-native-blurred-shell-bg: rgba(38, 40, 35, 0.80);
   --shell-glass-control: #1a1a17;
   --shell-glass-control-strong: #1c1c19;
   --shell-floating-surface: rgba(26,26,23,.62);
@@ -447,6 +452,7 @@ html {
   --text-soft: #9c998f;
   --accent: #a4c565;
   --shell-glass-bg: rgba(46,48,42,.64);
+  --windows-native-blurred-shell-bg: rgba(46, 48, 42, 0.80);
   --shell-glass-control: #1e1d1a;
   --shell-glass-control-strong: #232220;
   --shell-floating-surface: rgba(32,31,28,.62);

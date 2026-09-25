@@ -28,6 +28,7 @@ import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClass
 import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
+import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { LEADERBOARD_GRAPH_STYLE_OPTIONS, parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "../leaderboard/leaderboardGraphStyle";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
@@ -72,6 +73,9 @@ import {
 } from "./darkPalettePreview";
 
 type DevSettingsSectionProps = {
+  readonly hostPlatform: HostPlatform;
+  readonly windowsBlurPreviewEnabled: boolean;
+  readonly onWindowsBlurPreviewEnabledChange: (enabled: boolean) => void;
   readonly activeSubsection: DevSettingsSubsection;
   readonly onSubsectionChange: (subsection: DevSettingsSubsection) => void;
   readonly darkPalettePreview: DarkPalettePreview;
@@ -157,6 +161,9 @@ type DevSettingsSectionProps = {
 };
 
 export function DevSettingsSection({
+  hostPlatform,
+  windowsBlurPreviewEnabled,
+  onWindowsBlurPreviewEnabledChange,
   activeSubsection,
   onSubsectionChange,
   darkPalettePreview,
@@ -715,6 +722,17 @@ export function DevSettingsSection({
             <span>Product preview flags</span>
             <span className="settings-beta-badge">Beta</span>
           </h3>
+          {hostPlatform === "windows" ? (
+            <div className="settings-row">
+              <div>
+                <div className="lbl">Window blur (Preview)</div>
+                <div className="desc">Off keeps the original opaque window. On tries a blurred desktop background on supported Windows 11 devices; if blur fails, the window stays opaque.</div>
+              </div>
+              <div className="ctrl">
+                <Toggle checked={windowsBlurPreviewEnabled} onChange={onWindowsBlurPreviewEnabledChange} ariaLabel="Toggle Window blur Preview" />
+              </div>
+            </div>
+          ) : null}
           <DevSettingsDeviceSyncBlock
             deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
             onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}

@@ -105,6 +105,17 @@ describe("DevSettingsSection", () => {
     expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
 
+  it("shows Window blur Preview only on Windows and keeps it off until opted in", () => {
+    renderProductionDevSettings({ activeSubsection: "flags" });
+    expect(screen.queryByRole("switch", { name: "Toggle Window blur Preview" })).toBeNull();
+    cleanup();
+    const props = renderProductionDevSettings({ activeSubsection: "flags", hostPlatform: "windows" });
+    const toggle = screen.getByRole("switch", { name: "Toggle Window blur Preview" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+    expect(props.onWindowsBlurPreviewEnabledChange).toHaveBeenCalledWith(true);
+  });
+
   it("does not duplicate the app language preference in Dev settings", () => {
     renderProductionDevSettings();
 

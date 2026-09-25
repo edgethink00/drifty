@@ -339,6 +339,12 @@
   background: var(--windows-shell-bg);
 }
 
+/* Both markers are required: a failed/stopped helper can never leave a sharp,
+   partly transparent shell behind. The ordinary Windows shell stays opaque. */
+:root[data-platform="windows"][data-windows-blur-wanted="true"][data-window-material="translucent"][data-windows-native-blur="active"] .app-shell {
+  background: var(--windows-native-blurred-shell-bg);
+}
+
 :root[data-platform="windows"][data-runtime="browser"] .app-shell {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -355,6 +361,13 @@
   font-family: var(--font-sans);
   user-select: none;
   -webkit-user-select: none;
+}
+
+:root[data-platform="windows"][data-windows-blur-wanted="true"][data-window-material="translucent"][data-windows-native-blur="active"] .windows-titlebar {
+  /* The shell already paints the tint beneath this fixed row. Keep the
+     titlebar clear so the transmitted background and tint remain one
+     continuous surface instead of compositing the tint twice. */
+  background: transparent;
 }
 
 :root[data-platform="windows"] .auth-gate {
