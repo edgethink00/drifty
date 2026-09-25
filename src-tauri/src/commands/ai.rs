@@ -5,6 +5,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const DEFAULT_CHAT_TIMEOUT: Duration = Duration::from_secs(60);
+/// Reaching a provider takes well under a second even on a slow link. Without
+/// this, an address that never answers holds a request, and the onboarding or
+/// settings connection test, for the whole chat timeout. Generation time is
+/// still bounded only by the chat timeout, so slow local models are unaffected.
+const CHAT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_MODEL_LIST_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_MODEL_LIST_RESPONSE_BYTES: u64 = 5_000_000;
 
@@ -131,6 +136,7 @@ pub fn post_openai_chat(
         .map(Duration::from_millis)
         .unwrap_or(DEFAULT_CHAT_TIMEOUT);
     let client = reqwest::blocking::Client::builder()
+        .connect_timeout(CHAT_CONNECT_TIMEOUT)
         .timeout(timeout)
         .build()
         .map_err(|error| error.to_string())?;
@@ -276,6 +282,7 @@ pub fn post_anthropic_chat(
         .map(Duration::from_millis)
         .unwrap_or(DEFAULT_CHAT_TIMEOUT);
     let client = reqwest::blocking::Client::builder()
+        .connect_timeout(CHAT_CONNECT_TIMEOUT)
         .timeout(timeout)
         .build()
         .map_err(|error| error.to_string())?;
