@@ -5,7 +5,7 @@ import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { ModalPresence } from "./components/ModalPresence";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeveloperDiagnosticsSettings, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocksForIntervals,
@@ -159,6 +159,7 @@ import {
 } from "./features/flow-chart/flowChartDetailPreference";
 
 import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
+import { createDeveloperDiagnosticsSync } from "./features/settings/developerDiagnosticsSync";
 import { readContextualGuardAuditEvents } from "./features/classification/contextualGuardAuditLog";
 import {
   OnboardingModal,
@@ -4831,28 +4832,36 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
   }, [localization.effectiveLanguage]);
 
+  const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
+  const forceFrontmostFallbackCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceFrontmostFallbackCaptureEnabled;
+  const forceBrowserHistoryUrlFallback = DEV_SETTINGS_ENABLED && devModeEnabled && forceBrowserHistoryUrlFallbackEnabled;
   useEffect(() => {
-    const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
-    const forceFrontmostFallbackCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceFrontmostFallbackCaptureEnabled;
-    const forceBrowserHistoryUrlFallback = DEV_SETTINGS_ENABLED && devModeEnabled && forceBrowserHistoryUrlFallbackEnabled;
-    const enhancedContextSourceFamilies = ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS
-      .filter((option) => effectiveEnhancedContextSettings.sourceFamilies[option.family])
-      .map((option) => option.family);
-    const developerDiagnosticsSettings = {
+    window.localStorage.setItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, forceChromiumAxCapture ? "1" : "0");
+    window.localStorage.setItem(FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, forceFrontmostFallbackCapture ? "1" : "0");
+    window.localStorage.setItem(FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, forceBrowserHistoryUrlFallback ? "1" : "0");
+  }, [forceBrowserHistoryUrlFallback, forceChromiumAxCapture, forceFrontmostFallbackCapture]);
+
+  const [developerDiagnosticsSync] = useState(() => createDeveloperDiagnosticsSync(
+    (settings: DeveloperDiagnosticsSettings) => trackerClient.setDeveloperDiagnostics?.(settings) ?? Promise.resolve(),
+    (nextError) => console.warn("Failed to persist tracker developer diagnostics", nextError),
+  ));
+  // Requested after every render on purpose. The effective enhanced-context
+  // settings are rebuilt each render, so an effect keyed on them used to write
+  // the same six tracker settings after every render, each one a round trip on
+  // the one-at-a-time tracker. The sync sends a changed value, retries a failed
+  // one, and reconfirms an unchanged one at most once a minute.
+  useEffect(() => {
+    developerDiagnosticsSync.request({
       forceChromiumAxCapture,
       forceFrontmostFallbackCapture,
       forceBrowserHistoryUrlFallback,
       enhancedContextEnabled: effectiveEnhancedContextSettings.enabled,
       enhancedContextCaptureLocal: effectiveEnhancedContextSettings.captureLocal,
-      enhancedContextSourceFamilies,
-    };
-    window.localStorage.setItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, forceChromiumAxCapture ? "1" : "0");
-    window.localStorage.setItem(FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, forceFrontmostFallbackCapture ? "1" : "0");
-    window.localStorage.setItem(FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, forceBrowserHistoryUrlFallback ? "1" : "0");
-    void trackerClient.setDeveloperDiagnostics?.(developerDiagnosticsSettings).catch((nextError) => {
-      console.warn("Failed to persist tracker developer diagnostics", nextError);
+      enhancedContextSourceFamilies: ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS
+        .filter((option) => effectiveEnhancedContextSettings.sourceFamilies[option.family])
+        .map((option) => option.family),
     });
-  }, [devModeEnabled, effectiveEnhancedContextSettings, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceFrontmostFallbackCaptureEnabled]);
+  });
 
   useEffect(() => {
     const forceChromiumAxExtremeNudge = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled;
