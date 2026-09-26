@@ -1223,11 +1223,6 @@
   box-shadow: var(--shadow);
   scrollbar-color: color-mix(in srgb, var(--text-soft) 34%, transparent) transparent;
   scrollbar-width: thin;
-  /* Windows draws a classic scrollbar that takes layout width, so content
-     jumped 8px the moment a page started overflowing. Reserving the gutter
-     holds the measure steady; on macOS overlay scrollbars the gutter is 0,
-     so this changes nothing there. */
-  scrollbar-gutter: stable;
   transition:
     background var(--transition-base),
     border-radius var(--sidebar-duration) var(--sidebar-ease),
@@ -1239,6 +1234,13 @@
   margin: var(--space-1) var(--content-panel-gap) var(--content-panel-gap) 0;
   border: 0;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 9%, transparent);
+  /* Windows draws a classic scrollbar that takes layout width, so content
+     jumped the moment a page started overflowing. Reserving the gutter holds
+     the measure steady there. Keep it off macOS: overlay scrollbars reserve
+     nothing anyway, and with always-visible scrollbars (a mouse attached or
+     "Show scroll bars: Always") WebKit would leave an empty 13px lane beside
+     every page that does not scroll. */
+  scrollbar-gutter: stable;
 }
 
 .content::-webkit-scrollbar {
