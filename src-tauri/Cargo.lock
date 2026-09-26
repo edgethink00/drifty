@@ -984,7 +984,7 @@ dependencies = [
 
 [[package]]
 name = "drifty"
-version = "1.11.20"
+version = "1.11.21"
 dependencies = [
  "base64 0.22.1",
  "block2",
