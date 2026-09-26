@@ -1349,6 +1349,62 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(classifications_by_id[str(protected_segment_id)]["source"], "manual")
         self.assertEqual(classifications_by_id[str(writable_segment_id)]["source"], "llm")
 
+    def test_save_classifications_skips_rows_whose_segment_or_rule_disappeared(self) -> None:
+        live_segment_id = self._insert_segment_returning_id("2026-04-06T12:00:00+00:00")
+        ruled_segment_id = self._insert_segment_returning_id("2026-04-06T12:05:00+00:00")
+        trimmed_segment_id = self._insert_segment_returning_id("2026-04-06T12:10:00+00:00")
+        rule = self.database.save_classification_rule(
+            {
+                "targetKind": "app",
+                "targetValue": "Code",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+        # Both disappear from another path after a classifier selected them.
+        self.database.delete_activity_segments([str(trimmed_segment_id)])
+        self.database.delete_classification_rule(rule["id"])
+
+        saved = self.database.save_classifications([
+            {
+                "segmentId": trimmed_segment_id,
+                "category": "utility",
+                "productivity": "drift",
+                "source": "llm",
+                "confidence": 0.9,
+            },
+            {
+                "segmentId": ruled_segment_id,
+                "category": "workspace",
+                "productivity": "focus",
+                "source": "rule",
+                "confidence": 1,
+                "classificationRuleId": rule["id"],
+            },
+            {
+                "segmentId": live_segment_id,
+                "category": "learning",
+                "productivity": "focus",
+                "source": "llm",
+                "confidence": 0.9,
+            },
+        ])
+
+        classifications_by_id = {
+            segment["id"]: segment.get("classification")
+            for segment in self.database.fetch_timeline("2026-04-06")
+        }
+        self.assertEqual(saved, 1)
+        self.assertEqual(classifications_by_id[str(live_segment_id)]["category"], "learning")
+        self.assertIsNone(classifications_by_id[str(ruled_segment_id)])
+        self.assertNotIn(str(trimmed_segment_id), classifications_by_id)
+        with self.database.connect() as conn:
+            orphaned = conn.execute(
+                "SELECT COUNT(*) AS count FROM activity_classifications WHERE segment_id IN (?, ?)",
+                (trimmed_segment_id, ruled_segment_id),
+            ).fetchone()["count"]
+        self.assertEqual(orphaned, 0)
+
     def test_dashboard_week_timeline_omits_verbose_fields_without_full_timeline(self) -> None:
         self.database.record_snapshot(
             Snapshot(

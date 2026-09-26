@@ -3793,6 +3793,10 @@ class TrackerDatabase:
 
                 # A classifier can select an unclassified segment, then finish after the
                 # user has corrected it. Resolve that race atomically at the write.
+                # The segment (or its rule) can also disappear before the result lands:
+                # an idle trim, a history deletion, or a rule deletion commits from
+                # another connection. Skip that row inside the same statement instead of
+                # letting a foreign-key failure roll back every other row in the batch.
                 cursor = conn.execute(
                     """
                     INSERT INTO activity_classifications (
@@ -3813,7 +3817,13 @@ class TrackerDatabase:
                         ai_result,
                         stale,
                         classification_rule_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    )
+                    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
+                      AND (
+                        ? IS NULL
+                        OR EXISTS (SELECT 1 FROM classification_rules WHERE id = ?)
+                      )
                     ON CONFLICT(segment_id) DO UPDATE SET
                         input_fingerprint = excluded.input_fingerprint,
                         category = excluded.category,
@@ -3851,6 +3861,9 @@ class TrackerDatabase:
                         timestamp,
                         ai_result,
                         stale,
+                        classification_rule_id,
+                        segment_id,
+                        classification_rule_id,
                         classification_rule_id,
                     ),
                 )
