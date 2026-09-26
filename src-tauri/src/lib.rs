@@ -460,6 +460,43 @@ fn repair_windows_deep_link_registration(app: &AppHandle) {
     }
 }
 
+/// Windows is the only platform where a failed overlay setup has been observed
+/// in production; elsewhere a failure still stops launch so it cannot go unseen.
+const RECOVER_AUXILIARY_WINDOW_SETUP: bool = cfg!(target_os = "windows");
+
+/// The watcher peek, Companion pill, pet, and pet controls are optional
+/// overlays. On Windows each needs its native window handle right after
+/// creation to become click-through and non-activating. When that handle was
+/// unavailable (Windows 10 1903: "the underlying handle is not available"),
+/// the error aborted the setup hook and Drifty never opened. With `recover`,
+/// launch continues without that one overlay for this session. A
+/// half-configured overlay would be a transparent topmost window that captures
+/// clicks, so it is destroyed rather than kept.
+fn setup_auxiliary_window<R: Runtime>(
+    app: &tauri::App<R>,
+    label: &str,
+    recover: bool,
+    setup: impl FnOnce(&tauri::App<R>) -> tauri::Result<()>,
+) -> tauri::Result<()> {
+    let Err(error) = setup(app) else {
+        return Ok(());
+    };
+    if !recover {
+        return Err(error);
+    }
+    eprintln!("[startup] {label} is unavailable for this session: {error}");
+    sentry::capture_message(
+        &format!("Auxiliary window setup failed ({label}): {error}"),
+        sentry::Level::Warning,
+    );
+    if let Some(window) = app.get_webview_window(label) {
+        if let Err(destroy_error) = window.destroy() {
+            eprintln!("[startup] could not remove the partial {label} window: {destroy_error}");
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn app_reveal_main_window(app: AppHandle) {
     reveal_main_window(&app);
@@ -679,10 +716,30 @@ pub fn run() {
                 // discovery is a launch refinement and must not block startup.
                 eprintln!("could not calibrate initial main-window size: {error}");
             }
-            setup_watcher_window(app)?;
-            setup_companion_pill_window(app)?;
-            setup_pet_mode_window(app)?;
-            setup_pet_quick_controls_window(app)?;
+            setup_auxiliary_window(
+                app,
+                commands::WATCHER_PEEK_WINDOW_LABEL,
+                RECOVER_AUXILIARY_WINDOW_SETUP,
+                setup_watcher_window,
+            )?;
+            setup_auxiliary_window(
+                app,
+                commands::COMPANION_PILL_WINDOW_LABEL,
+                RECOVER_AUXILIARY_WINDOW_SETUP,
+                setup_companion_pill_window,
+            )?;
+            setup_auxiliary_window(
+                app,
+                commands::PET_MODE_WINDOW_LABEL,
+                RECOVER_AUXILIARY_WINDOW_SETUP,
+                setup_pet_mode_window,
+            )?;
+            setup_auxiliary_window(
+                app,
+                commands::PET_QUICK_CONTROLS_WINDOW_LABEL,
+                RECOVER_AUXILIARY_WINDOW_SETUP,
+                setup_pet_quick_controls_window,
+            )?;
             setup_tray(app.handle())?;
 
             // Reclaim icon-cache generations nothing reads anymore. Both run

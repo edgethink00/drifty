@@ -501,6 +501,46 @@ fn silent_update_relaunch_marker_is_consumed_and_deleted() {
     assert!(!consume_silent_update_relaunch(directory.path()));
 }
 
+fn failing_overlay_setup<R: Runtime>(app: &tauri::App<R>, label: &str) -> tauri::Result<()> {
+    tauri::WebviewWindowBuilder::new(app, label, Default::default()).build()?;
+    Err(tauri::Error::InvalidWindowHandle)
+}
+
+#[test]
+fn auxiliary_window_setup_failure_keeps_launching_without_that_overlay() {
+    let app = tauri::test::mock_app();
+
+    let result = setup_auxiliary_window(&app, "pet-mode", true, |app| {
+        failing_overlay_setup(app, "pet-mode")
+    });
+
+    assert!(result.is_ok(), "an optional overlay must not abort setup");
+}
+
+#[test]
+fn auxiliary_window_setup_failure_still_stops_launch_without_recovery() {
+    let app = tauri::test::mock_app();
+
+    let result = setup_auxiliary_window(&app, "pet-mode", false, |app| {
+        failing_overlay_setup(app, "pet-mode")
+    });
+
+    assert!(matches!(result, Err(tauri::Error::InvalidWindowHandle)));
+}
+
+#[test]
+fn auxiliary_window_setup_success_keeps_the_overlay() {
+    let app = tauri::test::mock_app();
+
+    let result = setup_auxiliary_window(&app, "watcher-peek", true, |app| {
+        tauri::WebviewWindowBuilder::new(app, "watcher-peek", Default::default()).build()?;
+        Ok(())
+    });
+
+    assert!(result.is_ok());
+    assert!(app.get_webview_window("watcher-peek").is_some());
+}
+
 #[test]
 fn ready_window_policy_reveals_and_focuses_a_normal_launch() {
     assert_eq!(
