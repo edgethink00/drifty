@@ -50,7 +50,7 @@ from app.tracker.adaptive_context.developer_diagnostics import (
     apply_developer_diagnostics_env as _apply_developer_diagnostics_env,
     save_developer_diagnostics,
 )
-from app.sentry_setup import capture_tracker_exception, init_tracker_sentry
+from app.sentry_setup import capture_tracker_exception, init_tracker_sentry, silence_urllib3_libressl_warning
 from app.tracker.engagement_policy import (
     FOREGROUND_AUDIO_EVIDENCE,
     EngagementDecision,
@@ -114,11 +114,38 @@ _YOUTUBE_METADATA_LOCK = threading.Lock()
 RuntimeMode = Literal["source", "frozen"]
 TrackerProcessOwnership = Literal["tracker", "unrelated", "unknown"]
 SENTRY_SMOKE_MODE = "sentry-smoke-test"
+SENTRY_SDK_CHECK_MODE = "sentry-sdk-check"
+# Discard-port DSN for the release build check. The check captures nothing, so no
+# event is ever sent, and the real DSN from the build environment is never used.
+SENTRY_SDK_CHECK_DSN = "https://public@127.0.0.1:9/0"
 SENTRY_SMOKE_ID_PATTERN = re.compile(r"\Adrifty-sentry-smoke-[A-Za-z0-9_-]{6,48}\Z")
 
 
 def response(ok: bool, data=None, error: str | None = None):
     return {"ok": ok, "data": data, "error": error}
+
+
+def sentry_sdk_check() -> dict:
+    """Report whether this build can start the Sentry SDK the way the tracker does.
+
+    Release builds run this against the frozen sidecar: a build Python without
+    sentry_sdk still produces a working tracker whose errors never reach Sentry.
+    Initialization goes through init_tracker_sentry with a discard-port DSN, so
+    a bundle that imports the SDK but cannot initialize it also fails.
+    """
+    try:
+        silence_urllib3_libressl_warning()
+        from sentry_sdk.consts import VERSION
+    except ImportError as error:
+        return response(False, {"sentrySdkVersion": None, "initialized": False}, f"Sentry SDK is not bundled: {error}")
+    os.environ["DRIFTY_TRACKER_SENTRY_DSN"] = SENTRY_SDK_CHECK_DSN
+    if not init_tracker_sentry(SENTRY_SDK_CHECK_MODE):
+        return response(
+            False,
+            {"sentrySdkVersion": VERSION, "initialized": False},
+            "Sentry SDK is bundled but the tracker could not initialize it.",
+        )
+    return response(True, {"sentrySdkVersion": VERSION, "initialized": True})
 
 
 def sentry_smoke_test(smoke_id: str | None, sentry_initialized: bool) -> dict:
@@ -2240,7 +2267,7 @@ def _is_public_cli_invocation(arguments: list[str]) -> bool:
     if "--request-json" in arguments:
         return False
     legacy_options_with_values = {"--db", "--request-json", "--smoke-id"}
-    legacy_modes = {"request", "daemon", "serve", SENTRY_SMOKE_MODE}
+    legacy_modes = {"request", "daemon", "serve", SENTRY_SMOKE_MODE, SENTRY_SDK_CHECK_MODE}
     index = 0
     while index < len(arguments):
         argument = arguments[index]
@@ -2278,7 +2305,14 @@ def main():
     if args.db_path:
         DB_PATH = Path(args.db_path)
 
-    sentry_initialized = init_tracker_sentry(args.mode)
+    if args.mode == SENTRY_SDK_CHECK_MODE:
+        result = sentry_sdk_check()
+        print(json.dumps(result))
+        if not result["ok"]:
+            raise SystemExit(1)
+        return
+
+    sentry_initialized = init_tracker_sentry(args.mode, defer_sdk_import=args.mode == "request")
 
     if args.mode == SENTRY_SMOKE_MODE:
         result = sentry_smoke_test(args.smoke_id, sentry_initialized)

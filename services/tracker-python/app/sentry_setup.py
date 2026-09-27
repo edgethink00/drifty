@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import platform
 import re
+import warnings
 from collections.abc import Mapping
 from typing import Callable
 
@@ -58,10 +59,21 @@ SENSITIVE_FIELD_PATTERN = re.compile(
 _capture_exception: CaptureException | None = None
 _flush: Flush | None = None
 _initialized = False
+# Set when a one-shot request process defers importing the SDK until it has an
+# error to report; see init_tracker_sentry(defer_sdk_import=True).
+_deferred_mode: str | None = None
 
 
-def init_tracker_sentry(mode: str) -> bool:
-    global _capture_exception, _flush, _initialized
+def silence_urllib3_libressl_warning() -> None:
+    # The macOS release sidecar is built on the system Python, whose ssl module
+    # is LibreSSL. urllib3 2.x warns about that on import, and the app reads a
+    # failed tracker command's stderr as its error message, so the warning would
+    # be prefixed to every tracker error. TLS to Sentry still works.
+    warnings.filterwarnings("ignore", message=r"urllib3 v2 only supports OpenSSL 1\.1\.1\+")
+
+
+def init_tracker_sentry(mode: str, *, defer_sdk_import: bool = False) -> bool:
+    global _capture_exception, _flush, _initialized, _deferred_mode
 
     if _initialized:
         return True
@@ -73,7 +85,17 @@ def init_tracker_sentry(mode: str) -> bool:
     if not dsn:
         return False
 
+    if defer_sdk_import:
+        # One-shot request processes report errors only through
+        # capture_tracker_exception, so the SDK import can wait until there is
+        # something to send. In the frozen macOS sidecar that import adds about a
+        # second to every launch, which one-shot callers with short timeouts feel.
+        _deferred_mode = mode
+        return True
+
+    _deferred_mode = None
     try:
+        silence_urllib3_libressl_warning()
         from sentry_sdk import capture_exception, flush, init, set_tag
     except ImportError:
         return False
@@ -105,6 +127,11 @@ def init_tracker_sentry(mode: str) -> bool:
 
 
 def capture_tracker_exception(error: BaseException, context: Mapping[str, JsonValue] | None = None) -> bool:
+    global _deferred_mode
+    if _capture_exception is None and _deferred_mode is not None:
+        deferred_mode, _deferred_mode = _deferred_mode, None
+        init_tracker_sentry(deferred_mode)
+
     capture_exception = _capture_exception
     if capture_exception is None:
         return False

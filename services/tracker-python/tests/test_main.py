@@ -1,4 +1,5 @@
 import hashlib
+import os
 import subprocess
 import sys
 import time
@@ -87,6 +88,79 @@ class TrackerMainTests(unittest.TestCase):
             result = tracker_main.sentry_smoke_test(None, True)
 
         self.assertEqual(result["data"]["smokeId"], "drifty-sentry-smoke-0123456789abcdef")
+
+    def test_sentry_sdk_check_is_a_legacy_mode(self) -> None:
+        self.assertFalse(
+            tracker_main._is_public_cli_invocation(["--db", "/tmp/db", tracker_main.SENTRY_SDK_CHECK_MODE])
+        )
+
+    def test_sentry_sdk_check_initializes_through_the_tracker_path_with_a_discard_dsn(self) -> None:
+        fake_consts = MagicMock(VERSION="9.9.9")
+        seen_dsn = []
+
+        def fake_init(mode: str) -> bool:
+            seen_dsn.append((mode, os.environ.get("DRIFTY_TRACKER_SENTRY_DSN")))
+            return True
+
+        with patch.dict(sys.modules, {"sentry_sdk": MagicMock(), "sentry_sdk.consts": fake_consts}), patch.dict(
+            os.environ, {"DRIFTY_TRACKER_SENTRY_DSN": "https://real@example.invalid/1"}
+        ), patch.object(tracker_main, "silence_urllib3_libressl_warning") as silence, patch.object(
+            tracker_main, "init_tracker_sentry", side_effect=fake_init
+        ):
+            result = tracker_main.sentry_sdk_check()
+
+        self.assertEqual(result, {"ok": True, "data": {"sentrySdkVersion": "9.9.9", "initialized": True}, "error": None})
+        self.assertEqual(seen_dsn, [(tracker_main.SENTRY_SDK_CHECK_MODE, tracker_main.SENTRY_SDK_CHECK_DSN)])
+        silence.assert_called_once_with()
+
+    def test_sentry_sdk_check_fails_when_the_sdk_cannot_initialize(self) -> None:
+        with patch.dict(sys.modules, {"sentry_sdk": MagicMock(), "sentry_sdk.consts": MagicMock(VERSION="9.9.9")}), patch.dict(
+            os.environ, {}
+        ), patch.object(tracker_main, "init_tracker_sentry", return_value=False):
+            result = tracker_main.sentry_sdk_check()
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["data"], {"sentrySdkVersion": "9.9.9", "initialized": False})
+        self.assertIn("could not initialize", result["error"])
+
+    def test_sentry_sdk_check_fails_when_the_sdk_is_missing(self) -> None:
+        with patch.dict(sys.modules, {"sentry_sdk": None}):
+            result = tracker_main.sentry_sdk_check()
+
+        self.assertFalse(result["ok"])
+        self.assertIsNone(result["data"]["sentrySdkVersion"])
+        self.assertFalse(result["data"]["initialized"])
+        self.assertIn("Sentry SDK is not bundled", result["error"])
+
+    def test_sentry_sdk_check_mode_returns_before_the_real_sentry_init(self) -> None:
+        with patch.object(sys, "argv", ["drifty-tracker", "--db", "/tmp/unused.sqlite3", "sentry-sdk-check"]), patch.object(
+            tracker_main, "init_tracker_sentry"
+        ) as init, patch.object(
+            tracker_main, "sentry_sdk_check", return_value={"ok": False, "data": None, "error": "x"}
+        ), patch("builtins.print"):
+            with self.assertRaises(SystemExit) as exit_info:
+                tracker_main.main()
+
+        self.assertEqual(exit_info.exception.code, 1)
+        init.assert_not_called()
+
+    def test_one_shot_requests_defer_the_sentry_import(self) -> None:
+        with patch.object(sys, "argv", ["drifty-tracker", "--db", "/tmp/unused.sqlite3", "--request-json", "{}"]), patch.object(
+            tracker_main, "init_tracker_sentry", return_value=True
+        ) as init, patch.object(tracker_main, "handle_request") as handle:
+            tracker_main.main()
+
+        init.assert_called_once_with("request", defer_sdk_import=True)
+        handle.assert_called_once_with("{}")
+
+    def test_long_lived_modes_initialize_sentry_eagerly(self) -> None:
+        with patch.object(sys, "argv", ["drifty-tracker", "--db", "/tmp/unused.sqlite3", "serve"]), patch.object(
+            tracker_main, "init_tracker_sentry", return_value=True
+        ) as init, patch.object(tracker_main, "serve") as serve:
+            tracker_main.main()
+
+        init.assert_called_once_with("serve", defer_sdk_import=False)
+        serve.assert_called_once_with()
 
     def test_day_bounds_supports_day_payload(self) -> None:
         start, end = tracker_main.day_bounds({"day": "2026-04-06"})

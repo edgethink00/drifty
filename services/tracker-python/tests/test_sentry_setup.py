@@ -22,10 +22,62 @@ class TrackerSentrySetupTests(unittest.TestCase):
         sentry_setup._capture_exception = None
         sentry_setup._flush = None
         sentry_setup._initialized = False
+        sentry_setup._deferred_mode = None
 
     def test_init_without_dsn_is_noop(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             self.assertFalse(sentry_setup.init_tracker_sentry("request"))
+
+    def test_deferred_init_does_not_import_the_sdk(self) -> None:
+        with patch.dict(os.environ, {"DRIFTY_TRACKER_SENTRY_DSN": "https://key@example.invalid/1"}, clear=True), patch.dict(
+            sys.modules, {"sentry_sdk": None}
+        ):
+            self.assertTrue(sentry_setup.init_tracker_sentry("request", defer_sdk_import=True))
+
+        self.assertFalse(sentry_setup._initialized)
+        self.assertIsNone(sentry_setup._capture_exception)
+        self.assertEqual(sentry_setup._deferred_mode, "request")
+
+    def test_deferred_init_imports_the_sdk_on_first_capture(self) -> None:
+        fake_sdk = types.ModuleType("sentry_sdk")
+        fake_sdk.init = MagicMock()
+        fake_sdk.set_tag = MagicMock()
+        fake_sdk.capture_exception = MagicMock()
+        fake_sdk.flush = MagicMock()
+        error = RuntimeError("request failed")
+        with patch.dict(os.environ, {"DRIFTY_TRACKER_SENTRY_DSN": "https://key@example.invalid/1"}, clear=True), patch.dict(
+            sys.modules, {"sentry_sdk": fake_sdk}
+        ):
+            sentry_setup.init_tracker_sentry("request", defer_sdk_import=True)
+            fake_sdk.init.assert_not_called()
+            self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "request"}))
+            self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "request"}))
+
+        fake_sdk.init.assert_called_once()
+        fake_sdk.set_tag.assert_any_call("tracker_mode", "request")
+        self.assertEqual(fake_sdk.capture_exception.call_count, 2)
+        fake_sdk.flush.assert_called_with(2.0)
+
+    def test_deferred_capture_without_the_sdk_fails_quietly_once(self) -> None:
+        with patch.dict(os.environ, {"DRIFTY_TRACKER_SENTRY_DSN": "https://key@example.invalid/1"}, clear=True), patch.dict(
+            sys.modules, {"sentry_sdk": None}
+        ):
+            sentry_setup.init_tracker_sentry("request", defer_sdk_import=True)
+            self.assertFalse(sentry_setup.capture_tracker_exception(RuntimeError("x")))
+
+        self.assertIsNone(sentry_setup._deferred_mode)
+
+    def test_libressl_warning_stays_out_of_tracker_stderr(self) -> None:
+        import warnings
+
+        message = "urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'."
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sentry_setup.silence_urllib3_libressl_warning()
+            warnings.warn(message, UserWarning)
+            warnings.warn("an unrelated warning", UserWarning)
+
+        self.assertEqual([str(item.message) for item in caught], ["an unrelated warning"])
 
     def test_scrubber_drops_user_request_and_filters_activity_fields(self) -> None:
         event = sentry_setup.scrub_sentry_event(

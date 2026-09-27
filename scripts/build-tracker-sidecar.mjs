@@ -1,4 +1,4 @@
-import { accessSync, chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { accessSync, chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -54,9 +54,41 @@ const WINDOWS_RELEASE_PTH_FILES = Object.freeze({
 // explicit collection the frozen Windows sidecar would ship with an empty
 // TZPATH and fail every zone lookup, exactly as an unpackaged interpreter does.
 export function extraPyInstallerArgs(platform = process.platform) {
+  // setuptools ships in the build venv, so PyInstaller would bundle
+  // pkg_resources and add a runtime hook that imports it on every launch. Only
+  // sentry_sdk's pre-3.8 fallback references it, and that path never runs here;
+  // on the macOS onefile sidecar the hook alone added about 0.7 s per launch.
+  const shared = ["--exclude-module", "pkg_resources"];
   return platform === "win32"
-    ? ["--collect-data", "tzdata", "--hidden-import", "tzdata"]
-    : [];
+    ? ["--collect-data", "tzdata", "--hidden-import", "tzdata", ...shared]
+    : shared;
+}
+
+// Release sidecars must bundle the Sentry SDK pinned in requirements-build.txt.
+// A build Python without it still produces a working tracker, but one whose
+// errors never reach Sentry; the Mac release shipped that way through 1.11.21.
+export function pinnedSentrySdkVersion(
+  requirements = readFileSync(resolve(trackerPythonRoot, "requirements-build.txt"), "utf8"),
+) {
+  const match = requirements.match(/^sentry-sdk==([0-9][0-9A-Za-z.]*)\s*$/mu);
+  if (!match) throw new Error("services/tracker-python/requirements-build.txt must pin sentry-sdk.");
+  return match[1];
+}
+
+// Returns null when the frozen sidecar's sentry-sdk-check output proves the
+// pinned SDK is bundled, otherwise the reason it does not.
+export function bundledSentrySdkProblem(status, stdout, expectedVersion) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(stdout).trim());
+  } catch {
+    return `sentry-sdk-check produced non-JSON output (exit ${status})`;
+  }
+  const version = parsed?.data?.sentrySdkVersion ?? null;
+  if (status !== 0 || parsed?.ok !== true) return parsed?.error ?? `sentry-sdk-check failed (exit ${status})`;
+  if (version !== expectedVersion) return `bundled sentry-sdk ${version} does not match the pinned ${expectedVersion}`;
+  if (parsed?.data?.initialized !== true) return "the bundled Sentry SDK did not initialize";
+  return null;
 }
 
 function remoteExporterPyInstallerArgs() {
@@ -241,6 +273,33 @@ function assertWindowsReleaseToolchain(pythonBin) {
   }
 }
 
+function assertReleasePythonHasSentrySdk(pythonBin) {
+  if (process.env.DRIFTY_RELEASE_BUILD !== "1") return;
+  const expected = pinnedSentrySdkVersion();
+  // -W ignore keeps the macOS system Python's urllib3/LibreSSL import warning out of the build log.
+  const probe = run(pythonBin, ["-W", "ignore", "-c", "from sentry_sdk.consts import VERSION; print(VERSION)"], { capture: true });
+  if (probe.status !== 0 || probe.stdout.trim() !== expected) {
+    fail(
+      `Release tracker builds require sentry-sdk==${expected} in ${pythonBin}.`
+        + ` Install build requirements with: ${pythonBin} -m pip install -r services/tracker-python/requirements-build.txt`,
+    );
+  }
+}
+
+function assertBundledSentrySdk(executable) {
+  if (process.env.DRIFTY_RELEASE_BUILD !== "1") return;
+  const expected = pinnedSentrySdkVersion();
+  const checkRoot = mkdtempSync(resolve(tmpdir(), "drifty-tracker-sidecar-sentry-"));
+  try {
+    const result = run(executable, ["--db", resolve(checkRoot, "check.sqlite3"), "sentry-sdk-check"], { capture: true });
+    const problem = bundledSentrySdkProblem(result.status, result.stdout, expected);
+    if (problem) fail(`Release tracker sidecar cannot report errors to Sentry: ${problem}`);
+    console.log(`sentry_sdk=${expected}`);
+  } finally {
+    rmSync(checkRoot, { recursive: true, force: true });
+  }
+}
+
 function signWindowsReleaseArtifact(artifactPath) {
   if (process.platform !== "win32" || process.env.DRIFTY_WINDOWS_SIGN_RELEASE !== "1") return;
   const systemRoot = process.env.SystemRoot;
@@ -377,6 +436,7 @@ async function main() {
 
   const pythonBin = defaultPython();
   assertWindowsReleaseToolchain(pythonBin);
+  assertReleasePythonHasSentrySdk(pythonBin);
   const pyInstallerVersion = assertPyInstaller(pythonBin);
   const outputPath = resolve(binariesDir, `${artifactBaseName}-${target}${useOneDir ? "" : exeSuffix}`);
   const outputExecutable = useOneDir
@@ -460,6 +520,7 @@ async function main() {
     assertSmokeTest(outputExecutable);
     signWindowsReleaseArtifact(outputExecutable);
     if (process.env.DRIFTY_WINDOWS_SIGN_RELEASE === "1") assertSmokeTest(outputExecutable);
+    assertBundledSentrySdk(outputExecutable);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
