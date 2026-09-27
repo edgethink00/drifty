@@ -24,6 +24,7 @@ PACKAGE_ROOT = APP_DIR.parent
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
+from app.fs_safety import ensure_directory
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
 from app.tracker.app_exclusion import match_app_exclusion, redact_snapshot
 from app.platform_locks import (
@@ -171,7 +172,7 @@ def pid_lock_path() -> Path:
 
 
 def ensure_state_dir() -> None:
-    state_dir().mkdir(parents=True, exist_ok=True)
+    ensure_directory(state_dir())
 
 
 @contextmanager
@@ -492,6 +493,8 @@ def _process_command(pid: int) -> str | None:
             ["ps", "-p", str(pid), "-o", "command="],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
     except Exception:
@@ -517,6 +520,8 @@ def _process_table() -> dict[int, str] | None:
             ["ps", "-axww", "-o", "pid=", "-o", "command="],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
     except Exception:
@@ -813,6 +818,8 @@ def _process_has_exited(pid: int) -> bool:
             ["ps", "-p", str(pid), "-o", "state="],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
     except Exception:

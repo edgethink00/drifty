@@ -42,6 +42,9 @@ USER_PATH_PATTERN = re.compile(r"/Users/[^/\s)]+")
 # Windows profile paths name the account: C:\Users\<name>\..., including the
 # \\?\ long-path prefix and forward-slash spellings.
 WINDOWS_USER_PATH_PATTERN = re.compile(r"\b([A-Z]:[\\/]+Users[\\/]+)[^\\/\s\"'<>|:*?)]+", re.IGNORECASE)
+# tempfile names (tmpab12_cd3) differ on every run; left in an error message they
+# split one failure into a new Sentry issue per occurrence (DRIFTY-MAC-NATIVE-A..Z).
+TEMP_NAME_PATTERN = re.compile(r"(?<=[\\/])tmp[a-z0-9_]{8}(?![a-z0-9_])", re.IGNORECASE)
 URL_PATTERN = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s\"'<>]+", re.IGNORECASE)
 SENSITIVE_QUERY_KEY_PATTERN = re.compile(r"(access_token|refresh_token|token|apikey|api_key|key|secret|code|state|session|password)", re.IGNORECASE)
 SENSITIVE_FIELD_PATTERN = re.compile(
@@ -190,7 +193,8 @@ def redact_text(value: str) -> str:
     redacted = EMAIL_PATTERN.sub(REDACTED_EMAIL, redacted)
     redacted = UUID_PATTERN.sub(REDACTED_ID, redacted)
     redacted = USER_PATH_PATTERN.sub("/Users/[user]", redacted)
-    return WINDOWS_USER_PATH_PATTERN.sub(r"\1[user]", redacted)
+    redacted = WINDOWS_USER_PATH_PATTERN.sub(r"\1[user]", redacted)
+    return TEMP_NAME_PATTERN.sub("tmp[random]", redacted)
 
 
 def _platform_name() -> str:

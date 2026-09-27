@@ -322,6 +322,29 @@ class BrowserHistoryTests(unittest.TestCase):
         self.assertEqual(metadata.browser_history_candidate_count, 0)
         self.assertEqual(metadata.browser_history_error_count, 1)
 
+    def test_browser_history_metadata_survives_a_temp_cleanup_failure(self) -> None:
+        # Windows can refuse to remove the copied history while a scanner holds it
+        # ("The directory is not empty"); that used to abort the capture tick.
+        self._write_firefox_places(
+            "abcd.default-release",
+            [("https://docs.example.test/local", "Local test page", 40)],
+        )
+        real_rmtree = __import__("shutil").rmtree
+
+        def busy_rmtree(path, ignore_errors=False, *args, **kwargs):
+            if not ignore_errors:
+                raise OSError(66, "The directory is not empty")
+            return real_rmtree(path, ignore_errors=True)
+
+        with patch("app.fs_safety.shutil.rmtree", side_effect=busy_rmtree):
+            metadata = browser_history_metadata(
+                "Firefox",
+                "Local test page - Mozilla Firefox",
+                profile_roots={"Firefox": self.root},
+            )
+
+        self.assertEqual(metadata.site_url, "https://docs.example.test/local")
+
     def test_browser_history_metadata_handles_copy_failure(self) -> None:
         self._write_chromium_history("Default", [("https://docs.example.test/", "Docs", 10)])
 

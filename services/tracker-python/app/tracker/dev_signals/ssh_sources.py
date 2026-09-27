@@ -520,6 +520,8 @@ def _run(args: list[str], *, runner: Runner, input_text: str | None = None, time
         args,
         input=input_text,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
         timeout=timeout,
         check=False,

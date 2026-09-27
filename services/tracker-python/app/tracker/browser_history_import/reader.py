@@ -6,9 +6,9 @@ from collections.abc import Callable
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from urllib.parse import urlparse, urlunparse
 
+from app.fs_safety import scratch_directory
 from app.tracker.browser_automation import normalize_domain, youtube_ids
 from app.tracker.browser_history import (
     _BROWSER_ROOTS,
@@ -43,9 +43,9 @@ def read_import_visits(request: BrowserHistoryImportRequest) -> HistoryVisitRead
         history_paths = _history_paths(browser_name, root)
         database_count += len(history_paths)
         for history_path in history_paths:
-            with TemporaryDirectory() as tempdir:
+            with scratch_directory() as tempdir:
                 try:
-                    copied_path = _copy_history_database(history_path, Path(tempdir))
+                    copied_path = _copy_history_database(history_path, tempdir)
                     visits.extend(_read_profile_visits(browser_name, history_path.parent.name, copied_path, start, request.observed_at))
                 except (OSError, sqlite3.DatabaseError) as error:
                     errors.append(f"{history_path.name} import read failed: {error}")

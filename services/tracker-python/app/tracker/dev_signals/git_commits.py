@@ -64,7 +64,11 @@ def _run_git(repo_path: Path, args: list[str]) -> str | None:
         completed = subprocess.run(
             ["git", "-C", str(repo_path), *args],
             capture_output=True,
+            # git writes commit messages and paths as UTF-8. Without an explicit
+            # encoding, Korean Windows decodes them as cp949 and drops the output.
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=GIT_TIMEOUT_SECONDS,
             check=False,
         )

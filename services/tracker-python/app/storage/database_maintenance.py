@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.fs_safety import ensure_directory
 from app.platform_locks import lock_exclusive, unlock
 
 
@@ -47,7 +48,7 @@ def _maintenance_lock_path(db_path: Path) -> Path:
 
 @contextmanager
 def _maintenance_lock(db_path: Path):
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(db_path.parent)
     with _maintenance_lock_path(db_path).open("a+") as lock_file:
         lock_exclusive(lock_file)
         try:

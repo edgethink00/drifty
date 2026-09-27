@@ -9,9 +9,10 @@ from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Final
 from urllib.parse import urlparse
+
+from app.fs_safety import scratch_directory
 
 from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
 
@@ -325,9 +326,9 @@ def _read_history_files(
     errors: list[str] = []
     history_path_list = tuple(history_paths)
     for history_path in history_path_list:
-        with TemporaryDirectory() as tempdir:
+        with scratch_directory() as tempdir:
             try:
-                copied_path = _copy_history_database(history_path, Path(tempdir))
+                copied_path = _copy_history_database(history_path, tempdir)
             except OSError as error:
                 errors.append(f"{history_path.name} copy failed: {error}")
                 continue
@@ -503,8 +504,8 @@ def safari_history_readable(root: Path | None = None) -> bool:
     """
     history_path = (_SAFARI_HISTORY_ROOT if root is None else root) / "History.db"
     try:
-        with TemporaryDirectory() as tempdir:
-            copied_path = _copy_history_database(history_path, Path(tempdir))
+        with scratch_directory() as tempdir:
+            copied_path = _copy_history_database(history_path, tempdir)
             with closing(sqlite3.connect(copied_path)) as conn:
                 conn.execute("SELECT 1 FROM history_visits LIMIT 1").fetchone()
         return True

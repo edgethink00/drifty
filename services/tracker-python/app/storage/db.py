@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
+from app.fs_safety import ensure_directory
+from app.text_safety import without_lone_surrogates
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
 from app.capture_platform import CAPTURE_PLATFORM
 from app.storage.activity_segment_serialization import (
@@ -141,7 +143,7 @@ class TrackerDatabase:
         self.path = db_path
         self.read_only = read_only
         if not self.read_only:
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            ensure_directory(self.db_path.parent)
         self._connection: sqlite3.Connection | None = None
         self.maintenance_error: str | None = None
         self.maintenance_result = DatabasePreparationResult(existed=self.db_path.exists())
@@ -1094,6 +1096,9 @@ class TrackerDatabase:
             )
 
     def record_snapshot(self, snapshot: Snapshot, sample_seconds: int, max_merge_gap_seconds: int | None = None) -> None:
+        # SQLite rejects the whole row for one unpaired UTF-16 surrogate, such as
+        # an emoji half left by a truncated Windows title (DRIFTY-MAC-NATIVE-16).
+        snapshot = without_lone_surrogates(snapshot)
         with self.connect() as conn:
             excluded_rules = self._get_excluded_app_rules(conn)
             match = match_app_exclusion(snapshot.app_name, snapshot.bundle_id, excluded_rules)
@@ -3139,11 +3144,18 @@ class TrackerDatabase:
                     continue
 
                 confidence = item.get("confidence")
-                conn.execute(
+                project_id = item.get("projectId", item.get("project_id"))
+                # The segment or project can be deleted from another connection after
+                # the pass selected it. Skip that row atomically instead of letting a
+                # foreign-key failure roll back the rest of the batch (#1492, #1487).
+                cursor = conn.execute(
                     """
                     INSERT INTO activity_project_assignments (
                         segment_id, project_id, source, confidence, reason, pass_id, chunk_fingerprint, assigned_at, stale
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    )
+                    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
+                      AND (? IS NULL OR EXISTS (SELECT 1 FROM projects WHERE id = ?))
                     ON CONFLICT(segment_id) DO UPDATE SET
                         project_id = excluded.project_id,
                         source = excluded.source,
@@ -3156,7 +3168,7 @@ class TrackerDatabase:
                     """,
                     (
                         segment_id,
-                        item.get("projectId", item.get("project_id")),
+                        project_id,
                         source,
                         float(confidence) if confidence is not None else None,
                         item.get("reason"),
@@ -3164,9 +3176,13 @@ class TrackerDatabase:
                         item.get("chunkFingerprint", item.get("chunk_fingerprint")),
                         item.get("assignedAt") or item.get("assigned_at") or timestamp,
                         1 if item.get("stale") else 0,
+                        segment_id,
+                        project_id,
+                        project_id,
                     ),
                 )
-                saved += 1
+                if cursor.rowcount > 0:
+                    saved += 1
         return {"saved": saved, "skippedManual": skipped_manual}
 
     def get_project_assignments(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
@@ -3513,11 +3529,17 @@ class TrackerDatabase:
                     continue
 
                 confidence = item.get("confidence")
-                conn.execute(
+                team_project_id = item.get("teamProjectId", item.get("team_project_id"))
+                # Same guard as save_project_assignments: a vanished segment or team
+                # project skips only its own row (#1492).
+                cursor = conn.execute(
                     """
                     INSERT INTO team_project_assignments (
                         segment_id, team_project_id, source, confidence, pass_id, chunk_fingerprint, assigned_at, stale
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    )
+                    SELECT ?, ?, ?, ?, ?, ?, ?, ?
+                    WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
+                      AND (? IS NULL OR EXISTS (SELECT 1 FROM team_projects WHERE id = ?))
                     ON CONFLICT(segment_id) DO UPDATE SET
                         team_project_id = excluded.team_project_id,
                         source = excluded.source,
@@ -3529,16 +3551,20 @@ class TrackerDatabase:
                     """,
                     (
                         segment_id,
-                        item.get("teamProjectId", item.get("team_project_id")),
+                        team_project_id,
                         source,
                         float(confidence) if confidence is not None else None,
                         item.get("passId", item.get("pass_id")),
                         item.get("chunkFingerprint", item.get("chunk_fingerprint")),
                         item.get("assignedAt") or item.get("assigned_at") or timestamp,
                         1 if item.get("stale") else 0,
+                        segment_id,
+                        team_project_id,
+                        team_project_id,
                     ),
                 )
-                saved += 1
+                if cursor.rowcount > 0:
+                    saved += 1
         return {"saved": saved, "skippedManual": skipped_manual}
 
     def get_team_project_assignments(
@@ -3672,12 +3698,17 @@ class TrackerDatabase:
                 except (TypeError, ValueError):
                     continue
                 confidence = event.get("confidence")
-                conn.execute(
+                # pass_id references project_pass_runs; an event whose segment is gone
+                # can never be shown or reverted. Skip either case per row (#1492).
+                cursor = conn.execute(
                     """
                     INSERT INTO ai_review_events (
                         segment_id, pass_id, prev_category, prev_productivity, prev_source,
                         new_category, new_productivity, confidence, reason, created_at, reverted_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                    )
+                    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+                    WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
+                      AND EXISTS (SELECT 1 FROM project_pass_runs WHERE id = ?)
                     """,
                     (
                         segment_id,
@@ -3690,9 +3721,12 @@ class TrackerDatabase:
                         float(confidence) if confidence is not None else None,
                         event.get("reason"),
                         event.get("createdAt") or event.get("created_at") or timestamp,
+                        segment_id,
+                        pass_id,
                     ),
                 )
-                saved += 1
+                if cursor.rowcount > 0:
+                    saved += 1
         return saved
 
     def get_ai_review_events(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:

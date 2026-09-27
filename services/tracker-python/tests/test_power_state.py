@@ -134,6 +134,8 @@ class PowerStateTests(unittest.TestCase):
             ["ioreg", "-r", "-n", "IOPMrootDomain", "-d", "1"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=2,
             check=False,
         )

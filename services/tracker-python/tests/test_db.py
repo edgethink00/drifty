@@ -2708,6 +2708,68 @@ class TrackerDatabaseTests(unittest.TestCase):
         ])
         return segment_id
 
+    def test_project_assignment_batch_skips_rows_whose_segment_or_project_disappeared(self) -> None:
+        project = self.database.save_project({"name": "Kept", "description": "d"})["id"]
+        removed_project = self.database.save_project({"name": "Removed", "description": "d"})["id"]
+        live = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        trimmed = self._insert_segment_returning_id("2026-04-06T09:10:00+00:00")
+        orphaned = self._insert_segment_returning_id("2026-04-06T09:20:00+00:00")
+        # Both vanish from another path after the project pass selected them (#1492).
+        self.database.delete_activity_segments([str(trimmed)])
+        self.database.delete_project(removed_project)
+
+        result = self.database.save_project_assignments(
+            [
+                {"segmentId": trimmed, "projectId": project, "source": "ai"},
+                {"segmentId": orphaned, "projectId": removed_project, "source": "ai"},
+                {"segmentId": live, "projectId": project, "source": "ai"},
+            ]
+        )
+
+        self.assertEqual(result, {"saved": 1, "skippedManual": 0})
+        assignments = {a["segmentId"]: a["projectId"] for a in self.database.get_project_assignments("2026-04-06")}
+        self.assertEqual(assignments, {str(live): project})
+
+    def test_team_project_assignment_batch_skips_rows_whose_segment_or_team_project_disappeared(self) -> None:
+        self.database.upsert_team_projects("org-1", [{"id": "tp-a", "name": "A", "description": "d"}])
+        live = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        trimmed = self._insert_segment_returning_id("2026-04-06T09:10:00+00:00")
+        unknown_project = self._insert_segment_returning_id("2026-04-06T09:20:00+00:00")
+        self.database.delete_activity_segments([str(trimmed)])
+
+        result = self.database.save_team_project_assignments(
+            [
+                {"segmentId": trimmed, "teamProjectId": "tp-a", "source": "ai"},
+                {"segmentId": unknown_project, "teamProjectId": "tp-removed", "source": "ai"},
+                {"segmentId": live, "teamProjectId": "tp-a", "source": "ai"},
+            ]
+        )
+
+        self.assertEqual(result, {"saved": 1, "skippedManual": 0})
+        assignments = {a["segmentId"]: a["teamProjectId"] for a in self.database.get_team_project_assignments("2026-04-06")}
+        self.assertEqual(assignments, {str(live): "tp-a"})
+
+    def test_ai_review_event_batch_skips_rows_whose_segment_or_pass_disappeared(self) -> None:
+        live = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        trimmed = self._insert_segment_returning_id("2026-04-06T09:10:00+00:00")
+        pass_id = self.database.record_project_pass(
+            {"rangeStart": "2026-04-06T00:00:00+00:00", "rangeEnd": "2026-04-06T23:59:59+00:00", "trigger": "manual"}
+        )["id"]
+        self.database.delete_activity_segments([str(trimmed)])
+        event = {"prevCategory": "workspace", "newCategory": "social_media", "confidence": 0.9}
+
+        saved = self.database.save_ai_review_events(
+            [
+                {**event, "segmentId": trimmed, "passId": pass_id},
+                {**event, "segmentId": live, "passId": pass_id + 1000},
+                {**event, "segmentId": live, "passId": pass_id},
+            ]
+        )
+
+        self.assertEqual(saved, 1)
+        events = self.database.get_ai_review_events("2026-04-06")
+        self.assertEqual([(e["segmentId"], e["passId"]) for e in events], [(str(live), pass_id)])
+
     def _insert_segment_returning_id(self, started_at: str, ended_at: str | None = None) -> int:
         self.database.insert_segment(
             {

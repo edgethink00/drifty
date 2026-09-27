@@ -254,5 +254,20 @@ class TrackerSentrySetupTests(unittest.TestCase):
         self.assertFalse(sentry_setup.capture_tracker_exception(RuntimeError("safe error")))
 
 
+class TempNameGroupingTests(unittest.TestCase):
+    def test_temp_directory_names_do_not_split_issues(self) -> None:
+        first = sentry_setup.redact_text(
+            "[WinError 145] The directory is not empty: 'C:\\\\Users\\\\USER~1\\\\AppData\\\\Local\\\\Temp\\\\tmpd8t2br5m'"
+        )
+        second = sentry_setup.redact_text(
+            "[WinError 145] The directory is not empty: 'C:\\\\Users\\\\USER~1\\\\AppData\\\\Local\\\\Temp\\\\tmp_zywzcgn'"
+        )
+        self.assertEqual(first, second)
+        self.assertIn("tmp[random]", first)
+        self.assertNotIn("USER~1", first)
+        self.assertEqual(sentry_setup.redact_text("/var/folders/x/T/tmpab12cd34/History"), "/var/folders/x/T/tmp[random]/History")
+        self.assertEqual(sentry_setup.redact_text("C:\\\\data\\\\tmpfile_backup.db"), "C:\\\\data\\\\tmpfile_backup.db")
+
+
 if __name__ == "__main__":
     unittest.main()

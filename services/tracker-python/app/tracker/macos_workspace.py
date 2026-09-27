@@ -67,6 +67,8 @@ def _run_osascript(script: str) -> str:
             ["osascript", "-e", script],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
             timeout=OSASCRIPT_TIMEOUT_SECONDS,
         )
@@ -79,7 +81,15 @@ def _run_osascript(script: str) -> str:
 
 def _run_command(command: list[str], timeout: float = COMMAND_TIMEOUT_SECONDS) -> str:
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=timeout,
+        )
     except subprocess.TimeoutExpired as error:
         raise RuntimeError("command timed out") from error
     if result.returncode != 0:

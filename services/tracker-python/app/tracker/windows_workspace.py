@@ -38,6 +38,7 @@ from typing import Callable
 
 from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
 from app.tracker.browser_history import browser_history_metadata, is_browser_history_supported_app
+from app.text_safety import replace_lone_surrogates
 from app.tracker.capture_contract import Snapshot, utc_now_iso
 from app.tracker.windows_app_names import exe_display_name, is_windows_browser_app
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult, read_live_browser_url
@@ -291,7 +292,8 @@ def build_snapshot(
     if not app_name:
         app_name = "Unavailable"
 
-    window_title = (window.title or "").strip() or None
+    # GetWindowTextW truncates at _TITLE_MAX UTF-16 units and can split an emoji.
+    window_title = replace_lone_surrogates(window.title or "").strip() or None
     return Snapshot(
         observed_at=observed,
         app_name=app_name,
