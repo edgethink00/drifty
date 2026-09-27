@@ -317,9 +317,9 @@ pub(super) fn begin_pet_quick_controls_interaction(app: &AppHandle) -> Result<Op
     // position is sampled only after this main-thread boundary, so layout gets
     // a stable anchor and no stale roam frame can land after the controls show.
     let (sender, receiver) = mpsc::sync_channel(1);
-    if let Err(error) = app.run_on_main_thread(move || {
+    if let Err(error) = app.run_on_main_thread(crate::panic_guard::contained("pet_mode::begin_pet_quick_controls_interaction", move || {
         let _ = sender.send(());
-    }) {
+    })) {
         let _ = end_pet_quick_controls_interaction(app, generation);
         return Err(error.to_string());
     }
@@ -883,7 +883,7 @@ fn set_pet_panel_height_from_bottom(
     let window_for_main = window.clone();
     let (sender, receiver) = mpsc::sync_channel(1);
     window
-        .run_on_main_thread(move || {
+        .run_on_main_thread(crate::panic_guard::contained("pet_mode::set_pet_panel_height_from_bottom", move || {
             let result = (|| {
                 let ptr = window_for_main.ns_window().ok()?;
                 // Safe: this runs on AppKit's main thread and Tauri retains the
@@ -928,7 +928,7 @@ fn set_pet_panel_height_from_bottom(
                 Some(())
             })();
             let _ = sender.send(result);
-        })
+        }))
         .map_err(|error| error.to_string())?;
     receiver
         .recv_timeout(Duration::from_millis(250))
@@ -1158,14 +1158,16 @@ pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
         .map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
     let hit_region_window = window.clone();
     window.on_window_event(move |event| {
-        if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_))
-            && pet_hit_region_geometry_refresh_needed()
-        {
-            // The panel can walk underneath a stationary pointer, so mouse
-            // monitors alone are insufficient. Refresh at every native frame
-            // movement and size transition as well.
-            let _ = refresh_pet_hit_region_for_window(&hit_region_window);
-        }
+        crate::panic_guard::contain_panic("pet_mode::pet_window_event", || {
+            if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_))
+                && pet_hit_region_geometry_refresh_needed()
+            {
+                // The panel can walk underneath a stationary pointer, so mouse
+                // monitors alone are insufficient. Refresh at every native frame
+                // movement and size transition as well.
+                let _ = refresh_pet_hit_region_for_window(&hit_region_window);
+            }
+        });
     });
     // configure_pet_panel already leaves the hidden window click-through. Do
     // not queue a second Tauri mutation that could race the first WebView mask.
@@ -1240,12 +1242,22 @@ fn set_pet_mode_enabled(
     let size_changed = apply_pet_mode_size(&window, width, height)?;
     let was_enabled = PET_MODE_ENABLED.load(Ordering::Relaxed);
 
-    window
-        .set_always_on_top(true)
-        .map_err(|error| error.to_string())?;
-    window
-        .set_visible_on_all_workspaces(true)
-        .map_err(|error| error.to_string())?;
+    // Both change the panel's level and collection behavior. From this worker
+    // they would run in tao's event loop, where an AppKit exception aborts the
+    // app; on the main thread inside the guard it fails only this enable.
+    let presentation_window = window.clone();
+    crate::panic_guard::run_on_main_contained(
+        &app,
+        "pet_mode::assert_pet_panel_presentation",
+        move || {
+            presentation_window
+                .set_always_on_top(true)
+                .map_err(|error| error.to_string())?;
+            presentation_window
+                .set_visible_on_all_workspaces(true)
+                .map_err(|error| error.to_string())
+        },
+    )?;
     refresh_pet_hit_region_for_window(&window)?;
 
     // React can legitimately re-send the enabled state while the panel is
@@ -1809,7 +1821,7 @@ fn set_pet_position_unconstrained(
     let window_for_main = window.clone();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
 
-    app.run_on_main_thread(move || {
+    app.run_on_main_thread(crate::panic_guard::contained("pet_mode::set_pet_position_unconstrained", move || {
         let result = (|| {
             let ptr = window_for_main.ns_window().ok()?;
             // Safe: this runs on AppKit's main thread and Tauri retains the
@@ -1823,7 +1835,7 @@ fn set_pet_position_unconstrained(
             Some(())
         })();
         let _ = sender.send(result);
-    })
+    }))
     .map_err(|error| error.to_string())?;
 
     receiver
@@ -2924,10 +2936,17 @@ fn move_pet_to_target(
             .as_ref()
             .map_or(true, |point| point.kind != PetModeTargetKind::Fallback)
     {
-        if let Some(frame) = pet_mode_native_ax::fullscreen_target_frame(
-            &target.app_name,
-            target.browser_name.as_deref(),
-        ) {
+        if let Some(frame) = crate::panic_guard::contain_panic(
+            "pet_mode_native_ax::fullscreen_target_frame",
+            || {
+                pet_mode_native_ax::fullscreen_target_frame(
+                    &target.app_name,
+                    target.browser_name.as_deref(),
+                )
+            },
+        )
+        .flatten()
+        {
             return pet_fullscreen::approach(app, &window, target, frame);
         }
     }
@@ -3142,7 +3161,7 @@ fn resolve_native_drifty_window_close_target(app: &AppHandle) -> Option<PetModeT
     let window_for_main = window.clone();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
 
-    app.run_on_main_thread(move || {
+    app.run_on_main_thread(crate::panic_guard::contained("pet_mode::resolve_native_drifty_window_close_target", move || {
         let offsets = (|| {
             let ptr = window_for_main.ns_window().ok()?;
             // Safe: this closure runs on AppKit's main thread and Tauri keeps
@@ -3160,7 +3179,7 @@ fn resolve_native_drifty_window_close_target(app: &AppHandle) -> Option<PetModeT
             ))
         })();
         let _ = sender.send(offsets);
-    })
+    }))
     .ok()?;
 
     let (offset_x, offset_y) = receiver.recv_timeout(Duration::from_millis(250)).ok()??;
@@ -3353,10 +3372,17 @@ fn resolve_macos_accessibility_target(
     let search_selected_tab = target.browser_name.as_deref().is_some()
         || target.lab_target == Some(PetModeLabTargetKind::BrowserTabX);
     if search_selected_tab {
-        if let Some(resolved) = pet_mode_native_ax::resolve_selected_browser_tab_close(
-            &target.app_name,
-            target.browser_name.as_deref(),
-        ) {
+        if let Some(resolved) = crate::panic_guard::contain_panic(
+            "pet_mode_native_ax::resolve_selected_browser_tab_close",
+            || {
+                pet_mode_native_ax::resolve_selected_browser_tab_close(
+                    &target.app_name,
+                    target.browser_name.as_deref(),
+                )
+            },
+        )
+        .flatten()
+        {
             // The tab strip's selected radio button is only a hotspot
             // candidate. The automatic close acts on the browser's scripted
             // active tab, and Chromium forks such as Aside can leave the strip
@@ -5359,7 +5385,7 @@ fn apply_pet_window_position_if_motion_current(
     let app = window.app_handle().clone();
     let position_window = window.clone();
     let (sender, receiver) = mpsc::sync_channel(1);
-    app.run_on_main_thread(move || {
+    app.run_on_main_thread(crate::panic_guard::contained("pet_mode::apply_pet_window_position_if_motion_current", move || {
         let result = if !pet_window_motion_is_current(motion_revision, outing_generation) {
             Ok(false)
         } else {
@@ -5369,7 +5395,7 @@ fn apply_pet_window_position_if_motion_current(
                 .map(|_| pet_window_motion_is_current(motion_revision, outing_generation))
         };
         let _ = sender.send(result);
-    })
+    }))
     .map_err(|error| error.to_string())?;
     receiver
         .recv()

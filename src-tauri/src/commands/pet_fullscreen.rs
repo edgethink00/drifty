@@ -66,6 +66,18 @@ static RETIRED: Mutex<std::collections::VecDeque<String>> =
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 static RESIDENT_STYLE_REVISION: AtomicU64 = AtomicU64::new(0);
 
+// The resident-visibility thread and AppKit main-thread work both read the
+// scene. A panic while one of them held the lock would poison it, and an
+// unwrap here would then panic on the main thread and end the app. The data
+// is plain state that stays valid, so keep using it.
+fn scene_slot() -> std::sync::MutexGuard<'static, Option<Scene>> {
+    SCENE.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn retired_ids() -> std::sync::MutexGuard<'static, std::collections::VecDeque<String>> {
+    RETIRED.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn on_main<R: Send + 'static>(
     app: &AppHandle,
     work: impl FnOnce(MainThreadMarker) -> Result<R, String> + Send + 'static,
@@ -74,37 +86,35 @@ fn on_main<R: Send + 'static>(
         return work(mtm);
     }
     let (send, recv) = std::sync::mpsc::sync_channel(1);
-    app.run_on_main_thread(move || {
+    app.run_on_main_thread(crate::panic_guard::contained("pet_fullscreen::on_main", move || {
         let result = MainThreadMarker::new()
             .ok_or_else(|| "AppKit main thread unavailable".to_string())
             .and_then(work);
         let _ = send.send(result);
-    })
+    }))
     .map_err(|e| e.to_string())?;
     recv.recv_timeout(Duration::from_secs(1))
         .map_err(|_| "Full-screen presentation timed out".to_string())?
 }
 
 fn current(generation: u64) -> bool {
-    SCENE
-        .lock()
-        .unwrap()
+    scene_slot()
         .as_ref()
         .is_some_and(|scene| scene.generation == generation)
 }
 
 pub(super) fn accept_contact(id: &str, contacted: bool) -> bool {
-    if RETIRED.lock().unwrap().iter().any(|old| old == id) {
+    if retired_ids().iter().any(|old| old == id) {
         return false;
     }
-    if let Some(scene) = SCENE.lock().unwrap().as_mut().filter(|s| s.id == id) {
+    if let Some(scene) = scene_slot().as_mut().filter(|s| s.id == id) {
         scene.contacted = contacted;
     }
     true
 }
 
 pub(super) fn close_completed(id: &str) {
-    if let Some(scene) = SCENE.lock().unwrap().as_mut().filter(|s| s.id == id) {
+    if let Some(scene) = scene_slot().as_mut().filter(|s| s.id == id) {
         scene.close_completed = true;
     }
 }
@@ -125,7 +135,7 @@ pub(super) fn monitor_resident_visibility(app: AppHandle) {
         let mut last_style = None;
         loop {
             thread::sleep(Duration::from_millis(250));
-            if !PET_MODE_ENABLED.load(Ordering::Relaxed) || SCENE.lock().unwrap().is_some() {
+            if !PET_MODE_ENABLED.load(Ordering::Relaxed) || scene_slot().is_some() {
                 // Reassert after a disabled period or scene-owned presentation.
                 last_style = None;
                 continue;
@@ -152,7 +162,7 @@ fn set_panel_style(
 ) -> Result<(), String> {
     let app_for_main = app.clone();
     on_main(app, move |_| {
-        if generation.map_or_else(|| SCENE.lock().unwrap().is_some(), |id| !current(id)) {
+        if generation.map_or_else(|| scene_slot().is_some(), |id| !current(id)) {
             return Ok(());
         }
         if let Some(window) = app_for_main.get_webview_window(PET_MODE_WINDOW_LABEL) {
@@ -245,7 +255,7 @@ pub(super) fn approach(
         motion_revision: 0,
     };
     {
-        let mut slot = SCENE.lock().unwrap();
+        let mut slot = scene_slot();
         if slot.is_some() {
             return Err("Full-screen intervention is already active".to_string());
         }
@@ -335,7 +345,7 @@ pub(super) fn approach(
             Some(revision),
         )?;
         if completed {
-            if let Some(active) = SCENE.lock().unwrap().as_mut().filter(|s| s.generation == generation) {
+            if let Some(active) = scene_slot().as_mut().filter(|s| s.generation == generation) {
                 // The guarded run claimed exactly revision + 1. Never adopt
                 // a later drag's revision when finish is queued behind it.
                 active.motion_revision = revision.wrapping_add(1);
@@ -374,9 +384,7 @@ async fn watchdog_delay(duration: Duration) {
 }
 
 pub(super) fn finish(app: &AppHandle, id: &str, interrupted: bool) -> Result<bool, String> {
-    let scene = SCENE
-        .lock()
-        .unwrap()
+    let scene = scene_slot()
         .as_ref()
         .filter(|s| s.id == id)
         .cloned();
@@ -392,9 +400,7 @@ pub(super) fn finish(app: &AppHandle, id: &str, interrupted: bool) -> Result<boo
         // shorter timeout here: a slow fresh-target probe must not send the
         // cat home before the actual close result arrives.
         loop {
-            let waiting = SCENE
-                .lock()
-                .unwrap()
+            let waiting = scene_slot()
                 .as_ref()
                 .is_some_and(|s| s.generation == generation && !s.close_completed);
             if !waiting || !pet_window_motion_is_current(motion_revision, None) {
@@ -447,7 +453,7 @@ pub(super) fn finish(app: &AppHandle, id: &str, interrupted: bool) -> Result<boo
 }
 
 pub(super) fn clear(app: &AppHandle) {
-    let generation = SCENE.lock().unwrap().as_ref().map(|s| s.generation);
+    let generation = scene_slot().as_ref().map(|s| s.generation);
     if let Some(generation) = generation {
         clear_generation(app, generation);
     }
@@ -459,7 +465,7 @@ fn clear_generation(app: &AppHandle, generation: u64) {
 
 fn clear_generation_with_motion(app: &AppHandle, generation: u64, expected_motion: Option<u64>, cancel_motion: bool) {
     let removed = {
-        let mut slot = SCENE.lock().unwrap();
+        let mut slot = scene_slot();
         if slot
             .as_ref()
             .is_some_and(|scene| scene.generation == generation)
@@ -472,7 +478,7 @@ fn clear_generation_with_motion(app: &AppHandle, generation: u64, expected_motio
                 PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
             }
             if let Some(scene) = slot.take() {
-                let mut retired = RETIRED.lock().unwrap();
+                let mut retired = retired_ids();
                 retired.push_back(scene.id);
                 while retired.len() > 32 {
                     retired.pop_front();
@@ -541,5 +547,23 @@ mod tests {
         ] {
             assert!(layout(frame, (144.0, 99.0), (1.0, 40.0)).is_none());
         }
+    }
+
+    #[test]
+    fn a_panic_while_holding_the_scene_does_not_break_later_scene_reads() {
+        let poisoned = std::thread::spawn(|| {
+            let _slot = scene_slot();
+            let _retired = retired_ids();
+            panic!("a scene worker panicked while holding the locks");
+        })
+        .join();
+        assert!(poisoned.is_err());
+        assert!(SCENE.is_poisoned() && RETIRED.is_poisoned());
+
+        // These run from the resident-visibility thread and AppKit main-thread
+        // work; a panic there used to end the app.
+        assert!(!current(u64::MAX));
+        assert!(accept_contact("no-such-scene", true));
+        close_completed("no-such-scene");
     }
 }

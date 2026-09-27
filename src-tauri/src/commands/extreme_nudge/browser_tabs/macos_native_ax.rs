@@ -5,6 +5,7 @@
 //! exact close this adapter would perform before the cat runs toward the tab,
 //! so the paw never acts out a close that the adapter is going to refuse.
 
+use crate::commands::ax_values::AxElements;
 use core_foundation::array::{CFArray, CFArrayRef};
 use core_foundation::base::{CFType, CFTypeRef, TCFType};
 use core_foundation::boolean::CFBoolean;
@@ -183,6 +184,11 @@ fn with_frontmost_window<T>(
 ) -> Result<T, String> {
     let pid = active_browser_pid(browser_name)
         .ok_or_else(|| format!("{diagnostic_namespace}_not_frontmost"))?;
+    if i64::from(pid) == i64::from(std::process::id()) {
+        // AX reads of Drifty itself run WebKit off the main thread; macOS 26
+        // traps the app for that.
+        return Err(format!("{diagnostic_namespace}_not_frontmost"));
+    }
 
     // SAFETY: The application element is created under the CoreFoundation
     // create rule and released before this function returns. The focused
@@ -266,8 +272,8 @@ unsafe fn window_exposes_only_title_bar(window: AXUIElementRef) -> bool {
         return true;
     };
     let roles: Vec<String> = (0..children.len())
-        .filter_map(|index| children.get(index as isize))
-        .map(|child| copy_attribute_string(*child as AXUIElementRef, "AXRole").unwrap_or_default())
+        .filter_map(|index| children.ax_element(index as isize))
+        .map(|child| copy_attribute_string(child, "AXRole").unwrap_or_default())
         .collect();
     exposes_only_title_bar(&roles)
 }
@@ -660,8 +666,7 @@ unsafe fn find_labelled_close(
     let children = copy_attribute_array(element, "AXChildren")?;
     for index in 0..children.len() {
         let Some(child) = children
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -723,8 +728,7 @@ unsafe fn find_selected_tab_in_strip(
     let children = copy_attribute_array(element, "AXChildren")?;
     for index in 0..children.len() {
         let Some(child) = children
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -756,8 +760,7 @@ unsafe fn collect_tab_parts(
             return;
         }
         let Some(child) = children
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -803,8 +806,7 @@ unsafe fn find_first_selected_tab(
     let children = copy_attribute_array(element, "AXChildren")?;
     for index in 0..children.len() {
         let Some(child) = children
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -885,7 +887,7 @@ unsafe fn focused_content_window(app: AXUIElementRef) -> Option<AXUIElementRef> 
             continue;
         };
         let window = value as AXUIElementRef;
-        if copy_attribute_string(window, "AXRole").as_deref() == Some("AXWindow") {
+        if crate::commands::ax_values::is_ax_element(window) && copy_attribute_string(window, "AXRole").as_deref() == Some("AXWindow") {
             return Some(window);
         }
         CFRelease(value);
@@ -925,7 +927,7 @@ unsafe fn find_address_value(
     }
     let children = copy_attribute_array(element, "AXChildren")?;
     for index in 0..children.len() {
-        let child = *children.get(index as isize)? as AXUIElementRef;
+        let child = children.ax_element(index as isize)?;
         if let Some(value) = find_address_value(child, allow_search_label, visited) {
             return Some(value);
         }
@@ -953,8 +955,7 @@ unsafe fn press_exact_close_tab_menu_item(element: AXUIElementRef, visited: &mut
     };
     for index in 0..children.len() {
         let Some(child) = children
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -982,8 +983,7 @@ unsafe fn cancel_open_menu(element: AXUIElementRef, visited: &mut usize) {
     };
     for index in 0..children.len() {
         let Some(child) = children
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -1008,8 +1008,7 @@ unsafe fn count_tab_elements(element: AXUIElementRef, tab_count: &mut usize, vis
     };
     for index in 0..children.len() {
         let Some(child) = children
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -1027,7 +1026,9 @@ unsafe fn window_has_close_button(window: AXUIElementRef) -> bool {
 
 unsafe fn window_close_button_frame(window: AXUIElementRef) -> Option<Rect> {
     let close_button = copy_attribute_value(window, "AXCloseButton")?;
-    let frame = element_frame(close_button as AXUIElementRef);
+    let frame = crate::commands::ax_values::is_ax_element(close_button)
+        .then(|| element_frame(close_button as AXUIElementRef))
+        .flatten();
     CFRelease(close_button);
     frame
 }
@@ -1036,7 +1037,8 @@ unsafe fn perform_window_close(window: AXUIElementRef) -> bool {
     let Some(close_button) = copy_attribute_value(window, "AXCloseButton") else {
         return false;
     };
-    let performed = perform_named_action(close_button as AXUIElementRef, "AXPress");
+    let performed = crate::commands::ax_values::is_ax_element(close_button)
+        && perform_named_action(close_button as AXUIElementRef, "AXPress");
     CFRelease(close_button);
     performed
 }
@@ -1127,16 +1129,18 @@ unsafe fn element_frame(element: AXUIElementRef) -> Option<Rect> {
     };
     let mut point = CGPoint::default();
     let mut extent = CGSize::default();
-    let ok_point = AXValueGetValue(
-        position as AXValueRef,
-        KAX_VALUE_CGPOINT,
-        &mut point as *mut CGPoint as *mut c_void,
-    ) != 0;
-    let ok_size = AXValueGetValue(
-        size as AXValueRef,
-        KAX_VALUE_CGSIZE,
-        &mut extent as *mut CGSize as *mut c_void,
-    ) != 0;
+    let ok_point = crate::commands::ax_values::is_ax_value(position as _)
+        && AXValueGetValue(
+            position as AXValueRef,
+            KAX_VALUE_CGPOINT,
+            &mut point as *mut CGPoint as *mut c_void,
+        ) != 0;
+    let ok_size = crate::commands::ax_values::is_ax_value(size as _)
+        && AXValueGetValue(
+            size as AXValueRef,
+            KAX_VALUE_CGSIZE,
+            &mut extent as *mut CGSize as *mut c_void,
+        ) != 0;
     CFRelease(position);
     CFRelease(size);
     (ok_point && ok_size).then_some(Rect {
@@ -1169,7 +1173,7 @@ unsafe fn copy_attribute_array(
     attribute: &str,
 ) -> Option<CFArray<*const c_void>> {
     let value = copy_attribute_value(element, attribute)?;
-    Some(CFArray::wrap_under_create_rule(value as CFArrayRef))
+    crate::commands::ax_values::owned_array(value)
 }
 
 fn looks_like_address_label(value: &str, allow_search_label: bool) -> bool {

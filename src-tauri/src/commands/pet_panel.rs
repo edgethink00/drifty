@@ -366,12 +366,12 @@ pub fn show_pet_panel(app: &AppHandle, window: &WebviewWindow) -> Result<(), Str
             let app_for_main = app.clone();
             let window_for_main = window.clone();
             let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            app.run_on_main_thread(move || {
+            app.run_on_main_thread(crate::panic_guard::contained("pet_panel::show_pet_panel", move || {
                 let _ = sender.send(show_pet_panel_on_main_thread(
                     &app_for_main,
                     &window_for_main,
                 ));
-            })
+            }))
             .map_err(|error| error.to_string())?;
 
             return receiver
@@ -387,12 +387,12 @@ pub fn show_pet_panel(app: &AppHandle, window: &WebviewWindow) -> Result<(), Str
         let app_for_main = app.clone();
         let window_for_main = window.clone();
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        app.run_on_main_thread(move || {
+        app.run_on_main_thread(crate::panic_guard::contained("pet_panel::show_pet_panel", move || {
             let _ = sender.send(show_pet_panel_on_main_thread(
                 &app_for_main,
                 &window_for_main,
             ));
-        })
+        }))
         .map_err(|error| error.to_string())?;
 
         return receiver
@@ -424,13 +424,13 @@ pub fn show_pet_panel_at_position(
             let app_for_main = app.clone();
             let window_for_main = window.clone();
             let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            app.run_on_main_thread(move || {
+            app.run_on_main_thread(crate::panic_guard::contained("pet_panel::show_pet_panel_at_position", move || {
                 let _ = sender.send(show_pet_panel_at_position_on_main_thread(
                     &app_for_main,
                     &window_for_main,
                     desired,
                 ));
-            })
+            }))
             .map_err(|error| error.to_string())?;
 
             return receiver
@@ -446,13 +446,13 @@ pub fn show_pet_panel_at_position(
         let app_for_main = app.clone();
         let window_for_main = window.clone();
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        app.run_on_main_thread(move || {
+        app.run_on_main_thread(crate::panic_guard::contained("pet_panel::show_pet_panel_at_position", move || {
             let res = window_for_main
                 .set_position(desired)
                 .map_err(|error| error.to_string())
                 .and_then(|_| show_pet_panel_on_main_thread(&app_for_main, &window_for_main));
             let _ = sender.send(res);
-        })
+        }))
         .map_err(|error| error.to_string())?;
 
         return receiver
@@ -615,7 +615,7 @@ pub fn perform_pet_panel_drag(
     let anchor = {
         let (sender, receiver) = sync_channel(1);
         let window_for_anchor = window.clone();
-        app.run_on_main_thread(move || {
+        app.run_on_main_thread(crate::panic_guard::contained("pet_panel::perform_pet_panel_drag", move || {
             let result = (|| {
                 let ptr = window_for_anchor.ns_window().ok()?;
                 // SAFETY: Tauri retains this NSWindow and the block runs on
@@ -626,7 +626,7 @@ pub fn perform_pet_panel_drag(
                 Some(((origin.x, origin.y), (mouse.x, mouse.y)))
             })();
             let _ = sender.send(result);
-        })
+        }))
         .map_err(|error| error.to_string())?;
         receiver
             .recv_timeout(MAIN_THREAD_TIMEOUT)
@@ -653,7 +653,7 @@ pub fn perform_pet_panel_drag(
             None
         };
         let completion_sender = completion.as_ref().map(|(sender, _)| sender.clone());
-        app.run_on_main_thread(move || {
+        app.run_on_main_thread(crate::panic_guard::contained("pet_panel::perform_pet_panel_drag", move || {
             if let Ok(ptr) = window_for_apply.ns_window() {
                 // SAFETY: Tauri retains this NSWindow and the block runs on
                 // AppKit's main thread.
@@ -671,7 +671,7 @@ pub fn perform_pet_panel_drag(
             if let Some(sender) = completion_sender {
                 let _ = sender.send(());
             }
-        })
+        }))
         .map_err(|error| {
             apply_in_flight.store(false, Ordering::Release);
             error.to_string()
@@ -838,7 +838,7 @@ pub fn perform_pet_panel_drag(
             None
         };
         let completion_sender = completion.as_ref().map(|(sender, _)| sender.clone());
-        app.run_on_main_thread(move || {
+        app.run_on_main_thread(crate::panic_guard::contained("pet_panel::perform_pet_panel_drag", move || {
             // Sample the freshest cursor inside the apply so the panel lands on
             // the current pointer rather than the position that queued it.
             if let Ok(mouse) = super::pet_cursor_windows::cursor_position() {
@@ -859,7 +859,7 @@ pub fn perform_pet_panel_drag(
             if let Some(sender) = completion_sender {
                 let _ = sender.send(());
             }
-        })
+        }))
         .map_err(|error| {
             apply_in_flight.store(false, Ordering::Release);
             error.to_string()

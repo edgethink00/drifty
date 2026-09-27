@@ -321,7 +321,7 @@ pub fn set_pet_quick_controls_acknowledgement_held(app: &AppHandle, held: bool) 
             PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
         ));
         let app_for_main = app.clone();
-        let _ = app.run_on_main_thread(move || {
+        let _ = app.run_on_main_thread(crate::panic_guard::contained("pet_quick_controls::set_pet_quick_controls_acknowledgement_held", move || {
             if PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_GENERATION.load(Ordering::Relaxed) != generation
                 || !PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD.swap(false, Ordering::Relaxed)
             {
@@ -330,7 +330,7 @@ pub fn set_pet_quick_controls_acknowledgement_held(app: &AppHandle, held: bool) 
             if let Some(window) = app_for_main.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
                 let _ = hide_pet_quick_controls_window(&window);
             }
-        });
+        }));
     });
 }
 
@@ -368,9 +368,9 @@ fn sync_pet_quick_controls_theme(app: &AppHandle, window: &WebviewWindow, dark: 
     }
 
     let window = window.clone();
-    if let Err(error) = app.run_on_main_thread(move || {
+    if let Err(error) = app.run_on_main_thread(crate::panic_guard::contained("pet_quick_controls::sync_pet_quick_controls_theme", move || {
         let _ = window.set_theme(theme);
-    }) {
+    })) {
         // Appearance is cosmetic and the CSS theme remains authoritative for
         // text and tint even if AppKit cannot update this frame.
         eprintln!("[pet-quick-controls] native theme sync unavailable: {error}");
@@ -624,9 +624,9 @@ fn macos_cursor_inside_window(app: &AppHandle, window: &WebviewWindow) -> Result
 
     let window_for_main = window.clone();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    app.run_on_main_thread(move || {
+    app.run_on_main_thread(crate::panic_guard::contained("pet_quick_controls::macos_cursor_inside_window", move || {
         let _ = sender.send(macos_cursor_inside_window_on_main_thread(&window_for_main));
-    })
+    }))
     .map_err(|error| error.to_string())?;
     receiver
         .recv_timeout(std::time::Duration::from_millis(250))

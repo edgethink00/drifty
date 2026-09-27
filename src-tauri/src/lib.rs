@@ -7,8 +7,10 @@ mod correction_evidence_store;
 mod custom_endpoint_key_store;
 mod donut_icon;
 mod living_soul_store;
+mod native_crash_reports;
 mod observability;
 mod openrouter_key_store;
+mod panic_guard;
 mod quit_confirmation;
 mod shell_action;
 mod site_icons;
@@ -741,6 +743,9 @@ pub fn run() {
                 setup_pet_quick_controls_window,
             )?;
             setup_tray(app.handle())?;
+            // Crashes that ended earlier sessions outside Rust (AppKit
+            // exceptions, aborts) only exist as macOS crash reports.
+            native_crash_reports::forward_previous_crashes(app.handle());
 
             // Reclaim icon-cache generations nothing reads anymore. Both run
             // off-thread because they touch the filesystem, and a failure here

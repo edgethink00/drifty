@@ -1,5 +1,7 @@
 mod accessibility;
 mod ai;
+#[cfg(target_os = "macos")]
+mod ax_values;
 mod cloud_sync;
 mod companion_context;
 mod companion_panel;

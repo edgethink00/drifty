@@ -78,7 +78,8 @@ fn frontmost_other_app_is_fullscreen() -> bool {
                 return false;
             }
             let fullscreen = (|| {
-                if Instant::now() >= deadline
+                if !crate::commands::ax_values::is_ax_element(window_ref)
+                    || Instant::now() >= deadline
                     || AXUIElementSetMessagingTimeout(
                         window_ref as AXUIElementRef,
                         remaining_ax_timeout_seconds(deadline),

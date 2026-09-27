@@ -187,9 +187,9 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
             let window_for_main = window.clone();
             let (sender, receiver) = std::sync::mpsc::sync_channel(1);
             window
-                .run_on_main_thread(move || {
+                .run_on_main_thread(crate::panic_guard::contained("pet_hit_region::refresh_pet_hit_region_for_window", move || {
                     let _ = sender.send(refresh_pet_hit_region_on_main_thread(&window_for_main));
-                })
+                }))
                 .map_err(|error| error.to_string())?;
             return receiver
                 .recv_timeout(MAIN_THREAD_TIMEOUT)
@@ -307,12 +307,12 @@ pub fn set_pet_window_interactive(window: &WebviewWindow, interactive: bool) -> 
             let window_for_main = window.clone();
             let (sender, receiver) = std::sync::mpsc::sync_channel(1);
             window
-                .run_on_main_thread(move || {
+                .run_on_main_thread(crate::panic_guard::contained("pet_hit_region::set_pet_window_interactive", move || {
                     let _ = sender.send(set_pet_window_interactive_on_main_thread(
                         &window_for_main,
                         interactive,
                     ));
-                })
+                }))
                 .map_err(|error| error.to_string())?;
             return receiver
                 .recv_timeout(MAIN_THREAD_TIMEOUT)
@@ -400,13 +400,16 @@ fn install_macos_monitor(app: &AppHandle) -> Result<(), String> {
     let global: block2::RcBlock<dyn Fn(NonNull<NSEvent>)> =
         RcBlock::new(move |event: NonNull<NSEvent>| {
             let event = unsafe { event.as_ref() };
-            handle_monitored_mouse_event(
-                &app_for_global,
-                event.r#type(),
-                false,
-                event.windowNumber(),
-                pet_window_number,
-            );
+            // A panic cannot unwind out of an AppKit block; it would abort.
+            crate::panic_guard::contain_panic("pet_hit_region::global_mouse_monitor", || {
+                handle_monitored_mouse_event(
+                    &app_for_global,
+                    event.r#type(),
+                    false,
+                    event.windowNumber(),
+                    pet_window_number,
+                )
+            });
         });
     let mask = NSEventMask::MouseMoved
         | NSEventMask::LeftMouseDragged
@@ -426,13 +429,16 @@ fn install_macos_monitor(app: &AppHandle) -> Result<(), String> {
     let local: block2::RcBlock<dyn Fn(NonNull<NSEvent>) -> *mut NSEvent> =
         RcBlock::new(move |event: NonNull<NSEvent>| {
             let event_ref = unsafe { event.as_ref() };
-            handle_monitored_mouse_event(
-                &app_for_local,
-                event_ref.r#type(),
-                true,
-                event_ref.windowNumber(),
-                pet_window_number,
-            );
+            // Contain a panic and still hand the event back unchanged.
+            crate::panic_guard::contain_panic("pet_hit_region::local_mouse_monitor", || {
+                handle_monitored_mouse_event(
+                    &app_for_local,
+                    event_ref.r#type(),
+                    true,
+                    event_ref.windowNumber(),
+                    pet_window_number,
+                )
+            });
             event.as_ptr()
         });
     let Some(local_monitor) =

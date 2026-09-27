@@ -7,7 +7,8 @@
 
 #![cfg(target_os = "macos")]
 
-use core_foundation::array::{CFArray, CFArrayRef};
+use crate::commands::ax_values::AxElements;
+use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, CFTypeRef, TCFType};
 use core_foundation::boolean::CFBoolean;
 use core_foundation::number::CFNumber;
@@ -91,6 +92,11 @@ pub(super) fn resolve_selected_browser_tab_close(
             .filter(|name| !name.trim().is_empty())
             .and_then(find_pid_by_app_name)
     })?;
+    if is_this_process(pid) {
+        // AX reads of Drifty itself run WebKit off the main thread; macOS 26
+        // traps the app for that. Drifty's own close targets use the main thread.
+        return None;
+    }
     let prefer_left_edge = prefers_left_edge_close(app_name, browser_name);
 
     // SAFETY: Category 8 - FFI boundary. We own the application AXUIElement
@@ -126,12 +132,17 @@ pub(super) fn resolve_selected_browser_tab_close(
 /// AX bounds are global logical points, including displays left of the primary.
 pub(super) fn fullscreen_target_frame(app_name: &str, browser_name: Option<&str>) -> Option<(f64, f64, f64, f64)> {
     let pid = find_pid_by_app_name(app_name).or_else(|| browser_name.and_then(find_pid_by_app_name))?;
+    if is_this_process(pid) { return None; }
     if NSWorkspace::sharedWorkspace().frontmostApplication()?.processIdentifier() != pid { return None; }
     unsafe {
         let app = AXUIElementCreateApplication(pid);
         if app.is_null() { return None; }
         let result = (|| {
             let window = copy_attribute_value(app, "AXFocusedWindow")?;
+            if !crate::commands::ax_values::is_ax_element(window) {
+                CFRelease(window);
+                return None;
+            }
             let result = (|| {
                 let value = copy_attribute_value(window as AXUIElementRef, "AXFullScreen")?;
                 let fullscreen = CFType::wrap_under_create_rule(value)
@@ -208,8 +219,7 @@ unsafe fn choose_browser_content_window(
     let mut best: Option<(i32, AXUIElementRef)> = None;
     for index in 0..windows.len() {
         let Some(window) = windows
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -306,8 +316,7 @@ unsafe fn scan_for_selected_tab_close(
     let mut deferred = Vec::new();
     for index in 0..children.len() {
         let Some(child) = children
-            .get(index as isize)
-            .map(|value| *value as AXUIElementRef)
+            .ax_element(index as isize)
         else {
             continue;
         };
@@ -386,16 +395,18 @@ unsafe fn element_frame(element: AXUIElementRef) -> Option<Rect> {
     let size = copy_attribute_value(element, "AXSize")?;
     let mut point = CGPoint::default();
     let mut extent = CGSize::default();
-    let ok_point = AXValueGetValue(
-        position as AXValueRef,
-        KAX_VALUE_CGPOINT,
-        &mut point as *mut CGPoint as *mut c_void,
-    ) != 0;
-    let ok_size = AXValueGetValue(
-        size as AXValueRef,
-        KAX_VALUE_CGSIZE,
-        &mut extent as *mut CGSize as *mut c_void,
-    ) != 0;
+    let ok_point = crate::commands::ax_values::is_ax_value(position as _)
+        && AXValueGetValue(
+            position as AXValueRef,
+            KAX_VALUE_CGPOINT,
+            &mut point as *mut CGPoint as *mut c_void,
+        ) != 0;
+    let ok_size = crate::commands::ax_values::is_ax_value(size as _)
+        && AXValueGetValue(
+            size as AXValueRef,
+            KAX_VALUE_CGSIZE,
+            &mut extent as *mut CGSize as *mut c_void,
+        ) != 0;
     CFRelease(position);
     CFRelease(size);
     if !ok_point || !ok_size {
@@ -407,6 +418,10 @@ unsafe fn element_frame(element: AXUIElementRef) -> Option<Rect> {
         width: extent.width,
         height: extent.height,
     })
+}
+
+fn is_this_process(pid: i32) -> bool {
+    i64::from(pid) == i64::from(std::process::id())
 }
 
 unsafe fn copy_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<CFTypeRef> {
@@ -424,13 +439,12 @@ unsafe fn copy_attribute_array(
     attribute: &str,
 ) -> Option<CFArray<*const c_void>> {
     let value = copy_attribute_value(element, attribute)?;
-    Some(CFArray::wrap_under_create_rule(value as CFArrayRef))
+    crate::commands::ax_values::owned_array(value)
 }
 
 unsafe fn copy_attribute_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
     let value = copy_attribute_value(element, attribute)?;
-    let text = CFString::wrap_under_create_rule(value as _).to_string();
-    Some(text)
+    crate::commands::ax_values::owned_string(value)
 }
 
 fn looks_like_close_label(value: &str) -> bool {

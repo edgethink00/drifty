@@ -498,9 +498,9 @@ pub(crate) fn native_window_number(window: &WebviewWindow) -> Option<i64> {
     let window_for_main = window.clone();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     window
-        .run_on_main_thread(move || {
+        .run_on_main_thread(crate::panic_guard::contained("pet_mode_ax_control_veto::native_window_number", move || {
             let _ = sender.send(read_window_number(&window_for_main));
-        })
+        }))
         .ok()?;
     receiver
         .recv_timeout(NATIVE_WINDOW_NUMBER_MAIN_THREAD_TIMEOUT)
@@ -588,7 +588,64 @@ fn control_obstacles_near_seat(
         width: (width + CONTROL_NUDGE_MAX * 2.0).min(work_width),
         height: height + CONTROL_SAFETY_INSET * 2.0,
     };
-    let mut candidates = Vec::new();
+    let SeatScanCandidates {
+        candidates,
+        own_frames,
+    } = seat_scan_candidates(
+        &listed,
+        seat,
+        search,
+        &excluded_window_ids,
+        i64::from(std::process::id()),
+    );
+    if candidates.is_empty() {
+        return ControlScan {
+            obstacles: Vec::new(),
+            truncated: false,
+            failure: Some(SeatDecisionReason::NoCandidateWindow),
+        };
+    }
+    let deadline = AxScanDeadline::whole_scan();
+    collect_process_scans(
+        &choose_scan_targets(seat, &candidates),
+        deadline,
+        |target, deadline| {
+            // Another app's AX tree is untrusted input. If a scan still
+            // trips an Objective-C exception or panic, treat it as truncated
+            // so the pet keeps its seat instead of ending the app.
+            crate::panic_guard::contain_panic("pet_mode_ax_control_veto::scan_controls", || {
+                macos_ax::scan_controls(target.pid, &target.frames, search, &own_frames, deadline)
+            })
+            .unwrap_or(WindowControlScan {
+                controls: Vec::new(),
+                truncated: true,
+            })
+        },
+    )
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Default, PartialEq)]
+struct SeatScanCandidates {
+    /// Front-to-back windows of other apps whose controls may sit under the seat.
+    candidates: Vec<WindowCandidate>,
+    /// Drifty's own windows near the seat. They are never scanned: an AX read
+    /// of this process is served in-process on the calling thread, which for a
+    /// WKWebView means WebKit API off the main thread, and macOS 26 WebKit
+    /// traps the whole app for that
+    /// (crashDueToApplicationCallingMainThreadOnlyWebKitAPIFromBackgroundThread).
+    own_frames: Vec<SeatRect>,
+}
+
+#[cfg(target_os = "macos")]
+fn seat_scan_candidates(
+    listed: &[super::pet_drop_windows::ListedWindow],
+    seat: SeatRect,
+    search: SeatRect,
+    excluded_window_ids: &[i64],
+    own_pid: i64,
+) -> SeatScanCandidates {
+    let mut result = SeatScanCandidates::default();
     for window in listed {
         if window.layer != 0
             || window.alpha < 0.05
@@ -613,7 +670,16 @@ fn control_obstacles_near_seat(
             // contains the seat.
             continue;
         }
-        candidates.push(WindowCandidate {
+        if window.pid == own_pid {
+            result.own_frames.push(frame);
+            // Drifty's own opaque window still hides whatever is behind it,
+            // so it ends the front-to-back walk like any covering window.
+            if contains(frame, seat) {
+                break;
+            }
+            continue;
+        }
+        result.candidates.push(WindowCandidate {
             pid: window.pid as i32,
             frame,
         });
@@ -625,19 +691,7 @@ fn control_obstacles_near_seat(
             break;
         }
     }
-    if candidates.is_empty() {
-        return ControlScan {
-            obstacles: Vec::new(),
-            truncated: false,
-            failure: Some(SeatDecisionReason::NoCandidateWindow),
-        };
-    }
-    let deadline = AxScanDeadline::whole_scan();
-    collect_process_scans(
-        &choose_scan_targets(seat, &candidates),
-        deadline,
-        |target, deadline| macos_ax::scan_controls(target.pid, &target.frames, search, deadline),
-    )
+    result
 }
 
 #[cfg(target_os = "macos")]
@@ -668,7 +722,8 @@ mod macos_ax {
         ax_copy_outcome, control_attached_to_window, intersects, AxCopyOutcome, AxScanDeadline,
         SeatRect, WindowControlScan, MAX_AX_CONTROLS, MAX_AX_VISITED,
     };
-    use core_foundation::array::{CFArray, CFArrayRef};
+    use crate::commands::ax_values::AxElements;
+    use core_foundation::array::CFArray;
     use core_foundation::base::{CFType, CFTypeRef, TCFType};
     use core_foundation::boolean::CFBoolean;
     use core_foundation::string::CFString;
@@ -729,6 +784,8 @@ mod macos_ax {
         seen: HashSet<usize>,
         controls: Vec<SeatRect>,
         deadline: AxScanDeadline,
+        /// Drifty's own windows; hit tests there would run WebKit AX here.
+        own_frames: Vec<SeatRect>,
     }
 
     impl ScanState {
@@ -788,6 +845,7 @@ mod macos_ax {
         pid: i32,
         window_targets: &[SeatRect],
         search: SeatRect,
+        own_frames: &[SeatRect],
         deadline: AxScanDeadline,
     ) -> WindowControlScan {
         unsafe {
@@ -797,6 +855,7 @@ mod macos_ax {
                 seen: HashSet::new(),
                 controls: Vec::new(),
                 deadline,
+                own_frames: own_frames.to_vec(),
             };
             if state.budget_exhausted() {
                 return WindowControlScan {
@@ -872,8 +931,7 @@ mod macos_ax {
                 break;
             }
             let Some(window) = windows
-                .get(index as isize)
-                .map(|value| *value as AXUIElementRef)
+                .ax_element(index as isize)
             else {
                 continue;
             };
@@ -932,8 +990,7 @@ mod macos_ax {
                 return None;
             }
             let Some(element) = elements
-                .get(index as isize)
-                .map(|value| *value as AXUIElementRef)
+                .ax_element(index as isize)
             else {
                 continue;
             };
@@ -996,6 +1053,15 @@ mod macos_ax {
         let system = CFType::wrap_under_create_rule(system as CFTypeRef);
         let system_ref = system.as_CFTypeRef() as AXUIElementRef;
         for (x, y) in sample_points(target) {
+            if state
+                .own_frames
+                .iter()
+                .any(|frame| x >= frame.x && x < frame.right() && y >= frame.y && y < frame.bottom())
+            {
+                // A system-wide hit test on Drifty's own window is answered
+                // in-process on this worker thread; see SeatScanCandidates.
+                continue;
+            }
             if !prepare_ax_ipc(system_ref, state) {
                 return None;
             }
@@ -1033,6 +1099,9 @@ mod macos_ax {
                     break;
                 };
                 let parent = CFType::wrap_under_create_rule(parent);
+                if !crate::commands::ax_values::is_ax_element(parent.as_CFTypeRef()) {
+                    break;
+                }
                 if element_pid(parent.as_CFTypeRef() as AXUIElementRef, state) != Some(pid) {
                     break;
                 }
@@ -1084,8 +1153,7 @@ mod macos_ax {
             };
             for index in 0..children.len() {
                 let Some(child) = children
-                    .get(index as isize)
-                    .map(|value| *value as AXUIElementRef)
+                    .ax_element(index as isize)
                 else {
                     continue;
                 };
@@ -1112,6 +1180,9 @@ mod macos_ax {
             return;
         };
         let control = CFType::wrap_under_create_rule(control);
+        if !crate::commands::ax_values::is_ax_element(control.as_CFTypeRef()) {
+            return;
+        }
         let control_ref = control.as_CFTypeRef() as AXUIElementRef;
         if !attribute_is_true(control_ref, "AXHidden", state) {
             let address = control_ref as usize;
@@ -1153,16 +1224,18 @@ mod macos_ax {
         let size = CFType::wrap_under_create_rule(copy_attribute_value(element, "AXSize", state)?);
         let mut point = CGPoint::default();
         let mut extent = CGSize::default();
-        let ok_point = AXValueGetValue(
-            position.as_CFTypeRef() as AXValueRef,
-            KAX_VALUE_CGPOINT,
-            &mut point as *mut CGPoint as *mut c_void,
-        ) != 0;
-        let ok_size = AXValueGetValue(
-            size.as_CFTypeRef() as AXValueRef,
-            KAX_VALUE_CGSIZE,
-            &mut extent as *mut CGSize as *mut c_void,
-        ) != 0;
+        let ok_point = crate::commands::ax_values::is_ax_value(position.as_CFTypeRef() as _)
+            && AXValueGetValue(
+                position.as_CFTypeRef() as AXValueRef,
+                KAX_VALUE_CGPOINT,
+                &mut point as *mut CGPoint as *mut c_void,
+            ) != 0;
+        let ok_size = crate::commands::ax_values::is_ax_value(size.as_CFTypeRef() as _)
+            && AXValueGetValue(
+                size.as_CFTypeRef() as AXValueRef,
+                KAX_VALUE_CGSIZE,
+                &mut extent as *mut CGSize as *mut c_void,
+            ) != 0;
         let frame = SeatRect {
             x: point.x,
             y: point.y,
@@ -1178,7 +1251,7 @@ mod macos_ax {
         state: &mut ScanState,
     ) -> Option<CFArray<*const c_void>> {
         let value = copy_attribute_value(element, attribute, state)?;
-        Some(CFArray::wrap_under_create_rule(value as CFArrayRef))
+        crate::commands::ax_values::owned_array(value)
     }
 
     unsafe fn copy_attribute_string(
@@ -1187,8 +1260,7 @@ mod macos_ax {
         state: &mut ScanState,
     ) -> Option<String> {
         let value = copy_attribute_value(element, attribute, state)?;
-        let string = CFString::wrap_under_create_rule(value as _);
-        Some(string.to_string())
+        crate::commands::ax_values::owned_string(value)
     }
 
     unsafe fn copy_attribute_value(
@@ -1711,5 +1783,78 @@ mod tests {
         let resolution = seat_from_scan(1272.0, 14.0, 144.0, 99.0, 0.0, 1440.0, scan);
         assert!(resolution.moved);
         assert_eq!(resolution.reason, SeatDecisionReason::ControlOverlap);
+    }
+
+    #[cfg(target_os = "macos")]
+    fn listed_window(
+        id: i64,
+        pid: i64,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    ) -> super::super::pet_drop_windows::ListedWindow {
+        super::super::pet_drop_windows::ListedWindow {
+            id,
+            pid,
+            owner: format!("pid-{pid}"),
+            name: String::new(),
+            layer: 0,
+            alpha: 1.0,
+            bounds: super::super::pet_drop::PetRect { x, y, width, height },
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn drifty_windows_are_never_scanned_but_still_hide_what_is_behind_them() {
+        const OWN: i64 = 4242;
+        let seat = SeatRect { x: 600.0, y: 760.0, width: 144.0, height: 99.0 };
+        let search = SeatRect { x: 400.0, y: 740.0, width: 544.0, height: 140.0 };
+
+        // Drifty's dashboard partly overlaps the seat above another app.
+        let partial = seat_scan_candidates(
+            &[
+                listed_window(1, OWN, 500.0, 100.0, 300.0, 700.0),
+                listed_window(2, 77, 0.0, 0.0, 1440.0, 900.0),
+            ],
+            seat,
+            search,
+            &[],
+            OWN,
+        );
+        assert_eq!(partial.candidates.len(), 1);
+        assert_eq!(partial.candidates[0].pid, 77);
+        assert_eq!(partial.own_frames.len(), 1);
+
+        // Drifty's window fully covers the seat: nothing behind it is
+        // scanned, and Drifty itself is not either (macOS 26 WebKit traps on
+        // AX reads of this process from a worker thread).
+        let covering = seat_scan_candidates(
+            &[
+                listed_window(1, OWN, 0.0, 0.0, 1440.0, 900.0),
+                listed_window(2, 77, 0.0, 0.0, 1440.0, 900.0),
+            ],
+            seat,
+            search,
+            &[],
+            OWN,
+        );
+        assert!(covering.candidates.is_empty());
+        assert_eq!(covering.own_frames.len(), 1);
+
+        // Transparent pet overlays stay excluded without counting as cover.
+        let overlay = seat_scan_candidates(
+            &[
+                listed_window(9, OWN, 0.0, 0.0, 1440.0, 900.0),
+                listed_window(2, 77, 0.0, 0.0, 1440.0, 900.0),
+            ],
+            seat,
+            search,
+            &[9],
+            OWN,
+        );
+        assert_eq!(overlay.candidates.len(), 1);
+        assert!(overlay.own_frames.is_empty());
     }
 }

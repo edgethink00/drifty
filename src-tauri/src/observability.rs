@@ -72,7 +72,7 @@ fn scrub_stacktrace(stacktrace: Option<&mut sentry::protocol::Stacktrace>) {
 
 /// Replace the account segment after a `Users` directory in either separator
 /// style: `/Users/<name>/…` and `C:\Users\<name>\…` become `…/Users/[user]/…`.
-fn redact_user_home(path: &str) -> String {
+pub(crate) fn redact_user_home(path: &str) -> String {
     const USERS: &str = "users";
     let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
     // ASCII lowercasing keeps byte offsets identical to `path`.
@@ -170,6 +170,18 @@ fn sentry_release() -> String {
             option_env!("DRIFTY_BUILD_COMMIT"),
         )
     })
+}
+
+/// The Sentry release for a crash recorded by `app_version`. The running
+/// version keeps its commit-qualified release so the crash groups with that
+/// build's other events; an earlier version is named by its version alone.
+pub(crate) fn release_for_app_version(app_version: Option<&str>) -> String {
+    match app_version.and_then(non_empty_trimmed) {
+        Some(version) if version != env!("CARGO_PKG_VERSION") => {
+            format!("{SENTRY_RELEASE_PREFIX}{version}")
+        }
+        _ => sentry_release(),
+    }
 }
 
 fn build_release(version: &str, commit: Option<&str>) -> String {

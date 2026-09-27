@@ -45,7 +45,7 @@ zip = { version = "4.6.1", default-features = false, features = ["deflate-flate2
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
 core-graphics = "0.24"
-objc2 = "0.6"
+objc2 = { version = "0.6", features = ["exception"] }
 block2 = "0.6"
 objc2-app-kit = { version = "0.3.2", features = ["NSAlert", "NSAnimationContext", "NSApplication", "NSButton", "NSButtonCell", "NSCell", "NSColor", "NSControl", "NSEvent", "NSFont", "NSGraphics", "NSGraphicsContext", "NSImage", "NSImageRep", "NSImageView", "NSBitmapImageRep", "NSPanel", "NSResponder", "NSSavePanel", "NSScreen", "NSTextField", "NSTrackingArea", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication", "block2", "objc2-quartz-core"] }
 objc2-quartz-core = { version = "0.3.2", features = ["CALayer", "CAMediaTimingFunction", "objc2-core-foundation", "objc2-core-graphics"] }

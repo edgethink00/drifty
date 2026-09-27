@@ -57,12 +57,15 @@ pub(super) fn preflight_native_ax_tab_close(
     if !closes_through_native_ax_selection(browser_name) {
         return Err("unsupported_browser".to_string());
     }
-    macos_native_ax::preflight_frontmost_tab(
-        browser_name,
-        site_url.unwrap_or(""),
-        site_domain,
-        native_ax_diagnostic_namespace(browser_name),
-    )
+    crate::panic_guard::contain_panic("browser_tabs::preflight_frontmost_tab", || {
+        macos_native_ax::preflight_frontmost_tab(
+            browser_name,
+            site_url.unwrap_or(""),
+            site_domain,
+            native_ax_diagnostic_namespace(browser_name),
+        )
+    })
+    .unwrap_or_else(|| Err("native_ax_preflight_contained_failure".to_string()))
 }
 
 const APPLESCRIPT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -104,12 +107,15 @@ pub(super) fn close_browser_tab(
 ) -> Result<String, ExtremeNudgeError> {
     #[cfg(target_os = "macos")]
     if closes_through_native_ax_selection(browser_name) {
-        return macos_native_ax::close_frontmost_tab(
-            browser_name.trim(),
-            site_url.unwrap_or(""),
-            site_domain,
-            native_ax_diagnostic_namespace(browser_name),
-        )
+        return crate::panic_guard::contain_panic("browser_tabs::close_frontmost_tab", || {
+            macos_native_ax::close_frontmost_tab(
+                browser_name.trim(),
+                site_url.unwrap_or(""),
+                site_domain,
+                native_ax_diagnostic_namespace(browser_name),
+            )
+        })
+        .unwrap_or_else(|| Err("native_ax_close_contained_failure".to_string()))
         .map_err(|diagnostic| ExtremeNudgeError::BrowserTabNotFound { diagnostic });
     }
 
