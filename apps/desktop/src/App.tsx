@@ -363,6 +363,8 @@ import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayRe
 import {
   END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY,
   endOfDayReviewDeadlineForDay,
+  endOfDayReviewDeliveryDeadline,
+  END_OF_DAY_REVIEW_CATCH_UP_EARLIEST_MINUTE,
   endOfDayReviewMinuteToValue,
   endOfDayReviewValueToMinute,
   hasExhaustedEndOfDayReviewPresentations,
@@ -7614,8 +7616,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (segments.length === 0) return;
 
     /* The review waits until the day has enough tracked time to say anything
-       honest about; from the evening trigger until the logical day rolls
-       over, the first evaluation that finds the bar crossed fires. Thin days
+       honest about; from the evening trigger until midnight, the first
+       evaluation that finds the bar crossed fires. Thin days
        are skipped silently. The leaderboard checkpoint keeps its own once-a-
        day marker so a skipped review never suppresses the publish. */
     const trackedSeconds = sumEndOfDayReviewTrackedSeconds(segments);
@@ -7697,10 +7699,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const shown = await showEndOfDayReview({
         ...event,
         presentationDay: todayDay,
-        expiresAt: new Date(logicalDayEndExclusiveMs(
+        expiresAt: endOfDayReviewDeliveryDeadline(new Date(logicalDayEndExclusiveMs(
           todayDay,
           deliveryPolicy.startOfDayMinutes,
-        )).toISOString(),
+        )).toISOString(), deliveryTime),
       });
       if (shown) recordEndOfDayReviewPresentation(todayDay);
       /* The day is marked shown only when a surface confirms an actual
@@ -7743,6 +7745,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       catchUpHandledDay: readEndOfDayReviewCatchUpHandledDay(),
       lastPresentationDay: readEndOfDayReviewLastPresentationDay(),
       currentReviewDue: isEndOfDayReviewDue(currentMinuteOfDay, endOfDayReviewMinute, startOfDayMinutes),
+      currentMinuteOfDay,
     });
     if (!catchUp) return;
     /* The same bounded allowance today's review uses. A payload the native
@@ -7788,6 +7791,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         const deliveryTime = new Date();
         const deliveryMinuteOfDay = deliveryTime.getHours() * 60 + deliveryTime.getMinutes();
         if (!deliveryPolicy.enabled
+          || deliveryMinuteOfDay < END_OF_DAY_REVIEW_CATCH_UP_EARLIEST_MINUTE
           || deliveryPolicy.startOfDayMinutes !== startOfDayMinutes
           || logicalDayIsoDateForDate(deliveryTime, deliveryPolicy.startOfDayMinutes) !== todayDay
           || isEndOfDayReviewDue(
@@ -7799,7 +7803,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           || readEndOfDayReviewCatchUpHandledDay() === catchUp.day
           || readEndOfDayReviewLastPresentationDay() === todayDay
           || hasExhaustedEndOfDayReviewPresentations(catchUp.day)) return null;
-        return deliveryPolicy;
+        return { deliveryPolicy, deliveryTime };
       };
       if (!resolveCatchUpDeliveryPolicy()) return;
 
@@ -7811,16 +7815,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       });
       /* Icon lookup is another async boundary. Today's review time or another
          acknowledged review may win while it is in flight. */
-      const deliveryPolicy = resolveCatchUpDeliveryPolicy();
-      if (!deliveryPolicy) return;
+      const delivery = resolveCatchUpDeliveryPolicy();
+      if (!delivery) return;
       const shown = await showEndOfDayReview({
         ...event,
         presentationDay: todayDay,
-        expiresAt: endOfDayReviewDeadlineForDay(
+        expiresAt: endOfDayReviewDeliveryDeadline(endOfDayReviewDeadlineForDay(
           todayDay,
-          deliveryPolicy.reviewMinute,
-          deliveryPolicy.startOfDayMinutes,
-        ),
+          delivery.deliveryPolicy.reviewMinute,
+          delivery.deliveryPolicy.startOfDayMinutes,
+        ), delivery.deliveryTime),
       });
       if (shown) recordEndOfDayReviewPresentation(catchUp.day);
       /* The native overlay acknowledges a real display and closes the slot from

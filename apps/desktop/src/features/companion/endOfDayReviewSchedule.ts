@@ -13,6 +13,7 @@ export const END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY =
   "drifty.endOfDayReview.lastPresentationDay.v1";
 
 export const DEFAULT_END_OF_DAY_REVIEW_MINUTE = 20 * 60;
+export const END_OF_DAY_REVIEW_CATCH_UP_EARLIEST_MINUTE = 8 * 60;
 
 const FIRST_REVIEW_MINUTE = 15 * 60;
 const LAST_REVIEW_MINUTE = 23 * 60 + 30;
@@ -63,10 +64,9 @@ export function persistEndOfDayReviewMinute(minutes: number, storage = browserSt
 }
 
 /**
- * The review minute is a wall-clock time while "today" is a logical day that
- * may start at 4 AM. A review set for 8 PM is due from 8 PM until the logical
- * day rolls over; between midnight and the day start the clock reads earlier
- * than the review minute even though the same logical day continues.
+ * A logical day may continue past midnight, but its evening review must not
+ * interrupt the user overnight. A missed review is offered as a catch-up on
+ * the following morning instead.
  */
 export function isEndOfDayReviewDue(
   currentMinuteOfDay: number,
@@ -76,7 +76,17 @@ export function isEndOfDayReviewDue(
   const minutesPerDay = 24 * 60;
   const logicalMinute = (currentMinuteOfDay - startOfDayMinutes + minutesPerDay) % minutesPerDay;
   const logicalReviewMinute = (reviewMinute - startOfDayMinutes + minutesPerDay) % minutesPerDay;
-  return logicalMinute >= logicalReviewMinute;
+  return currentMinuteOfDay >= reviewMinute && logicalMinute >= logicalReviewMinute;
+}
+
+/** A queued review from before midnight must not surface after midnight. */
+export function endOfDayReviewDeliveryDeadline(deadline: string, deliveryTime: Date): string {
+  const nextMidnight = new Date(
+    deliveryTime.getFullYear(),
+    deliveryTime.getMonth(),
+    deliveryTime.getDate() + 1,
+  ).getTime();
+  return new Date(Math.min(Date.parse(deadline), nextMidnight)).toISOString();
 }
 
 /** The wall-clock instant at which today's review supersedes a catch-up. */
@@ -117,10 +127,12 @@ export function resolveEndOfDayReviewCatchUp(input: {
   readonly catchUpHandledDay: string | null;
   readonly lastPresentationDay?: string | null;
   readonly currentReviewDue?: boolean;
+  readonly currentMinuteOfDay: number;
 }): EndOfDayReviewCatchUp | null {
   /* Catch-up is a morning recovery path, not a second review competing with
      today's card. Once today's review time arrives, today owns the slot. */
   if (input.currentReviewDue) return null;
+  if (input.currentMinuteOfDay < END_OF_DAY_REVIEW_CATCH_UP_EARLIEST_MINUTE) return null;
   /* A review already presented during this logical day has used the single
      interruption slot, even when the card summarized yesterday. */
   if (input.lastPresentationDay === input.todayDay) return null;

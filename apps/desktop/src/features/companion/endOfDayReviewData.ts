@@ -28,8 +28,8 @@ export const END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY =
  * telling the user their day was empty, with a ring, top apps and signals
  * that are all noise. The automatic card waits until the day has enough
  * tracked time to say anything honest about, then fires at the moment the
- * day crosses the bar (from the evening trigger minute until the logical
- * day rolls over). Days that never cross it are skipped silently — the
+ * day crosses the bar (from the evening trigger minute until midnight).
+ * Days that never cross it are skipped silently — the
  * dashboard remains the place to look at them.
  */
 export const END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS = 3 * 60 * 60;

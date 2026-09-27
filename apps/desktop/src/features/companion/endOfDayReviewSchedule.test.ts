@@ -7,6 +7,7 @@ import {
   END_OF_DAY_REVIEW_MAX_PRESENTATIONS_PER_DAY,
   END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY,
   endOfDayReviewDeadlineForDay,
+  endOfDayReviewDeliveryDeadline,
   hasExhaustedEndOfDayReviewPresentations,
   isEndOfDayReviewDue,
   persistEndOfDayReviewLastPresentationDay,
@@ -66,13 +67,13 @@ describe("endOfDayReviewSchedule", () => {
     expect(resolveInitialEndOfDayReviewMinute(storageWith("nope"))).toBe(DEFAULT_END_OF_DAY_REVIEW_MINUTE);
   });
 
-  it("is due from the review minute until the logical day rolls over", () => {
+  it("is due from the review minute until midnight, even when the logical day continues", () => {
     const startOfDay = 4 * 60;
     expect(isEndOfDayReviewDue(17 * 60 + 59, 18 * 60, startOfDay)).toBe(false);
     expect(isEndOfDayReviewDue(18 * 60, 18 * 60, startOfDay)).toBe(true);
     expect(isEndOfDayReviewDue(23 * 60 + 30, 18 * 60, startOfDay)).toBe(true);
-    /* 1 AM is still the same logical day when the day starts at 4 AM. */
-    expect(isEndOfDayReviewDue(1 * 60, 18 * 60, startOfDay)).toBe(true);
+    /* 2 AM belongs to yesterday's logical day, but is no time for an interruption. */
+    expect(isEndOfDayReviewDue(2 * 60, 18 * 60, startOfDay)).toBe(false);
     expect(isEndOfDayReviewDue(4 * 60, 18 * 60, startOfDay)).toBe(false);
     /* With a midnight day start, 1 AM is the next day and nothing is due. */
     expect(isEndOfDayReviewDue(1 * 60, 18 * 60, 0)).toBe(false);
@@ -95,15 +96,38 @@ describe("endOfDayReviewSchedule", () => {
       .toBe(new Date(2026, 4, 22, 15, 0, 0, 0).toISOString());
   });
 
+  it("expires a queued review at midnight, even if its logical deadline is later", () => {
+    expect(endOfDayReviewDeliveryDeadline(
+      new Date(2026, 4, 21, 4).toISOString(),
+      new Date(2026, 4, 20, 20),
+    )).toBe(new Date(2026, 4, 21).toISOString());
+    expect(endOfDayReviewDeliveryDeadline(
+      new Date(2026, 4, 22, 15).toISOString(),
+      new Date(2026, 4, 21, 20),
+    )).toBe(new Date(2026, 4, 22).toISOString());
+    expect(endOfDayReviewDeliveryDeadline(
+      new Date(2026, 4, 22, 15).toISOString(),
+      new Date(2026, 4, 22, 14),
+    )).toBe(new Date(2026, 4, 22, 15).toISOString());
+  });
+
   it("offers yesterday once when it was never shown", () => {
-    expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: null, catchUpHandledDay: null }))
+    expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: null, catchUpHandledDay: null, currentMinuteOfDay: 9 * 60 }))
       .toEqual({ day: "2026-05-20" });
-    expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: "2026-05-20", catchUpHandledDay: null }))
+    expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: "2026-05-20", catchUpHandledDay: null, currentMinuteOfDay: 9 * 60 }))
       .toBeNull();
-    expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: null, catchUpHandledDay: "2026-05-20" }))
+    expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: null, catchUpHandledDay: "2026-05-20", currentMinuteOfDay: 9 * 60 }))
       .toBeNull();
     /* Only yesterday: older gaps are history, not a card. */
-    expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: "2026-05-18", catchUpHandledDay: "2026-05-19" }))
+    expect(resolveEndOfDayReviewCatchUp({ todayDay: "2026-05-21", lastShownDay: "2026-05-18", catchUpHandledDay: "2026-05-19", currentMinuteOfDay: 9 * 60 }))
+      .toEqual({ day: "2026-05-20" });
+  });
+
+  it("waits until 8 AM to offer a missed review", () => {
+    const input = { todayDay: "2026-05-21", lastShownDay: null, catchUpHandledDay: null };
+    expect(resolveEndOfDayReviewCatchUp({ ...input, currentMinuteOfDay: 2 * 60 })).toBeNull();
+    expect(resolveEndOfDayReviewCatchUp({ ...input, currentMinuteOfDay: 7 * 60 + 59 })).toBeNull();
+    expect(resolveEndOfDayReviewCatchUp({ ...input, currentMinuteOfDay: 8 * 60 }))
       .toEqual({ day: "2026-05-20" });
   });
 
@@ -114,6 +138,7 @@ describe("endOfDayReviewSchedule", () => {
       catchUpHandledDay: null,
       lastPresentationDay: null,
       currentReviewDue: true,
+      currentMinuteOfDay: 20 * 60,
     })).toBeNull();
   });
 
@@ -124,6 +149,7 @@ describe("endOfDayReviewSchedule", () => {
       catchUpHandledDay: null,
       lastPresentationDay: "2026-05-21",
       currentReviewDue: false,
+      currentMinuteOfDay: 9 * 60,
     })).toBeNull();
   });
 
