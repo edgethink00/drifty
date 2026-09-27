@@ -303,6 +303,67 @@ describe("useAiSetupController connection resilience", () => {
     expect(runnerMocks.runAuto).toHaveBeenCalledTimes(2);
   });
 
+  it("re-tests a connected provider left retrying by a classification failure (#1501)", async () => {
+    vi.useFakeTimers();
+    const { result } = await renderConnectedController();
+
+    act(() => {
+      vi.advanceTimersByTime(10 * 60_000);
+    });
+    // A healthy connection is never re-probed on a timer.
+    expect(runnerMocks.runAuto).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
+    });
+    expect(result.current.localAiProviderStatus).toEqual({ kind: "connected" });
+    expect(result.current.localAiConnectionFailureCount).toBe(1);
+
+    act(() => {
+      vi.advanceTimersByTime(29_999);
+    });
+    expect(runnerMocks.runAuto).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(runnerMocks.runAuto).toHaveBeenCalledTimes(1);
+
+    // The re-test succeeds: the failure count clears and probing stops.
+    act(() => {
+      recordTestResult({ kind: "success", message: "Connected in 100 ms." });
+    });
+    expect(result.current.localAiConnectionFailureCount).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(10 * 60_000);
+    });
+    expect(runnerMocks.runAuto).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps backing off when the re-test of a retrying provider fails", async () => {
+    vi.useFakeTimers();
+    const { result } = await renderConnectedController();
+    act(() => {
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
+    });
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(runnerMocks.runAuto).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      recordTestResult({ kind: "error", issueKind: "network", message: "operation timed out" });
+    });
+    expect(result.current.localAiProviderStatus).toEqual({ kind: "failed", issueKind: "network" });
+    act(() => {
+      vi.advanceTimersByTime(59_999);
+    });
+    expect(runnerMocks.runAuto).toHaveBeenCalledTimes(1);
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(runnerMocks.runAuto).toHaveBeenCalledTimes(2);
+  });
+
   it("honors a longer OpenRouter Retry-After delay", async () => {
     vi.useFakeTimers();
     const rendered = renderHook(() => useAiSetupController());

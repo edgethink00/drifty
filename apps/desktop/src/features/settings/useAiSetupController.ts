@@ -192,10 +192,17 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   }, [localAiConnectionFingerprint]);
 
   const { runAuto: runAutoConnectionTest } = aiConnectionTest;
+  // A connected provider with unresolved classification failures shows as
+  // "retrying" (the checking pill) and hides upgrade offers, yet nothing else
+  // re-probes it until some later classification happens to succeed. After a
+  // slow cold start that left the UI stuck for 12+ minutes (#1501), so it is
+  // re-tested on the same backoff as an outright failure.
+  const localAiRetestNeeded = localAiProviderStatus.kind === "failed"
+    || (localAiProviderStatus.kind === "connected" && localAiConnectionFailureCount > 0);
   useEffect(() => {
     // "checking" means a probe is already in flight — keep the backoff level.
     if (localAiProviderStatus.kind === "checking") return;
-    if (localAiProviderStatus.kind !== "failed") {
+    if (!localAiRetestNeeded) {
       retestAttemptRef.current = 0;
       return;
     }
@@ -209,16 +216,15 @@ export function useAiSetupController(): UseAiSetupControllerResult {
       void runAutoConnectionTest();
     }, delayMs);
     return () => window.clearTimeout(timeoutId);
-  }, [aiSetupDialogOpen, localAiProviderStatus, runAutoConnectionTest]);
+  }, [aiSetupDialogOpen, localAiProviderStatus, localAiRetestNeeded, runAutoConnectionTest]);
 
-  const localAiProviderStatusKind = localAiProviderStatus.kind;
   const aiSetupDialogOpenRef = useRef(aiSetupDialogOpen);
   useEffect(() => {
     aiSetupDialogOpenRef.current = aiSetupDialogOpen;
   }, [aiSetupDialogOpen]);
   const lastOnlineProbeAtRef = useRef(0);
   useEffect(() => {
-    if (localAiProviderStatusKind !== "failed") return;
+    if (!localAiRetestNeeded) return;
     const handleOnline = () => {
       // Same manual-testing guard as the backoff loop, and a floor between
       // probes so a flapping connection (VPN reconnects, Wi-Fi roaming)
@@ -231,7 +237,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     };
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
-  }, [localAiProviderStatusKind, runAutoConnectionTest]);
+  }, [localAiRetestNeeded, runAutoConnectionTest]);
 
   useEffect(() => {
     persistLocalAiSetup(localAiSetup);
