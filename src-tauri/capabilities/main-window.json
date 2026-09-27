@@ -24,6 +24,7 @@
     "process:allow-restart",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
+    "allow-update-policy-fetch",
     "allow-update-prompt-show-native",
     "allow-update-status-show-native",
     "allow-startup-get-open-at-login-status",

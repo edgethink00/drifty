@@ -22,6 +22,7 @@ import {
   type UpdateInteractionMap,
   type UpdatePolicy,
 } from "./updatePolicy";
+import { resolveUpdatePolicyFetch } from "./updatePolicyFetch";
 
 type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 export type UpdateCheckMode = "manual" | "automatic";
@@ -270,7 +271,7 @@ export function useUpdateController({
         }
 
         const nowMs = Date.now();
-        const nextPolicy = await fetchUpdatePolicy(nextUpdate.version, globalThis.fetch, hostPlatform);
+        const nextPolicy = await fetchUpdatePolicy(nextUpdate.version, resolveUpdatePolicyFetch(), hostPlatform);
         if (!manualCheckRequestedRef.current && readVersionTestPauseUntil() > Date.now()) {
           releaseUpdateResource(nextUpdate);
           return;
@@ -361,7 +362,7 @@ export function useUpdateController({
       const latestPolicy = latestUpdate.version === offeredUpdate.version
         && availableUpdatePolicy?.version === latestUpdate.version
         ? availableUpdatePolicy
-        : await fetchUpdatePolicy(latestUpdate.version, globalThis.fetch, hostPlatform);
+        : await fetchUpdatePolicy(latestUpdate.version, resolveUpdatePolicyFetch(), hostPlatform);
       replaceAvailableUpdate(latestUpdate);
       setAvailableUpdatePolicy(latestPolicy);
       // The user already chose to install. If installation fails, keep the
