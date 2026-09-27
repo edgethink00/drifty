@@ -5,6 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { windowsDebugUploadSettings } from "./upload-windows-debug-files.mjs";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FULL_COMMIT_PATTERN = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/iu;
 const GOOGLE_DESKTOP_CLIENT_ID_PATTERN = /^[A-Za-z0-9.-]{1,256}\.apps\.googleusercontent\.com$/u;
@@ -242,6 +244,8 @@ function main(argv = process.argv.slice(2)) {
 
   if (windowsRelease) {
     args.push("--config", JSON.stringify(windowsReleaseConfig()));
+    // Fail before the long build when native debug files could not be uploaded.
+    windowsDebugUploadSettings(releaseEnvironment);
     run(
       "powershell.exe",
       [
@@ -299,6 +303,11 @@ function main(argv = process.argv.slice(2)) {
     run(
       process.execPath,
       [resolve(repoRoot, "scripts/sign-windows-updater-artifact.mjs")],
+      env,
+    );
+    run(
+      process.execPath,
+      [resolve(repoRoot, "scripts/upload-windows-debug-files.mjs")],
       env,
     );
   }
