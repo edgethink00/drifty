@@ -1591,6 +1591,54 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(sum(1 for item in refreshed if item.get("classification")), 2)
         self.assertEqual(refreshed[1]["classification"]["source"], "rule")
 
+    def test_refresh_non_ai_classifications_preserves_manual_and_ai_review_corrections(self) -> None:
+        for hour, app_name in [(9, "Code"), (10, "Mail"), (11, "Design")]:
+            self.database.insert_segment(
+                {
+                    "started_at": f"2026-04-06T{hour:02d}:00:00+00:00",
+                    "ended_at": f"2026-04-06T{hour:02d}:05:00+00:00",
+                    "duration_seconds": 300,
+                    "app_name": app_name,
+                }
+            )
+        segments = self.database.fetch_timeline("2026-04-06")
+        self.database.save_classifications([
+            {
+                "segmentId": segments[0]["id"],
+                "category": "workspace",
+                "productivity": "focus",
+                "source": "manual",
+                "confidence": 1,
+                "aiResult": False,
+            },
+            {
+                "segmentId": segments[1]["id"],
+                "category": "communication",
+                "productivity": "neutral",
+                "source": "system",
+                "confidence": 0.7,
+                "aiResult": False,
+            },
+            {
+                "segmentId": segments[2]["id"],
+                "category": "workspace",
+                "productivity": "focus",
+                "source": "ai_review",
+                "confidence": 0.9,
+            },
+        ])
+
+        deleted = self.database.refresh_non_ai_classifications(
+            "2026-04-06T00:00:00+00:00", "2026-04-06T23:59:59+00:00"
+        )
+        refreshed = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(deleted, 1)
+        self.assertEqual(refreshed[0]["classification"]["source"], "manual")
+        self.assertEqual(refreshed[0]["classification"]["category"], "workspace")
+        self.assertIsNone(refreshed[1].get("classification"))
+        self.assertEqual(refreshed[2]["classification"]["source"], "ai_review")
+
     def test_classification_rule_crud_normalizes_site_target(self) -> None:
         rule = self.database.save_classification_rule(
             {

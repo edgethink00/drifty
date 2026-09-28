@@ -3964,7 +3964,10 @@ class TrackerDatabase:
         return reusable
 
     def refresh_non_ai_classifications(self, start: str | None = None, end: str | None = None) -> int:
-        query = "DELETE FROM activity_classifications WHERE ai_result != 1 AND source != 'rule'"
+        # Keep rules, user edits, and AI-review corrections. The AI review
+        # writer defaults ai_result to 0, but its correction is still an AI
+        # result and has its own explicit Revert action.
+        query = "DELETE FROM activity_classifications WHERE ai_result != 1 AND source NOT IN ('rule', 'manual', 'ai_review')"
         params: list[Any] = []
         filters: list[str] = []
         if start:
