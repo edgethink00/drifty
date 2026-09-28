@@ -1,7 +1,13 @@
+use std::sync::Mutex;
+
 const DEFAULT_SENTRY_ENVIRONMENT: &str = "development";
 const SENTRY_RELEASE_PREFIX: &str = "drifty-mac@";
 const SHORT_COMMIT_LENGTH: usize = 12;
 const REDACTED_USER: &str = "[user]";
+/// Crates whose error logs explain a failed native window or WebView.
+const RUNTIME_LOG_TARGETS: [&str; 3] = ["tauri_runtime_wry", "wry", "tao"];
+const RUNTIME_LOG_MESSAGE_MAX_CHARS: usize = 400;
+const WEBVIEW_VERSION_TAG: &str = "webview.version";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct NativeSentryConfig {
@@ -14,6 +20,90 @@ pub fn init_native_sentry() -> Option<sentry::ClientInitGuard> {
     let config = resolve_native_sentry_config()?;
     let options = native_client_options(&config);
     Some(sentry::init((config.dsn, options)))
+}
+
+/// Tauri's runtime reports a failed window or WebView2 creation only through
+/// `log::error!`, then hands back a window whose native handle never existed.
+/// Without a logger that reason was discarded, and Windows reports reached
+/// Sentry only as "the underlying handle is not available". This logger keeps
+/// error records from the windowing crates as stderr lines and Sentry
+/// breadcrumbs, and remembers the latest one so a setup failure can name it.
+/// Other crates' logs and lower levels stay off.
+pub(crate) struct RuntimeErrorLog {
+    last_error: Mutex<Option<String>>,
+}
+
+static RUNTIME_ERROR_LOG: RuntimeErrorLog = RuntimeErrorLog {
+    last_error: Mutex::new(None),
+};
+
+impl RuntimeErrorLog {
+    fn record(&self, target: &str, message: &str) {
+        let message = runtime_log_message(message);
+        eprintln!("[{target}] {message}");
+        if let Ok(mut last_error) = self.last_error.lock() {
+            *last_error = Some(message.clone());
+        }
+        sentry::Hub::main().add_breadcrumb(sentry::Breadcrumb {
+            category: Some(format!("log.{target}")),
+            level: sentry::Level::Error,
+            message: Some(message),
+            ..Default::default()
+        });
+    }
+
+    fn take_last_error(&self) -> Option<String> {
+        self.last_error.lock().ok().and_then(|mut last_error| last_error.take())
+    }
+}
+
+impl log::Log for RuntimeErrorLog {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Error && is_runtime_log_target(metadata.target())
+    }
+
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            self.record(record.target(), &record.args().to_string());
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+fn is_runtime_log_target(target: &str) -> bool {
+    RUNTIME_LOG_TARGETS.iter().any(|runtime_target| {
+        target == *runtime_target
+            || target
+                .strip_prefix(runtime_target)
+                .is_some_and(|rest| rest.starts_with("::"))
+    })
+}
+
+fn runtime_log_message(message: &str) -> String {
+    let redacted = redact_user_home(message.trim());
+    match redacted.char_indices().nth(RUNTIME_LOG_MESSAGE_MAX_CHARS) {
+        Some((end, _)) => format!("{}…", &redacted[..end]),
+        None => redacted,
+    }
+}
+
+pub(crate) fn install_runtime_error_log() {
+    if log::set_logger(&RUNTIME_ERROR_LOG).is_ok() {
+        log::set_max_level(log::LevelFilter::Error);
+    }
+}
+
+/// The most recent windowing error logged since the previous call.
+pub(crate) fn take_last_runtime_error() -> Option<String> {
+    RUNTIME_ERROR_LOG.take_last_error()
+}
+
+/// Tags every native event with the WebView2 runtime the machine actually has,
+/// or `unavailable` when the runtime cannot be found.
+pub(crate) fn tag_webview_runtime_version(version: Option<String>) {
+    let value = version.unwrap_or_else(|| "unavailable".to_string());
+    sentry::configure_scope(|scope| scope.set_tag(WEBVIEW_VERSION_TAG, value));
 }
 
 fn native_client_options(config: &NativeSentryConfig) -> sentry::ClientOptions {
@@ -36,6 +126,9 @@ fn scrub_native_event(mut event: sentry::protocol::Event<'static>) -> sentry::pr
 
     event.server_name = None;
     event.message = event.message.take().map(|message| redact_user_home(&message));
+    for breadcrumb in event.breadcrumbs.values.iter_mut() {
+        breadcrumb.message = breadcrumb.message.take().map(|message| redact_user_home(&message));
+    }
     for exception in event.exception.values.iter_mut() {
         exception.value = exception.value.take().map(|value| redact_user_home(&value));
         scrub_stacktrace(exception.stacktrace.as_mut());
@@ -223,10 +316,12 @@ fn non_empty_trimmed(value: &str) -> Option<String> {
 mod tests {
     use super::{
         build_release, native_client_options, redact_user_home, scrub_native_event,
-        NativeSentryConfig,
+        NativeSentryConfig, RuntimeErrorLog,
     };
+    use log::Log;
     use sentry::protocol::{
-        DebugImage, DebugMeta, Event, Exception, Frame, Stacktrace, SymbolicDebugImage,
+        Breadcrumb, DebugImage, DebugMeta, Event, Exception, Frame, Stacktrace,
+        SymbolicDebugImage,
     };
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
@@ -381,6 +476,74 @@ mod tests {
             build_release("1.2.16", Some("d1f00b6a2cc9a43278b4e3f61234567890123456")),
             "drifty-mac@1.2.16+d1f00b6a2cc9"
         );
+    }
+
+    fn log_error(logger: &RuntimeErrorLog, target: &str, level: log::Level, message: &str) {
+        logger.log(
+            &log::Record::builder()
+                .target(target)
+                .level(level)
+                .args(format_args!("{message}"))
+                .build(),
+        );
+    }
+
+    #[test]
+    fn runtime_error_log_keeps_only_redacted_windowing_errors() {
+        let logger = RuntimeErrorLog {
+            last_error: Mutex::new(None),
+        };
+
+        log_error(&logger, "drifty_lib", log::Level::Error, "not a runtime error");
+        log_error(&logger, "tauri_runtime_wry", log::Level::Warn, "only a warning");
+        log_error(&logger, "wryly", log::Level::Error, "a different crate");
+        assert_eq!(logger.take_last_error(), None);
+
+        log_error(
+            &logger,
+            "tauri_runtime_wry",
+            log::Level::Error,
+            r"failed to create webview: WebView2 error at C:\Users\Morgan\AppData\Local\so.drifty.windows\EBWebView",
+        );
+        assert_eq!(
+            logger.take_last_error().as_deref(),
+            Some(r"failed to create webview: WebView2 error at C:\Users\[user]\AppData\Local\so.drifty.windows\EBWebView")
+        );
+        assert_eq!(logger.take_last_error(), None, "each error is reported once");
+
+        log_error(&logger, "tao::platform_impl", log::Level::Error, &"x".repeat(1_000));
+        let long = logger.take_last_error().expect("tao error kept");
+        assert_eq!(long.chars().count(), 401, "400 characters and an ellipsis");
+    }
+
+    #[test]
+    fn scrub_native_event_redacts_breadcrumb_messages() {
+        let event = Event {
+            breadcrumbs: vec![Breadcrumb {
+                message: Some(r"Error creating window at C:\Users\pQ7xYz\drifty".to_string()),
+                ..Default::default()
+            }]
+            .into(),
+            ..Default::default()
+        };
+
+        let scrubbed = scrub_native_event(event);
+
+        assert_eq!(
+            scrubbed.breadcrumbs.values[0].message.as_deref(),
+            Some(r"Error creating window at C:\Users\[user]\drifty")
+        );
+    }
+
+    #[test]
+    fn installed_runtime_error_log_is_the_process_logger_for_windowing_errors_only() {
+        super::install_runtime_error_log();
+
+        assert_eq!(log::max_level(), log::LevelFilter::Error);
+        assert!(log::log_enabled!(target: "tauri_runtime_wry", log::Level::Error));
+        assert!(log::log_enabled!(target: "tao::platform_impl::platform::window", log::Level::Error));
+        assert!(!log::log_enabled!(target: "tauri_runtime_wry", log::Level::Warn));
+        assert!(!log::log_enabled!(target: "reqwest::connect", log::Level::Error));
     }
 
     #[test]

@@ -22,6 +22,8 @@ serde_json = { version = "1", features = ["raw_value"] }
 sentry = { version = "0.48.4", default-features = false, features = ["backtrace", "contexts", "debug-images", "panic", "reqwest", "rustls"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 flate2 = "1"
+# Receives Tauri runtime error logs; see observability::RuntimeErrorLog.
+log = "0.4"
 sha2 = "0.10"
 tar = "0.4"
 # `macos-private-api` must stay here: tauri-build validates this feature list

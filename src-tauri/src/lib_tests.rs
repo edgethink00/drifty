@@ -542,6 +542,36 @@ fn auxiliary_window_setup_success_keeps_the_overlay() {
 }
 
 #[test]
+fn auxiliary_window_failure_report_leads_with_the_logged_creation_error() {
+    assert_eq!(
+        auxiliary_window_failure_report(
+            "pet-mode",
+            "the underlying handle is not available",
+            Some("failed to create webview: WebView2 error: 0x8007139F"),
+        ),
+        "Auxiliary window setup failed (pet-mode): failed to create webview: WebView2 error: 0x8007139F (the underlying handle is not available)"
+    );
+    assert_eq!(
+        auxiliary_window_failure_report("pet-mode", "the underlying handle is not available", None),
+        "Auxiliary window setup failed (pet-mode): the underlying handle is not available"
+    );
+}
+
+#[test]
+fn main_window_report_names_a_launch_that_has_no_window() {
+    let app = tauri::test::mock_app();
+    assert_eq!(
+        report_unavailable_main_window(&app).as_deref(),
+        Some("Main window setup failed: the window was not created")
+    );
+
+    tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .expect("mock main window");
+    assert_eq!(report_unavailable_main_window(&app), None);
+}
+
+#[test]
 fn ready_window_policy_reveals_and_focuses_a_normal_launch() {
     assert_eq!(
         ready_main_window_action(false, false),

@@ -217,7 +217,12 @@ fn shutdown_app_for_exit(app: &AppHandle) {
 }
 
 pub fn init_native_observability() -> Option<sentry::ClientInitGuard> {
-    observability::init_native_sentry()
+    observability::install_runtime_error_log();
+    let guard = observability::init_native_sentry();
+    if cfg!(target_os = "windows") {
+        observability::tag_webview_runtime_version(tauri::webview_version().ok());
+    }
+    guard
 }
 
 #[derive(Default)]
@@ -480,23 +485,61 @@ fn setup_auxiliary_window<R: Runtime>(
     recover: bool,
     setup: impl FnOnce(&tauri::App<R>) -> tauri::Result<()>,
 ) -> tauri::Result<()> {
+    // Only a runtime error logged while this window was being created explains
+    // its failure; drop anything an earlier window left behind.
+    let _ = observability::take_last_runtime_error();
     let Err(error) = setup(app) else {
         return Ok(());
     };
     if !recover {
         return Err(error);
     }
-    eprintln!("[startup] {label} is unavailable for this session: {error}");
-    sentry::capture_message(
-        &format!("Auxiliary window setup failed ({label}): {error}"),
-        sentry::Level::Warning,
+    let report = auxiliary_window_failure_report(
+        label,
+        &error.to_string(),
+        observability::take_last_runtime_error().as_deref(),
     );
+    eprintln!("[startup] {label} is unavailable for this session: {report}");
+    sentry::capture_message(&report, sentry::Level::Warning);
     if let Some(window) = app.get_webview_window(label) {
         if let Err(destroy_error) = window.destroy() {
             eprintln!("[startup] could not remove the partial {label} window: {destroy_error}");
         }
     }
     Ok(())
+}
+
+/// A missing native handle is only the symptom. When Tauri logged why the
+/// window or its WebView could not be created, that reason leads the report.
+fn auxiliary_window_failure_report(
+    label: &str,
+    error: &str,
+    creation_error: Option<&str>,
+) -> String {
+    match creation_error {
+        Some(creation_error) => {
+            format!("Auxiliary window setup failed ({label}): {creation_error} ({error})")
+        }
+        None => format!("Auxiliary window setup failed ({label}): {error}"),
+    }
+}
+
+/// Tauri returns the configured main window even when the runtime failed to
+/// create it, so a launch can finish setup with nothing on screen. Report that
+/// state with the logged cause instead of leaving an invisible failure.
+fn report_unavailable_main_window<R: Runtime>(app: &tauri::App<R>) -> Option<String> {
+    let available = app
+        .get_webview_window("main")
+        .is_some_and(|window| window.inner_size().is_ok());
+    if available {
+        return None;
+    }
+    let cause = observability::take_last_runtime_error()
+        .unwrap_or_else(|| "the window was not created".to_string());
+    let report = format!("Main window setup failed: {cause}");
+    eprintln!("[startup] {report}");
+    sentry::capture_message(&report, sentry::Level::Error);
+    Some(report)
 }
 
 #[tauri::command]
@@ -708,6 +751,7 @@ pub fn run() {
             // Restoring afterward let those requests erase a user's pause
             // during relaunch (Windows QA attempt 31, 2026-09-07).
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
+            report_unavailable_main_window(app);
             #[cfg(target_os = "windows")]
             repair_windows_deep_link_registration(app.handle());
             setup_app_menu(app.handle())?;
