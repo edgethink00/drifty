@@ -200,6 +200,33 @@ describe("AuthContext desktop session persistence", () => {
     expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
   });
 
+  it("preserves the native session when a failed restore emits SIGNED_OUT first", async () => {
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_load_saved_session") {
+        return JSON.stringify({ accessToken: "saved-access", refreshToken: "saved-refresh" });
+      }
+      return undefined;
+    });
+    setSession.mockImplementation(async () => {
+      authMocks.authChangeHandler?.("SIGNED_OUT", null);
+      return { data: { session: null }, error: new Error("Session restore unavailable") };
+    });
+
+    render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+
+    await waitFor(() => expect(latestAuth.current?.status).toBe("unauthenticated"));
+    expect(setSession).toHaveBeenCalledWith({ access_token: "saved-access", refresh_token: "saved-refresh" });
+    expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+
+    act(() => authMocks.authChangeHandler?.("SIGNED_OUT", null));
+    expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+
+    await act(async () => { await latestAuth.current?.signOut(); });
+    expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session");
+  });
+
   it("finishes a pending native save before a later sign-out clear", async () => {
     const pendingSave = createDeferred<void>();
     invoke.mockImplementation((command: string) => {

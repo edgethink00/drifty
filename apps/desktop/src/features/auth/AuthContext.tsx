@@ -614,6 +614,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           source: "native",
           ...getDesktopSessionDiagnosticSummary(savedSession),
         });
+        // Supabase can emit SIGNED_OUT before a failed setSession resolves.
+        // Keep the native credential until a successful restore or explicit sign-out.
+        preserveNativeSessionAfterRestoreFailure = true;
         const { data, error } = await client.auth.setSession({
           access_token: savedSession.accessToken,
           refresh_token: savedSession.refreshToken,
@@ -632,6 +635,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return null;
         }
 
+        preserveNativeSessionAfterRestoreFailure = false;
         recordAuthDiagnostic("auth.restore.set_session.success", {
           source: "native",
           ...getSessionDiagnosticSummary(data.session),
@@ -1210,6 +1214,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             skipReason: "initial-null-session-during-auth-init",
           });
           return;
+        }
+
+        if (!session && preserveNativeSessionAfterRestoreFailure) {
+          recordAuthDiagnostic("auth.state_change.skipped", {
+            eventType: event,
+            reason: "native-restore-failed",
+          });
+          if (!isInitializingAuth) applySession(null);
+          return;
+        }
+        if (session && !isInitializingAuth) {
+          preserveNativeSessionAfterRestoreFailure = false;
         }
 
         if (passwordRecoveryExchangeRef.current && session) {
