@@ -51,10 +51,11 @@ export function updatePolicyUrls(
   version: string,
   hostPlatform: "macos" | "windows" | "other" = "other",
 ): string[] {
-  const legacyUrl = updatePolicyUrl(version);
+  // A missing Windows policy must use the safe manual default. The same-number
+  // Mac release can carry a different urgency and a Mac-only message.
   return hostPlatform === "windows"
-    ? [`${UPDATE_POLICY_RELEASES_URL}/${encodeURIComponent(`${version}-win`)}/update-policy.json`, legacyUrl]
-    : [legacyUrl];
+    ? [`${UPDATE_POLICY_RELEASES_URL}/${encodeURIComponent(`${version}-win`)}/update-policy.json`]
+    : [updatePolicyUrl(version)];
 }
 
 export function normalizeUpdatePolicyMetadata(metadata: unknown, expectedVersion: string): UpdatePolicy | null {
@@ -117,8 +118,7 @@ export async function fetchUpdatePolicy(
         const policy = normalizeUpdatePolicyMetadata(metadata, version);
         if (policy) return policy;
       } catch {
-        // A platform pointer may be absent during the bridge. Try the legacy
-        // immutable release tag before falling back to the safe manual policy.
+        // A missing or unreachable policy uses the safe manual fallback.
       }
     }
     return fallbackUpdatePolicy(version);

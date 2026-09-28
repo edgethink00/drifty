@@ -23,13 +23,27 @@ describe("native update policy fetch", () => {
     expect(policy.installBehavior).toBe("next-launch");
   });
 
-  it("tries the Windows release first and falls back to the shared tag when it has no policy", async () => {
-    const invoke = vi.fn()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ ...V2_POLICY, urgency: "urgent" });
+  it("does not read the Mac policy when the Windows release has no policy", async () => {
+    const invoke = vi.fn().mockResolvedValue(null);
     const policy = await fetchUpdatePolicy(VERSION, createNativeUpdatePolicyFetch(invoke), "windows");
-    expect(invoke.mock.calls.map((call) => call[1])).toEqual([{ tag: `${VERSION}-win` }, { tag: VERSION }]);
-    expect(policy.urgency).toBe("urgent");
+    expect(invoke.mock.calls.map((call) => call[1])).toEqual([{ tag: `${VERSION}-win` }]);
+    expect(policy.urgency).toBe("general");
+    expect(policy.message).toBeNull();
+    expect(policy.installBehavior).toBe("manual");
+  });
+
+  it("uses the Windows release policy when it is present", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      ...V2_POLICY,
+      backgroundDownload: false,
+      installBehavior: "manual",
+      message: "Windows update ready to install.",
+    });
+    const policy = await fetchUpdatePolicy(VERSION, createNativeUpdatePolicyFetch(invoke), "windows");
+    expect(invoke.mock.calls.map((call) => call[1])).toEqual([{ tag: `${VERSION}-win` }]);
+    expect(policy.message).toBe("Windows update ready to install.");
+    expect(policy.backgroundDownloadEligible).toBe(false);
+    expect(policy.installBehavior).toBe("manual");
   });
 
   it("keeps the safe manual fallback when the native request fails", async () => {
@@ -52,7 +66,7 @@ describe("native update policy fetch", () => {
     const invoke = vi.fn().mockResolvedValue(V2_POLICY);
     const nativeFetch = createNativeUpdatePolicyFetch(invoke);
     for (const url of updatePolicyUrls(VERSION, "windows")) await nativeFetch(url);
-    expect(invoke.mock.calls.map((call) => call[1])).toEqual([{ tag: `${VERSION}-win` }, { tag: VERSION }]);
+    expect(invoke.mock.calls.map((call) => call[1])).toEqual([{ tag: `${VERSION}-win` }]);
   });
 
   it("rejects when the loader's timeout aborts a request that never settles", async () => {
