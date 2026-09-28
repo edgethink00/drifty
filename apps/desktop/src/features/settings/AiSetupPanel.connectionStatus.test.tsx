@@ -27,7 +27,7 @@ describe("AiSetupPanel connection status", () => {
     resetManagedStatusMock();
     revealItemInDirMock.mockClear();
     testCloudAiConnectionMock.mockClear();
-    testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected via Google in 42 ms." });
+    testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected in 42 ms." });
   });
 
   it("shows the shared AI connection status in Model being used", () => {

@@ -67,11 +67,10 @@ export function localizeAiConnectionTestMessage(
   const connectedMatch = /^Connected in ([\d,.]+) ms\.$/u.exec(value);
   if (connectedMatch) return t("settings.ai.connection.connectedIn", { latency: connectedMatch[1] });
 
-  const cloudConnectedMatch = /^Cloud AI connected via (.+) in ([\d,.]+) ms\.$/u.exec(value);
+  const cloudConnectedMatch = /^Cloud AI connected in ([\d,.]+) ms\.$/u.exec(value);
   if (cloudConnectedMatch) {
     return t("settings.ai.connection.cloudConnectedIn", {
-      provider: cloudConnectedMatch[1],
-      latency: cloudConnectedMatch[2],
+      latency: cloudConnectedMatch[1],
     });
   }
 

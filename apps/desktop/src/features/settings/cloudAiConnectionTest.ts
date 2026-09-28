@@ -39,8 +39,7 @@ export async function testCloudAiConnection(client: CloudAiConnectionTestClient 
     if (data?.ok !== true) return { kind: "error", issueKind: "provider", message: "Cloud AI connection test returned an invalid response." };
 
     const latencyMs = typeof data.latencyMs === "number" && Number.isFinite(data.latencyMs) ? data.latencyMs : 0;
-    const providerLabel = providerDisplayName(data.provider);
-    return { kind: "success", message: `Cloud AI connected via ${providerLabel} in ${latencyMs} ms.` };
+    return { kind: "success", message: `Cloud AI connected in ${latencyMs} ms.` };
   } catch (error) {
     const message = error instanceof Error && error.message ? error.message : "Cloud AI connection test failed.";
     return {
@@ -48,17 +47,6 @@ export async function testCloudAiConnection(client: CloudAiConnectionTestClient 
       issueKind: aiConnectionIssueKindFromMessage(message),
       message,
     };
-  }
-}
-
-function providerDisplayName(provider: string | undefined): string {
-  switch (provider) {
-    case "google":
-      return "Google";
-    case "openrouter":
-      return "OpenRouter";
-    default:
-      return "Drifty Cloud";
   }
 }
 

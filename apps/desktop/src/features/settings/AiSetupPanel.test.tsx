@@ -29,7 +29,7 @@ describe("AiSetupPanel", () => {
     revealItemInDirMock.mockClear();
     testCloudAiConnectionMock.mockClear();
     window.localStorage.clear();
-    testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected via Google in 42 ms." });
+    testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected in 42 ms." });
   });
 
   it("editing the shared key in Intelligence preserves the Classification provider and model", () => {
@@ -457,7 +457,7 @@ describe("AiSetupPanel", () => {
     expect(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }).textContent).toContain("Drifty Cloud");
     fireEvent.click(screen.getByRole("button", { name: /test ai connection/i }));
 
-    expect(await screen.findByText(/Cloud AI connected via Google in 42 ms/i)).toBeTruthy();
+    expect(await screen.findByText(/Cloud AI connected in 42 ms/i)).toBeTruthy();
     expect(testCloudAiConnectionMock).toHaveBeenCalledTimes(1);
     expect(invokeMock).not.toHaveBeenCalledWith("ai_classification_openai_chat", expect.anything());
     expect(onLocalAiConnectionTestResult).not.toHaveBeenCalled();

@@ -13,7 +13,7 @@ describe("testCloudAiConnection", () => {
 
     const result = await testCloudAiConnection(client);
 
-    expect(result).toEqual({ kind: "success", message: "Cloud AI connected via OpenRouter in 88 ms." });
+    expect(result).toEqual({ kind: "success", message: "Cloud AI connected in 88 ms." });
     expect(invoke).toHaveBeenCalledWith("test-ai-connection", {
       body: { clientVersion: "0.9.0", contractVersion: "cloud-api-v1", trialActivation: "explicit-v1" },
     });
@@ -28,6 +28,18 @@ describe("testCloudAiConnection", () => {
     const result = await testCloudAiConnection(client);
 
     expect(result).toEqual({ kind: "error", issueKind: "provider", message: "Drifty Cloud billing needs attention." });
+  });
+
+  it("hides the internal Cloud route from both fallback providers", async () => {
+    const google = createClient({
+      data: { ok: true, provider: "google", model: "gemini-3.1-flash-lite", latencyMs: 42 },
+      error: null,
+    });
+
+    const result = await testCloudAiConnection(google.client);
+
+    expect(result).toEqual({ kind: "success", message: "Cloud AI connected in 42 ms." });
+    expect(result.kind === "success" ? result.message : "").not.toMatch(/Google|OpenRouter|gemini|deepseek/u);
   });
 
   it("reports missing Supabase configuration", async () => {

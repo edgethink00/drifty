@@ -38,7 +38,7 @@ describe("Korean translations", () => {
 
   it("localizes connection-test outcomes and wraps unknown technical errors", () => {
     expect(localizeAiConnectionTestMessage("Connected in 24 ms.", "success", "ko", koreanT)).toBe("연결 완료 · 24ms");
-    expect(localizeAiConnectionTestMessage("Cloud AI connected via OpenRouter in 88 ms.", "success", "ko", koreanT)).toBe("Cloud AI 연결 완료 · OpenRouter · 88ms");
+    expect(localizeAiConnectionTestMessage("Cloud AI connected in 88 ms.", "success", "ko", koreanT)).toBe("Cloud AI 연결 완료 · 88ms");
     expect(localizeAiConnectionTestMessage("socket closed", "error", "ko", koreanT)).toBe("연결하지 못했습니다. 설정과 네트워크를 확인한 뒤 다시 시도하세요. 세부 정보: socket closed");
     expect(localizeAiConnectionTestMessage("Provider returned HTTP 401.", "error", "ko", koreanT)).toContain("API 키와 제공업체 권한을 확인하세요");
     expect(localizeAiConnectionTestMessage("socket closed", "error", "en", koreanT)).toBe("socket closed");
