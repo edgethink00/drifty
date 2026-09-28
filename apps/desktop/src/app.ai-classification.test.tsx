@@ -32,7 +32,7 @@ function cssRule(selector: string): string {
   return styles.slice(start, end + 1);
 }
 
-const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoisted(() => ({
+const { authState, aiClassificationMocks, billingMocks, cloudAiConnectionMock, trackerClient } = vi.hoisted(() => ({
   authState: {
     user: { id: "user-1", email: "alex@example.com" } as { id: string; email: string } | null,
     session: null,
@@ -77,6 +77,7 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
     createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
     createBillingPortalSession: vi.fn().mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } }),
   },
+  cloudAiConnectionMock: vi.fn(),
   trackerClient: {
     getStatus: vi.fn(),
     getTimeline: vi.fn(),
@@ -114,6 +115,10 @@ vi.mock("./features/billing/billingService", () => ({
   fetchIndividualPricingQuote: vi.fn().mockResolvedValue({ success: false, error: "Pricing unavailable in this test." }),
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
+}));
+
+vi.mock("./features/settings/cloudAiConnectionTest", () => ({
+  testCloudAiConnection: cloudAiConnectionMock,
 }));
 
 vi.mock("./features/classification/aiClassificationService", async () => {
@@ -461,6 +466,7 @@ describe("App AI classification controls", () => {
     billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } });
     billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
     billingMocks.createBillingPortalSession.mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } });
+    cloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected." });
     aiClassificationMocks.getAiClassificationUsageSummary.mockImplementation((day: string) => Promise.resolve(
       day === todayIsoDate()
         ? executionUsageAfterAvailable ? executionUsageAfter : executionUsageBefore
@@ -1434,6 +1440,152 @@ describe("App AI classification controls", () => {
     const recoveryQuery = aiClassificationMocks.runAiClassificationUntilEmpty.mock.calls[0]?.[0];
     expect(recoveryQuery).not.toHaveProperty("day");
     expect(new Date(recoveryQuery?.end ?? 0).getTime()).toBeGreaterThan(new Date(cutoff).getTime());
+  });
+
+  it("probes the recorded Cloud outage backlog without waiting for new activity today", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-28T10:00:00+09:00"));
+    setRendererFocus(false);
+    aiClassificationMocks.runAiClassificationForUnknownThreshold
+      .mockRejectedValueOnce(new Error("OpenRouter classification response could not be parsed"));
+    const recoveryProbe = createDeferred<AiClassificationSummary>();
+    aiClassificationMocks.runAiClassification.mockReturnValue(recoveryProbe.promise);
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold.mock.calls.length).toBeGreaterThanOrEqual(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    });
+    await waitFor(() => expect(aiClassificationMocks.runAiClassification).toHaveBeenCalled());
+    const cutoff = aiClassificationMocks.runAiClassification.mock.calls[0]?.[0]?.start;
+    expect(cutoff).toEqual(expect.any(String));
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
+    expect(aiClassificationMocks.runAiClassification.mock.calls[0]).toEqual([
+      expect.objectContaining({ start: cutoff, end: expect.any(String), limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD }),
+      AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+      expect.objectContaining({ allowProviderlessPersistence: false }),
+    ]);
+    expect(aiClassificationMocks.runAiClassification.mock.calls[0]?.[0]).not.toHaveProperty("day");
+
+    await act(async () => recoveryProbe.resolve({
+      status: "saved",
+      selectedSegments: 1,
+      savedRecords: 1,
+      message: "Recovered a prior-day classification.",
+      usedAiProvider: true,
+      metrics: selectedDayMetrics,
+    } satisfies AiClassificationSummary));
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalled());
+    const resumedQuery = aiClassificationMocks.runAiClassificationUntilEmpty.mock.calls[0]?.[0];
+    expect(resumedQuery).toEqual(expect.objectContaining({ start: expect.any(String), end: expect.any(String) }));
+    expect(new Date(resumedQuery?.start ?? 0).getTime()).toBeLessThanOrEqual(new Date(cutoff ?? 0).getTime());
+  });
+
+  it("unblocks automatic recovery when an outage probe has no AI candidates", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-28T10:00:00+09:00"));
+    setRendererFocus(false);
+    aiClassificationMocks.runAiClassificationForUnknownThreshold
+      .mockRejectedValueOnce(new Error("OpenRouter classification response could not be parsed"));
+    aiClassificationMocks.runAiClassification.mockResolvedValue({
+      status: "empty",
+      selectedSegments: 0,
+      savedRecords: 0,
+      message: "No provider candidates in the first recorded backlog batch.",
+      metrics: selectedDayMetrics,
+    } satisfies AiClassificationSummary);
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold.mock.calls.length).toBeGreaterThanOrEqual(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    });
+    await waitFor(() => expect(cloudAiConnectionMock).toHaveBeenCalled());
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalled());
+    expect(aiClassificationMocks.runAiClassificationUntilEmpty.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ start: expect.any(String), end: expect.any(String) }),
+    );
+  });
+
+  it("keeps a failed Cloud recovery test bounded and preserves the backlog", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-28T10:00:00+09:00"));
+    setRendererFocus(false);
+    aiClassificationMocks.runAiClassificationForUnknownThreshold
+      .mockRejectedValueOnce(new Error("OpenRouter classification response could not be parsed"));
+    aiClassificationMocks.runAiClassification.mockResolvedValue({
+      status: "empty",
+      selectedSegments: 0,
+      savedRecords: 0,
+      message: "No AI candidates in the recorded backlog batch.",
+      metrics: selectedDayMetrics,
+    } satisfies AiClassificationSummary);
+    cloudAiConnectionMock.mockResolvedValue({ kind: "error", issueKind: "provider", message: "Cloud unavailable." });
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalled());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    });
+    await waitFor(() => expect(cloudAiConnectionMock).toHaveBeenCalledTimes(1));
+    const cutoff = window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY);
+    expect(cutoff).not.toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+    });
+    expect(cloudAiConnectionMock).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
+  });
+
+  it("backs off failed paid backlog probes and retries automatically afterward", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-28T10:00:00+09:00"));
+    setRendererFocus(false);
+    aiClassificationMocks.runAiClassificationForUnknownThreshold
+      .mockRejectedValueOnce(new Error("OpenRouter classification response could not be parsed"))
+      .mockResolvedValue({
+        status: "empty",
+        selectedSegments: 0,
+        savedRecords: 0,
+        message: "No new activity today.",
+        metrics: selectedDayMetrics,
+      } satisfies AiClassificationSummary);
+    aiClassificationMocks.runAiClassification
+      .mockRejectedValueOnce(new Error("OpenRouter classification response could not be parsed"))
+      .mockRejectedValueOnce(new Error("OpenRouter classification response could not be parsed again"))
+      .mockResolvedValue({
+        status: "saved",
+        selectedSegments: 1,
+        savedRecords: 1,
+        message: "Recovered a prior-day classification.",
+        usedAiProvider: true,
+        metrics: selectedDayMetrics,
+      } satisfies AiClassificationSummary);
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalled());
+    await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS); });
+    await waitFor(() => expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(1));
+    const cutoff = window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY);
+    expect(cutoff).not.toBeNull();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(8 * 60 * 1000); });
+    expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS); });
+    await waitFor(() => expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(2));
+    await act(async () => { await vi.advanceTimersByTimeAsync(18 * 60 * 1000); });
+    expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(2);
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS); });
+    await waitFor(() => expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalled());
   });
 
   it("keeps retrying a safety-capped recovery range until no unclassified rows remain", async () => {

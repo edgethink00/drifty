@@ -80,6 +80,7 @@ import { collectMissingSiteIconRequests, mergeSiteIconResults, normalizeSiteIcon
 import { SiteIconProvider } from "./components/SiteIconContext";
 import { cloudAiRequestBackoffs, isDailyCloudQuotaBackoff } from "./features/classification/cloudAiRequestBackoff";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, clearCloudAiRequestBackoff, describeAiClassificationFailure, describeLocalAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { testCloudAiConnection } from "./features/settings/cloudAiConnectionTest";
 import { getClassificationActivitySnapshot, useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { applyClassificationAvailabilityToAiStatus, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch } from "./features/classification/classificationAvailability";
@@ -507,6 +508,8 @@ const FULL_HISTORY_SEARCH_RANGE = {
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
+const CLOUD_AI_RECOVERY_TEST_INTERVAL_MS = 10 * 60 * 1000;
+const CLOUD_AI_RECOVERY_FAILED_PROBE_MAX_INTERVAL_MS = 60 * 60 * 1000;
 // Heavy project pass cadence: hourly keeps "today" fresh without the cost/churn
 // of finer cadences. Eval-cadence experiment (2026-07-10): 15m ≈ 3.7× the cost
 // and ~13× the mid-day assignment revisions of 60m for no end-of-day accuracy
@@ -1533,6 +1536,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [, setCloudAiBackoffTick] = useState(0);
   const [cloudAiConnectionCheck, setCloudAiConnectionCheck] = useState<CloudAiConnectionCheck | null>(null);
   const cloudAiConnectionGenerationRef = useRef(0);
+  const cloudRecoveryTestNextAtRef = useRef(0);
+  const cloudRecoveryProbeNextAtRef = useRef(0);
+  const cloudRecoveryProbeFailuresRef = useRef(0);
   const recordCloudAiClassificationSummary = useCallback((summary: AiClassificationSummary, generation: number) => {
     if (generation !== cloudAiConnectionGenerationRef.current) return;
     if (summary.status === "error" && summary.failureKind === "quota") return;
@@ -2464,6 +2470,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setCloudAiConnectionCheck(null);
     clearCloudAiRequestBackoff();
     cloudAiConnectionGenerationRef.current += 1;
+    cloudRecoveryTestNextAtRef.current = 0;
+    cloudRecoveryProbeNextAtRef.current = 0;
+    cloudRecoveryProbeFailuresRef.current = 0;
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
   }, [aiClassificationProviderKey]);
   const isSettingsTab = activeTab === "settings";
@@ -8604,22 +8613,40 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (getClassificationActivitySnapshot().running) return null;
 
     const today = logicalTodayIsoDate(startOfDayMinutes);
+    const recoveryCutoff = builtInHeuristicsUnavailableSinceRef.current;
+    const probeRecoveryBacklog = !forceBacklogBatch && !options.query
+      && classificationAvailability.route === "cloud" && recoveryCutoff !== null
+      && (classificationAvailability.state === "retrying" || classificationAvailability.allowRecoveryProbe)
+      && Date.now() >= cloudRecoveryProbeNextAtRef.current;
     const isFocused = rendererFocusedRef.current;
-    const threshold = forceBacklogBatch ? AI_CLASSIFICATION_BACKGROUND_THRESHOLD
+    const threshold = forceBacklogBatch || probeRecoveryBacklog ? AI_CLASSIFICATION_BACKGROUND_THRESHOLD
       : isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
-    if (!forceBacklogBatch && isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return null;
+    if (!forceBacklogBatch && !probeRecoveryBacklog && isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return null;
     const providerKeyAtStart = aiClassificationProviderKey;
     const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
     const trigger = options.firstDayResume ? "first_day_resume" as const
       : isFocused ? "focused_idle" as const : "background_threshold" as const;
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
+    const isCurrentProvider = () => cloudAiConnectionGeneration === cloudAiConnectionGenerationRef.current
+      && providerKeyAtStart === currentAiClassificationProviderKeyRef.current;
+    const deferFailedRecoveryProbe = () => {
+      if (!isCurrentProvider()) return;
+      const failures = Math.min(cloudRecoveryProbeFailuresRef.current + 1, 4);
+      cloudRecoveryProbeFailuresRef.current = failures;
+      cloudRecoveryProbeNextAtRef.current = Date.now() + Math.min(
+        CLOUD_AI_RECOVERY_TEST_INTERVAL_MS * 2 ** (failures - 1),
+        CLOUD_AI_RECOVERY_FAILED_PROBE_MAX_INTERVAL_MS,
+      );
+    };
 
     aiClassificationInFlightRef.current = true;
     try {
       const query = options.query
         ? { ...options.query, limit: threshold }
-        : toClassificationQueryForDay(today, threshold);
-      const analyticsRange = options.analyticsRange ?? "current_day";
+        : probeRecoveryBacklog
+          ? { start: recoveryCutoff, end: new Date().toISOString(), limit: threshold }
+          : toClassificationQueryForDay(today, threshold);
+      const analyticsRange = options.analyticsRange ?? (probeRecoveryBacklog ? "recent" : "current_day");
       const runOptions = {
         ...(selectedLocalAiClassificationOptions ?? {}),
         allowProviderlessPersistence: !classificationAvailabilityGateEnabled || classificationAvailability.state === "ready",
@@ -8627,9 +8654,33 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       };
       const summary = forceBacklogBatch
         ? await runAiClassificationUntilEmpty(query, threshold, runOptions)
-        : await runAiClassificationForUnknownThreshold(query, threshold, runOptions);
+        : probeRecoveryBacklog
+          ? await runAiClassification(query, threshold, runOptions)
+          : await runAiClassificationForUnknownThreshold(query, threshold, runOptions);
+      if (probeRecoveryBacklog && isCurrentProvider()) {
+        if (summary.status === "error") deferFailedRecoveryProbe();
+        else {
+          cloudRecoveryProbeFailuresRef.current = 0;
+          cloudRecoveryProbeNextAtRef.current = 0;
+        }
+      }
       if (selectedLocalAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
+      if (probeRecoveryBacklog && isCurrentProvider() && !selectedLocalAiClassificationOptions
+        && summary.status === "empty" && summary.usedAiProvider !== true) {
+        // The first backlog batch may be empty or entirely local/reusable.
+        // Check the provider before lifting the availability gate; the
+        // existing recovery drain still verifies and saves the remaining rows.
+        const now = Date.now();
+        if (!cloudRateLimitBackoff && now >= cloudRecoveryTestNextAtRef.current) {
+          cloudRecoveryTestNextAtRef.current = now + CLOUD_AI_RECOVERY_TEST_INTERVAL_MS;
+          const probe = await testCloudAiConnection();
+          if (probe.kind === "success" && cloudAiConnectionGeneration === cloudAiConnectionGenerationRef.current) {
+            cloudRecoveryTestNextAtRef.current = 0;
+            setCloudAiConnectionCheck(null);
+          }
+        }
+      }
       if (summary.status === "empty" && summary.savedRecords === 0) return summary;
       if (analyticsRange === "current_day" && selectedDayRef.current === today) {
         setClassificationSummary(summary);
@@ -8654,6 +8705,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       }
       return summary;
     } catch (nextError) {
+      if (probeRecoveryBacklog) deferFailedRecoveryProbe();
       const localFailure = selectedLocalAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
       const failure = localFailure ?? await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
       if (localFailure) recordLocalAiClassificationError(localFailure);
@@ -8670,7 +8722,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [aiClassificationProviderKey, allowAutomaticClassificationAttempt, canUseSelectedCloudAiClassification, classificationActionLoading, classificationAvailability.state, classificationAvailabilityGateEnabled, hasLoadedOnce, preparingFirstDay, recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, selectedLocalAiClassificationOptions, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
+  }, [aiClassificationProviderKey, allowAutomaticClassificationAttempt, canUseSelectedCloudAiClassification, classificationActionLoading, classificationAvailability.allowRecoveryProbe, classificationAvailability.route, classificationAvailability.state, classificationAvailabilityGateEnabled, cloudRateLimitBackoff, hasLoadedOnce, preparingFirstDay, recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, selectedLocalAiClassificationOptions, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
   const firstDayResumeBatchRef = useRef(runAutoAiClassificationBatch);
   firstDayResumeBatchRef.current = runAutoAiClassificationBatch;
   const browserHistoryBootstrapTone = browserHistoryBootstrapNotice?.tone ?? null;
