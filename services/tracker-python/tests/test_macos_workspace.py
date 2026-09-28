@@ -2,6 +2,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
@@ -693,6 +694,30 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.browser_history_candidate_count, 4)
         mock_browser_metadata.assert_called_once_with('Google Chrome')
         mock_history_metadata.assert_called_once_with('Google Chrome', 'Fallback plan - Google Chrome', snapshot.observed_at)
+
+    def test_current_snapshot_still_records_chrome_when_its_profile_folder_is_protected(self) -> None:
+        # DRIFTY-MAC-NATIVE-4G (1.11.23): Apple Events to Chrome were denied, so
+        # capture fell back to history, and listing Chrome's profile folder raised
+        # PermissionError out of the whole sample.
+        automation_metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            browser_automation_status='denied',
+            browser_automation_error='Not authorized to send Apple events to Google Chrome.',
+        )
+        with TemporaryDirectory() as profile_root, \
+             patch.dict(os.environ, {'DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK': '0'}), \
+             patch.dict('app.tracker.browser_history._BROWSER_ROOTS', {'Google Chrome': Path(profile_root)}), \
+             patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=automation_metadata), \
+             patch('app.tracker.browser_history.Path.iterdir', side_effect=PermissionError(1, 'Operation not permitted')):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nFallback plan - Google Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.app_name, 'Google Chrome')
+        self.assertEqual(snapshot.bundle_id, 'com.google.Chrome')
+        self.assertIsNone(snapshot.site_url)
+        self.assertEqual(snapshot.browser_history_reason, 'unreadable_profile_root')
 
     def test_current_snapshot_keeps_direct_browser_url_without_history_lookup(self) -> None:
         metadata = BrowserMetadata(

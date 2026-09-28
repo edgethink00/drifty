@@ -322,6 +322,27 @@ class BrowserHistoryTests(unittest.TestCase):
         self.assertEqual(metadata.browser_history_candidate_count, 0)
         self.assertEqual(metadata.browser_history_error_count, 1)
 
+    def test_browser_history_metadata_survives_an_unlistable_profile_folder(self) -> None:
+        # macOS 1.11.23 (DRIFTY-MAC-NATIVE-4G): listing Chrome's profile folder
+        # raised PermissionError out of the capture tick about once per sample.
+        self._write_chromium_history("Default", [("https://docs.example.test/", "Docs", 10)])
+        denied = PermissionError(1, "Operation not permitted", str(self.root))
+
+        with patch("app.tracker.browser_history.Path.iterdir", side_effect=denied):
+            metadata = browser_history_metadata(
+                "Google Chrome",
+                "Docs - Google Chrome",
+                profile_roots={"Google Chrome": self.root},
+            )
+
+        self.assertIsNone(metadata.site_url)
+        self.assertEqual(metadata.browser_name, "Google Chrome")
+        self.assertEqual(metadata.browser_automation_status, "unavailable")
+        self.assertEqual(metadata.browser_history_status, "no_readable_database")
+        self.assertEqual(metadata.browser_history_reason, "unreadable_profile_root")
+        self.assertIn("profile folder is not readable (PermissionError)", metadata.browser_automation_error or "")
+        self.assertNotIn(str(self.root), metadata.browser_automation_error or "")
+
     def test_browser_history_metadata_survives_a_temp_cleanup_failure(self) -> None:
         # Windows can refuse to remove the copied history while a scanner holds it
         # ("The directory is not empty"); that used to abort the capture tick.

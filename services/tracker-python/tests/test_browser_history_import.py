@@ -16,6 +16,7 @@ from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
@@ -173,6 +174,36 @@ class BrowserHistoryImportTests(unittest.TestCase):
         self.assertEqual(imported["insertedCount"], 1)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["site_url"], "https://docs.example.test/zen")
+
+    def test_import_skips_only_a_browser_whose_profile_folder_cannot_be_listed(self) -> None:
+        # macOS 1.11.23 (DRIFTY-MAC-NATIVE-4J): listing Chrome's profile folder
+        # raised PermissionError and failed the whole import.
+        self._write_firefox_places(
+            "abcd.Default (release)",
+            [
+                ("https://docs.example.test/zen", "Zen Docs", self.now - timedelta(days=1, hours=3)),
+                ("https://docs.example.test/next", "Zen next", self.now - timedelta(days=1, hours=2, minutes=57)),
+            ],
+        )
+        db = TrackerDatabase(self.root / "tracker.sqlite3")
+        request = BrowserHistoryImportRequest(
+            lookback_days=7,
+            observed_at=self.now,
+            profile_roots={"Google Chrome": self.root / "chrome", "Zen": self.root},
+        )
+        denied = PermissionError(1, "Operation not permitted", str(self.root / "chrome"))
+
+        with patch(
+            "app.tracker.browser_history_import.reader.chromium_history_paths_for_root",
+            side_effect=denied,
+        ):
+            preview = preview_browser_history_import(request).to_payload()
+            imported = import_browser_history(db, request).to_payload()
+
+        self.assertGreaterEqual(preview["errorCount"], 1)
+        self.assertEqual(imported["insertedCount"], 1)
+        rows = db.timeline(start=(self.now - timedelta(days=2)).isoformat(), end=self.now.isoformat())
+        self.assertEqual([row["site_url"] for row in rows], ["https://docs.example.test/zen"])
 
     def test_import_reads_safari_history_with_cocoa_timestamps(self) -> None:
         visited = self.now - timedelta(days=1, hours=3)

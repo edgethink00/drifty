@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from app.tracker import platform_workspace, windows_workspace
@@ -16,6 +18,7 @@ from app.tracker.windows_workspace import (
     resolve_identity,
 )
 from app.tracker.browser_automation import BrowserMetadata
+from app.tracker.browser_history import browser_history_metadata
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
 
 
@@ -258,6 +261,29 @@ class BrowserEnrichmentTests(unittest.TestCase):
         self.assertIn("URL-shaped", snapshot.browser_automation_error or "")
         self.assertEqual(snapshot.browser_history_status, "matched")
         self.assertEqual(snapshot.capture_confidence, 0.45)
+
+    def test_protected_history_folder_still_records_the_browser(self) -> None:
+        # UI Automation found no URL, so capture falls back to history; a profile
+        # folder the tracker cannot list must end only that fallback.
+        with TemporaryDirectory() as profile_root, patch(
+            "app.tracker.browser_history.Path.iterdir",
+            side_effect=PermissionError(13, "Access is denied"),
+        ):
+            snapshot = enrich_browser_snapshot(
+                self._snapshot(),
+                44,
+                live_reader=lambda hwnd, app: WindowsBrowserUiaResult(None, "no URL-shaped edit control value"),
+                history_reader=lambda app, title, observed: browser_history_metadata(
+                    app, title, observed, profile_roots={app: Path(profile_root)}
+                ),
+                history_identity_checker=lambda *_: True,
+                bridge_reader=lambda *_: None,
+            )
+
+        self.assertEqual(snapshot.app_name, "Google Chrome")
+        self.assertEqual(snapshot.browser_name, "Google Chrome")
+        self.assertIsNone(snapshot.site_url)
+        self.assertEqual(snapshot.browser_history_reason, "unreadable_profile_root")
 
     def test_document_http_url_identity_reaches_snapshot_unchanged(self) -> None:
         url = "http://127.0.0.1:4173/Docs/?Q=Case#Fragment"

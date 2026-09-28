@@ -129,6 +129,7 @@ class _HistoryReadOutcome:
     candidates: tuple[BrowserHistoryCandidate, ...]
     errors: tuple[str, ...]
     database_count: int
+    profile_root_unreadable: bool = False
 
 
 def is_browser_history_supported_app(app_name: str | None) -> bool:
@@ -264,7 +265,12 @@ def browser_history_metadata(
     if not outcome.candidates:
         detail = "; ".join(outcome.errors[:2])
         suffix = f" {detail}" if detail else ""
-        reason = "missing_database" if outcome.database_count == 0 else "read_error"
+        if outcome.profile_root_unreadable:
+            reason = "unreadable_profile_root"
+        elif outcome.database_count == 0:
+            reason = "missing_database"
+        else:
+            reason = "read_error"
         return BrowserMetadata(
             browser_name=app_name,
             browser_automation_status="unavailable",
@@ -312,9 +318,24 @@ def browser_history_metadata(
 
 
 def _read_history_candidates(app_name: str, root: Path) -> _HistoryReadOutcome:
-    if is_firefox_family_browser(app_name):
-        return _read_history_files(app_name, firefox_history_paths_for_root(root), _read_firefox_candidates)
-    return _read_history_files(app_name, chromium_history_paths_for_root(root), _read_chromium_candidates)
+    firefox_family = is_firefox_family_browser(app_name)
+    try:
+        history_paths = (
+            firefox_history_paths_for_root(root) if firefox_family else chromium_history_paths_for_root(root)
+        )
+    except OSError as error:
+        # macOS privacy protection can deny listing a browser's profile folder
+        # ("Operation not permitted" on 1.11.23), and a Windows ACL can do the
+        # same. That only loses this sample's URL fallback; raising here failed
+        # the whole capture tick, so the browser's time was never recorded.
+        return _HistoryReadOutcome(
+            candidates=(),
+            errors=(f"profile folder is not readable ({type(error).__name__})",),
+            database_count=0,
+            profile_root_unreadable=True,
+        )
+    read_candidates = _read_firefox_candidates if firefox_family else _read_chromium_candidates
+    return _read_history_files(app_name, history_paths, read_candidates)
 
 
 def _read_history_files(

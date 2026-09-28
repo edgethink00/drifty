@@ -40,7 +40,14 @@ def read_import_visits(request: BrowserHistoryImportRequest) -> HistoryVisitRead
     errors: list[str] = []
     database_count = 0
     for browser_name, root in roots.items():
-        history_paths = _history_paths(browser_name, root)
+        try:
+            history_paths = _history_paths(browser_name, root)
+        except OSError as error:
+            # A protected profile folder (macOS privacy protection, a Windows
+            # ACL) skips only that browser. Raising here failed the whole
+            # import, including browsers whose history was readable.
+            errors.append(f"{browser_name} profile folder is not readable ({type(error).__name__})")
+            continue
         database_count += len(history_paths)
         for history_path in history_paths:
             with scratch_directory() as tempdir:
