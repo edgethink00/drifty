@@ -16,6 +16,20 @@ describe("end-of-day review readiness", () => {
     expect(sumEndOfDayReviewTrackedSeconds([observed, imported])).toBe(45 * 60);
   });
 
+  it("does not count a historical failed Windows foreground capture as tracked time", () => {
+    const observed = segment({ id: "observed", durationSeconds: 45 * 60, source: "win32-foreground", platform: "windows" });
+    const failed = segment({
+      id: "failed",
+      durationSeconds: 4 * 60 * 60,
+      source: "unknown",
+      platform: "windows",
+      appName: "Unavailable",
+      bundleId: null,
+    });
+
+    expect(sumEndOfDayReviewTrackedSeconds([observed, failed])).toBe(45 * 60);
+  });
+
   it("does not let malformed durations lower or instantly satisfy the observed total", () => {
     expect(sumEndOfDayReviewTrackedSeconds([
       segment({ id: "valid", durationSeconds: 60, source: "manual" }),

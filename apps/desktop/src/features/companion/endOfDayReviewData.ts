@@ -1,5 +1,5 @@
 import type { EndOfDayReviewEvent, EndOfDayReviewPendingAssessment } from "./endOfDayReviewModel";
-import { isBrowserHistoryImportSegment } from "@drifty/domain";
+import { isBrowserHistoryImportSegment, isFailedForegroundCaptureSegment } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ProductivityLabel } from "@drifty/domain";
 import {
   DAILY_LEADERBOARD_CHECKPOINT_MINUTE,
@@ -46,7 +46,7 @@ export function sumEndOfDayReviewTrackedSeconds(segments: readonly ActivitySegme
   // Drifty after installation and cannot make a thin install day review-ready.
   return segments.reduce(
     (total, segment) => total + (
-      isBrowserHistoryImportSegment(segment) || !Number.isFinite(segment.durationSeconds)
+      isBrowserHistoryImportSegment(segment) || isFailedForegroundCaptureSegment(segment) || !Number.isFinite(segment.durationSeconds)
         ? 0
         : Math.max(0, segment.durationSeconds)
     ),

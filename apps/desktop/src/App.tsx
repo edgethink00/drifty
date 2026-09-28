@@ -3125,7 +3125,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   const buildEndOfDayReviewEvent = useCallback(async (input: EndOfDayReviewSummaryInput): Promise<EndOfDayReviewEvent> => {
     const currentAppIcons = appIconsRef.current;
-    const { assessment: requestedAssessment, ...reviewInput } = input;
+    const { assessment: requestedAssessment, ...rawReviewInput } = input;
+    const reviewInput = {
+      ...rawReviewInput,
+      segments: rawReviewInput.segments.filter((segment) => !isFailedForegroundCaptureSegment(segment)),
+    };
     const resolveCurrentInput = () => {
       const currentAvailability = classificationAvailabilityRef.current;
       const inferredPendingAssessment = !classificationAssessmentReadyRef.current ? {
@@ -7444,16 +7448,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     shouldBuildClassificationModels && classificationRange === "Week"
       ? filterSegmentsForRange(historySegments, classificationWeekRange.start, classificationWeekRange.end)
       : shouldBuildClassificationModels ? segments : EMPTY_ACTIVITY_SEGMENTS
-  ), [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments, shouldBuildClassificationModels]);
+  ).filter((segment) => !isFailedForegroundCaptureSegment(segment)), [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments, shouldBuildClassificationModels]);
   const classificationRuleSegments = useMemo(() => {
-    if (classificationSegments.length === 0) return segments;
-    if (segments.length === 0) return classificationSegments;
+    if (classificationSegments.length === 0) return recordedDaySegments;
+    if (recordedDaySegments.length === 0) return classificationSegments;
     const seenIds = new Set(classificationSegments.map((segment) => segment.id));
     return [
       ...classificationSegments,
-      ...segments.filter((segment) => !seenIds.has(segment.id)),
+      ...recordedDaySegments.filter((segment) => !seenIds.has(segment.id)),
     ];
-  }, [classificationSegments, segments]);
+  }, [classificationSegments, recordedDaySegments]);
   const classificationTotalSeconds = useMemo(() => totalDurationSeconds(classificationSegments), [classificationSegments]);
   const classificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
