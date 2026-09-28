@@ -97,6 +97,7 @@ import {
   PET_MODE_PRESENT_MS,
   PET_MODE_INTERVENTION_PAW_LEAD_MS,
   PET_MODE_RUN_BETA_STORAGE_KEY,
+  PET_MODE_SIZES,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
@@ -192,6 +193,21 @@ function guaranteedOutcomesEnabled(): boolean {
     && window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1";
 }
 
+function resolveRenderablePetModeSize(): PetModeSize {
+  const requested = resolveInitialPetModeSize();
+  // The settings webview persists a new size before its native resize finishes.
+  // A bottom-anchored 125% drawing in the old 100% panel puts the head above
+  // the WebView and clips it. Keep the largest requested size that fits the
+  // actual viewport until Windows reports the new panel dimensions.
+  for (let index = PET_MODE_SIZES.length - 1; index >= 0; index -= 1) {
+    const size = PET_MODE_SIZES[index];
+    if (size > requested) continue;
+    const { width, height } = getPetModeWindowSize(size);
+    if (width <= window.innerWidth + 1 && height <= window.innerHeight + 1) return size;
+  }
+  return PET_MODE_SIZES[0];
+}
+
 export function PetModeWindowApp() {
   // The native window is created hidden and normally has time to mount before
   // the main app restores the persisted setting. Starting in the matching pose
@@ -234,14 +250,14 @@ export function PetModeWindowApp() {
   const [entrySequence, setEntrySequence] = useState(0);
   const [entryTravelDistance, setEntryTravelDistance] = useState<number | undefined>(undefined);
   const [entryDurationMs, setEntryDurationMs] = useState(() => {
-    const { width } = getPetModeWindowSize(resolveInitialPetModeSize());
+    const { width } = getPetModeWindowSize(resolveRenderablePetModeSize());
     return resolvePetModeEntryDurationMs(getPetModeDefaultEntryTravelDistance(width));
   });
   const [runSequence, setRunSequence] = useState(0);
   const [runTravelDistance, setRunTravelDistance] = useState<number | undefined>(undefined);
   const [runDurationMs, setRunDurationMs] = useState<number | undefined>(undefined);
   const [runStartDelayMs, setRunStartDelayMs] = useState<number | undefined>(undefined);
-  const [petModeSize, setPetModeSize] = useState(resolveInitialPetModeSize);
+  const [petModeSize, setPetModeSize] = useState(resolveRenderablePetModeSize);
   const [fastRunBetaEnabled, setFastRunBetaEnabled] = useState(resolveInitialPetModeRunBetaEnabled);
   const [danceOnCloseBetaEnabled, setDanceOnCloseBetaEnabled] = useState(resolveInitialPetModeDanceOnCloseBetaEnabled);
   const danceOnCloseBetaEnabledRef = useRef(danceOnCloseBetaEnabled);
@@ -1343,22 +1359,25 @@ export function PetModeWindowApp() {
     };
   }, []);
 
-  // Size arrives the same way the coat does. The webview only scales its own
-  // drawing; the main window owns resizing the native panel, so both sides
-  // read the same stored value rather than messaging each other.
+  // Size arrives through shared storage, but the main webview resizes the
+  // native panel asynchronously. Paint only a size that fits the current
+  // WebView, then apply an enlargement when its resize event arrives.
   useEffect(() => {
-    const applySize = (size: PetModeSize) => {
+    const applySize = () => {
+      const size = resolveRenderablePetModeSize();
       document.documentElement.style.setProperty("--pet-size-scale", String(size / 100));
       setPetModeSize(size);
     };
-    applySize(resolveInitialPetModeSize());
+    applySize();
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== null && event.key !== PET_MODE_SIZE_STORAGE_KEY) return;
-      applySize(resolveInitialPetModeSize());
+      applySize();
     };
     window.addEventListener("storage", handleStorage);
+    window.addEventListener("resize", applySize);
     return () => {
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("resize", applySize);
       document.documentElement.style.removeProperty("--pet-size-scale");
     };
   }, []);

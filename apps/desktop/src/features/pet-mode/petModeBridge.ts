@@ -147,8 +147,8 @@ export async function setNativePetModeSize(width: number, height: number): Promi
  * The dance pose stands the cat taller than the 99-point panel at its 1:1
  * body scale. Ask native for headroom above the panel right before showing
  * the pose and give it back afterwards. Resolves to whether the frame
- * changed; native also drops the headroom by itself before any motion, drag,
- * resize, or hide.
+ * changed; native also drops the headroom by itself before motion, drag, or
+ * hide. On Windows, resizing during a dance keeps the needed headroom.
  */
 export async function setNativePetDanceHeadroom(active: boolean): Promise<boolean> {
   if (!isTauriRuntime()) return false;

@@ -829,9 +829,9 @@ fn pet_dance_headroom_content_rect(
 }
 
 /// Grows the panel upward for the dance pose or shrinks it back. Returns
-/// whether the native frame changed. Every native motion, drag, size change,
-/// and hide restores the base height first, so a dance interrupted by any of
-/// those never leaves a taller panel behind.
+/// whether the native frame changed. Motion, drag, and hide restore the base
+/// height first. On Windows, a size change during a dance keeps the expanded
+/// frame until the pose ends.
 fn apply_pet_dance_headroom(window: &WebviewWindow, active: bool) -> Result<bool, String> {
     let (width, height) = pet_size();
     let next = if active {
@@ -936,6 +936,41 @@ fn set_pet_panel_height_from_bottom(
         .ok_or_else(|| "Pet Mode dance headroom resize is unavailable".to_string())
 }
 
+#[cfg(any(test, not(target_os = "macos")))]
+fn pet_dance_top_left_y(
+    ground_bottom: f64,
+    base_height: f64,
+    extra: f64,
+    screen_top: f64,
+) -> f64 {
+    let top = ground_bottom - base_height - extra.max(0.0);
+    // A resident pet starts only 14 points below the top of a display. Grow
+    // the dance panel upward until it reaches that edge, then move the whole
+    // panel down so the upright head remains on screen. Shrinking must use
+    // the saved ground line to put the paws back where they started.
+    if extra > 0.0 {
+        top.max(screen_top)
+    } else {
+        top
+    }
+}
+
+#[cfg(any(test, not(target_os = "macos")))]
+fn pet_dance_resized_ground_bottom(ground_bottom: f64, old_height: f64, new_height: f64) -> f64 {
+    // Preserve the base pose's top edge when the footprint changes mid-dance.
+    // The expanded panel can still grow upward, and lowering headroom later
+    // returns the resized cat to the same resting seat.
+    ground_bottom + new_height - old_height
+}
+
+#[cfg(any(test, not(target_os = "macos")))]
+fn pet_dance_ground_bottom(base_top: f64, base_height: f64) -> f64 {
+    // The outer height is rounded to whole physical pixels by Windows. Using
+    // that rounded height here, then subtracting the nominal logical height
+    // on restore, moves the resting seat a fraction of a point on each dance.
+    base_top + base_height
+}
+
 #[cfg(not(target_os = "macos"))]
 fn set_pet_panel_height_from_bottom(
     window: &WebviewWindow,
@@ -948,17 +983,18 @@ fn set_pet_panel_height_from_bottom(
         .outer_position()
         .map_err(|error| error.to_string())?
         .to_logical::<f64>(scale_factor);
-    let current = window
-        .outer_size()
-        .map_err(|error| error.to_string())?
-        .to_logical::<f64>(scale_factor);
     let total_height = base_height + extra.max(0.0);
     let size = LogicalSize::new(width, total_height);
+    let screen_top = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .map(|monitor| monitor.position().to_logical::<f64>(scale_factor).y)
+        .unwrap_or(position.y);
     let ground_bottom = PET_MODE_DANCE_GROUND_ORIGIN_Y
         .lock()
         .ok()
         .and_then(|value| *value)
-        .unwrap_or(position.y + current.height);
+        .unwrap_or_else(|| pet_dance_ground_bottom(position.y, base_height));
     if extra > 0.0 {
         if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
             if ground.is_none() {
@@ -973,12 +1009,13 @@ fn set_pet_panel_height_from_bottom(
         .set_max_size(None::<LogicalSize<f64>>)
         .map_err(|error| error.to_string())?;
     window.set_size(size).map_err(|error| error.to_string())?;
-    // Other platforms keep the top-left corner on resize. Place the bottom on
-    // the captured ground line so grow/shrink keep the paws planted.
+    // Other platforms keep the top-left corner on resize. Preserve the
+    // captured ground line unless an upward grow would put the head above the
+    // display; shrinking returns the panel to that original ground line.
     window
         .set_position(LogicalPosition::new(
             position.x,
-            ground_bottom - total_height,
+            pet_dance_top_left_y(ground_bottom, base_height, extra, screen_top),
         ))
         .map_err(|error| error.to_string())?;
     window
@@ -995,8 +1032,8 @@ fn set_pet_panel_height_from_bottom(
 
 /// The dance pose stands the cat taller than the panel. The renderer asks for
 /// headroom right before it shows the pose and gives it back right after; the
-/// native side also drops it on its own before any motion, drag, resize, or
-/// hide so an interrupted dance cannot strand a taller panel.
+/// native side also drops it on its own before motion, drag, or hide so an
+/// interrupted dance cannot strand a taller panel.
 #[tauri::command]
 pub fn pet_mode_set_dance_headroom(app: AppHandle, active: bool) -> Result<bool, String> {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
@@ -1238,6 +1275,7 @@ fn set_pet_mode_enabled(
     // Size and placement form one presentation transaction. Applying the
     // persisted size here prevents a cold launch from calculating the entry
     // offset at the default panel size and resizing halfway through the step.
+    #[cfg(target_os = "macos")]
     restore_pet_dance_headroom(&window);
     let size_changed = apply_pet_mode_size(&window, width, height)?;
     let was_enabled = PET_MODE_ENABLED.load(Ordering::Relaxed);
@@ -1268,13 +1306,28 @@ fn set_pet_mode_enabled(
         if (reduced_motion && entry_active) || size_changed {
             PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
             cancel_pet_motion();
-            if reduced_motion {
+            if reduced_motion && current_pet_dance_headroom() <= 0.0 {
+                // This resets an interrupted entry, but a dance already has
+                // its resized tall frame. Applying the base footprint here
+                // would clip the upright pose again.
                 let (final_width, final_height) = pet_size();
                 window
                     .set_size(LogicalSize::new(final_width, final_height))
                     .map_err(|error| error.to_string())?;
             }
-            position_pet_home(&app, &window, false)?;
+            if current_pet_dance_headroom() > 0.0 {
+                // Rehome horizontally for the new width without moving a
+                // dance-tall panel off its captured ground line.
+                let monitor = resolve_pet_home_monitor(&app)
+                    .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+                let home = calculate_pet_home_position_with_nudge(Some(&app), &monitor);
+                let current = current_pet_logical_position(&window)?;
+                window
+                    .set_position(LogicalPosition::new(home.x, current.y))
+                    .map_err(|error| error.to_string())?;
+            } else {
+                position_pet_home(&app, &window, false)?;
+            }
         }
         show_pet_panel(&app, &window)?;
         if !PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed) {
@@ -2040,6 +2093,42 @@ fn apply_pet_mode_size(window: &WebviewWindow, width: f64, height: f64) -> Resul
     // panel untouched.
     if !changed {
         return Ok(false);
+    }
+
+    // A size change during a Windows dance must resize the tall panel as one
+    // operation. Shrinking it to the base size while the renderer still shows
+    // the upright pose clips the head for the remainder of that action.
+    #[cfg(not(target_os = "macos"))]
+    if current_pet_dance_headroom() > 0.0 {
+        let (old_width, old_height) = pet_size();
+        let old_extra = current_pet_dance_headroom();
+        let old_ground = PET_MODE_DANCE_GROUND_ORIGIN_Y
+            .lock()
+            .map_err(|_| "Pet Mode dance ground line is unavailable".to_string())?
+            .ok_or_else(|| "Pet Mode dance ground line is missing".to_string())?;
+        let next_ground = pet_dance_resized_ground_bottom(old_ground, old_height, height);
+        let next_extra = pet_dance_headroom_for_width(width);
+        if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
+            *ground = Some(next_ground);
+        }
+        if let Err(error) = set_pet_panel_height_from_bottom(window, width, height, next_extra) {
+            if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
+                *ground = Some(old_ground);
+            }
+            // A failed native resize may have partially changed the panel;
+            // try to restore the prior dance footprint before returning.
+            let _ = set_pet_panel_height_from_bottom(window, old_width, old_height, old_extra);
+            return Err(error);
+        }
+        if let Ok(mut current) = PET_MODE_SIZE.lock() {
+            *current = (width, height);
+        }
+        if let Ok(mut extra) = PET_MODE_DANCE_HEADROOM.lock() {
+            *extra = next_extra;
+        }
+        set_pet_hit_region_top_inset_ratio(pet_hit_region_headroom_ratio(next_extra, height));
+        refresh_pet_hit_region_for_window(window)?;
+        return Ok(true);
     }
 
     // The explicit base size below replaces any dance headroom.
@@ -7189,6 +7278,63 @@ mod tests {
             880.0, 40.0, 144.0, 99.0, 0.0, 0.0, 900.0,
         );
         assert_eq!((y, height), (880.0, 99.0));
+    }
+
+    #[test]
+    fn windows_dance_headroom_keeps_the_head_on_screen_and_restores_the_ground_line() {
+        // The usual Windows home is 14 points below the top edge. An upright
+        // dance extends above that base panel, so preserving the ground line
+        // would otherwise put the panel (and head) at y = -22.
+        let ground_bottom = 14.0 + PET_MODE_HEIGHT;
+        assert_eq!(
+            pet_dance_top_left_y(ground_bottom, PET_MODE_HEIGHT, 36.0, 0.0),
+            0.0
+        );
+        assert_eq!(
+            pet_dance_top_left_y(ground_bottom, PET_MODE_HEIGHT, 0.0, 0.0),
+            14.0
+        );
+
+        // Away from the edge, the feet stay in place; a monitor above the
+        // primary display uses its own (negative) top coordinate.
+        assert_eq!(
+            pet_dance_top_left_y(60.0 + PET_MODE_HEIGHT, PET_MODE_HEIGHT, 36.0, 0.0),
+            24.0
+        );
+        assert_eq!(
+            pet_dance_top_left_y(
+                -1066.0 + PET_MODE_HEIGHT,
+                PET_MODE_HEIGHT,
+                36.0,
+                -1080.0
+            ),
+            -1080.0
+        );
+        assert_eq!(pet_dance_top_left_y(14.0 + 124.0, 124.0, 45.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn windows_dance_resize_keeps_headroom_and_restores_the_resized_seat() {
+        let old_ground = 14.0 + PET_MODE_HEIGHT;
+        let next_ground = pet_dance_resized_ground_bottom(old_ground, PET_MODE_HEIGHT, 124.0);
+        assert_eq!(next_ground, 138.0);
+        assert_eq!(pet_dance_top_left_y(next_ground, 124.0, 45.0, 0.0), 0.0);
+        assert_eq!(pet_dance_top_left_y(next_ground, 124.0, 0.0, 0.0), 14.0);
+    }
+
+    #[test]
+    fn windows_dance_restore_does_not_accumulate_physical_pixel_rounding() {
+        let base_top = 18.0 / 1.25;
+        for base_height in [50.0, 74.0, 99.0, 124.0] {
+            let ground = pet_dance_ground_bottom(base_top, base_height);
+            assert!((pet_dance_top_left_y(ground, base_height, 0.0, 0.0) - base_top).abs() < 1e-9);
+        }
+        // At 100%, a 99pt logical panel is 123.75 physical pixels. Windows
+        // reports 124px; treating that rounded outer height as the ground
+        // would move a resting cat by 0.2pt every dance/restore cycle.
+        let rounded_outer_height = (99.0_f64 * 1.25).round() / 1.25;
+        assert!(rounded_outer_height > 99.0);
+        assert!(pet_dance_top_left_y(base_top + rounded_outer_height, 99.0, 0.0, 0.0) > base_top);
     }
 
     #[test]

@@ -23,6 +23,7 @@ import {
   PET_MODE_PRESENT_MS,
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
   PET_MODE_RUN_BETA_STORAGE_KEY,
+  PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_SEAT_CLEAR_CONFIRM_MS,
   PET_MODE_DROWSY_RESETTLE_MS,
   PET_MODE_SEAT_RECONCILE_INTERVAL_MS,
@@ -304,6 +305,75 @@ describe("PetModeWindowApp", () => {
     window.localStorage.clear();
     vi.unstubAllGlobals();
     delete document.documentElement.dataset.surface;
+  });
+
+  it("waits for the native viewport before painting a larger cat", async () => {
+    vi.stubGlobal("innerWidth", 144);
+    vi.stubGlobal("innerHeight", 100);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("1");
+
+    // Settings storage reaches the pet webview before the Windows resize.
+    act(() => {
+      window.localStorage.setItem(PET_MODE_SIZE_STORAGE_KEY, "125");
+      window.dispatchEvent(new StorageEvent("storage", { key: PET_MODE_SIZE_STORAGE_KEY }));
+    });
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("1");
+
+    vi.stubGlobal("innerWidth", 180);
+    vi.stubGlobal("innerHeight", 124);
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("1.25");
+
+    // A user-selected decrease can paint immediately before the panel shrinks.
+    act(() => {
+      window.localStorage.setItem(PET_MODE_SIZE_STORAGE_KEY, "100");
+      window.dispatchEvent(new StorageEvent("storage", { key: PET_MODE_SIZE_STORAGE_KEY }));
+    });
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("1");
+  });
+
+  it("keeps the cat inside the viewport when native resize arrives before storage", async () => {
+    window.localStorage.setItem(PET_MODE_SIZE_STORAGE_KEY, "125");
+    vi.stubGlobal("innerWidth", 180);
+    vi.stubGlobal("innerHeight", 124);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("1.25");
+
+    // The native panel can shrink before this WebView receives the storage
+    // event. The viewport itself must limit the painted size in that order.
+    vi.stubGlobal("innerWidth", 72);
+    vi.stubGlobal("innerHeight", 50);
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("0.5");
+
+    act(() => {
+      window.localStorage.setItem(PET_MODE_SIZE_STORAGE_KEY, "50");
+      window.dispatchEvent(new StorageEvent("storage", { key: PET_MODE_SIZE_STORAGE_KEY }));
+    });
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("0.5");
+
+    // Growing the panel first leaves the existing smaller cat visible until
+    // the requested size arrives; then the full-size panel can paint it.
+    vi.stubGlobal("innerWidth", 180);
+    vi.stubGlobal("innerHeight", 124);
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("0.5");
+    act(() => {
+      window.localStorage.setItem(PET_MODE_SIZE_STORAGE_KEY, "125");
+      window.dispatchEvent(new StorageEvent("storage", { key: PET_MODE_SIZE_STORAGE_KEY }));
+    });
+    expect(document.documentElement.style.getPropertyValue("--pet-size-scale")).toBe("1.25");
   });
 
   it("shows fullscreen arrival beats only for the active, uninterrupted attempt", async () => {
