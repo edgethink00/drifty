@@ -10,6 +10,7 @@ import {
   buildAppUsageSummaries,
   buildFlowBlocksForIntervals,
   filterSegmentsByDevice,
+  isFailedForegroundCaptureSegment,
   buildRollingFocusSeconds,
   buildCategoryDurations,
   buildProductivityDurations,
@@ -6618,11 +6619,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Device filter choke point: every dashboard view model (day flow, week,
   // stats) derives from these two arrays, so filtering here covers them all.
   const effectiveSelectedDaySegments = useMemo(
-    () => filterSegmentsByDevice(unfilteredEffectiveSelectedDaySegments, deviceTimelineFilter),
+    () => filterSegmentsByDevice(unfilteredEffectiveSelectedDaySegments, deviceTimelineFilter)
+      .filter((segment) => !isFailedForegroundCaptureSegment(segment)),
     [deviceTimelineFilter, unfilteredEffectiveSelectedDaySegments],
   );
   const effectiveDashboardSegments = useMemo(
-    () => filterSegmentsByDevice(unfilteredEffectiveDashboardSegments, deviceTimelineFilter),
+    () => filterSegmentsByDevice(unfilteredEffectiveDashboardSegments, deviceTimelineFilter)
+      .filter((segment) => !isFailedForegroundCaptureSegment(segment)),
     [deviceTimelineFilter, unfilteredEffectiveDashboardSegments],
   );
   const handleStartDashboardDemoReplay = useCallback((replayKind: DemoDashboardReplayKind) => {
@@ -7032,10 +7035,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     : availableUpdate?.version ?? null;
   const latestBuildPromptUpdate = developerPreReleaseUpdateController.promptUpdate;
 
-  const dayTotalSeconds = useMemo(() => totalDurationSeconds(segments), [segments]);
+  const recordedDaySegments = useMemo(
+    () => segments.filter((segment) => !isFailedForegroundCaptureSegment(segment)),
+    [segments],
+  );
+  const dayTotalSeconds = useMemo(() => totalDurationSeconds(recordedDaySegments), [recordedDaySegments]);
   const selectedDayProductivityTotals = useMemo(
-    () => buildProductivityDurations(segments, selectedDayClassificationOptions),
-    [segments, selectedDayClassificationOptions],
+    () => buildProductivityDurations(recordedDaySegments, selectedDayClassificationOptions),
+    [recordedDaySegments, selectedDayClassificationOptions],
   );
   const trayProductivityMix = useMemo<ProductivityShareMix>(() => {
     const total = selectedDayProductivityTotals.reduce((sum, entry) => sum + entry.totalSeconds, 0);

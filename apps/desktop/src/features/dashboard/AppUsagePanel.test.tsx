@@ -1,11 +1,41 @@
 // @vitest-environment jsdom
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { buildAppUsageSummaries, type ActivitySegment } from "@drifty/domain";
 import { AppUsagePanel } from "./AppUsagePanel";
 import { SiteIconProvider } from "../../components/SiteIconContext";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 describe("AppUsagePanel", () => {
+  it("shows a real app instead of a historical failed Windows capture", () => {
+    const failedCapture: ActivitySegment = {
+      id: "failed",
+      startedAt: "2026-04-06T09:00:00.000Z",
+      endedAt: "2026-04-06T09:00:00.000Z",
+      durationSeconds: 3600,
+      appName: "Unavailable",
+      bundleId: null,
+      platform: "windows",
+      source: "unknown",
+      frontmostCaptureSource: "unavailable",
+    };
+    const firefox: ActivitySegment = {
+      ...failedCapture,
+      id: "firefox",
+      durationSeconds: 300,
+      appName: "Firefox",
+      bundleId: "c:\\apps\\firefox.exe",
+      source: "win32-foreground",
+      frontmostCaptureSource: "win32-foreground",
+    };
+    const items = buildAppUsageSummaries([failedCapture, firefox]);
+
+    render(<AppUsagePanel periodLabel="today" totalSeconds={3900} appIcons={{}} items={items} />);
+
+    expect(screen.getByLabelText("Most used app: Firefox")).toBeTruthy();
+    expect(screen.queryByText("Unavailable")).toBeNull();
+    expect(within(screen.getByLabelText("Most used app: Firefox")).getByText("100%")).toBeTruthy();
+  });
   it("keeps a site row's full context line reachable on hover", () => {
     const site = (rank: number, siteDomain: string, siteTitle: string) => ({
       rank,

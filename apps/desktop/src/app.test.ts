@@ -582,6 +582,23 @@ describe('domain helpers', () => {
     expect(summaries.map((summary) => summary.appName)).toEqual(['Alpha', 'Beta']);
   });
 
+  it('does not rank failed foreground captures as a most used app', () => {
+    const unavailableCapture: ActivitySegment = {
+      ...appUsageSegments[0],
+      id: 'failed-capture',
+      appName: 'Unavailable',
+      bundleId: null,
+      platform: 'windows',
+      source: 'unknown',
+      frontmostCaptureSource: 'unavailable',
+      durationSeconds: 10_000,
+    };
+    const summaries = buildAppUsageSummaries([unavailableCapture, ...appUsageSegments]);
+
+    expect(summaries.map((summary) => summary.appName)).toEqual(['Alpha', 'Beta', 'Gamma']);
+    expect(summaries[0]?.shareOfTotal).toBe(3600 / 9000);
+  });
+
   it('breaks browser usage out by site for activity summaries', () => {
     const browserUsageSegments: ActivitySegment[] = [
       {

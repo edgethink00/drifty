@@ -2069,6 +2069,11 @@ def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float 
 
     _apply_developer_diagnostics_env(db)
     snapshot = current_snapshot(include_system_transient=False)
+    if snapshot.frontmost_capture_source == "unavailable" or (
+        snapshot.app_name == "Unavailable" and snapshot.bundle_id is None
+    ):
+        # A failed foreground read is a gap, not an app the user opened.
+        return None
     snapshot.engagement_evidence = FOREGROUND_AUDIO_EVIDENCE if engagement.is_passive else None
     capture_tick = time.monotonic()
     sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)

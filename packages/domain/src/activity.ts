@@ -128,6 +128,13 @@ export interface ActivitySegment {
   classification?: StoredActivityClassification | null;
 }
 
+/** Older Windows builds persisted failed foreground reads as activity. */
+export function isFailedForegroundCaptureSegment(
+  segment: Pick<ActivitySegment, "platform" | "appName" | "bundleId">,
+): boolean {
+  return segment.platform === "windows" && segment.appName === "Unavailable" && !segment.bundleId;
+}
+
 export function isBrowserHistoryImportSegment(segment: Pick<ActivitySegment, "siteSource" | "source">): boolean {
   return segment.source === "browser-history-import" || segment.siteSource === "browser-history-import";
 }

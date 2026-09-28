@@ -13,7 +13,7 @@ import type {
   ProductivityLabel,
   SiteDuration,
 } from "./activity";
-import { isExcludedSegment } from "./activity";
+import { isExcludedSegment, isFailedForegroundCaptureSegment } from "./activity";
 import { canonicalizeClassificationRuleSiteUrl } from "./classificationRuleUrl";
 import {
   DRIFTY_PRODUCTIVITY_RUBRIC_V1,
@@ -197,6 +197,7 @@ export function buildAppUsageSummaries(
   options: { limit?: number; groupBy?: "app" | "activity" } = {},
 ): AppUsageSummary[] {
   const groupBy = options.groupBy ?? "activity";
+  let unavailableCaptureSeconds = 0;
   const totals = new Map<
     string,
     {
@@ -215,6 +216,11 @@ export function buildAppUsageSummaries(
   >();
 
   for (const segment of segments) {
+    if (isFailedForegroundCaptureSegment(segment)) {
+      // Older Windows builds stored failed foreground reads as app activity.
+      unavailableCaptureSeconds += segment.durationSeconds;
+      continue;
+    }
     if (isExcludedSegment(segment)) continue;
     const siteDomain = groupBy === "activity" ? normalizedSiteDomain(segment) : null;
     const siteTitle = groupBy === "activity" ? normalizedSiteTitle(segment) : null;
@@ -265,7 +271,7 @@ export function buildAppUsageSummaries(
     totals.set(groupKey, existing);
   }
 
-  const totalSeconds = totalDurationSeconds(segments);
+  const totalSeconds = totalDurationSeconds(segments) - unavailableCaptureSeconds;
   const summaries = Array.from(totals.values())
     .sort((left, right) => {
       if (right.totalSeconds !== left.totalSeconds) return right.totalSeconds - left.totalSeconds;

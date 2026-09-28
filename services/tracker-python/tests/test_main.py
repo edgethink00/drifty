@@ -20,6 +20,7 @@ from app.tracker.adaptive_context import developer_diagnostics
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.macos_audio_activity import ForegroundAudioSample
 from app.tracker.power_state import PowerStateSample
+from app.tracker.windows_workspace import build_snapshot as build_windows_snapshot
 from tests.support_cleanup import temp_dir_closing_databases
 
 
@@ -1937,6 +1938,74 @@ class TrackerMainTests(unittest.TestCase):
             50.0,
         )
         mock_db.create_periodic_backup.assert_called_once_with()
+
+    def test_daemon_tick_leaves_gap_when_foreground_identity_is_unavailable(self) -> None:
+        mock_db = MagicMock()
+        power_state = PowerStateSample(
+            observed_at=datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc),
+            should_capture=True,
+            reason="ok",
+        )
+        snapshot = Snapshot(
+            observed_at="2026-04-06T09:00:00+00:00",
+            app_name="Unavailable",
+            bundle_id=None,
+            window_title=None,
+            source="unknown",
+            frontmost_capture_source="unavailable",
+        )
+        with patch.object(tracker_main, "current_power_state", return_value=power_state), patch.object(
+            tracker_main, "seconds_since_last_input", return_value=0.0
+        ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+            tracker_main, "current_snapshot", return_value=snapshot
+        ), patch.object(tracker_main, "enqueue_youtube_metadata_fetch") as metadata_fetch, patch.object(
+            tracker_main, "backfill_browser_history_context"
+        ) as history_backfill:
+            next_tick = tracker_main._daemon_tick(mock_db, 37.0)
+
+        self.assertIsNone(next_tick)
+        mock_db.record_snapshot.assert_not_called()
+        metadata_fetch.assert_not_called()
+        history_backfill.assert_not_called()
+        self.assertNotIn(call("last_event_at", snapshot.observed_at), mock_db.set_meta.call_args_list)
+
+    def test_windows_foreground_race_is_not_saved_to_timeline(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            db = TrackerDatabase(tracker_main.DB_PATH)
+            failed = build_windows_snapshot(
+                None,
+                None,
+                observed_at="2026-04-06T09:00:00+00:00",
+                capture_error="Foreground window changed during browser capture (title).",
+            )
+            recovered = Snapshot(
+                observed_at="2026-04-06T09:00:05+00:00",
+                app_name="Firefox",
+                bundle_id="c:\\apps\\firefox.exe",
+                window_title="Browser",
+                source="win32-foreground",
+                frontmost_capture_source="win32-foreground",
+            )
+            power_state = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc),
+                should_capture=True,
+                reason="ok",
+            )
+            with patch.object(tracker_main, "current_power_state", return_value=power_state), patch.object(
+                tracker_main, "seconds_since_last_input", return_value=0.0
+            ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+                tracker_main, "current_snapshot", side_effect=[failed, recovered]
+            ), patch.object(tracker_main, "enqueue_youtube_metadata_fetch"), patch.object(
+                tracker_main, "backfill_browser_history_context"
+            ):
+                self.assertIsNone(tracker_main._daemon_tick(db, None))
+                self.assertEqual(db.fetch_timeline("2026-04-06"), [])
+                self.assertIsNotNone(tracker_main._daemon_tick(db, None))
+
+            timeline = db.fetch_timeline("2026-04-06")
+            self.assertEqual(len(timeline), 1)
+            self.assertEqual(timeline[0]["appName"], "Firefox")
 
     def test_daemon_survives_tick_exception_and_keeps_sampling(self) -> None:
         with temp_dir_closing_databases() as tmp:

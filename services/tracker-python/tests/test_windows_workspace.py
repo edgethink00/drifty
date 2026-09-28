@@ -456,21 +456,23 @@ class ForegroundSnapshotFreshnessTests(unittest.TestCase):
         snapshot, enrichment = self.capture([old, changed])
         enrichment.assert_not_called()
         self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+        self.assertIn("(process)", snapshot.frontmost_capture_error or "")
         self.assertIsNone(snapshot.site_url)
 
     def test_changed_foreground_discards_enriched_context(self) -> None:
         old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
-        for changed in (
-            ForegroundWindow(hwnd=200, title="Page A", pid=10),
-            ForegroundWindow(hwnd=100, title="Page A", pid=20),
-            ForegroundWindow(hwnd=100, title="Page B", pid=10),
-            None,
+        for changed, expected_kind in (
+            (ForegroundWindow(hwnd=200, title="Page A", pid=10), "handle"),
+            (ForegroundWindow(hwnd=100, title="Page A", pid=20), "process"),
+            (ForegroundWindow(hwnd=100, title="Page B", pid=10), "title"),
+            (None, "missing"),
         ):
             with self.subTest(changed=changed):
                 snapshot, enrichment = self.capture([old, old, changed])
                 enrichment.assert_called_once()
                 self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
                 self.assertIn("changed", snapshot.frontmost_capture_error or "")
+                self.assertIn(f"({expected_kind})", snapshot.frontmost_capture_error or "")
                 self.assertIsNone(snapshot.window_title)
                 self.assertIsNone(snapshot.site_url)
                 self.assertIsNone(snapshot.site_source)

@@ -451,6 +451,19 @@ def resolve_identity(
     return ProcessIdentity(exe_path=exe_path, exe_name=exe_name, aumid=aumid), diagnostic
 
 
+def _foreground_change_kind(previous: ForegroundWindow, current: ForegroundWindow | None) -> str:
+    """Describe a capture race without recording window titles or process IDs."""
+    if current is None:
+        return "missing"
+    if current.hwnd != previous.hwnd:
+        return "handle"
+    if current.pid != previous.pid:
+        return "process"
+    if current.title != previous.title:
+        return "title"
+    return "unknown"
+
+
 def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundary
     observed = utc_now_iso()
     if not is_windows():
@@ -470,17 +483,21 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
         return build_snapshot(None, None, observed, "GetForegroundWindow returned no window.")
 
     identity, diagnostic = resolve_identity(window)
-    if read_foreground_window() != window:
+    identity_window = read_foreground_window()
+    if identity_window != window:
         return build_snapshot(
-            None, None, observed, "Foreground window changed during identity capture."
+            None, None, observed,
+            f"Foreground window changed during identity capture ({_foreground_change_kind(window, identity_window)}).",
         )
     snapshot = build_snapshot(window, identity, observed, diagnostic)
     enriched = enrich_browser_snapshot(snapshot, window.hwnd)
     # URL/bridge/history reads may outlive the original foreground observation.
     # Never combine an earlier title/process with later browser metadata. This
     # detects observed changes; it does not make UIA or tab navigation atomic.
-    if read_foreground_window() != window:
+    enriched_window = read_foreground_window()
+    if enriched_window != window:
         return build_snapshot(
-            None, None, observed, "Foreground window changed during browser capture."
+            None, None, observed,
+            f"Foreground window changed during browser capture ({_foreground_change_kind(window, enriched_window)}).",
         )
     return enriched
