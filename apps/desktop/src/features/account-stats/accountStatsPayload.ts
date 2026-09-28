@@ -14,6 +14,7 @@ import {
   buildRollingFocusSeconds,
   isBrowserHistoryImportSegment,
   isExcludedSegment,
+  isFailedForegroundCaptureSegment,
   isRemoteDeviceSegment,
   logicalDayStartMs,
 } from "@drifty/domain";
@@ -157,7 +158,10 @@ export async function buildAccountStatsPayloadFromTracker(input: AccountStatsInp
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const fetched = await trackerClient.getTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
   const monthSegments = fetched.filter(
-    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment) && !isExcludedSegment(segment),
+    (segment) => !isBrowserHistoryImportSegment(segment)
+      && !isRemoteDeviceSegment(segment)
+      && !isExcludedSegment(segment)
+      && !isFailedForegroundCaptureSegment(segment),
   );
   return buildAccountStatsPayload(monthSegments, input);
 }

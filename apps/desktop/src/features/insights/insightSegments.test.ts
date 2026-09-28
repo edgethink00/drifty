@@ -42,6 +42,28 @@ describe("selectInsightSegments", () => {
     expect(segments.map((segment) => segment.id)).toEqual(["history-monday", "live-thursday"]);
   });
 
+  it("leaves failed Windows foreground captures out of Trends", () => {
+    const failedCapture: ActivitySegment = {
+      ...segmentBetween("failed-capture", "2026-06-30T09:00:00.000", "2026-06-30T11:00:00.000"),
+      appName: "Unavailable",
+      bundleId: null,
+      platform: "windows",
+      source: "unknown",
+      classification: null,
+    };
+
+    const segments = selectInsightSegments({
+      historySegments: [
+        segmentBetween("history-monday", "2026-06-29T10:00:00.000", "2026-06-29T11:00:00.000"),
+        failedCapture,
+      ],
+      selectedDaySegments: [],
+      range: { start: "2026-06-03T00:00:00", end: "2026-07-02T23:59:59" },
+    });
+
+    expect(segments.map((segment) => segment.id)).toEqual(["history-monday"]);
+  });
+
   it("keeps selected-day activity visible in a month attention rhythm", () => {
     const selectedDaySegments = [
       segmentBetween("live-thursday", "2026-07-02T16:00:00.000", "2026-07-02T17:00:00.000"),

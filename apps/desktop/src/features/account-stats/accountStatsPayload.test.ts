@@ -198,4 +198,24 @@ describe("buildAccountStatsPayloadFromTracker", () => {
     expect(payload.topApps7d.map((entry) => entry.appName)).toEqual(["Safari"]);
     expect(payload.topApps7d.some((entry) => entry.appName === "[Redacted]")).toBe(false);
   });
+
+  it("keeps failed Windows foreground captures out of published totals and top apps", async () => {
+    const today = todayIsoDate();
+    // Windows 1.11.22 and earlier stored a failed foreground read as an
+    // "Unavailable" app with no identity; the dashboard already hides it.
+    const failedCapture: ActivitySegment = {
+      ...makeSegment(today, 7200, "Unavailable"),
+      platform: "windows",
+      source: "unknown",
+      bundleId: null,
+    };
+    vi.mocked(trackerClient.getTimeline).mockResolvedValue([makeSegment(today, 3600), failedCapture]);
+
+    const payload = await buildAccountStatsPayloadFromTracker({ ...baseInput, windowEndDay: today });
+
+    expect(payload.topApps7d.map((entry) => entry.appName)).toEqual(["Safari"]);
+    expect(payload.neutralSecondsToday).toBe(0);
+    expect(payload.neutralSeconds7d).toBe(0);
+    expect(payload.categoryBreakdownToday.reduce((sum, entry) => sum + entry.seconds, 0)).toBe(3600);
+  });
 });

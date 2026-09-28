@@ -11,6 +11,7 @@ import {
   classifyActivity,
   isBrowserHistoryImportSegment,
   isExcludedSegment,
+  isFailedForegroundCaptureSegment,
   isPassiveSupportedSegment,
   isRemoteDeviceSegment,
   logicalDayEndExclusiveMs,
@@ -212,6 +213,7 @@ export async function buildFocusCardPayloadFromTracker(input: FocusCardInput): P
   const monthSegments = fetched.filter(
     (segment) => !isBrowserHistoryImportSegment(segment)
       && !isExcludedSegment(segment)
+      && !isFailedForegroundCaptureSegment(segment)
       && !isPassiveSupportedSegment(segment)
       && !isRemoteDeviceSegment(segment),
   );

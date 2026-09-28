@@ -1,4 +1,4 @@
-import type { ActivitySegment } from "@drifty/domain";
+import { isFailedForegroundCaptureSegment, type ActivitySegment } from "@drifty/domain";
 import { mergeActivitySegments } from "../../lib/activitySegments";
 import { filterSegmentsForRange } from "../../lib/formatting";
 
@@ -18,5 +18,8 @@ export function selectInsightSegments(input: InsightSegmentSelectionInput): Acti
   const historySegments = filterSegmentsForRange(input.historySegments, input.range.start, input.range.end);
   const supplementalSegments = filterSegmentsForRange(input.supplementalSegments ?? [], input.range.start, input.range.end);
   const selectedDaySegments = filterSegmentsForRange(input.selectedDaySegments, input.range.start, input.range.end);
-  return mergeActivitySegments(mergeActivitySegments(historySegments, supplementalSegments), selectedDaySegments);
+  // Trends reads history directly, outside the dashboard's filtered arrays, so
+  // failed Windows foreground captures have to be dropped here as well.
+  return mergeActivitySegments(mergeActivitySegments(historySegments, supplementalSegments), selectedDaySegments)
+    .filter((segment) => !isFailedForegroundCaptureSegment(segment));
 }
