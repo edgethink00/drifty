@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { windowsDebugUploadSettings } from "./upload-windows-debug-files.mjs";
@@ -207,6 +207,78 @@ export function windowsReleaseConfig(env = process.env) {
   };
 }
 
+// Candidate checkouts have separate Cargo target directories. Keep the output
+// layout intact while allowing one bounded compiler cache to span candidates.
+export function windowsReleaseRustCacheEnvironment(
+  env = process.env,
+  fileSystem = { existsSync },
+  execute = spawnSync,
+) {
+  const executable = (env.DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH ?? "").trim();
+  if (!executable) return env;
+  if (!win32.isAbsolute(executable) || !fileSystem.existsSync(executable)) {
+    throw new Error("DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH must name an existing absolute Windows executable.");
+  }
+  if (env.RUSTC_WRAPPER && env.RUSTC_WRAPPER.toLowerCase() !== executable.toLowerCase()) {
+    throw new Error("RUSTC_WRAPPER conflicts with DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH.");
+  }
+  const cacheDirectory = env.SCCACHE_DIR ||
+    (env.LOCALAPPDATA && win32.join(env.LOCALAPPDATA, "DriftyRelease", "rust-compiler-cache"));
+  if (!cacheDirectory || !win32.isAbsolute(cacheDirectory)) {
+    throw new Error("sccache requires an absolute SCCACHE_DIR or LOCALAPPDATA.");
+  }
+  const cacheSize = env.SCCACHE_CACHE_SIZE || "2G";
+  if (!/^(?:[1-9]\d{0,2}M|1G|2G)$/u.test(cacheSize)) {
+    throw new Error("Windows release SCCACHE_CACHE_SIZE must be at most 2G.");
+  }
+  const serverPort = env.SCCACHE_SERVER_PORT || "44286";
+  if (!/^\d+$/u.test(serverPort) || Number(serverPort) < 1024 || Number(serverPort) > 65535) {
+    throw new Error("SCCACHE_SERVER_PORT must be a valid unprivileged port.");
+  }
+  const configured = {
+    ...env,
+    RUSTC_WRAPPER: executable,
+    CARGO_INCREMENTAL: "0",
+    SCCACHE_DIR: cacheDirectory,
+    SCCACHE_CACHE_SIZE: cacheSize,
+    SCCACHE_SERVER_PORT: serverPort,
+  };
+  const version = execute(executable, ["--version"], {
+    env: configured,
+    encoding: "utf8",
+    timeout: 10_000,
+    windowsHide: true,
+  });
+  if (version.error || version.status !== 0 || !/^sccache \d+\.\d+/u.test(version.stdout?.trim() ?? "")) {
+    throw new Error("The Windows release sccache executable failed its version check.");
+  }
+  console.log("Windows release Rust cache statistics (before):");
+  const readiness = execute(executable, ["--show-stats"], {
+    env: configured,
+    stdio: "inherit",
+    timeout: 30_000,
+    windowsHide: true,
+  });
+  if (readiness.error || readiness.status !== 0) {
+    throw new Error("The Windows release sccache server failed its readiness check.");
+  }
+  return configured;
+}
+
+function reportWindowsReleaseRustCacheStats(env) {
+  if (!env.DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH) return;
+  console.log("Windows release Rust cache statistics (after):");
+  const result = spawnSync(env.RUSTC_WRAPPER, ["--show-stats"], {
+    env,
+    stdio: "inherit",
+    timeout: 10_000,
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) {
+    console.warn("Could not read sccache statistics after the build.");
+  }
+}
+
 function main(argv = process.argv.slice(2)) {
   const args = [...argv];
   const command = args.shift() ?? "build";
@@ -243,6 +315,7 @@ function main(argv = process.argv.slice(2)) {
   if (production) Object.assign(releaseEnvironment, productionPostHogConfig(releaseEnvironment));
 
   if (windowsRelease) {
+    Object.assign(releaseEnvironment, windowsReleaseRustCacheEnvironment(releaseEnvironment));
     args.push("--config", JSON.stringify(windowsReleaseConfig()));
     // Fail before the long build when native debug files could not be uploaded.
     windowsDebugUploadSettings(releaseEnvironment);
@@ -299,6 +372,7 @@ function main(argv = process.argv.slice(2)) {
     [resolve(repoRoot, "node_modules/@tauri-apps/cli/tauri.js"), command, ...args],
     env,
   );
+  if (windowsRelease) reportWindowsReleaseRustCacheStats(env);
   if (windowsRelease) {
     run(
       process.execPath,
