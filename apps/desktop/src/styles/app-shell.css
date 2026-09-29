@@ -1230,10 +1230,9 @@
 }
 
 :root[data-platform="windows"] main.content {
-  /* The lower-right panel corner sits close to Windows' tighter
-     native window corner. Keep this inset corner tighter than the other
-     panel corners instead of changing the cards within the panel. */
-  border-bottom-right-radius: 4px;
+  /* Keep the Windows outer content panel uniformly tight. Scope this to
+     the shell's main element so nested content surfaces keep their radii. */
+  border-radius: 4px;
 }
 
 :root[data-platform="windows"] .content {
