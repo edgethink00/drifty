@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -33,6 +34,14 @@ _STARTUP_TIMEOUT_SECONDS = 20.0
 # the normal limit.
 _COLD_REQUEST_TIMEOUT_SECONDS = 30.0
 _REQUEST_TIMEOUT_SECONDS = 2.0
+_EXIT_WAIT_SECONDS = 0.5
+_EXIT_LAUNCH_WAIT_SECONDS = 0.5
+# Track a host before its constructor awaits readiness: it has an owned child
+# then, but is not yet published in _host. Shutdown must not wait for the read
+# lock, and must also prevent a cancelled read from spawning its retry host.
+_host_shutdown = threading.Event()
+_owned_hosts_lock = threading.Lock()
+_owned_hosts: set[_WindowsUiaHost] = set()
 _SUPPORTED_BROWSERS = {
     "Google Chrome",
     "Google Chrome Beta",
@@ -40,6 +49,7 @@ _SUPPORTED_BROWSERS = {
     "Google Chrome Canary",
     "Microsoft Edge",
     "Brave Browser",
+    "Opera",
     "Firefox",
     "Firefox Developer Edition",
     "Floorp",
@@ -395,12 +405,33 @@ def _readline_with_timeout(stream, timeout_seconds: float) -> str:
     return str(reply).strip()
 
 
+class _OwnedUiaProcess(subprocess.Popen):
+    """Publish process ownership before the blocking stdlib initializer."""
+
+    def __init__(self, owner: _WindowsUiaHost, command, **kwargs) -> None:
+        with _owned_hosts_lock:
+            if _host_shutdown.is_set():
+                raise RuntimeError("Windows UIA capture is stopped.")
+            owner._launch_pending = True
+            owner._process = self
+        try:
+            super().__init__(command, **kwargs)
+        finally:
+            owner._launch_finished.set()
+
+
 class _WindowsUiaHost:
     def __init__(self) -> None:
         self._has_completed_request = False
         self._process: subprocess.Popen[str] | None = None
         self._script_path: Path | None = None
+        self._launch_pending = False
+        self._launch_finished = threading.Event()
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        with _owned_hosts_lock:
+            if _host_shutdown.is_set():
+                raise RuntimeError("Windows UIA capture is stopped.")
+            _owned_hosts.add(self)
         try:
             # UTF-16LE -EncodedCommand exceeds Windows' 32,767-character
             # command-line limit for this host. A private temp script keeps the
@@ -410,7 +441,10 @@ class _WindowsUiaHost:
             ) as script:
                 self._script_path = Path(script.name)
                 script.write(_POWERSHELL_UIA_HOST)
-            self._process = subprocess.Popen(
+            if _host_shutdown.is_set():
+                raise RuntimeError("Windows UIA capture is stopped.")
+            self._process = _OwnedUiaProcess(
+                self,
                 [
                     _powershell_executable(),
                     "-NoProfile",
@@ -429,12 +463,18 @@ class _WindowsUiaHost:
                 bufsize=1,
                 creationflags=creation_flags,
             )
+            # Exit can race process creation. Ownership was already published
+            # before Popen.__init__, and this also refuses post-exit reads.
+            if _host_shutdown.is_set():
+                raise RuntimeError("Windows UIA capture is stopped.")
             if self._process.stdout is None or self._process.stdin is None:
                 raise RuntimeError("Windows UIA host pipes are unavailable.")
             ready = _readline_with_timeout(self._process.stdout, _STARTUP_TIMEOUT_SECONDS)
             ready_payload = json.loads(ready)
             if not isinstance(ready_payload, dict) or ready_payload.get("ready") is not True:
                 raise RuntimeError("Windows UIA host did not become ready.")
+            if _host_shutdown.is_set():
+                raise RuntimeError("Windows UIA capture is stopped.")
             self._remove_script()
         except Exception:
             self.close()
@@ -459,17 +499,26 @@ class _WindowsUiaHost:
         return result
 
     def close(self) -> None:
+        if _host_shutdown.is_set():
+            self.abort()
+            return
         process = getattr(self, "_process", None)
+        if process is not None and not self._process_ready(process):
+            self.abort()
+            return
+        stopped = process is None
         try:
             if process is None:
                 return
             try:
                 if process.poll() is not None:
+                    stopped = True
                     return
                 if process.stdin is not None:
                     process.stdin.write("QUIT\n")
                     process.stdin.flush()
                 process.wait(timeout=1.0)
+                stopped = True
             except Exception:
                 try:
                     process.kill()
@@ -477,10 +526,62 @@ class _WindowsUiaHost:
                     pass
                 try:
                     process.wait(timeout=1.0)
+                    stopped = True
                 except Exception:
                     pass
         finally:
             self._remove_script()
+            if stopped:
+                self._forget_owned_host()
+
+    def abort(self) -> None:
+        """Bounded exit cleanup, independent of an in-flight pipe/provider read."""
+        process = getattr(self, "_process", None)
+        finished = getattr(self, "_launch_finished", None)
+        pending = getattr(self, "_launch_pending", False)
+        if pending and finished is not None and not finished.is_set() and not self._process_ready(process):
+            # Native creation may not have published a PID/handle yet. Allow a
+            # bounded publication wait, never the foreground lock or a join.
+            deadline = time.monotonic() + _EXIT_LAUNCH_WAIT_SECONDS
+            while not finished.is_set() and not self._process_ready(process):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                finished.wait(min(0.01, remaining))
+                process = getattr(self, "_process", None)
+        ready = self._process_ready(process)
+        # An incomplete launch is still owned even if no process is visible
+        # yet. Forgetting it here made actual interpreter exit leak a child
+        # created inside a Popen initializer that had not returned to the host.
+        stopped = not ready and (not pending or finished is None or finished.is_set())
+        try:
+            if ready:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
+                try:
+                    process.wait(timeout=_EXIT_WAIT_SECONDS)
+                    stopped = True
+                except Exception:
+                    pass
+        finally:
+            self._remove_script()
+            if stopped:
+                self._forget_owned_host()
+
+    def _process_ready(self, process) -> bool:
+        if process is None:
+            return False
+        if not hasattr(self, "_launch_finished"):
+            return True  # Existing direct host fixtures are already initialized.
+        if getattr(process, "pid", None) is None:
+            return False
+        return os.name != "nt" or getattr(process, "_handle", None) is not None
+
+    def _forget_owned_host(self) -> None:
+        with _owned_hosts_lock:
+            _owned_hosts.discard(self)
 
     def _remove_script(self) -> None:
         path = getattr(self, "_script_path", None)
@@ -498,10 +599,15 @@ _host: _WindowsUiaHost | None = None
 
 def _close_host() -> None:
     global _host
-    with _host_lock:
-        if _host is not None:
-            _host.close()
-            _host = None
+    _host_shutdown.set()
+    with _owned_hosts_lock:
+        owned = list(_owned_hosts)
+    # Do not acquire _host_lock: its owner may still be in the 30s cold read or
+    # waiting for constructor readiness. Both are released by terminating the
+    # separately registered child, without allowing another host to launch.
+    _host = None
+    for host in owned:
+        host.abort()
 
 
 atexit.register(_close_host)
@@ -514,10 +620,20 @@ def read_live_browser_url(hwnd: int, app_name: str | None) -> WindowsBrowserUiaR
     global _host
     with _host_lock:
         for attempt in range(2):
+            if _host_shutdown.is_set():
+                return WindowsBrowserUiaResult(None, "Windows UIA capture is stopped.")
             try:
                 if _host is None:
                     _host = _WindowsUiaHost()
-                return _host.read(hwnd, _uia_family(app_name))
+                host = _host
+                if _host_shutdown.is_set():
+                    host.abort()
+                    _host = None
+                    return WindowsBrowserUiaResult(None, "Windows UIA capture is stopped.")
+                result = host.read(hwnd, _uia_family(app_name))
+                if _host_shutdown.is_set():
+                    return WindowsBrowserUiaResult(None, "Windows UIA capture is stopped.")
+                return result
             except Exception as error:
                 if _host is not None:
                     try:
@@ -525,6 +641,8 @@ def read_live_browser_url(hwnd: int, app_name: str | None) -> WindowsBrowserUiaR
                     except Exception:
                         pass
                     _host = None
+                if _host_shutdown.is_set():
+                    return WindowsBrowserUiaResult(None, "Windows UIA capture is stopped.")
                 if attempt == 1:
                     message = " ".join(str(error).split())[:240]
                     return WindowsBrowserUiaResult(None, message or "Windows UIA failed.")

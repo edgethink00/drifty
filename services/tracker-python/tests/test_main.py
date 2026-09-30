@@ -4,12 +4,14 @@ import os
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import unittest
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
@@ -27,10 +29,118 @@ from app.tracker.macos_audio_activity import ForegroundAudioSample
 from app.tracker.power_state import PowerStateSample
 from app.tracker.windows_workspace import build_snapshot as build_windows_snapshot
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
+from app.tracker.windows_browser_capture import _UrlWorker
 from tests.support_cleanup import temp_dir_closing_databases
 
 
 class TrackerMainTests(unittest.TestCase):
+    def test_windows_stop_uses_cooperative_shutdown_instead_of_sigterm(self) -> None:
+        command = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
+        windows_stop = MagicMock(return_value="cooperative")
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main, "_process_exists", return_value=True
+        ), patch.object(tracker_main, "_process_command", return_value=command), patch.object(
+            tracker_main, "_wait_for_process_exit", return_value=True
+        ), patch.object(tracker_main, "_remove_pid_record_if_owned") as remove_pid, patch(
+            "app.main.os.kill"
+        ) as kill, patch.dict(sys.modules, {
+            "app.windows_daemon_shutdown": SimpleNamespace(stop_windows_tracker_daemon=windows_stop)
+        }):
+            ownership = tracker_main._stop_verified_tracker_daemon(501)
+
+        self.assertEqual(ownership, "tracker")
+        kill.assert_not_called()
+        windows_stop.assert_called_once()
+        self.assertEqual(windows_stop.call_args.args[:2], (501, tracker_main.DB_PATH))
+        remove_pid.assert_called_once_with(501)
+
+    def test_windows_stop_fresh_database_recheck_refuses_changed_command(self) -> None:
+        owned = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
+        other = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}.other"'
+        def stop(pid, db, executable, verify, timeout, **kwargs):
+            self.assertFalse(verify())
+            raise PermissionError("changed database")
+        windows_stop = MagicMock(side_effect=stop)
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main, "_process_exists", return_value=True
+        ), patch.object(tracker_main, "_process_command", side_effect=[owned, owned, other]), patch.object(
+            tracker_main, "_invalidate_process_table"
+        ) as invalidate, patch.object(tracker_main, "_remove_pid_record_if_owned") as remove_pid, patch(
+            "app.main.os.kill"
+        ) as kill, patch.dict(sys.modules, {
+            "app.windows_daemon_shutdown": SimpleNamespace(stop_windows_tracker_daemon=windows_stop)
+        }):
+            with self.assertRaises(PermissionError):
+                tracker_main._stop_verified_tracker_daemon(501)
+        invalidate.assert_called_once(); kill.assert_not_called(); remove_pid.assert_not_called()
+
+    def test_windows_stop_failure_preserves_pid_and_returns_observed_running_status(self) -> None:
+        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "owned.sqlite3"):
+            tracker_main._write_tracker_pid(501)
+            command = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
+            windows_stop = MagicMock(side_effect=TimeoutError("verified daemon did not exit"))
+            with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+                tracker_main, "_process_table", return_value={501: command}
+            ), patch.object(tracker_main, "_process_command", return_value=command), patch.object(
+                tracker_main, "_process_exists", return_value=True
+            ), patch.object(tracker_main, "get_status", return_value={"data": {"running": True}}), patch(
+                "app.main.os.kill"
+            ) as kill, patch.dict(sys.modules, {
+                "app.windows_daemon_shutdown": SimpleNamespace(stop_windows_tracker_daemon=windows_stop)
+            }):
+                result = tracker_main.stop_tracking()
+            self.assertFalse(result["ok"])
+            self.assertTrue(result["data"]["running"])
+            self.assertIn("did not exit", result["error"])
+            self.assertEqual(tracker_main._read_tracker_pid(), 501)
+            kill.assert_not_called()
+
+    def test_windows_stop_refreshes_cached_source_command_and_confirms_cooperative_exit(self) -> None:
+        from app import windows_process_table as process_table
+
+        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "owned.sqlite3"):
+            tracker_main.state_dir().mkdir(parents=True)
+            tracker_main._write_tracker_pid(501)
+            command = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
+            stopped = False
+            queried_states = []
+
+            def query(*args, **kwargs):
+                queried_states.append(stopped)
+                rows = [] if stopped else [{"ProcessId": 501, "CommandLine": command}]
+                return subprocess.CompletedProcess(args[0], 0, stdout=json.dumps(rows), stderr="")
+
+            def cooperative_stop(pid, db_path, executable, verify, timeout, **kwargs):
+                nonlocal stopped
+                queries_before_recheck = len(queried_states)
+                self.assertTrue(verify())
+                self.assertGreater(len(queried_states), queries_before_recheck)
+                stopped = True
+                return "cooperative"
+
+            windows_stop = MagicMock(side_effect=cooperative_stop)
+            with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+                process_table, "_cached_table", {501: command}
+            ), patch.object(process_table, "_cached_at", 10.0), patch.object(
+                process_table.time, "monotonic", return_value=10.0
+            ), patch.object(process_table.subprocess, "run", side_effect=query), patch.object(
+                tracker_main, "_process_exists", return_value=True
+            ), patch.object(tracker_main, "database", return_value=MagicMock()), patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": False}}
+            ), patch("app.main.os.kill") as kill, patch.dict(sys.modules, {
+                "app.windows_daemon_shutdown": SimpleNamespace(stop_windows_tracker_daemon=windows_stop)
+            }):
+                result = tracker_main.stop_tracking()
+
+            self.assertTrue(result["ok"], result)
+            windows_stop.assert_called_once()
+            self.assertEqual(windows_stop.call_args.args[:3],
+                             (501, tracker_main.DB_PATH, Path(sys.executable).expanduser().resolve()))
+            self.assertEqual(windows_stop.call_args.kwargs, {"source_runtime": True})
+            self.assertTrue(queried_states[-1], "stop confirmation must query after cooperative exit")
+            self.assertFalse(tracker_main.pid_path().exists())
+            kill.assert_not_called()
+
     def test_public_cli_dispatch_does_not_match_internal_argument_values(self) -> None:
         self.assertFalse(
             tracker_main._is_public_cli_invocation(
@@ -443,6 +553,7 @@ class TrackerMainTests(unittest.TestCase):
             kill.assert_not_called()
             self.assertFalse(pid_file.exists())
 
+    @patch("app.main.sys.platform", "darwin")
     def test_stop_tracking_signals_verified_tracker_daemon(self) -> None:
         with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             tracker_main.state_dir().mkdir(parents=True)
@@ -463,6 +574,7 @@ class TrackerMainTests(unittest.TestCase):
             self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
             self.assertFalse(pid_file.exists())
 
+    @patch("app.main.sys.platform", "darwin")
     def test_stop_tracking_refreshes_a_process_table_cached_before_daemon_start(self) -> None:
         with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             tracker_main.state_dir().mkdir(parents=True)
@@ -520,6 +632,7 @@ class TrackerMainTests(unittest.TestCase):
             self.assertEqual(db.get_meta("foreground_audio_reason"), "tracking_stopped")
             self.assertEqual(db.get_meta("passive_lease_remaining_seconds"), "")
 
+    @patch("app.main.sys.platform", "darwin")
     def test_stop_tracking_finds_live_same_db_daemon_without_pid_record(self) -> None:
         with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
@@ -535,6 +648,7 @@ class TrackerMainTests(unittest.TestCase):
             # on Windows, so only the termination signal is asserted.
             self.assertIn(call(301, tracker_main.signal.SIGTERM), kill.call_args_list)
 
+    @patch("app.main.sys.platform", "darwin")
     def test_stop_tracking_stops_every_duplicate_same_db_daemon(self) -> None:
         with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             first = f"/Applications/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
@@ -558,6 +672,7 @@ class TrackerMainTests(unittest.TestCase):
                 ],
             )
 
+    @patch("app.main.sys.platform", "darwin")
     def test_stop_tracking_reports_failure_when_daemon_does_not_exit(self) -> None:
         with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             tracker_main.state_dir().mkdir(parents=True)
@@ -577,6 +692,7 @@ class TrackerMainTests(unittest.TestCase):
             # on Windows, so only the termination signal is asserted.
             self.assertIn(call(501, tracker_main.signal.SIGTERM), kill.call_args_list)
 
+    @patch("app.main.sys.platform", "darwin")
     def test_stop_verified_daemon_accepts_kill_race_only_after_confirmed_exit(self) -> None:
         with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             tracker_main.state_dir().mkdir(parents=True)
@@ -590,6 +706,7 @@ class TrackerMainTests(unittest.TestCase):
             self.assertEqual(ownership, "tracker")
             self.assertFalse(tracker_main.pid_path().exists())
 
+    @patch("app.main.sys.platform", "darwin")
     def test_stop_verified_daemon_preserves_live_process_permission_failure(self) -> None:
         with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             tracker_main.state_dir().mkdir(parents=True)
@@ -673,6 +790,7 @@ class TrackerMainTests(unittest.TestCase):
             self.assertFalse(pid_file.exists())
             popen.assert_called_once()
 
+    @patch("app.main.sys.platform", "darwin")
     def test_start_tracking_replaces_source_daemon_when_current_runtime_is_frozen(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -706,6 +824,7 @@ class TrackerMainTests(unittest.TestCase):
             ],
         )
 
+    @patch("app.main.sys.platform", "darwin")
     def test_start_tracking_replaces_cross_runtime_daemon_without_pid_record(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -753,6 +872,7 @@ class TrackerMainTests(unittest.TestCase):
         kill.assert_not_called()
         popen.assert_not_called()
 
+    @patch("app.main.sys.platform", "darwin")
     def test_start_tracking_replaces_stale_packaged_daemon(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -774,6 +894,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
         popen.assert_called_once()
 
+    @patch("app.main.sys.platform", "darwin")
     def test_start_tracking_replaces_same_path_daemon_when_runtime_fingerprint_differs(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -1807,6 +1928,7 @@ class TrackerMainTests(unittest.TestCase):
         trim_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "")
         trim_db.set_meta.assert_any_call("tracker_mode", "idle")
 
+    @patch("app.main.sys.platform", "darwin")
     def test_daemon_skips_idle_and_snapshot_when_power_state_suppressed(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -1835,6 +1957,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
         mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
 
+    @patch("app.main.sys.platform", "darwin")
     def test_daemon_resumes_with_default_sample_after_power_suppression(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -1879,6 +2002,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
         mock_db.set_meta.assert_any_call("tracker_mode", "tracking")
 
+    @patch("app.main.sys.platform", "darwin")
     def test_daemon_records_runtime_fingerprint_on_start(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -1902,6 +2026,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call("foreground_audio_reason", "daemon_started")
         mock_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "")
 
+    @patch("app.main.sys.platform", "darwin")
     def test_daemon_checks_for_a_due_backup_while_it_remains_running(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -1927,6 +2052,7 @@ class TrackerMainTests(unittest.TestCase):
 
         mock_db.create_periodic_backup.assert_called_once_with()
 
+    @patch("app.main.sys.platform", "darwin")
     def test_daemon_ingests_dev_signals_when_the_window_is_due(self) -> None:
         """Agent turns stay current without opening the Your Agents tab."""
         with temp_dir_closing_databases() as tmp:
@@ -1957,6 +2083,7 @@ class TrackerMainTests(unittest.TestCase):
             max_files=tracker_main.DEV_SIGNALS_DAEMON_MAX_FILES,
         )
 
+    @patch("app.main.sys.platform", "darwin")
     def test_unexpected_periodic_backup_error_does_not_skip_sampling(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -2088,6 +2215,88 @@ class TrackerMainTests(unittest.TestCase):
             self.assertEqual(len(timeline), 1)
             self.assertEqual(timeline[0]["appName"], "Firefox")
 
+    def test_slow_windows_url_records_app_time_and_never_enriches_prior_intervals(self) -> None:
+        release = threading.Event()
+        requests = []
+
+        def read_url(hwnd, app):
+            requests.append((hwnd, app))
+            if len(requests) == 1:
+                self.assertTrue(release.wait(timeout=3.0))
+                return WindowsBrowserUiaResult("https://example.test/late-old-page", None)
+            return WindowsBrowserUiaResult("https://example.test/fresh-page", None)
+
+        worker = _UrlWorker(read_url)
+        try:
+            with temp_dir_closing_databases() as tmp:
+                path = Path(tmp) / "tracker.sqlite3"
+                db = TrackerDatabase(path)
+                captured_at = datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc)
+                window = windows_workspace.ForegroundWindow(hwnd=101, pid=202, title="Same title - Opera")
+                identity = windows_workspace.ProcessIdentity(r"C:\Browser\opera.exe", "Opera", None)
+                observations = [(captured_at + timedelta(seconds=5 * index)).isoformat() for index in range(3)]
+                with (
+                    patch.object(tracker_main, "DB_PATH", path),
+                    patch.object(tracker_storage, "CAPTURE_PLATFORM", "windows"),
+                    patch.object(tracker_main, "current_power_state", return_value=PowerStateSample(
+                        observed_at=captured_at, should_capture=True, reason="fixture-active",
+                    )),
+                    patch.object(tracker_main, "seconds_since_last_input", return_value=0.0),
+                    patch.object(tracker_main, "current_snapshot", side_effect=lambda **_: windows_workspace.current_snapshot()),
+                    patch.object(windows_workspace, "is_windows", return_value=True),
+                    patch.object(windows_workspace, "process_session_id", return_value=1),
+                    patch.object(windows_workspace, "read_foreground_window", return_value=window),
+                    patch.object(windows_workspace, "resolve_identity", return_value=(identity, None)),
+                    patch.object(windows_workspace, "utc_now_iso", side_effect=observations),
+                    patch.object(windows_workspace, "read_browser_url_with_budget", side_effect=worker.read),
+                ):
+                    began = time.monotonic()
+                    tick = tracker_main._daemon_tick(db, None)
+                    self.assertIsNotNone(tick)
+                    self.assertLess(time.monotonic() - began, 0.75)
+                    with db.connect() as conn:
+                        app_only = dict(conn.execute("SELECT * FROM activity_segments").fetchone())
+                    self.assertEqual(app_only["app_name"], "Opera")
+                    self.assertEqual(app_only["duration_seconds"], tracker_main.SAMPLE_SECONDS)
+                    self.assertIsNone(app_only["site_url"])
+                    raw = json.loads(app_only["raw_context_json"])
+                    self.assertIn("time budget", raw["browser_automation_error"])
+
+                    # The same HWND/title while its first request is still in
+                    # flight records more app time, without queuing another URL.
+                    tick = tracker_main._daemon_tick(db, tick)
+                    self.assertIsNotNone(tick)
+                    self.assertEqual(requests, [(101, "Opera")])
+                    with db.connect() as conn:
+                        before_release = dict(conn.execute("SELECT * FROM activity_segments").fetchone())
+                    self.assertEqual(before_release["duration_seconds"], tracker_main.SAMPLE_SECONDS * 2)
+                    self.assertIsNone(before_release["site_url"])
+
+                    release.set()
+                    with worker._condition:
+                        self.assertTrue(worker._condition.wait_for(lambda: worker._active is None, timeout=1.0))
+                    with db.connect() as conn:
+                        after_release = dict(conn.execute("SELECT * FROM activity_segments").fetchone())
+                    self.assertEqual(after_release, before_release)
+                    self.assertIsNotNone(tracker_main._daemon_tick(db, tick))
+
+                with db.connect() as conn:
+                    rows = [dict(row) for row in conn.execute("SELECT * FROM activity_segments ORDER BY id")]
+                self.assertEqual(len(rows), 2)
+                self.assertEqual(rows[0], before_release)
+                self.assertEqual(rows[1]["site_url"], "https://example.test/fresh-page")
+                self.assertEqual(rows[1]["site_source"], "windows-uia-document")
+                self.assertEqual(rows[1]["duration_seconds"], tracker_main.SAMPLE_SECONDS)
+                self.assertEqual(rows[1]["started_at"], observations[2])
+                self.assertEqual(requests, [(101, "Opera"), (101, "Opera")])
+        finally:
+            release.set()
+            worker.close()
+            if worker._thread is not None:
+                worker._thread.join(timeout=1.0)
+                self.assertFalse(worker._thread.is_alive())
+
+    @patch("app.main.sys.platform", "darwin")
     def test_daemon_survives_tick_exception_and_keeps_sampling(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -2129,6 +2338,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertIs(mock_db.record_snapshot.call_args.args[0], snapshot)
         mock_db.set_meta.assert_any_call("tracker_mode", "tracking")
 
+    @patch("app.main.sys.platform", "darwin")
     def test_daemon_resets_capture_tick_after_failed_tick(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"

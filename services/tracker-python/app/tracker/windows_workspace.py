@@ -38,7 +38,8 @@ from app.tracker.browser_automation import BrowserMetadata, normalize_domain, yo
 from app.text_safety import replace_lone_surrogates
 from app.tracker.capture_contract import Snapshot, utc_now_iso
 from app.tracker.windows_app_names import exe_display_name, is_windows_browser_app
-from app.tracker.windows_browser_uia import WindowsBrowserUiaResult, read_live_browser_url
+from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
+from app.tracker.windows_browser_capture import _URL_SAMPLE_BUDGET_SECONDS, read_browser_url_with_budget
 from app.tracker.windows_browser_bridge import read_browser_bridge_metadata
 
 
@@ -54,6 +55,9 @@ _LIVE_UIA_CONFIDENCE = 0.8
 # The Windows port's steady-state capture budget is 1.5s. A longer retry
 # could credit the first window's elapsed tracking interval to a new app.
 _FOREGROUND_RETRY_BUDGET_SECONDS = 1.5
+# Leave room for the final HWND/PID/title check inside the same whole-capture
+# budget. Identity capture itself still has the original 1.5s acceptance gate.
+_FOREGROUND_CHECK_RESERVE_SECONDS = 0.05
 
 
 @dataclass(frozen=True)
@@ -283,8 +287,10 @@ def _browser_metadata_from_live_uia(
 def enrich_browser_snapshot(
     snapshot: Snapshot,
     hwnd: int,
-    live_reader: Callable[[int, str | None], WindowsBrowserUiaResult] = read_live_browser_url,
+    live_reader: Callable[[int, str | None], WindowsBrowserUiaResult] | None = None,
     bridge_reader: Callable[[str, str | None], BrowserMetadata | None] = read_browser_bridge_metadata,
+    *,
+    url_timeout_seconds: float = _URL_SAMPLE_BUDGET_SECONDS,
 ) -> Snapshot:
     """Use a bridge URL only when it matches this foreground window's Document."""
     # Every named Windows browser gets browser_name even when its UIA URL is
@@ -293,9 +299,17 @@ def enrich_browser_snapshot(
     if not is_windows_browser_app(snapshot.app_name):
         return snapshot
 
-    live_result = live_reader(hwnd, snapshot.app_name)
+    # Explicit provider injections keep their two-argument contract. Production
+    # reads additionally obey the foreground observation's remaining budget.
+    live_result = (
+        live_reader(hwnd, snapshot.app_name) if live_reader is not None else
+        read_browser_url_with_budget(hwnd, snapshot.app_name, timeout_seconds=url_timeout_seconds)
+    )
     live = _browser_metadata_from_live_uia(snapshot.app_name, live_result)
-    bridge = bridge_reader(snapshot.app_name, live_result.url)
+    # Opera's measured Document provides its own HWND-local URL. The v1
+    # Chromium bridge has no Opera product/HWND binding, so even a same-URL
+    # message cannot add trustworthy information about this Opera window.
+    bridge = None if snapshot.app_name == "Opera" else bridge_reader(snapshot.app_name, live_result.url)
     # Keep this guard at the caller as well: injected readers and future bridge
     # versions must not bypass the exact HWND-local foreground proof.
     if bridge is not None and bridge.site_url != live_result.url:
@@ -400,8 +414,9 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
     # A tab switch or a new foreground window can race either process identity
     # or the slower browser URL read. Re-sample the *new* foreground once;
     # never reuse the first attempt's identity, title, or URL for that window.
-    # Keep a delayed UIA read as a gap; otherwise the daemon would assign its
-    # long pre-switch interval to the new foreground app.
+    # URL reads have their own short, single-flight deadline. A late URL becomes
+    # app-only context without stalling this observation; the remaining whole
+    # capture budget still refuses slow identity capture or a delayed retry.
     capture_started = time.monotonic()
     for attempt in range(2):
         if attempt:
@@ -424,7 +439,16 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
                 if snapshot.frontmost_capture_source == "unavailable":
                     failed = snapshot
                 else:
-                    enriched = enrich_browser_snapshot(snapshot, window.hwnd)
+                    remaining = _FOREGROUND_RETRY_BUDGET_SECONDS - (time.monotonic() - capture_started)
+                    if remaining < 0:
+                        return build_snapshot(None, None, observed, "Foreground capture exceeded time budget.")
+                    enriched = enrich_browser_snapshot(
+                        snapshot, window.hwnd,
+                        url_timeout_seconds=min(
+                            _URL_SAMPLE_BUDGET_SECONDS,
+                            max(0.0, remaining - _FOREGROUND_CHECK_RESERVE_SECONDS),
+                        ),
+                    )
                     # URL/bridge reads may outlive the observation.
                     # Discard the whole candidate if its context changed.
                     enriched_window = read_foreground_window()

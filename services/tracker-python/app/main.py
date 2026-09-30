@@ -904,6 +904,32 @@ def _stop_verified_tracker_daemon(pid: int) -> TrackerProcessOwnership:
     if ownership == "unrelated":
         _remove_pid_record_if_owned(pid)
         return ownership
+    if sys.platform == "win32":
+        from app.windows_daemon_shutdown import stop_windows_tracker_daemon
+
+        command = _process_command(pid)
+        arguments = _command_arguments(command) if command else None
+        details = _daemon_command_details(command) if command else None
+        if not arguments or details is None or details[2] != DB_PATH.expanduser().resolve():
+            return "unknown"
+        executable = Path(arguments[0]).expanduser().resolve()
+
+        def verify_ownership() -> bool:
+            _invalidate_process_table()
+            fresh_command = _process_command(pid)
+            fresh_arguments = _command_arguments(fresh_command) if fresh_command else None
+            return bool(
+                fresh_arguments
+                and _daemon_command_details(fresh_command) == details
+                and Path(fresh_arguments[0]).expanduser().resolve() == executable
+            )
+
+        stop_windows_tracker_daemon(
+            pid, DB_PATH, executable, verify_ownership, TRACKER_EXIT_TIMEOUT_SECONDS,
+            source_runtime=details[0] == "source",
+        )
+        _remove_pid_record_if_owned(pid)
+        return ownership
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -2154,13 +2180,34 @@ def _maybe_ingest_dev_signals(
     return current
 
 
+def _close_loaded_windows_capture() -> None:
+    if sys.platform != "win32":
+        return
+    capture = sys.modules.get("app.tracker.windows_browser_capture")
+    if capture is not None:
+        capture.close_browser_capture()
+    else:
+        # A direct UIA caller can load the host without loading the URL worker.
+        # Do not import either module during shutdown and create fresh state.
+        uia = sys.modules.get("app.tracker.windows_browser_uia")
+        if uia is not None:
+            uia._close_host()
+
+
 def daemon():
     daemon_pid = os.getpid()
     lock_file = _acquire_tracker_daemon_lock()
     if lock_file is None:
         return
 
+    stop_event = None
     try:
+        if sys.platform == "win32":
+            from app.windows_daemon_shutdown import WindowsDaemonStopEvent
+
+            # Publish the process-generation event under the daemon lock and
+            # before the PID record, including during database initialization.
+            stop_event = WindowsDaemonStopEvent(DB_PATH)
         _write_tracker_pid(daemon_pid)
         db = database()
         db.set_meta("tracker_script_path", _current_script_path())
@@ -2169,19 +2216,12 @@ def daemon():
         # run. Restarts and manual stop/start cycles begin fail-closed.
         db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
         reset_foreground_audio_diagnostics(db, "daemon_started")
-    except BaseException:
-        try:
-            _remove_pid_record_if_owned(daemon_pid)
-        finally:
-            _release_tracker_daemon_lock(lock_file)
-        raise
-    last_capture_tick: float | None = None
-    last_backup_check = time.time()
-    # One wall-clock read per loop feeds both maintenance windows.
-    last_dev_signals_ingest = last_backup_check
+        last_capture_tick: float | None = None
+        last_backup_check = time.time()
+        # One wall-clock read per loop feeds both maintenance windows.
+        last_dev_signals_ingest = last_backup_check
 
-    try:
-        while True:
+        while stop_event is None or not stop_event.requested():
             backup_check_started_at = time.time()
             try:
                 last_backup_check = _maybe_create_periodic_backup(
@@ -2196,6 +2236,8 @@ def daemon():
                 capture_tracker_exception(exc, {"phase": "database_periodic_backup"})
                 print("tracker database periodic backup failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
+            if stop_event is not None and stop_event.requested():
+                break
             try:
                 last_dev_signals_ingest = _maybe_ingest_dev_signals(
                     db,
@@ -2209,6 +2251,8 @@ def daemon():
                 capture_tracker_exception(exc, {"phase": "dev_signals_periodic_ingest"})
                 print("tracker dev signals periodic ingest failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
+            if stop_event is not None and stop_event.requested():
+                break
             try:
                 last_capture_tick = _daemon_tick(db, last_capture_tick)
             except Exception as exc:
@@ -2222,12 +2266,22 @@ def daemon():
                 # A failed tick means a capture gap, so the next successful
                 # capture starts from the default sample length again.
                 last_capture_tick = None
-            time.sleep(SAMPLE_SECONDS)
+            if stop_event is None:
+                time.sleep(SAMPLE_SECONDS)
+            elif stop_event.wait(SAMPLE_SECONDS):
+                break
     finally:
         try:
-            _remove_pid_record_if_owned(daemon_pid)
+            _close_loaded_windows_capture()
         finally:
-            _release_tracker_daemon_lock(lock_file)
+            try:
+                _remove_pid_record_if_owned(daemon_pid)
+            finally:
+                try:
+                    if stop_event is not None:
+                        stop_event.close()
+                finally:
+                    _release_tracker_daemon_lock(lock_file)
 
 
 def _dispatch(request: dict):

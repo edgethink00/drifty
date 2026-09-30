@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import textwrap
+import threading
+import time
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,6 +30,7 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         self.assertTrue(is_live_uia_browser("Google Chrome Canary"))
         self.assertTrue(is_live_uia_browser("Microsoft Edge"))
         self.assertTrue(is_live_uia_browser("Brave Browser"))
+        self.assertTrue(is_live_uia_browser("Opera"))
         self.assertTrue(is_live_uia_browser("Firefox"))
         self.assertTrue(is_live_uia_browser("Floorp"))
         self.assertTrue(is_live_uia_browser("LibreWolf"))
@@ -38,6 +44,7 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         self.assertEqual(windows_browser_uia._uia_family("Zen"), "gecko")
         self.assertEqual(windows_browser_uia._uia_family("Waterfox"), "gecko")
         self.assertEqual(windows_browser_uia._uia_family("Microsoft Edge"), "chromium")
+        self.assertEqual(windows_browser_uia._uia_family("Opera"), "chromium")
         script = windows_browser_uia._POWERSHELL_UIA_HOST
         self.assertIn("'tabbrowser-tabpanels'", script)
         self.assertIn("'private-browsing-indicator-icon'", script)
@@ -219,9 +226,15 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         process = FakeProcess()
         captured_script = []
 
-        def launch(command, **_kwargs):
+        def launch(owned_process, command, **_kwargs):
             captured_script.append(Path(command[-1]).read_text(encoding="utf-8-sig"))
-            return process
+            owned_process.stdin = process.stdin
+            owned_process.stdout = process.stdout
+            owned_process.pid = 4242
+            owned_process._handle = object()
+            owned_process.poll = process.poll
+            owned_process.wait = process.wait
+            owned_process.kill = process.kill
 
         with (
             patch.object(
@@ -229,7 +242,7 @@ class WindowsBrowserUiaTests(unittest.TestCase):
                 "_powershell_executable",
                 return_value=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
             ),
-            patch.object(windows_browser_uia.subprocess, "Popen", side_effect=launch) as popen,
+            patch.object(windows_browser_uia.subprocess.Popen, "__init__", autospec=True, side_effect=launch) as popen,
             patch.object(
                 windows_browser_uia,
                 "_readline_with_timeout",
@@ -241,7 +254,7 @@ class WindowsBrowserUiaTests(unittest.TestCase):
 
         self.assertTrue(process.waited)
         self.assertEqual(process.stdin.writes, ["QUIT\n"])
-        command = popen.call_args.args[0]
+        command = popen.call_args.args[1]
         self.assertEqual(
             command[0],
             r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
@@ -302,6 +315,305 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         )
         self.assertEqual(windows_browser_uia._COLD_REQUEST_TIMEOUT_SECONDS, 30.0)
         self.assertEqual(windows_browser_uia._REQUEST_TIMEOUT_SECONDS, 2.0)
+
+    def test_opera_live_reader_uses_the_requested_hwnd_and_chromium_rules(self) -> None:
+        class FakeHost:
+            def __init__(self) -> None:
+                self.requests: list[tuple[int, str]] = []
+
+            def read(self, hwnd: int, family: str) -> windows_browser_uia.WindowsBrowserUiaResult:
+                self.requests.append((hwnd, family))
+                return windows_browser_uia.WindowsBrowserUiaResult("https://example.com/opera", None)
+
+        host = FakeHost()
+        with (
+            patch.object(windows_browser_uia.sys, "platform", "win32"),
+            patch.object(windows_browser_uia, "_host", host),
+        ):
+            result = windows_browser_uia.read_live_browser_url(8195128, "Opera")
+        self.assertEqual(result.url, "https://example.com/opera")
+        self.assertEqual(host.requests, [(8195128, "chromium")])
+
+
+class WindowsBrowserUiaShutdownTests(unittest.TestCase):
+    """Use real child processes and pipe readers, without needing Windows UIA."""
+
+    def setUp(self) -> None:
+        self.stack = ExitStack()
+        self.processes = []
+        self.threads = []
+        self.releases = []
+        self.script_paths = []
+        self.real_popen_init = subprocess.Popen.__init__
+        self.real_readline = windows_browser_uia._readline_with_timeout
+        self.stack.enter_context(patch.object(windows_browser_uia, "_host", None))
+        self.stack.enter_context(patch.object(windows_browser_uia, "_host_lock", threading.Lock()))
+        self.stack.enter_context(patch.object(windows_browser_uia, "_host_shutdown", threading.Event()))
+        self.stack.enter_context(patch.object(windows_browser_uia, "_owned_hosts", set()))
+        self.stack.enter_context(patch.object(windows_browser_uia.sys, "platform", "win32"))
+        self.stack.enter_context(patch.object(windows_browser_uia, "_powershell_executable", return_value=sys.executable))
+
+    def tearDown(self) -> None:
+        windows_browser_uia._close_host()
+        for release in self.releases:
+            release.set()
+        for process in self.processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=1.0)
+            for stream in (process.stdin, process.stdout):
+                if stream is not None:
+                    stream.close()
+        for thread in self.threads:
+            thread.join(timeout=1.0)
+            self.assertFalse(thread.is_alive())
+        for path in self.script_paths:
+            self.assertFalse(path.exists())
+        self.stack.close()
+
+    def launch_fixture(self, process, command, **kwargs):
+        self.script_paths.append(Path(command[-1]))
+        self.real_popen_init(
+            process,
+            [sys.executable, "-u", "-c", self.child_code],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, encoding="utf-8", creationflags=kwargs.get("creationflags", 0),
+        )
+        self.processes.append(process)
+
+    def start_read(self):
+        results = []
+        thread = threading.Thread(target=lambda: results.append(windows_browser_uia.read_live_browser_url(101, "Opera")))
+        self.threads.append(thread)
+        thread.start()
+        return thread, results
+
+    def assert_stopped(self, thread, results, launch) -> None:
+        thread.join(timeout=1.0)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(launch.call_count, 1)
+        self.assertIsNone(results[0].url)
+        self.assertIn("stopped", results[0].error or "")
+        self.assertIsNone(windows_browser_uia._host)
+        self.assertEqual(windows_browser_uia._owned_hosts, set())
+        self.assertIsNotNone(self.processes[0].poll())
+        self.assertFalse(self.script_paths[0].exists())
+
+    def test_shutdown_stops_an_unpublished_constructor_waiting_for_ready(self) -> None:
+        self.child_code = "import time; time.sleep(60)"
+        waiting = threading.Event()
+
+        def read_reply(stream, timeout):
+            waiting.set()
+            return self.real_readline(stream, timeout)
+
+        with patch.object(windows_browser_uia.subprocess.Popen, "__init__", autospec=True, side_effect=self.launch_fixture) as launch, patch.object(
+            windows_browser_uia, "_readline_with_timeout", side_effect=read_reply,
+        ):
+            thread, results = self.start_read()
+            self.assertTrue(waiting.wait(timeout=1.0))
+            self.assertIsNone(windows_browser_uia._host)
+            self.assertEqual(len(windows_browser_uia._owned_hosts), 1)
+            self.assertTrue(windows_browser_uia._host_lock.locked())
+            began = time.monotonic()
+            windows_browser_uia._close_host()
+            self.assertLess(time.monotonic() - began, 1.0)
+            self.assert_stopped(thread, results, launch)
+
+    def test_shutdown_does_not_wait_for_the_busy_host_lock_or_spawn_a_retry(self) -> None:
+        self.child_code = 'import sys,time; print(\'{"ready":true}\', flush=True); sys.stdin.readline(); time.sleep(60)'
+        waiting = threading.Event()
+        reads = []
+
+        def read_reply(stream, timeout):
+            reads.append(timeout)
+            if len(reads) == 2:
+                waiting.set()
+            return self.real_readline(stream, timeout)
+
+        with patch.object(windows_browser_uia.subprocess.Popen, "__init__", autospec=True, side_effect=self.launch_fixture) as launch, patch.object(
+            windows_browser_uia, "_readline_with_timeout", side_effect=read_reply,
+        ):
+            thread, results = self.start_read()
+            self.assertTrue(waiting.wait(timeout=1.0))
+            self.assertIsNotNone(windows_browser_uia._host)
+            self.assertTrue(windows_browser_uia._host_lock.locked())
+            began = time.monotonic()
+            windows_browser_uia._close_host()
+            self.assertLess(time.monotonic() - began, 1.0)
+            self.assert_stopped(thread, results, launch)
+
+    def test_process_created_during_shutdown_is_closed_before_it_can_read(self) -> None:
+        self.child_code = "import time; time.sleep(60)"
+        creating = threading.Event()
+        release = threading.Event()
+        self.releases.append(release)
+
+        def launch_during_exit(process, command, **kwargs):
+            self.launch_fixture(process, command, **kwargs)
+            creating.set()
+            self.assertTrue(release.wait(timeout=3.0))
+
+        with patch.object(windows_browser_uia.subprocess.Popen, "__init__", autospec=True, side_effect=launch_during_exit) as launch, patch.object(
+            windows_browser_uia, "_readline_with_timeout",
+        ) as read_reply:
+            thread, results = self.start_read()
+            self.assertTrue(creating.wait(timeout=1.0))
+            self.assertIsNone(windows_browser_uia._host)
+            began = time.monotonic()
+            windows_browser_uia._close_host()
+            self.assertLess(time.monotonic() - began, 0.5)
+            release.set()
+            self.assert_stopped(thread, results, launch)
+        read_reply.assert_not_called()
+
+    def test_failed_popen_initialization_removes_registration_and_owned_script(self) -> None:
+        def fail_init(_process, command, **_kwargs):
+            self.script_paths.append(Path(command[-1]))
+            raise OSError("fixture launch failed before native creation")
+
+        with patch.object(windows_browser_uia.subprocess.Popen, "__init__", autospec=True, side_effect=fail_init) as launch:
+            result = windows_browser_uia.read_live_browser_url(101, "Opera")
+        self.assertEqual(launch.call_count, 2)
+        self.assertIsNone(result.url)
+        self.assertEqual(windows_browser_uia._owned_hosts, set())
+        self.assertTrue(all(not path.exists() for path in self.script_paths))
+
+    def test_partial_popen_without_pid_or_handle_stays_owned_during_bounded_shutdown(self) -> None:
+        initializing = threading.Event()
+        release = threading.Event()
+        self.releases.append(release)
+
+        def partial_init(_process, command, **_kwargs):
+            self.script_paths.append(Path(command[-1]))
+            initializing.set()
+            self.assertTrue(release.wait(timeout=3.0))
+            raise OSError("fixture initialization cancelled before native creation")
+
+        with patch.object(windows_browser_uia.subprocess.Popen, "__init__", autospec=True, side_effect=partial_init) as launch:
+            thread, results = self.start_read()
+            self.assertTrue(initializing.wait(timeout=1.0))
+            host = next(iter(windows_browser_uia._owned_hosts))
+            self.assertIsNotNone(host._process)
+            self.assertIsNone(getattr(host._process, "pid", None))
+            self.assertIsNone(getattr(host._process, "_handle", None))
+            began = time.monotonic()
+            windows_browser_uia._close_host()
+            elapsed = time.monotonic() - began
+            self.assertGreaterEqual(elapsed, 0.45)
+            self.assertLess(elapsed, 1.0)
+            self.assertEqual(windows_browser_uia._owned_hosts, {host})
+            self.assertFalse(self.script_paths[0].exists())
+            # No child was created in this partial-initialization fixture. The
+            # cancelled constructor can finish and release its retained owner.
+            release.set()
+            thread.join(timeout=1.0)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(launch.call_count, 1)
+            self.assertIsNone(results[0].url)
+            self.assertEqual(windows_browser_uia._owned_hosts, set())
+
+    def test_one_shot_exit_invalidates_worker_then_kills_owned_child_and_removes_script(self) -> None:
+        # The observer is registered first, so it runs after the production
+        # worker/UIA callbacks. Production registrations and real exit ordering
+        # remain intact; only the OS PowerShell launch is a local pipe fixture.
+        code = textwrap.dedent('''
+            import atexit,json,subprocess,sys
+            from pathlib import Path
+            child = None
+            script = None
+            launches = 0
+            def observe_exit():
+                print(json.dumps({"childStopped": child.poll() is not None,
+                                  "scriptRemoved": not script.exists(), "launches": launches}), flush=True)
+            atexit.register(observe_exit)
+            from app.tracker import windows_browser_capture,windows_browser_uia
+            real_init = subprocess.Popen.__init__
+            def launch(process, command, **kwargs):
+                global child,script,launches
+                launches += 1
+                script = Path(command[-1])
+                child_code = "import sys,time; print('ready', flush=True); sys.stdin.readline(); time.sleep(60)"
+                real_init(process, [sys.executable, "-u", "-c", child_code], stdin=subprocess.PIPE,
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                          creationflags=kwargs.get("creationflags", 0))
+                child = process
+            # Substitute only ready parsing, retaining the actual pipe wait for
+            # the URL request that follows it and the production child cleanup.
+            real_readline = windows_browser_uia._readline_with_timeout
+            def read_reply(stream, timeout):
+                line = real_readline(stream, timeout)
+                return '{"ready":true}' if line == 'ready' else line
+            subprocess.Popen.__init__ = launch
+            windows_browser_uia._powershell_executable = lambda: sys.executable
+            windows_browser_uia._readline_with_timeout = read_reply
+            sys.platform = "win32"
+            result = windows_browser_capture.read_browser_url_with_budget(101, "Opera")
+            print(json.dumps({"url": result.url, "error": result.error}), flush=True)
+        ''')
+        environment = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+        # setUp's global subprocess patch is deliberately not active here.
+        began = time.monotonic()
+        result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=3.0, env=environment)
+        self.assertLess(time.monotonic() - began, 3.0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        sample, exit_state = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertIsNone(sample["url"])
+        self.assertIn("time budget", sample["error"])
+        self.assertEqual(exit_state, {"childStopped": True, "scriptRemoved": True, "launches": 1})
+
+    def test_one_shot_exit_kills_a_created_child_before_popen_init_can_return(self) -> None:
+        # Delay __init__ indefinitely *after* the actual child exists. No test
+        # release or constructor join runs before atexit observes the outcome.
+        # The observer cleans up a failing pre-fix child only after recording
+        # production cleanup's result, so a red regression cannot leak it.
+        code = textwrap.dedent('''
+            import atexit,json,subprocess,sys,threading
+            from pathlib import Path
+            child = None
+            script = None
+            launches = 0
+            created = threading.Event()
+            def observe_exit():
+                state = {"childStopped": child.poll() is not None,
+                         "scriptRemoved": not script.exists(), "launches": launches,
+                         "registeredHosts": len(windows_browser_uia._owned_hosts)}
+                print(json.dumps(state), flush=True)
+                if child.poll() is None:
+                    child.kill()
+                    child.wait(timeout=1.0)
+            atexit.register(observe_exit)
+            from app.tracker import windows_browser_capture,windows_browser_uia
+            real_init = subprocess.Popen.__init__
+            def delayed_init(process, command, **kwargs):
+                global child,script,launches
+                launches += 1
+                script = Path(command[-1])
+                real_init(process, [sys.executable, "-u", "-c", "import time; time.sleep(60)"],
+                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                          text=True, encoding="utf-8", creationflags=kwargs.get("creationflags", 0))
+                child = process
+                created.set()
+                threading.Event().wait(timeout=60.0)
+            subprocess.Popen.__init__ = delayed_init
+            windows_browser_uia._powershell_executable = lambda: sys.executable
+            sys.platform = "win32"
+            result = windows_browser_capture.read_browser_url_with_budget(101, "Opera")
+            assert created.wait(timeout=1.0), "fixture child not created"
+            print(json.dumps({"url": result.url, "error": result.error}), flush=True)
+        ''')
+        environment = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+        began = time.monotonic()
+        result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=3.0, env=environment)
+        elapsed = time.monotonic() - began
+        self.assertLess(elapsed, 3.0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        sample, exit_state = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertIsNone(sample["url"])
+        self.assertIn("time budget", sample["error"])
+        self.assertEqual(exit_state, {
+            "childStopped": True, "scriptRemoved": True, "launches": 1, "registeredHosts": 0,
+        })
 
 
 @unittest.skipUnless(sys.platform == "win32", "requires Windows PowerShell 5.1")

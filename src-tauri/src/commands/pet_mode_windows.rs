@@ -124,6 +124,16 @@ fn browser_process_name(browser_name: &str) -> Option<&'static str> {
     }
 }
 
+#[cfg(test)]
+mod browser_mapping_tests {
+    use super::browser_process_name;
+
+    #[test]
+    fn opera_has_no_windows_tab_close_target() {
+        assert_eq!(browser_process_name("Opera"), None);
+    }
+}
+
 fn normalized_browser_identity(
     browser_identity: Option<&str>,
     browser_name: &str,

@@ -111,6 +111,7 @@ mod tests {
         );
         assert_eq!(browser_process_name("Floorp"), Some("floorp"));
         assert_eq!(browser_process_name("Waterfox"), Some("waterfox"));
+        assert_eq!(browser_process_name("Opera"), None);
         assert_eq!(browser_process_name("LibreWolf"), None);
         assert_eq!(browser_process_name("Zen"), None);
         assert_eq!(browser_process_name("Tor Browser"), None);

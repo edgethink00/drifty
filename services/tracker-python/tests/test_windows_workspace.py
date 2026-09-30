@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -15,6 +17,7 @@ from app.tracker.windows_workspace import (
     resolve_identity,
 )
 from app.tracker.browser_automation import BrowserMetadata
+from app.tracker.windows_browser_capture import _UrlWorker
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
 
 
@@ -536,6 +539,95 @@ class BrowserEnrichmentTests(unittest.TestCase):
         self.assertEqual(enriched.youtube_video_id, "abc")
 
 
+class OperaUrlCaptureTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.window = ForegroundWindow(hwnd=8195128, title="Example - Opera", pid=29704)
+        self.identity = ProcessIdentity(
+            exe_path=r"C:\Users\Public\Documents\drifty-opera-portable-20260930\opera.exe",
+            exe_name="opera.exe",
+            aumid=None,
+        )
+
+    def snapshot(self):
+        return build_snapshot(self.window, self.identity, "2026-09-30T00:00:00+00:00")
+
+    def test_portable_opera_uses_only_its_foreground_document_url(self) -> None:
+        requested: list[tuple[int, str | None]] = []
+
+        def live_reader(hwnd: int, app: str | None) -> WindowsBrowserUiaResult:
+            requested.append((hwnd, app))
+            return WindowsBrowserUiaResult("https://example.com/?drifty_qa=opera_one", None)
+
+        snapshot = self.snapshot()
+        self.assertEqual(snapshot.app_name, "Opera")
+        self.assertEqual(
+            snapshot.bundle_id,
+            r"c:\users\public\documents\drifty-opera-portable-20260930\opera.exe",
+        )
+        with patch("app.tracker.browser_history.browser_history_metadata") as history_reader:
+            enriched = enrich_browser_snapshot(
+                snapshot,
+                self.window.hwnd,
+                live_reader=live_reader,
+                bridge_reader=lambda *_: self.fail("generic Chromium bridge has no Opera HWND binding"),
+            )
+        history_reader.assert_not_called()
+        self.assertEqual(requested, [(8195128, "Opera")])
+        self.assertEqual(enriched.browser_name, "Opera")
+        self.assertEqual(enriched.site_url, "https://example.com/?drifty_qa=opera_one")
+        self.assertEqual(enriched.site_domain, "example.com")
+        self.assertEqual(enriched.site_source, "windows-uia-document")
+        self.assertIsNone(enriched.site_title)
+        self.assertEqual(enriched.capture_confidence, 0.8)
+
+    def test_url_failure_remains_opera_app_only(self) -> None:
+        with patch("app.tracker.browser_history.browser_history_metadata") as history_reader:
+            enriched = enrich_browser_snapshot(
+                self.snapshot(),
+                self.window.hwnd,
+                live_reader=lambda *_: WindowsBrowserUiaResult(None, "document URL unavailable"),
+                bridge_reader=lambda *_: self.fail("generic bridge must not fill an Opera URL gap"),
+            )
+        history_reader.assert_not_called()
+        self.assertEqual(enriched.app_name, "Opera")
+        self.assertEqual(enriched.browser_name, "Opera")
+        self.assertIsNone(enriched.site_url)
+        self.assertIsNone(enriched.site_source)
+        self.assertEqual(enriched.browser_automation_status, "unavailable")
+
+    def test_changed_foreground_hwnd_discards_opera_page(self) -> None:
+        other = ForegroundWindow(hwnd=74777726, title="Example - Opera", pid=29704)
+        requested: list[int] = []
+
+        def enrich(snapshot, hwnd, *, url_timeout_seconds):
+            requested.append(hwnd)
+            return enrich_browser_snapshot(
+                snapshot,
+                hwnd,
+                live_reader=lambda *_: WindowsBrowserUiaResult("https://example.com/opera", None),
+                bridge_reader=lambda *_: self.fail("Opera must use only UIA"),
+            )
+
+        with (
+            patch("app.tracker.browser_history.browser_history_metadata") as history_reader,
+            patch.object(windows_workspace, "is_windows", return_value=True),
+            patch.object(windows_workspace, "process_session_id", return_value=1),
+            # A later foreground-retry implementation may read once more to
+            # confirm that the other window has gone away. Neither path may
+            # retain the first Opera window's URL.
+            patch.object(windows_workspace, "read_foreground_window", side_effect=[self.window, self.window, other, None]),
+            patch.object(windows_workspace, "resolve_identity", return_value=(self.identity, None)),
+            patch.object(windows_workspace, "enrich_browser_snapshot", side_effect=enrich),
+        ):
+            result = windows_workspace.current_snapshot()
+        history_reader.assert_not_called()
+        self.assertEqual(requested, [8195128])
+        self.assertEqual(result.app_name, "Unavailable")
+        self.assertIsNone(result.site_url)
+        self.assertIsNone(result.site_source)
+        self.assertIsNotNone(result.frontmost_capture_error)
+
+
 class ForegroundSnapshotFreshnessTests(unittest.TestCase):
     def capture(self, windows, identity_reader=None):
         def resolve(window):
@@ -547,7 +639,7 @@ class ForegroundSnapshotFreshnessTests(unittest.TestCase):
                 aumid=None,
             ), None
 
-        def enrich(snapshot, hwnd):
+        def enrich(snapshot, hwnd, *, url_timeout_seconds):
             snapshot.site_url = f"http://127.0.0.1/{(snapshot.window_title or '').replace(' ', '')}"
             snapshot.site_source = "windows-uia-document"
             return snapshot
@@ -607,21 +699,20 @@ class ForegroundSnapshotFreshnessTests(unittest.TestCase):
     def test_delayed_first_capture_does_not_credit_new_app(self) -> None:
         old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
         changed = ForegroundWindow(hwnd=100, title="Page B", pid=10)
-        with patch.object(windows_workspace.time, "monotonic", side_effect=[0.0, 2.0]):
+        with patch.object(windows_workspace.time, "monotonic", side_effect=[0.0, 0.01, 2.0]):
             snapshot, identity, enrichment = self.capture([old, old, changed])
         identity.assert_called_once_with(old)
         enrichment.assert_called_once()
         self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
         self.assertIsNone(snapshot.site_url)
 
-    def test_slow_first_read_with_stable_title_is_a_gap(self) -> None:
-        # UIA may return a later same-title tab on the same HWND. A foreground
-        # re-read alone cannot prove which page owned the long interval.
+    def test_slow_identity_with_stable_title_is_a_gap_before_url_capture(self) -> None:
+        # The URL worker does not waive the whole observation's identity gate.
         stable = ForegroundWindow(hwnd=100, title="Page A", pid=10)
         with patch.object(windows_workspace.time, "monotonic", side_effect=[0.0, 2.0]):
             snapshot, identity, enrichment = self.capture([stable, stable, stable])
         identity.assert_called_once_with(stable)
-        enrichment.assert_called_once()
+        enrichment.assert_not_called()
         self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
         self.assertIn("time budget", snapshot.frontmost_capture_error or "")
         self.assertIsNone(snapshot.bundle_id)
@@ -630,7 +721,7 @@ class ForegroundSnapshotFreshnessTests(unittest.TestCase):
     def test_delayed_retry_does_not_credit_new_app(self) -> None:
         old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
         changed = ForegroundWindow(hwnd=100, title="Page B", pid=10)
-        with patch.object(windows_workspace.time, "monotonic", side_effect=[0.0, 0.2, 2.0]):
+        with patch.object(windows_workspace.time, "monotonic", side_effect=[0.0, 0.01, 0.2, 0.21, 2.0]):
             snapshot, identity, enrichment = self.capture(
                 [old, old, changed, changed, changed, changed]
             )
@@ -668,6 +759,170 @@ class ForegroundSnapshotFreshnessTests(unittest.TestCase):
         enrichment.assert_not_called()
         self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
         self.assertIsNone(snapshot.site_url)
+
+
+class BoundedBrowserSnapshotTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.window = ForegroundWindow(hwnd=101, title="Same title - Opera", pid=10)
+        self.requests = []
+        self.releases = []
+        self.workers = []
+
+    def tearDown(self) -> None:
+        for release in self.releases:
+            release.set()
+        for worker in self.workers:
+            worker.close()
+            if worker._thread is not None:
+                worker._thread.join(timeout=1.0)
+                self.assertFalse(worker._thread.is_alive())
+
+    def worker(self, reader):
+        worker = _UrlWorker(reader)
+        self.workers.append(worker)
+        return worker
+
+    def release(self):
+        release = threading.Event()
+        self.releases.append(release)
+        return release
+
+    def capture(self, worker, identity_delay=0.0):
+        def resolve(window):
+            if identity_delay:
+                time.sleep(identity_delay)
+            return ProcessIdentity(rf"C:\Browser{window.pid}\opera.exe", "Opera", None), None
+
+        with (
+            patch.object(windows_workspace, "is_windows", return_value=True),
+            patch.object(windows_workspace, "process_session_id", return_value=1),
+            patch.object(windows_workspace, "read_foreground_window", side_effect=lambda: self.window),
+            patch.object(windows_workspace, "resolve_identity", side_effect=resolve) as identity,
+            patch.object(windows_workspace, "read_browser_url_with_budget", side_effect=worker.read),
+            patch("app.tracker.browser_history.browser_history_metadata") as history,
+        ):
+            snapshot = windows_workspace.current_snapshot()
+        history.assert_not_called()
+        return snapshot, identity
+
+    def wait_idle(self, worker):
+        with worker._condition:
+            self.assertTrue(worker._condition.wait_for(lambda: worker._active is None, timeout=1.0))
+
+    def test_slow_url_returns_verified_app_quickly_without_mutating_it_later(self) -> None:
+        release = self.release()
+        started = threading.Event()
+
+        def read(hwnd, app):
+            self.requests.append((hwnd, app))
+            started.set()
+            self.assertTrue(release.wait(timeout=3.0))
+            return WindowsBrowserUiaResult("https://example.test/late", None)
+
+        worker = self.worker(read)
+        began = time.monotonic()
+        snapshot, identity = self.capture(worker)
+        elapsed = time.monotonic() - began
+        self.assertTrue(started.is_set())
+        self.assertLess(elapsed, 0.75)
+        identity.assert_called_once_with(self.window)
+        self.assertEqual(snapshot.app_name, "Opera")
+        self.assertEqual(snapshot.bundle_id, r"c:\browser10\opera.exe")
+        self.assertEqual(snapshot.window_title, self.window.title)
+        self.assertEqual(snapshot.frontmost_capture_source, "win32-foreground")
+        self.assertEqual(snapshot.browser_name, "Opera")
+        self.assertEqual(snapshot.capture_confidence, 1.0)
+        self.assertIsNone(snapshot.frontmost_capture_error)
+        self.assertIsNone(snapshot.site_url)
+        self.assertIn("time budget", snapshot.browser_automation_error or "")
+        observed = snapshot.observed_at
+        release.set()
+        self.wait_idle(worker)
+        self.assertEqual(snapshot.observed_at, observed)
+        self.assertIsNone(snapshot.site_url)
+        self.assertIsNone(snapshot.site_source)
+        self.assertEqual(self.requests, [(101, "Opera")])
+
+    def test_new_hwnd_and_pid_get_fresh_identity_while_the_old_url_is_busy(self) -> None:
+        release = self.release()
+        changed = ForegroundWindow(hwnd=202, title="New page - Opera", pid=20)
+
+        def read(hwnd, app):
+            self.requests.append((hwnd, app))
+            if len(self.requests) == 1:
+                self.window = changed
+                self.assertTrue(release.wait(timeout=3.0))
+                return WindowsBrowserUiaResult("https://example.test/old-window", None)
+            return WindowsBrowserUiaResult("https://example.test/new-window", None)
+
+        worker = self.worker(read)
+        snapshot, identity = self.capture(worker)
+        self.assertEqual(identity.call_count, 2)
+        self.assertEqual(snapshot.bundle_id, r"c:\browser20\opera.exe")
+        self.assertEqual(snapshot.window_title, changed.title)
+        self.assertIsNone(snapshot.site_url)
+        self.assertIn("busy", snapshot.browser_automation_error or "")
+        release.set()
+        self.wait_idle(worker)
+        fresh, identity = self.capture(worker)
+        identity.assert_called_once_with(changed)
+        self.assertEqual(fresh.site_url, "https://example.test/new-window")
+        self.assertEqual(fresh.site_source, "windows-uia-document")
+        self.assertEqual(self.requests, [(101, "Opera"), (202, "Opera")])
+        self.assertIsNone(snapshot.site_url)
+
+    def test_fast_title_change_retries_without_reusing_the_previous_url(self) -> None:
+        old = self.window
+        changed = ForegroundWindow(hwnd=old.hwnd, title="Next page - Opera", pid=old.pid)
+
+        def read(hwnd, app):
+            self.requests.append((hwnd, app))
+            if len(self.requests) == 1:
+                self.window = changed
+                return WindowsBrowserUiaResult("https://example.test/old-tab", None)
+            return WindowsBrowserUiaResult("https://example.test/new-tab", None)
+
+        snapshot, identity = self.capture(self.worker(read))
+        self.assertEqual(identity.call_count, 2)
+        self.assertEqual(snapshot.window_title, changed.title)
+        self.assertEqual(snapshot.site_url, "https://example.test/new-tab")
+        self.assertEqual(self.requests, [(101, "Opera"), (101, "Opera")])
+
+    def test_fast_opera_url_keeps_the_existing_source_and_confidence(self) -> None:
+        worker = self.worker(lambda *_: WindowsBrowserUiaResult("https://example.test/opera", None))
+        snapshot, _ = self.capture(worker)
+        self.assertEqual(snapshot.app_name, "Opera")
+        self.assertEqual(snapshot.browser_name, "Opera")
+        self.assertEqual(snapshot.site_url, "https://example.test/opera")
+        self.assertEqual(snapshot.site_source, "windows-uia-document")
+        self.assertEqual(snapshot.capture_confidence, 0.8)
+        self.assertEqual(snapshot.browser_automation_status, "granted")
+
+    def test_failed_fast_url_keeps_verified_app_identity_and_diagnostic(self) -> None:
+        worker = self.worker(lambda *_: WindowsBrowserUiaResult(None, "document URL unavailable"))
+        snapshot, _ = self.capture(worker)
+        self.assertEqual(snapshot.bundle_id, r"c:\browser10\opera.exe")
+        self.assertEqual(snapshot.frontmost_capture_source, "win32-foreground")
+        self.assertIsNone(snapshot.site_url)
+        self.assertEqual(snapshot.browser_automation_status, "unavailable")
+        self.assertEqual(snapshot.browser_automation_error, "document URL unavailable")
+
+    def test_url_wait_uses_the_remaining_budget_after_slow_but_timely_identity(self) -> None:
+        release = self.release()
+
+        def read(_hwnd, _app):
+            self.assertTrue(release.wait(timeout=3.0))
+            return WindowsBrowserUiaResult("https://example.test/late", None)
+
+        began = time.monotonic()
+        snapshot, _ = self.capture(self.worker(read), identity_delay=1.25)
+        elapsed = time.monotonic() - began
+        self.assertGreaterEqual(elapsed, 1.25)
+        self.assertLess(elapsed, 1.55)
+        self.assertEqual(snapshot.bundle_id, r"c:\browser10\opera.exe")
+        self.assertEqual(snapshot.frontmost_capture_source, "win32-foreground")
+        self.assertIsNone(snapshot.site_url)
+        self.assertIn("time budget", snapshot.browser_automation_error or "")
 
 
 class SessionZeroRefusalTests(unittest.TestCase):
