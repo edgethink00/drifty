@@ -13,6 +13,7 @@
         "transparent": true,
         "backgroundColor": "#00000000",
         "visible": false,
+        "create": false,
         "label": "main"
       }
     ]

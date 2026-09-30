@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { constants } from "node:os";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
@@ -17,18 +17,32 @@ function ensureDummyTrackerResource(relativePath) {
   mkdirSync(target, { recursive: true });
 }
 
+let temporaryHelper;
 if (process.platform === "win32") {
   ensureDummyTrackerResource("src-tauri/binaries/drifty-tracker-x86_64-pc-windows-msvc");
 } else if (process.platform === "darwin") {
   const triple = process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin";
   ensureDummyTrackerResource(`src-tauri/binaries/drifty-tracker-${triple}`);
+  // Tauri 2.12 also validates the generated native helper while compiling the
+  // test manifest. Tests do not execute/package it. Remove this placeholder
+  // afterward and preserve a real helper when the worktree already has one.
+  const helper = resolve(repoRoot, `src-tauri/binaries/chatgpt-session-ax-${triple}`);
+  if (!existsSync(helper)) {
+    writeFileSync(helper, "unit-test manifest placeholder\n", { flag: "wx" });
+    temporaryHelper = helper;
+  }
 }
 
-const result = spawnSync(
-  "cargo",
-  ["test", "--manifest-path", "src-tauri/Cargo.toml", ...process.argv.slice(2)],
-  { cwd: repoRoot, env: process.env, stdio: "inherit" },
-);
+let result;
+try {
+  result = spawnSync(
+    "cargo",
+    ["test", "--manifest-path", "src-tauri/Cargo.toml", ...process.argv.slice(2)],
+    { cwd: repoRoot, env: process.env, stdio: "inherit" },
+  );
+} finally {
+  if (temporaryHelper) rmSync(temporaryHelper);
+}
 if (result.error) {
   // Report a cargo that cannot start the way a shell does instead of a stack
   // trace: 127 when it is missing, 126 when it is not executable.

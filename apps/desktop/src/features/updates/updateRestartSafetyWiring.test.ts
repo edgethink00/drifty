@@ -25,7 +25,13 @@ describe("idle update restart safety wiring", () => {
     expect(rustSource).toContain("match ready_main_window_action(");
     expect(rustSource).toContain("ReadyMainWindowAction::RevealIsolatedWithoutActivation");
     expect(rustSource).toContain("ReadyMainWindowAction::KeepHidden");
-    expect(rustSource).toContain("ReadyMainWindowAction::RevealAndFocus => reveal_main_window(handle)");
+    expect(rustSource).toContain("ReadyMainWindowAction::RevealAndFocus => request_main_window(handle)");
+    const openRequest = rustSource.slice(
+      rustSource.indexOf("pub(crate) fn request_main_window("),
+      rustSource.indexOf("fn main_window_is_available<"),
+    );
+    expect(openRequest).toMatch(/#\[cfg\(target_os = "windows"\)\]\s+if !main_window_is_available\(app\) \{\s+main_window_recovery::recover_on_open\(app\);\s+return;\s+\}/);
+    expect(rustSource).toContain("keep_hidden && !explicit_open");
+    expect(openRequest.trim()).toMatch(/reveal_main_window\(app\);\s+\}$/);
   });
 });
-

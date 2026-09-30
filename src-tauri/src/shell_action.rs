@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::{reveal_main_window, tray, MAIN_WINDOW_LABEL};
+use crate::{request_main_window, tray, MAIN_WINDOW_LABEL};
 
 pub(crate) mod app_menu_id {
     pub(crate) const ROOT: &str = "drifty-app-menu";
@@ -149,7 +149,7 @@ struct TauriShellActionTarget<'a> {
 
 impl ShellActionTarget for TauriShellActionTarget<'_> {
     fn reveal_main_window(&mut self) {
-        reveal_main_window(self.app);
+        request_main_window(self.app);
     }
 
     fn toggle_tracking(&mut self) {

@@ -7,6 +7,8 @@ mod correction_evidence_store;
 mod custom_endpoint_key_store;
 mod donut_icon;
 mod living_soul_store;
+#[cfg(any(target_os = "windows", test))]
+mod main_window_recovery;
 mod native_crash_reports;
 mod observability;
 mod openrouter_key_store;
@@ -453,6 +455,22 @@ pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Explicit Windows opens retry a failed main window without restarting the
+/// tracker. Background reveals stay silent; exhausted recovery gives guidance.
+pub(crate) fn request_main_window(app: &AppHandle) {
+    #[cfg(target_os = "windows")]
+    if !main_window_is_available(app) {
+        main_window_recovery::recover_on_open(app);
+        return;
+    }
+    reveal_main_window(app);
+}
+
+fn main_window_is_available<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.get_webview_window(MAIN_WINDOW_LABEL)
+        .is_some_and(|window| window.inner_size().is_ok())
+}
+
 #[cfg(target_os = "windows")]
 fn repair_windows_deep_link_registration(app: &AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
@@ -524,14 +542,11 @@ fn auxiliary_window_failure_report(
     }
 }
 
-/// Tauri returns the configured main window even when the runtime failed to
-/// create it, so a launch can finish setup with nothing on screen. Report that
-/// state with the logged cause instead of leaving an invisible failure.
+/// Report a missing configured main window on platforms using default creation.
+/// Windows handles the actual creation result in main_window_recovery instead.
+#[cfg(any(test, not(target_os = "windows")))]
 fn report_unavailable_main_window<R: Runtime>(app: &tauri::App<R>) -> Option<String> {
-    let available = app
-        .get_webview_window("main")
-        .is_some_and(|window| window.inner_size().is_ok());
-    if available {
+    if main_window_is_available(app.handle()) {
         return None;
     }
     let cause = observability::take_last_runtime_error()
@@ -544,7 +559,7 @@ fn report_unavailable_main_window<R: Runtime>(app: &tauri::App<R>) -> Option<Str
 
 #[tauri::command]
 fn app_reveal_main_window(app: AppHandle) {
-    reveal_main_window(&app);
+    request_main_window(&app);
 }
 
 fn run_update_restart(cleanup: impl FnOnce(), restart: impl FnOnce()) {
@@ -704,11 +719,13 @@ pub fn run() {
         );
 
     #[cfg(target_os = "windows")]
-    let builder = builder.plugin(
-        tauri_plugin_snap_layout::init()
-            .button_id("windows-caption-maximize")
-            .build(),
-    );
+    let builder = builder
+        .manage(main_window_recovery::MainWindowRecoveryState::default())
+        .plugin(
+            tauri_plugin_snap_layout::init()
+                .button_id("windows-caption-maximize")
+                .build(),
+        );
 
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _| {
         #[cfg(target_os = "windows")]
@@ -716,7 +733,7 @@ pub fn run() {
         let handled_auth_callback = remember_auth_deep_links(app, args);
 
         if handled_auth_callback {
-            reveal_main_window(app);
+            request_main_window(app);
             return;
         }
 
@@ -725,7 +742,7 @@ pub fn run() {
             return;
         }
 
-        reveal_main_window(app);
+        request_main_window(app);
     }));
 
     #[cfg(target_os = "macos")]
@@ -744,19 +761,20 @@ pub fn run() {
 
     let app_result = builder
         .setup(|app| {
-            // Restore the durable pause before creating auxiliary WebViews.
-            // The configured main window already exists. On Windows, creating
-            // each WebView2 below pumps the message loop, allowing that main
+            // Restore the durable pause before creating Windows WebViews.
+            // Creating each WebView2 pumps the message loop, allowing the main
             // renderer to query status and request automatic tracking startup.
             // Restoring afterward let those requests erase a user's pause
             // during relaunch (Windows QA attempt 31, 2026-09-07).
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
+            #[cfg(target_os = "windows")]
+            main_window_recovery::create_initial_window(app.handle());
+            #[cfg(not(target_os = "windows"))]
             report_unavailable_main_window(app);
             #[cfg(target_os = "windows")]
             repair_windows_deep_link_registration(app.handle());
             setup_app_menu(app.handle())?;
-            #[cfg(target_os = "windows")]
-            configure_main_window_material(app.handle());
+            #[cfg(not(target_os = "windows"))]
             if let Err(error) = calibrate_main_window_to_work_area(app.handle()) {
                 // The configured 1254×800 fallback is already usable. Monitor
                 // discovery is a launch refinement and must not block startup.
@@ -1113,10 +1131,15 @@ pub fn run() {
             return;
         }
 
-        match ready_main_window_action(
-            isolated_dev,
-            should_keep_main_window_hidden_on_ready(handle),
-        ) {
+        let keep_hidden = should_keep_main_window_hidden_on_ready(handle);
+        #[cfg(target_os = "windows")]
+        let keep_hidden = {
+            let explicit_open = handle
+                .state::<main_window_recovery::MainWindowRecoveryState>()
+                .on_ready();
+            keep_hidden && !explicit_open
+        };
+        match ready_main_window_action(isolated_dev, keep_hidden) {
             ReadyMainWindowAction::RevealIsolatedWithoutActivation => {
                 // Launch finished under Prohibited with the main window hidden,
                 // so tao's key-window activation hack has already been skipped.
@@ -1129,7 +1152,7 @@ pub fn run() {
                 }
             }
             ReadyMainWindowAction::KeepHidden => {}
-            ReadyMainWindowAction::RevealAndFocus => reveal_main_window(handle),
+            ReadyMainWindowAction::RevealAndFocus => request_main_window(handle),
         }
     });
 }
