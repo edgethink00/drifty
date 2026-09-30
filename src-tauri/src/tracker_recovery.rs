@@ -247,7 +247,7 @@ fn recovery_tick(
             return HEALTH_POLL_INTERVAL;
         }
     };
-    drive_recovery(schedule, tracking_paused, tracker_running, || {
+    drive_recovery(schedule, tracking_pause::snapshot(app).is_active(), tracker_running, || {
         attempt_tracker_recovery(app, stopping)
     })
 }
@@ -274,6 +274,7 @@ fn attempt_tracker_recovery(app: &AppHandle, stopping: &Arc<AtomicBool>) -> bool
     if stopping.load(Ordering::Acquire) || pause_state.snapshot().is_active() {
         return true;
     }
+    let intent_generation = pause_state.current_generation();
 
     let controller = *app.state::<TrackerController>();
     match controller.daemon_running(app) {
@@ -285,9 +286,21 @@ fn attempt_tracker_recovery(app: &AppHandle, stopping: &Arc<AtomicBool>) -> bool
         }
     }
 
+    // Pause intent can now change while operation is held. Recheck after native
+    // identity inspection, immediately before the automatic Start mutation.
+    if stopping.load(Ordering::Acquire)
+        || !tracking_pause::start_intent_is_current(app, intent_generation)
+        || !tracking_activation::is_activated(app)
+    {
+        return true;
+    }
     let startup_state = app.state::<TrackerStartupState>();
     let generation = startup_state.begin_start_attempt();
-    match controller.recover_start(app) {
+    let result = controller.recover_start(app, intent_generation);
+    if !pause_state.generation_is_current(intent_generation) {
+        return true;
+    }
+    match result {
         Ok(status) if status.running => {
             startup_state.complete_start_success(generation);
             tray::queue_tracking_controls_refresh(app, Some(true));

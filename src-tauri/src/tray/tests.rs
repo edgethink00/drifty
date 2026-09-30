@@ -371,6 +371,149 @@ fn tracking_action_label_resumes_for_indefinite_timed_and_failed_pauses() {
 }
 
 #[test]
+fn renderer_status_preserves_native_running_during_pause_and_updates_drift_fields() {
+    for native_running in [None, Some(true), Some(false)] {
+        for renderer_running in [None, Some(true), Some(false)] {
+            let state = TrayDriftAlarmState::default();
+            state.set_tracker_running(native_running);
+            state
+                .publish_renderer_status(renderer_drift_alarm_status(renderer_running), || TrackingPauseView {
+                    snapshot: TrackingPauseSnapshot::Indefinite,
+                    stopped_confirmed: native_running == Some(false),
+                })
+                .expect("publish renderer metrics during Pause");
+            assert_eq!(state.tracker_running(), native_running);
+            let mut published = state.0.lock().expect("native cache").clone();
+            // Running controls pause labels; examine the other fields without
+            // that presentation override to prove locale/Dev updates applied.
+            published.set_tracker_running(None);
+            assert_eq!(drift_alerts_status_label(&published, true), "딴짓 알림: 모델 대기");
+            assert_eq!(
+                drift_summary_label(&published, false).as_deref(),
+                Some("Last check: 11:11 AM · Suppressed: fixture")
+            );
+            assert_eq!(
+                pause_status_label(
+                    TrackingPauseSnapshot::Indefinite,
+                    state.tracker_running(),
+                    TrayLanguage::English,
+                )
+                .as_deref(),
+                match native_running {
+                    None => Some("Pause requested · tracking status unavailable"),
+                    Some(true) => Some("Pause requested · still tracking, retrying"),
+                    Some(false) => Some("Paused until you resume"),
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn renderer_status_applies_running_after_pause_resume_and_checks_pause_under_cache_lock() {
+    for renderer_running in [None, Some(true), Some(false)] {
+        let state = TrayDriftAlarmState::default();
+        state.set_tracker_running(Some(true));
+        state
+            .publish_renderer_status(renderer_drift_alarm_status(renderer_running), || {
+                assert!(state.0.try_lock().is_err(), "query latest Pause inside cache lock");
+                TrackingPauseView {
+                    snapshot: TrackingPauseSnapshot::Inactive,
+                    stopped_confirmed: false,
+                }
+            })
+            .expect("publish renderer status after Resume");
+        assert_eq!(state.tracker_running(), renderer_running);
+    }
+}
+
+#[test]
+fn early_pause_hint_is_saved_without_ui_dispatch_and_preserves_a_newer_resume() {
+    let state = TrayDriftAlarmState::default();
+    for native_running in [None, Some(true), Some(false)] {
+        state.set_tracker_running(native_running);
+        state
+            .mark_pause_requested(|| {
+                assert!(state.0.try_lock().is_err(), "read/filter/write use one cache lock");
+                TrackingPauseView {
+                    snapshot: TrackingPauseSnapshot::Indefinite,
+                    stopped_confirmed: false,
+                }
+            })
+            .expect("record hint before UI dispatch");
+        assert_eq!(state.tracker_running(), pause_requested_running_hint(native_running));
+    }
+    state.set_tracker_running(Some(false));
+    state
+        .mark_pause_requested(|| TrackingPauseView {
+            snapshot: TrackingPauseSnapshot::Inactive,
+            stopped_confirmed: false,
+        })
+        .expect("a newer Resume already made Pause inactive");
+    assert_eq!(state.tracker_running(), Some(false));
+    state
+        .mark_pause_requested(|| TrackingPauseView {
+            snapshot: TrackingPauseSnapshot::Indefinite,
+            stopped_confirmed: true,
+        })
+        .expect("fresh stopped proof arrived before early helper");
+    assert_eq!(state.tracker_running(), Some(false));
+}
+
+fn renderer_drift_alarm_status(running: Option<bool>) -> TrayDriftAlarmStatus {
+    serde_json::from_value(serde_json::json!({
+        "enabled": true,
+        "statusLabel": "딴짓 알림: 모델 대기",
+        "lastCheckedAt": "2026-09-30T02:11:00Z",
+        "lastCheckedLabel": "11:11 AM",
+        "resultLabel": "Suppressed: fixture",
+        "developerDetailsEnabled": true,
+        "trackerRunning": running,
+    }))
+    .expect("valid renderer tray payload")
+}
+
+#[test]
+fn newly_requested_pause_requires_fresh_stopped_confirmation() {
+    for pause in [
+        TrackingPauseSnapshot::Indefinite,
+        TrackingPauseSnapshot::Timed {
+            resumes_at_unix_seconds: 1_800_000_000,
+        },
+        TrackingPauseSnapshot::ResumeFailed {
+            resumes_at_unix_seconds: 1_800_000_000,
+        },
+    ] {
+        for cached_running in [Some(false), None] {
+            assert_eq!(
+                pause_status_label(
+                    pause,
+                    pause_requested_running_hint(cached_running),
+                    TrayLanguage::English,
+                )
+                .as_deref(),
+                Some("Pause requested · tracking status unavailable")
+            );
+        }
+        assert_eq!(
+            pause_status_label(
+                pause,
+                pause_requested_running_hint(Some(true)),
+                TrayLanguage::English,
+            )
+            .as_deref(),
+            Some("Pause requested · still tracking, retrying")
+        );
+        assert!(
+            pause_status_label(pause, Some(false), TrayLanguage::English)
+                .expect("confirmed stopped pause")
+                .starts_with("Paused"),
+            "a fresh Stop/status confirmation may display the completed pause"
+        );
+    }
+}
+
+#[test]
 fn pause_status_labels_explain_indefinite_timed_and_failed_states() {
     assert_eq!(
         pause_status_label(TrackingPauseSnapshot::Indefinite, Some(false), TrayLanguage::English).as_deref(),

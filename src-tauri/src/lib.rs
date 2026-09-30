@@ -205,6 +205,9 @@ fn run_exit_cleanup_steps(
 
 fn shutdown_app_for_exit(app: &AppHandle) {
     app.state::<AppExitCoordinator>().shutdown_once(|| {
+        // Invalidate queued Start/timer/enforcement tokens before shutdown
+        // waits on workers or sends the intentional daemon Stop.
+        tracking_pause::begin_app_exit(app);
         run_exit_cleanup_steps(
             // The recovery worker must stop before the intentional daemon stop.
             || shutdown_tracker_recovery(app),
@@ -853,31 +856,50 @@ pub fn run() {
             } else {
                 let startup_state = app.state::<TrackerStartupState>();
                 let generation = startup_state.begin_start_attempt();
+                let pause_generation = app.state::<TrackingPauseState>().current_generation();
                 let _ = tauri::async_runtime::spawn_blocking(move || {
                     let pause_state = app_handle.state::<TrackingPauseState>();
                     let _operation = pause_state.lock_operation();
-                    if tracking_pause::snapshot(&app_handle).is_active() {
+                    if !tracking_pause::start_intent_is_current(&app_handle, pause_generation) {
                         return;
                     }
                     let controller = *app_handle.state::<TrackerController>();
                     let startup_state = app_handle.state::<TrackerStartupState>();
-                    match controller.start(&app_handle) {
+                    // Recheck the disk marker under the operation lock: an
+                    // implicit launch must never clear or bypass a saved pause.
+                    let start = match tracking_pause::run_start_unless_paused(
+                        &app_handle,
+                        false,
+                        |_| controller.start_with_recovery(&app_handle, pause_generation),
+                    ) {
+                        Ok(Some(start)) => start,
+                        Ok(None) => return,
+                        Err(error) => {
+                            eprintln!("[tracking-pause] Refusing automatic start: {error}");
+                            return;
+                        }
+                    };
+                    match start {
                         Ok(status) if status.running => {
-                            startup_state.complete_start_success(generation);
-                            tray::queue_tracking_controls_refresh(
-                                &app_handle,
-                                Some(status.running),
-                            );
+                            if startup_state.complete_start_success(generation)
+                                || pause_state.snapshot().is_active()
+                            {
+                                tray::queue_tracking_controls_refresh(
+                                    &app_handle,
+                                    Some(status.running),
+                                );
+                            }
                         }
                         Ok(status) => {
                             let error = tracker::TrackerError::TrackerReturnedError(
                                 "tracker did not report running after automatic start".to_string(),
                             );
-                            startup_state.record_start_failure(generation, &error);
-                            tray::queue_tracking_controls_refresh(
-                                &app_handle,
-                                Some(status.running),
-                            );
+                            if startup_state.record_start_failure(generation, &error) {
+                                tray::queue_tracking_controls_refresh(
+                                    &app_handle,
+                                    Some(status.running),
+                                );
+                            }
                             eprintln!(
                                 "[tracker] Automatic start returned a stopped tracker; exposing recoverable degraded status"
                             );

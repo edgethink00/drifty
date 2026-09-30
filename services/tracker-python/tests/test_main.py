@@ -796,6 +796,50 @@ class TrackerMainTests(unittest.TestCase):
         self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
         popen.assert_called_once()
 
+    def test_start_recovery_rejects_a_same_path_daemon_from_an_old_runtime(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+            mock_db = MagicMock()
+            with patch.object(tracker_main, "_process_table", return_value={12345: command}), patch.object(
+                tracker_main, "_process_command", return_value=command
+            ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "_tracker_runtime_fingerprint", return_value="new-runtime"
+            ):
+                mock_db.get_meta.return_value = "old-runtime"
+                self.assertFalse(tracker_main.verify_current_runtime_running()["data"])
+                mock_db.get_meta.return_value = "new-runtime"
+                self.assertTrue(tracker_main.verify_current_runtime_running()["data"])
+
+                with patch.object(tracker_main, "_process_table", return_value={12345: command, 12346: command}):
+                    self.assertFalse(tracker_main.verify_current_runtime_running()["data"])
+
+    def test_start_recovery_requires_a_live_daemon_for_the_current_database(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            other_db = Path(tmp) / "other.sqlite3"
+            current_command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+            other_db_command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {other_db}"
+            old_script = Path(tmp) / "old" / "services" / "tracker-python" / "app" / "main.py"
+            old_script_command = f"{sys.executable} {old_script} daemon --db {tracker_main.DB_PATH}"
+            mock_db = MagicMock()
+            mock_db.get_meta.return_value = "current-runtime"
+
+            for processes in (None, {}, {12345: other_db_command}, {12345: old_script_command}):
+                with self.subTest(processes=processes), patch.object(
+                    tracker_main, "_process_table", return_value=processes
+                ), patch.object(tracker_main, "_process_command", side_effect=lambda pid: processes[pid] if processes else None), patch.object(
+                    tracker_main, "database", return_value=mock_db
+                ), patch.object(tracker_main, "_tracker_runtime_fingerprint", return_value="current-runtime"):
+                    self.assertFalse(tracker_main.verify_current_runtime_running()["data"])
+
+            with patch.object(tracker_main, "_process_table", return_value={12345: current_command}), patch.object(
+                tracker_main, "_process_command", return_value=current_command
+            ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "_tracker_runtime_fingerprint", return_value="current-runtime"
+            ):
+                self.assertTrue(tracker_main.verify_current_runtime_running()["data"])
+
     def test_start_tracking_keeps_same_path_daemon_when_runtime_fingerprint_matches(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"

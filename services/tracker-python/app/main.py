@@ -1058,6 +1058,23 @@ def get_status():
     )
 
 
+def verify_current_runtime_running():
+    """Confirm the sole daemon belongs to this runtime and database.
+
+    A plain get_status() can report an older daemon as running during an
+    upgrade. Startup recovery must not treat that as a successful new start.
+    """
+    _invalidate_process_table()
+    processes = _process_table()
+    if processes is None:
+        return response(True, False)
+    daemon_pids = _matching_tracker_daemon_pids(processes)
+    return response(
+        True,
+        len(daemon_pids) == 1 and _running_daemon_matches_current_runtime(daemon_pids[0], database()),
+    )
+
+
 def get_timeline(payload: dict):
     db = database()
     if payload.get("day"):
@@ -1983,6 +2000,7 @@ def backup_for_version_switch(payload: dict):
 COMMANDS = {
     "backup_for_version_switch": backup_for_version_switch,
     "get_status": lambda payload: get_status(),
+    "verify_current_runtime_running": lambda payload: verify_current_runtime_running(),
     "start_tracking": lambda payload: start_tracking(),
     "stop_tracking": lambda payload: stop_tracking(),
     "get_timeline": get_timeline,

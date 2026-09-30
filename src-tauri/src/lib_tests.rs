@@ -1,9 +1,9 @@
 use super::*;
 use crate::tracker::{
     apply_tracker_startup_state, apply_tracking_pause_state, degraded_tracker_status,
-    tracker_start_error_message, tracker_status_error_message, tracker_stop_error_message,
-    TrackerError, TrackerStartupState, TrackerStatus, TRACKER_PAUSE_STILL_RUNNING_MESSAGE,
-    TRACKER_PAUSE_UNCONFIRMED_MESSAGE,
+    reconcile_start_result_with_status, tracker_start_error_message, tracker_status_error_message,
+    tracker_stop_error_message, TrackerError, TrackerStartupState, TrackerStatus,
+    TRACKER_PAUSE_STILL_RUNNING_MESSAGE, TRACKER_PAUSE_UNCONFIRMED_MESSAGE,
     TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS,
 };
 
@@ -190,6 +190,34 @@ fn tracker_startup_state_retains_failure_until_tracker_recovers() {
     assert_eq!(recovered.tracker_mode.as_deref(), Some("tracking"));
     assert_eq!(recovered.message.as_deref(), Some("Tracker is running."));
     assert_eq!(startup_state.failure_message(), None);
+}
+
+#[test]
+fn tracker_start_recovers_a_lost_reply_only_when_status_confirms_running() {
+    let recovered = reconcile_start_result_with_status(
+        Err(TrackerError::CommandFailed("sidecar response lost".into())),
+        || Ok(tracker_status(true)),
+    )
+    .expect("running daemon confirms the start");
+    assert!(recovered.running);
+
+    let failed = reconcile_start_result_with_status(
+        Err(TrackerError::CommandFailed("sidecar response lost".into())),
+        || Ok(tracker_status(false)),
+    );
+    assert!(matches!(failed, Err(TrackerError::CommandFailed(_))));
+
+    let late_running = reconcile_start_result_with_status(Ok(tracker_status(false)), || {
+        Ok(tracker_status(true))
+    })
+    .expect("daemon became visible after the start response");
+    assert!(late_running.running);
+
+    let missing = reconcile_start_result_with_status(
+        Err(TrackerError::MissingRuntime("missing component".into())),
+        || panic!("missing runtime cannot be recovered by a status probe"),
+    );
+    assert!(matches!(missing, Err(TrackerError::MissingRuntime(_))));
 }
 #[test]
 fn tracker_startup_state_ignores_stale_start_completions() {

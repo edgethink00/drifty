@@ -44,8 +44,8 @@ use crate::donut_icon::{self, TrayDisplayMode, TrayIconStyle};
 #[cfg(not(target_os = "windows"))]
 use crate::donut_icon::DonutIconRenderInput;
 use crate::shell_action::{self, tray_menu_id, ShellAction};
-use crate::tracker::TrackerController;
-use crate::tracking_pause::{self, TrackingPauseSnapshot, TrackingPauseState};
+use crate::tracker::{TrackerController, TrackerError, TrackerStartupState};
+use crate::tracking_pause::{self, TrackingPauseSnapshot, TrackingPauseState, TrackingPauseView};
 use crate::app_menu;
 
 const TRAY_ID: &str = "drifty-menu";
@@ -121,6 +121,54 @@ pub(crate) fn tray_icon_rect(app: &AppHandle) -> Option<tauri::Rect> {
 
 #[derive(Default)]
 pub struct TrayDriftAlarmState(Mutex<TrayDriftAlarmStatus>);
+
+impl TrayDriftAlarmState {
+    pub(crate) fn publish_renderer_status(
+        &self,
+        mut status: TrayDriftAlarmStatus,
+        pause_view: impl FnOnce() -> TrackingPauseView,
+    ) -> Result<(), String> {
+        let mut latest = self
+            .0
+            .lock()
+            .map_err(|_| "tray drift alarm state lock poisoned".to_string())?;
+        // Sample intent under the cache guard. An IPC waiting for this lock
+        // must not apply an inactive snapshot from before a newer Pause.
+        let pause = pause_view();
+        if pause.snapshot.is_active() {
+            status.set_tracker_running(pause.running_hint(latest.tracker_running()));
+        }
+        *latest = status;
+        Ok(())
+    }
+
+    pub(crate) fn mark_pause_requested(
+        &self,
+        pause_view: impl FnOnce() -> TrackingPauseView,
+    ) -> Result<(), String> {
+        let mut latest = self
+            .0
+            .lock()
+            .map_err(|_| "tray drift alarm state lock poisoned".to_string())?;
+        let pause = pause_view();
+        if pause.snapshot.is_active() {
+            // Read/filter/write in one transaction, before any UI dispatch.
+            let hint = pause.running_hint(latest.tracker_running());
+            latest.set_tracker_running(hint);
+        }
+        Ok(())
+    }
+
+    fn set_tracker_running(&self, running: Option<bool>) {
+        if let Ok(mut latest) = self.0.lock() {
+            latest.set_tracker_running(running);
+        }
+    }
+
+    pub(crate) fn tracker_running(&self) -> Option<bool> {
+        self.0.lock().ok().and_then(|latest| latest.tracker_running())
+    }
+}
 
 #[derive(Default)]
 pub struct TrayIconStyleState(Mutex<TrayIconStyle>);
@@ -279,13 +327,7 @@ pub async fn tray_update_drift_alarm_status(
     state: State<'_, TrayDriftAlarmState>,
     status: TrayDriftAlarmStatus,
 ) -> Result<(), String> {
-    {
-        let mut latest = state
-            .0
-            .lock()
-            .map_err(|_| "tray drift alarm state lock poisoned".to_string())?;
-        *latest = status;
-    }
+    state.publish_renderer_status(status, || app.state::<TrackingPauseState>().view())?;
 
     run_menu_update(app, refresh_tray_menu_on_main_thread).await
 }
@@ -386,14 +428,18 @@ struct TrayMenuPlan {
 struct TrayMenuState(Mutex<TrayMenu<tauri::Wry>>);
 
 fn tray_menu_plan(app: &AppHandle) -> TrayMenuPlan {
-    let drift_status = latest_tray_drift_alarm_status(app);
+    let mut drift_status = latest_tray_drift_alarm_status(app);
+    let pause = app.state::<TrackingPauseState>().view();
+    // A new generation becomes unconfirmed as soon as its marker is saved,
+    // including the interval before its early cache refresh runs.
+    drift_status.set_tracker_running(pause.running_hint(drift_status.tracker_running()));
     let lang = latest_tray_language(app);
     let ko = lang.is_korean();
 
     tray_menu_plan_from(
         lang,
         drift_status.tracker_running(),
-        tracking_pause::snapshot(app),
+        pause.snapshot,
         drift_alerts_status_label(&drift_status, ko),
         drift_summary_label(&drift_status, ko),
         &app.package_info().version.to_string(),
@@ -626,88 +672,147 @@ fn local_clock_label(unix_seconds: i64) -> String {
     label.strip_prefix('0').unwrap_or(&label).to_string()
 }
 
+static TRAY_TOGGLE_PENDING: AtomicBool = AtomicBool::new(false);
+
+struct ClearTrayTogglePending;
+
+impl Drop for ClearTrayTogglePending {
+    fn drop(&mut self) {
+        TRAY_TOGGLE_PENDING.store(false, Ordering::Release);
+    }
+}
+
 pub(crate) fn toggle_tracking(app: &AppHandle) {
-    let pause_state = app.state::<TrackingPauseState>();
-    let _operation = pause_state.lock_operation();
-    let controller = app.state::<TrackerController>();
-    let pause_active = pause_state.snapshot().is_active();
-    let is_running = controller
-        .get_status(app)
-        .map(|status| status.running)
-        .unwrap_or(false);
-
-    if pause_active {
-        if let Err(error) = tracking_pause::clear_for_manual_start(app) {
-            eprintln!("[tracking-pause] Refusing Resume while its durable pause remains: {error}");
+    // A queued Pause already changed intent. Let its newer Resume through even
+    // while the old toggle worker is waiting for a slow Start to release RPCs.
+    let is_resume = tracking_pause::snapshot(app).is_active();
+    if !is_resume
+        && TRAY_TOGGLE_PENDING
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+    {
+        return;
+    }
+    let pending = (!is_resume).then(|| ClearTrayTogglePending);
+    // This is the action the visible menu offers. Record it before dispatching
+    // a worker so an old queued toggle cannot reinterpret a new Pause as Resume.
+    let wants_pause = !is_resume && cached_tracker_running(app) == Some(true);
+    let intent = if wants_pause {
+        tracking_pause::prepare_indefinite_pause(app).map(Some)
+    } else {
+        tracking_pause::prepare_manual_start(app, true)
+    };
+    let intent = match intent {
+        Ok(Some(intent)) => intent,
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("[tracking-pause] Refusing tray action without durable intent: {error}");
             return;
         }
-        match controller.start(app) {
-            Ok(status) => refresh_tracking_controls(app, Some(status.running)),
-            Err(error) => {
-                eprintln!("[tracking-pause] Could not resume tracking: {error}");
-                let _ = refresh_tray_menu(app);
-                update_tray_icon(app);
-            }
-        }
-        return;
+    };
+    if wants_pause {
+        queue_pause_requested_refresh(app);
+    } else {
+        queue_tracking_controls_ui_refresh(app);
     }
+    let worker_app = app.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        let _pending = pending;
+        if wants_pause {
+            if let Err(error) = finish_pause_tracking_forever_blocking(&worker_app, intent) {
+                eprintln!("[tracking-pause] Could not pause tracking from tray: {error}");
+            }
+        } else {
+            let pause_state = worker_app.state::<TrackingPauseState>();
+            let _operation = pause_state.lock_operation();
+            start_tracking_from_tray(
+                &worker_app,
+                &worker_app.state::<TrackerController>(),
+                intent,
+            );
+        }
+    });
+}
 
-    if is_running {
-        if let Err(error) = tracking_pause::prepare_indefinite_pause(app) {
-            eprintln!("[tracking-pause] Refusing an unpersisted indefinite pause: {error}");
-            return;
-        }
-    } else if let Err(error) = tracking_pause::clear_for_manual_start(app) {
-        eprintln!("[tracking-pause] Refusing Resume while its durable pause remains: {error}");
+fn start_tracking_from_tray(
+    app: &AppHandle,
+    controller: &TrackerController,
+    intent: tracking_pause::TrackingIntent,
+) {
+    if !tracking_pause::start_intent_is_current(app, intent.generation) {
         return;
     }
-    if is_running {
-        match tracking_pause::finish_indefinite_pause_stop(app, &controller, controller.stop(app)) {
-            tracking_pause::IndefinitePauseStopOutcome::Paused(status) => {
-                refresh_tracking_controls(app, Some(status.running));
-            }
-            tracking_pause::IndefinitePauseStopOutcome::StillRunning(status) => {
-                refresh_tracking_controls(app, Some(status.running));
-            }
-            tracking_pause::IndefinitePauseStopOutcome::Ambiguous(error) => {
-                eprintln!(
-                    "[tracking-pause] Preserving tray pause after an ambiguous stop: {error}"
-                );
-                refresh_tracking_controls(app, None);
+    let startup_state = app.state::<TrackerStartupState>();
+    let generation = intent.startup_generation;
+    match controller.start_with_recovery(app, intent.generation) {
+        Ok(status) if status.running => {
+            if startup_state.complete_start_success(generation)
+                || tracking_pause::snapshot(app).is_active()
+            {
+                queue_tracking_controls_refresh(app, Some(true));
             }
         }
-        return;
+        Ok(status) => {
+            let error = TrackerError::TrackerReturnedError(
+                "tracker did not report running after tray start".to_string(),
+            );
+            if startup_state.record_start_failure(generation, &error) {
+                queue_tracking_controls_refresh(app, Some(status.running));
+            }
+        }
+        Err(error) => {
+            if startup_state.record_start_failure(generation, &error) {
+                eprintln!("[tracker] Could not start tracking from tray: {error}");
+                queue_tracking_controls_refresh(app, None);
+            }
+        }
     }
-
-    let next_status = controller.start(app);
-    if let Ok(status) = next_status {
-        refresh_tracking_controls(app, Some(status.running));
-        return;
-    }
-    let _ = refresh_tray_menu(app);
-    update_tray_icon(app);
 }
 
 pub(crate) fn pause_tracking_forever(app: &AppHandle) {
+    let intent = match tracking_pause::prepare_indefinite_pause(app) {
+        Ok(intent) => intent,
+        Err(error) => {
+            eprintln!("[tracking-pause] Refusing an unpersisted indefinite pause: {error}");
+            return;
+        }
+    };
+    queue_pause_requested_refresh(app);
     let worker_app = app.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || {
-        if let Err(error) = pause_tracking_forever_blocking(&worker_app) {
+        if let Err(error) = finish_pause_tracking_forever_blocking(&worker_app, intent) {
             eprintln!("[tracking-pause] Could not pause tracking: {error}");
         }
     });
 }
 
 pub(crate) fn pause_tracking_forever_blocking(app: &AppHandle) -> Result<(), String> {
+    let intent = tracking_pause::prepare_indefinite_pause(app)
+        .map_err(|error| format!("Could not save the pause before stopping tracking: {error}"))?;
+    queue_pause_requested_refresh(app);
+    finish_pause_tracking_forever_blocking(app, intent)
+}
+
+fn finish_pause_tracking_forever_blocking(
+    app: &AppHandle,
+    intent: tracking_pause::TrackingIntent,
+) -> Result<(), String> {
     let pause_state = app.state::<TrackingPauseState>();
+    let controller = app.state::<TrackerController>();
     let _operation = pause_state.lock_operation();
-    if pause_state.snapshot().is_active() {
+    if !pause_state.generation_is_current(intent.generation) {
         return Ok(());
     }
-    let controller = app.state::<TrackerController>();
-    tracking_pause::prepare_indefinite_pause(app)
-        .map_err(|error| format!("Could not save the pause before stopping tracking: {error}"))?;
-    match tracking_pause::finish_indefinite_pause_stop(app, &controller, controller.stop(app)) {
+    let outcome = tracking_pause::finish_indefinite_pause_stop(
+        app, &controller, intent, controller.stop(app),
+    );
+    if !pause_state.generation_is_current(intent.generation) {
+        return Ok(());
+    }
+    match outcome {
         tracking_pause::IndefinitePauseStopOutcome::Paused(_status) => {
+            app.state::<TrackerStartupState>()
+                .complete_stop_success(intent.startup_generation);
             queue_tracking_controls_refresh(app, Some(false));
             Ok(())
         }
@@ -725,31 +830,59 @@ pub(crate) fn pause_tracking_forever_blocking(app: &AppHandle) -> Result<(), Str
     }
 }
 
-pub(crate) fn refresh_tracking_controls(app: &AppHandle, running: Option<bool>) {
-    update_cached_tracker_running(app, running);
+fn refresh_tracking_controls(app: &AppHandle) {
     let _ = refresh_tray_menu(app);
     update_tray_icon(app);
 }
 
 pub(crate) fn queue_tracking_controls_refresh(app: &AppHandle, running: Option<bool>) {
+    // Record native observations before dispatch. An older UI callback must
+    // not replay its captured observation over a newer Pause or status reply.
+    // Generic false hints (including a failed Start) do not confirm Stop.
+    // Only native Stop/status readers confirm their observed generation.
+    if running != Some(false) {
+        let pause_state = app.state::<TrackingPauseState>();
+        pause_state.invalidate_stopped_confirmation(pause_state.current_generation());
+    }
+    update_cached_tracker_running(app, running);
+    queue_tracking_controls_ui_refresh(app);
+}
+
+pub(crate) fn queue_tracking_controls_ui_refresh(app: &AppHandle) {
     let callback_app = app.clone();
     if let Err(error) = app.run_on_main_thread(move || {
-        refresh_tracking_controls(&callback_app, running);
+        refresh_tracking_controls(&callback_app);
     }) {
         eprintln!("[tray] Could not queue tracking-control refresh: {error}");
     }
 }
 
+pub(crate) fn pause_requested_running_hint(last_known_running: Option<bool>) -> Option<bool> {
+    // A stopped cache may predate a Start whose reply is still pending. Keep
+    // last-known running evidence, but require a new status/Stop confirmation
+    // before a newly requested Pause can be displayed as actually stopped.
+    last_known_running.filter(|running| *running)
+}
+
+pub(crate) fn queue_pause_requested_refresh(app: &AppHandle) {
+    if let Some(state) = app.try_state::<TrayDriftAlarmState>() {
+        if let Err(error) = state.mark_pause_requested(|| app.state::<TrackingPauseState>().view()) {
+            eprintln!("[tray] Could not record the requested pause: {error}");
+        }
+    }
+    queue_tracking_controls_ui_refresh(app);
+}
+
 fn update_cached_tracker_running(app: &AppHandle, running: Option<bool>) {
     if let Some(state) = app.try_state::<TrayDriftAlarmState>() {
-        if let Ok(mut latest) = state.0.lock() {
-            latest.set_tracker_running(running);
-        }
+        state.set_tracker_running(running);
     }
 }
 
 pub(crate) fn cached_tracker_running(app: &AppHandle) -> Option<bool> {
-    latest_tray_drift_alarm_status(app).tracker_running()
+    let running = app.try_state::<TrayDriftAlarmState>()
+        .and_then(|state| state.tracker_running());
+    app.state::<TrackingPauseState>().view().running_hint(running)
 }
 
 /// Equality key over everything that feeds the tray icon rasterizer. The 60s

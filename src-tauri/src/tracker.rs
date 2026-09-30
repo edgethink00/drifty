@@ -17,6 +17,7 @@ use thiserror::Error;
 
 use crate::app_icons::{app_identity_key, resolve_app_icon_data};
 use crate::site_icons::resolve_site_icons_batch;
+use crate::{tracking_activation, tracking_pause};
 mod mutation;
 mod query;
 
@@ -214,6 +215,84 @@ pub(crate) fn apply_tracker_startup_state(
     status
 }
 
+/// A start request may reach the sidecar and launch the daemon even when its
+/// response is lost. Only callers that have already persisted activation and
+/// cleared a manual pause may use this read-only status probe to recover it.
+pub(crate) fn reconcile_start_result_with_status(
+    start_result: Result<TrackerStatus, TrackerError>,
+    status_probe: impl FnOnce() -> Result<TrackerStatus, TrackerError>,
+) -> Result<TrackerStatus, TrackerError> {
+    match start_result {
+        Ok(status) if status.running => Ok(status),
+        Err(error @ (TrackerError::MissingScript(_) | TrackerError::MissingRuntime(_))) => {
+            Err(error)
+        }
+        result => match status_probe() {
+            Ok(status) if status.running => Ok(status),
+            _ => result,
+        },
+    }
+}
+
+const START_RECOVERY_PROBE_ATTEMPTS: usize = 6;
+const START_RECOVERY_PROBE_INTERVAL: Duration = Duration::from_millis(300);
+const START_RECOVERY_TOTAL_BUDGET: Duration = Duration::from_secs(10);
+const START_RECOVERY_READ_TIMEOUT: Duration = Duration::from_secs(3);
+
+fn confirm_current_runtime_running_with_reads(
+    mut continue_start: impl FnMut() -> bool,
+    mut verify: impl FnMut() -> Result<bool, TrackerError>,
+    mut status: impl FnMut() -> Result<TrackerStatus, TrackerError>,
+    mut wait: impl FnMut(Duration),
+) -> Result<TrackerStatus, TrackerError> {
+    let mut last_error = TrackerError::TrackerReturnedError(
+        "current tracker runtime is not running".to_string(),
+    );
+    for attempt in 0..START_RECOVERY_PROBE_ATTEMPTS {
+        if attempt > 0 {
+            wait(START_RECOVERY_PROBE_INTERVAL);
+        }
+        if !continue_start() {
+            return Err(superseded_start_error());
+        }
+        match verify() {
+            Ok(true) => {
+                if !continue_start() {
+                    return Err(superseded_start_error());
+                }
+                let current = status();
+                if !continue_start() {
+                    return Err(superseded_start_error());
+                }
+                match current {
+                    Ok(current) if current.running => return Ok(current),
+                    Ok(_) => {
+                        last_error = TrackerError::TrackerReturnedError(
+                            "current tracker runtime stopped before status confirmation".to_string(),
+                        );
+                    }
+                    Err(error @ TrackerError::ServeTimedOut(_)) => return Err(error),
+                    Err(error) => last_error = error,
+                }
+            }
+            Ok(false) => {
+                last_error = TrackerError::TrackerReturnedError(
+                    "current tracker runtime is not running".to_string(),
+                );
+            }
+            Err(error @ TrackerError::ServeTimedOut(_)) => return Err(error),
+            Err(error) => last_error = error,
+        }
+    }
+    Err(last_error)
+}
+
+fn superseded_start_error() -> TrackerError {
+    TrackerError::TrackerReturnedError(
+        "start superseded by a newer tracking request".to_string(),
+    )
+}
+
 pub(crate) fn apply_tracking_pause_state(
     mut status: TrackerStatus,
     tracking_paused: bool,
@@ -298,6 +377,68 @@ impl TrackerController {
         Ok(status)
     }
 
+    /// Call only after activation is durable and any saved pause has been
+    /// cleared. A lost start reply can be recovered by confirming that the
+    /// sole daemon belongs to this runtime and database, without replaying
+    /// the start mutation.
+    pub(crate) fn start_with_recovery(
+        &self,
+        app: &AppHandle,
+        intent_generation: u64,
+    ) -> Result<TrackerStatus, TrackerError> {
+        let continue_start = || {
+            tracking_activation::is_activated(app)
+                && tracking_pause::start_intent_is_current(app, intent_generation)
+        };
+        if !continue_start() {
+            return Err(superseded_start_error());
+        }
+        let start_result = self.start(app);
+        if !continue_start() {
+            // The mutation may already have started a daemon. Preserve its
+            // observation, but do not delay the queued Pause with recovery.
+            return start_result;
+        }
+        reconcile_start_result_with_status(start_result, || {
+            let deadline = Instant::now() + START_RECOVERY_TOTAL_BUDGET;
+            confirm_current_runtime_running_with_reads(
+                continue_start,
+                || self.recovery_read(app, "verify_current_runtime_running", deadline),
+                || {
+                    let mut status: TrackerStatus = self.recovery_read(app, "get_status", deadline)?;
+                    status.accessibility_granted = merged_accessibility_granted(
+                        status.accessibility_granted,
+                        current_process_accessibility_trusted(),
+                    );
+                    Ok(status)
+                },
+                thread::sleep,
+            )
+        })
+    }
+
+    fn recovery_read<T: for<'de> Deserialize<'de>>(
+        &self,
+        app: &AppHandle,
+        command: &str,
+        deadline: Instant,
+    ) -> Result<T, TrackerError> {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(TrackerError::ServeTimedOut(START_RECOVERY_TOTAL_BUDGET));
+        }
+        let runtime = resolve_tracker_runtime(app)?;
+        let db_path = resolve_db_path(app);
+        let request = json!({ "command": command, "payload": {} });
+        let raw = invoke_one_shot_with_timeout(
+            &runtime,
+            &db_path,
+            &request,
+            remaining.min(START_RECOVERY_READ_TIMEOUT),
+        )?;
+        parse_envelope(&raw)
+    }
+
     pub fn start(&self, app: &AppHandle) -> Result<TrackerStatus, TrackerError> {
         self.invoke::<TrackerStatus>(app, "start_tracking", json!({}))
     }
@@ -324,7 +465,16 @@ impl TrackerController {
         Ok(tracker_daemon_command_matches(&command, &runtime, &db_path))
     }
 
-    pub(crate) fn recover_start(&self, app: &AppHandle) -> Result<TrackerStatus, TrackerError> {
+    pub(crate) fn recover_start(
+        &self,
+        app: &AppHandle,
+        intent_generation: u64,
+    ) -> Result<TrackerStatus, TrackerError> {
+        if !tracking_activation::is_activated(app)
+            || !tracking_pause::start_intent_is_current(app, intent_generation)
+        {
+            return Err(superseded_start_error());
+        }
         let runtime = resolve_tracker_runtime(app)?;
         let db_path = resolve_db_path(app);
         let request = json!({
@@ -1031,6 +1181,7 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
     // replay. An unknown command is conservatively treated as a mutation.
     match command {
         "get_status"
+        | "verify_current_runtime_running"
         | "get_timeline"
         | "get_timeline_page"
         | "search_timeline"
@@ -1726,6 +1877,9 @@ pub(crate) fn resolve_db_path(app: &AppHandle) -> PathBuf {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    static SERVE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn active_pause_preserves_a_live_or_unknown_tracker_observation() {
         let status = TrackerStatus {
@@ -2025,6 +2179,7 @@ mod tests {
     fn retry_policy_whitelists_current_read_commands_and_defaults_to_mutation() {
         for command in [
             "get_status",
+            "verify_current_runtime_running",
             "get_timeline",
             "get_timeline_page",
             "search_timeline",
@@ -2432,6 +2587,241 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn lost_start_reply_recovers_through_a_fresh_sidecar_without_replaying_start() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
+        shutdown_serve_process();
+
+        let dir = temp_dir_path("lost-start-reply");
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let script = dir.join("fake-serve");
+        let marker = dir.join("started-once");
+        let source = r#"#!/bin/sh
+if [ "$1" = "warmup" ]; then exit 0; fi
+respond() {
+  case "$1" in
+    *'"command":"start_tracking"'*)
+      printf 'x' >> '__MARKER__'
+      exit 0
+      ;;
+    *'"command":"verify_current_runtime_running"'*)
+      if [ -f '__MARKER__' ]; then
+        printf '%s\n' '{"ok":true,"data":true}'
+      else
+        printf '%s\n' '{"ok":true,"data":false}'
+      fi
+      ;;
+    *'"command":"get_status"'*)
+      printf '%s\n' '{"ok":true,"data":{"running":true,"accessibilityGranted":false}}'
+      ;;
+  esac
+}
+if [ "$1" = "--db" ]; then
+  respond "$4"
+  exit 0
+fi
+while IFS= read -r line; do
+  respond "$line"
+done
+"#;
+        std::fs::write(&script, source.replace("__MARKER__", &marker.to_string_lossy()))
+            .expect("write fake sidecar");
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+            .expect("mark sidecar executable");
+        assert!(Command::new(&script)
+            .arg("warmup")
+            .status()
+            .expect("warm up sidecar")
+            .success());
+
+        let runtime = TrackerRuntime::packaged_sidecar(script);
+        let db = dir.join("tracker.sqlite3");
+        let verify = json!({ "command": "verify_current_runtime_running", "payload": {} });
+        let before: bool = parse_envelope(
+            serve_request(&runtime, &db, &verify, SidecarCommandRetrySafety::SafeRead)
+                .expect("read stopped baseline")
+                .as_bytes(),
+        )
+        .expect("parse stopped baseline");
+        assert!(!before, "a first start has no daemon to recover yet");
+
+        let start_request = json!({ "command": "start_tracking", "payload": {} });
+        let start_result = invoke_with_serve_fallback(
+            SidecarCommandRetrySafety::Mutation,
+            || {
+                serve_request(
+                    &runtime,
+                    &db,
+                    &start_request,
+                    SidecarCommandRetrySafety::Mutation,
+                )
+                .map(String::into_bytes)
+            },
+            || panic!("a lost mutation reply must not replay start through one-shot"),
+        )
+        .and_then(|raw| parse_envelope::<TrackerStatus>(&raw));
+        assert!(matches!(&start_result, Err(TrackerError::CommandFailed(_))));
+
+        let recovered = reconcile_start_result_with_status(start_result, || {
+            let verified: bool = parse_envelope(
+                &invoke_one_shot_with_timeout(
+                    &runtime,
+                    &db,
+                    &verify,
+                    START_RECOVERY_READ_TIMEOUT,
+                )?,
+            )?;
+            if !verified {
+                return Err(TrackerError::TrackerReturnedError(
+                    "current tracker runtime is not running".into(),
+                ));
+            }
+            let status_request = json!({ "command": "get_status", "payload": {} });
+            parse_envelope(
+                &invoke_one_shot_with_timeout(
+                    &runtime,
+                    &db,
+                    &status_request,
+                    START_RECOVERY_READ_TIMEOUT,
+                )?,
+            )
+        })
+        .expect("fresh status recovers the lost start reply");
+        assert!(recovered.running);
+        assert_eq!(
+            std::fs::read_to_string(&marker).expect("start marker"),
+            "x",
+            "start_tracking must have run exactly once"
+        );
+
+        shutdown_serve_process();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn start_recovery_waits_for_a_late_daemon_without_replaying_start() {
+        let mut verification_reads = 0;
+        let mut status_reads = 0;
+        let mut waits = 0;
+        let recovered = reconcile_start_result_with_status(
+            Err(TrackerError::CommandFailed("start reply lost".into())),
+            || {
+                confirm_current_runtime_running_with_reads(
+                    || true,
+                    || {
+                        verification_reads += 1;
+                        Ok(verification_reads == 4)
+                    },
+                    || {
+                        status_reads += 1;
+                        Ok(serde_json::from_value(json!({
+                            "running": true,
+                            "accessibilityGranted": false,
+                        }))
+                        .expect("valid tracker status"))
+                    },
+                    |interval| {
+                        assert_eq!(interval, START_RECOVERY_PROBE_INTERVAL);
+                        waits += 1;
+                    },
+                )
+            },
+        )
+        .expect("later matching daemon confirms the one start");
+        assert!(recovered.running);
+        assert_eq!(verification_reads, 4);
+        assert_eq!(status_reads, 1);
+        assert_eq!(waits, 3);
+
+        let mut absent_reads = 0;
+        let missing = confirm_current_runtime_running_with_reads(
+            || true,
+            || {
+                absent_reads += 1;
+                Ok(false)
+            },
+            || panic!("status must not be accepted without runtime verification"),
+            |_| {},
+        );
+        assert!(missing.is_err());
+        assert_eq!(absent_reads, START_RECOVERY_PROBE_ATTEMPTS);
+    }
+
+    #[test]
+    fn start_recovery_does_not_repeat_a_timed_out_read() {
+        let mut reads = 0;
+        let result = confirm_current_runtime_running_with_reads(
+            || true,
+            || {
+                reads += 1;
+                Err(TrackerError::ServeTimedOut(START_RECOVERY_READ_TIMEOUT))
+            },
+            || panic!("a timed-out verification cannot authorize status"),
+            |_| panic!("a timed-out read must not schedule another attempt"),
+        );
+        assert!(matches!(result, Err(TrackerError::ServeTimedOut(_))));
+        assert_eq!(reads, 1);
+
+        let mut status_reads = 0;
+        let result = confirm_current_runtime_running_with_reads(
+            || true,
+            || Ok(true),
+            || {
+                status_reads += 1;
+                Err(TrackerError::ServeTimedOut(START_RECOVERY_READ_TIMEOUT))
+            },
+            |_| panic!("a timed-out status must not schedule another attempt"),
+        );
+        assert!(matches!(result, Err(TrackerError::ServeTimedOut(_))));
+        assert_eq!(status_reads, 1);
+    }
+
+    #[test]
+    fn a_new_pause_after_runtime_verification_skips_the_start_recovery_status_read() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let current = AtomicBool::new(true);
+        let mut verification_reads = 0;
+        let result = confirm_current_runtime_running_with_reads(
+            || current.load(Ordering::SeqCst),
+            || {
+                verification_reads += 1;
+                current.store(false, Ordering::SeqCst);
+                Ok(true)
+            },
+            || panic!("a newer Pause must not wait for another recovery read"),
+            |_| panic!("a superseded Start must not retry"),
+        );
+        assert!(result.is_err());
+        assert_eq!(verification_reads, 1);
+    }
+
+    #[test]
+    fn a_new_pause_during_the_recovery_interval_skips_the_next_identity_probe() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let current = AtomicBool::new(true);
+        let mut verification_reads = 0;
+        let mut waits = 0;
+        let result = confirm_current_runtime_running_with_reads(
+            || current.load(Ordering::SeqCst),
+            || {
+                verification_reads += 1;
+                Ok(false)
+            },
+            || panic!("an absent daemon must not authorize status"),
+            |_| {
+                waits += 1;
+                current.store(false, Ordering::SeqCst);
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(verification_reads, 1);
+        assert_eq!(waits, 1);
+    }
+
     #[test]
     fn serve_identity_is_stale_when_runtime_changes() {
         let source = TrackerRuntime::source_python(
@@ -2462,6 +2852,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn serve_round_trip_times_out_on_hung_sidecar_and_respawns() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
         let dir = temp_dir_path("serve-timeout");
         std::fs::create_dir_all(&dir).expect("create temp dir");
         let script = dir.join("fake-serve");
