@@ -1,5 +1,6 @@
 import {
   categorizeActivity,
+  isFailedForegroundCaptureSegment,
   logicalDayIsoDateForDate,
   shiftIsoDate,
   type ActivitySegment,
@@ -52,7 +53,7 @@ export function buildCompanionFocusRunRecordBaseline({
   readonly classificationOptions?: ClassificationOptions;
 }): CompanionFocusRunRecordBaseline {
   const ordered = segments
-    .filter((segment) => segment.durationSeconds > 0)
+    .filter((segment) => segment.durationSeconds > 0 && !isFailedForegroundCaptureSegment(segment))
     .slice()
     .sort((left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt));
   const options: ClassificationOptions = {

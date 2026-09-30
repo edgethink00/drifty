@@ -128,11 +128,16 @@ export interface ActivitySegment {
   classification?: StoredActivityClassification | null;
 }
 
-/** Older Windows builds persisted failed foreground reads as activity. */
+/** Older Windows builds persisted failed foreground or process-identity reads as activity. */
 export function isFailedForegroundCaptureSegment(
-  segment: Pick<ActivitySegment, "platform" | "appName" | "bundleId">,
+  segment: Pick<ActivitySegment, "platform" | "appName" | "bundleId" | "source">,
 ): boolean {
-  return segment.platform === "windows" && segment.appName === "Unavailable" && !segment.bundleId;
+  return segment.platform === "windows"
+    && segment.appName === "Unavailable"
+    && !segment.bundleId
+    && (segment.source === "unknown"
+      || segment.source === "win32-foreground"
+      || segment.source === "win32-foreground-untitled");
 }
 
 export function isBrowserHistoryImportSegment(segment: Pick<ActivitySegment, "siteSource" | "source">): boolean {

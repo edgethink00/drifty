@@ -2,6 +2,7 @@ import {
   buildProjectPassPrompt,
   buildProjectPassAnalysisWindows,
   formatProjectPassAnalysisWindowLine,
+  isFailedForegroundCaptureSegment,
   CATEGORY_ORDER,
   PRODUCTIVITY_ORDER,
   PROJECT_ASSIGNMENT_MIN_CONFIDENCE,
@@ -325,11 +326,14 @@ export function runProjectPass(options: RunProjectPassOptions): Promise<ProjectP
 async function runProjectPassInner(options: RunProjectPassOptions): Promise<ProjectPassSummary> {
   const { tracker, inference, range, trigger } = options;
   const runAt = options.now();
-  const [segments, projects, teamProjects] = await Promise.all([
+  const [fetchedSegments, projects, teamProjects] = await Promise.all([
     tracker.getTimeline({ start: range.start, end: range.end }),
     tracker.getProjects(),
     tracker.getTeamProjects().catch(() => []),
   ]);
+  // Older Windows builds stored failed foreground reads as activity. They
+  // cannot contribute to an AI analysis window or a project assignment.
+  const segments = fetchedSegments.filter((segment) => !isFailedForegroundCaptureSegment(segment));
   const activeProjects = projects.filter((project) => project.status === "active");
   // Classify once against the union of personal + subscribed team projects; team
   // assignments route to the local team mirror (below) and never touch the personal

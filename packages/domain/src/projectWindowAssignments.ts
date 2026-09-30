@@ -1,4 +1,4 @@
-import type { ActivitySegment } from "./activity";
+import { isFailedForegroundCaptureSegment, type ActivitySegment } from "./activity";
 import type {
   ProjectAssignmentRecord,
   ProjectWindowAssignmentRecord,
@@ -61,7 +61,10 @@ export function buildTeamProjectSliceProjection(
 }
 
 function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceProjection {
-  const sourceById = new Map(input.segments.map((segment) => [segment.id, segment]));
+  // Stored assignments from older Windows builds may still reference failed
+  // foreground reads. Hide both those slices and unassigned legacy activity.
+  const segments = input.segments.filter((segment) => !isFailedForegroundCaptureSegment(segment));
+  const sourceById = new Map(segments.map((segment) => [segment.id, segment]));
   const legacyBySegmentId = new Map(
     input.legacyAssignments
       .filter((assignment) => !assignment.stale)
@@ -113,7 +116,7 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
   // Backward-compatible projection for ranges not yet re-analyzed by the new
   // fixed-window pass. A legacy row fills only the source duration not covered by
   // stored windows; a legacy manual row still overrides each covered slice above.
-  for (const source of input.segments) {
+  for (const source of segments) {
     const remainingSeconds = Math.max(
       0,
       source.durationSeconds - (coveredSecondsBySourceId.get(source.id) ?? 0),

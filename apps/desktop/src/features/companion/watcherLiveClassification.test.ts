@@ -1,6 +1,6 @@
 import type { ActivitySegment, CurrentActivitySnapshot } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
-import { buildLiveWatcherSnapshot, buildWatcherSnapshotFromCurrent } from "./watcherData";
+import { buildLiveWatcherSnapshot, buildWatcherSnapshot, buildWatcherSnapshotFromCurrent } from "./watcherData";
 import { buildDriftAlarmCandidates } from "./driftAlarmData";
 import { buildPetModeSnapshot } from "../pet-mode/petModeData";
 import { advancePetModeDriftHunt, EMPTY_PET_MODE_DRIFT_HUNT_STATE } from "../pet-mode/petModeDriftHunt";
@@ -158,6 +158,48 @@ describe("live watcher focus runs", () => {
       focusSecondsToday: 240 + uncapturedSeconds,
     });
     expect(segments).toEqual(original);
+  });
+
+  it("keeps the current Companion focus run across a legacy Windows capture failure", () => {
+    const windowsCurrent = { ...current, source: "win32-foreground" as const };
+    const prior = { ...priorFocus(), platform: "windows" as const, source: "win32-foreground" as const };
+    const failedCapture = active({
+      id: "failed-capture",
+      startedAt: prior.endedAt,
+      endedAt: "2026-09-05T18:30:45.000Z",
+      durationSeconds: 30,
+      appName: "Unavailable",
+      bundleId: null,
+      platform: "windows",
+      source: "unknown",
+      classification: null,
+    });
+    const latest = active({
+      startedAt: failedCapture.endedAt,
+      durationSeconds: 90,
+      platform: "windows",
+      source: "win32-foreground",
+    });
+    const withoutFailure = [prior, latest];
+    const withFailure = [prior, failedCapture, latest];
+    const expected = { focusStrikeSeconds: 210, focusSecondsToday: 210 };
+
+    expect(buildLiveWatcherSnapshot(windowsCurrent, withFailure)).toMatchObject(expected);
+    expect(buildWatcherSnapshot(withFailure)).toMatchObject(expected);
+    const options = { rules: [{ targetKind: "site" as const, targetValue: "youtube.com", category: "learning" as const, productivity: "focus" as const }] };
+    expect(buildWatcherSnapshotFromCurrent(windowsCurrent, withFailure, null, options)).toMatchObject(expected);
+    expect(buildLiveWatcherSnapshot(windowsCurrent, withoutFailure)).toMatchObject(expected);
+    expect(buildLiveWatcherSnapshot(windowsCurrent, [prior, {
+      ...failedCapture,
+      classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 },
+    }, latest])).toMatchObject(expected);
+
+    expect(buildWatcherSnapshot([prior, latest, {
+      ...failedCapture,
+      startedAt: latest.endedAt,
+      endedAt: "2026-09-05T18:33:00.000Z",
+      classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 },
+    }])).toMatchObject({ productivity: "neutral", focusStrikeSeconds: null, focusSecondsToday: 210 });
   });
 
   it.each([0, 15])("preserves the preceding focus run without adding %i uncaptured drift seconds", (uncapturedSeconds) => {

@@ -37,6 +37,65 @@ function windowAssignment(
 }
 
 describe("buildPersonalProjectSliceProjection", () => {
+  it("retains a captured Windows app named Unavailable when its process identity is verified", () => {
+    const captured: ActivitySegment = {
+      ...source,
+      id: "captured-unavailable",
+      appName: "Unavailable",
+      bundleId: "C:\\Apps\\Unavailable\\Unavailable.exe",
+      platform: "windows",
+      source: "win32-foreground",
+      frontmostCaptureSource: "win32-foreground",
+    };
+    const projection = buildPersonalProjectSliceProjection(
+      [captured],
+      [{
+        ...windowAssignment("w0", captured.startedAt, "2026-07-28T09:03:00.000Z", "project-a"),
+        segmentOverlaps: [{ segmentId: captured.id, durationSeconds: 180 }],
+      }],
+      [],
+    );
+
+    expect(projection.segments.map((segment) => segment.appName)).toEqual(["Unavailable", "Unavailable"]);
+    expect(projection.segments.reduce((seconds, segment) => seconds + segment.durationSeconds, 0)).toBe(360);
+    expect([...projection.projectBySegmentId.values()]).toEqual(["project-a"]);
+  });
+
+  it("hides old Windows capture failures even when persisted window decisions reference them", () => {
+    const failedCapture: ActivitySegment = {
+      ...source,
+      id: "failed-capture",
+      startedAt: "2026-07-28T09:06:00.000Z",
+      endedAt: "2026-07-28T09:09:00.000Z",
+      durationSeconds: 180,
+      appName: "Unavailable",
+      bundleId: null,
+      platform: "windows",
+      source: "win32-foreground",
+    };
+    const unassignedFailure = {
+      ...failedCapture,
+      id: "unassigned-failure",
+      startedAt: "2026-07-28T09:09:00.000Z",
+      endedAt: "2026-07-28T09:12:00.000Z",
+    };
+    const projection = buildPersonalProjectSliceProjection(
+      [source, failedCapture, unassignedFailure],
+      [
+        windowAssignment("w0", "2026-07-28T09:00:00.000Z", "2026-07-28T09:03:00.000Z", "project-a"),
+        {
+          ...windowAssignment("w2", failedCapture.startedAt, failedCapture.endedAt, "project-a"),
+          segmentOverlaps: [{ segmentId: failedCapture.id, durationSeconds: 180 }],
+        },
+      ],
+      [],
+    );
+
+    expect(projection.segments.map((segment) => segment.appName)).toEqual(["Chrome", "Chrome"]);
+    expect(projection.segments.reduce((seconds, segment) => seconds + segment.durationSeconds, 0)).toBe(360);
+    expect([...projection.projectBySegmentId.values()]).toEqual(["project-a"]);
+  });
+
   it("preserves different project decisions for adjacent 3-minute windows of one source segment", () => {
     const projection = buildPersonalProjectSliceProjection(
       [source],

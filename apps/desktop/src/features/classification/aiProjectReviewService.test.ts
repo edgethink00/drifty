@@ -204,6 +204,73 @@ function mockTracker(overrides: Partial<TrackerApi> = {}): { tracker: TrackerApi
 }
 
 describe("runProjectPass orchestration", () => {
+  it("omits old Windows capture failures from analysis prompts and saved overlaps", async () => {
+    const failedCapture = seg({
+      id: "failed",
+      startedAt: "2026-04-06T09:03:00+00:00",
+      endedAt: "2026-04-06T09:06:00+00:00",
+      durationSeconds: 180,
+      appName: "Unavailable",
+      bundleId: null,
+      platform: "windows",
+      source: "unknown",
+    });
+    const { tracker, spies } = mockTracker({
+      getTimeline: vi.fn(async () => [
+        classified("1", "2026-04-06T09:00:00+00:00", "2026-04-06T09:03:00+00:00", "Chrome", "social_media", "drift"),
+        failedCapture,
+      ]) as TrackerApi["getTimeline"],
+    });
+    const inference = vi.fn<ProjectPassInference>(async () => ({
+      output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] },
+      usage: {},
+    }));
+
+    await runProjectPass({
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "manual",
+      tracker,
+      inference,
+      now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
+    });
+
+    expect(inference).toHaveBeenCalledTimes(1);
+    expect(inference.mock.calls[0][1]?.coreWindows.map((window) => window.appName)).toEqual(["Chrome"]);
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([
+      expect.objectContaining({ segmentOverlaps: [{ segmentId: "1", durationSeconds: 180 }] }),
+    ]);
+  });
+
+  it("skips inference when a range contains only old Windows capture failures", async () => {
+    const { tracker, spies } = mockTracker({
+      getTimeline: vi.fn(async () => [seg({
+        id: "failed",
+        startedAt: "2026-04-06T09:00:00+00:00",
+        endedAt: "2026-04-06T09:03:00+00:00",
+        durationSeconds: 180,
+        appName: "Unavailable",
+        bundleId: null,
+        platform: "windows",
+        source: "unknown",
+      })]) as TrackerApi["getTimeline"],
+    });
+    const inference = vi.fn<ProjectPassInference>(async () => ({ output: { assignments: [], corrections: [] }, usage: {} }));
+
+    const summary = await runProjectPass({
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "manual",
+      tracker,
+      inference,
+      now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
+    });
+
+    expect(summary).toEqual(expect.objectContaining({ ran: false, skippedReason: "no activity in range" }));
+    expect(inference).not.toHaveBeenCalled();
+    expect(spies.recordProjectPass).not.toHaveBeenCalled();
+  });
+
   it("does not hand a wider-range caller the running narrow pass's result", async () => {
     const { tracker } = mockTracker();
     let releaseFirst!: () => void;

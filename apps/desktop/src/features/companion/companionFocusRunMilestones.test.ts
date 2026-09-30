@@ -62,6 +62,34 @@ describe("Companion focus-run records", () => {
     expect(baseline.bestSeconds.record7d).toBe(30 * 60);
   });
 
+  it("does not count old Windows capture failures as tracked days or a break in a focus run", () => {
+    const failedDuringRun: ActivitySegment = {
+      ...segment("failed-run", 20, 9.5, 2, "neutral", "Unavailable"),
+      platform: "windows",
+      source: "unknown",
+      bundleId: null,
+    };
+    const failedOnlyDay: ActivitySegment = {
+      ...segment("failed-day", 19, 9, 3, "neutral", "Unavailable"),
+      platform: "windows",
+      source: "unknown",
+      bundleId: null,
+    };
+    const baseline = buildCompanionFocusRunRecordBaseline({
+      segments: [
+        segment("code", 20, 9, 30),
+        failedDuringRun,
+        segment("figma", 20, 9.5, 25),
+        failedOnlyDay,
+      ],
+      day: "2026-07-20",
+      startOfDayMinutes: 0,
+    });
+
+    expect(baseline.bestSeconds.record7d).toBe(55 * 60);
+    expect(baseline.trackedDays.record7d).toBe(1);
+  });
+
   it("emits only the longest newly beaten window", () => {
     const baseline = {
       bestSeconds: { record7d: 40 * 60, record14d: 45 * 60, record30d: 50 * 60 },

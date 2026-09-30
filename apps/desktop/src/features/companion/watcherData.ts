@@ -1,6 +1,6 @@
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./watcherPeekTypes";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { categorizeActivity, classifyActivity, computeCurrentFocusStrikeSeconds, computePreservedFocusStrikeSeconds } from "@drifty/domain";
+import { categorizeActivity, classifyActivity, computeCurrentFocusStrikeSeconds, computePreservedFocusStrikeSeconds, isFailedForegroundCaptureSegment } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, CurrentActivitySnapshot, ProductivityLabel } from "@drifty/domain";
 import { isProductivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
@@ -106,12 +106,18 @@ export function getLatestWatcherSegment(segments: ActivitySegment[]): ActivitySe
 }
 
 export function buildWatcherSnapshot(segments: ActivitySegment[], classificationOptions?: ClassificationOptions): WatcherSnapshot {
+  const capturedSegments = segments.filter((candidate) => !isFailedForegroundCaptureSegment(candidate));
   const segment = getLatestWatcherSegment(segments);
   if (!segment) return getDefaultWatcherSnapshot();
+  const focusSecondsToday = sumProductivitySeconds(capturedSegments, "focus", classificationOptions);
+  const currentHourFocusSeconds = sumCurrentHourFocusSeconds(capturedSegments, classificationOptions);
+  // A failed latest read says nothing about the current app. Retain known
+  // totals without presenting the preceding captured app as still active.
+  if (isFailedForegroundCaptureSegment(segment)) {
+    return { ...getDefaultWatcherSnapshot(), focusSecondsToday, currentHourFocusSeconds };
+  }
   const { category, productivity } = classifyActivity(segment, classificationOptions);
   const recentWatcherResponse = getRecentWatcherResponse();
-  const focusSecondsToday = sumProductivitySeconds(segments, "focus", classificationOptions);
-  const currentHourFocusSeconds = sumCurrentHourFocusSeconds(segments, classificationOptions);
 
   return {
     productivity,
@@ -126,8 +132,8 @@ export function buildWatcherSnapshot(segments: ActivitySegment[], classification
     minutesSinceLastWatcher: recentWatcherResponse ? Math.max(0, Math.round((Date.now() - new Date(recentWatcherResponse.respondedAt).getTime()) / 60000)) : null,
     focusSecondsToday,
     currentHourFocusSeconds,
-    focusStrikeSeconds: computeCurrentFocusStrikeSeconds(segments, segment, classificationOptions),
-    preservedFocusStrikeSeconds: computePreservedFocusStrikeSeconds(segments, segment, classificationOptions),
+    focusStrikeSeconds: computeCurrentFocusStrikeSeconds(capturedSegments, segment, classificationOptions),
+    preservedFocusStrikeSeconds: computePreservedFocusStrikeSeconds(capturedSegments, segment, classificationOptions),
   };
 }
 
@@ -154,12 +160,13 @@ export function buildLiveWatcherSnapshot(
   classificationOptions?: ClassificationOptions,
   driftReminderElapsedSeconds: number | null = null,
 ): WatcherSnapshot {
-  const active = resolveWatcherCurrentSegment(current, todaySegments, CURRENT_SNAPSHOT_FRESHNESS_SECONDS);
+  const capturedSegments = todaySegments.filter((segment) => !isFailedForegroundCaptureSegment(segment));
+  const active = resolveWatcherCurrentSegment(current, capturedSegments, CURRENT_SNAPSHOT_FRESHNESS_SECONDS);
   const liveIdentity = active?.segment ?? currentSnapshotToSegment(current, 0);
   return {
     ...buildCurrentWatcherSnapshot(
       liveIdentity,
-      todaySegments,
+      capturedSegments,
       driftReminderElapsedSeconds,
       {
         includeAiClassifications: classificationOptions?.includeAiClassifications,
@@ -188,9 +195,10 @@ export function shouldReplacePetModeLiveSnapshot(
 }
 
 export function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot, segments: ActivitySegment[], driftReminderElapsedSeconds: number | null = null, classificationOptions?: ClassificationOptions): WatcherSnapshot {
-  const timing = getCurrentSnapshotTiming(current, segments);
+  const capturedSegments = segments.filter((segment) => !isFailedForegroundCaptureSegment(segment));
+  const timing = getCurrentSnapshotTiming(current, capturedSegments);
   const segment = currentSnapshotToSegment(current, timing.durationSeconds);
-  return buildCurrentWatcherSnapshot(segment, segments, driftReminderElapsedSeconds, classificationOptions, timing.uncapturedSeconds);
+  return buildCurrentWatcherSnapshot(segment, capturedSegments, driftReminderElapsedSeconds, classificationOptions, timing.uncapturedSeconds);
 }
 
 function buildCurrentWatcherSnapshot(
