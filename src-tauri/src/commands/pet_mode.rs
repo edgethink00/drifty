@@ -1676,6 +1676,18 @@ pub fn pet_mode_intervene(app: AppHandle, target: PetModeInterventionTarget) -> 
     if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
         return Err("Pet Mode is disabled".to_string());
     }
+    // The pet must not act out pressing a tab X that the Windows close adapter
+    // cannot resolve. The ordinary automatic-close path will fail closed and
+    // present the drift alert instead (for example, Opera on Windows).
+    #[cfg(target_os = "windows")]
+    if !target.preview
+        && super::extreme_nudge::should_skip_windows_pet_approach(
+            target.browser_name.as_deref(),
+            target.browser_identity.as_deref(),
+        )
+    {
+        return Err("unsupported_browser".to_string());
+    }
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;

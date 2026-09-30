@@ -346,6 +346,19 @@ mod tests {
     }
 
     #[test]
+    fn pet_skips_browsers_with_missing_or_unsupported_tab_metadata() {
+        let skips = super::super::should_skip_windows_pet_approach;
+        assert!(skips(Some("Opera"), Some(r"C:\Program Files\Opera\opera.exe")));
+        assert!(skips(None, Some(r"C:\Program Files\Opera\opera.exe")));
+        assert!(skips(Some("  "), Some(r"C:\Program Files\Opera\opera.exe")));
+        assert!(!skips(None, Some(r"C:\Windows\System32\notepad.exe")));
+        assert!(!skips(
+            Some("Google Chrome"),
+            Some(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+        ));
+    }
+
+    #[test]
     fn current_process_is_always_protected() {
         let current = std::env::current_exe().expect("current exe");
         assert!(is_protected_identity(&current.to_string_lossy()));

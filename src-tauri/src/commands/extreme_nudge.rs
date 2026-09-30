@@ -16,6 +16,23 @@ use thiserror::Error;
 
 mod browser_tabs;
 pub(in crate::commands) use browser_tabs::closes_through_native_ax_selection;
+#[cfg(target_os = "windows")]
+pub(in crate::commands) fn supports_windows_browser_tab_close(browser_name: &str) -> bool {
+    browser_tabs::is_supported_browser_tab_target(browser_name)
+}
+#[cfg(target_os = "windows")]
+pub(in crate::commands) fn should_skip_windows_pet_approach(
+    browser_name: Option<&str>,
+    browser_identity: Option<&str>,
+) -> bool {
+    if let Some(name) = browser_name.map(str::trim).filter(|name| !name.is_empty()) {
+        return !supports_windows_browser_tab_close(name);
+    }
+    // An older or incomplete capture may have lost browser_name. Its executable
+    // still identifies a browser, so never animate a whole-window close that
+    // the automatic-close path will refuse to perform.
+    browser_identity.is_some_and(windows::is_browser_identity)
+}
 #[cfg(target_os = "macos")]
 pub(in crate::commands) use browser_tabs::NativeAxCloseHotspot;
 #[cfg(test)]
