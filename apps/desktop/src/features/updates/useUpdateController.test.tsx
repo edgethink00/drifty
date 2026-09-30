@@ -9,8 +9,9 @@ vi.mock("./updatePolicy", async (importOriginal) => {
   return { ...actual, fetchUpdatePolicy: vi.fn(async (version: string) => actual.fallbackUpdatePolicy(version)) };
 });
 import { acquireUpdateOperation, pauseUpdatesForVersionTest, resumeUpdatesAfterVersionTest } from "./versionSwitchState";
-import { useUpdateController } from "./useUpdateController";
+import { useUpdateController, WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY } from "./useUpdateController";
 import { POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY, fetchUpdatePolicy, fallbackUpdatePolicy } from "./updatePolicy";
+import { WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY } from "./useAutomaticUpdateScheduler";
 type DownloadEvent =
   | { readonly event: "Started"; readonly data: { readonly contentLength?: number } }
   | { readonly event: "Progress"; readonly data: { readonly chunkLength: number } }
@@ -567,5 +568,280 @@ describe("background update and idle auto-restart", () => {
     await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
 
     expect(result.current.canAutoUpdateSilently).toBe(false);
+  });
+});
+
+describe("Windows unattended stable update", () => {
+  const windowsPolicy = {
+    version: "1.11.25",
+    policyVersion: 2 as const,
+    urgency: "general" as const,
+    promptAfterMs: 72 * 60 * 60 * 1000,
+    backgroundDownloadEligible: true,
+    installBehavior: "idle" as const,
+    message: null,
+  };
+
+  it("lets a manual Windows update launch NSIS without an app-side relaunch", async () => {
+    const next = update(windowsPolicy.version);
+    checkMock.mockResolvedValue(next);
+    const { result } = renderHook(() => useUpdateController({
+      backgroundPreparationSupported: true,
+      hostPlatform: "windows",
+    }));
+    await act(async () => { await result.current.handleCheckForUpdates("manual"); });
+    await act(async () => { await result.current.handleInstallUpdate(); });
+    expect(invokeMock).toHaveBeenCalledWith("windows_download_stable_update", { expectedVersion: windowsPolicy.version });
+    expect(invokeMock).toHaveBeenCalledWith("windows_install_prepared_stable_update", { expectedVersion: windowsPolicy.version, silent: false });
+    expect(next.downloadAndInstall).not.toHaveBeenCalled();
+    expect(restartInvocations()).toHaveLength(0);
+  });
+
+  it("downloads first and launches NSIS only after a safe idle probe", async () => {
+    vi.useFakeTimers();
+    try {
+      const next = update(windowsPolicy.version);
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+      let idleSeconds = 30;
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        hostPlatform: "windows",
+        getIdleSeconds: async () => idleSeconds,
+        canSafelyRestart: () => true,
+      }));
+      await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+      expect(invokeMock).toHaveBeenCalledWith("windows_download_stable_update", { expectedVersion: windowsPolicy.version });
+      expect(invokeMock).not.toHaveBeenCalledWith("windows_install_prepared_stable_update", expect.anything());
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(false);
+      expect(result.current.canAutoUpdateSilently).toBe(true);
+      expect(localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY)).toBe(windowsPolicy.version);
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(invokeMock).not.toHaveBeenCalledWith("windows_install_prepared_stable_update", expect.anything());
+      idleSeconds = 15 * 60 + 1;
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(invokeMock).toHaveBeenCalledWith("windows_install_prepared_stable_update", { expectedVersion: windowsPolicy.version, silent: true });
+      expect(restartInvocations()).toHaveLength(0);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([false, true])("installs the prepared Windows candidate after a manual check fails (retry: %s)", async (retry) => {
+    vi.useFakeTimers();
+    try {
+      checkMock.mockReset();
+      const prepared = update(windowsPolicy.version);
+      const rechecked = update(windowsPolicy.version);
+      checkMock.mockResolvedValueOnce(prepared)
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce(rechecked);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+      let idleSeconds = 30;
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        hostPlatform: "windows",
+        getIdleSeconds: async () => idleSeconds,
+        canSafelyRestart: () => true,
+      }));
+      await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+      await act(async () => {
+        expect(await result.current.handleCheckForUpdates("manual")).toEqual({ kind: "error", message: "Update check failed: offline" });
+      });
+      expect(result.current.updaterError).toBe("Update check failed: offline");
+      expect(result.current.preparedUpdateVersion).toBe(windowsPolicy.version);
+      expect(localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY)).toBe(windowsPolicy.version);
+      if (retry) {
+        await act(async () => {
+          expect(await result.current.handleCheckForUpdates("manual")).toEqual({ kind: "available", version: windowsPolicy.version });
+        });
+        expect(rechecked.close).toHaveBeenCalledOnce();
+      }
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(false);
+      idleSeconds = 960;
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(invokeMock.mock.calls.filter(([command]) => command === "windows_install_prepared_stable_update"))
+        .toEqual([["windows_install_prepared_stable_update", { expectedVersion: windowsPolicy.version, silent: true }]]);
+      expect(result.current.availableUpdate).toBe(prepared);
+      expect(result.current.currentUpdatePolicy).toEqual(windowsPolicy);
+      expect(prepared.close).not.toHaveBeenCalled();
+      expect(invokeMock.mock.calls.filter(([command]) => command === "windows_download_stable_update")).toHaveLength(1);
+      expect(invokeMock).not.toHaveBeenCalledWith("windows_clear_prepared_stable_update");
+      expect(restartInvocations()).toHaveLength(0);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restages the same signed Windows candidate after a normal quit", async () => {
+    checkMock.mockImplementation(async () => update(windowsPolicy.version));
+    vi.mocked(fetchUpdatePolicy).mockResolvedValue(windowsPolicy);
+    const first = renderHook(() => useUpdateController({
+      backgroundPreparationSupported: true,
+      hostPlatform: "windows",
+    }));
+    await act(async () => { await first.result.current.handleCheckForUpdates("automatic"); });
+    expect(localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY)).toBe(windowsPolicy.version);
+    first.unmount();
+
+    const second = renderHook(() => useUpdateController({
+      backgroundPreparationSupported: true,
+      hostPlatform: "windows",
+    }));
+    await act(async () => { await second.result.current.handleCheckForUpdates("automatic"); });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "windows_download_stable_update")).toHaveLength(2);
+    expect(second.result.current.preparedUpdateVersion).toBe(windowsPolicy.version);
+    expect(second.result.current.shouldShowAvailableUpdateDialog).toBe(false);
+  });
+
+  it("drops a stale pending marker when restaging is no longer eligible", async () => {
+    localStorage.setItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY, windowsPolicy.version);
+    checkMock.mockResolvedValue(update(windowsPolicy.version));
+    vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(fallbackUpdatePolicy(windowsPolicy.version));
+    const { result } = renderHook(() => useUpdateController({
+      backgroundPreparationSupported: true,
+      hostPlatform: "windows",
+    }));
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    expect(localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY)).toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith("windows_download_stable_update", expect.anything());
+  });
+
+  it("clears a stale pending marker after a failed restage", async () => {
+    localStorage.setItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY, windowsPolicy.version);
+    checkMock.mockResolvedValue(update(windowsPolicy.version));
+    vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "windows_download_stable_update") throw new Error("network interrupted");
+    });
+    const { result } = renderHook(() => useUpdateController({
+      backgroundPreparationSupported: true,
+      hostPlatform: "windows",
+    }));
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    expect(localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY)).toBeNull();
+    expect(result.current.updaterError).toContain("network interrupted");
+  });
+
+  it("drops a prepared stable package when Windows enters the beta channel", async () => {
+    const next = update(windowsPolicy.version);
+    checkMock.mockResolvedValue(next);
+    vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+    const { result, rerender } = renderHook(
+      ({ stableEnabled }: { stableEnabled: boolean }) => useUpdateController({
+        backgroundPreparationSupported: true,
+        hostPlatform: "windows",
+        stableAutomaticUpdatesEnabled: stableEnabled,
+      }),
+      { initialProps: { stableEnabled: true } },
+    );
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    rerender({ stableEnabled: false });
+    expect(result.current.preparedUpdateVersion).toBeNull();
+    expect(next.close).toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledWith("windows_clear_prepared_stable_update");
+    expect(localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY)).toBeNull();
+  });
+
+  it("keeps a manual recovery path when the idle installer fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const next = update(windowsPolicy.version);
+      invokeMock.mockImplementation(async (command: string) => {
+        if (command === "windows_install_prepared_stable_update") throw new Error("installer launch refused");
+      });
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        hostPlatform: "windows",
+        getIdleSeconds: async () => 16 * 60,
+      }));
+      await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(result.current.availableUpdateSource).toBe("manual");
+      expect(result.current.updaterError).toContain("installer launch refused");
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(true);
+      expect(localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY)).toBeNull();
+      expect(localStorage.getItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY)).toBe(windowsPolicy.version);
+      expect(restartInvocations()).toHaveLength(1);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps manual recovery reachable after Later when a failed installer relaunches the old version", async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY, windowsPolicy.version);
+      const next = update(windowsPolicy.version);
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        hostPlatform: "windows",
+        getIdleSeconds: async () => 960,
+        canSafelyRestart: () => true,
+      }));
+      await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(true);
+      expect(result.current.updaterError).toContain("Install it manually");
+      act(() => result.current.dismissAvailableUpdate());
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(false);
+      expect(result.current.availableUpdate).toBe(next);
+      expect(result.current.availableUpdateSource).toBe("automatic");
+      expect(result.current.preparedUpdateVersion).toBeNull();
+      expect(result.current.canAutoUpdateSilently).toBe(false);
+      expect(result.current.updaterError).toContain("Install it manually");
+      expect(invokeMock).not.toHaveBeenCalledWith("windows_download_stable_update", expect.anything());
+      expect(invokeMock).not.toHaveBeenCalledWith("windows_install_prepared_stable_update", expect.anything());
+      await act(async () => { await result.current.handleInstallUpdate(); });
+      expect(invokeMock).toHaveBeenCalledWith("windows_download_stable_update", { expectedVersion: windowsPolicy.version });
+      expect(invokeMock).toHaveBeenCalledWith("windows_install_prepared_stable_update", { expectedVersion: windowsPolicy.version, silent: false });
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("allows a newer Windows candidate to prepare silently after failed-version recovery is dismissed", async () => {
+    localStorage.setItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY, windowsPolicy.version);
+    const newerVersion = "1.11.26";
+    checkMock.mockResolvedValueOnce(update(windowsPolicy.version)).mockResolvedValueOnce(update(newerVersion));
+    vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy)
+      .mockResolvedValueOnce({ ...windowsPolicy, version: newerVersion });
+    const { result } = renderHook(() => useUpdateController({
+      backgroundPreparationSupported: true,
+      hostPlatform: "windows",
+    }));
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    act(() => result.current.dismissAvailableUpdate());
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "windows_download_stable_update"))
+      .toEqual([["windows_download_stable_update", { expectedVersion: newerVersion }]]);
+    expect(result.current.preparedUpdateVersion).toBe(newerVersion);
+    expect(result.current.shouldShowAvailableUpdateDialog).toBe(false);
+    expect(result.current.canAutoUpdateSilently).toBe(true);
+  });
+
+  it("never launches NSIS when native signature validation rejects the download", async () => {
+    const next = update(windowsPolicy.version);
+    checkMock.mockResolvedValue(next);
+    vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "windows_download_stable_update") throw new Error("signature mismatch");
+    });
+    const { result } = renderHook(() => useUpdateController({
+      backgroundPreparationSupported: true,
+      hostPlatform: "windows",
+    }));
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    expect(result.current.updaterError).toContain("signature mismatch");
+    expect(invokeMock).not.toHaveBeenCalledWith("windows_install_prepared_stable_update", expect.anything());
+    expect(localStorage.getItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY)).toBeNull();
   });
 });

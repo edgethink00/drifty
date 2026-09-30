@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+#[cfg(test)]
 const POLICY_RELEASES_URL: &str =
     "https://github.com/edgethink00/drifty_releases/releases/download/";
 const POLICY_FETCH_TIMEOUT: Duration = Duration::from_secs(4);
@@ -23,6 +24,7 @@ pub(crate) fn valid_policy_tag(tag: &str) -> bool {
         })
 }
 
+#[cfg(test)]
 pub(crate) fn policy_url(tag: &str) -> String {
     format!("{POLICY_RELEASES_URL}{tag}/update-policy.json")
 }
@@ -31,7 +33,10 @@ pub(crate) fn policy_url(tag: &str) -> String {
 /// publish one. Transport failures are errors so the caller can try its next
 /// candidate and then fall back to the safe manual policy.
 #[tauri::command]
-pub async fn update_policy_fetch(tag: String) -> Result<Option<serde_json::Value>, String> {
+pub async fn update_policy_fetch(
+    app: tauri::AppHandle,
+    tag: String,
+) -> Result<Option<serde_json::Value>, String> {
     if !valid_policy_tag(&tag) {
         return Err("Invalid update policy tag".into());
     }
@@ -40,7 +45,10 @@ pub async fn update_policy_fetch(tag: String) -> Result<Option<serde_json::Value
         .timeout(POLICY_FETCH_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?
-        .get(policy_url(&tag))
+        .get(format!(
+            "{}/{tag}/update-policy.json",
+            super::windows_update_feed::release_base(&app)?
+        ))
         .send()
         .await
         .map_err(|e| e.to_string())?;

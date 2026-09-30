@@ -1,4 +1,4 @@
-import { acquireUpdateOperation, readVersionTestPauseUntil, useVersionTestPauseUntil } from "./versionSwitchState";
+import { acquireUpdateOperation, readVersionTestPauseUntil, UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY, useVersionTestPauseUntil } from "./versionSwitchState";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
@@ -23,6 +23,8 @@ import {
   type UpdatePolicy,
 } from "./updatePolicy";
 import { resolveUpdatePolicyFetch } from "./updatePolicyFetch";
+import { WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY } from "./useAutomaticUpdateScheduler";
+import { BUILD_INFO } from "../../buildInfo";
 
 type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 export type UpdateCheckMode = "manual" | "automatic";
@@ -33,6 +35,15 @@ export const UPDATE_IDLE_CHECK_INTERVAL_MS = 30 * 1000;
 // ~10 minutes of unanswered idle probes before the prepared update falls back
 // to normal prompting instead of waiting silently forever.
 export const UPDATE_IDLE_PROBE_FAILURE_THRESHOLD = 20;
+export const WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY = "drifty.updates.windowsInstallAttempt.v1";
+
+function readFailedWindowsInstallVersion(): string | null {
+  if (typeof window === "undefined") return null;
+  const attemptedVersion = window.localStorage.getItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY);
+  if (!attemptedVersion) return null;
+  window.localStorage.removeItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY);
+  return attemptedVersion === BUILD_INFO.version ? null : attemptedVersion;
+}
 
 export type UpdateCheckResult =
   | { readonly kind: "available"; readonly version: string }
@@ -66,6 +77,7 @@ type UseUpdateControllerResult = {
 type UseUpdateControllerOptions = {
   readonly backgroundPreparationSupported: boolean;
   readonly hostPlatform?: "macos" | "windows" | "other";
+  readonly stableAutomaticUpdatesEnabled?: boolean;
   readonly getIdleSeconds?: () => Promise<number | null>;
   readonly canSafelyRestart?: () => boolean;
 };
@@ -80,13 +92,17 @@ function releaseUpdateResource(update: AvailableUpdate | null): void {
 export function useUpdateController({
   backgroundPreparationSupported,
   hostPlatform = "other",
+  stableAutomaticUpdatesEnabled = true,
   getIdleSeconds,
   canSafelyRestart,
 }: UseUpdateControllerOptions): UseUpdateControllerResult {
   const getIdleSecondsRef = useRef(getIdleSeconds);
   const canSafelyRestartRef = useRef(canSafelyRestart);
+  const stableAutomaticUpdatesEnabledRef = useRef(stableAutomaticUpdatesEnabled);
+  const previousStableAutomaticUpdatesEnabledRef = useRef(stableAutomaticUpdatesEnabled);
   getIdleSecondsRef.current = getIdleSeconds;
   canSafelyRestartRef.current = canSafelyRestart;
+  stableAutomaticUpdatesEnabledRef.current = stableAutomaticUpdatesEnabled;
   const versionTestPauseUntil = useVersionTestPauseUntil();
   const updaterCheckingRef = useRef(false);
   const manualCheckRequestedRef = useRef(false);
@@ -109,6 +125,14 @@ export function useUpdateController({
   const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
   const [idleProbeFailures, setIdleProbeFailures] = useState(0);
+  const [failedWindowsInstallVersion] = useState(readFailedWindowsInstallVersion);
+  const failedWindowsInstallVersionRef = useRef(failedWindowsInstallVersion);
+
+  useEffect(() => {
+    if (hostPlatform === "windows" && failedWindowsInstallVersion) {
+      setUpdaterError(`Drifty ${failedWindowsInstallVersion} could not finish installing. Install it manually.`);
+    }
+  }, [failedWindowsInstallVersion, hostPlatform]);
 
   useEffect(() => {
     if (versionTestPauseUntil > Date.now()) setBackgroundUpdatesEnabled(false);
@@ -138,6 +162,42 @@ export function useUpdateController({
     setPreparedUpdateVersion(version);
   }, []);
 
+  const installPreparedWindowsUpdate = useCallback(async (version: string, silent: boolean) => {
+    window.localStorage.setItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY, version);
+    try {
+      // The native updater owns signature-verified bytes and performs tracker
+      // shutdown before launching NSIS. Success exits this process.
+      await invoke<void>("windows_install_prepared_stable_update", { expectedVersion: version, silent });
+    } catch (error) {
+      window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
+      window.localStorage.setItem(UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY, "0");
+      // Native installation may have stopped the tracker. Restarting restores
+      // normal startup state; the old version then shows manual recovery.
+      try {
+        await invoke<void>("app_restart_after_update", { silent: false });
+      } catch (restartError) {
+        throw new Error(`${toErrorMessage(error)}; Drifty could not restart: ${toErrorMessage(restartError)}`);
+      }
+      throw error;
+    }
+  }, []);
+
+  useEffect(() => {
+    const wasEnabled = previousStableAutomaticUpdatesEnabledRef.current;
+    previousStableAutomaticUpdatesEnabledRef.current = stableAutomaticUpdatesEnabled;
+    if (hostPlatform !== "windows" || !wasEnabled || stableAutomaticUpdatesEnabled || updaterOperatingRef.current) return;
+    // Entering the Windows beta channel drops an uninstalled stable package.
+    // Manual stable checks remain available even while Dev mode is enabled.
+    rememberPreparedUpdate(null);
+    replaceAvailableUpdate(null);
+    setAvailableUpdatePolicy(null);
+    setAvailableUpdateSource(null);
+    window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
+    void invoke<void>("windows_clear_prepared_stable_update").catch((error: unknown) => {
+      console.warn("Failed to clear the prepared Windows update:", toErrorMessage(error));
+    });
+  }, [hostPlatform, rememberPreparedUpdate, replaceAvailableUpdate, stableAutomaticUpdatesEnabled]);
+
   useEffect(() => () => {
     const currentUpdate = availableUpdateRef.current;
     availableUpdateRef.current = null;
@@ -159,31 +219,35 @@ export function useUpdateController({
     try {
       const updateToInstall = await resolveUpdate();
       if (!updateToInstall) return;
-      // The updater already reports its transfer; ignoring it left the app
-      // sitting on a disabled "Preparing" button for the whole download, which
-      // is the moment people are most worried about an app that restarts itself.
+      // macOS reports transfer progress. Windows uses the native signed
+      // staging command and keeps the settings spinner until it completes.
       let contentLength = 0;
       let downloadedBytes = 0;
-      await updateToInstall.downloadAndInstall((event) => {
-        if (event.event === "Started") {
-          contentLength = event.data.contentLength ?? 0;
-          downloadedBytes = 0;
-          // A source without a content length gets no invented percentage.
-          setUpdaterDownloadProgress(contentLength > 0 ? 0 : null);
-          return;
-        }
-        if (event.event === "Progress") {
-          downloadedBytes += event.data.chunkLength;
-          if (contentLength > 0) {
-            setUpdaterDownloadProgress(Math.min(1, downloadedBytes / contentLength));
+      if (hostPlatform === "windows") {
+        await invoke<void>("windows_download_stable_update", { expectedVersion: updateToInstall.version });
+        await installPreparedWindowsUpdate(updateToInstall.version, false);
+      } else {
+        await updateToInstall.downloadAndInstall((event) => {
+          if (event.event === "Started") {
+            contentLength = event.data.contentLength ?? 0;
+            downloadedBytes = 0;
+            // A source without a content length gets no invented percentage.
+            setUpdaterDownloadProgress(contentLength > 0 ? 0 : null);
+            return;
           }
-          return;
-        }
-        // "Finished" covers the transfer only; installing continues after it.
-        if (contentLength > 0) setUpdaterDownloadProgress(1);
-      });
-      markPostUpdateRelaunchFocusPending();
-      await invoke<void>("app_restart_after_update", { silent: false });
+          if (event.event === "Progress") {
+            downloadedBytes += event.data.chunkLength;
+            if (contentLength > 0) {
+              setUpdaterDownloadProgress(Math.min(1, downloadedBytes / contentLength));
+            }
+            return;
+          }
+          // "Finished" covers the transfer only; installing continues after it.
+          if (contentLength > 0) setUpdaterDownloadProgress(1);
+        });
+        markPostUpdateRelaunchFocusPending();
+        await invoke<void>("app_restart_after_update", { silent: false });
+      }
     } catch (nextError) {
       clearPostUpdateRelaunchFocusPending();
       setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
@@ -193,7 +257,7 @@ export function useUpdateController({
       setUpdaterInstalling(false);
       setUpdaterDownloadProgress(null);
     }
-  }, []);
+  }, [hostPlatform, installPreparedWindowsUpdate]);
 
   const prepareUpdateInBackground = useCallback(async (
     updateToPrepare: AvailableUpdate,
@@ -210,8 +274,25 @@ export function useUpdateController({
     setUpdaterMessage(`Preparing Drifty ${version} in the background...`);
 
     try {
-      await updateToPrepare.download();
+      if (hostPlatform === "windows") {
+        await invoke<void>("windows_download_stable_update", { expectedVersion: version });
+      } else {
+        await updateToPrepare.download();
+      }
       setUpdaterDownloading(false);
+      if (hostPlatform === "windows") {
+        // Keep the native signed bytes until the idle gate, and recheck next
+        // launch if the app quits naturally before that gate is reached.
+        if (!stableAutomaticUpdatesEnabledRef.current) {
+          replaceAvailableUpdate(null);
+          await invoke<void>("windows_clear_prepared_stable_update");
+          return false;
+        }
+        window.localStorage.setItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY, version);
+        rememberPreparedUpdate(version);
+        setUpdaterMessage(`Drifty ${version} will install when you're away.`);
+        return true;
+      }
       setUpdaterInstalling(true);
       await updateToPrepare.install();
       rememberPreparedUpdate(version);
@@ -230,13 +311,13 @@ export function useUpdateController({
       setUpdaterDownloading(false);
       setUpdaterInstalling(false);
     }
-  }, [rememberPreparedUpdate, replaceAvailableUpdate, updateStoredInteractions]);
+  }, [hostPlatform, rememberPreparedUpdate, replaceAvailableUpdate, updateStoredInteractions]);
 
   const handleCheckForUpdates = useCallback(async (
     mode: UpdateCheckMode = "manual",
   ): Promise<UpdateCheckResult | void> => {
     if (updaterOperatingRef.current) return;
-    if (mode === "automatic" && readVersionTestPauseUntil() > Date.now()) return;
+    if (mode === "automatic" && (readVersionTestPauseUntil() > Date.now() || !stableAutomaticUpdatesEnabledRef.current)) return;
     if (updaterCheckingRef.current) {
       // A click during the scheduled check upgrades that same request to a
       // visible manual result instead of silently discarding the user's action.
@@ -259,6 +340,10 @@ export function useUpdateController({
 
     try {
       const nextUpdate = await check();
+      if (!manualCheckRequestedRef.current && !stableAutomaticUpdatesEnabledRef.current) {
+        releaseUpdateResource(nextUpdate);
+        return;
+      }
       if (!manualCheckRequestedRef.current && readVersionTestPauseUntil() > Date.now()) {
         releaseUpdateResource(nextUpdate);
         return;
@@ -266,12 +351,29 @@ export function useUpdateController({
       if (nextUpdate) {
         if (preparedUpdateVersionRef.current === nextUpdate.version) {
           releaseUpdateResource(nextUpdate);
-          if (manualCheckRequestedRef.current) setUpdaterMessage(`Drifty ${nextUpdate.version} is ready for the next launch.`);
+          if (manualCheckRequestedRef.current) setUpdaterMessage(hostPlatform === "windows"
+            ? `Drifty ${nextUpdate.version} will install when you're away.`
+            : `Drifty ${nextUpdate.version} is ready for the next launch.`);
           return { kind: "available", version: nextUpdate.version };
+        }
+        const pendingWindowsVersion = hostPlatform === "windows"
+          ? window.localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY)
+          : null;
+        if (pendingWindowsVersion && pendingWindowsVersion !== nextUpdate.version) {
+          window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
+        }
+        if (hostPlatform === "windows" && preparedUpdateVersionRef.current) {
+          rememberPreparedUpdate(null);
+          window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
+          await invoke<void>("windows_clear_prepared_stable_update");
         }
 
         const nowMs = Date.now();
         const nextPolicy = await fetchUpdatePolicy(nextUpdate.version, resolveUpdatePolicyFetch(), hostPlatform);
+        if (!manualCheckRequestedRef.current && !stableAutomaticUpdatesEnabledRef.current) {
+          releaseUpdateResource(nextUpdate);
+          return;
+        }
         if (!manualCheckRequestedRef.current && readVersionTestPauseUntil() > Date.now()) {
           releaseUpdateResource(nextUpdate);
           return;
@@ -283,17 +385,26 @@ export function useUpdateController({
         const nextInteraction = nextInteractions[nextUpdate.version] ?? null;
         replaceAvailableUpdate(nextUpdate);
         setAvailableUpdatePolicy(nextPolicy);
-        setAvailableUpdateSource(manualCheckRequestedRef.current ? "manual" : "automatic");
+        const needsWindowsManualRecovery = hostPlatform === "windows"
+          && failedWindowsInstallVersionRef.current === nextUpdate.version;
+        setAvailableUpdateSource(manualCheckRequestedRef.current || needsWindowsManualRecovery ? "manual" : "automatic");
         setDismissedPromptVersion(null);
         setUpdatePromptNowMs(nowMs);
         if (manualCheckRequestedRef.current) {
           setUpdaterMessage(`Drifty ${nextUpdate.version} is available.`);
         }
-        if (!manualCheckRequestedRef.current && nextPolicy.urgency === "general" && shouldPrepareUpdateInBackground({
+        // A prepared Windows package lived only in the previous process. The
+        // pending marker permits restaging that exact candidate after a normal
+        // quit, while the policy and failure-count gates still apply.
+        const restageLostWindowsPackage = pendingWindowsVersion === nextUpdate.version;
+        if (!manualCheckRequestedRef.current && !needsWindowsManualRecovery && nextPolicy.urgency === "general"
+          && nextPolicy.installBehavior === (hostPlatform === "windows" ? "idle" : "next-launch")
+          && shouldPrepareUpdateInBackground({
           backgroundPreparationSupported,
           backgroundUpdatesEnabled,
           policy: nextPolicy,
           interaction: nextInteraction,
+          allowPreviouslyAttempted: restageLostWindowsPackage,
         })) {
           updateStoredInteractions((currentInteractions) => markUpdateBackgroundPreparationAttempted(
             currentInteractions,
@@ -302,25 +413,37 @@ export function useUpdateController({
           ));
           const prepared = await prepareUpdateInBackground(nextUpdate, nextUpdate.version);
           if (!prepared) {
+            if (restageLostWindowsPackage) window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
             return { kind: "error", message: `Unable to prepare Drifty ${nextUpdate.version}.` };
           }
+        } else if (restageLostWindowsPackage) {
+          window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
         }
         return { kind: "available", version: nextUpdate.version };
       }
 
+      if (hostPlatform === "windows" && preparedUpdateVersionRef.current) {
+        rememberPreparedUpdate(null);
+        await invoke<void>("windows_clear_prepared_stable_update");
+      }
       if (!preparedUpdateVersionRef.current) {
         replaceAvailableUpdate(null);
         setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
       }
+      if (hostPlatform === "windows") window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
       if (manualCheckRequestedRef.current) setUpdaterMessage("Drifty is up to date.");
       return { kind: "none" };
     } catch (nextError) {
       const message = `Update check failed: ${toErrorMessage(nextError)}`;
       if (manualCheckRequestedRef.current) {
-        replaceAvailableUpdate(null);
-        setAvailableUpdatePolicy(null);
-        setAvailableUpdateSource(null);
+        // A failed recheck does not invalidate the signed Windows package.
+        // Keep its candidate and policy so the idle installer can still run.
+        if (hostPlatform !== "windows" || !preparedUpdateVersionRef.current) {
+          replaceAvailableUpdate(null);
+          setAvailableUpdatePolicy(null);
+          setAvailableUpdateSource(null);
+        }
         setUpdaterError(message);
       }
       return { kind: "error", message };
@@ -334,12 +457,32 @@ export function useUpdateController({
     backgroundUpdatesEnabled,
     hostPlatform,
     prepareUpdateInBackground,
+    rememberPreparedUpdate,
     replaceAvailableUpdate,
     updateStoredInteractions,
   ]);
 
   const handleInstallUpdate = useCallback(async () => {
     if (preparedUpdateVersionRef.current) {
+      if (hostPlatform === "windows") {
+        const preparedVersion = preparedUpdateVersionRef.current;
+        const releaseOperation = acquireUpdateOperation();
+        if (!releaseOperation) return;
+        updaterOperatingRef.current = true;
+        setUpdaterInstalling(true);
+        try {
+          await installPreparedWindowsUpdate(preparedVersion, false);
+        } catch (error) {
+          setUpdaterError(`Update install failed: ${toErrorMessage(error)}`);
+          rememberPreparedUpdate(null);
+          setAvailableUpdateSource("manual");
+        } finally {
+          updaterOperatingRef.current = false;
+          setUpdaterInstalling(false);
+          releaseOperation();
+        }
+        return;
+      }
       markPostUpdateRelaunchFocusPending();
       await invoke<void>("app_restart_after_update", { silent: false });
       return;
@@ -383,6 +526,8 @@ export function useUpdateController({
     availableUpdatePolicy,
     hostPlatform,
     installUpdateAndRestart,
+    installPreparedWindowsUpdate,
+    rememberPreparedUpdate,
     replaceAvailableUpdate,
     updateStoredInteractions,
   ]);
@@ -464,7 +609,7 @@ export function useUpdateController({
   useEffect(() => {
     if (!preparedUpdateVersion) return undefined;
     if (!backgroundUpdatesEnabled) return undefined;
-    if (!backgroundPreparationSupported) return undefined;
+    if (!backgroundPreparationSupported || !stableAutomaticUpdatesEnabled) return undefined;
 
     let disposed = false;
     let restartInFlight = false;
@@ -508,9 +653,28 @@ export function useUpdateController({
           if (!releaseOperation) return;
           restartInFlight = true;
           try {
-            await invoke<void>("app_restart_after_update", { silent: true });
+            if (hostPlatform === "windows") {
+              const prepared = availableUpdateRef.current;
+              if (!prepared || prepared.version !== preparedUpdateVersionRef.current) {
+                restartInFlight = false;
+                return;
+              }
+              await installPreparedWindowsUpdate(prepared.version, true);
+            } else {
+              await invoke<void>("app_restart_after_update", { silent: true });
+            }
           } catch (error) {
             console.warn("Failed to restart app after background update:", toErrorMessage(error));
+            if (hostPlatform === "windows") {
+              window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
+              rememberPreparedUpdate(null);
+              updateStoredInteractions((interactions) => markUpdateBackgroundPreparationFailed(
+                interactions,
+                preparedUpdateVersion,
+              ));
+              setUpdaterError(`Update install failed: ${toErrorMessage(error)}`);
+              setAvailableUpdateSource("manual");
+            }
             restartInFlight = false;
           } finally {
             releaseOperation();
@@ -528,15 +692,26 @@ export function useUpdateController({
   }, [
     backgroundPreparationSupported,
     backgroundUpdatesEnabled,
+    hostPlatform,
+    installPreparedWindowsUpdate,
     preparedUpdateVersion,
+    rememberPreparedUpdate,
+    stableAutomaticUpdatesEnabled,
+    updateStoredInteractions,
   ]);
 
   const canAutoUpdateSilently = !idleProbeUnavailable
+    // Dismissing recovery must leave the titlebar action reachable. This
+    // version cannot use the silent path even after its source becomes automatic.
+    && !(hostPlatform === "windows" && offeredUpdateVersion !== null
+      && failedWindowsInstallVersion === offeredUpdateVersion)
     && backgroundPreparationSupported
     && backgroundUpdatesEnabled
+    && stableAutomaticUpdatesEnabled
     && (preparedUpdateVersion !== null || (
       availableUpdateSource === "automatic"
       && currentUpdatePolicy?.urgency !== "urgent"
+      && currentUpdatePolicy?.installBehavior === (hostPlatform === "windows" ? "idle" : "next-launch")
       && currentUpdatePolicy?.backgroundDownloadEligible === true
       && (availableUpdateInteraction?.backgroundPreparationFailureCount ?? 0) < 3
     ));

@@ -73,6 +73,21 @@ describe("updatePolicy", () => {
     });
   });
 
+  it("recognizes the Windows idle-install policy without legacy autoInstall", () => {
+    expect(normalizeUpdatePolicyMetadata({
+      version: VERSION,
+      policyVersion: 2,
+      urgency: "general",
+      promptAfterHours: 72,
+      backgroundDownload: true,
+      installBehavior: "idle",
+      autoInstall: false,
+    }, VERSION)).toEqual(expect.objectContaining({
+      backgroundDownloadEligible: true,
+      installBehavior: "idle",
+    }));
+  });
+
   it("never converts legacy autoInstall metadata into background permission", () => {
     const policy = normalizeUpdatePolicyMetadata({
       version: VERSION,
@@ -189,6 +204,13 @@ describe("updatePolicy", () => {
       policy,
       interaction: requireInteraction(attempted),
     })).toBe(false);
+    expect(shouldPrepareUpdateInBackground({
+      backgroundPreparationSupported: true,
+      backgroundUpdatesEnabled: true,
+      policy,
+      interaction: requireInteraction(attempted),
+      allowPreviouslyAttempted: true,
+    })).toBe(true);
 
     const failedOnce = markUpdateBackgroundPreparationFailed(attempted, VERSION);
     const attemptedTwice = markUpdateBackgroundPreparationAttempted(failedOnce, VERSION, NOW_MS + 2);
@@ -200,6 +222,7 @@ describe("updatePolicy", () => {
       backgroundUpdatesEnabled: true,
       policy,
       interaction: requireInteraction(failedThrice),
+      allowPreviouslyAttempted: true,
     })).toBe(false);
   });
 

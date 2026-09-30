@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-windows-download-stable-update"
+description = "Enables the windows_download_stable_update command without any pre-configured scope."
+commands.allow = ["windows_download_stable_update"]
+
+[[permission]]
+identifier = "deny-windows-download-stable-update"
+description = "Denies the windows_download_stable_update command without any pre-configured scope."
+commands.deny = ["windows_download_stable_update"]

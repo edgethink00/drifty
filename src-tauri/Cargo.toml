@@ -6,6 +6,11 @@ authors = ["EdgeThink"]
 edition = "2021"
 default-run = "drifty"
 
+[features]
+# Private, separately identified signed updater-cycle builds only. Never enable
+# this feature in a distributed production build.
+windows-updater-qa = []
+
 [lib]
 name = "drifty_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -65,6 +70,7 @@ window-vibrancy = "0.6"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1" }
 
 [target."cfg(windows)".dependencies]
+tempfile = "3"
 sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
 uiautomation = "0.25.1"
 winreg = "0.56.0"

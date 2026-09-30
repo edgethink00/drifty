@@ -6,6 +6,7 @@ export const AUTO_UPDATE_CHECK_RETRY_MS = 60 * 60 * 1000;
 export const AUTO_UPDATE_CHECK_BUSY_RETRY_MS = 15 * 60 * 1000;
 export const AUTO_UPDATE_CHECK_STARTUP_DELAY_MS = 2500;
 export const WINDOWS_BETA_NEXT_AUTOMATIC_CHECK_STORAGE_KEY = "drifty.updates.windowsBetaNextAutomaticCheckAt.v1";
+export const WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY = "drifty.updates.windowsPendingAutoUpdate.v1";
 export { UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY } from "./versionSwitchState";
 
 export type ScheduledUpdateCheckResult = {
@@ -71,6 +72,10 @@ export function useAutomaticUpdateScheduler({
     let disposed = false;
     let checkInFlight = false;
     let timeoutId: number | null = null;
+    // Downloaded Windows updates live in the updater process. A normal quit
+    // discards those bytes, so the next process must check again at startup.
+    let pendingWindowsUpdateAtStartup = storageKey === UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY
+      && Boolean(window.localStorage.getItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY));
     const startupNotBeforeMs = Date.now() + AUTO_UPDATE_CHECK_STARTUP_DELAY_MS;
 
     const clearScheduledCheck = () => {
@@ -84,7 +89,9 @@ export function useAutomaticUpdateScheduler({
       clearScheduledCheck();
       const nowMs = Date.now();
       const delayMs = nextAutomaticCheckDelayMs({
-        nextCheckAtMs: Math.max(readNextAutomaticCheckAt(storageKey) ?? 0, versionTestPauseUntil),
+        nextCheckAtMs: pendingWindowsUpdateAtStartup
+          ? versionTestPauseUntil
+          : Math.max(readNextAutomaticCheckAt(storageKey) ?? 0, versionTestPauseUntil),
         nowMs,
         startupNotBeforeMs,
       });
@@ -101,13 +108,16 @@ export function useAutomaticUpdateScheduler({
         scheduleNextCheck();
         return;
       }
-      const nextCheckAtMs = Math.max(readNextAutomaticCheckAt(storageKey) ?? 0, versionTestPauseUntil);
+      const nextCheckAtMs = pendingWindowsUpdateAtStartup
+        ? versionTestPauseUntil
+        : Math.max(readNextAutomaticCheckAt(storageKey) ?? 0, versionTestPauseUntil);
       if (nextCheckAtMs !== null && nowMs < nextCheckAtMs) {
         scheduleNextCheck();
         return;
       }
 
       checkInFlight = true;
+      pendingWindowsUpdateAtStartup = false;
       let result: ScheduledUpdateCheckResult | void;
       try {
         result = await checkForUpdatesRef.current();

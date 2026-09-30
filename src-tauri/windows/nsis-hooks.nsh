@@ -8,9 +8,13 @@
 !define DRIFTY_VC_REDIST_RBLD 0
 
 !macro NSIS_HOOK_PREINSTALL
-  ; Ensure any running Drifty or tracker instances are terminated so files are not locked
+  ; Drifty's native updater stops the app and tracker before launching /UPDATE.
+  ; A second forced kill here can interrupt database cleanup.
+  StrCmp $UpdateMode "1" drifty_processes_stopped
+  ; Interactive/manual installation may replace a still-running app.
   nsExec::Exec 'taskkill /F /IM drifty.exe'
   nsExec::Exec 'taskkill /F /IM drifty-tracker.exe'
+  drifty_processes_stopped:
 
   ; The downloaded managed-AI runtime links the Microsoft VC++ runtime. Keep
   ; Drifty itself per-user, but install this machine prerequisite centrally so

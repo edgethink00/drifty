@@ -6,6 +6,7 @@ import { dirname, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { windowsDebugUploadSettings } from "./upload-windows-debug-files.mjs";
+import { qaBuildConfig } from "./qa/windows-updater-feed.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FULL_COMMIT_PATTERN = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/iu;
@@ -288,6 +289,14 @@ function main(argv = process.argv.slice(2)) {
   const windowsReleaseIndex = args.indexOf("--windows-release");
   const windowsRelease = windowsReleaseIndex >= 0;
   if (windowsRelease) args.splice(windowsReleaseIndex, 1);
+  const qaIndex = args.indexOf("--windows-updater-qa-version");
+  const qaVersion = qaIndex < 0 ? null : args[qaIndex + 1];
+  if (qaIndex >= 0) {
+    if (!windowsRelease || !production || !qaVersion) throw new Error("Private updater QA requires a signed Windows production-mode build and explicit QA version.");
+    qaBuildConfig(qaVersion);
+    args.splice(qaIndex, 2);
+    args.push("--features", "windows-updater-qa");
+  }
 
   if (command !== "build" && command !== "dev") {
     throw new Error(`Unsupported Tauri command: ${command}`);
@@ -304,11 +313,15 @@ function main(argv = process.argv.slice(2)) {
     process.env,
     production ? "production" : "development",
   );
+  if (!qaVersion && (buildEnvironment.DRIFTY_WINDOWS_UPDATER_QA || buildEnvironment.DRIFTY_WINDOWS_UPDATER_QA_VERSION)) {
+    throw new Error("Private updater QA environment requires --windows-updater-qa-version; normal builds refuse it.");
+  }
   validateGoogleCalendarBuildConfig(buildEnvironment);
   const buildCommit = resolveBuildCommit(buildEnvironment, gitCheckoutState, production);
 
   const releaseEnvironment = {
     ...buildEnvironment,
+    ...(qaVersion ? { DRIFTY_WINDOWS_UPDATER_QA: "1", DRIFTY_WINDOWS_UPDATER_QA_VERSION: qaVersion } : {}),
     ...(production ? { DRIFTY_RELEASE_BUILD: "1" } : {}),
     ...(windowsRelease ? { DRIFTY_WINDOWS_SIGN_RELEASE: "1" } : {}),
   };
@@ -316,7 +329,7 @@ function main(argv = process.argv.slice(2)) {
 
   if (windowsRelease) {
     Object.assign(releaseEnvironment, windowsReleaseRustCacheEnvironment(releaseEnvironment));
-    args.push("--config", JSON.stringify(windowsReleaseConfig()));
+    args.push("--config", JSON.stringify({ ...windowsReleaseConfig(), ...(qaVersion ? qaBuildConfig(qaVersion) : {}) }));
     // Fail before the long build when native debug files could not be uploaded.
     windowsDebugUploadSettings(releaseEnvironment);
     run(

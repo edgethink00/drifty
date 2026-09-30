@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { act, cleanup, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AUTO_UPDATE_CHECK_BUSY_RETRY_MS,
   AUTO_UPDATE_CHECK_INTERVAL_MS,
@@ -6,7 +8,16 @@ import {
   nextAutomaticCheckAtAfterResult,
   nextAutomaticCheckDelayMs,
   parseNextAutomaticCheckAt,
+  useAutomaticUpdateScheduler,
+  WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY,
 } from "./useAutomaticUpdateScheduler";
+import { UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY } from "./versionSwitchState";
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  vi.useRealTimers();
+});
 
 describe("automatic update scheduling", () => {
   it("waits for the startup quiet period when no check is persisted", () => {
@@ -45,5 +56,16 @@ describe("automatic update scheduling", () => {
     expect(parseNextAutomaticCheckAt("bad")).toBeNull();
     expect(parseNextAutomaticCheckAt("-1")).toBeNull();
     expect(parseNextAutomaticCheckAt("1234")).toBe(1234);
+  });
+
+  it("rechecks a Windows package lost on normal quit despite tomorrow's deadline", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY, String(Date.now() + AUTO_UPDATE_CHECK_INTERVAL_MS));
+    localStorage.setItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY, "1.11.25");
+    const checkForUpdates = vi.fn(async () => ({ kind: "none" as const }));
+    const { unmount } = renderHook(() => useAutomaticUpdateScheduler({ enabled: true, checkForUpdates }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_500); });
+    expect(checkForUpdates).toHaveBeenCalledTimes(1);
+    unmount();
   });
 });

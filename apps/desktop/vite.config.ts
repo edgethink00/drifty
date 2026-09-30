@@ -19,6 +19,11 @@ function resolveBuildCommit(): string {
 }
 
 function resolveAppVersion(): string {
+  if (process.env.DRIFTY_WINDOWS_UPDATER_QA === "1") {
+    const version = process.env.DRIFTY_WINDOWS_UPDATER_QA_VERSION;
+    if (!version || !["1.11.2401", "1.11.2402"].includes(version)) throw new Error("Invalid private updater QA version");
+    return version;
+  }
   return process.env.npm_package_version?.trim() || "unknown";
 }
 

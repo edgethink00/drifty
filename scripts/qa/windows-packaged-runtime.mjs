@@ -613,7 +613,7 @@ async function waitForMainTarget(port, timeoutMs = 90_000) {
   throw new Error(`A main-window WebView2 DevTools target did not appear within ${timeoutMs / 1000} seconds.`);
 }
 
-class CdpClient {
+export class CdpClient {
   constructor(socket) {
     this.socket = socket;
     this.nextId = 0;

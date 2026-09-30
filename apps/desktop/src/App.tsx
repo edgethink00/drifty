@@ -703,6 +703,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, []);
   const canSafelyRestartRef = useRef<() => boolean>(() => true);
   const petOccupancyRef = useRef({ enabled: false, hiddenUntil: null as number | null, menuOpen: false });
+  const [devModeEnabled, setDevModeEnabled] = useState(initialDevModeEnabled);
+  const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
+  const windowsBetaAutomaticChecksEnabled = isTauriRuntime()
+    && hostPlatform === "windows"
+    && isDevModeActive;
   const {
     backgroundUpdatesEnabled,
     availableUpdate,
@@ -722,11 +727,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     updaterInstalling,
     updaterMessage,
   } = useUpdateController({
-    // Tauri's Windows updater exits the current process from `install()`.
-    // Keep unattended next-launch preparation on the macOS path proven by
-    // packaged runtime QA until another platform has its own safe contract.
-    backgroundPreparationSupported: hostPlatform === "macos",
+    backgroundPreparationSupported: hostPlatform === "macos" || hostPlatform === "windows",
     hostPlatform,
+    stableAutomaticUpdatesEnabled: !windowsBetaAutomaticChecksEnabled,
     getIdleSeconds: async () => {
       try {
         const occupancy = petOccupancyRef.current;
@@ -755,7 +758,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
   const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
-  const [devModeEnabled, setDevModeEnabled] = useState(initialDevModeEnabled);
   const [windowsBlurPreviewEnabled, setWindowsBlurPreviewEnabled] = useState(resolveInitialWindowsBlurPreviewEnabled);
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
@@ -775,10 +777,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [teamNavMenuOpen, setTeamNavMenuOpen] = useState(false);
   const [teamNavMenuPos, setTeamNavMenuPos] = useState<{ readonly left: number; readonly top: number } | null>(null);
   const [teamNavExpandedId, setTeamNavExpandedId] = useState<string | null | undefined>(undefined);
-  const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
-  const windowsBetaAutomaticChecksEnabled = isTauriRuntime()
-    && hostPlatform === "windows"
-    && isDevModeActive;
   useAutomaticUpdateScheduler({
     enabled: isTauriRuntime() && !windowsBetaAutomaticChecksEnabled,
     checkForUpdates: () => handleCheckForUpdates("automatic"),
@@ -10846,7 +10844,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 )}
                 {settingsSection === "general" && (
                   <GeneralSettingsSection
-                    backgroundUpdatesSupported={hostPlatform === "macos"}
+                    backgroundUpdatesSupported={hostPlatform === "macos" || hostPlatform === "windows"}
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
                     devModeEnabled={isDevModeActive}
                     hostPlatform={hostPlatform}

@@ -104,6 +104,11 @@ use commands::{
     calibrate_main_window_to_work_area, window_set_onboarding_presentation,
     window_set_theme_appearance, window_show_system_menu, MainWindowMaterialState,
 };
+#[cfg(target_os = "windows")]
+use commands::{
+    windows_clear_prepared_stable_update, windows_download_stable_update,
+    windows_install_prepared_stable_update, WindowsStableUpdateState,
+};
 use quit_confirmation::{quit_confirmation_set_language, QuitConfirmationState};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
@@ -762,6 +767,9 @@ pub fn run() {
         .manage(TrackerStartupState::default())
         .on_menu_event(|app, event| handle_app_menu_event(app, event.id().as_ref()));
 
+    #[cfg(target_os = "windows")]
+    let builder = builder.manage(WindowsStableUpdateState::default());
+
     let app_result = builder
         .setup(|app| {
             // Restore the durable pause before creating Windows WebViews.
@@ -928,6 +936,12 @@ pub fn run() {
             app_menu_set_dev_mode_checked,
             quit_confirmation_set_language,
             app_restart_after_update,
+            #[cfg(target_os = "windows")]
+            windows_download_stable_update,
+            #[cfg(target_os = "windows")]
+            windows_install_prepared_stable_update,
+            #[cfg(target_os = "windows")]
+            windows_clear_prepared_stable_update,
             developer_list_releases,
             developer_install_release,
             developer_check_pre_release_update,

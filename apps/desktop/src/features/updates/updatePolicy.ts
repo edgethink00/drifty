@@ -1,5 +1,5 @@
 export type UpdateUrgency = "general" | "urgent";
-export type UpdateInstallBehavior = "manual" | "next-launch";
+export type UpdateInstallBehavior = "manual" | "next-launch" | "idle";
 
 export type UpdatePolicy = {
   readonly version: string;
@@ -69,15 +69,16 @@ export function normalizeUpdatePolicyMetadata(metadata: unknown, expectedVersion
 
   const policyVersion = metadata.policyVersion === 2 ? 2 : 1;
   const promptAfterMs = normalizePromptAfterMs(metadata.promptAfterHours, urgency);
-  const installBehavior = policyVersion === 2 && metadata.installBehavior === "next-launch"
-    ? "next-launch"
+  const installBehavior = policyVersion === 2
+    && (metadata.installBehavior === "next-launch" || metadata.installBehavior === "idle")
+    ? metadata.installBehavior
     : "manual";
   // `autoInstall` deliberately stays a legacy-only release field. Older
   // clients interpret it as permission to restart immediately, so the new
   // background path is eligible only through policy-v2 fields they ignore.
   const backgroundDownloadEligible = policyVersion === 2
     && metadata.backgroundDownload === true
-    && installBehavior === "next-launch";
+    && (installBehavior === "next-launch" || installBehavior === "idle");
   const message = typeof metadata.message === "string" && metadata.message.trim().length > 0
     ? metadata.message.trim()
     : null;
@@ -293,11 +294,13 @@ export function shouldPrepareUpdateInBackground(input: {
   readonly backgroundUpdatesEnabled: boolean;
   readonly policy: UpdatePolicy;
   readonly interaction: UpdateInteraction | null;
+  readonly allowPreviouslyAttempted?: boolean;
 }): boolean {
   if (!input.backgroundPreparationSupported) return false;
   if (!input.backgroundUpdatesEnabled) return false;
   if (!input.policy.backgroundDownloadEligible) return false;
   if ((input.interaction?.backgroundPreparationFailureCount ?? 0) >= MAX_BACKGROUND_PREPARATION_FAILURES) return false;
+  if (input.allowPreviouslyAttempted) return true;
   return input.interaction?.backgroundPreparationAttemptedAtMs === null
     || input.interaction?.backgroundPreparationAttemptedAtMs === undefined;
 }
