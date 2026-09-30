@@ -26,6 +26,7 @@ from app.storage.timestamps import parse_iso_datetime
 from app.storage.database_maintenance import (
     DatabasePreparationResult,
     create_rotating_backup,
+    database_initialization_guard,
     permanent_deletion_guard,
     prepare_database,
 )
@@ -153,7 +154,8 @@ class TrackerDatabase:
                 if perform_maintenance
                 else self.maintenance_result
             )
-            self._init_db()
+            with database_initialization_guard(self.db_path):
+                self._init_db()
         if not self.read_only and perform_maintenance and self.maintenance_result.existed:
             self.create_periodic_backup()
 

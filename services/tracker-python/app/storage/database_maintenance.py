@@ -5,7 +5,7 @@ import shutil
 import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,6 +46,41 @@ def _maintenance_lock_path(db_path: Path) -> Path:
     return db_path.parent / f".{db_path.name}.maintenance.lock"
 
 
+def _recovery_pending_path(db_path: Path) -> Path:
+    return db_path.parent / f".{db_path.name}.recovery-pending"
+
+
+def _pending_quarantine_path(db_path: Path) -> Path | None:
+    pending_path = _recovery_pending_path(db_path)
+    try:
+        name = pending_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    # The record contains only a generated basename, never an arbitrary path.
+    if (
+        Path(name).name != name
+        or "/" in name
+        or "\\" in name
+        or not name.startswith(f"{db_path.stem}-corrupt-")
+        or not name.endswith(db_path.suffix)
+    ):
+        raise sqlite3.DatabaseError("invalid pending database recovery record")
+    return database_quarantine_dir(db_path) / name
+
+
+def _record_pending_recovery(db_path: Path, quarantined_db: Path) -> None:
+    pending_path = _recovery_pending_path(db_path)
+    temp_path = pending_path.with_name(f"{pending_path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8") as record:
+            record.write(quarantined_db.name)
+            record.flush()
+            os.fsync(record.fileno())
+        os.replace(temp_path, pending_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 @contextmanager
 def _maintenance_lock(db_path: Path):
     ensure_directory(db_path.parent)
@@ -55,6 +90,18 @@ def _maintenance_lock(db_path: Path):
             yield
         finally:
             unlock(lock_file)
+
+
+@contextmanager
+def database_initialization_guard(db_path: Path) -> Iterator[None]:
+    """Keep writable initialization from bypassing an interrupted recovery."""
+
+    with _maintenance_lock(db_path):
+        if _recovery_pending_path(db_path).exists():
+            raise sqlite3.DatabaseError(
+                "database recovery is pending; retry startup maintenance"
+            )
+        yield
 
 
 def _is_confirmed_corruption_error(error: sqlite3.DatabaseError) -> bool:
@@ -174,6 +221,7 @@ def permanent_deletion_guard(
                 return
             for path in [*_backup_candidates(db_path), *_quarantine_candidates(db_path)]:
                 path.unlink()
+            _recovery_pending_path(db_path).unlink(missing_ok=True)
             invalidated = True
 
         try:
@@ -204,16 +252,16 @@ def _latest_valid_backup(db_path: Path) -> Path | None:
     return None
 
 
-def _quarantine_database_files(db_path: Path, now: datetime) -> Path:
-    quarantine_dir = database_quarantine_dir(db_path)
-    quarantine_dir.mkdir(parents=True, exist_ok=True)
-    quarantined_db = quarantine_dir / f"{db_path.stem}-corrupt-{_timestamp_slug(now)}{db_path.suffix}"
-    os.replace(db_path, quarantined_db)
+def _quarantine_database_files(db_path: Path, quarantined_db: Path) -> None:
+    quarantined_db.parent.mkdir(parents=True, exist_ok=True)
+    if db_path.exists():
+        os.replace(db_path, quarantined_db)
+    # A previous process may have moved the source, then failed on a sidecar.
+    # Finish these moves before a restored database can open at the live path.
     for suffix in ("-wal", "-shm"):
         source = Path(f"{db_path}{suffix}")
         if source.exists():
             os.replace(source, Path(f"{quarantined_db}{suffix}"))
-    return quarantined_db
 
 
 def _restore_backup(backup_path: Path, db_path: Path) -> None:
@@ -222,30 +270,52 @@ def _restore_backup(backup_path: Path, db_path: Path) -> None:
         shutil.copy2(backup_path, temp_path)
         if not quick_check_database(temp_path, immutable=True):
             raise sqlite3.DatabaseError("restored database backup failed quick_check")
+        # This is a closed backup copy, not a live WAL database. Publish it
+        # without WAL mode so older SQLite can read it even if startup stops
+        # before _init_db creates its live WAL/SHM files.
+        with closing(sqlite3.connect(temp_path)) as restored:
+            restored.execute("PRAGMA journal_mode = DELETE")
         os.replace(temp_path, db_path)
     finally:
         temp_path.unlink(missing_ok=True)
 
 
 def prepare_database(db_path: Path, *, now: datetime | None = None) -> DatabasePreparationResult:
-    """Check an existing database and recover only from confirmed corruption."""
+    """Recover confirmed corruption, including an interrupted earlier restore."""
 
-    if not db_path.exists():
-        return DatabasePreparationResult(existed=False)
     resolved_now = now or datetime.now(timezone.utc)
     with _maintenance_lock(db_path):
-        if not db_path.exists():
+        pending_quarantine = _pending_quarantine_path(db_path)
+        source_exists = db_path.exists()
+        if not source_exists and pending_quarantine is None:
             return DatabasePreparationResult(existed=False)
-        if quick_check_database(db_path):
+        if source_exists and quick_check_database(db_path):
+            # The atomic restore may have completed before record cleanup failed.
+            # Keep the healthy live database, including any subsequent writes.
+            if pending_quarantine is not None:
+                _recovery_pending_path(db_path).unlink()
             return DatabasePreparationResult(existed=True)
 
         backup_path = _latest_valid_backup(db_path)
-        quarantined_path = _quarantine_database_files(db_path, resolved_now)
+        if pending_quarantine is not None and backup_path is None:
+            raise sqlite3.DatabaseError("pending database recovery has no valid backup")
+        if source_exists:
+            quarantined_path = database_quarantine_dir(db_path) / (
+                f"{db_path.stem}-corrupt-{_timestamp_slug(resolved_now)}{db_path.suffix}"
+            )
+            if backup_path is not None:
+                # Persist intent before removing the source. Errors or process
+                # exit must not turn the next startup into a fresh installation.
+                _record_pending_recovery(db_path, quarantined_path)
+        else:
+            quarantined_path = pending_quarantine
+        _quarantine_database_files(db_path, quarantined_path)
         if backup_path is not None:
             _restore_backup(backup_path, db_path)
+            _recovery_pending_path(db_path).unlink()
         return DatabasePreparationResult(
             existed=True,
-            quarantined_path=quarantined_path,
+            quarantined_path=quarantined_path if quarantined_path.is_file() else None,
             restored_backup_path=backup_path,
         )
 

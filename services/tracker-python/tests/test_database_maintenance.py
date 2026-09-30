@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import errno
+import os
 import sqlite3
+import subprocess
 import sys
 import threading
 import unittest
@@ -249,6 +252,308 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         self.assertTrue(quick_check_database(self.db_path))
         self.assertEqual(recovered.get_meta("maintenance-test"), "recover-me")
         recovered.close()
+
+    def _seed_windows_recovery(self) -> Path:
+        database = TrackerDatabase(self.db_path)
+        self._insert_marker(database, "recover-me")
+        database.insert_segment(
+            {
+                "segment_uid": "recovery-windows-row",
+                "started_at": "2026-08-02T09:00:00+00:00",
+                "ended_at": "2026-08-02T09:01:00+00:00",
+                "duration_seconds": 60,
+                "app_name": "Synthetic Windows recovery",
+                "platform": "windows",
+                "source": "win32-foreground",
+            }
+        )
+        backup = create_rotating_backup(
+            database.connect(), self.db_path, interval_seconds=0
+        )
+        self.assertIsNotNone(backup)
+        database.close()
+        self.db_path.write_bytes(b"not a sqlite database")
+        return backup
+
+    def _assert_windows_recovery(self, database: TrackerDatabase) -> None:
+        self.assertEqual(database.get_meta("maintenance-test"), "recover-me")
+        rows = database.connect().execute(
+            "SELECT segment_uid, platform FROM activity_segments"
+        ).fetchall()
+        self.assertEqual(
+            [(row["segment_uid"], row["platform"]) for row in rows],
+            [("recovery-windows-row", "windows")],
+        )
+
+    def test_failed_restore_retries_without_starting_an_empty_database(self) -> None:
+        replace = os.replace
+
+        def fail_restore_replace(source, destination):
+            if ".restore-" in Path(source).name:
+                raise PermissionError("destination sharing denial")
+            return replace(source, destination)
+
+        failures = (
+            ("copy denied", "shutil.copy2", PermissionError("copy denied")),
+            ("disk full", "shutil.copy2", OSError(errno.ENOSPC, "disk full")),
+            ("replace denied", "os.replace", fail_restore_replace),
+        )
+        for name, target, failure in failures:
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                self.db_path = Path(directory) / "tracker.sqlite3"
+                backup = self._seed_windows_recovery()
+                backup_bytes = backup.read_bytes()
+                for _attempt in range(2):
+                    with patch(
+                        f"app.storage.database_maintenance.{target}",
+                        side_effect=failure,
+                    ), self.assertRaises(OSError):
+                        TrackerDatabase(self.db_path)
+                    self.assertFalse(self.db_path.exists())
+                    self.assertEqual(backup.read_bytes(), backup_bytes)
+                    self.assertEqual(
+                        len(list(database_quarantine_dir(self.db_path).glob("*.sqlite3"))),
+                        1,
+                    )
+
+                recovered = TrackerDatabase(self.db_path)
+                self.addCleanup(recovered.close)
+                self._assert_windows_recovery(recovered)
+                self.assertEqual(recovered.maintenance_result.restored_backup_path, backup)
+                self.assertEqual(backup.read_bytes(), backup_bytes)
+                self.assertEqual(list(self.db_path.parent.glob("*.tmp")), [])
+                recovered.close()
+
+    def test_restore_retries_after_an_abrupt_process_exit(self) -> None:
+        backup = self._seed_windows_recovery()
+        backup_bytes = backup.read_bytes()
+        script = "\n".join(
+            (
+                "import os, sys",
+                "from pathlib import Path",
+                "from unittest.mock import patch",
+                "from app.storage.db import TrackerDatabase",
+                "with patch('app.storage.database_maintenance.shutil.copy2', "
+                "side_effect=lambda *_args, **_kwargs: os._exit(73)):",
+                "    TrackerDatabase(Path(sys.argv[1]))",
+            )
+        )
+        failed = subprocess.run(
+            [sys.executable, "-c", script, str(self.db_path)],
+            cwd=SERVICE_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(failed.returncode, 73, failed.stderr)
+        self.assertFalse(self.db_path.exists())
+        retry_script = "\n".join(
+            (
+                "import sys",
+                "from pathlib import Path",
+                "from app.storage.db import TrackerDatabase",
+                "db = TrackerDatabase(Path(sys.argv[1]))",
+                "assert db.get_meta('maintenance-test') == 'recover-me'",
+                "assert db.connect().execute("
+                "'SELECT COUNT(*) FROM activity_segments').fetchone()[0] == 1",
+                "assert db.maintenance_result.restored_backup_path is not None",
+                "db.close()",
+            )
+        )
+        retry = subprocess.run(
+            [sys.executable, "-c", retry_script, str(self.db_path)],
+            cwd=SERVICE_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertEqual(backup.read_bytes(), backup_bytes)
+
+    def test_interrupted_sidecar_quarantine_finishes_before_restore(self) -> None:
+        self._seed_windows_recovery()
+        wal_path = Path(f"{self.db_path}-wal")
+        shm_path = Path(f"{self.db_path}-shm")
+        wal_path.write_bytes(b"original wal sidecar")
+        shm_path.write_bytes(b"original shm sidecar")
+        replace = os.replace
+
+        def fail_shm_move(source, destination):
+            if Path(source) == shm_path:
+                raise PermissionError("shm sharing denial")
+            return replace(source, destination)
+
+        with patch(
+            "app.storage.database_maintenance.os.replace", side_effect=fail_shm_move
+        ), self.assertRaisesRegex(PermissionError, "shm sharing denial"):
+            TrackerDatabase(self.db_path)
+
+        self.assertFalse(self.db_path.exists())
+        self.assertTrue(shm_path.exists())
+        # SQLite can initialize SHM even during the failed read-only check.
+        # Preserve the file left by that first attempt through the retry.
+        remaining_shm = shm_path.read_bytes()
+        recovered = TrackerDatabase(self.db_path)
+        self.addCleanup(recovered.close)
+        self._assert_windows_recovery(recovered)
+        quarantine = recovered.maintenance_result.quarantined_path
+        self.assertIsNotNone(quarantine)
+        self.assertEqual(Path(f"{quarantine}-wal").read_bytes(), b"original wal sidecar")
+        self.assertEqual(Path(f"{quarantine}-shm").read_bytes(), remaining_shm)
+
+    def test_missing_database_with_old_recovery_copies_is_a_fresh_install(self) -> None:
+        self._seed_windows_recovery()
+        recovered = TrackerDatabase(self.db_path)
+        self._assert_windows_recovery(recovered)
+        recovered.close()
+        self.db_path.unlink()
+        self.assertTrue(database_backup_dir(self.db_path).is_dir())
+        self.assertTrue(database_quarantine_dir(self.db_path).is_dir())
+
+        fresh = TrackerDatabase(self.db_path)
+        self.addCleanup(fresh.close)
+        self.assertFalse(fresh.maintenance_result.existed)
+        self.assertIsNone(fresh.maintenance_result.restored_backup_path)
+        self.assertIsNone(fresh.get_meta("maintenance-test"))
+        self.assertEqual(fresh.fetch_timeline("2026-08-02"), [])
+
+    def test_pending_restore_with_no_valid_backup_does_not_start_fresh(self) -> None:
+        backup = self._seed_windows_recovery()
+        backup_bytes = backup.read_bytes()
+        with patch(
+            "app.storage.database_maintenance.shutil.copy2",
+            side_effect=PermissionError("copy denied"),
+        ), self.assertRaises(PermissionError):
+            TrackerDatabase(self.db_path)
+        backup.write_bytes(b"invalid backup")
+
+        with self.assertRaises(sqlite3.DatabaseError):
+            TrackerDatabase(self.db_path)
+        self.assertFalse(self.db_path.exists())
+        self.assertEqual(len(list(database_quarantine_dir(self.db_path).glob("*.sqlite3"))), 1)
+        backup.write_bytes(backup_bytes)
+        recovered = TrackerDatabase(self.db_path)
+        self.addCleanup(recovered.close)
+        self._assert_windows_recovery(recovered)
+
+    def test_completed_restore_with_failed_record_cleanup_keeps_newer_writes(self) -> None:
+        self._seed_windows_recovery()
+        unlink = Path.unlink
+
+        def fail_record_cleanup(path, *args, **kwargs):
+            if path.name.endswith(".recovery-pending"):
+                raise PermissionError("record cleanup denied")
+            return unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", fail_record_cleanup), self.assertRaisesRegex(
+            PermissionError, "record cleanup denied"
+        ):
+            TrackerDatabase(self.db_path)
+        self.assertTrue(quick_check_database(self.db_path))
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "recovery.*pending"):
+            TrackerDatabase(self.db_path, perform_maintenance=False)
+        # A connection that was already open may have written after publication.
+        # A successful retry must preserve that healthy database, not replay an
+        # older backup merely because clearing the recovery record failed.
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE tracker_meta SET value = 'written-after-restore' "
+                    "WHERE key = 'maintenance-test'"
+                )
+
+        with closing(TrackerDatabase(self.db_path)) as reopened:
+            self.assertEqual(reopened.get_meta("maintenance-test"), "written-after-restore")
+            self.assertIsNone(reopened.maintenance_result.restored_backup_path)
+        self.assertEqual(list(self.db_path.parent.glob("*.recovery-pending")), [])
+
+    def test_recovery_record_failure_leaves_the_original_in_place(self) -> None:
+        self._seed_windows_recovery()
+        original = self.db_path.read_bytes()
+        replace = os.replace
+
+        def fail_record_publish(source, destination):
+            if Path(destination).name.endswith(".recovery-pending"):
+                raise OSError(errno.ENOSPC, "record disk full")
+            return replace(source, destination)
+
+        with patch(
+            "app.storage.database_maintenance.os.replace", side_effect=fail_record_publish
+        ), self.assertRaisesRegex(OSError, "record disk full"):
+            TrackerDatabase(self.db_path)
+        self.assertEqual(self.db_path.read_bytes(), original)
+        self.assertEqual(list(self.db_path.parent.glob("*.tmp")), [])
+        with closing(TrackerDatabase(self.db_path)) as recovered:
+            self._assert_windows_recovery(recovered)
+
+    def test_malformed_recovery_record_never_uses_an_arbitrary_path(self) -> None:
+        self._seed_windows_recovery()
+        with patch(
+            "app.storage.database_maintenance.shutil.copy2",
+            side_effect=PermissionError("copy denied"),
+        ), self.assertRaises(PermissionError):
+            TrackerDatabase(self.db_path)
+        record = next(self.db_path.parent.glob("*.recovery-pending"))
+        valid_record = record.read_text()
+        record.write_text("../foreign.sqlite3")
+
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "invalid pending"):
+            TrackerDatabase(self.db_path)
+        self.assertFalse(self.db_path.exists())
+        record.write_text(valid_record)
+        with closing(TrackerDatabase(self.db_path)) as recovered:
+            self._assert_windows_recovery(recovered)
+
+    def test_permanent_delete_clears_a_leftover_recovery_record(self) -> None:
+        self._seed_windows_recovery()
+        with closing(TrackerDatabase(self.db_path)) as database:
+            quarantine = database.maintenance_result.quarantined_path
+            self.assertIsNotNone(quarantine)
+            # Exercise deletion through an already initialized connection. New
+            # workers must refuse to open while a recovery record is present.
+            record = self.db_path.parent / f".{self.db_path.name}.recovery-pending"
+            record.write_text(quarantine.name, encoding="utf-8")
+            segment_id = str(database.connect().execute(
+                "SELECT id FROM activity_segments"
+            ).fetchone()["id"])
+            self.assertEqual(database.delete_activity_segments([segment_id]), 1)
+        self.assertFalse(record.exists())
+        self.db_path.write_bytes(b"not a sqlite database")
+        with closing(TrackerDatabase(self.db_path)) as recovered:
+            self.assertEqual(recovered.fetch_timeline("2026-08-02"), [])
+
+    def test_worker_cannot_create_a_fresh_database_during_pending_recovery(self) -> None:
+        backup = self._seed_windows_recovery()
+        with patch(
+            "app.storage.database_maintenance.shutil.copy2",
+            side_effect=PermissionError("copy denied"),
+        ), self.assertRaises(PermissionError):
+            TrackerDatabase(self.db_path)
+
+        for _attempt in range(2):
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "recovery.*pending"):
+                TrackerDatabase(self.db_path, perform_maintenance=False)
+            self.assertFalse(self.db_path.exists())
+        self.assertTrue(quick_check_database(backup, immutable=True))
+        with closing(TrackerDatabase(self.db_path)) as recovered:
+            self._assert_windows_recovery(recovered)
+
+    def test_pending_restore_does_not_require_the_corrupt_quarantine_copy(self) -> None:
+        self._seed_windows_recovery()
+        with patch(
+            "app.storage.database_maintenance.shutil.copy2",
+            side_effect=PermissionError("copy denied"),
+        ), self.assertRaises(PermissionError):
+            TrackerDatabase(self.db_path)
+        quarantined = next(database_quarantine_dir(self.db_path).glob("*.sqlite3"))
+        quarantined.unlink()
+
+        with closing(TrackerDatabase(self.db_path)) as recovered:
+            self._assert_windows_recovery(recovered)
+            self.assertIsNotNone(recovered.maintenance_result.restored_backup_path)
+            self.assertIsNone(recovered.maintenance_result.quarantined_path)
+        with closing(TrackerDatabase(self.db_path)) as reopened:
+            self._assert_windows_recovery(reopened)
 
     def test_permanent_activity_delete_cannot_be_undone_by_backup_recovery(self) -> None:
         database = TrackerDatabase(self.db_path)
