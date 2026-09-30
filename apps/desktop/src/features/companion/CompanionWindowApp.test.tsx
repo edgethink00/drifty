@@ -12,6 +12,7 @@ import type { WatcherPeekEvent } from "./watcherPeekTypes";
 import type { CompanionPillWindowEvent, NativeCompanionPointerEvent } from "./watcherBridge";
 
 const bridge = vi.hoisted(() => ({
+  visibilityHandler: null as ((visible: boolean) => void) | null,
   clearHandler: null as ((momentKey?: string | null) => void) | null,
   enteredHandler: null as ((event: NativeCompanionPointerEvent) => void) | null,
   exitedHandler: null as ((event: NativeCompanionPointerEvent) => void) | null,
@@ -64,6 +65,10 @@ vi.mock("./watcherBridge", () => ({
   dismissNativeCompanionMoment: bridge.dismissNativeCompanionMoment,
   isTauriRuntime: () => true,
   isNativeCompanionCursorOverCapsule: bridge.isNativeCompanionCursorOverCapsule,
+  listenToNativeCompanionVisibility: vi.fn(async (handler: (visible: boolean) => void) => {
+    bridge.visibilityHandler = handler;
+    return vi.fn();
+  }),
   listenToNativeCompanionPillClear: vi.fn(async (handler: (momentKey?: string | null) => void) => {
     bridge.clearHandler = handler;
     return vi.fn();
@@ -163,6 +168,7 @@ describe("CompanionWindowApp", () => {
     cleanup();
     vi.clearAllMocks();
     vi.useRealTimers();
+    bridge.visibilityHandler = null;
     bridge.clearHandler = null;
     bridge.enteredHandler = null;
     bridge.exitedHandler = null;
@@ -174,6 +180,7 @@ describe("CompanionWindowApp", () => {
     window.history.replaceState({}, "", "/");
     bridge.setNativeCompanionPillState.mockResolvedValue({ prepared: false, menuAnchorX: null });
     bridge.notifyNativeEndOfDayReviewDisplayed.mockResolvedValue(undefined);
+    bridge.presentPreparedNativeCompanionMoment.mockResolvedValue(undefined);
     informationalSuppression.suppressed = false;
     informationalSuppression.refresh.mockResolvedValue(undefined);
     /* `clearAllMocks` drops mock implementations as well as call history, so
@@ -313,6 +320,129 @@ describe("CompanionWindowApp", () => {
     expect(container.querySelectorAll(".view--collapsed .icon-btn")).toHaveLength(2);
     expect(bridge.setNativeCompanionPillState).not.toHaveBeenCalledWith("peek");
     expect(bridge.setNativeCompanionPillState).toHaveBeenLastCalledWith("collapsed", undefined, undefined);
+  });
+
+  it("stops hidden native cursor queries and immediately resumes when shown without focus", async () => {
+    vi.useFakeTimers();
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(null);
+    render(<CompanionWindowApp />);
+    await act(async () => {});
+    const hiddenCalls = bridge.isNativeCompanionCursorOverCapsule.mock.calls.length;
+    expect(hiddenCalls).toBeGreaterThan(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(hiddenCalls);
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(true);
+    await act(async () => { bridge.visibilityHandler?.(true); });
+    expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(hiddenCalls + 1);
+    expect(bridge.setNativeCompanionClickThrough).toHaveBeenLastCalledWith(false);
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(null);
+    await act(async () => { bridge.visibilityHandler?.(false); });
+    const stoppedCalls = bridge.isNativeCompanionCursorOverCapsule.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(stoppedCalls);
+  });
+
+  it("reports no native cursor surface outside Tauri", async () => {
+    const actual = await vi.importActual<typeof import("./watcherBridge")>("./watcherBridge");
+    expect(actual.isTauriRuntime()).toBe(false);
+    expect(await actual.isNativeCompanionCursorOverCapsule()).toBeNull();
+  });
+
+  it("finishes a hidden menu-bar close without a native resize start", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => {});
+    bridge.setNativeCompanionPillState.mockResolvedValue({ prepared: true, menuAnchorX: 100, presentationId: 1 });
+    const alarm = buildCompanionDriftAlarmPreview("drift-alarm");
+    await act(async () => bridge.showHandler?.({ kind: "companionDriftAlarm", alarm, __companionPresentation: "menuBar" }));
+    await act(async () => { bridge.clearHandler?.(null); });
+    await act(async () => {
+      bridge.transitionHandler?.({ state: "collapsed", phase: "completed", anchor: "right" });
+    });
+    expect(container.querySelector(".view--collapsed")?.classList.contains("is-active")).toBe(true);
+    expect(container.querySelector(".view--drift")).toBeNull();
+  });
+
+  it("reopens production menu-bar moments after hidden completion without a resident pill", async () => {
+    vi.useFakeTimers();
+    let visible = false;
+    bridge.isNativeCompanionCursorOverCapsule.mockImplementation(async () => visible ? true : null);
+    bridge.setNativeCompanionPillState.mockImplementation(async (state: string) => ({
+      prepared: state !== "collapsed",
+      menuAnchorX: state !== "collapsed" ? 100 : null,
+    }));
+    bridge.presentPreparedNativeCompanionMoment.mockImplementation(async () => {
+      visible = true;
+      bridge.visibilityHandler?.(true);
+    });
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => {});
+
+    const events: CompanionPillWindowEvent[] = [
+      { kind: "companionDriftAlarm", alarm: buildCompanionDriftAlarmPreview("drift-alarm"), __companionPresentation: "menuBar" },
+      { ...focusMilestone, __companionPresentation: "menuBar" },
+    ];
+    for (const event of events) {
+      await act(async () => { bridge.showHandler?.(event); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+      expect(container.querySelector(".pill")?.getAttribute("data-direct-entry")).toBe("true");
+      expect(bridge.setNativeCompanionClickThrough).toHaveBeenLastCalledWith(false);
+      const activeCard = container.querySelector<HTMLElement>(".view.is-active:not(.view--collapsed)");
+      expect(activeCard).not.toBeNull();
+      const close = activeCard?.querySelector<HTMLButtonElement>(".card__close");
+      expect(close).not.toBeNull();
+      fireEvent.click(close!);
+      await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+      expect(bridge.setNativeCompanionPillState).toHaveBeenLastCalledWith("collapsed", expect.anything(), undefined);
+
+      visible = false;
+      await act(async () => {
+        bridge.visibilityHandler?.(false);
+        bridge.transitionHandler?.({ state: "collapsed", phase: "completed", anchor: "right" });
+      });
+      expect(container.querySelector(".view--drift")).toBeNull();
+      expect(container.querySelector(".view--milestone")).toBeNull();
+      const hiddenQueries = bridge.isNativeCompanionCursorOverCapsule.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+      expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(hiddenQueries);
+    }
+    expect(bridge.presentPreparedNativeCompanionMoment).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps cursor recovery working when visibility subscription fails", async () => {
+    vi.useFakeTimers();
+    const { listenToNativeCompanionVisibility } = await import("./watcherBridge");
+    vi.mocked(listenToNativeCompanionVisibility).mockRejectedValueOnce(new Error("listener unavailable"));
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(null);
+    const { unmount } = render(<CompanionWindowApp />);
+    await act(async () => {});
+    const initialCalls = bridge.isNativeCompanionCursorOverCapsule.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(bridge.isNativeCompanionCursorOverCapsule.mock.calls.length).toBeGreaterThan(initialCalls);
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(32); });
+    expect(bridge.setNativeCompanionClickThrough).toHaveBeenLastCalledWith(false);
+    unmount();
+    const stoppedCalls = bridge.isNativeCompanionCursorOverCapsule.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(stoppedCalls);
+  });
+
+  it("discards a cursor response received after a native hide", async () => {
+    vi.useFakeTimers();
+    let resolveQuery!: (value: boolean) => void;
+    bridge.isNativeCompanionCursorOverCapsule.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => { resolveQuery = resolve; }),
+    );
+    render(<CompanionWindowApp />);
+    await act(async () => {});
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(null);
+    act(() => { bridge.visibilityHandler?.(false); });
+    bridge.setNativeCompanionClickThrough.mockClear();
+    await act(async () => { resolveQuery(true); });
+    expect(bridge.setNativeCompanionClickThrough).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(2);
   });
 
   it("keeps native cursor polling single-flight while a query is pending", async () => {

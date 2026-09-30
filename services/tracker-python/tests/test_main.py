@@ -34,6 +34,24 @@ from tests.support_cleanup import temp_dir_closing_databases
 
 
 class TrackerMainTests(unittest.TestCase):
+    def test_status_skips_only_explicit_mac_native_permission_probe(self) -> None:
+        for platform_name, payload, should_probe in (
+            ("darwin", {}, True),
+            ("darwin", {"skipAccessibilityProbe": True}, False),
+            ("darwin", {"skipAccessibilityProbe": "true"}, True),
+            ("win32", {"skipAccessibilityProbe": True}, True),
+        ):
+            with self.subTest(platform=platform_name, payload=payload):
+                with patch.object(tracker_main, "database"), patch.object(
+                    tracker_main, "is_running", return_value=False
+                ), patch.object(tracker_main.sys, "platform", platform_name), patch.object(
+                    tracker_main, "accessibility_granted", return_value=True
+                ) as probe:
+                    result = tracker_main.COMMANDS["get_status"](payload)
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["data"]["accessibilityGranted"], should_probe)
+                self.assertEqual(probe.call_count, int(should_probe))
+
     def test_windows_stop_uses_cooperative_shutdown_instead_of_sigterm(self) -> None:
         command = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
         windows_stop = MagicMock(return_value="cooperative")
@@ -2501,15 +2519,17 @@ class TrackerMainTests(unittest.TestCase):
             db_path = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             mock_db.youtube_metadata_should_fetch.return_value = False
-            with patch.object(tracker_main, "TrackerDatabase", return_value=mock_db), patch(
+            with patch.object(tracker_main, "TrackerDatabase") as constructor, patch(
                 "app.main.threading.Thread"
             ) as thread:
+                mock_db.db_path = db_path
                 tracker_main.enqueue_youtube_metadata_fetch(
-                    db_path,
+                    mock_db,
                     "abc123",
                     "https://www.youtube.com/watch?v=abc123",
                 )
 
+        constructor.assert_not_called()
         thread.assert_not_called()
 
     def test_enqueue_youtube_metadata_fetch_starts_background_worker(self) -> None:
@@ -2517,17 +2537,101 @@ class TrackerMainTests(unittest.TestCase):
             db_path = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             mock_db.youtube_metadata_should_fetch.return_value = True
-            with patch.object(tracker_main, "TrackerDatabase", return_value=mock_db), patch(
+            with patch.object(tracker_main, "TrackerDatabase") as constructor, patch(
                 "app.main.threading.Thread"
             ) as thread:
+                mock_db.db_path = db_path
                 tracker_main.enqueue_youtube_metadata_fetch(
-                    db_path,
+                    mock_db,
                     "abc123",
                     "https://www.youtube.com/watch?v=abc123",
                 )
 
+        constructor.assert_not_called()
+        thread.assert_called_once_with(
+            target=tracker_main._fetch_youtube_metadata_background,
+            args=(db_path, "abc123", "https://www.youtube.com/watch?v=abc123"),
+            daemon=True,
+        )
         thread.return_value.start.assert_called_once()
         tracker_main._YOUTUBE_METADATA_IN_FLIGHT.discard("abc123")
+
+    def test_youtube_worker_owns_and_closes_connection_after_fetch_failure(self) -> None:
+        db_path = Path("/tmp/metadata-worker-test.sqlite3")
+        worker_db = MagicMock()
+        worker_db.youtube_metadata_should_fetch.return_value = True
+        tracker_main._YOUTUBE_METADATA_IN_FLIGHT.add("worker-video")
+        with patch.object(tracker_main, "TrackerDatabase", return_value=worker_db) as constructor, patch.object(
+            tracker_main, "fetch_youtube_metadata", side_effect=OSError("network unavailable")
+        ):
+            tracker_main._fetch_youtube_metadata_background(
+                db_path, "worker-video", "https://www.youtube.com/watch?v=worker-video"
+            )
+        constructor.assert_called_once_with(db_path, perform_maintenance=False)
+        worker_db.save_youtube_metadata_failure.assert_called_once_with("worker-video")
+        worker_db.close.assert_called_once()
+        self.assertNotIn("worker-video", tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
+
+    def test_youtube_worker_start_failure_does_not_block_tracking_or_retry(self) -> None:
+        db = MagicMock()
+        db.db_path = Path("/tmp/metadata-start-test.sqlite3")
+        db.youtube_metadata_should_fetch.return_value = True
+        video_id = "start-failure-video"
+        tracker_main._YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)
+        try:
+            with patch("app.main.threading.Thread") as thread:
+                thread.return_value.start.side_effect = [RuntimeError("can't start new thread"), None]
+                tracker_main.enqueue_youtube_metadata_fetch(db, video_id, "https://www.youtube.com/watch?v=" + video_id)
+                self.assertNotIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
+                tracker_main.enqueue_youtube_metadata_fetch(db, video_id, "https://www.youtube.com/watch?v=" + video_id)
+                self.assertEqual(thread.return_value.start.call_count, 2)
+                self.assertIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
+        finally:
+            tracker_main._YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)
+
+    def test_youtube_worker_close_failure_still_clears_inflight(self) -> None:
+        worker_db = MagicMock()
+        worker_db.youtube_metadata_should_fetch.return_value = False
+        worker_db.close.side_effect = RuntimeError("close failed")
+        video_id = "close-failure-video"
+        tracker_main._YOUTUBE_METADATA_IN_FLIGHT.add(video_id)
+        with patch.object(tracker_main, "TrackerDatabase", return_value=worker_db):
+            with self.assertRaisesRegex(RuntimeError, "close failed"):
+                tracker_main._fetch_youtube_metadata_background(
+                    Path("/tmp/metadata-close-test.sqlite3"), video_id, "https://www.youtube.com/watch?v=" + video_id,
+                )
+        self.assertNotIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
+
+    def test_youtube_worker_writes_real_sqlite_on_its_own_thread(self) -> None:
+        from app.tracker.youtube_metadata import YouTubeVideoMetadata
+
+        threads = []
+        real_thread = tracker_main.threading.Thread
+        def capture_thread(**kwargs):
+            thread = real_thread(**kwargs)
+            threads.append(thread)
+            return thread
+
+        video_id = "separate-connection-video"
+        with temp_dir_closing_databases() as tmp:
+            db = TrackerDatabase(Path(tmp) / "tracker.sqlite3")
+            try:
+                with patch("app.main.threading.Thread", side_effect=capture_thread), patch.object(
+                    tracker_main, "fetch_youtube_metadata",
+                    return_value=YouTubeVideoMetadata(video_id=video_id, title="Synthetic QA title"),
+                ):
+                    tracker_main.enqueue_youtube_metadata_fetch(db, video_id, "https://www.youtube.com/watch?v=" + video_id)
+                    self.assertEqual(len(threads), 1)
+                    threads[0].join(timeout=5)
+                    self.assertFalse(threads[0].is_alive())
+                with db.connect() as conn:
+                    row = conn.execute("SELECT title, status FROM youtube_video_metadata WHERE video_id = ?", (video_id,)).fetchone()
+                self.assertEqual((row["title"], row["status"]), ("Synthetic QA title", "ok"))
+                self.assertNotIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
+            finally:
+                for thread in threads:
+                    thread.join(timeout=5)
+                db.close()
 
     def test_serve_processes_requests_echoes_id_and_survives_errors(self) -> None:
         import io

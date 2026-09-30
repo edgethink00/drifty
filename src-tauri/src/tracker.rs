@@ -369,7 +369,11 @@ impl TrackerController {
     }
 
     pub fn get_status(&self, app: &AppHandle) -> Result<TrackerStatus, TrackerError> {
-        let mut status = self.invoke::<TrackerStatus>(app, "get_status", json!({}))?;
+        let mut status = self.invoke::<TrackerStatus>(
+            app,
+            "get_status",
+            json!({ "skipAccessibilityProbe": cfg!(target_os = "macos") }),
+        )?;
         status.accessibility_granted = merged_accessibility_granted(
             status.accessibility_granted,
             current_process_accessibility_trusted(),

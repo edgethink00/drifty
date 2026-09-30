@@ -147,12 +147,12 @@ export async function setNativeCompanionClickThrough(ignore: boolean): Promise<v
 /**
  * Whether the cursor is over the visible capsule rather than its transparent
  * canvas. Asked natively because a click-through window no longer reports
- * pointer events to the page.
+ * pointer events to the page. null means the native window is hidden.
  */
-export async function isNativeCompanionCursorOverCapsule(): Promise<boolean> {
-  if (!isTauriRuntime()) return false;
+export async function isNativeCompanionCursorOverCapsule(): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
   try {
-    return await invoke<boolean>("watcher_companion_cursor_over_capsule");
+    return await invoke<boolean | null>("watcher_companion_cursor_over_capsule");
   } catch {
     return false;
   }
@@ -249,6 +249,14 @@ export async function listenToNativeCompanionPillSnapshot(onUpdate: (event: Watc
 export async function listenToNativeCompanionPillClear(onClear: (momentKey?: string | null) => void): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
   return listen<{ momentKey?: string | null }>("watcher-companion-clear", ({ payload }) => onClear(payload?.momentKey));
+}
+
+/** Actual native shown/hidden state; Companion panels need not take focus. */
+export async function listenToNativeCompanionVisibility(
+  onVisibility: (visible: boolean) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<boolean>("watcher-companion-visibility", ({ payload }) => onVisibility(payload));
 }
 
 export async function listenToNativeCompanionTransition(

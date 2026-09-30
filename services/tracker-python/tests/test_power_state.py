@@ -1,3 +1,4 @@
+import ctypes
 import sys
 import unittest
 from datetime import datetime, timezone
@@ -8,7 +9,7 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from app.tracker.power_state import current_power_state, evaluate_ioreg_power_state, parse_ioreg_root_domain
+from app.tracker.power_state import _IOKitPowerReader, _read_native_power_state, current_power_state, evaluate_ioreg_power_state, parse_ioreg_root_domain
 
 
 class PowerStateTests(unittest.TestCase):
@@ -106,6 +107,43 @@ class PowerStateTests(unittest.TestCase):
         self.assertTrue(unknown.should_capture)
         self.assertEqual(unknown.reason, "power_state_unknown")
 
+    def test_native_library_failure_uses_legacy_probe(self) -> None:
+        with patch("app.tracker.power_state._native_power_reader", side_effect=OSError("unavailable")):
+            self.assertIsNone(_read_native_power_state())
+
+    def test_native_reader_releases_snapshot_and_service_when_string_conversion_fails(self) -> None:
+        reader = _IOKitPowerReader.__new__(_IOKitPowerReader)
+        reader.io = MagicMock()
+        reader.cf = MagicMock()
+        reader.io.IOServiceNameMatching.return_value = 10
+        reader.io.IOServiceGetMatchingService.return_value = 11
+        def copy_properties(entry, output, allocator, options):
+            ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p))[0] = 55
+            return 0
+        reader.io.IORegistryEntryCreateCFProperties.side_effect = copy_properties
+        reader.cf.CFStringCreateWithCString.return_value = 7
+        reader.cf.CFDictionaryGetValue.return_value = 8
+        reader.cf.CFGetTypeID.return_value = 2
+        reader.cf.CFBooleanGetTypeID.return_value = 1
+        reader.cf.CFStringGetTypeID.return_value = 2
+        reader.cf.CFStringGetLength.return_value = 5
+        reader.cf.CFStringGetMaximumSizeForEncoding.return_value = 20
+        reader.cf.CFStringGetCString.return_value = 0
+        self.assertIsNone(reader.read())
+        released = [getattr(call.args[0], "value", call.args[0]) for call in reader.cf.CFRelease.call_args_list]
+        self.assertEqual(released, [7, 55])
+        reader.io.IOObjectRelease.assert_called_once_with(11)
+
+    def test_native_power_state_uses_same_darkwake_precedence_without_subprocess(self) -> None:
+        with patch("app.tracker.power_state.platform.system", return_value="Darwin"), patch(
+            "app.tracker.power_state._read_native_power_state",
+            return_value={"Wake Type": "DarkWake", "IOPMUserIsActive": "Yes"},
+        ), patch("app.tracker.power_state.subprocess.run") as run:
+            sample = current_power_state()
+        self.assertFalse(sample.should_capture)
+        self.assertEqual(sample.reason, "non_user_visible_wake_type:darkwake")
+        run.assert_not_called()
+
     def test_current_power_state_captures_on_non_darwin(self) -> None:
         with patch("app.tracker.power_state.platform.system", return_value="Linux"):
             sample = current_power_state()
@@ -123,7 +161,7 @@ class PowerStateTests(unittest.TestCase):
                 '    | |   "AppleClamshellCausesSleep" = Yes\n'
             ),
         )
-        with patch("app.tracker.power_state.platform.system", return_value="Darwin"), patch(
+        with patch("app.tracker.power_state._read_native_power_state", return_value=None), patch("app.tracker.power_state.platform.system", return_value="Darwin"), patch(
             "app.tracker.power_state.subprocess.run", return_value=completed
         ) as run:
             sample = current_power_state()
@@ -142,7 +180,7 @@ class PowerStateTests(unittest.TestCase):
 
     def test_current_power_state_captures_when_probe_fails(self) -> None:
         completed = MagicMock(returncode=1, stdout="")
-        with patch("app.tracker.power_state.platform.system", return_value="Darwin"), patch(
+        with patch("app.tracker.power_state._read_native_power_state", return_value=None), patch("app.tracker.power_state.platform.system", return_value="Darwin"), patch(
             "app.tracker.power_state.subprocess.run", return_value=completed
         ):
             sample = current_power_state()

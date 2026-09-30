@@ -337,7 +337,7 @@ def backfill_browser_history_context(db: TrackerDatabase, observed_at: str) -> N
         ),
     )
     for result in results:
-        enqueue_youtube_metadata_fetch(DB_PATH, result.youtube_video_id, result.site_url)
+        enqueue_youtube_metadata_fetch(db, result.youtube_video_id, result.site_url)
 
 
 def _bool_meta(value: str | None) -> bool | None:
@@ -1059,7 +1059,10 @@ def _stop_tracking_locked():
     return response(True, status)
 
 
-def get_status():
+def get_status(payload: dict | None = None):
+    # The Mac bridge replaces this field with a fresh native trust result.
+    # CLI/default calls and other platforms still perform the normal probe.
+    native_accessibility_supplied = sys.platform == "darwin" and (payload or {}).get("skipAccessibilityProbe") is True
     db = database()
     last_event_at = db.get_meta("last_event_at")
     running = is_running()
@@ -1073,7 +1076,7 @@ def get_status():
         True,
         {
             "running": running,
-            "accessibilityGranted": accessibility_granted(),
+            "accessibilityGranted": False if native_accessibility_supplied else accessibility_granted(),
             "lastEventAt": last_event_at,
             "databasePath": str(DB_PATH),
             "trackerMode": effective_tracker_mode,
@@ -1915,14 +1918,12 @@ def sample_seconds_since_previous(previous_tick: float | None, current_tick: flo
     return max(default_seconds, int(round(current_tick - previous_tick)))
 
 
-def enqueue_youtube_metadata_fetch(db_path: Path, video_id: str | None, site_url: str | None) -> None:
+def enqueue_youtube_metadata_fetch(db: TrackerDatabase, video_id: str | None, site_url: str | None) -> None:
     if not video_id or not site_url:
         return
 
-    # The owning daemon/serve database has already completed startup
-    # maintenance. Short-lived metadata helpers must not re-run quick_check and
-    # backup discovery for every video.
-    db = TrackerDatabase(db_path, perform_maintenance=False)
+    # Check on the calling thread's existing connection. The worker opens its
+    # own connection; SQLite connections must not cross thread boundaries.
     if not db.youtube_metadata_should_fetch(video_id):
         return
 
@@ -1931,14 +1932,21 @@ def enqueue_youtube_metadata_fetch(db_path: Path, video_id: str | None, site_url
             return
         _YOUTUBE_METADATA_IN_FLIGHT.add(video_id)
 
-    threading.Thread(
-        target=_fetch_youtube_metadata_background,
-        args=(db_path, video_id, site_url),
-        daemon=True,
-    ).start()
+    try:
+        threading.Thread(
+            target=_fetch_youtube_metadata_background,
+            args=(db.db_path, video_id, site_url),
+            daemon=True,
+        ).start()
+    except RuntimeError:
+        # Optional enrichment must not interrupt capture or leave a video
+        # permanently in-flight when the host cannot start another thread.
+        with _YOUTUBE_METADATA_LOCK:
+            _YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)
 
 
 def _fetch_youtube_metadata_background(db_path: Path, video_id: str, site_url: str) -> None:
+    db: TrackerDatabase | None = None
     try:
         db = TrackerDatabase(db_path, perform_maintenance=False)
         if not db.youtube_metadata_should_fetch(video_id):
@@ -1946,10 +1954,16 @@ def _fetch_youtube_metadata_background(db_path: Path, video_id: str, site_url: s
         metadata = fetch_youtube_metadata(site_url, video_id, timeout_seconds=YOUTUBE_METADATA_TIMEOUT_SECONDS)
         db.save_youtube_metadata(metadata)
     except Exception:
-        TrackerDatabase(db_path, perform_maintenance=False).save_youtube_metadata_failure(video_id)
+        if db is None:
+            db = TrackerDatabase(db_path, perform_maintenance=False)
+        db.save_youtube_metadata_failure(video_id)
     finally:
-        with _YOUTUBE_METADATA_LOCK:
-            _YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)
+        try:
+            if db is not None:
+                db.close()
+        finally:
+            with _YOUTUBE_METADATA_LOCK:
+                _YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)
 
 
 def get_sync_outbox(payload: dict):
@@ -2025,7 +2039,7 @@ def backup_for_version_switch(payload: dict):
 
 COMMANDS = {
     "backup_for_version_switch": backup_for_version_switch,
-    "get_status": lambda payload: get_status(),
+    "get_status": get_status,
     "verify_current_runtime_running": lambda payload: verify_current_runtime_running(),
     "start_tracking": lambda payload: start_tracking(),
     "stop_tracking": lambda payload: stop_tracking(),
@@ -2131,7 +2145,7 @@ def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float 
         db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap)
     else:
         db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
-    enqueue_youtube_metadata_fetch(DB_PATH, snapshot.youtube_video_id, snapshot.site_url)
+    enqueue_youtube_metadata_fetch(db, snapshot.youtube_video_id, snapshot.site_url)
     backfill_browser_history_context(db, snapshot.observed_at)
     db.set_meta("last_event_at", snapshot.observed_at)
     # Preserve the existing public tracker-mode vocabulary. Passive support is

@@ -52,6 +52,7 @@ import {
   setNativeCompanionPillState,
   setNativeCompanionClickThrough,
   isNativeCompanionCursorOverCapsule,
+  listenToNativeCompanionVisibility,
   triggerNativeEndOfDayReviewAction,
   triggerNativeCompanionVisibilityAction,
   triggerNativeExtremeNudgeAction,
@@ -611,26 +612,72 @@ export function CompanionWindowApp() {
      window stops reporting them, which would leave no way back. */
   useEffect(() => {
     let isCurrent = true;
+    let generation = 0;
+    let inFlight = false;
+    let visibilityListenerFailed = false;
     let wasOverCapsule: boolean | null = null;
     let timer: number | null = null;
-    const sync = async () => {
+    let unlisten: (() => void) | null = null;
+    const stop = () => {
+      generation += 1;
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+      wasOverCapsule = null;
+    };
+    const sync = async (currentGeneration: number) => {
+      if (inFlight || !isCurrent) return;
+      inFlight = true;
       const overCapsule = await isNativeCompanionCursorOverCapsule();
+      inFlight = false;
       if (!isCurrent) return;
+      if (currentGeneration !== generation) {
+        void sync(generation);
+        return;
+      }
+      // null is the native hidden state. Keep presentation listeners and
+      // prepared-card warmup alive, but stop cursor queries until shown.
+      if (overCapsule === null) {
+        wasOverCapsule = null;
+        setIsPointerInside(false);
+        if (visibilityListenerFailed) {
+          // Without show events, retain the original polling recovery so a
+          // displayed panel can still become interactive.
+          timer = window.setTimeout(() => void sync(currentGeneration), 32);
+        } else {
+          stop();
+        }
+        return;
+      }
       if (overCapsule !== wasOverCapsule) {
         wasOverCapsule = overCapsule;
         setIsPointerInside(overCapsule);
         ignoreCompanionBridgePromise(setNativeCompanionClickThrough(!overCapsule));
       }
-      // Wait for the native query to settle before scheduling the next one. A
-      // fixed interval can otherwise queue bridge calls faster than Tauri
-      // answers them, and late responses may apply cursor state out of order.
-      timer = window.setTimeout(() => void sync(), 32);
+      timer = window.setTimeout(() => void sync(currentGeneration), 32);
+    };
+    const visibilityChanged = (isVisible: boolean) => {
+      stop();
+      if (!isVisible) setIsPointerInside(false);
+      // Verify the native state once, including after a hide. Commands from
+      // different windows may race; a late hide event must not strand a shown panel.
+      void sync(generation);
     };
 
-    void sync();
+    // Subscribe before bootstrapping so a show during the first query cannot
+    // leave the poll asleep. A generation also discards pre-hide responses.
+    void listenToNativeCompanionVisibility(visibilityChanged).then((listener) => {
+      if (!isCurrent) { listener?.(); return; }
+      unlisten = listener;
+      if (generation === 0) void sync(generation);
+    }).catch(() => {
+      if (!isCurrent) return;
+      visibilityListenerFailed = true;
+      void sync(generation);
+    });
     return () => {
       isCurrent = false;
-      if (timer !== null) window.clearTimeout(timer);
+      stop();
+      unlisten?.();
       ignoreCompanionBridgePromise(setNativeCompanionClickThrough(false));
     };
   }, [pillState]);

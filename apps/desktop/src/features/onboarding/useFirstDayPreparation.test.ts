@@ -142,7 +142,9 @@ function makeLocalOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}
 describe("useFirstDayPreparation", () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.useFakeTimers();
+    // Keep same-day retry tests independent of when the suite runs.
+    // Explicit clock-boundary cases override this baseline below.
+    vi.useFakeTimers({ now: new Date(2026, 6, 4, 12, 0, 0) });
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     analyticsMocks.capturePostHogEvent.mockReset();
     managedAiMocks.getManagedLocalAiStatus.mockReset().mockResolvedValue({

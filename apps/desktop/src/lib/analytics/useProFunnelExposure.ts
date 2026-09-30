@@ -34,11 +34,19 @@ export function useProFunnelExposure<T extends HTMLElement>(
     let visibleSince: number | null = null;
     let attempted = false;
     let disposed = false;
+    let completed = false;
     let timer: number | undefined;
     let preferenceGeneration = 0;
     const reset = () => { visibleSince = null; attempted = false; };
+    const stopSampling = () => {
+      window.clearInterval(timer);
+      timer = undefined;
+    };
+    const canSample = () => readProductAnalyticsEnabled()
+      && document.visibilityState === "visible" && document.hasFocus();
     const sample = () => {
-      if (!readProductAnalyticsEnabled() || document.visibilityState !== "visible" || !document.hasFocus()) {
+      if (!canSample()) {
+        stopSampling();
         reset();
         return;
       }
@@ -57,31 +65,43 @@ export function useProFunnelExposure<T extends HTMLElement>(
         attempted = true;
         const generation = preferenceGeneration;
         void recordProFunnelStep(step).then((ok) => {
-          if (ok && !disposed && generation === preferenceGeneration) window.clearInterval(timer);
+          if (ok && !disposed && generation === preferenceGeneration) {
+            completed = true;
+            stopSampling();
+          }
         });
       }
     };
-    sample();
-    timer = window.setInterval(sample, 250);
-    const preferenceChanged = (event: Event) => {
-      if (event instanceof StorageEvent && event.key !== null && event.key !== PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY) return;
-      preferenceGeneration += 1;
-      reset();
-      window.clearInterval(timer);
-      if (readProductAnalyticsEnabled()) {
+    const syncSampling = () => {
+      if (!canSample()) {
+        stopSampling();
+        reset();
+      } else if (!completed && timer === undefined) {
         sample();
         timer = window.setInterval(sample, 250);
       }
     };
-    window.addEventListener("blur", reset);
-    document.addEventListener("visibilitychange", reset);
+    const blur = () => { stopSampling(); reset(); };
+    syncSampling();
+    const preferenceChanged = (event: Event) => {
+      if (event instanceof StorageEvent && event.key !== null && event.key !== PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY) return;
+      preferenceGeneration += 1;
+      reset();
+      completed = false;
+      stopSampling();
+      syncSampling();
+    };
+    window.addEventListener("blur", blur);
+    window.addEventListener("focus", syncSampling);
+    document.addEventListener("visibilitychange", syncSampling);
     window.addEventListener(PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT, preferenceChanged);
     window.addEventListener("storage", preferenceChanged);
     return () => {
       disposed = true;
-      window.clearInterval(timer);
-      window.removeEventListener("blur", reset);
-      document.removeEventListener("visibilitychange", reset);
+      stopSampling();
+      window.removeEventListener("blur", blur);
+      window.removeEventListener("focus", syncSampling);
+      document.removeEventListener("visibilitychange", syncSampling);
       window.removeEventListener(PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT, preferenceChanged);
       window.removeEventListener("storage", preferenceChanged);
     };

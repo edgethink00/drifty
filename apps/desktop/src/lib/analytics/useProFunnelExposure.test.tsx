@@ -41,11 +41,17 @@ describe("real foreground exposure", () => {
   it("resets duration on blur, background and occlusion, then records re-exposure", async () => {
     render(<Harness />);
     await advance(750);
-    focused = false;
+    act(() => { focused = false; window.dispatchEvent(new Event("blur")); });
+    expect(vi.getTimerCount()).toBe(0);
     await advance(250);
-    focused = true; hidden = true;
+    act(() => {
+      focused = true; hidden = true;
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(vi.getTimerCount()).toBe(0);
     await advance(1500);
-    hidden = false; occluded = true;
+    act(() => { hidden = false; occluded = true; document.dispatchEvent(new Event("visibilitychange")); });
     await advance(1500);
     expect(recordProFunnelStep).not.toHaveBeenCalled();
     occluded = false;
@@ -53,6 +59,28 @@ describe("real foreground exposure", () => {
     expect(recordProFunnelStep).not.toHaveBeenCalled();
     await advance(250);
     expect(recordProFunnelStep).toHaveBeenCalledTimes(1);
+  });
+  it("starts from hidden without polling and resumes on native focus events", async () => {
+    hidden = true; focused = false;
+    render(<Harness />);
+    expect(vi.getTimerCount()).toBe(0);
+    await advance(5000);
+    act(() => {
+      hidden = false;
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => { focused = true; window.dispatchEvent(new Event("focus")); });
+    await advance(750);
+    expect(recordProFunnelStep).not.toHaveBeenCalled();
+    await advance(250);
+    expect(recordProFunnelStep).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => {
+      focused = false; window.dispatchEvent(new Event("blur"));
+      focused = true; window.dispatchEvent(new Event("focus"));
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
   it("excludes signed-out, disabled/preview and unmounted surfaces", async () => {
     const view = render(<Harness enabled={false} />);
@@ -93,12 +121,15 @@ describe("real foreground exposure", () => {
   });
 
   it("requires a fresh exposure after analytics is enabled", async () => {
-    const { writeProductAnalyticsEnabled } = await import("./productAnalyticsPreference");
     writeProductAnalyticsEnabled(false);
+    const intervals = vi.spyOn(window, "setInterval");
     render(<Harness />);
+    expect(intervals).not.toHaveBeenCalled();
     await advance(2000);
     expect(recordProFunnelStep).not.toHaveBeenCalled();
     act(() => { writeProductAnalyticsEnabled(true); });
+    expect(intervals).toHaveBeenCalledOnce();
+    expect(intervals).toHaveBeenCalledWith(expect.any(Function), 250);
     await advance(750);
     expect(recordProFunnelStep).not.toHaveBeenCalled();
     await advance(250);

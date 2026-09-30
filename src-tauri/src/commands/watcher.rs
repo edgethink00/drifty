@@ -34,10 +34,9 @@ use super::companion_panel::move_companion_panel_by;
 use super::companion_panel::perform_companion_panel_drag;
 use super::companion_panel::{
     configure_companion_panel, reset_companion_panel_vertical_center, resize_companion_panel,
-    resolve_companion_horizontal_anchor, show_companion_panel, CompanionFrame,
+    hide_companion_panel, resolve_companion_horizontal_anchor, show_companion_panel, CompanionFrame,
     CompanionHorizontalAnchor, CompanionVerticalAnchor,
 };
-#[cfg(not(target_os = "macos"))]
 use super::companion_panel::emit_companion_panel_transition;
 use super::watcher_extreme_nudge::{
     calculate_extreme_nudge_toast_window_position, extreme_nudge_toast_window_dimensions,
@@ -501,11 +500,11 @@ fn set_companion_surface_policy(
                 position_companion_pill_under_menu_bar(app, &window, "collapsed")?;
             }
             set_windows_overlay_click_through(&window, true)?;
-            hide_windows_overlay(&window)
+            hide_companion_panel(&window)
         }
         CompanionSurfacePolicy::Off => {
             set_windows_overlay_click_through(&window, true)?;
-            hide_windows_overlay(&window)
+            hide_companion_panel(&window)
         }
     }
 }
@@ -607,10 +606,18 @@ pub fn watcher_companion_set_state(
             React exit fade has completed, remove the panel instead of visibly
             shrinking it into a floating resident pill that does not exist in
             this policy. Reset its resting geometry only while hidden. */
-            hide_windows_overlay(&window)?;
+            hide_companion_panel(&window)?;
             resize_companion_pill_window(&window, &state)?;
             position_companion_pill_under_menu_bar(&app, &window, &state)?;
             set_windows_overlay_click_through(&window, true)?;
+            // No resize animation runs while hidden. Still finish the renderer's
+            // closing phase so a later floating pill has its controls restored.
+            emit_companion_panel_transition(
+                &window,
+                &state,
+                "completed",
+                companion_pill_horizontal_anchor(),
+            );
             return Ok(CompanionSetStateResult {
                 presentation_id: None,
                 prepared: false,
@@ -628,7 +635,7 @@ pub fn watcher_companion_set_state(
             should_prepare_direct_menu_bar_card(companion_menu_bar_mode(), &state);
         if prepare_hidden_menu_bar_card {
             if matches!(window.is_visible(), Ok(true)) {
-                hide_windows_overlay(&window)?;
+                hide_companion_panel(&window)?;
             }
             /* This path intentionally has no native resize animation. The panel
             is still hidden, so resize and anchor it at the destination before
@@ -708,7 +715,7 @@ fn refresh_companion_pointer_policy(app: &AppHandle, window: &WebviewWindow) -> 
         // instead of unconditionally making the whole canvas interactive.
         set_windows_overlay_click_through(
             window,
-            !watcher_companion_cursor_over_capsule(app.clone()),
+            !companion_cursor_over_capsule(app.clone()),
         )
     }
     #[cfg(not(target_os = "windows"))]
@@ -742,7 +749,15 @@ pub fn watcher_companion_set_click_through(app: AppHandle, ignore: bool) -> Resu
 /// transparent canvas around it. The webview polls this in every state so
 /// interaction can be handed back the moment the pointer reaches the capsule.
 #[tauri::command]
-pub fn watcher_companion_cursor_over_capsule(app: AppHandle) -> bool {
+pub fn watcher_companion_cursor_over_capsule(app: AppHandle) -> Option<bool> {
+    let window = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL)?;
+    if !super::windows_overlay::is_windows_overlay_visible(&window) {
+        return None;
+    }
+    Some(companion_cursor_over_capsule(app))
+}
+
+fn companion_cursor_over_capsule(app: AppHandle) -> bool {
     if !companion_pill_enabled() {
         return false;
     }
@@ -1448,7 +1463,7 @@ fn schedule_menu_bar_companion_hide(app: AppHandle) {
             }
             if let Some(window) = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL) {
                 let _ = set_windows_overlay_click_through(&window, true);
-                let _ = hide_windows_overlay(&window);
+                let _ = hide_companion_panel(&window);
             }
         });
     });

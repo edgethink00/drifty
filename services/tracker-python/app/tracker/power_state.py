@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import ctypes
 import platform
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,99 @@ NON_USER_VISIBLE_WAKE_TYPES = {
 }
 
 
+# Copy one root-domain snapshot per sample; never cache the power values.
+_POWER_KEYS = (
+    "Wake Type", "WakeType", "IOPMRootDomainWakeType",
+    "IOPMUserIsActive", "AppleClamshellState", "AppleClamshellCausesSleep",
+)
+_CF_UTF8 = 0x08000100
+
+
+class _IOKitPowerReader:
+    def __init__(self) -> None:
+        self.io = ctypes.CDLL("/System/Library/Frameworks/IOKit.framework/IOKit")
+        self.cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        signatures = (
+            (self.io, "IOServiceNameMatching", [ctypes.c_char_p], ctypes.c_void_p),
+            (self.io, "IOServiceGetMatchingService", [ctypes.c_uint32, ctypes.c_void_p], ctypes.c_uint32),
+            (self.io, "IORegistryEntryCreateCFProperties", [
+                ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p, ctypes.c_uint32,
+            ], ctypes.c_int32),
+            (self.io, "IOObjectRelease", [ctypes.c_uint32], ctypes.c_int32),
+            (self.cf, "CFRelease", [ctypes.c_void_p], None),
+            (self.cf, "CFStringCreateWithCString", [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32], ctypes.c_void_p),
+            (self.cf, "CFDictionaryGetValue", [ctypes.c_void_p, ctypes.c_void_p], ctypes.c_void_p),
+            (self.cf, "CFGetTypeID", [ctypes.c_void_p], ctypes.c_ulong),
+            (self.cf, "CFBooleanGetTypeID", [], ctypes.c_ulong),
+            (self.cf, "CFBooleanGetValue", [ctypes.c_void_p], ctypes.c_ubyte),
+            (self.cf, "CFStringGetTypeID", [], ctypes.c_ulong),
+            (self.cf, "CFStringGetLength", [ctypes.c_void_p], ctypes.c_long),
+            (self.cf, "CFStringGetMaximumSizeForEncoding", [ctypes.c_long, ctypes.c_uint32], ctypes.c_long),
+            (self.cf, "CFStringGetCString", [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_uint32], ctypes.c_ubyte),
+        )
+        for library, name, args, result in signatures:
+            function = getattr(library, name)
+            function.argtypes = args
+            function.restype = result
+
+    def read(self) -> dict[str, str] | None:
+        matching = self.io.IOServiceNameMatching(b"IOPMrootDomain")
+        if not matching:
+            return None
+        # GetMatchingService consumes the matching dictionary even on failure.
+        entry = self.io.IOServiceGetMatchingService(0, matching)
+        if not entry:
+            return None
+        properties = ctypes.c_void_p()
+        try:
+            if self.io.IORegistryEntryCreateCFProperties(entry, ctypes.byref(properties), None, 0) != 0:
+                return None
+            if not properties.value:
+                return None
+            values: dict[str, str] = {}
+            for name in _POWER_KEYS:
+                key = self.cf.CFStringCreateWithCString(None, name.encode("utf-8"), _CF_UTF8)
+                if not key:
+                    return None
+                try:
+                    value = self.cf.CFDictionaryGetValue(properties, key)
+                    if not value:
+                        continue
+                    kind = self.cf.CFGetTypeID(value)
+                    if kind == self.cf.CFBooleanGetTypeID():
+                        values[name] = "Yes" if self.cf.CFBooleanGetValue(value) else "No"
+                    elif kind == self.cf.CFStringGetTypeID():
+                        length = self.cf.CFStringGetMaximumSizeForEncoding(self.cf.CFStringGetLength(value), _CF_UTF8)
+                        if length < 0:
+                            return None
+                        buffer = ctypes.create_string_buffer(length + 1)
+                        if not self.cf.CFStringGetCString(value, buffer, len(buffer), _CF_UTF8):
+                            return None
+                        values[name] = buffer.value.decode("utf-8")
+                    else:
+                        # An unexpected representation must use the legacy probe.
+                        return None
+                finally:
+                    self.cf.CFRelease(key)
+            return values or None
+        finally:
+            if properties.value:
+                self.cf.CFRelease(properties)
+            self.io.IOObjectRelease(entry)
+
+
+@lru_cache(maxsize=1)
+def _native_power_reader() -> _IOKitPowerReader:
+    return _IOKitPowerReader()
+
+
+def _read_native_power_state() -> dict[str, str] | None:
+    try:
+        return _native_power_reader().read()
+    except (OSError, AttributeError, ValueError):
+        return None
+
+
 def current_power_state() -> PowerStateSample:
     observed_at = datetime.now(timezone.utc)
     if platform.system() != "Darwin":
@@ -32,6 +127,10 @@ def current_power_state() -> PowerStateSample:
             should_capture=True,
             reason="non_darwin_power_state_unavailable",
         )
+
+    metadata = _read_native_power_state()
+    if metadata is not None:
+        return evaluate_power_state(metadata, observed_at=observed_at)
 
     try:
         result = subprocess.run(
@@ -63,7 +162,10 @@ def current_power_state() -> PowerStateSample:
 
 
 def evaluate_ioreg_power_state(output: str, observed_at: datetime | None = None) -> PowerStateSample:
-    metadata = parse_ioreg_root_domain(output)
+    return evaluate_power_state(parse_ioreg_root_domain(output), observed_at=observed_at)
+
+
+def evaluate_power_state(metadata: dict[str, str], observed_at: datetime | None = None) -> PowerStateSample:
     sample_time = observed_at or datetime.now(timezone.utc)
     if not metadata:
         return PowerStateSample(

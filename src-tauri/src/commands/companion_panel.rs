@@ -765,6 +765,18 @@ pub fn configure_companion_panel(_app: &AppHandle, _window: &WebviewWindow) -> t
 }
 
 pub fn show_companion_panel(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    show_companion_panel_inner(app, window)?;
+    let _ = window.emit("watcher-companion-visibility", true);
+    Ok(())
+}
+
+pub fn hide_companion_panel(window: &WebviewWindow) -> Result<(), String> {
+    super::windows_overlay::hide_windows_overlay(window)?;
+    let _ = window.emit("watcher-companion-visibility", false);
+    Ok(())
+}
+
+fn show_companion_panel_inner(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     if let Ok(panel) = app.get_webview_panel(COMPANION_PILL_WINDOW_LABEL) {
         panel.order_front_regardless();
