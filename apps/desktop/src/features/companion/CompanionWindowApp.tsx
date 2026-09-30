@@ -641,7 +641,7 @@ export function CompanionWindowApp() {
     void (async () => {
       try {
         const status = await trackerClient.getStatus();
-        const nextStatus = status.running ? await trackerClient.stop() : await trackerClient.start();
+        const nextStatus = status.running ? await trackerClient.stop() : await trackerClient.start({ resumePaused: true });
         setPeekEvent((current) => current ? { ...current, trackingPaused: nextStatus?.running !== true } : current);
       } catch {
         setPeekEvent((current) => current ? { ...current, trackingPaused: wasPaused } : current);

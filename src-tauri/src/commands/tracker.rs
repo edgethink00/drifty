@@ -397,45 +397,68 @@ pub async fn tracker_get_status(
 pub async fn tracker_start(
     app: AppHandle,
     controller: State<'_, TrackerController>,
+    // An omitted argument is an implicit start and must preserve a saved pause.
+    resume_paused: Option<bool>,
 ) -> Result<TrackerStatus, String> {
     let controller = *controller.inner();
-    let generation = app.state::<TrackerStartupState>().begin_start_attempt();
     async_runtime::spawn_blocking(move || {
         let pause_state = app.state::<TrackingPauseState>();
         let _operation = pause_state.lock_operation();
         let startup_state = app.state::<TrackerStartupState>();
-        // Record activation before starting. If this cannot be persisted, refuse
-        // to start so a restart cannot silently resume capturing without a
-        // durable record that the user asked for it.
-        if let Err(error) = tracking_activation::activate(&app) {
-            let activation_error = crate::tracker::TrackerError::TrackerReturnedError(error);
-            startup_state.record_start_failure(generation, &activation_error);
-            return Err(tracker_start_error_message());
-        }
-        if let Err(error) = tracking_pause::clear_for_manual_start(&app) {
-            let clear_error = crate::tracker::TrackerError::TrackerReturnedError(error);
-            startup_state.record_start_failure(generation, &clear_error);
-            return Err(tracker_start_error_message());
-        }
-        match controller.start(&app) {
-            Ok(status) if status.running => {
-                startup_state.complete_start_success(generation);
-                tray::queue_tracking_controls_refresh(&app, Some(status.running));
-                Ok(TrackerStatus {
-                    tracking_paused: false,
-                    ..status
-                })
+        let start = tracking_pause::run_start_unless_paused(
+            &app,
+            resume_paused.unwrap_or(false),
+            || {
+                let generation = startup_state.begin_start_attempt();
+                // Record activation before starting. If this cannot be persisted,
+                // refuse to start so a restart cannot silently resume capturing.
+                if let Err(error) = tracking_activation::activate(&app) {
+                    let activation_error =
+                        crate::tracker::TrackerError::TrackerReturnedError(error);
+                    startup_state.record_start_failure(generation, &activation_error);
+                    return Err(tracker_start_error_message());
+                }
+                if let Err(error) = tracking_pause::clear_for_manual_start(&app) {
+                    let clear_error = crate::tracker::TrackerError::TrackerReturnedError(error);
+                    startup_state.record_start_failure(generation, &clear_error);
+                    return Err(tracker_start_error_message());
+                }
+                match controller.start(&app) {
+                    Ok(status) if status.running => {
+                        startup_state.complete_start_success(generation);
+                        tray::queue_tracking_controls_refresh(&app, Some(status.running));
+                        Ok(TrackerStatus {
+                            tracking_paused: false,
+                            ..status
+                        })
+                    }
+                    Ok(status) => {
+                        let error = crate::tracker::TrackerError::TrackerReturnedError(
+                            "tracker did not report running after start".to_string(),
+                        );
+                        startup_state.record_start_failure(generation, &error);
+                        tray::queue_tracking_controls_refresh(&app, Some(status.running));
+                        Err(tracker_start_error_message())
+                    }
+                    Err(error) => {
+                        startup_state.record_start_failure(generation, &error);
+                        Err(tracker_start_error_message())
+                    }
+                }
+            },
+        );
+        match start {
+            Ok(Some(result)) => result,
+            Ok(None) => {
+                let status = controller
+                    .get_status(&app)
+                    .unwrap_or_else(|_| degraded_tracker_status(tracker_status_error_message()));
+                Ok(apply_tracking_pause_state(status, true))
             }
-            Ok(status) => {
-                let error = crate::tracker::TrackerError::TrackerReturnedError(
-                    "tracker did not report running after start".to_string(),
+            Err(_) => {
+                eprintln!(
+                    "[tracking-pause] Refusing implicit start because pause state is unreadable"
                 );
-                startup_state.record_start_failure(generation, &error);
-                tray::queue_tracking_controls_refresh(&app, Some(status.running));
-                Err(tracker_start_error_message())
-            }
-            Err(error) => {
-                startup_state.record_start_failure(generation, &error);
                 Err(tracker_start_error_message())
             }
         }
@@ -477,7 +500,7 @@ pub async fn tracker_stop(
                 eprintln!(
                     "[tracking-pause] Preserving manual pause after an ambiguous stop: {error}"
                 );
-                tray::queue_tracking_controls_refresh(&app, Some(false));
+                tray::queue_tracking_controls_refresh(&app, None);
                 Err(tracker_stop_error_message())
             }
         }

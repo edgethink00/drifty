@@ -19,6 +19,8 @@ use crate::{
 const PAUSE_STATE_FILE_NAME: &str = "tracking-pause.json";
 const PAUSE_STATE_VERSION: u8 = 1;
 const TIMER_POLL_INTERVAL_SECONDS: i64 = 5;
+const PAUSE_ENFORCEMENT_RETRY_DELAY: Duration = Duration::from_secs(2);
+const PAUSE_ENFORCEMENT_MAX_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,6 +93,12 @@ pub(crate) enum IndefinitePauseStopOutcome {
     Ambiguous(TrackerError),
 }
 
+enum TimedPauseStopOutcome {
+    Paused,
+    StillRunning(TrackerStatus),
+    Ambiguous(TrackerError),
+}
+
 impl TrackingPauseSnapshot {
     pub(crate) fn is_active(self) -> bool {
         !matches!(self, Self::Inactive)
@@ -117,6 +125,13 @@ impl TrackingPauseState {
         self.operation
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn current_generation(&self) -> u64 {
+        self.lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .generation
     }
 
     fn arm(&self, pause: TimedPause) -> u64 {
@@ -348,12 +363,6 @@ pub(crate) fn commit_indefinite_pause(app: &AppHandle) {
     app.state::<TrackingPauseState>().mark_indefinite();
 }
 
-pub(crate) fn abort_indefinite_pause(app: &AppHandle) {
-    if let Err(error) = clear_persisted_pause(app) {
-        eprintln!("[tracking-pause] {error}");
-    }
-}
-
 pub(crate) fn finish_indefinite_pause_stop(
     app: &AppHandle,
     controller: &TrackerController,
@@ -371,11 +380,10 @@ pub(crate) fn finish_indefinite_pause_stop(
 
     match &outcome {
         IndefinitePauseStopOutcome::Paused(_) => commit_indefinite_pause(app),
-        IndefinitePauseStopOutcome::StillRunning(_) => abort_indefinite_pause(app),
-        IndefinitePauseStopOutcome::Ambiguous(_) => {
-            // A mutating sidecar request may complete even if its response is
-            // lost. Preserve the durable user intent and retry enforcement on
-            // a fresh sidecar instead of letting recovery restart tracking.
+        IndefinitePauseStopOutcome::StillRunning(_)
+        | IndefinitePauseStopOutcome::Ambiguous(_) => {
+            // Keep the durable user intent until a stopped daemon is confirmed.
+            // A reply can arrive before process exit, or the reply can be lost.
             commit_indefinite_pause(app);
             let enforcement_app = app.clone();
             let _ = async_runtime::spawn_blocking(move || {
@@ -386,12 +394,68 @@ pub(crate) fn finish_indefinite_pause_stop(
     outcome
 }
 
+fn resolve_timed_pause_stop(
+    stop_result: Result<TrackerStatus, TrackerError>,
+    status_probe: impl FnOnce() -> Result<TrackerStatus, TrackerError>,
+) -> TimedPauseStopOutcome {
+    match stop_result {
+        Ok(status) if !status.running => TimedPauseStopOutcome::Paused,
+        Ok(status) => TimedPauseStopOutcome::StillRunning(status),
+        Err(stop_error) => match status_probe() {
+            Ok(status) if !status.running => TimedPauseStopOutcome::Paused,
+            // A lost stop reply can arrive before the daemon finishes exiting.
+            // A single still-running or failed status read cannot cancel the
+            // user's durable pause intent.
+            _ => TimedPauseStopOutcome::Ambiguous(stop_error),
+        },
+    }
+}
+
 pub(crate) fn snapshot(app: &AppHandle) -> TrackingPauseSnapshot {
     app.state::<TrackingPauseState>().snapshot()
 }
 
 pub(crate) fn clear_for_manual_start(app: &AppHandle) -> Result<(), String> {
     clear_pause_and_cancel(&app.state::<TrackingPauseState>(), &pause_state_path(app)?)
+}
+
+pub(crate) fn run_start_unless_paused<T>(
+    app: &AppHandle,
+    resume_paused: bool,
+    start: impl FnOnce() -> T,
+) -> Result<Option<T>, String> {
+    run_start_unless_paused_at_path(
+        &app.state::<TrackingPauseState>(),
+        &pause_state_path(app)?,
+        resume_paused,
+        start,
+    )
+}
+
+fn run_start_unless_paused_at_path<T>(
+    state: &TrackingPauseState,
+    path: &Path,
+    resume_paused: bool,
+    start: impl FnOnce() -> T,
+) -> Result<Option<T>, String> {
+    if !resume_paused && blocks_implicit_start_at_path(state, path)? {
+        return Ok(None);
+    }
+    Ok(Some(start()))
+}
+
+fn blocks_implicit_start_at_path(
+    state: &TrackingPauseState,
+    path: &Path,
+) -> Result<bool, String> {
+    // A renderer can hold a status read from before startup restored the pause.
+    // The disk marker must therefore guard an implicit start even when the
+    // in-memory lifecycle has not been restored yet. An unreadable marker is
+    // not permission to begin recording.
+    if state.snapshot().is_active() {
+        return Ok(true);
+    }
+    Ok(read_persisted_pause(path)?.is_some())
 }
 
 fn clear_pause_and_cancel(state: &TrackingPauseState, path: &Path) -> Result<(), String> {
@@ -408,16 +472,21 @@ pub(crate) fn restore_on_startup(app: &AppHandle) -> bool {
         Ok(path) => path,
         Err(error) => {
             eprintln!("[tracking-pause] {error}");
-            return false;
+            // Without the state path startup cannot prove that the user did
+            // not pause tracking. Keep the native automatic start stopped.
+            app.state::<TrackingPauseState>().mark_indefinite();
+            return true;
         }
     };
     let pause = match read_persisted_pause(&path) {
         Ok(Some(pause)) => pause,
         Ok(None) => return false,
         Err(error) => {
-            eprintln!("[tracking-pause] {error}");
-            let _ = clear_pause_file(&path);
-            return false;
+            // An unreadable marker may be the only durable evidence of a
+            // paused tracker. Preserve it so an explicit Resume can clear it,
+            // and stop native startup from recording in the meantime.
+            preserve_unreadable_pause(&app.state::<TrackingPauseState>(), &error);
+            return true;
         }
     };
     match pause {
@@ -442,13 +511,76 @@ pub(crate) fn restore_on_startup(app: &AppHandle) -> bool {
     }
 }
 
+fn preserve_unreadable_pause(state: &TrackingPauseState, error: &str) {
+    eprintln!("[tracking-pause] {error}; preserving pause until explicit Resume");
+    state.mark_indefinite();
+}
+
 pub(crate) fn enforce_restored_pause(app: &AppHandle) {
     let state = app.state::<TrackingPauseState>();
     let controller = *app.state::<TrackerController>();
-    run_if_pause_still_active(&state, || match controller.stop(app) {
-        Ok(status) => tray::queue_tracking_controls_refresh(app, Some(status.running)),
-        Err(error) => eprintln!("[tracking-pause] Could not enforce restored pause: {error}"),
-    });
+    enforce_pause_until_stopped(
+        &state,
+        || {
+            let result = resolve_timed_pause_stop(controller.stop(app), || {
+                controller.get_status(app)
+            });
+            match &result {
+                TimedPauseStopOutcome::Paused => {
+                    tray::queue_tracking_controls_refresh(app, Some(false));
+                }
+                TimedPauseStopOutcome::StillRunning(status) => {
+                    tray::queue_tracking_controls_refresh(app, Some(status.running));
+                }
+                TimedPauseStopOutcome::Ambiguous(error) => {
+                    eprintln!("[tracking-pause] Could not confirm the paused tracker: {error}");
+                    tray::queue_tracking_controls_refresh(app, None);
+                }
+            }
+            matches!(result, TimedPauseStopOutcome::Paused)
+        },
+        thread::sleep,
+    );
+}
+
+fn enforce_pause_until_stopped(
+    state: &TrackingPauseState,
+    mut stop_and_confirm: impl FnMut() -> bool,
+    mut wait: impl FnMut(Duration),
+) {
+    let generation = state.current_generation();
+    let mut failed_attempts = 0_usize;
+    loop {
+        let mut stopped = false;
+        let active = run_if_pause_generation_active(state, generation, || {
+            stopped = stop_and_confirm();
+        });
+        if !active || stopped {
+            return;
+        }
+        failed_attempts = failed_attempts.saturating_add(1);
+        wait(pause_enforcement_retry_delay(failed_attempts));
+    }
+}
+
+fn run_if_pause_generation_active(
+    state: &TrackingPauseState,
+    generation: u64,
+    action: impl FnOnce(),
+) -> bool {
+    let _operation = state.lock_operation();
+    if state.current_generation() != generation || !state.snapshot().is_active() {
+        return false;
+    }
+    action();
+    true
+}
+
+fn pause_enforcement_retry_delay(failed_attempts: usize) -> Duration {
+    let exponent = failed_attempts.saturating_sub(3).min(4) as u32;
+    PAUSE_ENFORCEMENT_RETRY_DELAY
+        .saturating_mul(1_u32 << exponent)
+        .min(PAUSE_ENFORCEMENT_MAX_RETRY_DELAY)
 }
 
 fn run_if_pause_still_active(state: &TrackingPauseState, action: impl FnOnce()) -> bool {
@@ -481,23 +613,28 @@ pub(crate) fn pause_tracking_for(app: &AppHandle, minutes: u64) {
         eprintln!("[tracking-pause] Refusing an unpersisted timed pause: {error}");
         return;
     }
-    let status = match controller.stop(app) {
-        Ok(status) => status,
-        Err(error) => {
-            let _ = clear_persisted_pause(app);
-            eprintln!("[tracking-pause] Could not pause tracking: {error}");
-            return;
+    let (needs_enforcement, running_hint) = match resolve_timed_pause_stop(controller.stop(app), || {
+        controller.get_status(app)
+    }) {
+        TimedPauseStopOutcome::Paused => (false, Some(false)),
+        TimedPauseStopOutcome::StillRunning(status) => {
+            eprintln!("[tracking-pause] Tracker still reports running after pause request");
+            (true, Some(status.running))
+        }
+        TimedPauseStopOutcome::Ambiguous(error) => {
+            eprintln!("[tracking-pause] Preserving timed pause after an ambiguous stop: {error}");
+            (true, None)
         }
     };
-    if status.running {
-        let _ = clear_persisted_pause(app);
-        eprintln!("[tracking-pause] Tracker still reports running after pause request");
-        tray::refresh_tracking_controls(app, Some(true));
-        return;
-    }
     let generation = state.arm(pause);
-    tray::refresh_tracking_controls(app, Some(status.running));
+    tray::refresh_tracking_controls(app, running_hint);
     drop(operation);
+    if needs_enforcement {
+        let enforcement_app = app.clone();
+        let _ = async_runtime::spawn_blocking(move || {
+            enforce_restored_pause(&enforcement_app);
+        });
+    }
     if let Err(error) = schedule_timed_resume(app.clone(), generation) {
         eprintln!("[tracking-pause] Could not schedule pause: {error}");
         state.mark_auto_resume_failed(generation);
@@ -576,6 +713,98 @@ fn timed_resume_loop(app: AppHandle, generation: u64) {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    fn tracker_status(running: bool) -> TrackerStatus {
+        serde_json::from_value(serde_json::json!({
+            "running": running,
+            "accessibilityGranted": false,
+        }))
+        .expect("valid tracker status")
+    }
+
+    #[test]
+    fn timed_pause_recovers_a_lost_stop_reply_without_cancelling_pause_intent() {
+        let lost_reply = || TrackerError::CommandFailed("stop reply lost".to_string());
+        assert!(matches!(
+            resolve_timed_pause_stop(Err(lost_reply()), || Ok(tracker_status(false))),
+            TimedPauseStopOutcome::Paused
+        ));
+        assert!(matches!(
+            resolve_timed_pause_stop(Err(lost_reply()), || Ok(tracker_status(true))),
+            TimedPauseStopOutcome::Ambiguous(_)
+        ));
+        assert!(matches!(
+            resolve_timed_pause_stop(Err(lost_reply()), || Err(lost_reply())),
+            TimedPauseStopOutcome::Ambiguous(_)
+        ));
+        assert!(matches!(
+            resolve_timed_pause_stop(Ok(tracker_status(true)), || {
+                panic!("a completed stop reply needs no second status read")
+            }),
+            TimedPauseStopOutcome::StillRunning(_)
+        ));
+    }
+
+    #[test]
+    fn pause_enforcement_retries_beyond_initial_burst_until_stop_is_confirmed() {
+        let state = TrackingPauseState::default();
+        state.mark_indefinite();
+        let mut attempts = 0;
+        let mut delays = Vec::new();
+        enforce_pause_until_stopped(
+            &state,
+            || {
+                attempts += 1;
+                attempts == 8
+            },
+            |delay| delays.push(delay),
+        );
+        assert_eq!(attempts, 8);
+        assert_eq!(
+            delays,
+            vec![2, 2, 2, 4, 8, 16, 30]
+                .into_iter()
+                .map(Duration::from_secs)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn pause_enforcement_stops_when_explicit_resume_cancels_the_pause() {
+        let state = TrackingPauseState::default();
+        state.mark_indefinite();
+        let mut attempts = 0;
+        enforce_pause_until_stopped(
+            &state,
+            || {
+                attempts += 1;
+                false
+            },
+            |_| {
+                state.cancel();
+            },
+        );
+        assert_eq!(attempts, 1);
+    }
+
+    #[test]
+    fn old_pause_enforcement_stops_when_a_new_pause_replaces_its_generation() {
+        let state = TrackingPauseState::default();
+        state.mark_indefinite();
+        let mut attempts = 0;
+        enforce_pause_until_stopped(
+            &state,
+            || {
+                attempts += 1;
+                false
+            },
+            |_| {
+                state.arm(TimedPause::new(100, 200));
+            },
+        );
+        assert_eq!(attempts, 1);
+        assert!(state.snapshot().is_active());
+    }
 
     #[test]
     fn manual_cancel_invalidates_the_waiting_generation() {
@@ -754,6 +983,128 @@ mod tests {
         assert_eq!(
             read_persisted_pause(&path).expect("read indefinite pause"),
             Some(PersistedTrackingPause::Indefinite(pause))
+        );
+    }
+
+    #[test]
+    fn implicit_start_checks_disk_even_before_pause_restoration() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        assert_eq!(
+            run_start_unless_paused_at_path(&state, &path, false, || 1)
+                .expect("absent pause"),
+            Some(1)
+        );
+
+        write_indefinite_pause(&path, IndefinitePause::new(100)).expect("write pause");
+        let mut activation_writes = 0;
+        let mut pause_clears = 0;
+        let result = run_start_unless_paused_at_path(&state, &path, false, || {
+            activation_writes += 1;
+            pause_clears += 1;
+        });
+        assert_eq!(result.expect("persisted pause"), None);
+        assert_eq!((activation_writes, pause_clears), (0, 0));
+        assert!(path.exists(), "implicit start must preserve the marker");
+
+        write_timed_pause(&path, TimedPause::new(100, 200)).expect("write timed pause");
+        assert_eq!(
+            run_start_unless_paused_at_path(&state, &path, false, || 1)
+                .expect("timed pause"),
+            None
+        );
+    }
+
+    #[test]
+    fn implicit_start_honors_memory_pause_and_refuses_unreadable_marker() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        state.mark_indefinite();
+        assert_eq!(
+            run_start_unless_paused_at_path(&state, &path, false, || 1)
+                .expect("memory pause"),
+            None
+        );
+
+        state.cancel();
+        fs::write(&path, b"invalid pause").expect("write invalid pause");
+        assert!(run_start_unless_paused_at_path(&state, &path, false, || 1).is_err());
+        assert!(path.exists(), "implicit start must not clear an unreadable marker");
+    }
+
+    #[test]
+    fn startup_preserves_a_corrupt_pause_until_explicit_resume() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        fs::write(&path, b"invalid pause").expect("write invalid pause");
+
+        let error = read_persisted_pause(&path).expect_err("corrupt marker is unreadable");
+        preserve_unreadable_pause(&state, &error);
+        assert_eq!(state.snapshot(), TrackingPauseSnapshot::Indefinite);
+        assert!(path.exists(), "startup must preserve the durable marker");
+        assert_eq!(
+            run_start_unless_paused_at_path(&state, &path, false, || 1)
+                .expect("implicit start remains paused"),
+            None
+        );
+
+        assert_eq!(
+            run_start_unless_paused_at_path(&state, &path, true, || {
+                clear_pause_and_cancel(&state, &path)
+            })
+            .expect("explicit Resume is allowed"),
+            Some(Ok(()))
+        );
+        assert!(!path.exists());
+        assert_eq!(state.snapshot(), TrackingPauseSnapshot::Inactive);
+        assert_eq!(
+            run_start_unless_paused_at_path(&state, &path, false, || 1)
+                .expect("subsequent start"),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn startup_preserves_a_pause_when_the_marker_cannot_be_read_or_cleared() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        fs::create_dir(&path).expect("unreadable marker path");
+
+        let error = read_persisted_pause(&path).expect_err("directory cannot be read as marker");
+        preserve_unreadable_pause(&state, &error);
+        assert_eq!(state.snapshot(), TrackingPauseSnapshot::Indefinite);
+        assert_eq!(
+            run_start_unless_paused_at_path(&state, &path, false, || 1)
+                .expect("implicit start remains paused"),
+            None
+        );
+        assert!(
+            run_start_unless_paused_at_path(&state, &path, true, || {
+                clear_pause_and_cancel(&state, &path)
+            })
+            .expect("explicit Resume is allowed")
+            .expect("start closure ran")
+            .is_err()
+        );
+        assert_eq!(state.snapshot(), TrackingPauseSnapshot::Indefinite);
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn explicit_resume_runs_with_a_saved_pause() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        write_indefinite_pause(&path, IndefinitePause::new(100)).expect("write pause");
+
+        assert_eq!(
+            run_start_unless_paused_at_path(&state, &path, true, || 1)
+                .expect("explicit start"),
+            Some(1)
         );
     }
 

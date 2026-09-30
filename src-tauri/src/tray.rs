@@ -412,7 +412,7 @@ fn tray_menu_plan_from(
         korean: lang.is_korean(),
         show_pause_options: pause_options_visible(tracker_running, pause_snapshot),
         tracking_action: tracking_action_label(tracker_running, pause_snapshot, lang),
-        pause_status: pause_status_label(pause_snapshot, lang),
+        pause_status: pause_status_label(pause_snapshot, tracker_running, lang),
         drift_alerts_status,
         drift_summary,
         app_info: app_version_label(version),
@@ -571,8 +571,30 @@ fn pause_options_visible(running: Option<bool>, pause_snapshot: TrackingPauseSna
     !pause_snapshot.is_active() && running == Some(true)
 }
 
-fn pause_status_label(pause_snapshot: TrackingPauseSnapshot, lang: TrayLanguage) -> Option<String> {
+fn pause_status_label(
+    pause_snapshot: TrackingPauseSnapshot,
+    tracker_running: Option<bool>,
+    lang: TrayLanguage,
+) -> Option<String> {
     let ko = lang.is_korean();
+    if pause_snapshot.is_active() {
+        if tracker_running == Some(true) {
+            return Some(if ko {
+                "일시 정지 요청됨 · 아직 기록 중, 재시도 중"
+            } else {
+                "Pause requested · still tracking, retrying"
+            }
+            .to_string());
+        }
+        if tracker_running.is_none() {
+            return Some(if ko {
+                "일시 정지 요청됨 · 기록 상태 확인 불가"
+            } else {
+                "Pause requested · tracking status unavailable"
+            }
+            .to_string());
+        }
+    }
     match pause_snapshot {
         TrackingPauseSnapshot::Inactive => None,
         TrackingPauseSnapshot::Indefinite => Some(
@@ -651,7 +673,7 @@ pub(crate) fn toggle_tracking(app: &AppHandle) {
                 eprintln!(
                     "[tracking-pause] Preserving tray pause after an ambiguous stop: {error}"
                 );
-                refresh_tracking_controls(app, Some(false));
+                refresh_tracking_controls(app, None);
             }
         }
         return;
@@ -697,7 +719,7 @@ pub(crate) fn pause_tracking_forever_blocking(app: &AppHandle) -> Result<(), Str
             eprintln!(
                 "[tracking-pause] Preserving indefinite pause after an ambiguous stop: {error}"
             );
-            queue_tracking_controls_refresh(app, Some(false));
+            queue_tracking_controls_refresh(app, None);
             Ok(())
         }
     }

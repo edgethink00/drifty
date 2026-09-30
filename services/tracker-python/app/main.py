@@ -994,6 +994,11 @@ def stop_tracking():
 
 
 def _stop_tracking_locked():
+    # A successful start can return while Windows process discovery still
+    # caches the empty table read before the new daemon appeared. A new stop
+    # operation must inspect a fresh table or it may miss that daemon, remove
+    # its pid record, then find it alive during confirmation and fail.
+    _invalidate_process_table()
     processes = _process_table()
     if processes is None:
         return response(

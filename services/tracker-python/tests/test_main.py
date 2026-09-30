@@ -457,6 +457,37 @@ class TrackerMainTests(unittest.TestCase):
             self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
             self.assertFalse(pid_file.exists())
 
+    def test_stop_tracking_refreshes_a_process_table_cached_before_daemon_start(self) -> None:
+        with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+            tracker_main.state_dir().mkdir(parents=True)
+            pid_file = tracker_main.pid_path()
+            pid_file.write_text("12345")
+            command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+            # Start has just returned running from the pid/liveness probe, but
+            # CIM still holds the empty pre-spawn process table for 0.75s.
+            cached_table: dict[int, str] = {}
+            fresh_tables = iter([{12345: command}, {}])
+
+            def invalidate_cache() -> None:
+                nonlocal cached_table
+                cached_table = next(fresh_tables)
+
+            with patch.object(tracker_main, "_process_table", side_effect=lambda: cached_table), patch.object(
+                tracker_main, "_invalidate_process_table", side_effect=invalidate_cache
+            ) as invalidate, patch.object(
+                tracker_main, "_process_command", return_value=command
+            ), patch.object(tracker_main, "_process_exists", return_value=True), patch.object(
+                tracker_main, "_wait_for_process_exit", return_value=True
+            ), patch("app.main.os.kill") as kill, patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": False}}
+            ):
+                result = tracker_main.stop_tracking()
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(invalidate.call_count, 2)
+            kill.assert_called_once_with(12345, tracker_main.signal.SIGTERM)
+            self.assertFalse(pid_file.exists())
+
     def test_stop_tracking_clears_active_passive_diagnostics_after_confirmed_exit(self) -> None:
         with temp_dir_closing_databases() as tmp:
             db_path = Path(tmp) / "tracker.sqlite3"

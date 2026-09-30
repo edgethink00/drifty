@@ -1150,6 +1150,7 @@ describe("App onboarding", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
     });
+    expect(trackerStart).toHaveBeenLastCalledWith({ resumePaused: true });
     expect(parsePostOnboardingSidebarGuideRecord(
       window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
     )).toMatchObject({ status: "active", step: "activity" });
@@ -1994,6 +1995,28 @@ describe("App onboarding", () => {
     fireEvent.focus(window);
 
     await waitFor(() => expect(continueButton.disabled).toBe(false), { timeout: 3_000 });
+  });
+
+  it("keeps the Windows onboarding early start implicit after Accessibility becomes ready", async () => {
+    setTauriRuntime();
+    accessibilityDetectHostPlatform.mockReturnValue("windows");
+    trackerGetStatus.mockResolvedValue(makeTrackerStatus({
+      running: false,
+      accessibilityGranted: false,
+      trackerMode: "idle",
+    }));
+    accessibilityGetStatus.mockResolvedValue({ granted: true, required: false });
+    trackerStart.mockResolvedValue(makeTrackerStatus({
+      running: false,
+      trackingPaused: true,
+      trackerMode: "stopped",
+    }));
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await waitFor(() => expect(trackerStart).toHaveBeenCalledExactlyOnceWith());
+    expect(screen.getByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
   });
 
   it("lets Windows continue without presenting a macOS-only Accessibility grant", async () => {

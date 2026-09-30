@@ -124,7 +124,7 @@ describe("trackerClient", () => {
   it("preserves native persisted-pause state in normalized status", async () => {
     const { trackerClient } = await import("./trackerClient");
     invoke.mockResolvedValueOnce({
-      running: true,
+      running: false,
       trackingPaused: true,
       accessibilityGranted: true,
       trackerMode: "stopped",
@@ -135,6 +135,34 @@ describe("trackerClient", () => {
       trackingPaused: true,
       trackerMode: "stopped",
     });
+  });
+
+  it("keeps a still-running tracker visible while a persisted pause is being enforced", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce({
+      running: true,
+      trackingPaused: true,
+      accessibilityGranted: true,
+      trackerMode: "degraded",
+      message: "Pause requested, but tracking is still running. Drifty is retrying.",
+    });
+
+    await expect(trackerClient.getStatus()).resolves.toMatchObject({
+      running: true,
+      trackingPaused: true,
+      trackerMode: "degraded",
+    });
+  });
+
+  it("marks only explicit tracker resumes as able to clear a pause", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValue({ running: true, accessibilityGranted: true });
+
+    await trackerClient.start();
+    await trackerClient.start({ resumePaused: true });
+
+    expect(invoke).toHaveBeenNthCalledWith(1, "tracker_start", undefined);
+    expect(invoke).toHaveBeenNthCalledWith(2, "tracker_start", { resumePaused: true });
   });
 
   it("invokes tracker_delete_activity_segments with selected ids", async () => {

@@ -91,7 +91,7 @@ export const trackerClientInvokeCommands = [
 
 export type TrackerCommandMap = {
   tracker_get_status: { args: undefined; result: Record<string, unknown> };
-  tracker_start: { args: undefined; result: Record<string, unknown> };
+  tracker_start: { args: { resumePaused?: boolean } | undefined; result: Record<string, unknown> };
   tracker_stop: { args: undefined; result: Record<string, unknown> };
   tracker_get_timeline: { args: { query: TimelineQuery }; result: ActivitySegment[] };
   tracker_get_timeline_page: { args: { query: TimelinePageQuery }; result: TimelinePage };
@@ -850,7 +850,8 @@ export interface SyncOutboxQuery {
 
 export interface TrackerApi {
   getStatus(): Promise<TrackerStatus>;
-  start(): Promise<TrackerStatus>;
+  /** Pass resumePaused only for a user action that should clear a saved pause. */
+  start(options?: { resumePaused?: boolean }): Promise<TrackerStatus>;
   stop(): Promise<TrackerStatus>;
   getTimeline(query: TimelineQuery): Promise<ActivitySegment[]>;
   getTimelinePage(query: TimelinePageQuery): Promise<TimelinePage>;

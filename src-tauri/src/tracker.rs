@@ -35,6 +35,10 @@ pub(crate) const TRACKER_STOP_ERROR_MESSAGE: &str = "Activity tracking could not
 pub(crate) const TRACKER_STATUS_ERROR_MESSAGE: &str =
     "Activity tracking status is unavailable. Try again.";
 pub(crate) const TRACKER_PAUSED_MESSAGE: &str = "Tracking paused until you resume.";
+pub(crate) const TRACKER_PAUSE_STILL_RUNNING_MESSAGE: &str =
+    "Pause requested, but tracking is still running. Drifty is retrying.";
+pub(crate) const TRACKER_PAUSE_UNCONFIRMED_MESSAGE: &str =
+    "Pause requested, but tracking status is unavailable. Drifty is retrying.";
 #[cfg(windows)]
 const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -216,11 +220,18 @@ pub(crate) fn apply_tracking_pause_state(
 ) -> TrackerStatus {
     status.tracking_paused = tracking_paused;
     if tracking_paused {
-        // The persisted user choice is authoritative while startup finishes
-        // stopping a previously running daemon or status inspection degrades.
-        status.running = false;
-        status.tracker_mode = Some("stopped".into());
-        status.message = Some(TRACKER_PAUSED_MESSAGE.into());
+        // The durable marker records intent, not proof that capture stopped.
+        // A failed stop may leave a live daemon; preserve that observation and
+        // surface an actionable degraded state while enforcement retries.
+        if status.running {
+            status.tracker_mode = Some("degraded".into());
+            status.message = Some(TRACKER_PAUSE_STILL_RUNNING_MESSAGE.into());
+        } else if status.tracker_mode.as_deref() == Some("degraded") {
+            status.message = Some(TRACKER_PAUSE_UNCONFIRMED_MESSAGE.into());
+        } else {
+            status.tracker_mode = Some("stopped".into());
+            status.message = Some(TRACKER_PAUSED_MESSAGE.into());
+        }
     }
     status
 }
@@ -1714,6 +1725,48 @@ pub(crate) fn resolve_db_path(app: &AppHandle) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn active_pause_preserves_a_live_or_unknown_tracker_observation() {
+        let status = TrackerStatus {
+            running: true,
+            tracking_paused: false,
+            accessibility_granted: true,
+            last_event_at: None,
+            database_path: None,
+            tracker_mode: Some("tracking".into()),
+            idle_seconds: None,
+            idle_detection_available: None,
+            message: None,
+        };
+        let still_running = apply_tracking_pause_state(status.clone(), true);
+        assert!(still_running.running);
+        assert!(still_running.tracking_paused);
+        assert_eq!(still_running.tracker_mode.as_deref(), Some("degraded"));
+        assert_eq!(
+            still_running.message.as_deref(),
+            Some(TRACKER_PAUSE_STILL_RUNNING_MESSAGE)
+        );
+
+        let unknown = apply_tracking_pause_state(degraded_tracker_status("failed".into()), true);
+        assert!(!unknown.running);
+        assert!(unknown.tracking_paused);
+        assert_eq!(unknown.tracker_mode.as_deref(), Some("degraded"));
+        assert_eq!(
+            unknown.message.as_deref(),
+            Some(TRACKER_PAUSE_UNCONFIRMED_MESSAGE)
+        );
+
+        let confirmed_stopped = apply_tracking_pause_state(
+            TrackerStatus {
+                running: false,
+                ..status
+            },
+            true,
+        );
+        assert_eq!(confirmed_stopped.tracker_mode.as_deref(), Some("stopped"));
+        assert_eq!(confirmed_stopped.message.as_deref(), Some(TRACKER_PAUSED_MESSAGE));
+    }
     const MUTATING_COMMANDS: &[&str] = &[
         "backup_for_version_switch",
         "start_tracking",

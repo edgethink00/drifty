@@ -86,7 +86,9 @@ function isTauriRuntime() {
 function normalizeStatus(status: Record<string, unknown>): TrackerStatus {
   const trackingPaused = Boolean(status.trackingPaused);
   return {
-    running: trackingPaused ? false : Boolean(status.running ?? status.isRunning),
+    // A persisted pause records the user's intent. A failed stop can leave the
+    // daemon recording, so preserve the native observation until it is stopped.
+    running: Boolean(status.running ?? status.isRunning),
     trackingPaused,
     accessibilityGranted: Boolean(status.accessibilityGranted),
     lastEventAt: (status.lastEventAt as string | null | undefined) ?? null,
@@ -178,9 +180,9 @@ export const trackerClient: TrackerApi = {
       return getTrackerUnavailableStatus(message);
     }
   },
-  async start() {
+  async start(options) {
     if (shouldUsePreviewData()) return previewStatus();
-    const status = await safeInvoke("tracker_start");
+    const status = await safeInvoke("tracker_start", options?.resumePaused ? { resumePaused: true } : undefined);
     if (!status) {
       throw new Error("Tracker is not available. Please run the desktop app.");
     }

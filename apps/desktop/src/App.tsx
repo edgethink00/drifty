@@ -7511,11 +7511,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     ? localization.t("tracker.pausing")
     : isTrackerUnavailable
       ? localization.t("tracker.unavailable")
-      : isTrackerDegraded
-        ? localization.t("tracker.retry")
-        : status.running
-          ? localization.t("tracker.pause")
-          : localization.t("tracker.resume");
+      : status.running
+        ? localization.t("tracker.pause")
+        : status.trackingPaused
+          ? localization.t("tracker.resume")
+          : isTrackerDegraded
+            ? localization.t("tracker.retry")
+            : localization.t("tracker.resume");
   const replaySidebarTrackerCard = useMemo(() => buildDashboardDemoReplaySidebarCard({
     currentDay: effectiveTodayDayForWeekModel,
     currentMinuteOfDay: effectiveCurrentMinuteOfDay,
@@ -9116,6 +9118,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
       setStatus(nextStatus);
       setAccessibilityGranted(nextStatus.accessibilityGranted);
+      // Startup may have restored a pause after the renderer read an older
+      // status. The native start guard reports that user choice.
+      if (nextStatus.trackingPaused) return;
       const degraded = nextStatus.trackerMode === "degraded" || nextStatus.running !== true;
       capturePostHogEvent("tracker_action", {
         action: "start",
@@ -9158,7 +9163,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     trackerMutationGenerationRef.current = trackerMutationGeneration;
     let nextStatus: TrackerStatus;
     try {
-      nextStatus = await trackerClient.start();
+      nextStatus = await trackerClient.start({ resumePaused: true });
     } catch (startError) {
       if (trackerMutationGenerationRef.current !== trackerMutationGeneration) throw startError;
       const message = toErrorMessage(startError);
@@ -9827,6 +9832,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
             setStatus(nextStatus);
             setAccessibilityGranted(nextStatus.accessibilityGranted);
+            if (nextStatus.trackingPaused) return;
             await refresh();
           } catch {
             // silent early start; completion retries with full error handling
@@ -10153,7 +10159,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                   stopDashboardDemoReplay();
                   return;
                 }
-                void (status?.running && !isTrackerDegraded ? handleStopTracking() : handleStartTracking());
+                void (status?.running ? handleStopTracking() : handleStartTracking());
               }}
               disabled={isSidebarTrackerActionDisabled}
               aria-busy={trackerPausePending || undefined}

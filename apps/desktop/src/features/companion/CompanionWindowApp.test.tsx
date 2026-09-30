@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompanionWindowApp } from "./CompanionWindowApp";
+import { trackerClient } from "../../lib/api/trackerClient";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { buildCompanionDriftAlarmPreview, buildCompanionExtremeNudgePreview } from "./companionPillPreview";
 import { readCompanionEngagementMetrics } from "./companionEngagementMetrics";
@@ -182,6 +183,27 @@ describe("CompanionWindowApp", () => {
     delete document.documentElement.dataset.surface;
     delete document.documentElement.dataset.theme;
     document.documentElement.style.colorScheme = "";
+  });
+
+  it("resumes a paused tracker only from the companion's explicit control", async () => {
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.snapshotHandler?.({ ...focusSnapshot, trackingPaused: true }));
+    vi.mocked(trackerClient.getStatus).mockResolvedValueOnce({
+      running: false,
+      trackingPaused: true,
+      accessibilityGranted: true,
+      lastEventAt: null,
+      databasePath: null,
+      trackerMode: "stopped",
+      message: null,
+    });
+
+    const resumeButton = container.querySelector<HTMLButtonElement>('[data-act="toggleTracking"]');
+    expect(resumeButton).not.toBeNull();
+    fireEvent.click(resumeButton as HTMLButtonElement);
+
+    await waitFor(() => expect(trackerClient.start).toHaveBeenCalledExactlyOnceWith({ resumePaused: true }));
   });
 
   it("ignores an earlier watcher's clear 100ms into a fresh alarm", async () => {

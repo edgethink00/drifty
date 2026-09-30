@@ -79,7 +79,7 @@ fn paused_and_stopped_trays_offer_only_the_applicable_tracking_action() {
             Some(true),
             TrackingPauseSnapshot::Indefinite,
             "Resume Tracking",
-            Some("Paused until you resume"),
+            Some("Pause requested · still tracking, retrying"),
         ),
         (
             Some(false),
@@ -373,20 +373,28 @@ fn tracking_action_label_resumes_for_indefinite_timed_and_failed_pauses() {
 #[test]
 fn pause_status_labels_explain_indefinite_timed_and_failed_states() {
     assert_eq!(
-        pause_status_label(TrackingPauseSnapshot::Indefinite, TrayLanguage::English).as_deref(),
+        pause_status_label(TrackingPauseSnapshot::Indefinite, Some(false), TrayLanguage::English).as_deref(),
         Some("Paused until you resume")
     );
     assert!(pause_status_label(TrackingPauseSnapshot::Timed {
         resumes_at_unix_seconds: 1_800_000_000,
-    }, TrayLanguage::English)
+    }, Some(false), TrayLanguage::English)
     .expect("timed label")
     .starts_with("Paused · resumes at "));
     assert_eq!(
         pause_status_label(TrackingPauseSnapshot::ResumeFailed {
             resumes_at_unix_seconds: 1_800_000_000,
-        }, TrayLanguage::English)
+        }, Some(false), TrayLanguage::English)
         .as_deref(),
         Some("Paused · automatic resume failed")
+    );
+    assert_eq!(
+        pause_status_label(TrackingPauseSnapshot::Indefinite, Some(true), TrayLanguage::English).as_deref(),
+        Some("Pause requested · still tracking, retrying")
+    );
+    assert_eq!(
+        pause_status_label(TrackingPauseSnapshot::Indefinite, None, TrayLanguage::English).as_deref(),
+        Some("Pause requested · tracking status unavailable")
     );
 }
 
