@@ -5,7 +5,7 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread::JoinHandle,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tauri::{AppHandle, Manager};
@@ -23,6 +23,9 @@ const RETRY_DELAYS: [Duration; 3] = [
     Duration::from_secs(10),
     Duration::from_secs(30),
 ];
+// After the short startup burst, a persistent failure gets one further
+// attempt per cooldown rather than keeping tracking stopped until app relaunch.
+const EXHAUSTED_RETRY_COOLDOWN: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RecoveryAction {
@@ -35,16 +38,33 @@ struct RecoverySchedule {
     failed_attempts: usize,
     attempt_armed: bool,
     exhausted: bool,
+    exhausted_retry_at: Option<Instant>,
 }
 
 impl RecoverySchedule {
     fn observe(&mut self, tracking_paused: bool, tracker_running: bool) -> RecoveryAction {
+        self.observe_at(tracking_paused, tracker_running, Instant::now())
+    }
+
+    fn observe_at(
+        &mut self,
+        tracking_paused: bool,
+        tracker_running: bool,
+        now: Instant,
+    ) -> RecoveryAction {
         if tracking_paused || tracker_running {
             self.reset();
             return RecoveryAction::Wait(HEALTH_POLL_INTERVAL);
         }
         if self.exhausted {
-            return RecoveryAction::Wait(HEALTH_POLL_INTERVAL);
+            return if self
+                .exhausted_retry_at
+                .is_some_and(|retry_at| now >= retry_at)
+            {
+                RecoveryAction::AttemptStart
+            } else {
+                RecoveryAction::Wait(HEALTH_POLL_INTERVAL)
+            };
         }
         if self.attempt_armed {
             self.attempt_armed = false;
@@ -56,6 +76,10 @@ impl RecoverySchedule {
     }
 
     fn record_attempt(&mut self, succeeded: bool) -> Duration {
+        self.record_attempt_at(succeeded, Instant::now())
+    }
+
+    fn record_attempt_at(&mut self, succeeded: bool, now: Instant) -> Duration {
         if succeeded {
             self.reset();
             return HEALTH_POLL_INTERVAL;
@@ -65,6 +89,7 @@ impl RecoverySchedule {
         if self.failed_attempts >= RETRY_DELAYS.len() {
             self.exhausted = true;
             self.attempt_armed = false;
+            self.exhausted_retry_at = Some(now + EXHAUSTED_RETRY_COOLDOWN);
             HEALTH_POLL_INTERVAL
         } else {
             self.attempt_armed = true;
@@ -76,6 +101,7 @@ impl RecoverySchedule {
         self.failed_attempts = 0;
         self.attempt_armed = false;
         self.exhausted = false;
+        self.exhausted_retry_at = None;
     }
 }
 
@@ -330,8 +356,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unexpected_stop_uses_bounded_two_ten_thirty_second_attempts() {
+    fn unexpected_stop_uses_short_burst_then_slow_retry() {
         let mut schedule = RecoverySchedule::default();
+        let now = Instant::now();
 
         assert_eq!(
             schedule.observe(false, false),
@@ -342,12 +369,46 @@ mod tests {
         assert_eq!(schedule.observe(false, false), RecoveryAction::AttemptStart);
         assert_eq!(schedule.record_attempt(false), Duration::from_secs(30));
         assert_eq!(schedule.observe(false, false), RecoveryAction::AttemptStart);
-        assert_eq!(schedule.record_attempt(false), HEALTH_POLL_INTERVAL);
+        assert_eq!(schedule.record_attempt_at(false, now), HEALTH_POLL_INTERVAL);
         assert!(schedule.exhausted);
         assert_eq!(
-            schedule.observe(false, false),
+            schedule.observe_at(
+                false,
+                false,
+                now + EXHAUSTED_RETRY_COOLDOWN - Duration::from_secs(1)
+            ),
             RecoveryAction::Wait(HEALTH_POLL_INTERVAL)
         );
+        assert_eq!(
+            schedule.observe_at(false, false, now + EXHAUSTED_RETRY_COOLDOWN),
+            RecoveryAction::AttemptStart
+        );
+
+        // A persistent failure gets one attempt every five minutes, not a
+        // fresh 2/10/30-second burst and not a permanent stop.
+        let later = now + EXHAUSTED_RETRY_COOLDOWN;
+        assert_eq!(
+            schedule.record_attempt_at(false, later),
+            HEALTH_POLL_INTERVAL
+        );
+        assert_eq!(
+            schedule.observe_at(
+                false,
+                false,
+                later + EXHAUSTED_RETRY_COOLDOWN - Duration::from_secs(1)
+            ),
+            RecoveryAction::Wait(HEALTH_POLL_INTERVAL)
+        );
+        assert_eq!(
+            schedule.observe_at(false, false, later + EXHAUSTED_RETRY_COOLDOWN),
+            RecoveryAction::AttemptStart
+        );
+        assert_eq!(
+            schedule.record_attempt_at(true, later + EXHAUSTED_RETRY_COOLDOWN),
+            HEALTH_POLL_INTERVAL
+        );
+        assert!(!schedule.exhausted);
+        assert_eq!(schedule.exhausted_retry_at, None);
     }
 
     #[test]
@@ -363,6 +424,7 @@ mod tests {
         );
         assert_eq!(schedule.failed_attempts, 0);
         assert!(!schedule.exhausted);
+        assert_eq!(schedule.exhausted_retry_at, None);
 
         schedule.observe(false, false);
         schedule.observe(false, false);
@@ -373,6 +435,7 @@ mod tests {
         );
         assert_eq!(schedule.failed_attempts, 0);
         assert!(!schedule.exhausted);
+        assert_eq!(schedule.exhausted_retry_at, None);
     }
 
     #[test]
@@ -398,6 +461,7 @@ mod tests {
             schedule.record_attempt(false);
         }
         assert!(schedule.exhausted);
+        schedule.exhausted_retry_at = Some(Instant::now() - Duration::from_secs(1));
 
         let wait = drive_recovery(&mut schedule, true, false, || {
             panic!("paused tracking must not invoke recovery")
@@ -406,6 +470,7 @@ mod tests {
         assert_eq!(wait, HEALTH_POLL_INTERVAL);
         assert_eq!(schedule.failed_attempts, 0);
         assert!(!schedule.exhausted);
+        assert_eq!(schedule.exhausted_retry_at, None);
     }
 
     #[test]
