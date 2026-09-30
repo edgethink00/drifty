@@ -2,9 +2,11 @@ import type { ActivitySegment, CurrentActivitySnapshot } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
 import {
   buildActivitySurfaceRevision,
+  buildCaptureGapWatcherSnapshot,
   buildLiveWatcherSnapshot,
   buildWatcherSnapshot,
   buildWatcherSnapshotFromCurrent,
+  currentSnapshotToSegment,
   shouldReplacePetModeLiveSnapshot,
   snapshotObservedAtMs,
 } from "./watcherData";
@@ -112,5 +114,37 @@ describe("pet live snapshot freshness", () => {
     expect(shouldReplacePetModeLiveSnapshot(alarmObservedAt, 0)).toBe(true);
     expect(shouldReplacePetModeLiveSnapshot(staleReactSnapshot, alarmObservedAt ?? 0)).toBe(false);
     expect(shouldReplacePetModeLiveSnapshot(null, 1)).toBe(false);
+  });
+});
+
+describe("foreground capture gaps", () => {
+  it("keeps recorded focus totals while clearing an unknown current app and focus run", () => {
+    const recordedFocus: ActivitySegment = {
+      ...historicalFocus,
+      classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 },
+    };
+    expect(buildWatcherSnapshot([recordedFocus])).toMatchObject({
+      productivity: "focus",
+      contextLabel: "ChatGPT",
+      focusStrikeSeconds: 1200,
+    });
+    expect(buildCaptureGapWatcherSnapshot([recordedFocus])).toMatchObject({
+      productivity: "neutral",
+      category: "unknown",
+      contextLabel: "the current session",
+      durationSeconds: 0,
+      focusSecondsToday: 1200,
+      focusStrikeSeconds: null,
+      preservedFocusStrikeSeconds: null,
+    });
+  });
+});
+
+describe("current snapshot platform", () => {
+  it("keeps Windows foreground captures on Windows when constructing a live segment", () => {
+    expect(currentSnapshotToSegment({ ...liveYouTube, source: "win32-foreground" }, 30).platform).toBe("windows");
+    expect(currentSnapshotToSegment({ ...liveYouTube, source: "win32-foreground-untitled" }, 30).platform).toBe("windows");
+    expect(currentSnapshotToSegment({ ...liveYouTube, frontmostCaptureSource: "uwp-frame-host" }, 30).platform).toBe("windows");
+    expect(currentSnapshotToSegment(liveYouTube, 30).platform).toBe("macos");
   });
 });

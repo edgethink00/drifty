@@ -1789,12 +1789,26 @@ def set_developer_diagnostics(payload: JsonObject):
     return response(True, save_developer_diagnostics(database(), payload))
 
 
+def _failed_foreground_capture(snapshot: Snapshot) -> bool:
+    return snapshot.frontmost_capture_source == "unavailable" or (
+        snapshot.frontmost_capture_source is None
+        and snapshot.source == "unknown"
+        and snapshot.app_name.strip() == "Unavailable"
+        and not snapshot.bundle_id
+    )
+
+
 def get_current_snapshot():
     if DB_PATH.exists():
         _apply_developer_diagnostics_env(database())
     else:
         _apply_developer_diagnostics_defaults()
     snapshot = current_snapshot()
+    if snapshot.source == "unknown" and _failed_foreground_capture(snapshot):
+        # A failed foreground read is a capture gap, just as in the daemon
+        # loop. Limit this response change to Windows' unknown-source failure;
+        # macOS frontmost reads retain their existing response contract.
+        return response(True)
     if DB_PATH.exists():
         excluded_rules = database().get_excluded_app_rules()
         match = match_app_exclusion(snapshot.app_name, snapshot.bundle_id, excluded_rules)
@@ -2193,9 +2207,7 @@ def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float 
 
     _apply_developer_diagnostics_env(db)
     snapshot = current_snapshot(include_system_transient=False)
-    if snapshot.frontmost_capture_source == "unavailable" or (
-        snapshot.app_name == "Unavailable" and snapshot.bundle_id is None
-    ):
+    if _failed_foreground_capture(snapshot):
         # A failed foreground read is a gap, not an app the user opened.
         return None
     snapshot.engagement_evidence = FOREGROUND_AUDIO_EVIDENCE if engagement.is_passive else None

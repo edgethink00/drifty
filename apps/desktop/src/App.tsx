@@ -381,7 +381,7 @@ import {
   resolveEndOfDayReviewCatchUp,
   resolveInitialEndOfDayReviewMinute,
 } from "./features/companion/endOfDayReviewSchedule";
-import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildLiveWatcherSnapshot, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, shouldReplacePetModeLiveSnapshot, showDueDriftWatcherPeek, snapshotObservedAtMs } from "./features/companion/watcherData";
+import { LIVE_CAPTURE_GAP_GRACE_MS, WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildCaptureGapWatcherSnapshot, buildLiveWatcherSnapshot, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, shouldReplacePetModeLiveSnapshot, showDueDriftWatcherPeek, snapshotObservedAtMs } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
 import {
   automaticCloseOverrideIsExpired,
@@ -624,6 +624,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [selectedDay, setSelectedDay] = useState(() => logicalTodayIsoDate(resolveInitialStartOfDayMinutes()));
   const [status, setStatus] = useState<TrackerStatus | null>(null);
   const [trackerPausePending, setTrackerPausePending] = useState(false);
+  const trackerPauseIntentRef = useRef(false);
+  trackerPauseIntentRef.current = trackerPausePending || status?.trackingPaused === true;
   const hasTrackerStatus = status !== null;
   const [brandCaptureMotionKey, setBrandCaptureMotionKey] = useState(0);
   const triggerBrandCaptureMotion = useCallback(() => {
@@ -642,6 +644,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [accessibilityRequired, setAccessibilityRequired] = useState(hostPlatform !== "windows");
   const [currentSnapshot, setCurrentSnapshot] = useState<CurrentActivitySnapshot | null>(null);
+  const [liveCaptureGapExpired, setLiveCaptureGapExpired] = useState(false);
   // True until a refresh has settled its first live snapshot; the sidebar keeps
   // its pre-load placeholder meanwhile (resolveSidebarLiveActivityLabels).
   const [awaitingFirstCurrentSnapshot, setAwaitingFirstCurrentSnapshot] = useState(true);
@@ -2620,6 +2623,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const siteIconCachedOnlyRequestsInFlightRef = useRef<Set<string>>(new Set());
   const driftAlarmRequestInFlightRef = useRef(false);
   const liveDriftAlarmRefreshInFlightRef = useRef(false);
+  const liveDriftAlarmTimelineUnavailableRef = useRef(false);
+  const windowsLiveSnapshotRefreshInFlightRef = useRef(false);
   const liveDriftAlarmAiRequestInFlightRef = useRef<string | null>(null);
   const liveDriftAlarmAiRetryAfterRef = useRef<Map<string, number>>(new Map());
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
@@ -3763,7 +3768,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               || trackerMutationGenerationRef.current !== trackerMutationGeneration
             ) return null;
             if (!nextStatus?.running) return null;
-            return isRequiredCurrentSnapshotRefresh
+            return isRequiredCurrentSnapshotRefresh && hostPlatform !== "windows"
               ? trackerClient.getCurrentSnapshot()
               : trackerClient.getCurrentSnapshot().catch(() => null);
           })
@@ -3799,6 +3804,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         setAwaitingFirstCurrentSnapshot(false);
       }
       if (isAlarmDayRefresh) {
+        liveDriftAlarmTimelineUnavailableRef.current = false;
         liveDriftAlarmSegmentsRef.current = [];
         updateDriftAlarmBaseSegments(day, materializedTimeline.segments);
         if (materializedArchiveTimelines !== null) {
@@ -4440,21 +4446,31 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     liveDriftAlarmRefreshInFlightRef.current = true;
     const trackerMutationGeneration = trackerMutationGenerationRef.current;
+    const fullRefreshRequest = refreshRequestRef.current;
     try {
       const timelineRange = getDriftAlarmPollTimelineRange(day, startOfDayMinutes);
-      const [liveTimeline, nextCurrentSnapshot] = await Promise.all([
+      const [timelineResult, snapshotResult] = await Promise.allSettled([
         trackerClient.getTimeline(timelineRange),
-        trackerClient.getCurrentSnapshot().catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : "unknown error";
-          console.warn("Failed to refresh current activity for drift alarm poll", message);
-          return null;
-        }),
+        trackerClient.getCurrentSnapshot(),
       ]);
 
       if (
         day !== currentDriftAlarmDay()
         || trackerMutationGenerationRef.current !== trackerMutationGeneration
       ) return false;
+      const nextCurrentSnapshot = snapshotResult.status === "fulfilled" ? snapshotResult.value : null;
+      if (snapshotResult.status === "rejected") {
+        console.warn("Failed to refresh current activity for drift alarm poll", toErrorMessage(snapshotResult.reason));
+      }
+      liveDriftAlarmTimelineUnavailableRef.current = timelineResult.status === "rejected";
+      if (hostPlatform === "windows" && refreshRequestRef.current === fullRefreshRequest) {
+        setCurrentSnapshot(nextCurrentSnapshot);
+      }
+      if (timelineResult.status === "rejected") {
+        console.warn("Failed to refresh live drift alarm activity", toErrorMessage(timelineResult.reason));
+        return false;
+      }
+      const liveTimeline = timelineResult.value;
       liveDriftAlarmSegmentsRef.current = liveTimeline;
       evaluateDriftAlarmRef.current?.({
         checkedAt: new Date(),
@@ -4470,7 +4486,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     } finally {
       liveDriftAlarmRefreshInFlightRef.current = false;
     }
-  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
+  }, [hostPlatform, shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
 
   const refreshLiveTail = useCallback(async (day: string): Promise<boolean> => {
     if (liveTailRefreshInFlightRef.current) return false;
@@ -4521,12 +4537,37 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
   }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
+  const refreshWindowsLiveSnapshot = useCallback(async (): Promise<void> => {
+    if (hostPlatform !== "windows" || status?.running !== true || shouldBlockLocalTrackerAccess) return;
+    if (windowsLiveSnapshotRefreshInFlightRef.current) return;
+    windowsLiveSnapshotRefreshInFlightRef.current = true;
+    const trackerMutationGeneration = trackerMutationGenerationRef.current;
+    const fullRefreshRequest = refreshRequestRef.current;
+    try {
+      const snapshot = await trackerClient.getCurrentSnapshot();
+      if (
+        trackerMutationGenerationRef.current === trackerMutationGeneration
+        && refreshRequestRef.current === fullRefreshRequest
+      ) setCurrentSnapshot(snapshot);
+    } catch (error) {
+      console.warn("Failed to refresh Windows current activity", toErrorMessage(error));
+      if (
+        trackerMutationGenerationRef.current === trackerMutationGeneration
+        && refreshRequestRef.current === fullRefreshRequest
+      ) setCurrentSnapshot(null);
+    } finally {
+      windowsLiveSnapshotRefreshInFlightRef.current = false;
+    }
+  }, [hostPlatform, shouldBlockLocalTrackerAccess, status?.running]);
+
   const refreshRef = useRef(refresh);
   const refreshLiveTailRef = useRef(refreshLiveTail);
+  const refreshWindowsLiveSnapshotRef = useRef(refreshWindowsLiveSnapshot);
   const selectTodayAfterDateRolloverRef = useRef(selectTodayAfterDateRollover);
   useLayoutEffect(() => {
     refreshRef.current = refresh;
     refreshLiveTailRef.current = refreshLiveTail;
+    refreshWindowsLiveSnapshotRef.current = refreshWindowsLiveSnapshot;
     selectTodayAfterDateRolloverRef.current = selectTodayAfterDateRollover;
   });
 
@@ -4647,6 +4688,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         nowMs: Date.now(),
         lastFullDayRefreshAtMs: lastFullDayRefreshAtRef.current,
       });
+      // The alarm poll handles unfocused Windows captures when alerts are on.
+      // It deliberately skips the focused renderer, so the regular tick owns
+      // that case as well as the alerts-off case.
+      if (hostPlatform === "windows" && (!driftAlertsRuntimeEnabled || rendererFocusedRef.current)) {
+        void refreshWindowsLiveSnapshotRef.current();
+      }
       if (tickAction === "reconcile") {
         void refreshRef.current(selectedDay, { foreground: false });
         return;
@@ -4654,7 +4701,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       void refreshLiveTailRef.current(selectedDay);
     }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [activeTab, classificationRange, dashPeriod, isPreviewSurface, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
+  }, [activeTab, classificationRange, dashPeriod, driftAlertsRuntimeEnabled, hostPlatform, isPreviewSurface, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
@@ -5326,7 +5373,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       clearPendingTransientDriftAlarm();
       return;
     }
-    if (!status?.running) {
+    if (!status?.running || trackerPauseIntentRef.current) {
       publishEvaluationDriftAlarmTrayStatus({ kind: "tracker_paused" }, null);
       clearPausedDriftAlarmRuntime();
       return;
@@ -5922,11 +5969,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         evaluation,
       });
       const closeStillAuthorized = () => automaticCloseEnabledRef.current
+        && !trackerPauseIntentRef.current
         && pendingExtremeNudgeRef.current === pendingClose
         && (driftAlarmSnoozeRef.current === null || Date.now() >= driftAlarmSnoozeRef.current.untilMs);
       const cancelledCloseResult = () => ({
         applied: false as const,
-        diagnostic: !automaticCloseEnabledRef.current || driftAlarmSnoozeRef.current || driftAlarmSessionProtectionRef.current
+        diagnostic: !automaticCloseEnabledRef.current || trackerPauseIntentRef.current || driftAlarmSnoozeRef.current || driftAlarmSessionProtectionRef.current
           ? "automatic_close_paused" : "pet_target_changed",
       });
       let targetConfirmedAfterApproach = false;
@@ -6402,7 +6450,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     pendingDriftAlarmGateRef.current = alertKey;
     const gateGeneration = pendingDriftAlarmGateGenerationRef.current;
     const isCurrentGateAttempt = () => (
-      pendingDriftAlarmGateRef.current === alertKey
+      !trackerPauseIntentRef.current
+      && pendingDriftAlarmGateRef.current === alertKey
       && pendingDriftAlarmGateGenerationRef.current === gateGeneration
     );
     recordDriftAlarmDebugEvent({
@@ -6573,7 +6622,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, hostPlatform, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, hostPlatform, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running, status?.trackingPaused, trackerPausePending]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -6588,6 +6637,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       }
       return;
     }
+    // A snapshot from a poll whose timeline failed still updates the current
+    // Windows UI, but it cannot certify a drift candidate against old rows.
+    if (liveDriftAlarmTimelineUnavailableRef.current) return;
     if (selectedDay !== currentDriftAlarmDay()) return;
 
     evaluateDriftAlarm({
@@ -7166,8 +7218,25 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       neutral: (selectedDayProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0) / total,
     };
   }, [selectedDayProductivityTotals]);
+  useEffect(() => {
+    if (hostPlatform !== "windows" || currentSnapshot || status?.running !== true) {
+      setLiveCaptureGapExpired(false);
+      return undefined;
+    }
+    setLiveCaptureGapExpired(false);
+    const timeoutId = window.setTimeout(() => setLiveCaptureGapExpired(true), LIVE_CAPTURE_GAP_GRACE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [currentSnapshot, hostPlatform, status?.running]);
+
+  const windowsTrackingStopped = hostPlatform === "windows" && status?.running === false;
   const petModeLiveSnapshot = useMemo(() => {
     const todaySegments = selectedDay === todayDay ? segments : driftAlarmBaseSegmentsRef.current;
+    if (windowsTrackingStopped || (!currentSnapshot && liveCaptureGapExpired)) return buildCaptureGapWatcherSnapshot(todaySegments, {
+      includeAiClassifications: showAiClassificationImpact,
+      includeBuiltInHeuristics: allowBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
+      rules: classificationRules,
+    });
     if (!currentSnapshot) return petModeLiveSnapshotRef.current;
     const observedAtMs = snapshotObservedAtMs(currentSnapshot);
     if (!shouldReplacePetModeLiveSnapshot(observedAtMs, petModeLiveObservedAtMsRef.current)) {
@@ -7184,7 +7253,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         rules: classificationRules,
       },
     );
-  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, segments, selectedDay, showAiClassificationImpact, todayDay]);
+  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, liveCaptureGapExpired, segments, selectedDay, showAiClassificationImpact, todayDay, windowsTrackingStopped]);
   const watcherSnapshot = useMemo(() => buildWatcherSnapshot(segments, selectedDayClassificationOptions), [selectedDayClassificationOptions, segments]);
   useEffect(() => { watcherSnapshotRef.current = watcherSnapshot; }, [watcherSnapshot]);
   useEffect(() => { petModeLiveSnapshotRef.current = petModeLiveSnapshot; }, [petModeLiveSnapshot]);
@@ -7415,27 +7484,20 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   });
   const companionTodaySnapshot = useMemo(() => {
     const todaySegments = selectedDay === todayDay ? segments : driftAlarmBaseSegmentsRef.current;
-    if (currentSnapshot) {
-      return buildLiveWatcherSnapshot(
-        currentSnapshot,
-        todaySegments,
-        {
-          includeAiClassifications: showAiClassificationImpact,
-          includeBuiltInHeuristics: allowBuiltInHeuristics,
-          builtInHeuristicsUnavailableSince,
-          rules: classificationRules,
-        },
-      );
+    const classificationOptions = {
+      includeAiClassifications: showAiClassificationImpact,
+      includeBuiltInHeuristics: allowBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
+      rules: classificationRules,
+    };
+    if (windowsTrackingStopped || (!currentSnapshot && liveCaptureGapExpired)) {
+      return buildCaptureGapWatcherSnapshot(todaySegments, classificationOptions);
     }
+    if (currentSnapshot) return buildLiveWatcherSnapshot(currentSnapshot, todaySegments, classificationOptions);
     return selectedDay === todayDay
       ? watcherSnapshot
-      : buildWatcherSnapshot(todaySegments, {
-        includeAiClassifications: showAiClassificationImpact,
-        includeBuiltInHeuristics: allowBuiltInHeuristics,
-        builtInHeuristicsUnavailableSince,
-        rules: classificationRules,
-      });
-  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, segments, selectedDay, showAiClassificationImpact, todayDay, watcherSnapshot]);
+      : buildWatcherSnapshot(todaySegments, classificationOptions);
+  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, liveCaptureGapExpired, segments, selectedDay, showAiClassificationImpact, todayDay, watcherSnapshot, windowsTrackingStopped]);
 
   useEffect(() => {
     const client = trackerClient as Partial<typeof trackerClient>;
@@ -7582,7 +7644,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     snapshot: currentSnapshot,
     awaitingFirstSnapshot: awaitingFirstCurrentSnapshot,
     pendingAppLabel: localization.t("tracker.noActivity"),
-    fallbackAppLabel: topAppLabel,
+    fallbackAppLabel: hostPlatform === "windows" && (liveCaptureGapExpired || windowsTrackingStopped)
+      ? localization.t("tracker.noActivity")
+      : topAppLabel,
   });
   const hasTimelineData = effectiveSelectedDaySegments.length > 0;
   const isBootstrappingTracker = loading && status === null;
@@ -9327,6 +9391,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   async function handleStopTracking() {
     if (trackerStopInFlightRef.current) return;
     trackerStopInFlightRef.current = true;
+    // Pause intent cancels destructive actions immediately, even while native
+    // shutdown still reports running. Keep that running truth in the UI.
+    trackerPauseIntentRef.current = true;
+    clearPausedDriftAlarmRuntime();
     setTrackerPausePending(true);
     setError(null);
     const trackerMutationGeneration = trackerMutationGenerationRef.current + 1;

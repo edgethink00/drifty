@@ -1490,6 +1490,57 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(result["data"]["browserHistoryCandidateCount"], 0)
         self.assertEqual(result["data"]["browserHistoryErrorCount"], 0)
 
+    def test_get_current_snapshot_treats_failed_windows_capture_as_a_gap(self) -> None:
+        failed = build_windows_snapshot(None, None, "2026-04-06T09:00:00+00:00")
+        with temp_dir_closing_databases() as tmp:
+            db_path = Path(tmp) / "tracker.sqlite3"
+            with patch.object(tracker_main, "DB_PATH", db_path), patch.object(
+                tracker_main, "current_snapshot", return_value=failed
+            ):
+                result = tracker_main.get_current_snapshot()
+
+            self.assertTrue(result["ok"])
+            self.assertIsNone(result["data"])
+            self.assertFalse(db_path.exists())
+
+    def test_get_current_snapshot_preserves_macos_failed_capture_response(self) -> None:
+        captured = Snapshot(
+            observed_at="2026-04-06T09:00:00+00:00",
+            app_name="Unavailable",
+            bundle_id=None,
+            window_title=None,
+            source="nsworkspace",
+            frontmost_capture_source="unavailable",
+        )
+        with temp_dir_closing_databases() as tmp:
+            with patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"), patch.object(
+                tracker_main, "current_snapshot", return_value=captured
+            ):
+                result = tracker_main.get_current_snapshot()
+
+        self.assertEqual(result["data"]["appName"], "Unavailable")
+        self.assertEqual(result["data"]["source"], "nsworkspace")
+
+    def test_get_current_snapshot_keeps_a_real_unavailable_named_app(self) -> None:
+        for capture_source in (None, "win32-foreground"):
+            with self.subTest(capture_source=capture_source):
+                captured = Snapshot(
+                    observed_at="2026-04-06T09:00:00+00:00",
+                    app_name="Unavailable",
+                    bundle_id=None,
+                    window_title=None,
+                    source="win32-foreground-untitled",
+                    frontmost_capture_source=capture_source,
+                )
+                with temp_dir_closing_databases() as tmp:
+                    with patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"), patch.object(
+                        tracker_main, "current_snapshot", return_value=captured
+                    ):
+                        result = tracker_main.get_current_snapshot()
+
+                self.assertEqual(result["data"]["appName"], "Unavailable")
+                self.assertEqual(result["data"]["frontmostCaptureSource"], capture_source)
+
     def test_get_current_snapshot_does_not_initialize_missing_database(self) -> None:
         snapshot = Snapshot(
             observed_at="2026-04-06T09:00:00+00:00",
@@ -2575,6 +2626,33 @@ class TrackerMainTests(unittest.TestCase):
         metadata_fetch.assert_not_called()
         history_backfill.assert_not_called()
         self.assertNotIn(call("last_event_at", snapshot.observed_at), mock_db.set_meta.call_args_list)
+
+    def test_daemon_tick_records_a_verified_app_named_unavailable(self) -> None:
+        mock_db = MagicMock()
+        power_state = PowerStateSample(
+            observed_at=datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc),
+            should_capture=True,
+            reason="ok",
+        )
+        snapshot = Snapshot(
+            observed_at="2026-04-06T09:00:00+00:00",
+            app_name="Unavailable",
+            bundle_id=None,
+            window_title=None,
+            source="win32-foreground-untitled",
+            frontmost_capture_source="win32-foreground",
+        )
+        with patch.object(tracker_main, "current_power_state", return_value=power_state), patch.object(
+            tracker_main, "seconds_since_last_input", return_value=0.0
+        ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+            tracker_main, "current_snapshot", return_value=snapshot
+        ), patch.object(tracker_main, "enqueue_youtube_metadata_fetch"), patch.object(
+            tracker_main, "backfill_browser_history_context"
+        ):
+            self.assertIsNotNone(tracker_main._daemon_tick(mock_db, None))
+
+        mock_db.record_snapshot.assert_called_once()
+        self.assertIs(mock_db.record_snapshot.call_args.args[0], snapshot)
 
     def test_windows_foreground_race_is_not_saved_to_timeline(self) -> None:
         with temp_dir_closing_databases() as tmp:

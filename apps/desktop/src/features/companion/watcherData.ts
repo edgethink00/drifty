@@ -70,6 +70,11 @@ export const WATCHER_DRIFT_REMINDER_THRESHOLDS_SECONDS = [10, 5 * 60, 30 * 60, 6
 
 export const WATCHER_STALE_EVENT_RECOVERY_MS = 30_000;
 
+// The dashboard polls every 30 seconds. Keep one missed foreground capture
+// from changing the resident posture, but stop presenting the previous app as
+// current if the gap lasts past the next poll.
+export const LIVE_CAPTURE_GAP_GRACE_MS = 45_000;
+
 export function getDefaultWatcherSnapshot(): WatcherSnapshot {
   return {
     productivity: "neutral",
@@ -134,6 +139,16 @@ export function buildWatcherSnapshot(segments: ActivitySegment[], classification
     currentHourFocusSeconds,
     focusStrikeSeconds: computeCurrentFocusStrikeSeconds(capturedSegments, segment, classificationOptions),
     preservedFocusStrikeSeconds: computePreservedFocusStrikeSeconds(capturedSegments, segment, classificationOptions),
+  };
+}
+
+/** Preserve recorded totals without attributing an unavailable foreground to the last app. */
+export function buildCaptureGapWatcherSnapshot(segments: ActivitySegment[], classificationOptions?: ClassificationOptions): WatcherSnapshot {
+  const recorded = buildWatcherSnapshot(segments, classificationOptions);
+  return {
+    ...getDefaultWatcherSnapshot(),
+    focusSecondsToday: recorded.focusSecondsToday,
+    currentHourFocusSeconds: recorded.currentHourFocusSeconds,
   };
 }
 
@@ -271,7 +286,10 @@ export function currentSnapshotToSegment(current: CurrentActivitySnapshot, durat
     frontmostCaptureSource: current.frontmostCaptureSource,
     frontmostCaptureError: current.frontmostCaptureError,
     frontmostFallbackError: current.frontmostFallbackError,
-    platform: "macos",
+    platform: current.source === "win32-foreground" || current.source === "win32-foreground-untitled"
+      || current.frontmostCaptureSource === "win32-foreground" || current.frontmostCaptureSource === "uwp-frame-host"
+      ? "windows"
+      : "macos",
     source: current.source,
   };
 }

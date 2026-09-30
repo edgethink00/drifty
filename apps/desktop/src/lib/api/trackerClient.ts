@@ -256,7 +256,13 @@ export const trackerClient: TrackerApi = {
     };
   },
   async getCurrentSnapshot() {
-    return await safeInvoke("tracker_get_current_snapshot");
+    const snapshot = await safeInvoke("tracker_get_current_snapshot");
+    if (!snapshot) return null;
+    // Windows failures use the unknown source. Keep macOS' existing response
+    // contract, and allow a verified app whose actual name is Unavailable.
+    if (snapshot.source === "unknown" && (snapshot.frontmostCaptureSource === "unavailable"
+      || (snapshot.frontmostCaptureSource == null && snapshot.appName.trim() === "Unavailable" && !snapshot.bundleId))) return null;
+    return snapshot;
   },
   async getHourlySummary(query: TimelineQuery) {
     if (shouldUsePreviewData()) return previewHourlySummary(query);

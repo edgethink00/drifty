@@ -491,7 +491,8 @@ impl TrackerController {
     }
 
     pub fn get_current_snapshot(&self, app: &AppHandle) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "get_current_snapshot", json!({}))
+        let raw = self.invoke_raw(app, "get_current_snapshot", json!({}))?;
+        parse_current_snapshot_envelope(&raw)
     }
 
     pub fn preview_browser_history_import(
@@ -793,6 +794,16 @@ impl TrackerController {
         command: &str,
         payload: Value,
     ) -> Result<T, TrackerError> {
+        let raw = self.invoke_raw(app, command, payload)?;
+        parse_envelope::<T>(&raw)
+    }
+
+    fn invoke_raw(
+        &self,
+        app: &AppHandle,
+        command: &str,
+        payload: Value,
+    ) -> Result<Vec<u8>, TrackerError> {
         let runtime = resolve_tracker_runtime(app)?;
         let db_path = resolve_db_path(app);
         let retry_safety = sidecar_command_retry_safety(command);
@@ -805,7 +816,7 @@ impl TrackerController {
         // Fast path: reuse a long-lived `serve` process so each request avoids
         // the ~160ms interpreter/import cold-start (and the contention of
         // spawning several interpreters at once during a refresh burst).
-        let raw = invoke_with_serve_fallback(
+        invoke_with_serve_fallback(
             retry_safety,
             || {
                 let serve_result = if should_use_one_shot_when_serve_busy(command) {
@@ -816,10 +827,22 @@ impl TrackerController {
                 serve_result.map(|line| line.into_bytes())
             },
             || invoke_one_shot(&runtime, &db_path, &request),
-        )?;
-
-        parse_envelope::<T>(&raw)
+        )
     }
+}
+
+fn parse_current_snapshot_envelope(raw: &[u8]) -> Result<Value, TrackerError> {
+    let envelope = serde_json::from_slice::<SidecarEnvelope<Value>>(raw)
+        .map_err(|err| TrackerError::ParseFailed(err.to_string()))?;
+
+    if !envelope.ok {
+        return Err(TrackerError::TrackerReturnedError(
+            envelope.error.unwrap_or_else(|| "unknown tracker error".into()),
+        ));
+    }
+
+    // Only current activity is optional: a failed foreground read is a gap.
+    Ok(envelope.data.unwrap_or(Value::Null))
 }
 
 fn parse_envelope<T: for<'de> Deserialize<'de>>(raw: &[u8]) -> Result<T, TrackerError> {
@@ -1955,6 +1978,24 @@ mod tests {
         "save_ai_review_events",
         "revert_ai_review_event",
     ];
+
+    #[test]
+    fn current_snapshot_envelope_preserves_capture_gaps_without_relaxing_other_commands() {
+        let gap = br#"{"ok":true,"data":null,"error":null}"#;
+        let captured = br#"{"ok":true,"data":{"appName":"Code"},"error":null}"#;
+        let failed = br#"{"ok":false,"data":null,"error":"capture failed"}"#;
+
+        assert_eq!(parse_current_snapshot_envelope(gap).unwrap(), Value::Null);
+        assert_eq!(
+            parse_current_snapshot_envelope(captured).unwrap()["appName"],
+            Value::String("Code".into())
+        );
+        assert!(matches!(parse_envelope::<Value>(gap), Err(TrackerError::MissingData)));
+        assert!(matches!(
+            parse_current_snapshot_envelope(failed),
+            Err(TrackerError::TrackerReturnedError(message)) if message == "capture failed"
+        ));
+    }
 
     #[test]
     fn timeline_envelope_preserves_passive_engagement_evidence() {

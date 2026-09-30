@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { trackerClientInvokeCommands, type TrackerClientCommand } from "@drifty/domain";
+import { trackerClientInvokeCommands, type ActivitySegment, type TrackerClientCommand } from "@drifty/domain";
+import { buildLiveWatcherSnapshot, buildWatcherSnapshot } from "../../features/companion/watcherData";
 
 const { invoke } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -134,6 +135,106 @@ describe("trackerClient", () => {
       running: false,
       trackingPaused: true,
       trackerMode: "stopped",
+    });
+  });
+
+  it.each(["focus", "drift"] as const)("treats a failed Windows current capture as a gap even with an Unavailable %s rule", async (productivity) => {
+    const { trackerClient } = await import("./trackerClient");
+    const recordedFocus: ActivitySegment = {
+      id: "recorded-focus",
+      startedAt: "2026-09-30T09:00:00.000Z",
+      endedAt: "2026-09-30T09:05:00.000Z",
+      durationSeconds: 300,
+      appName: "Code",
+      bundleId: "C:\\Code.exe",
+      platform: "windows",
+      source: "win32-foreground",
+      classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 },
+    };
+    const options = {
+      rules: [{
+        targetKind: "app" as const,
+        targetValue: "Unavailable",
+        category: productivity === "focus" ? "workspace" as const : "entertainment" as const,
+        productivity,
+      }, {
+        targetKind: "app" as const,
+        targetValue: "Browser",
+        category: "entertainment" as const,
+        productivity: "drift" as const,
+      }],
+    };
+    invoke.mockResolvedValueOnce({
+      observedAt: "2026-09-30T09:05:05.000Z",
+      appName: "Unavailable",
+      bundleId: null,
+      source: "unknown",
+      frontmostCaptureSource: "unavailable",
+    });
+
+    const current = await trackerClient.getCurrentSnapshot();
+    const companion = current
+      ? buildLiveWatcherSnapshot(current, [recordedFocus], options)
+      : buildWatcherSnapshot([recordedFocus], options);
+
+    expect(current).toBeNull();
+    expect(companion).toMatchObject({
+      productivity: "focus",
+      contextLabel: "Code",
+      focusSecondsToday: 300,
+      focusStrikeSeconds: 300,
+    });
+    expect(buildWatcherSnapshot([], options)).toMatchObject({ productivity: "neutral", focusSecondsToday: 0 });
+
+    invoke.mockResolvedValueOnce({
+      observedAt: "2026-09-30T09:05:10.000Z",
+      appName: "Browser",
+      bundleId: "C:\\Browser.exe",
+      source: "win32-foreground",
+      frontmostCaptureSource: "win32-foreground",
+    });
+    const recovered = await trackerClient.getCurrentSnapshot();
+    expect(recovered?.appName).toBe("Browser");
+    expect(recovered && buildLiveWatcherSnapshot(recovered, [recordedFocus], options)).toMatchObject({
+      productivity: "drift",
+      focusStrikeSeconds: null,
+      focusSecondsToday: 300,
+    });
+  });
+
+  it("filters a legacy failed capture but accepts a verified app named Unavailable", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    const legacy = {
+      observedAt: "2026-09-30T09:05:05.000Z",
+      appName: "Unavailable",
+      bundleId: null,
+      source: "unknown",
+    };
+    invoke.mockResolvedValueOnce(legacy).mockResolvedValueOnce({
+      ...legacy,
+      source: "win32-foreground-untitled",
+    }).mockResolvedValueOnce({
+      ...legacy,
+      source: "win32-foreground-untitled",
+      frontmostCaptureSource: "win32-foreground",
+    }).mockResolvedValueOnce({
+      ...legacy,
+      source: "nsworkspace",
+      frontmostCaptureSource: "unavailable",
+    });
+
+    await expect(trackerClient.getCurrentSnapshot()).resolves.toBeNull();
+    await expect(trackerClient.getCurrentSnapshot()).resolves.toMatchObject({
+      appName: "Unavailable",
+      source: "win32-foreground-untitled",
+    });
+    await expect(trackerClient.getCurrentSnapshot()).resolves.toMatchObject({
+      appName: "Unavailable",
+      frontmostCaptureSource: "win32-foreground",
+    });
+    await expect(trackerClient.getCurrentSnapshot()).resolves.toMatchObject({
+      appName: "Unavailable",
+      source: "nsworkspace",
     });
   });
 
