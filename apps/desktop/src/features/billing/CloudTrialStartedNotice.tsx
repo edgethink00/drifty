@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type AnimationEvent } from "react";
 import type { BillingEntitlement } from "./billingService";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { LocalizationController } from "../localization/LocalizationContext";
@@ -15,7 +15,6 @@ export type CloudTrialStartedNoticeModel = {
 type CloudTrialStartedNoticeProps = {
   readonly notice: CloudTrialStartedNoticeModel;
   readonly onDismiss: () => void;
-  readonly onOpenAiSetup?: () => void;
 };
 
 export function getCloudTrialStartedNoticeStorageKey(
@@ -56,10 +55,15 @@ export function claimCloudTrialStartedNotice(
 export function CloudTrialStartedNotice({
   notice,
   onDismiss,
-  onOpenAiSetup,
 }: CloudTrialStartedNoticeProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [isTimerPaused, setIsTimerPaused] = useState(false);
+  // The card animates in and out instead of popping: hasEntered gates the
+  // hover lift so it cannot fight the entrance, and isLeaving plays the exit
+  // before the parent unmounts the notice.
+  const [hasEntered, setHasEntered] = useState(isNoticeMotionReduced);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const rootRef = useRef<HTMLElement>(null);
   // Mirrors isTimerPaused synchronously: hover and focus can both arrive
   // before React re-renders, and a stale "not paused" read would subtract the
   // same elapsed time twice from the remaining countdown.
@@ -93,6 +97,17 @@ export function CloudTrialStartedNotice({
     setIsTimerPaused(false);
   }, []);
 
+  const requestLeave = useCallback(() => {
+    clearDismissTimer();
+    // Reduced motion removes the exit animation entirely, so there is no exit
+    // to wait for; dismiss immediately instead of holding a static card.
+    if (isNoticeMotionReduced()) {
+      onDismiss();
+      return;
+    }
+    setIsLeaving(true);
+  }, [clearDismissTimer, onDismiss]);
+
   const setPauseSource = useCallback((source: "hover" | "focus", active: boolean) => {
     pauseSourcesRef.current = { ...pauseSourcesRef.current, [source]: active };
     if (active) {
@@ -103,22 +118,46 @@ export function CloudTrialStartedNotice({
   }, [pauseDismissTimer, resumeDismissTimer]);
 
   useEffect(() => {
-    if (isTimerPaused) return undefined;
+    if (isTimerPaused || isLeaving) return undefined;
 
     timerStartedAtRef.current = Date.now();
-    timeoutIdRef.current = window.setTimeout(onDismiss, remainingDismissMsRef.current);
+    timeoutIdRef.current = window.setTimeout(requestLeave, remainingDismissMsRef.current);
     return clearDismissTimer;
-  }, [clearDismissTimer, isTimerPaused, onDismiss]);
+  }, [clearDismissTimer, isLeaving, isTimerPaused, requestLeave]);
+
+  // animationend is the fast path; the timeout covers a DOM that never runs
+  // stylesheet animations (jsdom) or a superseded animation, so dismissal
+  // always lands. CSS owns the budget — see floating-notice-leave.
+  useEffect(() => {
+    if (!isLeaving) return undefined;
+    const timer = window.setTimeout(onDismiss, leaveFallbackMs(rootRef.current));
+    return () => window.clearTimeout(timer);
+  }, [isLeaving, onDismiss]);
+
+  const handleAnimationEnd = (event: AnimationEvent<HTMLElement>) => {
+    if (event.animationName === "floating-notice-enter") {
+      setHasEntered(true);
+      return;
+    }
+    if (event.animationName === "floating-notice-leave") onDismiss();
+  };
 
   const isPromotion = notice.accessSource === "promotion";
   const headline = t(isPromotion ? "billing.trialNotice.promoHeadline" : "billing.trialNotice.trialHeadline");
   const detail = formatCloudTrialStartedDetail(notice.trialEndsAt, notice.accessSource, effectiveLanguage, t);
+  const className = [
+    "cloud-trial-started-notice",
+    isLeaving ? "is-leaving" : hasEntered ? "is-settled" : "is-entering",
+    isTimerPaused ? "is-paused" : "",
+  ].filter(Boolean).join(" ");
 
   return (
     <section
-      className={isTimerPaused ? "cloud-trial-started-notice is-paused" : "cloud-trial-started-notice"}
+      ref={rootRef}
+      className={className}
       role="status"
       aria-label={t(isPromotion ? "billing.trialNotice.promoAria" : "billing.trialNotice.trialAria")}
+      onAnimationEnd={handleAnimationEnd}
       onMouseEnter={() => setPauseSource("hover", true)}
       onMouseLeave={() => setPauseSource("hover", false)}
       onFocus={() => setPauseSource("focus", true)}
@@ -131,40 +170,54 @@ export function CloudTrialStartedNotice({
         setPauseSource("focus", false);
       }}
     >
-      <span className="cloud-trial-started-notice__signal" aria-hidden="true">
-        <span className="cloud-trial-started-notice__signal-dot" />
-      </span>
       <span className="cloud-trial-started-notice__copy">
-        <span className="cloud-trial-started-notice__eyebrow">{t("billing.trialNotice.eyebrow")}</span>
         <strong>{headline}</strong>
-        <span>{detail}</span>
+        <span className="cloud-trial-started-notice__detail">{detail}</span>
       </span>
-      {onOpenAiSetup ? (
-        <button
-          type="button"
-          className="app-btn app-btn--primary cloud-trial-started-notice__action"
-          onClick={onOpenAiSetup}
-        >
-          {t("billing.trialNotice.action")}
-        </button>
-      ) : null}
       <button
         type="button"
         className="cloud-trial-started-notice__dismiss"
         aria-label={t("billing.trialNotice.dismiss")}
-        onClick={onDismiss}
+        onClick={requestLeave}
       >
-        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" />
+        <svg className="cloud-trial-started-notice__ring" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
+          <circle className="cloud-trial-started-notice__ring-track" cx="14" cy="14" r="11" />
+          <circle className="cloud-trial-started-notice__ring-progress" cx="14" cy="14" r="11" />
         </svg>
+        <span className="cloud-trial-started-notice__dismiss-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" focusable="false">
+            <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" />
+          </svg>
+        </span>
       </button>
       <span
-        className="cloud-trial-started-notice__timer"
+        className="sr-only"
         role="timer"
         aria-label={t("billing.trialNotice.timerAria")}
       />
     </section>
   );
+}
+
+function isNoticeMotionReduced(): boolean {
+  return typeof window !== "undefined"
+    && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+// CSS owns the exit timing; read it back rather than duplicating the number,
+// matching AnchoredPresence/ModalPresence.
+function leaveFallbackMs(root: HTMLElement | null): number {
+  if (!root) return 220;
+  const style = window.getComputedStyle(root);
+  const milliseconds = (value: string) =>
+    value.trim().endsWith("ms") ? parseFloat(value) : parseFloat(value) * 1000;
+  const durations = style.animationDuration.split(",").map(milliseconds);
+  const delays = style.animationDelay.split(",").map(milliseconds);
+  const longest = Math.max(0, ...durations
+    .map((duration, index) => duration + (delays[index % delays.length] || 0))
+    .filter(Number.isFinite));
+  // jsdom has no stylesheet timing; browser zero-motion styles remove quickly.
+  return style.animationDuration ? longest + 80 : 220;
 }
 
 export function formatCloudTrialStartedDetail(

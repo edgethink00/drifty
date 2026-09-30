@@ -72,6 +72,11 @@ html {
      cards, the classification popover, and the anchored menus. Modals own a
      separate curve because they arrive at the centre of the window. */
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  /* Floating notices (trial start, update status, share toasts) share one
+     corner radius and one pair of enter/leave easings across both themes. */
+  --float-card-radius: 14px;
+  --ease-float-in: cubic-bezier(0.3, 1.35, 0.42, 1);
+  --ease-float-out: cubic-bezier(0.4, 0, 1, 1);
   /* Shared danger action colors for page, dialog, and Settings buttons. */
   --button-danger-bg: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
   --button-danger-border: color-mix(in srgb, var(--warn) 14%, transparent);
@@ -330,6 +335,17 @@ html {
   --danger-soft: #f0deda;
   --danger-line: rgba(158,66,56,.3);
   --shadow: 0 10px 24px rgba(38, 38, 32, 0.05);
+  /* Floating notices (trial start, update status, share toasts) sit above the
+     resting surface stack, so they share one deeper directional shadow and
+     one corner radius. */
+  --float-card-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 1px 2px rgba(28, 28, 25, 0.05),
+    0 14px 36px -12px rgba(28, 28, 25, 0.18);
+  --float-card-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 1px 2px rgba(28, 28, 25, 0.06),
+    0 18px 42px -12px rgba(28, 28, 25, 0.24);
   /* Week event blocks share the Day flow cells' surface tint, but the Day cells
      carry no text. In light mode the tint pushes the block toward its own near
      white label, so the light theme uses a lighter dose than dark. */
@@ -415,6 +431,14 @@ html {
   --danger-soft: #2e1a18;
   --danger-line: rgba(200,90,78,.3);
   --shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  --float-card-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 14px 38px -12px rgba(0, 0, 0, 0.5);
+  --float-card-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 18px 44px -12px rgba(0, 0, 0, 0.55);
   --week-event-surface-tint: 20%;
 }
 

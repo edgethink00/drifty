@@ -21,6 +21,7 @@ describe("CloudTrialStartedNotice", () => {
     const onDismiss = vi.fn();
 
     render(<CloudTrialStartedNotice notice={notice} onDismiss={onDismiss} />);
+    const trialNotice = screen.getByRole("status", { name: /drifty pro trial started/i });
 
     expect(screen.getByRole("timer", { name: /closes in 5 seconds/i })).toBeTruthy();
 
@@ -31,6 +32,14 @@ describe("CloudTrialStartedNotice", () => {
 
     act(() => {
       vi.advanceTimersByTime(1);
+    });
+    // The 5-second boundary starts the exit animation; onDismiss lands once
+    // the leave motion (or its jsdom fallback budget) finishes.
+    expect(trialNotice.classList.contains("is-leaving")).toBe(true);
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(500);
     });
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
@@ -64,6 +73,9 @@ describe("CloudTrialStartedNotice", () => {
     act(() => {
       vi.advanceTimersByTime(1);
     });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
@@ -75,21 +87,14 @@ describe("CloudTrialStartedNotice", () => {
     const windowHasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
     const onDismiss = vi.fn();
 
-    render(<CloudTrialStartedNotice notice={notice} onDismiss={onDismiss} onOpenAiSetup={vi.fn()} />);
+    render(<CloudTrialStartedNotice notice={notice} onDismiss={onDismiss} />);
     const trialNotice = screen.getByRole("status", { name: /drifty pro trial started/i });
     const dismissButton = trialNotice.querySelector<HTMLButtonElement>(".cloud-trial-started-notice__dismiss");
-    const actionButton = screen.getByRole("button", { name: /ai setup/i });
     if (!dismissButton) throw new Error("dismiss button did not render");
 
     act(() => {
       vi.advanceTimersByTime(2_000);
     });
-    act(() => {
-      actionButton.focus();
-    });
-    expect(trialNotice.classList.contains("is-paused")).toBe(true);
-
-    // Tabbing between the notice's own buttons keeps it held.
     act(() => {
       dismissButton.focus();
     });
@@ -126,6 +131,9 @@ describe("CloudTrialStartedNotice", () => {
     act(() => {
       vi.advanceTimersByTime(1);
     });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
@@ -141,5 +149,50 @@ describe("CloudTrialStartedNotice", () => {
     expect(screen.getByRole("status", { name: /pro pass ready/i })).toBeTruthy();
     expect(screen.getByText("Your Drifty Pro pass is ready")).toBeTruthy();
     expect(screen.queryByText(/1-week free trial/i)).toBeNull();
+  });
+
+  it("plays the exit animation after the dismiss button is pressed", () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+
+    render(<CloudTrialStartedNotice notice={notice} onDismiss={onDismiss} />);
+    const trialNotice = screen.getByRole("status", { name: /drifty pro trial started/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+
+    // The click only requests the leave; onDismiss lands when the exit
+    // animation (or its jsdom fallback) finishes, so the parent never unmounts
+    // the card mid-motion.
+    expect(trialNotice.classList.contains("is-leaving")).toBe(true);
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("dismisses immediately under reduced motion instead of waiting on an exit", () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }));
+    const onDismiss = vi.fn();
+
+    render(<CloudTrialStartedNotice notice={notice} onDismiss={onDismiss} />);
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    // No leave animation exists under reduced motion, so dismissal must not
+    // wait for one.
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

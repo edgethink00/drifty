@@ -1,159 +1,188 @@
 .cloud-trial-started-notice {
-  --cloud-trial-accent: var(--accent);
-  --cloud-trial-soft: var(--accent-soft);
-  --cloud-trial-line: color-mix(in srgb, var(--cloud-trial-accent) 22%, var(--line));
-  --cloud-trial-panel: color-mix(in srgb, var(--surface) 94%, var(--cloud-trial-soft));
   align-items: center;
-  animation: toastSlideIn 180ms ease-out;
-  background: var(--cloud-trial-panel);
-  border: 1px solid var(--cloud-trial-line);
-  border-radius: var(--radius-md);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--surface) 78%, transparent),
-    var(--shadow);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--float-card-radius);
+  box-shadow: var(--float-card-shadow);
   color: var(--text);
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  max-width: min(25.5rem, calc(100vw - var(--space-4) * 2));
-  overflow: hidden;
-  padding: var(--space-3);
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  max-width: min(23rem, calc(100vw - var(--space-4) * 2));
+  padding: 15px 14px 15px 18px;
   position: fixed;
   right: var(--space-4);
   top: calc(var(--window-chrome-height) + var(--space-3));
+  transition:
+    box-shadow 140ms ease-out,
+    transform 140ms ease-out;
   width: max-content;
   z-index: 950;
 }
 
-.cloud-trial-started-notice__signal {
-  align-items: center;
-  align-self: start;
-  background: color-mix(in srgb, var(--cloud-trial-accent) 12%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--cloud-trial-accent) 32%, transparent);
-  border-radius: 999px;
-  display: inline-flex;
-  height: 1.45rem;
-  justify-content: center;
-  margin-top: 0.08rem;
-  width: 1.45rem;
+.cloud-trial-started-notice.is-entering {
+  animation: floating-notice-enter 480ms var(--ease-float-in) both;
 }
 
-.cloud-trial-started-notice__signal-dot {
-  background: var(--cloud-trial-accent);
-  border-radius: 999px;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--cloud-trial-accent) 14%, transparent);
-  display: block;
-  height: 0.48rem;
-  width: 0.48rem;
+.cloud-trial-started-notice.is-leaving {
+  animation: floating-notice-leave 170ms var(--ease-float-out) forwards;
+}
+
+/* The entrance animation owns the transform while it runs, so the hover lift
+   only arms once the card has landed. */
+.cloud-trial-started-notice.is-settled:hover {
+  box-shadow: var(--float-card-shadow-hover);
+  transform: translateY(-1px);
 }
 
 .cloud-trial-started-notice__copy {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
-.cloud-trial-started-notice__eyebrow {
-  color: var(--cloud-trial-accent);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.15;
-  text-transform: uppercase;
+.cloud-trial-started-notice.is-entering .cloud-trial-started-notice__copy {
+  animation: cloud-trial-notice-copy-in 380ms 80ms var(--ease-out-quart) both;
+}
+
+@keyframes cloud-trial-notice-copy-in {
+  from {
+    opacity: 0;
+    transform: translate3d(6px, 0, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .cloud-trial-started-notice__copy strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: var(--type-setting-label-size);
-  font-weight: 650;
-  letter-spacing: 0;
-  line-height: 1.2;
+  font-size: 0.9rem;
+  font-weight: 680;
+  letter-spacing: -0.008em;
+  line-height: 1.25;
+  word-break: keep-all;
 }
 
-.cloud-trial-started-notice__copy span:last-child {
+.cloud-trial-started-notice__detail {
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  word-break: keep-all;
 }
 
+/* The dismiss button doubles as the countdown: the accent ring drains around
+   the x for the 5-second auto-dismiss window. */
 .cloud-trial-started-notice__dismiss {
-  align-items: center;
   appearance: none;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--text-soft);
+  background: none;
+  border: 0;
   cursor: pointer;
-  display: inline-flex;
-  height: 1.9rem;
-  justify-content: center;
+  height: 28px;
   padding: 0;
-  width: 1.9rem;
+  position: relative;
+  width: 28px;
 }
 
-.cloud-trial-started-notice__dismiss svg {
+.cloud-trial-started-notice.is-entering .cloud-trial-started-notice__dismiss {
+  animation: cloud-trial-notice-dismiss-in 300ms 200ms ease-out both;
+}
+
+@keyframes cloud-trial-notice-dismiss-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.cloud-trial-started-notice__ring {
+  display: block;
+  height: 28px;
+  width: 28px;
+}
+
+.cloud-trial-started-notice__ring-track {
   fill: none;
-  height: 0.85rem;
-  stroke: currentColor;
+  stroke: color-mix(in srgb, var(--accent) 16%, transparent);
+  stroke-width: 1.8;
+}
+
+.cloud-trial-started-notice__ring-progress {
+  animation: cloud-trial-notice-ring 5s linear forwards;
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 68%, transparent);
+  stroke-dasharray: 69.1;
+  stroke-dashoffset: 0;
   stroke-linecap: round;
   stroke-width: 1.8;
-  width: 0.85rem;
+  transform: rotate(-90deg);
+  transform-origin: center;
 }
 
-.cloud-trial-started-notice__dismiss:hover {
-  background: var(--bg-2);
+.cloud-trial-started-notice.is-paused .cloud-trial-started-notice__ring-progress {
+  animation-play-state: paused;
+}
+
+@keyframes cloud-trial-notice-ring {
+  to {
+    stroke-dashoffset: 69.1;
+  }
+}
+
+.cloud-trial-started-notice__dismiss-icon {
+  align-items: center;
+  color: var(--text-soft);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.cloud-trial-started-notice__dismiss-icon svg {
+  fill: none;
+  height: 10px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.7;
+  width: 10px;
+}
+
+.cloud-trial-started-notice__dismiss:hover .cloud-trial-started-notice__dismiss-icon {
   color: var(--text);
 }
 
 .cloud-trial-started-notice__dismiss:focus-visible {
-  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  border-radius: 999px;
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 55%, transparent));
   outline-offset: 2px;
 }
 
-.cloud-trial-started-notice .cloud-trial-started-notice__action {
-  white-space: nowrap;
-}
-
-.cloud-trial-started-notice__timer {
-  animation: cloudTrialNoticeTimer 5s linear forwards;
-  background: color-mix(in srgb, var(--cloud-trial-accent) 62%, transparent);
-  bottom: 0;
-  height: 3px;
-  left: 0;
-  position: absolute;
-  right: 0;
-  transform-origin: left center;
-}
-
-.cloud-trial-started-notice.is-paused .cloud-trial-started-notice__timer {
-  animation-play-state: paused;
-}
-
-@keyframes cloudTrialNoticeTimer {
-  from {
-    opacity: 0.9;
-    transform: scaleX(1);
-  }
-
-  to {
-    opacity: 0.45;
-    transform: scaleX(0);
-  }
+:root[data-platform="windows"] .cloud-trial-started-notice {
+  top: calc(var(--windows-titlebar-height) + var(--space-3));
 }
 
 @media (max-width: 680px) {
   .cloud-trial-started-notice {
-    grid-template-columns: auto minmax(0, 1fr) auto;
     left: var(--space-3);
+    max-width: none;
     right: var(--space-3);
-    top: calc(var(--window-chrome-height) + var(--space-3));
     width: auto;
   }
+}
 
-  .cloud-trial-started-notice__action {
-    display: none;
+@media (prefers-reduced-motion: reduce) {
+  .cloud-trial-started-notice,
+  .cloud-trial-started-notice__copy,
+  .cloud-trial-started-notice__dismiss,
+  .cloud-trial-started-notice__ring-progress {
+    animation: none !important;
+    transition: none;
   }
 }

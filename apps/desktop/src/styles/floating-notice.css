@@ -1,0 +1,27 @@
+/* Shared motion for floating notices — the trial-start card, update status,
+   and the share toasts. They all sit against the right window edge, so the
+   family arrives from the right and leaves back to it. */
+
+@keyframes floating-notice-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(26px, 0, 0) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes floating-notice-leave {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0) scale(0.97);
+  }
+}

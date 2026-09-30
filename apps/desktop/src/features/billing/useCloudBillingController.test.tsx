@@ -95,7 +95,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await act(async () => {
@@ -126,7 +125,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await act(async () => {
@@ -150,7 +148,6 @@ describe("useCloudBillingController", () => {
         shouldCheckBillingEntitlement: props.shouldCheckBillingEntitlement,
         user: signedInUser,
         onAuthRequired: vi.fn(),
-        onOpenAiSetup: vi.fn(),
       }),
       { initialProps: { shouldCheckBillingEntitlement: true } },
     );
@@ -190,7 +187,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
@@ -232,7 +228,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }), { wrapper });
 
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
@@ -262,7 +257,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement?.lockedReason).toBe("payment_required"));
@@ -307,7 +301,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement).toEqual(entitlement));
@@ -339,7 +332,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
@@ -378,7 +370,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
     await waitFor(() => expect(result.current.individualPricingQuote).toEqual(quote));
     await act(async () => { await result.current.startCloudCheckout("monthly"); });
@@ -397,7 +388,7 @@ describe("useCloudBillingController", () => {
     const fallback = vi.spyOn(window, "open").mockReturnValue(null);
     const { result } = renderHook(() => useCloudBillingController({
       hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
-      user: signedInUser, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+      user: signedInUser, onAuthRequired: vi.fn(),
     }));
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
     await act(async () => { await result.current.startCloudCheckout("monthly"); });
@@ -413,7 +404,7 @@ describe("useCloudBillingController", () => {
     billingMocks.createIndividualCheckout.mockReturnValue(new Promise((resolve) => { resolveCheckout = resolve; }));
     const { result, rerender } = renderHook(({ user }) => useCloudBillingController({
       hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
-      user, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+      user, onAuthRequired: vi.fn(),
     }), { initialProps: { user: signedInUser } });
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
     let checkout!: Promise<void>;
@@ -445,7 +436,7 @@ describe("useCloudBillingController", () => {
     create.mockImplementation(() => new Promise(resolve => { resolvers.push(resolve); }));
     const { result, rerender } = renderHook(({ user }) => useCloudBillingController({
       hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
-      user, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+      user, onAuthRequired: vi.fn(),
     }), { initialProps: { user: signedInUser } });
     await waitFor(() => expect(result.current.billingEntitlement).not.toBeNull());
     const start = () => kind === "portal" ? result.current.handleManageCloudBilling() : result.current.startCloudCheckout("monthly");
@@ -468,7 +459,7 @@ describe("useCloudBillingController", () => {
     }}).mockReturnValue(new Promise(() => {}));
     const {result, rerender} = renderHook(({user}) => useCloudBillingController({
       hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
-      user, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+      user, onAuthRequired: vi.fn(),
     }), {initialProps: {user: signedInUser}});
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("active"));
     rerender({user: {...signedInUser, id: "user-2"}});
@@ -488,7 +479,7 @@ describe("useCloudBillingController", () => {
     const fallback = vi.spyOn(window, "open").mockReturnValue(null);
     const {result, rerender} = renderHook(({user}) => useCloudBillingController({
       hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
-      user, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+      user, onAuthRequired: vi.fn(),
     }), {initialProps: {user: signedInUser}});
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("active"));
     let pending!: Promise<void>;
@@ -507,7 +498,7 @@ describe("useCloudBillingController", () => {
     billingMocks.createBillingPortalSession.mockResolvedValue({success: true, data: {url: "https://portal.example.test"}});
     const {result} = renderHook(() => useCloudBillingController({
       hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
-      user: signedInUser, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+      user: signedInUser, onAuthRequired: vi.fn(),
     }));
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("active"));
     await act(async () => {await result.current.handleManageCloudBilling();});
@@ -547,7 +538,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
@@ -589,7 +579,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement?.lockedReason).toBe("device_limit_reached"));
@@ -634,7 +623,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement).toEqual(originalEntitlement));
@@ -681,7 +669,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await act(async () => {
@@ -745,7 +732,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement).toEqual(lockedEntitlement));
@@ -789,7 +775,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement).toEqual(activeEntitlement));
@@ -836,7 +821,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement).toEqual(lockedEntitlement));
@@ -886,7 +870,6 @@ describe("useCloudBillingController", () => {
       shouldCheckBillingEntitlement: true,
       user: signedInUser,
       onAuthRequired: vi.fn(),
-      onOpenAiSetup: vi.fn(),
     }));
 
     await waitFor(() => expect(result.current.billingEntitlement).toEqual(paidLikeLockedEntitlement));
@@ -917,7 +900,7 @@ describe("explicit Cloud trial activation", () => {
   function setup() {
     return renderHook(({ user }) => useCloudBillingController({
       user, hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
-      onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+      onAuthRequired: vi.fn(),
     }), { initialProps: { user: signedInUser } });
   }
   it("does not activate on a read, and joins two simultaneous explicit clicks", async () => {

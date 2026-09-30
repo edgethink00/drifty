@@ -32,7 +32,6 @@ type UseCloudBillingControllerInput = {
   readonly shouldCheckBillingEntitlement: boolean;
   readonly user: AuthState["user"];
   readonly onAuthRequired: () => void;
-  readonly onOpenAiSetup: () => void;
 };
 
 type UseCloudBillingControllerResult = {
@@ -63,7 +62,6 @@ type UseCloudBillingControllerResult = {
   readonly handleRevokeCloudDevice: (deviceId: string) => Promise<void>;
   /** Creates the Polar checkout for an interval the user explicitly picked. */
   readonly startCloudCheckout: (billingInterval: BillingInterval) => Promise<void>;
-  readonly openCloudTrialStartedNoticeAiSetup: () => void;
   readonly refreshBillingEntitlement: () => Promise<BillingEntitlement | null>;
 };
 
@@ -101,7 +99,6 @@ export function useCloudBillingController({
   shouldCheckBillingEntitlement,
   user,
   onAuthRequired,
-  onOpenAiSetup,
 }: UseCloudBillingControllerInput): UseCloudBillingControllerResult {
   const { t } = useLocalization();
   const [billingEntitlement, setBillingEntitlement] = useState<BillingEntitlement | null>(null);
@@ -544,11 +541,6 @@ export function useCloudBillingController({
     }
   }, [refreshBillingEntitlement]);
 
-  const openCloudTrialStartedNoticeAiSetup = useCallback(() => {
-    onOpenAiSetup();
-    setCloudTrialStartedNotice(null);
-  }, [onOpenAiSetup]);
-
   useEffect(() => {
     let cancelled = false;
     if (!shouldCheckBillingEntitlement) {
@@ -713,7 +705,6 @@ export function useCloudBillingController({
     handleManageCloudBilling,
     handleRedeemTrialCoupon,
     handleRevokeCloudDevice,
-    openCloudTrialStartedNoticeAiSetup,
     refreshBillingEntitlement,
     startCloudCheckout,
   };

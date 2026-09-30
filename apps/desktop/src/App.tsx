@@ -1719,7 +1719,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     handleManageCloudBilling,
     handleRedeemTrialCoupon,
     handleRevokeCloudDevice,
-    openCloudTrialStartedNoticeAiSetup,
     refreshBillingEntitlement,
     startCloudCheckout,
     activateCloudTrial,
@@ -1731,7 +1730,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     shouldCheckBillingEntitlement,
     user,
     onAuthRequired: requestCloudBillingAuth,
-    onOpenAiSetup: openAiSetupSettings,
   });
   useEffect(() => {
     function handlePromoBillingSuccess(event: Event) {
@@ -10025,7 +10023,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         <CloudTrialStartedNotice
           notice={cloudTrialStartedNotice}
           onDismiss={dismissCloudTrialStartedNotice}
-          onOpenAiSetup={openCloudTrialStartedNoticeAiSetup}
         />
       ) : null}
       {shellStatusNotice ? <AppStatusNotice notice={shellStatusNotice} /> : null}

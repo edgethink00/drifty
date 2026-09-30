@@ -1,4 +1,5 @@
 @import "./styles/tokens-base.css";
+@import "./styles/floating-notice.css";
 @import "./styles/app-shell.css";
 @import "./styles/dashboard-today.css";
 @import "./styles/classification.css";

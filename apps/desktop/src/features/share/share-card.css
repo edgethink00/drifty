@@ -294,12 +294,12 @@
 }
 
 .share-card-toast {
-  animation: share-card-toast-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  background: color-mix(in srgb, var(--surface) 97%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 27%, var(--line));
-  border-radius: 14px;
+  animation: floating-notice-enter 480ms var(--ease-float-in) both;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--float-card-radius);
   bottom: max(var(--space-4), env(safe-area-inset-bottom));
-  box-shadow: 0 14px 36px rgba(25, 24, 20, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.36);
+  box-shadow: var(--float-card-shadow);
   color: var(--text);
   display: grid;
   font-size: 0.78rem;
@@ -315,8 +315,9 @@
 }
 
 .share-card-toast strong {
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 650;
 }
 
 .share-card-toast span {
@@ -325,11 +326,6 @@
 
 .share-card-toast[data-tone="error"] {
   border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
-}
-
-@keyframes share-card-toast-in {
-  from { opacity: 0; transform: translateY(18px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* Dashboard head-row secondary controls, including the date navigator. */
