@@ -163,6 +163,94 @@ class ResolveIdentityTests(unittest.TestCase):
         self.assertEqual(identity.exe_name, "unresolved-uwp")
         self.assertIsNotNone(diagnostic)
 
+    def test_unreadable_frame_host_resolves_packaged_child(self) -> None:
+        window = ForegroundWindow(hwnd=500, title="Calculator", pid=10)
+        aumid_reads = []
+
+        def read_aumid(pid: int) -> str | None:
+            aumid_reads.append(pid)
+            return "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App" if pid == 77 else None
+
+        identity, diagnostic = resolve_identity(
+            window,
+            read_exe_path=lambda pid: None,
+            read_aumid=read_aumid,
+            resolve_hosted_pid=lambda hwnd, pid: 77 if (hwnd, pid) == (500, 10) else None,
+            read_window_class=lambda hwnd: "ApplicationFrameWindow",
+        )
+        self.assertIsNone(diagnostic)
+        self.assertEqual(identity.aumid, "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App")
+        self.assertIsNone(identity.exe_path)
+        self.assertEqual(aumid_reads, [77])
+        snapshot = build_snapshot(window, identity)
+        self.assertEqual(snapshot.app_name, "WindowsCalculator")
+        self.assertEqual(snapshot.bundle_id, "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App")
+        self.assertEqual(snapshot.frontmost_capture_source, "uwp-frame-host")
+
+    def test_unreadable_frame_host_never_uses_host_identity_if_child_fails(self) -> None:
+        window = ForegroundWindow(hwnd=501, title="Calculator", pid=10)
+        aumid_reads = []
+
+        def read_aumid(pid: int) -> str | None:
+            aumid_reads.append(pid)
+            return "Host.Wrong_abc!App" if pid == 10 else None
+
+        identity, diagnostic = resolve_identity(
+            window,
+            read_exe_path=lambda pid: None,
+            read_aumid=read_aumid,
+            resolve_hosted_pid=lambda hwnd, pid: None,
+            read_window_class=lambda hwnd: "ApplicationFrameWindow",
+        )
+        self.assertEqual(identity.exe_name, "unresolved-uwp")
+        self.assertIsNone(identity.aumid)
+        self.assertIsNotNone(diagnostic)
+        self.assertEqual(aumid_reads, [])
+
+    def test_unreadable_frame_host_needs_child_aumid_not_just_exe(self) -> None:
+        window = ForegroundWindow(hwnd=502, title="Calculator", pid=10)
+        identity, diagnostic = resolve_identity(
+            window,
+            read_exe_path=lambda pid: r"C:\Apps\wrong.exe" if pid == 77 else None,
+            read_aumid=lambda pid: None,
+            resolve_hosted_pid=lambda hwnd, pid: 77,
+            read_window_class=lambda hwnd: "ApplicationFrameWindow",
+        )
+        self.assertIsNone(identity.exe_path)
+        self.assertIsNone(identity.aumid)
+        self.assertIsNotNone(diagnostic)
+
+    def test_unreadable_regular_window_keeps_its_own_packaged_identity(self) -> None:
+        window = ForegroundWindow(hwnd=503, title="Editor", pid=10)
+        hosted_calls = []
+
+        def resolve_hosted(hwnd: int, pid: int) -> int | None:
+            hosted_calls.append((hwnd, pid))
+            return 77
+
+        identity, diagnostic = resolve_identity(
+            window,
+            read_exe_path=lambda pid: None,
+            read_aumid=lambda pid: "Contoso.Editor_abc!Editor" if pid == 10 else None,
+            resolve_hosted_pid=resolve_hosted,
+            read_window_class=lambda hwnd: "RegularWindow",
+        )
+        self.assertIsNone(diagnostic)
+        self.assertEqual(identity.aumid, "Contoso.Editor_abc!Editor")
+        self.assertEqual(hosted_calls, [])
+
+    def test_known_regular_exe_does_not_use_frame_class_fallback(self) -> None:
+        window = ForegroundWindow(hwnd=504, title="Editor", pid=10)
+        identity, diagnostic = resolve_identity(
+            window,
+            read_exe_path=lambda pid: r"C:\Apps\editor.exe",
+            read_aumid=lambda pid: None,
+            resolve_hosted_pid=lambda hwnd, pid: self.fail("regular app must not unwrap"),
+            read_window_class=lambda hwnd: "ApplicationFrameWindow",
+        )
+        self.assertIsNone(diagnostic)
+        self.assertEqual(identity.exe_path, r"C:\Apps\editor.exe")
+
 
 class BuildSnapshotTests(unittest.TestCase):
     def test_normal_window_snapshot(self) -> None:

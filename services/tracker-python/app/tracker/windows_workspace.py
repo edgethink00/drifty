@@ -44,6 +44,7 @@ from app.tracker.windows_browser_bridge import read_browser_bridge_metadata
 
 
 _APPLICATION_FRAME_HOST = "applicationframehost.exe"
+_APPLICATION_FRAME_WINDOW_CLASS = "ApplicationFrameWindow"
 _CORE_WINDOW_CLASS = "Windows.UI.Core.CoreWindow"
 _TITLE_MAX = 512
 _AUMID_MAX = 1024
@@ -345,6 +346,7 @@ def resolve_identity(
     read_exe_path: Callable[[int], str | None] | None = None,
     read_aumid: Callable[[int], str | None] | None = None,
     resolve_hosted_pid: Callable[[int, int], int | None] | None = None,
+    read_window_class: Callable[[int], str] | None = None,
 ) -> tuple[ProcessIdentity, str | None]:
     """Resolve process identity, unwrapping UWP frame hosts.
 
@@ -354,18 +356,26 @@ def resolve_identity(
     exe_reader = read_exe_path or read_process_exe_path
     aumid_reader = read_aumid or read_process_aumid
     hosted_resolver = resolve_hosted_pid or resolve_uwp_hosted_pid
+    class_reader = read_window_class or (lambda hwnd: _window_class_name(_user32(), hwnd))
 
     exe_path = exe_reader(window.pid)
     exe_name = exe_display_name(exe_path)
     diagnostic = None
 
     is_frame_host = bool(exe_path) and exe_path.replace("\\", "/").rsplit("/", 1)[-1].lower() == _APPLICATION_FRAME_HOST
-    if is_frame_host:
+    # The host executable itself can be temporarily unreadable even though
+    # its foreground frame and the packaged child process remain accessible.
+    # A class name alone is not an app identity: accept this fallback only
+    # after the child supplies a packaged AUMID, never as the frame host.
+    unreadable_frame_host = (
+        exe_path is None and class_reader(window.hwnd) == _APPLICATION_FRAME_WINDOW_CLASS
+    )
+    if is_frame_host or unreadable_frame_host:
         hosted_pid = hosted_resolver(window.hwnd, window.pid)
         if hosted_pid:
             hosted_exe = exe_reader(hosted_pid)
             hosted_aumid = aumid_reader(hosted_pid)
-            if hosted_exe or hosted_aumid:
+            if hosted_aumid or (is_frame_host and hosted_exe):
                 return (
                     ProcessIdentity(
                         exe_path=hosted_exe,
