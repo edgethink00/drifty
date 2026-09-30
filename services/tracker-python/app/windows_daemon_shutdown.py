@@ -208,14 +208,18 @@ def stop_windows_tracker_daemon(
     pid: int,
     db_path: Path,
     executable: Path,
-    verify_ownership: Callable[[], bool],
+    verify_ownership: Callable[[float], bool],
     timeout_seconds: float = 3.0,
     *,
     source_runtime: bool = False,
+    deadline: float | None = None,
 ) -> StopResult:
     started = time.monotonic()
-    deadline = started + max(0.0, timeout_seconds)
+    own_deadline = started + max(0.0, timeout_seconds)
+    deadline = own_deadline if deadline is None else min(deadline, own_deadline)
     cooperative_deadline = min(deadline, started + _COOPERATIVE_SECONDS)
+    if started >= deadline:
+        raise TimeoutError("Tracker daemon stop deadline expired before native binding.")
     api = _NativeApi()
     process = api.open_process(pid)
     if not process:
@@ -224,11 +228,15 @@ def stop_windows_tracker_daemon(
         if api.wait(process, 0):
             return "exited"
         creation = api.validate_process(process, executable, source_runtime)
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Tracker daemon stop deadline expired before ownership verification.")
         # This command/DB check is deliberately fresh and after native binding.
         # If the original exits during it, only its bound handle is ever used.
-        verified = verify_ownership()
+        verified = verify_ownership(deadline)
         if api.wait(process, 0):
             return "exited"
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Tracker daemon stop deadline expired during ownership verification.")
         if not verified:
             raise PermissionError("Unable to verify tracker daemon database; refusing to stop it.")
         name = _event_name(db_path, pid, creation)
@@ -239,6 +247,8 @@ def stop_windows_tracker_daemon(
                 try:
                     if api.wait(process, 0):
                         return "exited"
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Tracker daemon stop deadline expired before cooperative signal.")
                     api.signal(event)
                 finally:
                     api.close(event)
@@ -252,13 +262,15 @@ def stop_windows_tracker_daemon(
             return "exited"
         # A fallback remains conditional on the exact same fresh command/DB.
         # This recheck shares the original deadline; it never buys another wait.
-        verified = verify_ownership()
-        if api.wait(process, 0):
-            return "exited"
-        if not verified:
-            raise PermissionError("Tracker daemon ownership changed before force fallback; refusing to stop it.")
         if time.monotonic() >= deadline:
             raise TimeoutError("Tracker daemon stop deadline expired before force fallback.")
+        verified = verify_ownership(deadline)
+        if api.wait(process, 0):
+            return "exited"
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Tracker daemon stop deadline expired before force fallback.")
+        if not verified:
+            raise PermissionError("Tracker daemon ownership changed before force fallback; refusing to stop it.")
         print(f"tracker Windows daemon force fallback: {reason}; provider cleanup is unconfirmed.", file=sys.stderr)
         api.terminate(process)
         if not api.wait(process, max(0.0, deadline - time.monotonic())):

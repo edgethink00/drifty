@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -80,6 +81,35 @@ class WindowsProcessTableTests(unittest.TestCase):
             wpt.subprocess, "run", side_effect=subprocess.TimeoutExpired(cmd="powershell", timeout=20)
         ):
             self.assertIsNone(wpt.windows_process_table())
+
+    def test_generic_query_keeps_twenty_second_timeout(self) -> None:
+        with patch.object(wpt.subprocess, "run", return_value=_completed("[]")) as run:
+            self.assertEqual(wpt.windows_process_table(), {})
+        self.assertEqual(run.call_args.kwargs["timeout"], 20)
+
+    def test_stop_deadline_bounds_a_real_slow_query(self) -> None:
+        run = subprocess.run
+
+        def slow_query(*args, **kwargs):
+            return run([sys.executable, "-c", "import time; time.sleep(2); print('[]')"], **kwargs)
+
+        started = time.monotonic()
+        with patch.object(wpt.subprocess, "run", side_effect=slow_query) as query:
+            self.assertIsNone(wpt.windows_process_table(deadline=started + 0.2))
+        elapsed = time.monotonic() - started
+        self.assertGreaterEqual(elapsed, 0.15)
+        self.assertLess(elapsed, 1.25, "query must not spend the generic 20s allowance")
+        query.assert_called_once()
+        self.assertIsNone(wpt._cached_table)
+
+    def test_expired_stop_budget_refuses_even_a_cached_snapshot(self) -> None:
+        with patch.object(wpt, "_cached_table", {501: "owned command"}), patch.object(
+            wpt, "_cached_at", 10.0
+        ), patch.object(wpt.time, "monotonic", return_value=10.0), patch.object(
+            wpt.subprocess, "run"
+        ) as run:
+            self.assertIsNone(wpt.windows_process_command(501, deadline=10.0))
+        run.assert_not_called()
 
     def test_process_command_returns_none_for_unknown_pid(self) -> None:
         payload = '[{"ProcessId":10,"CommandLine":"a.exe"}]'

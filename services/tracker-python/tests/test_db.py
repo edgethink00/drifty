@@ -8,6 +8,7 @@ import time
 import unittest
 import warnings
 from contextlib import closing
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -341,6 +342,153 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["durationSeconds"], 10)
 
+    @patch("app.storage.db.CAPTURE_PLATFORM", "macos")
+    def test_record_snapshot_splits_changed_app_identity_including_history_enrichment(self) -> None:
+        identities = (
+            ("com.google.Chrome", "com.other.Chrome"),
+            (None, "com.google.Chrome"),
+            ("com.google.Chrome", None),
+        )
+        for identity_index, (prior_identity, next_identity) in enumerate(identities):
+            for enrich in (False, True):
+                with self.subTest(prior=prior_identity, next=next_identity, history=enrich):
+                    with closing(TrackerDatabase(Path(self.tempdir.name) / f"identity-{identity_index}-{enrich}.sqlite3")) as database:
+                        prior = Snapshot(
+                            observed_at="2026-04-06T09:00:00+00:00",
+                            app_name="Google Chrome",
+                            bundle_id=prior_identity,
+                            window_title="Document - Google Chrome",
+                            source="accessibility",
+                            browser_name="Google Chrome",
+                        )
+                        history = {
+                            "site_domain": "example.com",
+                            "site_title": "Document",
+                            "site_url": "https://example.com/document",
+                            "site_source": "browser-history-title",
+                        } if enrich else {}
+                        database.record_snapshot(prior, 5, max_merge_gap_seconds=180)
+                        with database.connect() as conn:
+                            before = dict(conn.execute("SELECT * FROM activity_segments").fetchone())
+                        database.record_snapshot(replace(
+                            prior,
+                            observed_at="2026-04-06T09:00:05+00:00",
+                            bundle_id=next_identity,
+                            **history,
+                        ), 5, max_merge_gap_seconds=180)
+                        with database.connect() as conn:
+                            rows = [dict(row) for row in conn.execute("SELECT * FROM activity_segments ORDER BY id")]
+                        self.assertEqual(len(rows), 2)
+                        self.assertEqual(rows[0], before)
+                        self.assertEqual(rows[1]["bundle_id"], next_identity)
+                        self.assertEqual(sum(row["duration_seconds"] for row in rows), 10)
+
+    def test_record_snapshot_preserves_windows_row_when_mac_context_matches_or_enriches(self) -> None:
+        for enrich in (False, True):
+            with self.subTest(history=enrich):
+                with closing(TrackerDatabase(Path(self.tempdir.name) / f"platform-{enrich}.sqlite3")) as database:
+                    prior = Snapshot(
+                        observed_at="2026-04-06T09:00:00+00:00",
+                        app_name="Google Chrome",
+                        # Pin both IDs to the same value so platform isolation
+                        # cannot accidentally rely only on differing app IDs.
+                        bundle_id="com.google.Chrome",
+                        window_title="Document - Google Chrome",
+                        source="win32-foreground",
+                        browser_name="Google Chrome",
+                    )
+                    history = {
+                        "site_domain": "example.com",
+                        "site_title": "Document",
+                        "site_url": "https://example.com/document",
+                        "site_source": "browser-history-title",
+                    } if enrich else {}
+                    with patch("app.storage.db.CAPTURE_PLATFORM", "windows"):
+                        database.record_snapshot(prior, 5, max_merge_gap_seconds=180)
+                    with database.connect() as conn:
+                        before = dict(conn.execute("SELECT * FROM activity_segments").fetchone())
+                    with patch("app.storage.db.CAPTURE_PLATFORM", "macos"):
+                        database.record_snapshot(replace(
+                            prior,
+                            observed_at="2026-04-06T09:00:05+00:00",
+                            source="accessibility",
+                            **history,
+                        ), 5, max_merge_gap_seconds=180)
+                    with database.connect() as conn:
+                        rows = [dict(row) for row in conn.execute("SELECT * FROM activity_segments ORDER BY id")]
+                    self.assertEqual(len(rows), 2)
+                    self.assertEqual(rows[0], before)
+                    self.assertEqual(rows[1]["platform"], "macos")
+                    self.assertEqual(rows[1]["site_url"], history.get("site_url"))
+                    self.assertEqual(sum(row["duration_seconds"] for row in rows), 10)
+
+    @patch("app.storage.db.CAPTURE_PLATFORM", "windows")
+    def test_record_snapshot_coalesces_same_windows_app_identity_without_a_url(self) -> None:
+        snapshot = Snapshot(
+            observed_at="2026-04-06T09:00:00+00:00",
+            app_name="Google Chrome",
+            bundle_id=r"C:\Apps\Chrome\chrome.exe",
+            window_title="Document - Google Chrome",
+            source="win32-foreground",
+            browser_name="Google Chrome",
+            browser_automation_status="unavailable",
+        )
+        self.database.record_snapshot(snapshot, 5, max_merge_gap_seconds=180)
+        self.database.record_snapshot(replace(
+            snapshot,
+            observed_at="2026-04-06T09:00:05+00:00",
+            browser_automation_error="The live URL read is still unavailable.",
+        ), 5, max_merge_gap_seconds=180)
+
+        events = self.database.fetch_timeline("2026-04-06")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["durationSeconds"], 10)
+        self.assertEqual(events[0]["bundleId"], snapshot.bundle_id)
+        self.assertEqual(events[0]["platform"], "windows")
+        self.assertIsNone(events[0]["siteUrl"])
+        self.assertEqual(events[0]["browserAutomationError"], "The live URL read is still unavailable.")
+
+    @patch("app.storage.db.CAPTURE_PLATFORM", "macos")
+    def test_record_snapshot_never_extends_matching_imported_history(self) -> None:
+        self._insert_activity_segment(
+            0,
+            started_at="2026-04-06T08:59:55+00:00",
+            ended_at="2026-04-06T09:00:00+00:00",
+            duration_seconds=5,
+            app_name="Google Chrome",
+            bundle_id="com.google.Chrome",
+            window_title="Document - Google Chrome",
+            browser_name="Google Chrome",
+            site_domain="example.com",
+            site_title="Document",
+            site_url="https://example.com/document",
+            site_source="browser-history-import",
+            source="browser-history-import",
+        )
+        with self.database.connect() as conn:
+            before = dict(conn.execute("SELECT * FROM activity_segments").fetchone())
+
+        self.database.record_snapshot(Snapshot(
+            observed_at="2026-04-06T09:00:05+00:00",
+            app_name="Google Chrome",
+            bundle_id="com.google.Chrome",
+            window_title="Document - Google Chrome",
+            source="accessibility",
+            browser_name="Google Chrome",
+            site_domain="example.com",
+            site_title="Document",
+            site_url="https://example.com/document",
+            site_source="applescript",
+        ), 5, max_merge_gap_seconds=180)
+
+        with self.database.connect() as conn:
+            rows = [dict(row) for row in conn.execute("SELECT * FROM activity_segments ORDER BY id")]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0], before)
+        self.assertEqual(rows[1]["source"], "accessibility")
+        self.assertEqual(rows[1]["duration_seconds"], 5)
+        self.assertEqual(rows[1]["site_url"], "https://example.com/document")
+
     def test_record_snapshot_splits_interactive_and_passive_evidence(self) -> None:
         self.database.record_snapshot(
             Snapshot(
@@ -456,6 +604,7 @@ class TrackerDatabaseTests(unittest.TestCase):
             "Google Chrome returned an empty browser automation result.",
         )
 
+    @patch("app.storage.db.CAPTURE_PLATFORM", "macos")
     def test_record_snapshot_enriches_empty_site_segment_from_browser_history_without_splitting(self) -> None:
         self.database.record_snapshot(
             Snapshot(

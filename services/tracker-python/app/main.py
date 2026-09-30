@@ -100,6 +100,7 @@ DEV_SIGNALS_INGEST_INTERVAL_SECONDS = 30 * 60
 DEV_SIGNALS_DAEMON_MAX_FILES = 40
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 TRACKER_EXIT_TIMEOUT_SECONDS = 3.0
+WINDOWS_STOP_PROCESS_BUDGET_CAP_SECONDS = 24.0
 TRACKER_EXIT_POLL_SECONDS = 0.05
 # A frozen Windows daemon spends most of its first second in the bootloader
 # (plus a Defender look at the fresh files) before it can write its pid
@@ -446,14 +447,24 @@ def _browser_history_import_request(payload: dict):
     )
 
 
-def is_running() -> bool:
+def is_running(*, deadline: float | None = None) -> bool:
+    # Existing boolean callers keep their conservative PID handling and their
+    # historical False fallback when discovery is unreadable. Status replies
+    # need the distinct unknown observation to avoid confirming a false Pause.
+    return _observed_tracker_running(**({"deadline": deadline} if deadline is not None else {})) is True
+
+
+def _observed_tracker_running(*, deadline: float | None = None) -> bool | None:
+    query_kwargs = {"deadline": deadline} if deadline is not None else {}
     pid = _read_tracker_pid()
     if pid is not None and _process_exists(pid):
-        ownership = _tracker_process_ownership(pid)
+        ownership = _tracker_process_ownership(pid, **query_kwargs)
         if ownership != "unrelated":
             return True
-    processes = _process_table()
-    return processes is not None and bool(_matching_tracker_daemon_pids(processes))
+    processes = _process_table(**query_kwargs)
+    if processes is None:
+        return None
+    return bool(_matching_tracker_daemon_pids(processes))
 
 
 def _read_tracker_pid_unlocked() -> int | None:
@@ -509,11 +520,11 @@ def _process_exists(pid: int) -> bool:
     return True
 
 
-def _process_command(pid: int) -> str | None:
+def _process_command(pid: int, *, deadline: float | None = None) -> str | None:
     if sys.platform == "win32":
         from app.windows_process_table import windows_process_command
 
-        return windows_process_command(pid)
+        return windows_process_command(pid, **({"deadline": deadline} if deadline is not None else {}))
 
     try:
         result = subprocess.run(
@@ -531,7 +542,7 @@ def _process_command(pid: int) -> str | None:
     return result.stdout.strip() or None
 
 
-def _process_table() -> dict[int, str] | None:
+def _process_table(*, deadline: float | None = None) -> dict[int, str] | None:
     """Return an untruncated process snapshot or ``None`` when inspection fails."""
 
     # Windows has no ps(1); command lines come from CIM instead. Both backends
@@ -540,7 +551,7 @@ def _process_table() -> dict[int, str] | None:
     if sys.platform == "win32":
         from app.windows_process_table import windows_process_table
 
-        return windows_process_table()
+        return windows_process_table(**({"deadline": deadline} if deadline is not None else {}))
 
     try:
         result = subprocess.run(
@@ -646,8 +657,8 @@ def _tracker_runtime_fingerprint() -> str:
     return digest.hexdigest()
 
 
-def _tracker_process_ownership(pid: int) -> TrackerProcessOwnership:
-    command = _process_command(pid)
+def _tracker_process_ownership(pid: int, *, deadline: float | None = None) -> TrackerProcessOwnership:
+    command = _process_command(pid, **({"deadline": deadline} if deadline is not None else {}))
     if command is None:
         return "unknown"
     if _command_arguments(command) is None:
@@ -894,11 +905,16 @@ def _running_daemon_matches_current_runtime(pid: int, db: TrackerDatabase) -> bo
     return db.get_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY) == _tracker_runtime_fingerprint()
 
 
-def _stop_verified_tracker_daemon(pid: int) -> TrackerProcessOwnership:
+def _stop_verified_tracker_daemon(pid: int, *, deadline: float | None = None) -> TrackerProcessOwnership:
+    if sys.platform == "win32" and deadline is None:
+        deadline = time.monotonic() + TRACKER_EXIT_TIMEOUT_SECONDS
+    query_kwargs = {"deadline": deadline} if deadline is not None else {}
+    if deadline is not None and time.monotonic() >= deadline:
+        raise TimeoutError("Tracker daemon stop deadline expired before process inspection.")
     if not _process_exists(pid):
         _remove_pid_record_if_owned(pid)
         return "tracker"
-    ownership = _tracker_process_ownership(pid)
+    ownership = _tracker_process_ownership(pid, **query_kwargs)
     if ownership == "unknown":
         return ownership
     if ownership == "unrelated":
@@ -907,16 +923,16 @@ def _stop_verified_tracker_daemon(pid: int) -> TrackerProcessOwnership:
     if sys.platform == "win32":
         from app.windows_daemon_shutdown import stop_windows_tracker_daemon
 
-        command = _process_command(pid)
+        command = _process_command(pid, **query_kwargs)
         arguments = _command_arguments(command) if command else None
         details = _daemon_command_details(command) if command else None
         if not arguments or details is None or details[2] != DB_PATH.expanduser().resolve():
             return "unknown"
         executable = Path(arguments[0]).expanduser().resolve()
 
-        def verify_ownership() -> bool:
+        def verify_ownership(query_deadline: float = deadline) -> bool:
             _invalidate_process_table()
-            fresh_command = _process_command(pid)
+            fresh_command = _process_command(pid, deadline=query_deadline)
             fresh_arguments = _command_arguments(fresh_command) if fresh_command else None
             return bool(
                 fresh_arguments
@@ -927,6 +943,7 @@ def _stop_verified_tracker_daemon(pid: int) -> TrackerProcessOwnership:
         stop_windows_tracker_daemon(
             pid, DB_PATH, executable, verify_ownership, TRACKER_EXIT_TIMEOUT_SECONDS,
             source_runtime=details[0] == "source",
+            deadline=deadline,
         )
         _remove_pid_record_if_owned(pid)
         return ownership
@@ -952,11 +969,11 @@ def _stop_verified_tracker_daemon(pid: int) -> TrackerProcessOwnership:
     return ownership
 
 
-def _stop_tracker_daemons(daemon_pids: list[int]) -> list[str]:
+def _stop_tracker_daemons(daemon_pids: list[int], *, deadline: float | None = None) -> list[str]:
     errors: list[str] = []
     for pid in daemon_pids:
         try:
-            ownership = _stop_verified_tracker_daemon(pid)
+            ownership = _stop_verified_tracker_daemon(pid, **({"deadline": deadline} if deadline is not None else {}))
         except Exception as exc:
             errors.append(str(exc))
             continue
@@ -982,7 +999,10 @@ def _start_tracking_locked():
     _reconcile_pid_record(daemon_pids)
 
     if len(daemon_pids) == 1 and _running_daemon_matches_current_runtime(daemon_pids[0], database()):
-        return response(True, get_status()["data"])
+        status_response = get_status()
+        if status_response.get("ok") is False:
+            return status_response
+        return response(True, status_response["data"])
 
     stop_errors = _stop_tracker_daemons(daemon_pids)
     if stop_errors:
@@ -1007,7 +1027,10 @@ def _start_tracking_locked():
     deadline = time.monotonic() + TRACKER_START_TIMEOUT_SECONDS
     while True:
         time.sleep(TRACKER_START_POLL_SECONDS)
-        status = get_status()["data"]
+        status_response = get_status()
+        if status_response.get("ok") is False:
+            return status_response
+        status = status_response["data"]
         if status.get("running"):
             return response(True, status)
         if time.monotonic() >= deadline:
@@ -1020,37 +1043,67 @@ def stop_tracking():
 
 
 def _stop_tracking_locked():
+    # Discovery has one 3s allowance. A readable same-DB PID set then determines
+    # a single start-anchored budget: discovery + 3s per native Stop + 3s final
+    # confirmation, capped below the controller's default 30s round trip.
+    # Native Stop still owns its existing 3s limit; prebinding queries share the
+    # overall budget. Native calls and database/lock work are not cancellable.
+    started = time.monotonic() if sys.platform == "win32" else None
+    deadline = started + TRACKER_EXIT_TIMEOUT_SECONDS if started is not None else None
+    query_kwargs = {"deadline": deadline} if deadline is not None else {}
+    status_kwargs = {"process_deadline": deadline} if deadline is not None else {}
     # A successful start can return while Windows process discovery still
     # caches the empty table read before the new daemon appeared. A new stop
     # operation must inspect a fresh table or it may miss that daemon, remove
     # its pid record, then find it alive during confirmation and fail.
     _invalidate_process_table()
-    processes = _process_table()
+    processes = _process_table(**query_kwargs)
     if processes is None:
         return response(
             False,
-            get_status()["data"],
+            get_status(**status_kwargs)["data"],
             "Unable to inspect tracker processes; refusing to report a successful stop.",
         )
     daemon_pids = _matching_tracker_daemon_pids(processes)
+    if started is not None:
+        if time.monotonic() >= deadline:
+            return response(
+                False,
+                get_status(**status_kwargs)["data"],
+                "Tracker daemon stop deadline expired during process discovery.",
+            )
+        # The parsed dictionary supplies distinct original same-DB PIDs only.
+        # More than six cannot extend the current 24s cap, nor can a retry.
+        deadline = started + min(
+            WINDOWS_STOP_PROCESS_BUDGET_CAP_SECONDS,
+            TRACKER_EXIT_TIMEOUT_SECONDS * (len(daemon_pids) + 2),
+        )
+        query_kwargs = {"deadline": deadline}
     _reconcile_pid_record(daemon_pids)
 
-    stop_errors = _stop_tracker_daemons(daemon_pids)
+    stop_errors = _stop_tracker_daemons(daemon_pids, **query_kwargs)
+    if deadline is not None:
+        deadline = min(deadline, time.monotonic() + TRACKER_EXIT_TIMEOUT_SECONDS)
+        query_kwargs = {"deadline": deadline}
+        status_kwargs = {"process_deadline": deadline}
     if stop_errors:
-        return response(False, get_status()["data"], " ".join(stop_errors))
+        return response(False, get_status(**status_kwargs)["data"], " ".join(stop_errors))
 
     _invalidate_process_table()
-    remaining_processes = _process_table()
+    remaining_processes = _process_table(**query_kwargs)
     if remaining_processes is None:
-        return response(False, get_status()["data"], "Unable to confirm that tracker daemons exited.")
+        return response(False, get_status(**status_kwargs)["data"], "Unable to confirm that tracker daemons exited.")
     remaining_pids = _matching_tracker_daemon_pids(remaining_processes)
     if remaining_pids:
-        return response(False, get_status()["data"], "Tracker daemons are still running.")
+        return response(False, get_status(**status_kwargs)["data"], "Tracker daemons are still running.")
 
     recorded_pid = _read_tracker_pid()
     if recorded_pid is not None:
         _remove_pid_record_if_owned(recorded_pid)
-    status = get_status()["data"]
+    status_response = get_status(**status_kwargs)
+    if status_response.get("ok") is False:
+        return status_response
+    status = status_response["data"]
     if status.get("running"):
         return response(False, status, "Tracker still reports running after stop.")
     db = database()
@@ -1059,13 +1112,21 @@ def _stop_tracking_locked():
     return response(True, status)
 
 
-def get_status(payload: dict | None = None):
+def get_status(payload: dict | None = None, *, process_deadline: float | None = None):
     # The Mac bridge replaces this field with a fresh native trust result.
     # CLI/default calls and other platforms still perform the normal probe.
     native_accessibility_supplied = sys.platform == "darwin" and (payload or {}).get("skipAccessibilityProbe") is True
     db = database()
     last_event_at = db.get_meta("last_event_at")
-    running = is_running()
+    query_kwargs = {"deadline": process_deadline} if process_deadline is not None else {}
+    if sys.platform == "win32":
+        running = _observed_tracker_running(**query_kwargs)
+        if running is None:
+            # The Rust bridge treats a failed envelope as unconfirmed. Do not
+            # let its follow-up status read turn an unknown Stop into Paused.
+            return response(False, error="Unable to inspect tracker processes; running state is unconfirmed.")
+    else:
+        running = is_running(**query_kwargs)
     tracker_mode = db.get_meta("tracker_mode") if running else None
     effective_tracker_mode = tracker_mode or ("tracking" if running else "idle")
     message = "Tracker stopped."

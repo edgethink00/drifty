@@ -56,10 +56,19 @@ def invalidate_process_table_cache() -> None:
     _cached_at = 0.0
 
 
-def windows_process_table() -> dict | None:
-    """Map pid to command line, or ``None`` when the snapshot is unavailable."""
+def windows_process_table(*, deadline: float | None = None) -> dict | None:
+    """Read commands within an optional monotonic Stop deadline.
+
+    Generic callers keep the existing query timeout. An expired Stop budget is
+    an unreadable snapshot, never evidence that no daemon is running.
+    """
     global _cached_table, _cached_at
     now = time.monotonic()
+    timeout_seconds = _QUERY_TIMEOUT_SECONDS
+    if deadline is not None:
+        timeout_seconds = min(timeout_seconds, deadline - now)
+        if timeout_seconds <= 0:
+            return None
     if _cached_table is not None and now - _cached_at < _CACHE_TTL_SECONDS:
         return dict(_cached_table)
 
@@ -78,7 +87,7 @@ def windows_process_table() -> dict | None:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=_QUERY_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
             check=False,
             creationflags=_no_window_flag(),
         )
@@ -107,8 +116,11 @@ def windows_process_table() -> dict | None:
         # daemons, and dropping them keeps the table shaped like the Unix one.
         if isinstance(pid, int) and isinstance(command, str) and command.strip():
             processes[pid] = command.strip()
+    completed_at = time.monotonic()
+    if deadline is not None and completed_at >= deadline:
+        return None
     _cached_table = processes
-    _cached_at = time.monotonic()
+    _cached_at = completed_at
     return dict(processes)
 
 
@@ -117,14 +129,14 @@ def _no_window_flag() -> int:
     return getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
-def windows_process_command(pid: int) -> str | None:
+def windows_process_command(pid: int, *, deadline: float | None = None) -> str | None:
     """The command line for one pid, or ``None`` when it cannot be read.
 
     Served from the full snapshot rather than a per-pid query: the caller uses
     this to decide whether a *specific* daemon is ours, and a pid that has
     exited must read as absent rather than as an error.
     """
-    processes = windows_process_table()
+    processes = windows_process_table(**({"deadline": deadline} if deadline is not None else {}))
     if processes is None:
         return None
     return processes.get(pid)

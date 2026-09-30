@@ -1107,20 +1107,31 @@ class TrackerDatabase:
             if match:
                 snapshot = redact_snapshot(snapshot, match.source)
 
-            # Only coalesce against locally-originated segments. Segments pulled from
-            # another synced device (origin_device_id IS NOT NULL) describe that device's
-            # timeline; extending or trimming them here would corrupt the merge.
+            # Only coalesce live, locally-originated segments. Imported history
+            # describes the past, and synced segments describe another device's
+            # timeline; neither may absorb a new local capture interval.
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
                 WHERE origin_device_id IS NULL
+                  AND source != ?
                 ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 1
-                """
+                """,
+                (BROWSER_HISTORY_IMPORT_SOURCE,),
             ).fetchone()
 
+            # A matching display name/title does not establish app identity.
+            # Do not rewrite an earlier device/platform or unidentified app
+            # interval with the identity and page fields of a later capture.
+            same_capture_identity = bool(
+                last
+                and last["platform"] == CAPTURE_PLATFORM
+                and last["bundle_id"] == snapshot.bundle_id
+            )
             last_site_fields_empty = bool(
                 last
+                and same_capture_identity
                 and last["app_name"] == snapshot.app_name
                 and last["window_title"] == snapshot.window_title
                 and last["site_domain"] is None
@@ -1140,6 +1151,7 @@ class TrackerDatabase:
             same_engagement_evidence = last_engagement_evidence == snapshot_engagement_evidence
             exact_context_match = (
                 last
+                and same_capture_identity
                 and same_engagement_evidence
                 and last["app_name"] == snapshot.app_name
                 and last["window_title"] == snapshot.window_title

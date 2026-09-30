@@ -34,6 +34,142 @@ from tests.support_cleanup import temp_dir_closing_databases
 
 
 class TrackerMainTests(unittest.TestCase):
+    def test_windows_status_without_pid_refuses_unreadable_process_table(self) -> None:
+        db = MagicMock()
+        db.get_meta.return_value = None
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main, "database", return_value=db
+        ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+            tracker_main, "_process_table", return_value=None
+        ) as inspect, patch.object(tracker_main, "accessibility_granted", return_value=True):
+            status = tracker_main._dispatch({"command": "get_status", "payload": {}})
+            self.assertFalse(status["ok"])
+            self.assertIsNone(status["data"])
+            self.assertIn("Unable to inspect", status["error"])
+            inspect.assert_called_once_with()
+            # Other boolean callers retain their existing unknown fallback.
+            self.assertIs(tracker_main.is_running(), False)
+
+    def test_windows_status_without_pid_accepts_a_readable_empty_process_table(self) -> None:
+        db = MagicMock()
+        db.get_meta.return_value = None
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main, "database", return_value=db
+        ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+            tracker_main, "_process_table", return_value={}
+        ), patch.object(tracker_main, "accessibility_granted", return_value=True):
+            status = tracker_main.get_status()
+        self.assertTrue(status["ok"])
+        self.assertIs(status["data"]["running"], False)
+        self.assertEqual(status["data"]["trackerMode"], "idle")
+
+    def test_windows_status_keeps_a_live_pid_running_when_ownership_is_unknown(self) -> None:
+        db = MagicMock()
+        db.get_meta.return_value = None
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main, "database", return_value=db
+        ), patch.object(tracker_main, "_read_tracker_pid", return_value=501), patch.object(
+            tracker_main, "_process_exists", return_value=True
+        ), patch.object(tracker_main, "_process_command", return_value=None), patch.object(
+            tracker_main, "_process_table", return_value=None
+        ) as inspect, patch.object(tracker_main, "accessibility_granted", return_value=True):
+            status = tracker_main.get_status()
+        self.assertTrue(status["ok"])
+        self.assertIs(status["data"]["running"], True)
+        inspect.assert_not_called()
+
+    def test_macos_status_retains_its_unreadable_table_fallback(self) -> None:
+        db = MagicMock()
+        db.get_meta.return_value = None
+        with patch.object(tracker_main.sys, "platform", "darwin"), patch.object(
+            tracker_main, "database", return_value=db
+        ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+            tracker_main, "_process_table", return_value=None
+        ), patch.object(tracker_main, "accessibility_granted", return_value=True):
+            status = tracker_main.get_status()
+        self.assertTrue(status["ok"])
+        self.assertIs(status["data"]["running"], False)
+        self.assertEqual(status["data"]["trackerMode"], "idle")
+
+    def test_windows_status_expired_budget_does_not_query_or_confirm_stopped(self) -> None:
+        from app import windows_process_table as process_table
+
+        db = MagicMock()
+        db.get_meta.return_value = None
+        process_table.invalidate_process_table_cache()
+        try:
+            with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+                tracker_main.time, "monotonic", return_value=100.0
+            ), patch.object(tracker_main, "database", return_value=db), patch.object(
+                tracker_main, "_read_tracker_pid", return_value=None
+            ), patch.object(tracker_main, "accessibility_granted", return_value=True), patch.object(
+                process_table.subprocess, "run"
+            ) as query:
+                status = tracker_main.get_status(process_deadline=100.0)
+            self.assertFalse(status["ok"])
+            self.assertIsNone(status["data"])
+            query.assert_not_called()
+        finally:
+            process_table.invalidate_process_table_cache()
+
+    def test_windows_start_preserves_a_status_error_for_an_existing_daemon(self) -> None:
+        db = MagicMock()
+        db.get_meta.return_value = None
+        command = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main, "database", return_value=db
+        ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+            tracker_main, "_process_table", side_effect=[{501: command}, None]
+        ), patch.object(tracker_main, "_reconcile_pid_record"), patch.object(
+            tracker_main, "_running_daemon_matches_current_runtime", return_value=True
+        ), patch.object(tracker_main, "accessibility_granted", return_value=True), patch.object(
+            tracker_main.subprocess, "Popen"
+        ) as spawn:
+            status = tracker_main._start_tracking_locked()
+        self.assertFalse(status["ok"])
+        self.assertIsNone(status["data"])
+        self.assertIn("Unable to inspect", status["error"])
+        spawn.assert_not_called()
+
+    def test_windows_start_poll_preserves_a_status_error(self) -> None:
+        db = MagicMock()
+        db.get_meta.return_value = None
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main, "database", return_value=db
+        ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+            tracker_main, "_process_table", side_effect=[{}, {}, None]
+        ), patch.object(tracker_main, "_reconcile_pid_record"), patch.object(
+            tracker_main, "_invalidate_process_table"
+        ), patch.object(tracker_main, "accessibility_granted", return_value=True), patch.object(
+            tracker_main.subprocess, "Popen"
+        ) as spawn, patch.object(tracker_main.time, "sleep"), patch.object(
+            tracker_main, "TRACKER_START_TIMEOUT_SECONDS", 0.0
+        ), patch.object(tracker_main, "_detached_spawn_kwargs", return_value={}
+        ):
+            status = tracker_main._start_tracking_locked()
+        self.assertFalse(status["ok"])
+        self.assertIsNone(status["data"])
+        self.assertIn("Unable to inspect", status["error"])
+        spawn.assert_called_once()
+
+    def test_windows_stop_and_follow_up_status_do_not_confirm_an_unreadable_table(self) -> None:
+        db = MagicMock()
+        db.get_meta.return_value = None
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main, "database", return_value=db
+        ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+            tracker_main, "_process_table", side_effect=[{}, {}, None, None]
+        ), patch.object(tracker_main, "_reconcile_pid_record"), patch.object(
+            tracker_main, "_invalidate_process_table"
+        ), patch.object(tracker_main, "accessibility_granted", return_value=True):
+            stopped = tracker_main._stop_tracking_locked()
+            follow_up = tracker_main._dispatch({"command": "get_status", "payload": {}})
+        for status in (stopped, follow_up):
+            self.assertFalse(status["ok"])
+            self.assertIsNone(status["data"])
+            self.assertIn("Unable to inspect", status["error"])
+        db.set_meta.assert_not_called()
+
     def test_status_skips_only_explicit_mac_native_permission_probe(self) -> None:
         for platform_name, payload, should_probe in (
             ("darwin", {}, True),
@@ -44,6 +180,8 @@ class TrackerMainTests(unittest.TestCase):
             with self.subTest(platform=platform_name, payload=payload):
                 with patch.object(tracker_main, "database"), patch.object(
                     tracker_main, "is_running", return_value=False
+                ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+                    tracker_main, "_process_table", return_value={}
                 ), patch.object(tracker_main.sys, "platform", platform_name), patch.object(
                     tracker_main, "accessibility_granted", return_value=True
                 ) as probe:
@@ -154,10 +292,253 @@ class TrackerMainTests(unittest.TestCase):
             windows_stop.assert_called_once()
             self.assertEqual(windows_stop.call_args.args[:3],
                              (501, tracker_main.DB_PATH, Path(sys.executable).expanduser().resolve()))
-            self.assertEqual(windows_stop.call_args.kwargs, {"source_runtime": True})
+            self.assertEqual(windows_stop.call_args.kwargs, {"source_runtime": True, "deadline": 19.0})
             self.assertTrue(queried_states[-1], "stop confirmation must query after cooperative exit")
             self.assertFalse(tracker_main.pid_path().exists())
             kill.assert_not_called()
+
+    def test_windows_stop_initial_query_and_failure_status_share_one_wall_budget(self) -> None:
+        from app import windows_process_table as process_table
+
+        run = subprocess.run
+
+        def slow_query(*args, **kwargs):
+            return run([sys.executable, "-c", "import time; time.sleep(2); print('[]')"], **kwargs)
+
+        db = MagicMock()
+        db.get_meta.return_value = None
+        process_table.invalidate_process_table_cache()
+        try:
+            with TemporaryDirectory() as tmp, patch.object(
+                tracker_main, "DB_PATH", Path(tmp) / "owned.sqlite3"
+            ):
+                tracker_main._write_tracker_pid(501)
+                with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+                    tracker_main, "TRACKER_EXIT_TIMEOUT_SECONDS", 0.2
+                ), patch.object(tracker_main, "database", return_value=db), patch.object(
+                    tracker_main, "accessibility_granted", return_value=True
+                ), patch.object(tracker_main, "_process_exists", return_value=True), patch.object(
+                    tracker_main, "_stop_verified_tracker_daemon"
+                ) as stop, patch.object(process_table.subprocess, "run", side_effect=slow_query) as query:
+                    started = time.monotonic()
+                    result = tracker_main.stop_tracking()
+                    elapsed = time.monotonic() - started
+
+                self.assertGreaterEqual(elapsed, 0.15)
+                self.assertLess(elapsed, 1.25)
+                self.assertFalse(result["ok"])
+                self.assertIn("Unable to inspect", result["error"])
+                self.assertTrue(result["data"]["running"])
+                self.assertEqual(tracker_main._read_tracker_pid(), 501)
+                query.assert_called_once()  # No fresh 20s status query after expiry.
+                stop.assert_not_called()
+        finally:
+            process_table.invalidate_process_table_cache()
+
+    def test_windows_stop_expired_unknown_snapshot_without_pid_is_not_confirmed(self) -> None:
+        from app import windows_process_table as process_table
+
+        now = 0.0
+
+        def late_query(*args, **kwargs):
+            nonlocal now
+            now = tracker_main.TRACKER_EXIT_TIMEOUT_SECONDS
+            return MagicMock(returncode=0, stdout="[]")
+
+        db = MagicMock()
+        db.get_meta.return_value = None
+        process_table.invalidate_process_table_cache()
+        try:
+            with TemporaryDirectory() as tmp, patch.object(
+                tracker_main, "DB_PATH", Path(tmp) / "owned.sqlite3"
+            ), patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+                tracker_main.time, "monotonic", side_effect=lambda: now
+            ), patch.object(tracker_main, "database", return_value=db), patch.object(
+                tracker_main, "accessibility_granted", return_value=True
+            ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+                tracker_main, "_stop_verified_tracker_daemon"
+            ) as stop, patch.object(process_table.subprocess, "run", side_effect=late_query) as query:
+                result = tracker_main.stop_tracking()
+
+            self.assertFalse(result["ok"])
+            self.assertIn("Unable to inspect", result["error"])
+            self.assertIsNone(result["data"])
+            self.assertIsNone(process_table._cached_table)
+            query.assert_called_once()
+            stop.assert_not_called()
+        finally:
+            process_table.invalidate_process_table_cache()
+
+    def test_windows_stop_confirmation_and_status_share_one_wall_budget(self) -> None:
+        from app import windows_process_table as process_table
+
+        run = subprocess.run
+        calls = 0
+
+        def query(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return subprocess.CompletedProcess(args[0], 0, stdout="[]")
+            return run([sys.executable, "-c", "import time; time.sleep(2); print('[]')"], **kwargs)
+
+        db = MagicMock()
+        db.get_meta.return_value = None
+        process_table.invalidate_process_table_cache()
+        try:
+            with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+                tracker_main, "TRACKER_EXIT_TIMEOUT_SECONDS", 0.2
+            ), patch.object(tracker_main, "database", return_value=db), patch.object(
+                tracker_main, "accessibility_granted", return_value=True
+            ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
+                tracker_main, "_reconcile_pid_record"
+            ), patch.object(process_table.subprocess, "run", side_effect=query) as cim:
+                started = time.monotonic()
+                result = tracker_main.stop_tracking()
+                elapsed = time.monotonic() - started
+            self.assertGreaterEqual(elapsed, 0.15)
+            self.assertLess(elapsed, 1.25)
+            self.assertFalse(result["ok"])
+            self.assertIn("Unable to confirm", result["error"])
+            self.assertEqual(cim.call_count, 2)  # No third status CIM after expiry.
+        finally:
+            process_table.invalidate_process_table_cache()
+
+    def _stop_simulated_windows_legacy_daemons(self, count: int):
+        from app import windows_daemon_shutdown as shutdown
+        from app import windows_process_table as process_table
+
+        # Exercise public Stop, real command parsing/cache and the native Stop
+        # algorithm. Only CIM transport, native handles and the clock are fake.
+        now = 100.0
+        active = set(range(501, 501 + count))
+        handles = {pid: object() for pid in active}
+        owners = {handle: pid for pid, handle in handles.items()}
+        bound_at = []
+        forced = []
+        closed = []
+        queries = []
+        process_deadlines = []
+        read_process_table = tracker_main._process_table
+
+        def inspect_process_table(**kwargs):
+            process_deadlines.append(kwargs.get("deadline"))
+            return read_process_table(**kwargs)
+
+        def open_process(pid):
+            bound_at.append((pid, now))
+            return handles[pid] if pid in active else None
+
+        def wait(handle, seconds):
+            nonlocal now
+            self.assertIn(handle, owners)
+            if owners[handle] not in active:
+                return True
+            now += seconds
+            return False
+
+        def terminate(handle):
+            self.assertIn(handle, owners)
+            forced.append(owners[handle])
+            active.remove(owners[handle])
+
+        api = SimpleNamespace(
+            open_process=open_process,
+            validate_process=lambda handle, executable, source: 1000 + owners[handle],
+            wait=wait,
+            open_event=lambda name: None,  # A legacy daemon has no Stop event.
+            terminate=terminate,
+            close=closed.append,
+        )
+        process_table.invalidate_process_table_cache()
+        try:
+            with TemporaryDirectory() as tmp, patch.object(
+                tracker_main, "DB_PATH", Path(tmp) / "owned.sqlite3"
+            ):
+                command = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
+                foreign = command.replace(str(tracker_main.DB_PATH), str(tracker_main.DB_PATH) + ".other")
+
+                def query(*args, **kwargs):
+                    nonlocal now
+                    queries.append((now, kwargs["timeout"]))
+                    if kwargs["timeout"] <= 0.25:
+                        now += kwargs["timeout"]
+                        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+                    now += 0.25
+                    rows = [{"ProcessId": pid, "CommandLine": command} for pid in active]
+                    # Unrelated namespaces cannot buy a larger Stop budget.
+                    rows.extend({"ProcessId": pid, "CommandLine": foreign} for pid in range(900, 920))
+                    return subprocess.CompletedProcess(args[0], 0, stdout=json.dumps(rows))
+
+                db = MagicMock()
+                db.get_meta.return_value = None
+                with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+                    tracker_main.time, "monotonic", side_effect=lambda: now
+                ), patch.object(process_table.subprocess, "run", side_effect=query), patch.object(
+                    tracker_main, "_process_exists", side_effect=lambda pid: pid in active
+                ), patch.object(shutdown, "_NativeApi", return_value=api), patch.object(
+                    tracker_main, "database", return_value=db
+                ), patch.object(tracker_main, "_process_table", side_effect=inspect_process_table), patch.object(
+                    tracker_main, "accessibility_granted", return_value=True
+                ), patch(
+                    "app.main.os.kill"
+                ) as kill, patch.object(shutdown.sys, "stderr", MagicMock()):
+                    result = tracker_main.stop_tracking()
+                kill.assert_not_called()
+                self.assertEqual(len(closed), len(bound_at))
+                return result, now - 100.0, active, forced, bound_at, queries, process_deadlines[-1]
+        finally:
+            process_table.invalidate_process_table_cache()
+
+    def test_windows_stop_preserves_each_legacy_daemons_cooperative_wait(self) -> None:
+        result, elapsed, active, forced, bound_at, queries, status = self._stop_simulated_windows_legacy_daemons(4)
+        self.assertTrue(result["ok"], result)
+        self.assertFalse(active)
+        self.assertEqual(forced, [501, 502, 503, 504])
+        self.assertEqual(len(bound_at), 4)
+        self.assertGreater(elapsed, 8.0)  # Four full 2s windows on the fake clock.
+        self.assertLessEqual(elapsed, 18.0)
+        self.assertTrue(all(timeout <= 118.0 - started for started, timeout in queries))
+        self.assertLessEqual(status, 118.0)
+        self.assertLessEqual(status - (100.0 + elapsed), 3.0)
+
+    def test_windows_stop_many_legacy_daemons_share_a_fixed_operation_cap(self) -> None:
+        result, elapsed, active, forced, bound_at, queries, status = self._stop_simulated_windows_legacy_daemons(12)
+        self.assertFalse(result["ok"])
+        self.assertIsNone(result["data"])
+        self.assertIn("deadline", result["error"])
+        self.assertTrue(active)
+        self.assertGreater(len(forced), 1)
+        self.assertLess(len(forced), 12)
+        self.assertAlmostEqual(elapsed, 24.0)
+        self.assertTrue(all(started < 124.0 for _, started in bound_at))
+        self.assertTrue(all(started < 124.0 and timeout <= 124.0 - started for started, timeout in queries))
+        self.assertEqual(status, 124.0)
+
+    def test_windows_stop_prebinding_queries_keep_the_overall_budget(self) -> None:
+        now = 100.0
+        command = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
+        deadlines = []
+
+        def inspect(pid, *, deadline):
+            nonlocal now
+            deadlines.append(deadline)
+            if len(deadlines) == 1:
+                now += 3.1  # Still inside overall, before native Stop starts.
+            return command
+
+        windows_stop = MagicMock(return_value="cooperative")
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main.time, "monotonic", side_effect=lambda: now
+        ), patch.object(tracker_main, "_process_exists", return_value=True), patch.object(
+            tracker_main, "_process_command", side_effect=inspect
+        ), patch.object(tracker_main, "_remove_pid_record_if_owned"), patch.dict(sys.modules, {
+            "app.windows_daemon_shutdown": SimpleNamespace(stop_windows_tracker_daemon=windows_stop)
+        }):
+            self.assertEqual(tracker_main._stop_verified_tracker_daemon(501, deadline=118.0), "tracker")
+        self.assertEqual(deadlines, [118.0, 118.0])
+        self.assertEqual(windows_stop.call_args.args[4], 3.0)
+        self.assertEqual(windows_stop.call_args.kwargs["deadline"], 118.0)
 
     def test_public_cli_dispatch_does_not_match_internal_argument_values(self) -> None:
         self.assertFalse(

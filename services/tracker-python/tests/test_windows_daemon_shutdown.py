@@ -64,11 +64,13 @@ class _FakeNative:
 
 
 class WindowsDaemonShutdownTests(unittest.TestCase):
-    def stop(self, api, verify=lambda: True, timeout=3.0):
+    def stop(self, api, verify=lambda deadline: True, timeout=3.0, *, deadline=None):
         with patch.object(shutdown, "_NativeApi", return_value=api), patch.object(
             shutdown.time, "monotonic", side_effect=lambda: api.now
         ):
-            return shutdown.stop_windows_tracker_daemon(501, Path("owned.sqlite3"), Path(sys.executable), verify, timeout)
+            return shutdown.stop_windows_tracker_daemon(
+                501, Path("owned.sqlite3"), Path(sys.executable), verify, timeout, deadline=deadline
+            )
 
     def test_cooperative_stop_signals_exact_db_and_process_generation_without_force(self):
         api = _FakeNative()
@@ -88,7 +90,7 @@ class WindowsDaemonShutdownTests(unittest.TestCase):
 
     def test_original_exit_during_command_recheck_never_signals_a_reused_pid(self):
         api = _FakeNative()
-        def verify():
+        def verify(deadline):
             api.exited = True  # the numeric PID may now name another process
             return True
         self.assertEqual(self.stop(api, verify), "exited")
@@ -100,7 +102,7 @@ class WindowsDaemonShutdownTests(unittest.TestCase):
     def test_changed_database_or_unknown_command_fails_closed(self):
         api = _FakeNative()
         with self.assertRaisesRegex(PermissionError, "database"):
-            self.stop(api, lambda: False)
+            self.stop(api, lambda deadline: False)
         self.assertFalse(api.signaled)
         self.assertFalse(api.forced)
         self.assertEqual(api.closed, [api.original])
@@ -149,14 +151,106 @@ class WindowsDaemonShutdownTests(unittest.TestCase):
 
     def test_slow_ownership_recheck_does_not_reset_stop_budget(self):
         api = _FakeNative()
-        def verify():
+        def verify(deadline):
             api.now = 4.0
             return True
-        with self.assertRaisesRegex(TimeoutError, "before force"):
+        with self.assertRaisesRegex(TimeoutError, "ownership verification"):
             self.stop(api, verify)
         self.assertFalse(api.signaled)
         self.assertFalse(api.forced)
         self.assertEqual(api.closed, [api.original])
+
+    def test_shared_stop_entry_deadline_is_not_renewed_by_native_binding(self):
+        api = _FakeNative()
+        api.now = 1.0  # Discovery already spent one second of the shared budget.
+        self.assertEqual(self.stop(api, deadline=2.5), "cooperative")
+        self.assertEqual(api.now, 2.5)
+        self.assertFalse(api.forced)
+        self.assertEqual(api.closed, [api.event, api.original])
+
+    def test_expired_native_identity_read_does_not_start_an_ownership_query(self):
+        api = _FakeNative()
+
+        def validate(*args):
+            api.now = 4.0
+            return api.creation_filetime
+
+        api.validate_process = validate
+        verify = MagicMock(return_value=True)
+        with self.assertRaisesRegex(TimeoutError, "ownership verification"):
+            self.stop(api, verify)
+        verify.assert_not_called()
+        self.assertFalse(api.opened_names)
+        self.assertFalse(api.signaled)
+        self.assertFalse(api.forced)
+        self.assertEqual(api.closed, [api.original])
+
+    def test_real_slow_ownership_query_is_bounded_before_any_signal(self):
+        from app import windows_process_table as process_table
+
+        api = _FakeNative()
+        run = subprocess.run
+
+        def slow_query(*args, **kwargs):
+            return run([sys.executable, "-c", "import time; time.sleep(2); print('[]')"], **kwargs)
+
+        def verify(deadline):
+            return process_table.windows_process_command(501, deadline=deadline) is not None
+
+        process_table.invalidate_process_table_cache()
+        started = time.monotonic()
+        try:
+            with patch.object(shutdown, "_NativeApi", return_value=api), patch.object(
+                process_table.subprocess, "run", side_effect=slow_query
+            ), self.assertRaisesRegex(TimeoutError, "ownership verification"):
+                shutdown.stop_windows_tracker_daemon(
+                    501, Path("owned.sqlite3"), Path(sys.executable), verify, 0.2
+                )
+        finally:
+            process_table.invalidate_process_table_cache()
+        self.assertLess(time.monotonic() - started, 1.25)
+        self.assertFalse(api.opened_names)
+        self.assertFalse(api.signaled)
+        self.assertFalse(api.forced)
+        self.assertEqual(api.closed, [api.original])
+
+    def test_real_slow_fallback_query_uses_only_the_remaining_stop_budget(self):
+        from app import windows_process_table as process_table
+
+        api = _FakeNative(cooperative=False)
+        api.wait = lambda handle, seconds: (time.sleep(seconds) or False)
+        run = subprocess.run
+        queries = []
+
+        def query(*args, **kwargs):
+            queries.append(kwargs["timeout"])
+            if len(queries) == 1:
+                return subprocess.CompletedProcess(args[0], 0, stdout='[{"ProcessId":501,"CommandLine":"owned"}]')
+            return run([sys.executable, "-c", "import time; time.sleep(2); print('[]')"], **kwargs)
+
+        def verify(deadline):
+            process_table.invalidate_process_table_cache()
+            return process_table.windows_process_command(501, deadline=deadline) == "owned"
+
+        process_table.invalidate_process_table_cache()
+        started = time.monotonic()
+        try:
+            with patch.object(shutdown, "_NativeApi", return_value=api), patch.object(
+                shutdown, "_COOPERATIVE_SECONDS", 0.05
+            ), patch.object(process_table.subprocess, "run", side_effect=query), self.assertRaisesRegex(
+                TimeoutError, "before force"
+            ):
+                shutdown.stop_windows_tracker_daemon(
+                    501, Path("owned.sqlite3"), Path(sys.executable), verify, 0.3
+                )
+        finally:
+            process_table.invalidate_process_table_cache()
+        self.assertLess(time.monotonic() - started, 1.25)
+        self.assertEqual(len(queries), 2)
+        self.assertLess(queries[1], queries[0])
+        self.assertTrue(api.signaled)
+        self.assertFalse(api.forced)
+        self.assertEqual(api.closed, [api.event, api.original])
 
     def test_changed_ownership_before_fallback_never_forces(self):
         api = _FakeNative(event=False)
@@ -170,7 +264,7 @@ class WindowsDaemonShutdownTests(unittest.TestCase):
     def test_original_exit_during_fallback_recheck_accepts_confirmed_exit_not_reused_pid(self):
         api = _FakeNative(event=False)
         calls = []
-        def verify():
+        def verify(deadline):
             calls.append(True)
             if len(calls) == 2:
                 api.exited = True
