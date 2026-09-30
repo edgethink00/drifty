@@ -13,6 +13,7 @@ from app.tracker.windows_browser_bridge import (
 
 
 NOW = datetime(2026, 9, 4, 12, 0, 0, tzinfo=timezone.utc)
+FOREGROUND_URL = "https://www.example.com/docs?q=1"
 
 
 class WindowsBrowserBridgeTests(unittest.TestCase):
@@ -43,20 +44,36 @@ class WindowsBrowserBridgeTests(unittest.TestCase):
 
     def test_reads_a_fresh_exact_firefox_tab(self) -> None:
         self.write()
-        metadata = read_browser_bridge_metadata("Firefox", self.path, NOW)
+        metadata = read_browser_bridge_metadata("Firefox", FOREGROUND_URL, self.path, NOW)
         self.assertIsNotNone(metadata)
         self.assertEqual(metadata.site_url, "https://www.example.com/docs?q=1")
         self.assertEqual(metadata.site_domain, "example.com")
-        self.assertEqual(metadata.site_title, "Example docs")
+        self.assertIsNone(metadata.site_title)
         self.assertEqual(metadata.match_state, "browser-extension")
 
     def test_rejects_stale_or_wrong_browser_snapshots(self) -> None:
         self.write(receivedAtEpochMs=int(NOW.timestamp() * 1000) - 6_000)
-        self.assertIsNone(read_browser_bridge_metadata("Firefox", self.path, NOW))
+        self.assertIsNone(read_browser_bridge_metadata("Firefox", FOREGROUND_URL, self.path, NOW))
 
         self.write(browserFamily="chromium")
-        self.assertIsNone(read_browser_bridge_metadata("Firefox", self.path, NOW))
-        self.assertIsNotNone(read_browser_bridge_metadata("Microsoft Edge", self.path, NOW))
+        self.assertIsNone(read_browser_bridge_metadata("Firefox", FOREGROUND_URL, self.path, NOW))
+        self.assertIsNotNone(read_browser_bridge_metadata("Microsoft Edge", FOREGROUND_URL, self.path, NOW))
+
+    def test_generic_chromium_message_needs_the_exact_foreground_url(self) -> None:
+        self.write(browserFamily="chromium")
+        for app_name in ("Google Chrome", "Microsoft Edge", "Opera"):
+            with self.subTest(app_name=app_name):
+                self.assertIsNone(read_browser_bridge_metadata(app_name, None, self.path, NOW))
+                self.assertIsNone(read_browser_bridge_metadata(
+                    app_name, "https://other.example.com/docs?q=1", self.path, NOW
+                ))
+                self.assertIsNone(read_browser_bridge_metadata(
+                    app_name, "https://www.example.com/docs?q=2", self.path, NOW
+                ))
+                self.assertEqual(
+                    read_browser_bridge_metadata(app_name, FOREGROUND_URL, self.path, NOW).site_url,
+                    FOREGROUND_URL,
+                )
 
     def test_rejects_domain_mismatch_and_non_http_urls(self) -> None:
         self.write(
@@ -68,7 +85,7 @@ class WindowsBrowserBridgeTests(unittest.TestCase):
                 "title": "Mismatch",
             }
         )
-        self.assertIsNone(read_browser_bridge_metadata("Firefox", self.path, NOW))
+        self.assertIsNone(read_browser_bridge_metadata("Firefox", FOREGROUND_URL, self.path, NOW))
 
         self.write(
             tab={
@@ -79,7 +96,7 @@ class WindowsBrowserBridgeTests(unittest.TestCase):
                 "title": "Local",
             }
         )
-        self.assertIsNone(read_browser_bridge_metadata("Firefox", self.path, NOW))
+        self.assertIsNone(read_browser_bridge_metadata("Firefox", FOREGROUND_URL, self.path, NOW))
 
     def test_uses_the_per_user_local_app_data_path(self) -> None:
         self.assertEqual(

@@ -1,4 +1,4 @@
-"""Read exact active-tab context written by Drifty's local native host."""
+"""Read local bridge context only after an exact foreground Document URL match."""
 
 from __future__ import annotations
 
@@ -58,9 +58,15 @@ def _fresh_received_at(received_at_epoch_ms: object, now: datetime) -> bool:
 
 def read_browser_bridge_metadata(
     app_name: str,
+    foreground_url: str | None,
     path: Path | None = None,
     now: datetime | None = None,
 ) -> BrowserMetadata | None:
+    # V1 messages identify only a browser family and extension window ID, not
+    # the OS foreground window or the product that sent them. A same-family
+    # browser can otherwise inherit another browser's recent tab URL.
+    if not foreground_url:
+        return None
     snapshot_path = path or browser_bridge_snapshot_path()
     if snapshot_path is None:
         return None
@@ -92,6 +98,8 @@ def read_browser_bridge_metadata(
         return None
     if len(url) > 8192 or len(domain) > 253 or len(title) > 512:
         return None
+    if url != foreground_url:
+        return None
     parsed = urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return None
@@ -103,7 +111,9 @@ def read_browser_bridge_metadata(
     return BrowserMetadata(
         browser_name=app_name,
         site_domain=normalized_domain,
-        site_title=title or None,
+        # V1 does not identify the sending HWND/product. The title can belong
+        # to a different window displaying this same URL.
+        site_title=None,
         site_url=url,
         youtube_video_id=video_id,
         youtube_playlist_id=playlist_id,

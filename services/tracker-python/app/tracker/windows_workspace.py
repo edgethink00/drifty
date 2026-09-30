@@ -21,9 +21,9 @@ apps and the lowercased executable path otherwise, so downstream identity keys
 (`app_identity_key`) stay unique without schema changes.
 
 Allowlisted Chromium browser URLs are read from the focused window's top-level
-Document ValuePattern through a resident UI Automation host. An exact extension
-bridge takes precedence; verified browser history is a separately labeled,
-conservative fallback, including for Firefox without bridge context.
+Document ValuePattern through a resident UI Automation host. A fresh extension
+bridge may enrich that URL only when it matches the same foreground Document;
+verified browser history is a separately labeled, conservative fallback.
 """
 
 from __future__ import annotations
@@ -355,31 +355,34 @@ def enrich_browser_snapshot(
     live_reader: Callable[[int, str | None], WindowsBrowserUiaResult] = read_live_browser_url,
     history_reader: Callable[[str | None, str | None, str | None], BrowserMetadata] = browser_history_metadata,
     history_identity_checker: Callable[[str, str | None], bool] = is_verified_browser_history_identity,
-    bridge_reader: Callable[[str], BrowserMetadata | None] = read_browser_bridge_metadata,
+    bridge_reader: Callable[[str, str | None], BrowserMetadata | None] = read_browser_bridge_metadata,
 ) -> Snapshot:
-    """Attach exact bridge context, then UIA, then conservative history."""
+    """Use a bridge URL only when it matches this foreground window's Document."""
     # A browser without a history root is still a browser: it gets
     # browser_name, so an automatic close refuses its tab instead of treating
     # the whole browser as an app. Its live and history readers stay off.
     if not (is_browser_history_supported_app(snapshot.app_name) or is_windows_browser_app(snapshot.app_name)):
         return snapshot
 
-    bridge = bridge_reader(snapshot.app_name)
-    live = BrowserMetadata(browser_name=snapshot.app_name)
+    live_result = live_reader(hwnd, snapshot.app_name)
+    live = _browser_metadata_from_live_uia(snapshot.app_name, live_result)
+    bridge = bridge_reader(snapshot.app_name, live_result.url)
+    # Keep this guard at the caller as well: injected readers and future bridge
+    # versions must not bypass the exact HWND-local foreground proof.
+    if bridge is not None and bridge.site_url != live_result.url:
+        bridge = None
     history = None
-    metadata = bridge or live
-    private_window = False
-    if bridge is None:
-        live_result = live_reader(hwnd, snapshot.app_name)
-        private_window = live_result.private_window
-        live = _browser_metadata_from_live_uia(snapshot.app_name, live_result)
-        metadata = live
+    # A v1 bridge message has no HWND, PID, or product identity. Even after its
+    # URL matches this window, another tab at the same URL could supply a
+    # different title or other dynamic page data. Derive all page fields from
+    # the HWND-local Document; the bridge is only an exact-URL corroboration.
+    metadata = live
     # A private window records no page. Guessing one from history by its title
     # would attribute private browsing to a normal visit.
     if (
         bridge is None
         and not live.site_url
-        and not private_window
+        and not live_result.private_window
         and history_identity_checker(snapshot.app_name, snapshot.bundle_id)
     ):
         history = history_reader(snapshot.app_name, snapshot.window_title, snapshot.observed_at)
@@ -394,23 +397,20 @@ def enrich_browser_snapshot(
     snapshot.youtube_playlist_id = metadata.youtube_playlist_id
     snapshot.youtube_is_shorts = metadata.youtube_is_shorts
     snapshot.site_source = (
-        "browser-extension"
-        if bridge is not None
-        else "windows-uia-document"
+        "windows-uia-document"
         if live.site_url
         else "browser-history-title"
         if metadata.site_url
         else None
     )
-    if bridge is not None:
-        snapshot.capture_confidence = 1.0
-    elif live.site_url:
+    # An exact URL match is not proof that the v1 bridge sender is this HWND.
+    # Its source, confidence, and diagnostics must not replace the live read.
+    if live.site_url:
         snapshot.capture_confidence = _LIVE_UIA_CONFIDENCE
     elif metadata.site_url:
         snapshot.capture_confidence = _HISTORY_FALLBACK_CONFIDENCE
-    diagnostic_metadata = bridge if bridge is not None else live
-    snapshot.browser_automation_status = diagnostic_metadata.browser_automation_status
-    snapshot.browser_automation_error = diagnostic_metadata.browser_automation_error
+    snapshot.browser_automation_status = live.browser_automation_status
+    snapshot.browser_automation_error = live.browser_automation_error
     if history is not None:
         snapshot.browser_history_status = history.browser_history_status
         snapshot.browser_history_reason = history.browser_history_reason

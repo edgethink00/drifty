@@ -399,7 +399,7 @@ class BrowserEnrichmentTests(unittest.TestCase):
         )
         self.assertEqual(enriched.browser_name, "Arc")
 
-    def test_exact_firefox_bridge_skips_uia_and_history(self) -> None:
+    def test_exact_firefox_bridge_needs_a_matching_foreground_document(self) -> None:
         snapshot = self._snapshot("Firefox")
         snapshot.app_name = "Firefox"
         bridge = BrowserMetadata(
@@ -413,13 +413,101 @@ class BrowserEnrichmentTests(unittest.TestCase):
         enriched = enrich_browser_snapshot(
             snapshot,
             44,
-            live_reader=lambda *_: self.fail("UIA must not run after an exact bridge match"),
+            live_reader=lambda *_: WindowsBrowserUiaResult("https://example.com/firefox", None),
             history_reader=lambda *_: self.fail("history must not run after an exact bridge match"),
-            bridge_reader=lambda *_: bridge,
+            bridge_reader=lambda app, url: bridge if (app, url) == ("Firefox", bridge.site_url) else None,
         )
         self.assertEqual(enriched.site_url, "https://example.com/firefox")
-        self.assertEqual(enriched.site_source, "browser-extension")
-        self.assertEqual(enriched.capture_confidence, 1.0)
+        self.assertEqual(enriched.site_source, "windows-uia-document")
+        self.assertEqual(enriched.capture_confidence, 0.8)
+
+    def test_cross_browser_bridge_cannot_replace_the_foreground_document_url(self) -> None:
+        snapshot = self._snapshot("Microsoft Edge")
+        snapshot.app_name = "Microsoft Edge"
+        bridge = BrowserMetadata(
+            browser_name="Microsoft Edge",
+            site_domain="chrome.example",
+            site_url="https://chrome.example/private",
+            site_title="Chrome tab",
+            browser_automation_status="granted",
+        )
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult("https://edge.example/current", None),
+            history_reader=lambda *_: self.fail("history must not replace a live URL"),
+            bridge_reader=lambda *_: bridge,
+        )
+        self.assertEqual(enriched.site_url, "https://edge.example/current")
+        self.assertEqual(enriched.site_domain, "edge.example")
+        self.assertEqual(enriched.site_source, "windows-uia-document")
+        self.assertIsNone(enriched.site_title)
+        self.assertEqual(enriched.capture_confidence, 0.8)
+
+    def test_same_url_bridge_cannot_supply_another_windows_title_or_page_fields(self) -> None:
+        snapshot = self._snapshot("Microsoft Edge")
+        snapshot.app_name = "Microsoft Edge"
+        bridge = BrowserMetadata(
+            browser_name="Microsoft Edge",
+            site_domain="other.example",
+            site_title="Other window's private title",
+            site_url="https://example.com/shared",
+            youtube_video_id="other-video",
+            browser_automation_status="denied",
+            browser_automation_error="other window's bridge failure",
+        )
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult("https://example.com/shared", None),
+            history_reader=lambda *_: self.fail("history must not replace a live URL"),
+            bridge_reader=lambda *_: bridge,
+        )
+        self.assertEqual(enriched.site_url, "https://example.com/shared")
+        self.assertEqual(enriched.site_domain, "example.com")
+        self.assertIsNone(enriched.site_title)
+        self.assertIsNone(enriched.youtube_video_id)
+        self.assertEqual(enriched.site_source, "windows-uia-document")
+        self.assertEqual(enriched.capture_confidence, 0.8)
+        self.assertEqual(enriched.browser_automation_status, "granted")
+        self.assertIsNone(enriched.browser_automation_error)
+
+    def test_bridge_without_a_foreground_document_uses_verified_history(self) -> None:
+        history = BrowserMetadata(
+            browser_name="Google Chrome",
+            site_domain="history.example",
+            site_url="https://history.example/visited",
+            browser_history_status="matched",
+        )
+        enriched = enrich_browser_snapshot(
+            self._snapshot(),
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult(None, "document URL unavailable"),
+            history_reader=lambda *_: history,
+            history_identity_checker=lambda *_: True,
+            bridge_reader=lambda *_: BrowserMetadata(
+                browser_name="Google Chrome", site_url="https://other.example/stale"
+            ),
+        )
+        self.assertEqual(enriched.site_url, "https://history.example/visited")
+        self.assertEqual(enriched.site_source, "browser-history-title")
+        self.assertEqual(enriched.capture_confidence, 0.45)
+
+    def test_private_window_rejects_a_recent_bridge_and_history(self) -> None:
+        snapshot = self._snapshot("Firefox")
+        snapshot.app_name = "Firefox"
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult(None, "private browsing window", private_window=True),
+            history_reader=lambda *_: self.fail("private window must not read history"),
+            history_identity_checker=lambda *_: True,
+            bridge_reader=lambda *_: BrowserMetadata(
+                browser_name="Firefox", site_url="https://example.com/normal"
+            ),
+        )
+        self.assertIsNone(enriched.site_url)
+        self.assertIsNone(enriched.site_source)
 
     def test_firefox_private_window_records_no_page_and_skips_history(self) -> None:
         snapshot = self._snapshot("Firefox")
