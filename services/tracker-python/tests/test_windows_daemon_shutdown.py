@@ -1,4 +1,5 @@
 import ctypes
+from contextlib import contextmanager
 import io
 import json
 import os
@@ -14,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 from app import main as tracker_main
 from app import windows_daemon_shutdown as shutdown
+from app import windows_process_liveness as liveness
 
 
 class _FakeNative:
@@ -382,27 +384,43 @@ class WindowsDaemonShutdownTests(unittest.TestCase):
 
 
 class DaemonCooperativeLifecycleTests(unittest.TestCase):
-    def run_daemon(self, event, *, db_error=None, capture_error=None):
+    def run_daemon(self, event, *, owner=None, db_error=None, capture_error=None,
+                   during_init=None, during_event_create=None, tick_side_effect=None):
         order = []
         db = MagicMock()
+        self.last_db = db
         if db_error:
             db.set_meta.side_effect = db_error
+        elif during_init:
+            db.set_meta.side_effect = during_init
+        @contextmanager
+        def app_owner():
+            try:
+                yield owner
+            finally:
+                if owner is not None:
+                    owner.close()
+                    order.append("owner-close")
         event.close.side_effect = lambda: order.append("event-close")
         def create(db_path):
             order.append("event-create")
+            if during_event_create:
+                during_event_create()
             return event
         def close_capture():
             order.append("capture-close")
             if capture_error:
                 raise capture_error
-        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+        with patch.object(liveness, "tracker_app_owner", app_owner), patch.object(
+            tracker_main.sys, "platform", "win32"
+        ), patch.object(
             tracker_main, "_acquire_tracker_daemon_lock", return_value="owned-lock"
         ), patch.object(shutdown, "WindowsDaemonStopEvent", side_effect=create), patch.object(
             tracker_main, "_write_tracker_pid", side_effect=lambda pid: order.append("pid-publish")
-        ), patch.object(tracker_main, "database", return_value=db), patch.object(
+        ), patch.object(tracker_main, "database", return_value=db) as open_db, patch.object(
             tracker_main, "_tracker_runtime_fingerprint", return_value="fixture"
         ), patch.object(tracker_main, "reset_foreground_audio_diagnostics"), patch.object(
-            tracker_main, "_daemon_tick", return_value=1.0
+            tracker_main, "_daemon_tick", return_value=1.0, side_effect=tick_side_effect
         ) as tick, patch.object(tracker_main, "_close_loaded_windows_capture", side_effect=close_capture), patch.object(
             tracker_main, "_remove_pid_record_if_owned", side_effect=lambda pid: order.append("pid-remove")
         ), patch.object(tracker_main, "_release_tracker_daemon_lock", side_effect=lambda lock: order.append("lock-release")), patch.object(
@@ -413,6 +431,7 @@ class DaemonCooperativeLifecycleTests(unittest.TestCase):
                     tracker_main.daemon()
             else:
                 tracker_main.daemon()
+        self.last_database = open_db
         return order, tick, sleep
 
     def test_stop_during_initialization_exits_without_new_tick_and_closes_before_pid(self):
@@ -453,6 +472,116 @@ class DaemonCooperativeLifecycleTests(unittest.TestCase):
         order, tick, sleep = self.run_daemon(event, capture_error=OSError("cleanup failed"))
         self.assertEqual(order, ["event-create", "pid-publish", "capture-close", "pid-remove", "event-close", "lock-release"])
         tick.assert_not_called(); sleep.assert_not_called()
+
+    def test_owned_daemon_waits_on_stop_and_owner_without_delaying_ordinary_stop(self):
+        for cancellation in ("stop", "owner"):
+            with self.subTest(cancellation=cancellation):
+                owner = MagicMock()
+                owner.is_alive.return_value = True
+                event = MagicMock()
+                event.requested.return_value = False
+                def wait(seconds, *, owner):
+                    if cancellation == "stop":
+                        event.requested.return_value = True
+                    else:
+                        owner.is_alive.return_value = False
+                    return True
+                event.wait.side_effect = wait
+                order, tick, sleep = self.run_daemon(event, owner=owner)
+                tick.assert_called_once()
+                self.assertFalse(tick.call_args.kwargs["capture_allowed"]())
+                event.wait.assert_called_once_with(tracker_main.SAMPLE_SECONDS, owner=owner)
+                owner.wait_until_exit.assert_not_called()
+                sleep.assert_not_called()
+                self.assertEqual(owner.is_alive(), cancellation == "stop")
+                owner.close.assert_called_once_with()
+                self.assertEqual(order, ["event-create", "pid-publish", "capture-close", "pid-remove",
+                                         "event-close", "lock-release", "owner-close"])
+
+    def test_owner_exit_during_initialization_stops_before_capture_and_closes_every_owner(self):
+        owner = MagicMock()
+        owner.is_alive.return_value = True
+        event = MagicMock()
+        event.requested.return_value = False
+        def exit_owner(*args):
+            owner.is_alive.return_value = False
+        order, tick, sleep = self.run_daemon(event, owner=owner, during_init=exit_owner)
+        tick.assert_not_called(); sleep.assert_not_called(); event.wait.assert_not_called()
+        owner.close.assert_called_once_with()
+        self.assertEqual(order, ["event-create", "pid-publish", "capture-close", "pid-remove",
+                                 "event-close", "lock-release", "owner-close"])
+
+    def test_owner_exit_during_event_creation_never_publishes_pid_or_opens_database(self):
+        owner = MagicMock()
+        owner.is_alive.return_value = True
+        event = MagicMock()
+        def exit_owner():
+            owner.is_alive.return_value = False
+        order, tick, sleep = self.run_daemon(event, owner=owner, during_event_create=exit_owner)
+        self.last_database.assert_not_called()
+        tick.assert_not_called(); sleep.assert_not_called(); event.wait.assert_not_called()
+        self.assertNotIn("pid-publish", order)
+        self.assertEqual(order, ["event-create", "capture-close", "pid-remove", "event-close",
+                                 "lock-release", "owner-close"])
+        owner.close.assert_called_once_with()
+
+    def test_owner_exit_during_maintenance_does_not_start_foreground_capture(self):
+        for phase in ("_maybe_create_periodic_backup", "_maybe_ingest_dev_signals"):
+            with self.subTest(phase=phase):
+                owner = MagicMock()
+                owner.is_alive.return_value = True
+                event = MagicMock()
+                event.requested.return_value = False
+                def exit_owner(*args, **kwargs):
+                    owner.is_alive.return_value = False
+                    return 0.0
+                with patch.object(tracker_main, phase, side_effect=exit_owner):
+                    order, tick, sleep = self.run_daemon(event, owner=owner)
+                tick.assert_not_called(); sleep.assert_not_called(); event.wait.assert_not_called()
+                self.assertLess(order.index("capture-close"), order.index("owner-close"))
+                owner.close.assert_called_once_with()
+
+    def test_stop_or_owner_exit_during_foreground_read_discards_snapshot_and_cleans_up(self):
+        real_tick = tracker_main._daemon_tick
+        for cancellation in ("stop", "owner"):
+            with self.subTest(cancellation=cancellation):
+                owner = MagicMock()
+                owner.is_alive.return_value = True
+                event = MagicMock()
+                event.requested.return_value = False
+                event.wait.return_value = True
+                def read_snapshot(**kwargs):
+                    if cancellation == "stop":
+                        event.requested.return_value = True
+                    else:
+                        owner.is_alive.return_value = False
+                    return MagicMock()
+                with patch.object(tracker_main, "handle_power_state_sample", return_value=False), patch.object(
+                    tracker_main, "current_power_state"
+                ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+                    tracker_main, "engagement_decision_for_tick", return_value=SimpleNamespace(should_capture=True)
+                ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+                    tracker_main, "current_snapshot", side_effect=read_snapshot
+                ) as snapshot, patch.object(tracker_main, "backfill_browser_history_context") as backfill, patch.object(
+                    tracker_main, "enqueue_youtube_metadata_fetch"
+                ) as youtube:
+                    order, tick, sleep = self.run_daemon(event, owner=owner, tick_side_effect=real_tick)
+                snapshot.assert_called_once_with(include_system_transient=False)
+                self.last_db.record_snapshot.assert_not_called()
+                backfill.assert_not_called(); youtube.assert_not_called(); sleep.assert_not_called()
+                self.assertNotIn("last_event_at", [call.args[0] for call in self.last_db.set_meta.call_args_list])
+                self.assertEqual(order[-5:], ["capture-close", "pid-remove", "event-close", "lock-release", "owner-close"])
+                owner.close.assert_called_once_with()
+
+    def test_owner_handle_is_closed_even_when_provider_cleanup_fails(self):
+        owner = MagicMock()
+        owner.is_alive.return_value = True
+        event = MagicMock()
+        event.requested.return_value = True
+        order, tick, sleep = self.run_daemon(event, owner=owner, capture_error=OSError("cleanup failed"))
+        tick.assert_not_called(); sleep.assert_not_called()
+        self.assertEqual(order[-5:], ["capture-close", "pid-remove", "event-close", "lock-release", "owner-close"])
+        owner.close.assert_called_once_with()
 
     def test_event_creation_failure_never_publishes_pid_and_releases_daemon_lock(self):
         with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
@@ -524,7 +653,8 @@ class DaemonCooperativeLifecycleTests(unittest.TestCase):
             main.SAMPLE_SECONDS = 60
             main.database = MagicMock(return_value=MagicMock())
             main._tracker_runtime_fingerprint = lambda: "unit-fixture"
-            def tick(db, previous):
+            def tick(db, previous, *, capture_allowed):
+                assert capture_allowed(), "cooperative capture predicate must be active before the fixture"
                 result = capture.read_browser_url_with_budget(101, "Microsoft Edge")
                 (root / "ready").write_text(json.dumps({
                     "tempScripts": len(list(root.glob("drifty-uia-*.ps1"))),

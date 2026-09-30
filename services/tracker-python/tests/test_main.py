@@ -19,6 +19,7 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app import main as tracker_main
+from app import windows_process_liveness
 from app.storage import db as tracker_storage
 from app.storage.db import TrackerDatabase
 from app.storage.live_tail import fetch_live_tail
@@ -2452,6 +2453,98 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
         mock_db.set_meta.assert_any_call("tracker_mode", "tracking")
 
+    def test_daemon_stops_sampling_when_owning_app_exits(self) -> None:
+        for platform in ("darwin", "win32"):
+            with self.subTest(platform=platform):
+                owner = MagicMock()
+                owner.is_alive.return_value = True
+                owner.wait_until_exit.return_value = True
+                owner_context = MagicMock()
+                owner_context.__enter__.return_value = owner
+                stop_event = MagicMock()
+                stop_event.requested.return_value = False
+                stop_event.wait.return_value = True
+                create_stop_event = MagicMock(return_value=stop_event)
+                lock_file = MagicMock()
+                with patch.object(tracker_main.sys, "platform", platform), patch.dict(sys.modules, {
+                    "app.windows_daemon_shutdown": SimpleNamespace(WindowsDaemonStopEvent=create_stop_event)
+                }), patch.object(
+                    windows_process_liveness, "tracker_app_owner", return_value=owner_context, create=True
+                ), patch.object(tracker_main, "_acquire_tracker_daemon_lock", return_value=lock_file), patch.object(
+                    tracker_main, "_release_tracker_daemon_lock"
+                ) as release_lock, patch.object(tracker_main, "_write_tracker_pid"), patch.object(
+                    tracker_main, "_remove_pid_record_if_owned"
+                ) as remove_pid, patch.object(tracker_main, "database", return_value=MagicMock()), patch.object(
+                    tracker_main, "_maybe_create_periodic_backup", return_value=0.0
+                ), patch.object(tracker_main, "_maybe_ingest_dev_signals", return_value=0.0), patch.object(
+                    tracker_main, "_daemon_tick", return_value=1.0
+                ) as tick, patch.object(tracker_main, "_close_loaded_windows_capture") as close_capture, patch.object(
+                    tracker_main.time, "sleep", side_effect=[None, KeyboardInterrupt]
+                ):
+                    try:
+                        tracker_main.daemon()
+                    except KeyboardInterrupt:
+                        # Bound the old unowned loop so the regression fails by count,
+                        # rather than leaving a real sampling process behind.
+                        pass
+
+                tick.assert_called_once()
+                if platform == "win32":
+                    create_stop_event.assert_called_once_with(tracker_main.DB_PATH)
+                    stop_event.wait.assert_called_once_with(tracker_main.SAMPLE_SECONDS, owner=owner)
+                    stop_event.close.assert_called_once()
+                    owner.wait_until_exit.assert_not_called()
+                else:
+                    create_stop_event.assert_not_called()
+                    owner.wait_until_exit.assert_called_once_with(tracker_main.SAMPLE_SECONDS)
+                close_capture.assert_called_once()
+                remove_pid.assert_called_once_with(os.getpid())
+                release_lock.assert_called_once_with(lock_file)
+                owner_context.__exit__.assert_called_once()
+
+    def test_daemon_does_not_start_after_owning_app_has_already_exited(self) -> None:
+        owner = MagicMock()
+        owner.is_alive.return_value = False
+        owner_context = MagicMock()
+        owner_context.__enter__.return_value = owner
+        with patch.object(
+            windows_process_liveness, "tracker_app_owner", return_value=owner_context, create=True
+        ), patch.object(tracker_main, "_acquire_tracker_daemon_lock") as acquire_lock, patch.object(
+            tracker_main, "_release_tracker_daemon_lock"
+        ), patch.object(tracker_main, "_remove_pid_record_if_owned"), patch.object(
+            tracker_main, "_write_tracker_pid"
+        ) as write_pid, patch.object(tracker_main, "database", return_value=MagicMock()) as open_db, patch.object(
+            tracker_main, "_maybe_create_periodic_backup", return_value=0.0
+        ), patch.object(tracker_main, "_maybe_ingest_dev_signals", return_value=0.0), patch.object(
+            tracker_main, "_daemon_tick"
+        ) as tick, patch.object(tracker_main.time, "sleep", side_effect=KeyboardInterrupt):
+            try:
+                tracker_main.daemon()
+            except KeyboardInterrupt:
+                pass
+
+        acquire_lock.assert_not_called()
+        write_pid.assert_not_called()
+        open_db.assert_not_called()
+        tick.assert_not_called()
+        owner_context.__exit__.assert_called_once()
+
+    def test_daemon_releases_lock_if_owner_exits_during_lock_acquisition(self) -> None:
+        owner = MagicMock()
+        owner.is_alive.side_effect = [True, False]
+        owner_context = MagicMock()
+        owner_context.__enter__.return_value = owner
+        lock_file = MagicMock()
+        with patch.object(
+            windows_process_liveness, "tracker_app_owner", return_value=owner_context
+        ), patch.object(tracker_main, "_acquire_tracker_daemon_lock", return_value=lock_file), patch.object(
+            tracker_main, "_release_tracker_daemon_lock"
+        ) as release_lock, patch.object(tracker_main, "database") as open_db:
+            tracker_main.daemon()
+
+        release_lock.assert_called_once_with(lock_file)
+        open_db.assert_not_called()
+
     @patch("app.main.sys.platform", "darwin")
     def test_daemon_records_runtime_fingerprint_on_start(self) -> None:
         with temp_dir_closing_databases() as tmp:
@@ -2862,6 +2955,33 @@ class TrackerMainTests(unittest.TestCase):
             mock_db.record_snapshot.call_args_list[1].args[1],
             tracker_main.SAMPLE_SECONDS,
         )
+
+    def test_daemon_tick_skips_capture_after_owner_exit(self) -> None:
+        mock_db = MagicMock()
+        with patch.object(tracker_main, "current_power_state") as power, patch.object(
+            tracker_main, "current_snapshot"
+        ) as snapshot:
+            self.assertIsNone(tracker_main._daemon_tick(mock_db, 42.0, capture_allowed=lambda: False))
+        power.assert_not_called()
+        snapshot.assert_not_called()
+        mock_db.record_snapshot.assert_not_called()
+        mock_db.set_meta.assert_not_called()
+
+    def test_daemon_tick_discards_snapshot_if_owner_exits_during_foreground_read(self) -> None:
+        mock_db = MagicMock()
+        capture_allowed = MagicMock(side_effect=[True, True, False])
+        with patch.object(tracker_main, "handle_power_state_sample", return_value=False), patch.object(
+            tracker_main, "current_power_state"
+        ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+            tracker_main, "engagement_decision_for_tick", return_value=MagicMock(should_capture=True)
+        ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+            tracker_main, "current_snapshot"
+        ) as snapshot, patch.object(tracker_main, "backfill_browser_history_context") as backfill:
+            self.assertIsNone(tracker_main._daemon_tick(mock_db, 42.0, capture_allowed=capture_allowed))
+        snapshot.assert_called_once_with(include_system_transient=False)
+        mock_db.record_snapshot.assert_not_called()
+        mock_db.set_meta.assert_not_called()
+        backfill.assert_not_called()
 
     def test_daemon_tick_records_snapshot_and_returns_capture_tick(self) -> None:
         mock_db = MagicMock()

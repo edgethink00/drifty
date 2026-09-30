@@ -17,7 +17,7 @@ import traceback
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Callable, Literal
 
 APP_DIR = Path(__file__).resolve().parent
 PACKAGE_ROOT = APP_DIR.parent
@@ -71,6 +71,7 @@ from app.tracker.dev_signals.ssh_sources import (
 )
 
 if TYPE_CHECKING:
+    from app.windows_process_liveness import WindowsProcessOwner
     from app.tracker.macos_workspace import Snapshot
     from app.tracker.power_state import PowerStateSample
     from app.tracker.youtube_metadata import YouTubeVideoMetadata
@@ -2189,12 +2190,19 @@ COMMANDS = {
 }
 
 
-def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float | None:
+def _daemon_tick(
+    db: TrackerDatabase,
+    last_capture_tick: float | None,
+    *,
+    capture_allowed: Callable[[], bool] | None = None,
+) -> float | None:
     """Run one sampling tick and return the next ``last_capture_tick`` value.
 
     Returns ``None`` when no snapshot was captured (power-suppressed or idle),
     mirroring a capture gap so the next capture uses the default sample length.
     """
+    if capture_allowed is not None and not capture_allowed():
+        return None
     if handle_power_state_sample(db, current_power_state()):
         return None
 
@@ -2206,7 +2214,13 @@ def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float 
         return None
 
     _apply_developer_diagnostics_env(db)
+    if capture_allowed is not None and not capture_allowed():
+        return None
     snapshot = current_snapshot(include_system_transient=False)
+    # Foreground inspection can block. Discard its result if the owning app
+    # exited or cooperative Stop arrived while the OS resolved the snapshot.
+    if capture_allowed is not None and not capture_allowed():
+        return None
     if _failed_foreground_capture(snapshot):
         # A failed foreground read is a gap, not an app the user opened.
         return None
@@ -2282,6 +2296,15 @@ def _close_loaded_windows_capture() -> None:
 
 
 def daemon():
+    from app.windows_process_liveness import tracker_app_owner
+
+    with tracker_app_owner() as owner:
+        if owner is not None and not owner.is_alive():
+            return
+        _daemon_with_owner(owner)
+
+
+def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
     daemon_pid = os.getpid()
     lock_file = _acquire_tracker_daemon_lock()
     if lock_file is None:
@@ -2289,12 +2312,16 @@ def daemon():
 
     stop_event = None
     try:
+        if owner is not None and not owner.is_alive():
+            return
         if sys.platform == "win32":
             from app.windows_daemon_shutdown import WindowsDaemonStopEvent
 
             # Publish the process-generation event under the daemon lock and
             # before the PID record, including during database initialization.
             stop_event = WindowsDaemonStopEvent(DB_PATH)
+        if owner is not None and not owner.is_alive():
+            return
         _write_tracker_pid(daemon_pid)
         db = database()
         db.set_meta("tracker_script_path", _current_script_path())
@@ -2308,7 +2335,12 @@ def daemon():
         # One wall-clock read per loop feeds both maintenance windows.
         last_dev_signals_ingest = last_backup_check
 
-        while stop_event is None or not stop_event.requested():
+        def capture_allowed() -> bool:
+            return (owner is None or owner.is_alive()) and (
+                stop_event is None or not stop_event.requested()
+            )
+
+        while capture_allowed():
             backup_check_started_at = time.time()
             try:
                 last_backup_check = _maybe_create_periodic_backup(
@@ -2323,7 +2355,7 @@ def daemon():
                 capture_tracker_exception(exc, {"phase": "database_periodic_backup"})
                 print("tracker database periodic backup failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
-            if stop_event is not None and stop_event.requested():
+            if not capture_allowed():
                 break
             try:
                 last_dev_signals_ingest = _maybe_ingest_dev_signals(
@@ -2338,10 +2370,13 @@ def daemon():
                 capture_tracker_exception(exc, {"phase": "dev_signals_periodic_ingest"})
                 print("tracker dev signals periodic ingest failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
-            if stop_event is not None and stop_event.requested():
+            if not capture_allowed():
                 break
             try:
-                last_capture_tick = _daemon_tick(db, last_capture_tick)
+                if owner is None and stop_event is None:
+                    last_capture_tick = _daemon_tick(db, last_capture_tick)
+                else:
+                    last_capture_tick = _daemon_tick(db, last_capture_tick, capture_allowed=capture_allowed)
             except Exception as exc:
                 # One failed tick (Apple Event failure, a locked database,
                 # an unexpected snapshot shape, ...) must not kill tracking
@@ -2353,9 +2388,19 @@ def daemon():
                 # A failed tick means a capture gap, so the next successful
                 # capture starts from the default sample length again.
                 last_capture_tick = None
-            if stop_event is None:
+            if stop_event is not None:
+                # One native wait wakes for either cancellation source. Waiting
+                # only on the app handle would delay an ordinary Stop by a tick.
+                stopped = (
+                    stop_event.wait(SAMPLE_SECONDS)
+                    if owner is None
+                    else stop_event.wait(SAMPLE_SECONDS, owner=owner)
+                )
+                if stopped:
+                    break
+            elif owner is None:
                 time.sleep(SAMPLE_SECONDS)
-            elif stop_event.wait(SAMPLE_SECONDS):
+            elif owner.wait_until_exit(SAMPLE_SECONDS):
                 break
     finally:
         try:

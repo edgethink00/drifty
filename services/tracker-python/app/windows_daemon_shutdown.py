@@ -15,7 +15,10 @@ from pathlib import Path
 import signal
 import sys
 import time
-from typing import Callable, Literal
+from typing import TYPE_CHECKING, Callable, Literal
+
+if TYPE_CHECKING:
+    from app.windows_process_liveness import WindowsProcessOwner
 
 
 StopResult = Literal["exited", "cooperative", "forced"]
@@ -195,7 +198,9 @@ class WindowsDaemonStopEvent:
     def requested(self) -> bool:
         return self._api.wait(self._handle, 0)
 
-    def wait(self, seconds: float) -> bool:
+    def wait(self, seconds: float, *, owner: WindowsProcessOwner | None = None) -> bool:
+        if owner is not None:
+            return owner.wait_until_exit_or_stop(max(0.0, seconds), self._handle)
         return self._api.wait(self._handle, max(0.0, seconds))
 
     def close(self) -> None:

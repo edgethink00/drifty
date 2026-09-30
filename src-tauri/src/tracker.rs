@@ -1602,11 +1602,55 @@ fn command_from_argv(argv: Vec<OsString>) -> Result<Command, TrackerError> {
         // request protocol uses stdin/stdout. CREATE_NO_WINDOW preserves those
         // redirected pipes without flashing a console over the desktop app.
         command.creation_flags(WINDOWS_CREATE_NO_WINDOW);
+        // Detached sampling daemons inherit this identity through both serve
+        // and one-shot launches. Their retained process handle ends capture
+        // even when the best-effort stop RPC outlives the app's exit budget.
+        let creation_time = windows_app_process_creation_time()?;
+        command.env("DRIFTY_TRACKER_APP_PID", std::process::id().to_string());
+        command.env("DRIFTY_TRACKER_APP_CREATION_TIME", creation_time.to_string());
     }
     for (key, value) in crate::observability::tracker_sentry_env_vars() {
         command.env(key, value);
     }
     Ok(command)
+}
+
+#[cfg(any(windows, test))]
+fn windows_filetime_value(low: u32, high: u32) -> u64 {
+    (u64::from(high) << 32) | u64::from(low)
+}
+
+#[cfg(windows)]
+fn windows_app_process_creation_time() -> Result<u64, TrackerError> {
+    use windows_sys::Win32::{
+        Foundation::FILETIME,
+        System::Threading::{GetCurrentProcess, GetProcessTimes},
+    };
+    let mut created = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut exited = created;
+    let mut kernel = created;
+    let mut user = created;
+    let read = unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        )
+    };
+    if read == 0 {
+        return Err(TrackerError::CommandFailed(
+            "tracker owning app process identity is unavailable".into(),
+        ));
+    }
+    Ok(windows_filetime_value(
+        created.dwLowDateTime,
+        created.dwHighDateTime,
+    ))
 }
 
 fn resolve_tracker_runtime(app: &AppHandle) -> Result<TrackerRuntime, TrackerError> {
@@ -2070,6 +2114,39 @@ mod tests {
     #[test]
     fn stop_daemon_for_app_exit_reports_completed_fast_stop() {
         assert!(stop_tracking_daemon_for_app_exit_with(|| {}));
+    }
+
+    #[test]
+    fn windows_owner_creation_time_preserves_all_filetime_bits() {
+        assert_eq!(
+            windows_filetime_value(0x9abc_def0, 0x1234_5678),
+            0x1234_5678_9abc_def0
+        );
+        assert_eq!(windows_filetime_value(u32::MAX, u32::MAX), u64::MAX);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn all_windows_tracker_launch_modes_carry_the_current_app_identity() {
+        for mode in ["serve", "--request-json", "daemon"] {
+            let command = command_from_argv(vec!["drifty-tracker".into(), mode.into()])
+                .expect("owned tracker command");
+            let env: std::collections::HashMap<_, _> = command.get_envs().collect();
+            assert_eq!(
+                env.get(std::ffi::OsStr::new("DRIFTY_TRACKER_APP_PID"))
+                    .copied()
+                    .flatten(),
+                Some(std::ffi::OsStr::new(&std::process::id().to_string()))
+            );
+            assert_eq!(
+                env.get(std::ffi::OsStr::new("DRIFTY_TRACKER_APP_CREATION_TIME"))
+                    .copied()
+                    .flatten(),
+                Some(std::ffi::OsStr::new(
+                    &windows_app_process_creation_time().unwrap().to_string()
+                ))
+            );
+        }
     }
 
     #[test]
