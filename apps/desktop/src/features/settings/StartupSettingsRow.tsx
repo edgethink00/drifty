@@ -54,7 +54,7 @@ export function StartupSettingsRow() {
         outcome: result,
       });
       setStatus(result.success ? "ready" : "unavailable");
-      if (!result.success) setEnabled(false);
+      setEnabled(result.success && result.enabled);
     } catch (nextError) {
       reportStartupRegistration({
         phase: "settings",
