@@ -48,6 +48,11 @@ describe("managedModelRuntimeMemoryLabel", () => {
     expect(managedModelRuntimeMemoryLabel(model, status)).toBe("8.7 GB");
   });
 
+  it("formats a sub-gigabyte measurement in megabytes", () => {
+    const status = statusWith({ memoryUsageBytes: 172_115_624 });
+    expect(managedModelRuntimeMemoryLabel(model, status)).toBe("164 MB");
+  });
+
   it("keeps the estimate when a different model is running", () => {
     const status = statusWith({ selectedModelId: "drifty-qwen3-5-2b-economy", memoryUsageBytes: 2_000_000_000 });
     expect(managedModelRuntimeMemoryLabel(model, status)).toBe("~3.5 GB");

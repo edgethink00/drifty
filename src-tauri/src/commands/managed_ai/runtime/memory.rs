@@ -1,9 +1,58 @@
 use std::process::Command;
 
 pub(super) fn process_memory_usage_bytes(pid: u32) -> Option<u64> {
-    process_resident_memory_bytes(pid).or_else(|| process_footprint_bytes(pid))
+    // Activity Monitor's Memory column is the physical-footprint ledger, not
+    // resident size. Resident size counts reclaimable model-file cache and
+    // drops compressed pages. macOS therefore never substitutes it when the
+    // ledger cannot be read. Other platforms keep their working-set reading.
+    #[cfg(target_os = "macos")]
+    {
+        return macos_physical_footprint_bytes(pid).or_else(|| process_footprint_bytes(pid));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        process_resident_memory_bytes(pid)
+    }
 }
 
+#[cfg(target_os = "macos")]
+fn macos_physical_footprint_bytes(pid: u32) -> Option<u64> {
+    // RUSAGE_INFO_V0 already carries ri_phys_footprint. libSystem resolves
+    // proc_pid_rusage, so a status poll does not spawn the footprint tool.
+    #[repr(C)]
+    struct RusageInfoV0 {
+        _uuid: [u8; 16],
+        _user_time: u64,
+        _system_time: u64,
+        _pkg_idle_wkups: u64,
+        _interrupt_wkups: u64,
+        _pageins: u64,
+        _wired_size: u64,
+        _resident_size: u64,
+        phys_footprint: u64,
+        _proc_start_abstime: u64,
+        _proc_exit_abstime: u64,
+    }
+
+    const _: () = assert!(std::mem::size_of::<RusageInfoV0>() == 96);
+    const _: () = assert!(std::mem::align_of::<RusageInfoV0>() == 8);
+
+    extern "C" {
+        fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut RusageInfoV0) -> i32;
+    }
+
+    let pid = i32::try_from(pid).ok()?;
+    let mut info = std::mem::MaybeUninit::<RusageInfoV0>::zeroed();
+    // proc_pid_rusage writes a fully initialized rusage_info_v0 into info.
+    let status = unsafe { proc_pid_rusage(pid, 0, info.as_mut_ptr()) };
+    if status != 0 {
+        return None;
+    }
+    let footprint = unsafe { info.assume_init() }.phys_footprint;
+    (footprint > 0).then_some(footprint)
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn process_footprint_bytes(pid: u32) -> Option<u64> {
     let output = Command::new("footprint")
         .arg("-p")
@@ -157,5 +206,53 @@ Auxiliary data:
     #[test]
     fn parse_resident_kib_reads_ps_rss_output() {
         assert_eq!(parse_resident_kib("17792\n"), Some(17_792));
+    }
+
+    #[test]
+    fn missing_process_has_no_memory_reading() {
+        assert_eq!(process_memory_usage_bytes(2_000_000_001), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn process_memory_matches_activity_monitor_ledger() {
+        let pid = std::process::id();
+        let charged = process_memory_usage_bytes(pid).expect("charged memory");
+        let ledger = process_footprint_bytes(pid).expect("footprint ledger");
+        let resident = process_resident_memory_bytes(pid).expect("resident memory");
+        let ledger_delta = charged.abs_diff(ledger);
+        assert!(
+            ledger_delta < 4 * 1024 * 1024,
+            "charged {charged} should track phys_footprint {ledger}, not resident {resident}"
+        );
+        if resident.abs_diff(ledger) > 8 * 1024 * 1024 {
+            assert!(
+                charged.abs_diff(ledger) < charged.abs_diff(resident),
+                "charged {charged} followed resident {resident} instead of ledger {ledger}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn process_memory_tracks_requested_process_ledger() {
+        let Ok(raw_pid) = std::env::var("DRIFTY_MEMORY_QA_PID") else {
+            return;
+        };
+        let pid = raw_pid.parse::<u32>().expect("DRIFTY_MEMORY_QA_PID");
+        let charged = process_memory_usage_bytes(pid).expect("charged memory");
+        let ledger = process_footprint_bytes(pid).expect("footprint ledger");
+        let resident = process_resident_memory_bytes(pid).expect("resident memory");
+        eprintln!("pid {pid} charged {charged} ledger {ledger} resident {resident}");
+        assert!(
+            charged.abs_diff(ledger) < 32 * 1024 * 1024,
+            "charged {charged} ledger {ledger} resident {resident}"
+        );
+        if resident.abs_diff(ledger) > 64 * 1024 * 1024 {
+            assert!(
+                charged.abs_diff(ledger) * 4 < charged.abs_diff(resident),
+                "charged {charged} stayed near resident {resident} instead of ledger {ledger}"
+            );
+        }
     }
 }

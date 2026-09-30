@@ -99,6 +99,16 @@ describe("resolveAiConnectionStatus", () => {
     });
   });
 
+  it("shows a sub-gigabyte local footprint in megabytes", () => {
+    const status = resolveAiConnectionStatus(statusInput({
+      localProviderStatus: { kind: "connected" },
+      localProviderLabel: "Local AI",
+      localMemoryUsageBytes: 170_247_824,
+    }));
+
+    expect(status.memoryLabel).toBe("162 MB RAM");
+  });
+
   it("does not attach memory details to cloud AI status", () => {
     const status = resolveAiConnectionStatus(statusInput({
       canUseCloudAi: true,
