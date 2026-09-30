@@ -985,6 +985,11 @@ type PetModePreviewSegment = Pick<
   "id" | "endedAt" | "appName" | "browserName" | "deviceId" | "source"
 >;
 
+type PetModeLabBrowserSegment = PetModePreviewSegment & Pick<
+  ActivitySegment,
+  "bundleId" | "siteDomain" | "siteUrl"
+>;
+
 export function buildPetModePreviewInterventionTarget(
   segments: readonly PetModePreviewSegment[],
 ): PetModeInterventionTarget | null {
@@ -1013,13 +1018,14 @@ export function buildPetModePreviewInterventionTarget(
 }
 
 /**
- * Dev settings bring Drifty to the foreground, so the Lab deliberately uses
- * the last locally observed browser as the target it can return to and test.
+ * Dev settings bring Drifty to the foreground, so the Lab uses the last locally
+ * observed browser. Windows close needs that segment's executable and page
+ * identity; the native side foregrounds the browser before locating its tab X.
  */
 export function buildPetModeLabBrowserTabTarget(
-  segments: readonly PetModePreviewSegment[],
+  segments: readonly PetModeLabBrowserSegment[],
 ): PetModeInterventionTarget | null {
-  let latestBrowser: PetModePreviewSegment | null = null;
+  let latestBrowser: PetModeLabBrowserSegment | null = null;
   let latestEndedAt = Number.NEGATIVE_INFINITY;
 
   for (const segment of segments) {
@@ -1039,6 +1045,9 @@ export function buildPetModeLabBrowserTabTarget(
     id: `pet-lab-browser-x:${latestBrowser.id}:${Date.now()}`,
     appName: latestBrowser.appName,
     browserName: latestBrowser.browserName,
+    browserIdentity: latestBrowser.bundleId,
+    siteDomain: latestBrowser.siteDomain,
+    siteUrl: latestBrowser.siteUrl,
     labTarget: "browser_tab_x",
   });
 }

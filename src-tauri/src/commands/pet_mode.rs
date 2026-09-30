@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+#[cfg(target_os = "macos")]
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Mutex, MutexGuard};
@@ -522,6 +523,17 @@ pub enum PetModeLabTargetKind {
 pub struct PetModeLabTarget {
     pub browser_name: Option<String>,
     pub lab_target: Option<PetModeLabTargetKind>,
+    /// Captured executable path. Windows Lab close refuses without it.
+    #[serde(default)]
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub browser_identity: Option<String>,
+    /// Captured page identity. Windows Lab close refuses without a URL or domain.
+    #[serde(default)]
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub site_domain: Option<String>,
+    #[serde(default)]
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub site_url: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -1715,14 +1727,7 @@ pub async fn pet_mode_lab_apply_target(
             Ok("drifty_window_close_requested".to_string())
         }
         Some(PetModeLabTargetKind::BrowserTabX) => {
-            let browser_name = target
-                .browser_name
-                .as_deref()
-                .map(str::trim)
-                .filter(|name| !name.is_empty())
-                .ok_or_else(|| "No observed browser is available for the tab-X test".to_string())?
-                .to_string();
-            async_runtime::spawn_blocking(move || close_lab_browser_active_tab(&browser_name))
+            async_runtime::spawn_blocking(move || close_lab_browser_active_tab(&target))
                 .await
                 .map_err(|error| error.to_string())?
         }
@@ -3009,7 +3014,7 @@ fn move_pet_to_target(
         return move_pet_to_preview_target(&window, &home_monitor);
     }
     if target.lab_target == Some(PetModeLabTargetKind::BrowserTabX) {
-        activate_lab_target_app(&target.app_name)?;
+        activate_lab_browser(target)?;
     }
     // Browsers whose close drives the AX tab selection are preflighted through
     // the close adapter itself before any choreography, including the
@@ -5694,6 +5699,61 @@ fn applescript_string_literal(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Z-order candidates that already match the browser executable. Prefer the
+/// topmost visible window. Restore the topmost minimized window only when
+/// every match is minimized.
+#[cfg(any(target_os = "windows", test))]
+fn select_lab_browser_window_index(iconic_in_z_order: &[bool]) -> Option<usize> {
+    iconic_in_z_order
+        .iter()
+        .position(|iconic| !*iconic)
+        .or_else(|| (!iconic_in_z_order.is_empty()).then_some(0))
+}
+
+fn activate_lab_browser(target: &PetModeInterventionTarget) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        return activate_lab_target_app(&target.app_name);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return pet_mode_windows::activate_lab_browser(target);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = target;
+        return Err("Pet Mode Lab browser activation is unavailable on this platform".to_string());
+    }
+}
+
+fn close_lab_browser_active_tab(target: &PetModeLabTarget) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        return crate::commands::extreme_nudge::close_browser_tab_for_lab(
+            target.browser_name.as_deref().unwrap_or(""),
+            target.browser_identity.as_deref(),
+            target.site_url.as_deref(),
+            target.site_domain.as_deref(),
+        );
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let browser_name = target
+            .browser_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| "No observed browser is available for the tab-X test".to_string())?;
+        return close_lab_browser_active_tab_via_script(browser_name);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = target;
+        return Err("Pet Mode Lab browser tab close is unavailable on this platform".to_string());
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn activate_lab_target_app(app_name: &str) -> Result<(), String> {
     let app_name = applescript_string_literal(app_name);
     let script = format!(
@@ -5715,7 +5775,8 @@ return "activated""#
     }
 }
 
-fn close_lab_browser_active_tab(browser_name: &str) -> Result<String, String> {
+#[cfg(target_os = "macos")]
+fn close_lab_browser_active_tab_via_script(browser_name: &str) -> Result<String, String> {
     let script = lab_browser_tab_close_script(browser_name)?;
     let output = Command::new("osascript")
         .args(["-e", &script])
@@ -7119,6 +7180,59 @@ mod tests {
         assert!(windows_source.contains("windows_browser_uia::locate_foreground_tab_close("));
         assert!(!windows_source.contains("process_name == \"firefox\""));
         assert!(!windows_source.to_ascii_lowercase().contains("powershell"));
+    }
+
+    #[test]
+    fn lab_browser_window_prefers_the_topmost_visible_match() {
+        assert_eq!(select_lab_browser_window_index(&[]), None);
+        assert_eq!(select_lab_browser_window_index(&[false, false]), Some(0));
+        assert_eq!(
+            select_lab_browser_window_index(&[true, false, false]),
+            Some(1)
+        );
+        assert_eq!(select_lab_browser_window_index(&[true, true]), Some(0));
+    }
+
+    #[test]
+    fn lab_target_keeps_windows_page_identity_optional() {
+        let legacy: PetModeLabTarget = serde_json::from_value(json!({
+            "browserName": "Google Chrome",
+            "labTarget": "browser_tab_x",
+        }))
+        .expect("older Lab payload");
+        assert!(legacy.browser_identity.is_none());
+        assert!(legacy.site_domain.is_none());
+        assert!(legacy.site_url.is_none());
+
+        let current: PetModeLabTarget = serde_json::from_value(json!({
+            "browserName": "Google Chrome",
+            "browserIdentity": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "siteDomain": "example.com",
+            "siteUrl": "https://example.com/drift",
+            "labTarget": "browser_tab_x",
+        }))
+        .expect("Windows Lab payload");
+        assert_eq!(
+            current.browser_identity.as_deref(),
+            Some(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+        );
+        assert_eq!(current.site_domain.as_deref(), Some("example.com"));
+        assert_eq!(
+            current.site_url.as_deref(),
+            Some("https://example.com/drift")
+        );
+    }
+
+    #[test]
+    fn windows_lab_browser_close_does_not_shell_out_to_applescript() {
+        let windows = include_str!("pet_mode_windows.rs");
+        assert!(windows.contains("fn activate_lab_browser"));
+        assert!(windows.contains("SetForegroundWindow"));
+        assert!(!windows.contains("osascript"));
+        let pet = include_str!("pet_mode.rs");
+        assert!(pet.contains("close_browser_tab_for_lab"));
+        assert!(pet
+            .contains("#[cfg(target_os = \"macos\")]\nfn close_lab_browser_active_tab_via_script"));
     }
 
     #[test]

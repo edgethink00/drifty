@@ -421,6 +421,9 @@ describe("petModeData", () => {
         endedAt: "2026-08-03T10:09:00.000Z",
         appName: "Google Chrome",
         browserName: "Google Chrome",
+        bundleId: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        siteDomain: "example.com",
+        siteUrl: "https://example.com/drift",
         deviceId: null,
         source: "nsworkspace",
       },
@@ -429,6 +432,9 @@ describe("petModeData", () => {
     expect(browser).toMatchObject({
       appName: "Google Chrome",
       browserName: "Google Chrome",
+      browserIdentity: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      siteDomain: "example.com",
+      siteUrl: "https://example.com/drift",
       preview: false,
       labTarget: "browser_tab_x",
     });

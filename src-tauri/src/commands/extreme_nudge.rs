@@ -266,6 +266,40 @@ impl BrowserPage {
     }
 }
 
+/// Dev Lab tab close on Windows. This is the automatic-close adapter, so the
+/// Lab cannot quit the browser or press a different control than the paw.
+#[cfg(target_os = "windows")]
+pub(in crate::commands) fn close_browser_tab_for_lab(
+    browser_name: &str,
+    browser_identity: Option<&str>,
+    site_url: Option<&str>,
+    site_domain: Option<&str>,
+) -> Result<String, String> {
+    let browser_name = browser_name.trim();
+    if !browser_tabs::is_supported_browser_tab_target(browser_name) {
+        return Err("unsupported_browser".to_string());
+    }
+    let page = BrowserPage::normalize(site_url, site_domain).map_err(|error| match error {
+        ExtremeNudgeError::MissingBrowserTarget => "windows_uia_missing_target".to_string(),
+        other => other.to_string(),
+    })?;
+    browser_tabs::close_browser_tab(
+        browser_name,
+        browser_identity,
+        page.site_url.as_deref(),
+        page.site_domain.as_deref(),
+        false,
+    )
+    .map_err(|error| match error {
+        ExtremeNudgeError::BrowserTabNotFound { diagnostic } => diagnostic,
+        ExtremeNudgeError::MissingBrowserIdentity => {
+            "windows_uia_missing_browser_identity".to_string()
+        }
+        ExtremeNudgeError::MissingBrowserTarget => "windows_uia_missing_target".to_string(),
+        other => other.to_string(),
+    })
+}
+
 /// Pet Mode's preflight for browsers whose automatic close drives the AX tab
 /// selection. It runs the close adapter's own resolver without acting, so the
 /// cat only approaches a close the adapter would actually perform, and it

@@ -310,7 +310,10 @@ export async function returnWithNativePetCursor({
 }
 
 export async function applyNativePetModeLabTarget(
-  target: Pick<PetModeInterventionTarget, "browserName" | "labTarget">,
+  target: Pick<
+    PetModeInterventionTarget,
+    "browserName" | "browserIdentity" | "siteDomain" | "siteUrl" | "labTarget"
+  >,
 ): Promise<string> {
   if (!isTauriRuntime()) return "not_tauri_runtime";
   return invoke<string>("pet_mode_lab_apply_target", { target });
