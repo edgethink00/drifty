@@ -88,6 +88,9 @@ function dispatchPointer(
 }
 
 const bridge = vi.hoisted(() => ({
+  contactInvoke: vi.fn().mockResolvedValue(null),
+  contactListen: vi.fn(),
+  isTauri: vi.fn().mockReturnValue(false),
   alignNativePetContact: vi.fn().mockResolvedValue({
     targetX: 640,
     targetY: 48,
@@ -262,6 +265,9 @@ vi.mock("./petModeHitRegions", () => ({
   publishPetModeHitRegion: bridge.publishPetModeHitRegion,
 }));
 
+vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.contactInvoke, isTauri: bridge.isTauri }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: bridge.contactListen, emit: vi.fn().mockResolvedValue(undefined) }));
+
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ onMoved: bridge.onMoved }),
 }));
@@ -290,6 +296,10 @@ describe("PetModeWindowApp", () => {
     vi.useRealTimers();
     if (vi.isMockFunction(Math.random)) vi.mocked(Math.random).mockRestore();
     vi.clearAllMocks();
+    bridge.contactInvoke.mockReset().mockResolvedValue(null);
+    bridge.contactListen.mockReset();
+    bridge.isTauri.mockReset().mockReturnValue(false);
+    bridge.reportNativePetContact.mockReset().mockResolvedValue(undefined);
     bridge.sampleNativePetCursor.mockReset().mockResolvedValue(null);
     bridge.isNativePetCursorInside.mockReset().mockResolvedValue(false);
     bridge.isNativePetQuickControlsCursorInside.mockReset().mockResolvedValue(false);
@@ -4669,6 +4679,191 @@ describe("PetModeWindowApp", () => {
     expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-1");
     expect(bridge.alignNativePetContact.mock.invocationCallOrder[0])
       .toBeLessThan(bridge.reportNativePetContact.mock.invocationCallOrder[0]);
+  });
+
+  it.each(["contact", "stop", "pause"] as const)("redirects a completed automatic return without losing the new approach's ownership (%s)", async (outcome) => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishOldReturn!: () => void;
+    bridge.returnNativePetHome.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishOldReturn = resolve;
+    }));
+    await renderResidentPet();
+    const send = (id: string) => bridge.eventHandler?.({
+      kind: "intervention", target: { id, appName: "Google Chrome", browserName: "Google Chrome", preview: false },
+    });
+    act(() => { send("first-close"); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PAW_SCENE_SETTLE_MS); });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("first-close");
+    expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
+
+    let finishNewApproach!: () => void;
+    if (outcome !== "pause") {
+      bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => {
+        finishNewApproach = () => resolve({
+          facing: "right", targetKind: "browser_tab_close", motionOutcome: "completed",
+          confidence: "high", diagnostic: "ax_selected_tab_close", targetX: 640, targetY: 48,
+        });
+      }));
+    }
+    const cancellationsBefore = bridge.cancelNativePetMotion.mock.calls.length;
+    let finishRedirect!: () => void;
+    if (outcome === "pause") {
+      bridge.cancelNativePetMotion.mockImplementationOnce(() => new Promise<void>((resolve) => {
+        finishRedirect = resolve;
+      }));
+    }
+    await act(async () => { send("reentry-close"); });
+    expect(bridge.cancelNativePetMotion.mock.calls.length).toBe(cancellationsBefore + 1);
+    if (outcome === "pause") {
+      await act(async () => {
+        window.localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(false, "15")));
+        window.dispatchEvent(new StorageEvent("storage", { key: AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY }));
+      });
+      await act(async () => { finishOldReturn(); finishRedirect(); });
+      expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+      expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith("reentry-close");
+      expect(bridge.reportNativePetContact).toHaveBeenCalledWith("reentry-close", false, "renderer_action_cancelled");
+      expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sleep");
+      return;
+    }
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(2);
+
+    // Native cancellation can settle the old walk after the new action owns
+    // the renderer. Its finally blocks must leave the new action in control.
+    await act(async () => { finishOldReturn(); });
+    act(() => { send("duplicate-during-approach"); });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith(
+      "duplicate-during-approach", false, "renderer_busy_intervention",
+    );
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(2);
+    expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith(
+      "reentry-close", false, "renderer_busy_intervention",
+    );
+    if (outcome === "stop") {
+      await act(async () => { bridge.eventHandler?.({ kind: "preview_action", action: "stop" }); });
+    }
+    await act(async () => { finishNewApproach(); await vi.advanceTimersByTimeAsync(PAW_SCENE_SETTLE_MS); });
+    if (outcome === "stop") {
+      expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith("reentry-close");
+      expect(bridge.reportNativePetContact).toHaveBeenCalledWith("reentry-close", false, "renderer_action_cancelled");
+    } else {
+      expect(bridge.reportNativePetContact).toHaveBeenCalledWith("reentry-close");
+      expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it.each([
+    ["catch", false], ["catch", true], ["focus", false], ["focus", true],
+    ["pause", false], ["pause", true], ["stop", false], ["preview", false], ["none", true],
+  ] as const)("reports exactly one result when %s interrupts the return-to-approach handoff (native failure: %s)", async (outcome, nativeFailure) => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishOldReturn!: () => void;
+    bridge.returnNativePetHome.mockImplementationOnce(() => new Promise<void>((resolve) => { finishOldReturn = resolve; }));
+    await renderResidentPet();
+    const send = (id: string) => bridge.eventHandler?.({ kind: "intervention", target: {
+      id, appName: "Google Chrome", browserName: "Google Chrome", preview: false,
+    } });
+    act(() => { send("first-close"); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PAW_SCENE_SETTLE_MS); });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("first-close");
+    expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
+
+    // Run the real main-window contact bridge against the renderer's result;
+    // only the native event transport is replaced. A catch must settle as
+    // user intent, a context change as cancellation, and native errors must
+    // remain technical failures rather than receiving catch grace.
+    const nativeBridge = await vi.importActual<typeof import("./petModeBridge")>("./petModeBridge");
+    bridge.isTauri.mockReturnValue(true);
+    const unlisten = vi.fn();
+    let sendContact!: (payload: { id: string; contacted: boolean; reason: string | null }) => void;
+    bridge.contactListen.mockImplementation(async (event: string, handler: (event: { event: string; id: number; payload: unknown }) => void) => {
+      sendContact = (payload) => handler({ event, id: 0, payload });
+      return unlisten;
+    });
+    bridge.reportNativePetContact.mockImplementationOnce(async (id: string, contacted = true, reason: string | null = null) => {
+      sendContact({ id, contacted, reason });
+    });
+    const target = { id: "reentry-close", appName: "Google Chrome", browserName: "Google Chrome", preview: false };
+    const result = nativeBridge.playNativePetModeIntervention(target);
+    await act(async () => undefined);
+    expect(bridge.contactInvoke).toHaveBeenCalledWith("pet_mode_intervene", { target });
+
+    let settleRedirect!: () => void;
+    bridge.cancelNativePetMotion.mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+      settleRedirect = nativeFailure ? () => reject(new Error("Native cancellation failed")) : resolve;
+    }));
+    await act(async () => { send("reentry-close"); });
+    await act(async () => {
+      if (outcome === "catch") {
+        dispatchPointer(screen.getByRole("button", { name: /Pet Drifty cat/ }), "pointerdown", { pointerId: 42, clientX: 60, clientY: 50 });
+        bridge.dragStartHandler?.();
+      } else if (outcome === "focus") {
+        bridge.eventHandler?.({ kind: "snapshot", snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 120 } });
+      } else if (outcome === "pause") {
+        window.localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(false, "15")));
+        window.dispatchEvent(new StorageEvent("storage", { key: AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY }));
+      } else if (outcome === "stop") {
+        bridge.eventHandler?.({ kind: "preview_action", action: "stop" });
+      } else if (outcome === "preview") {
+        bridge.eventHandler?.({ kind: "preview_action", action: "tail_flick" });
+      }
+    });
+    await act(async () => { settleRedirect(); });
+    const reason = outcome === "catch" ? "user_intercepted"
+      : outcome === "focus" ? "activity_context_changed"
+        : nativeFailure && outcome === "none" ? "renderer_intervention_failed" : "renderer_action_cancelled";
+    const results = () => bridge.reportNativePetContact.mock.calls.filter(([id]) => id === "reentry-close");
+    expect(results()).toEqual([["reentry-close", false, reason]]);
+    await expect(result).resolves.toMatchObject({
+      outcome: outcome === "catch" ? "user_intercepted" : outcome === "focus" ? "cancelled" : "rejected",
+      reason,
+    });
+    expect(unlisten).toHaveBeenCalledTimes(1);
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+    // A late completion belongs to the first target and cannot contact or
+    // send another cancellation for the reentry target.
+    await act(async () => { finishOldReturn(); await vi.advanceTimersByTimeAsync(100); });
+    expect(results()).toEqual([["reentry-close", false, reason]]);
+    expect(bridge.reportNativePetContact.mock.calls.filter(([id]) => id === "first-close")).toEqual([["first-close"]]);
+    if (outcome === "focus" || outcome === "pause") {
+      expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe(outcome === "focus" ? "sit" : "sleep");
+    }
+    if (outcome !== "none") expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps explicit Lab ownership when an automatic return settles after a preview starts", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishReturn!: () => void;
+    bridge.returnNativePetHome.mockImplementationOnce(() => new Promise<void>((resolve) => { finishReturn = resolve; }));
+    await renderResidentPet();
+    act(() => { bridge.eventHandler?.({ kind: "intervention", target: {
+      id: "automatic-before-lab", appName: "Google Chrome", browserName: "Google Chrome", preview: false,
+    } }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PAW_SCENE_SETTLE_MS); });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("automatic-before-lab");
+    expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
+    await act(async () => { bridge.eventHandler?.({ kind: "preview_action", action: "dance" }); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("dance");
+    await act(async () => { finishReturn(); });
+    expect(cat.getAttribute("data-phase")).toBe("dance");
+    await act(async () => { bridge.eventHandler?.({ kind: "snapshot", snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 120 } }); });
+    expect(cat.getAttribute("data-phase")).toBe("dance");
   });
 
   it("celebrates with dance after closing when danceOnCloseBeta is enabled", async () => {

@@ -248,6 +248,7 @@ import {
   driftAlarmSessionSuppressionReason,
   type DriftAlarmSessionProtection,
 } from "./features/companion/driftAlarmSessionProtection";
+import { observeAutomaticCloseReentry, type AutomaticCloseReentry } from "./features/companion/automaticCloseReentry";
 import {
   buildPetInterceptionGrace,
   isPetInterceptionGraceActive,
@@ -973,6 +974,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const handleAutomaticCloseSettingsChange = useCallback((enabled: boolean) => {
     // A direct Settings choice replaces any temporary quick-control override.
     automaticCloseEnabledRef.current = enabled;
+    if (!enabled) pendingExtremeNudgeRef.current = null;
     automaticCloseExpiryHandledRef.current = null;
     setAutomaticCloseOverride(null);
     if (enabled) setDriftAlertsEnabled(true);
@@ -981,6 +983,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const setTemporaryAutomaticClose = useCallback((enabled: boolean, kind: AutomaticCloseOverrideKind) => {
     const next = buildAutomaticCloseOverride(enabled, kind);
     automaticCloseEnabledRef.current = enabled;
+    if (!enabled) pendingExtremeNudgeRef.current = null;
     automaticCloseExpiryHandledRef.current = null;
     setAutomaticCloseOverride(next);
   }, []);
@@ -1067,6 +1070,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // Set the guard synchronously: an already-running approach can settle before
     // React publishes the new override to the next alarm evaluation.
     automaticCloseEnabledRef.current = false;
+    pendingExtremeNudgeRef.current = null;
     automaticCloseExpiryHandledRef.current = null;
     // Native choices can arrive before the preceding state update commits.
     // Preserve the newest queued pause rather than this render's snapshot.
@@ -2566,6 +2570,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
   const pendingExtremeNudgeRef = useRef<{ readonly alertKey: string; readonly candidate: DriftAlarmCandidate } | null>(null);
+  const nativeExtremeNudgeInFlightRef = useRef(false);
   // One card per episode used to be the whole intervention. The reminder
   // ladder re-opens delivery for an episode that outlives its card; it is
   // reset wherever the episode lock itself is cleared.
@@ -2575,6 +2580,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // grace on the stable drift episode so tracker segment rollover or an extra
   // refresh cannot make the cat return before the grace deadline.
   const petInterceptionGraceRef = useRef<PetInterceptionGrace | null>(null);
+  const automaticCloseReentryRef = useRef<AutomaticCloseReentry | null>(null);
   const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const pendingDriftAlarmGateGenerationRef = useRef(0);
   // Alert key whose latest outcome is an AI-gate suppression or gate error,
@@ -2967,6 +2973,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   function resetDriftAlarmRuntimeForDay(nextAlarmDay: string) {
     unavailableYouTubeDriftAlarmGateRef.current = null;
     driftAlarmDayRef.current = nextAlarmDay;
+    automaticCloseReentryRef.current = null;
+    pendingExtremeNudgeRef.current = null;
     driftAlarmBaseSegmentsRef.current = [];
     driftAlarmHistorySegmentsRef.current = [];
     liveDriftAlarmSegmentsRef.current = [];
@@ -2981,6 +2989,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }
 
   function clearPausedDriftAlarmRuntime() {
+    pendingExtremeNudgeRef.current = null;
+    if (automaticCloseReentryRef.current) automaticCloseReentryRef.current = { ...automaticCloseReentryRef.current, entry: null };
     pendingDriftAlarmGateRef.current = null;
     pendingDriftAlarmGateGenerationRef.current += 1;
     lastEligibleDriftCandidateRef.current = null;
@@ -3425,6 +3435,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, []);
 
   async function applyDriftAlarmManualCorrection(event: DriftAlarmEvent | null): Promise<void> {
+    pendingExtremeNudgeRef.current = null;
+    pendingDriftAlarmGateRef.current = null;
+    pendingDriftAlarmGateGenerationRef.current += 1;
+    if (automaticCloseReentryRef.current) automaticCloseReentryRef.current = { ...automaticCloseReentryRef.current, entry: null };
     const sourceSegmentId = event?.sourceSegmentId?.trim();
     if (!sourceSegmentId) {
       recordDriftAlarmDebugEvent({
@@ -3458,8 +3472,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       sourceSegment,
       Date.now(),
     );
-    pendingDriftAlarmGateRef.current = null;
-    pendingDriftAlarmGateGenerationRef.current += 1;
     // "Not a drift" ends the conversation about this episode; no reminder.
     driftAlarmReminderRef.current = null;
 
@@ -3607,6 +3619,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         // carry a catch grace across the break the user deliberately chose.
         petInterceptionGraceRef.current = null;
         driftAlarmReminderRef.current = null;
+        pendingExtremeNudgeRef.current = null;
+        pendingDriftAlarmGateRef.current = null;
+        pendingDriftAlarmGateGenerationRef.current += 1;
+        if (automaticCloseReentryRef.current) automaticCloseReentryRef.current = { ...automaticCloseReentryRef.current, entry: null };
         driftAlarmSnoozeRef.current = nextSnooze;
         setBreakRecoveryAssessment(null);
         setDriftAlarmSnooze(nextSnooze);
@@ -5315,6 +5331,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       clearPausedDriftAlarmRuntime();
       return;
     }
+    // Once sent, native close cannot be withdrawn. A pause/restore may cancel
+    // its presentation, but must never dispatch another close before it settles.
+    if (nativeExtremeNudgeInFlightRef.current) return;
 
     const checkedAtMs = checkedAt.getTime();
     const previousSessionProtection = driftAlarmSessionProtectionRef.current;
@@ -5347,6 +5366,23 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     const availableDriftAlarmFocusTargetsForAlarm = availableDriftAlarmFocusTargets.length > 0
       ? availableDriftAlarmFocusTargets
       : filterDefinitelyAvailableFocusTargets(driftAlarmFocusTargets);
+    // Probe without the configured delay so reentry starts when first seen,
+    // rather than when the old analysis episode has already paid that delay.
+    const recovery = automaticCloseReentryRef.current;
+    const potentialReentry = recovery ? buildDriftAlarmCandidates({
+      segments: driftAlarmSegments,
+      currentSnapshot: alarmSnapshot,
+      classificationOptions: driftAlarmClassificationOptions,
+      minimumDurationSeconds: 0,
+    })[0] ?? null : null;
+    const reentryProbe = potentialReentry && canApplyExtremeNudgeToSurface({
+      segment: potentialReentry.segment, category: potentialReentry.category,
+      classificationSource: potentialReentry.classification.source, aiConfirmedDrift: true,
+    }) ? potentialReentry : null;
+    const reentry = recovery ? observeAutomaticCloseReentry(
+      recovery, reentryProbe, alarmSnapshot, Date.now(), driftAlertDelaySeconds,
+    ) : null;
+    if (reentry) automaticCloseReentryRef.current = reentry.state;
     const driftCandidates = buildDriftAlarmCandidates({
       segments: driftAlarmSegments,
       currentSnapshot: alarmSnapshot,
@@ -5587,7 +5623,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       // Missing capture is not proof that the pending target changed. Retain
       // only its delivery key until that attempt settles; a verified change or
       // pause still retires it and later capture loss cannot resurrect it.
-      if (!preservePendingClose) lastDriftAlertSegmentRef.current = null;
+      if (!preservePendingClose) {
+        lastDriftAlertSegmentRef.current = null;
+        pendingExtremeNudgeRef.current = null;
+      }
       driftAlarmReminderRef.current = null;
       petInterceptionGraceRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
@@ -5597,6 +5636,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       return;
     }
 
+    const browserReentry = automaticCloseEnabled && reentry !== null && Boolean(reentryProbe?.segment.browserName);
+    if (browserReentry && (pendingExtremeNudgeRef.current !== null
+      || (!reentry.ready && (reentry.state.entry !== null || lastDriftAlertSegmentRef.current !== latestDrift.alertKey)))) {
+      pendingDriftAlarmGateRef.current = null;
+      pendingDriftAlarmGateGenerationRef.current += 1;
+      publishEvaluationDriftAlarmTrayStatus({
+        kind: "suppressed", reason: "automatic-close-recovery", candidateDetail: null,
+      }, checkedAt);
+      return;
+    }
     const { alertKey, episodeKey } = latestDrift;
     let deliveryCandidate = latestDrift;
     let { category, segment } = deliveryCandidate;
@@ -5872,10 +5921,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
+      const closeStillAuthorized = () => automaticCloseEnabledRef.current
+        && pendingExtremeNudgeRef.current === pendingClose
+        && (driftAlarmSnoozeRef.current === null || Date.now() >= driftAlarmSnoozeRef.current.untilMs);
+      const cancelledCloseResult = () => ({
+        applied: false as const,
+        diagnostic: !automaticCloseEnabledRef.current || driftAlarmSnoozeRef.current || driftAlarmSessionProtectionRef.current
+          ? "automatic_close_paused" : "pet_target_changed",
+      });
+      let targetConfirmedAfterApproach = false;
       let petInterventionId: string | null = null;
       const runExtremeNudge = async () => {
-        if (!automaticCloseEnabledRef.current) {
-          return { applied: false, diagnostic: "automatic_close_paused" } as const;
+        if (!closeStillAuthorized()) {
+          return cancelledCloseResult();
         }
         if (petModeActive) {
           petInterventionId = `${alertKey}:pet:${crypto.randomUUID()}`;
@@ -5889,7 +5947,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           }));
           // A pause can arrive while the cat approaches. A sleeping renderer's
           // cancellation is user intent, not a reason to close without the cat.
-          if (!automaticCloseEnabledRef.current) return { applied: false, diagnostic: "automatic_close_paused" } as const;
+          if (!closeStillAuthorized()) return cancelledCloseResult();
           // The paw contact frame is the stated cause of the close. When the
           // user catches the cat before that frame, nothing has pressed the X,
           // so closing anyway would make the whole animation a lie. Hand the
@@ -5930,7 +5988,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           // approach (including an 8s timeout) so a tab/app that was current
           // before the animation can never be closed after the user moved on.
           const postInterventionGateResult = await confirmFreshDriftAlarmCandidate();
-          if (!automaticCloseEnabledRef.current) return { applied: false, diagnostic: "automatic_close_paused" } as const;
+          if (!closeStillAuthorized()) return cancelledCloseResult();
           if (postInterventionGateResult === "current-snapshot-unavailable") {
             // Fail closed when the tracker cannot prove the target is still
             // current, but keep the ordinary fallback alarm visible. Treating
@@ -5941,15 +5999,34 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           if (postInterventionGateResult !== "confirmed") {
             return { applied: false, diagnostic: "pet_target_changed" } as const;
           }
+          targetConfirmedAfterApproach = true;
         }
-        if (!automaticCloseEnabledRef.current) {
-          return { applied: false, diagnostic: "automatic_close_paused" } as const;
+        if (!closeStillAuthorized()) {
+          return cancelledCloseResult();
         }
-        return applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
-          forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
-        }));
+        if (browserReentry && !targetConfirmedAfterApproach) {
+          const fresh = await confirmFreshDriftAlarmCandidate();
+          if (!closeStillAuthorized()) return cancelledCloseResult();
+          if (fresh !== "confirmed") return { applied: false, diagnostic: "pet_target_changed" } as const;
+        }
+        // Consume this reentry once. A failed native close earns a fallback
+        // card, never another destructive attempt on every tracker poll.
+        if (browserReentry) automaticCloseReentryRef.current = null;
+        nativeExtremeNudgeInFlightRef.current = true;
+        try {
+          return await applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
+            forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
+          }));
+        } finally {
+          nativeExtremeNudgeInFlightRef.current = false;
+        }
       };
       void runExtremeNudge().then(async (nativeResult) => {
+        // Record the physical close before fullscreen/focus cleanup can wait.
+        if (nativeResult.applied && segment.browserName) {
+          automaticCloseReentryRef.current = { closedAtMs: Date.now(), entry: null };
+        }
+
         if (petInterventionId) await completeNativePetFullscreenClose(petInterventionId).catch(() => undefined);
         const result = !nativeResult.applied && !automaticCloseEnabledRef.current
           ? { applied: false, diagnostic: "automatic_close_paused" } as const
@@ -5962,6 +6039,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           candidate: summarizeDriftAlarmCandidate(latestDrift),
           evaluation,
         });
+        if (pendingExtremeNudgeRef.current !== pendingClose) {
+          if (!result.applied && pendingExtremeNudgeRef.current === null && lastDriftAlertSegmentRef.current === alertKey
+            && !driftAlarmSnoozeRef.current && !driftAlarmSessionProtectionRef.current) {
+            lastDriftAlertSegmentRef.current = null;
+          }
+          return;
+        }
         if (!result.applied) {
           if (lastDriftAlertSegmentRef.current === alertKey) {
             const intercepted = result.diagnostic === "pet_intercepted";
@@ -6002,6 +6086,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             console.warn("Failed to resolve current drift alarm focus target availability", String(error));
           }
         }
+        if (pendingExtremeNudgeRef.current !== pendingClose) return;
         const driftAlarmEvent = buildCurrentDriftAlarmEvent(
           resolvedDriftAlarmFocusTargets,
           false,
@@ -6035,6 +6120,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           candidate: summarizeDriftAlarmCandidate(latestDrift),
           evaluation,
         });
+        if (pendingExtremeNudgeRef.current !== pendingClose) return;
         if (lastDriftAlertSegmentRef.current === alertKey) {
           if (!automaticCloseEnabledRef.current) {
             lastDriftAlertSegmentRef.current = null;
@@ -6100,6 +6186,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         classificationOptions: driftAlarmClassificationOptions,
         minimumDurationSeconds: driftAlertDelaySeconds,
       });
+      if (browserReentry && !reminderDelivery) {
+        const currentRecovery = automaticCloseReentryRef.current;
+        if (!currentRecovery || currentRecovery.closedAtMs !== recovery?.closedAtMs) return "current-window-changed";
+        const freshReentry = observeAutomaticCloseReentry(
+          currentRecovery, freshCandidate, freshSnapshot, Date.now(), driftAlertDelaySeconds,
+        );
+        automaticCloseReentryRef.current = freshReentry.state;
+        if (!freshReentry.ready) return "current-snapshot-unavailable";
+      }
       if (freshCandidate) {
         deliveryCandidate = freshCandidate;
         ({ category, segment } = deliveryCandidate);
@@ -6205,6 +6300,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       markCurrentDriftAlarmDelivered();
       sendUserEnabledDriftNotification();
     };
+
+    if (browserReentry && reentry.ready && !pendingExtremeNudgeRef.current
+      && gateSuppressedDriftAlarmRef.current?.alertKey !== alertKey) {
+      lastDriftAlertSegmentRef.current = null;
+      driftAlarmReminderRef.current = null;
+    }
 
     if (lastDriftAlertSegmentRef.current === alertKey && !pendingBreakReturnAlarmRef.current) {
       const reminderState = driftAlarmReminderRef.current;

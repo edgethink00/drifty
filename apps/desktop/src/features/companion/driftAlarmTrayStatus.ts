@@ -158,6 +158,7 @@ function resultDetailLabel(result: DriftAlarmTrayResult): string | null {
 
 function suppressionReasonLabel(reason: string, ko: boolean = false): string {
   const normalized = reason.trim();
+  if (normalized === "automatic-close-recovery") return ko ? "자동 닫기 복구 유예" : "Automatic close recovery";
   if (normalized === "quiet-hours") return ko ? "조용한 시간" : "Quiet hours";
   if (normalized === "ai-low-confidence") return ko ? "AI 신뢰도 낮음" : "AI low confidence";
   if (normalized === "ai-timeout") return ko ? "AI 시간 초과" : "AI gate timed out";

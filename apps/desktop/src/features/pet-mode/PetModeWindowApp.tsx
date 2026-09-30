@@ -321,6 +321,7 @@ export function PetModeWindowApp() {
   // nudge to retain motion ownership.
   const automaticInterventionRef = useRef(false);
   const interventionSceneRef = useRef<{ id: string; token: number } | null>(null);
+  const interventionReturnTokenRef = useRef<number | null>(null);
   const interventionRunTimingRef = useRef<{
     readonly token: number;
     readonly resolve: (timing: PetModeInterventionRunTiming) => void;
@@ -689,9 +690,10 @@ export function PetModeWindowApp() {
     }
   }, [phase]);
 
-  const setActiveLabAction = useCallback((action: PetModeLabAction | null) => {
+  const setActiveLabAction = useCallback((action: PetModeLabAction | null, automatic = false) => {
     const revision = ++activeLabActionRevisionRef.current;
     activeLabActionRef.current = action;
+    automaticInterventionRef.current = automatic;
     reportLabState();
     return revision;
   }, [reportLabState]);
@@ -700,6 +702,7 @@ export function PetModeWindowApp() {
     if (activeLabActionRevisionRef.current !== revision) return;
     activeLabActionRevisionRef.current += 1;
     activeLabActionRef.current = null;
+    automaticInterventionRef.current = false;
     reportLabState();
   }, [reportLabState]);
 
@@ -1688,10 +1691,14 @@ export function PetModeWindowApp() {
         const proudReturn = contacted && !target.preview;
         setProudWalk(proudReturn);
         commitPhase("walk");
+        if (contacted && !target.preview && !target.labTarget) {
+          interventionReturnTokenRef.current = token;
+        }
         try {
           await returnNativePetHome();
         } finally {
-          setProudWalk(false);
+          if (interventionReturnTokenRef.current === token) interventionReturnTokenRef.current = null;
+          if (token === actionTokenRef.current) setProudWalk(false);
         }
       }
       if (token === actionTokenRef.current) {
@@ -2414,7 +2421,13 @@ export function PetModeWindowApp() {
       // "renderer_focus_resting elapsedMs=19", and the tab closed with the cat
       // still sitting. An approach that starts here stays interruptible: a
       // genuine focus change still cancels it via activity_context_changed.
-      const rejectionReason = activeLabActionRef.current === "intervention"
+      // A completed automatic paw may still be walking home when a verified
+      // reentry becomes due. Redirect that return; an approach or paw still
+      // in progress keeps its exclusive ownership.
+      const canRedirectReturn = !isLabTarget && !event.target.preview
+        && interventionReturnTokenRef.current !== null
+        && interventionReturnTokenRef.current === actionTokenRef.current;
+      const rejectionReason = activeLabActionRef.current === "intervention" && !canRedirectReturn
         ? "renderer_busy_intervention"
         : manualDragRef.current
           ? "renderer_manual_drag"
@@ -2435,18 +2448,48 @@ export function PetModeWindowApp() {
         return;
       }
       void (async () => {
-        automaticInterventionRef.current = !isLabTarget && !event.target.preview;
         if (seatReconcileInFlightRef.current) {
           seatReconcilePendingRef.current = true;
         }
-        const actionRevision = setActiveLabAction("intervention");
+        const actionRevision = setActiveLabAction("intervention", !isLabTarget && !event.target.preview);
+        let redirectToken: number | null = null;
+        let approachStarted = false;
+        let redirectFailed = false;
         try {
+          if (canRedirectReturn) {
+            redirectToken = ++actionTokenRef.current;
+            interventionReturnTokenRef.current = null;
+            setProudWalk(false);
+            await cancelNativePetMotion();
+            if (activeLabActionRevisionRef.current !== actionRevision || actionTokenRef.current !== redirectToken) return;
+          }
+          approachStarted = true;
           await playIntervention(event.target);
         } catch {
+          redirectFailed = !approachStarted;
+          if (activeLabActionRevisionRef.current !== actionRevision) return;
+          if (redirectToken !== null && !approachStarted && actionTokenRef.current !== redirectToken) return;
           commitPhase("idle");
           void returnNativePetHome().catch(() => undefined);
         } finally {
-          automaticInterventionRef.current = false;
+          // The new target already owns an alarm while the old return is
+          // cancelled. If that handoff is interrupted, playIntervention never
+          // starts and cannot report its result. Settle this target explicitly
+          // before a contact timeout can turn a real catch into a plain close.
+          if (redirectToken !== null && !approachStarted) {
+            const reason = userInterceptedInterventionTokenRef.current === redirectToken
+              ? "user_intercepted"
+              : contextChangedInterventionTokenRef.current === redirectToken
+                ? "activity_context_changed"
+                : redirectFailed && actionTokenRef.current === redirectToken
+                  ? "renderer_intervention_failed" : "renderer_action_cancelled";
+            await reportNativePetContact(event.target.id, false, reason).catch(() => undefined);
+            if (userInterceptedInterventionTokenRef.current === redirectToken) userInterceptedInterventionTokenRef.current = null;
+            if (contextChangedInterventionTokenRef.current === redirectToken) contextChangedInterventionTokenRef.current = null;
+          }
+          // A superseded return can settle after the next approach starts.
+          // It must not clear that approach's focus/seat ownership.
+          if (activeLabActionRevisionRef.current !== actionRevision) return;
           clearActiveLabAction(actionRevision);
           if (seatReconcilePendingRef.current) requestSeatReconcile();
           // Focus may have ended while a cancelled native move was still
