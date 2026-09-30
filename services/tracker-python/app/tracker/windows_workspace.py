@@ -20,25 +20,21 @@ Identity model under test (§4.2): ``bundle_id`` carries the AUMID for packaged
 apps and the lowercased executable path otherwise, so downstream identity keys
 (`app_identity_key`) stay unique without schema changes.
 
-Allowlisted Chromium browser URLs are read from the focused window's top-level
-Document ValuePattern through a resident UI Automation host. A fresh extension
-bridge may enrich that URL only when it matches the same foreground Document;
-verified browser history is a separately labeled, conservative fallback.
+Allowlisted browser URLs are read from the focused window's top-level Document
+ValuePattern through a resident UI Automation host. A fresh extension bridge
+is considered only when it matches the same foreground Document. Windows
+does not infer a foreground URL from a separate browser-history profile.
 """
 
 from __future__ import annotations
 
 import ctypes
-import ntpath
-import os
 import sys
 import time
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Callable
 
 from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
-from app.tracker.browser_history import browser_history_metadata, is_browser_history_supported_app
 from app.text_safety import replace_lone_surrogates
 from app.tracker.capture_contract import Snapshot, utc_now_iso
 from app.tracker.windows_app_names import exe_display_name, is_windows_browser_app
@@ -55,46 +51,9 @@ _PATH_MAX = 32767
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _APPMODEL_ERROR_NO_APPLICATION = 15703
 _LIVE_UIA_CONFIDENCE = 0.8
-_HISTORY_FALLBACK_CONFIDENCE = 0.45
 # The Windows port's steady-state capture budget is 1.5s. A longer retry
 # could credit the first window's elapsed tracking interval to a new app.
 _FOREGROUND_RETRY_BUDGET_SECONDS = 1.5
-
-_VERIFIED_HISTORY_BROWSER_PATHS: dict[str, tuple[tuple[str, str], ...]] = {
-    "Google Chrome": (
-        ("PROGRAMFILES", r"Google\Chrome\Application\chrome.exe"),
-        ("PROGRAMFILES(X86)", r"Google\Chrome\Application\chrome.exe"),
-        ("LOCALAPPDATA", r"Google\Chrome\Application\chrome.exe"),
-    ),
-    "Google Chrome Beta": (
-        ("PROGRAMFILES", r"Google\Chrome Beta\Application\chrome.exe"),
-        ("PROGRAMFILES(X86)", r"Google\Chrome Beta\Application\chrome.exe"),
-        ("LOCALAPPDATA", r"Google\Chrome Beta\Application\chrome.exe"),
-    ),
-    "Google Chrome Dev": (
-        ("PROGRAMFILES", r"Google\Chrome Dev\Application\chrome.exe"),
-        ("PROGRAMFILES(X86)", r"Google\Chrome Dev\Application\chrome.exe"),
-        ("LOCALAPPDATA", r"Google\Chrome Dev\Application\chrome.exe"),
-    ),
-    "Google Chrome Canary": (
-        ("LOCALAPPDATA", r"Google\Chrome SxS\Application\chrome.exe"),
-    ),
-    "Microsoft Edge": (
-        ("PROGRAMFILES", r"Microsoft\Edge\Application\msedge.exe"),
-        ("PROGRAMFILES(X86)", r"Microsoft\Edge\Application\msedge.exe"),
-        ("LOCALAPPDATA", r"Microsoft\Edge\Application\msedge.exe"),
-    ),
-    "Brave Browser": (
-        ("PROGRAMFILES", r"BraveSoftware\Brave-Browser\Application\brave.exe"),
-        ("PROGRAMFILES(X86)", r"BraveSoftware\Brave-Browser\Application\brave.exe"),
-        ("LOCALAPPDATA", r"BraveSoftware\Brave-Browser\Application\brave.exe"),
-    ),
-    "Firefox": (
-        ("PROGRAMFILES", r"Mozilla Firefox\firefox.exe"),
-        ("PROGRAMFILES(X86)", r"Mozilla Firefox\firefox.exe"),
-        ("LOCALAPPDATA", r"Mozilla Firefox\firefox.exe"),
-    ),
-}
 
 
 @dataclass(frozen=True)
@@ -228,34 +187,6 @@ def identity_key_for(exe_path: str | None, aumid: str | None) -> str | None:
     return None
 
 
-def is_verified_browser_history_identity(
-    app_name: str,
-    bundle_id: str | None,
-    environment: Mapping[str, str] | None = None,
-) -> bool:
-    """Allow cross-process history reads only for a known browser install.
-
-    Live UIA remains HWND-local and works for portable browsers. History is a
-    separate process/profile boundary, so a basename such as ``chrome.exe`` is
-    not sufficient proof that the foreground executable owns Chrome's profile.
-    """
-    if not bundle_id or not ntpath.isabs(bundle_id):
-        return False
-    relative_paths = _VERIFIED_HISTORY_BROWSER_PATHS.get(app_name)
-    if not relative_paths:
-        return False
-    values = os.environ if environment is None else environment
-    actual = ntpath.normcase(ntpath.normpath(bundle_id))
-    for root_name, relative_path in relative_paths:
-        root = values.get(root_name)
-        if not root:
-            continue
-        expected = ntpath.normcase(ntpath.normpath(ntpath.join(root, relative_path)))
-        if actual == expected:
-            return True
-    return False
-
-
 def aumid_display_name(aumid: str) -> str | None:
     """Best-effort readable name from an AUMID (``PackageFamily!AppId``)."""
     package_family, _, app_id = aumid.partition("!")
@@ -353,15 +284,13 @@ def enrich_browser_snapshot(
     snapshot: Snapshot,
     hwnd: int,
     live_reader: Callable[[int, str | None], WindowsBrowserUiaResult] = read_live_browser_url,
-    history_reader: Callable[[str | None, str | None, str | None], BrowserMetadata] = browser_history_metadata,
-    history_identity_checker: Callable[[str, str | None], bool] = is_verified_browser_history_identity,
     bridge_reader: Callable[[str, str | None], BrowserMetadata | None] = read_browser_bridge_metadata,
 ) -> Snapshot:
     """Use a bridge URL only when it matches this foreground window's Document."""
-    # A browser without a history root is still a browser: it gets
-    # browser_name, so an automatic close refuses its tab instead of treating
-    # the whole browser as an app. Its live and history readers stay off.
-    if not (is_browser_history_supported_app(snapshot.app_name) or is_windows_browser_app(snapshot.app_name)):
+    # Every named Windows browser gets browser_name even when its UIA URL is
+    # unavailable, so an automatic close refuses its tab instead of treating
+    # the whole browser as an app.
+    if not is_windows_browser_app(snapshot.app_name):
         return snapshot
 
     live_result = live_reader(hwnd, snapshot.app_name)
@@ -371,53 +300,29 @@ def enrich_browser_snapshot(
     # versions must not bypass the exact HWND-local foreground proof.
     if bridge is not None and bridge.site_url != live_result.url:
         bridge = None
-    history = None
     # A v1 bridge message has no HWND, PID, or product identity. Even after its
     # URL matches this window, another tab at the same URL could supply a
     # different title or other dynamic page data. Derive all page fields from
     # the HWND-local Document; the bridge is only an exact-URL corroboration.
-    metadata = live
-    # A private window records no page. Guessing one from history by its title
-    # would attribute private browsing to a normal visit.
-    if (
-        bridge is None
-        and not live.site_url
-        and not live_result.private_window
-        and history_identity_checker(snapshot.app_name, snapshot.bundle_id)
-    ):
-        history = history_reader(snapshot.app_name, snapshot.window_title, snapshot.observed_at)
-        if history.site_url:
-            metadata = history
+    # Even a normal browser can have multiple pages with the same title. A
+    # recent normal-history entry is not proof of this foreground HWND's page,
+    # and a failed UIA read cannot reliably distinguish private windows. Keep
+    # browser app time and the diagnostic without guessing a site.
 
     snapshot.browser_name = snapshot.app_name
-    snapshot.site_domain = metadata.site_domain
-    snapshot.site_title = metadata.site_title
-    snapshot.site_url = metadata.site_url
-    snapshot.youtube_video_id = metadata.youtube_video_id
-    snapshot.youtube_playlist_id = metadata.youtube_playlist_id
-    snapshot.youtube_is_shorts = metadata.youtube_is_shorts
-    snapshot.site_source = (
-        "windows-uia-document"
-        if live.site_url
-        else "browser-history-title"
-        if metadata.site_url
-        else None
-    )
+    snapshot.site_domain = live.site_domain
+    snapshot.site_title = live.site_title
+    snapshot.site_url = live.site_url
+    snapshot.youtube_video_id = live.youtube_video_id
+    snapshot.youtube_playlist_id = live.youtube_playlist_id
+    snapshot.youtube_is_shorts = live.youtube_is_shorts
+    snapshot.site_source = "windows-uia-document" if live.site_url else None
     # An exact URL match is not proof that the v1 bridge sender is this HWND.
     # Its source, confidence, and diagnostics must not replace the live read.
     if live.site_url:
         snapshot.capture_confidence = _LIVE_UIA_CONFIDENCE
-    elif metadata.site_url:
-        snapshot.capture_confidence = _HISTORY_FALLBACK_CONFIDENCE
     snapshot.browser_automation_status = live.browser_automation_status
     snapshot.browser_automation_error = live.browser_automation_error
-    if history is not None:
-        snapshot.browser_history_status = history.browser_history_status
-        snapshot.browser_history_reason = history.browser_history_reason
-        snapshot.browser_history_database_found = history.browser_history_database_found
-        snapshot.browser_history_profile_count = history.browser_history_profile_count
-        snapshot.browser_history_candidate_count = history.browser_history_candidate_count
-        snapshot.browser_history_error_count = history.browser_history_error_count
     return snapshot
 
 
@@ -520,7 +425,7 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
                     failed = snapshot
                 else:
                     enriched = enrich_browser_snapshot(snapshot, window.hwnd)
-                    # URL/bridge/history reads may outlive the observation.
+                    # URL/bridge reads may outlive the observation.
                     # Discard the whole candidate if its context changed.
                     enriched_window = read_foreground_window()
                     if enriched_window == window:

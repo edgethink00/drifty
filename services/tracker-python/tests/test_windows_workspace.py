@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app.tracker import platform_workspace, windows_workspace
 from app.tracker.windows_workspace import (
@@ -14,11 +12,9 @@ from app.tracker.windows_workspace import (
     enrich_browser_snapshot,
     exe_display_name,
     identity_key_for,
-    is_verified_browser_history_identity,
     resolve_identity,
 )
 from app.tracker.browser_automation import BrowserMetadata
-from app.tracker.browser_history import browser_history_metadata
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
 
 
@@ -248,9 +244,17 @@ class BuildSnapshotTests(unittest.TestCase):
 
 class BrowserEnrichmentTests(unittest.TestCase):
     def _snapshot(self, app_name: str = "Google Chrome"):
+        paths = {
+            "Google Chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "Microsoft Edge": r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            "Brave Browser": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+            "Firefox": r"C:\Program Files\Mozilla Firefox\firefox.exe",
+            "Editor": r"C:\Apps\Editor\editor.exe",
+        }
+        path = paths[app_name]
         return build_snapshot(
-            ForegroundWindow(hwnd=44, title="Example - Google Chrome", pid=5),
-            ProcessIdentity(exe_path="C:\\Program Files\\Google\\Chrome\\chrome.exe", exe_name=app_name, aumid=None),
+            ForegroundWindow(hwnd=44, title=f"Example - {app_name}", pid=5),
+            ProcessIdentity(exe_path=path, exe_name=path.rsplit("\\", 1)[-1], aumid=None),
             observed_at="2026-08-20T00:00:00+00:00",
         )
 
@@ -259,7 +263,6 @@ class BrowserEnrichmentTests(unittest.TestCase):
             self._snapshot(),
             44,
             live_reader=lambda hwnd, app: WindowsBrowserUiaResult("https://www.example.com/docs", None),
-            history_reader=lambda *_: self.fail("history must not run after a live URL"),
             bridge_reader=lambda *_: None,
         )
         self.assertEqual(snapshot.browser_name, "Google Chrome")
@@ -269,55 +272,22 @@ class BrowserEnrichmentTests(unittest.TestCase):
         self.assertEqual(snapshot.capture_confidence, 0.8)
         self.assertEqual(snapshot.browser_automation_status, "granted")
 
-    def test_history_is_only_a_fallback_and_preserves_uia_diagnostic(self) -> None:
-        history = BrowserMetadata(
-            browser_name="Google Chrome",
-            site_domain="example.com",
-            site_url="https://example.com/fallback",
-            browser_history_status="matched",
-            browser_history_reason="matched",
-            browser_history_database_found=True,
-            browser_history_profile_count=1,
-            browser_history_candidate_count=3,
-            browser_history_error_count=0,
-        )
+    def test_even_claimed_normal_gecko_without_live_url_has_no_site(self) -> None:
+        # No currently measured Gecko signal proves a normal window when the
+        # Document URL fails; a future explicit state must not revive title
+        # matching without a separate foreground binding proof.
         snapshot = enrich_browser_snapshot(
-            self._snapshot(),
+            self._snapshot("Firefox"),
             44,
-            live_reader=lambda hwnd, app: WindowsBrowserUiaResult(None, "no URL-shaped edit control value"),
-            history_reader=lambda *_: history,
-            history_identity_checker=lambda *_: True,
+            live_reader=lambda hwnd, app: WindowsBrowserUiaResult(None, "document URL unavailable", privacy_state="normal"),
             bridge_reader=lambda *_: None,
         )
-        self.assertEqual(snapshot.site_url, "https://example.com/fallback")
-        self.assertEqual(snapshot.site_source, "browser-history-title")
-        self.assertEqual(snapshot.browser_automation_status, "unavailable")
-        self.assertIn("URL-shaped", snapshot.browser_automation_error or "")
-        self.assertEqual(snapshot.browser_history_status, "matched")
-        self.assertEqual(snapshot.capture_confidence, 0.45)
-
-    def test_protected_history_folder_still_records_the_browser(self) -> None:
-        # UI Automation found no URL, so capture falls back to history; a profile
-        # folder the tracker cannot list must end only that fallback.
-        with TemporaryDirectory() as profile_root, patch(
-            "app.tracker.browser_history.Path.iterdir",
-            side_effect=PermissionError(13, "Access is denied"),
-        ):
-            snapshot = enrich_browser_snapshot(
-                self._snapshot(),
-                44,
-                live_reader=lambda hwnd, app: WindowsBrowserUiaResult(None, "no URL-shaped edit control value"),
-                history_reader=lambda app, title, observed: browser_history_metadata(
-                    app, title, observed, profile_roots={app: Path(profile_root)}
-                ),
-                history_identity_checker=lambda *_: True,
-                bridge_reader=lambda *_: None,
-            )
-
-        self.assertEqual(snapshot.app_name, "Google Chrome")
-        self.assertEqual(snapshot.browser_name, "Google Chrome")
         self.assertIsNone(snapshot.site_url)
-        self.assertEqual(snapshot.browser_history_reason, "unreadable_profile_root")
+        self.assertIsNone(snapshot.site_source)
+        self.assertEqual(snapshot.browser_automation_status, "unavailable")
+        self.assertIn("document URL", snapshot.browser_automation_error or "")
+        self.assertIsNone(snapshot.browser_history_status)
+        self.assertEqual(snapshot.capture_confidence, 1.0)
 
     def test_document_http_url_identity_reaches_snapshot_unchanged(self) -> None:
         url = "http://127.0.0.1:4173/Docs/?Q=Case#Fragment"
@@ -325,7 +295,6 @@ class BrowserEnrichmentTests(unittest.TestCase):
             self._snapshot(),
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult(url, None),
-            history_reader=lambda *_: self.fail("history must not replace Document identity"),
             bridge_reader=lambda *_: None,
         )
         self.assertEqual(snapshot.site_url, url)
@@ -336,27 +305,25 @@ class BrowserEnrichmentTests(unittest.TestCase):
         )
         self.assertEqual(metadata.match_state, "windows-uia-document")
 
-    def test_unverified_portable_browser_never_reads_canonical_history(self) -> None:
+    def test_portable_browser_keeps_app_identity_when_live_url_fails(self) -> None:
         snapshot = self._snapshot()
         snapshot.bundle_id = r"c:\temp\chrome.exe"
         enriched = enrich_browser_snapshot(
             snapshot,
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult(None, "address bar unavailable"),
-            history_reader=lambda *_: self.fail("unverified executable must not read browser history"),
             bridge_reader=lambda *_: None,
         )
         self.assertIsNone(enriched.site_url)
         self.assertEqual(enriched.capture_confidence, 1.0)
 
-    def test_non_browser_never_starts_uia_or_history(self) -> None:
+    def test_non_browser_never_starts_uia(self) -> None:
         snapshot = self._snapshot("Editor")
         snapshot.app_name = "Editor"
         unchanged = enrich_browser_snapshot(
             snapshot,
             44,
             live_reader=lambda *_: self.fail("UIA must not run"),
-            history_reader=lambda *_: self.fail("history must not run"),
             bridge_reader=lambda *_: None,
         )
         self.assertIs(unchanged, snapshot)
@@ -373,7 +340,6 @@ class BrowserEnrichmentTests(unittest.TestCase):
             snapshot,
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult(None, "Windows UIA is not applicable."),
-            history_reader=lambda *_: self.fail("an unverified browser must not read history"),
             bridge_reader=lambda *_: None,
         )
         self.assertEqual(enriched.browser_name, "Zen")
@@ -394,7 +360,6 @@ class BrowserEnrichmentTests(unittest.TestCase):
             snapshot,
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult(None, "Windows UIA is not applicable."),
-            history_reader=lambda *_: self.fail("an unverified browser must not read history"),
             bridge_reader=lambda *_: None,
         )
         self.assertEqual(enriched.browser_name, "Arc")
@@ -414,7 +379,6 @@ class BrowserEnrichmentTests(unittest.TestCase):
             snapshot,
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult("https://example.com/firefox", None),
-            history_reader=lambda *_: self.fail("history must not run after an exact bridge match"),
             bridge_reader=lambda app, url: bridge if (app, url) == ("Firefox", bridge.site_url) else None,
         )
         self.assertEqual(enriched.site_url, "https://example.com/firefox")
@@ -435,7 +399,6 @@ class BrowserEnrichmentTests(unittest.TestCase):
             snapshot,
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult("https://edge.example/current", None),
-            history_reader=lambda *_: self.fail("history must not replace a live URL"),
             bridge_reader=lambda *_: bridge,
         )
         self.assertEqual(enriched.site_url, "https://edge.example/current")
@@ -460,7 +423,6 @@ class BrowserEnrichmentTests(unittest.TestCase):
             snapshot,
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult("https://example.com/shared", None),
-            history_reader=lambda *_: self.fail("history must not replace a live URL"),
             bridge_reader=lambda *_: bridge,
         )
         self.assertEqual(enriched.site_url, "https://example.com/shared")
@@ -472,26 +434,66 @@ class BrowserEnrichmentTests(unittest.TestCase):
         self.assertEqual(enriched.browser_automation_status, "granted")
         self.assertIsNone(enriched.browser_automation_error)
 
-    def test_bridge_without_a_foreground_document_uses_verified_history(self) -> None:
-        history = BrowserMetadata(
-            browser_name="Google Chrome",
-            site_domain="history.example",
-            site_url="https://history.example/visited",
-            browser_history_status="matched",
-        )
+    def test_bridge_without_a_foreground_document_keeps_unknown_site(self) -> None:
         enriched = enrich_browser_snapshot(
             self._snapshot(),
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult(None, "document URL unavailable"),
-            history_reader=lambda *_: history,
-            history_identity_checker=lambda *_: True,
             bridge_reader=lambda *_: BrowserMetadata(
                 browser_name="Google Chrome", site_url="https://other.example/stale"
             ),
         )
-        self.assertEqual(enriched.site_url, "https://history.example/visited")
-        self.assertEqual(enriched.site_source, "browser-history-title")
-        self.assertEqual(enriched.capture_confidence, 0.45)
+        self.assertIsNone(enriched.site_url)
+        self.assertIsNone(enriched.site_source)
+        self.assertEqual(enriched.capture_confidence, 1.0)
+
+    def test_chromium_private_same_title_history_cannot_supply_a_url(self) -> None:
+        # The normal profile contains this exact title, but an inaccessible
+        # private Document gives no proof that the current HWND is normal.
+        for app_name in ("Google Chrome", "Microsoft Edge", "Brave Browser"):
+            with self.subTest(app_name=app_name):
+                snapshot = self._snapshot(app_name)
+                original_identity = snapshot.bundle_id
+                normal_history_sentinel = Mock(return_value=BrowserMetadata(
+                    browser_name=app_name,
+                    site_url="https://normal-history.example/same-title",
+                    browser_history_status="matched",
+                ))
+                with patch("app.tracker.browser_history.browser_history_metadata", normal_history_sentinel):
+                    enriched = enrich_browser_snapshot(
+                        snapshot,
+                        44,
+                        live_reader=lambda *_: WindowsBrowserUiaResult(None, "document URL unavailable"),
+                        bridge_reader=lambda *_: None,
+                    )
+                normal_history_sentinel.assert_not_called()
+                self.assertEqual(enriched.app_name, app_name)
+                self.assertEqual(enriched.bundle_id, original_identity)
+                self.assertEqual(enriched.browser_name, app_name)
+                self.assertIsNone(enriched.site_url)
+                self.assertIsNone(enriched.site_source)
+                self.assertEqual(enriched.browser_automation_status, "unavailable")
+                self.assertEqual(enriched.capture_confidence, 1.0)
+
+    def test_gecko_host_failure_keeps_app_time_without_history(self) -> None:
+        snapshot = self._snapshot("Firefox")
+        normal_history_sentinel = Mock(return_value=BrowserMetadata(
+            browser_name="Firefox", site_url="https://normal-history.example/same-title"
+        ))
+        with patch("app.tracker.browser_history.browser_history_metadata", normal_history_sentinel):
+            enriched = enrich_browser_snapshot(
+                snapshot,
+                44,
+                live_reader=lambda *_: WindowsBrowserUiaResult(None, "Windows UIA host unavailable"),
+                bridge_reader=lambda *_: None,
+            )
+        normal_history_sentinel.assert_not_called()
+        self.assertEqual(enriched.app_name, "Firefox")
+        self.assertIsNotNone(enriched.bundle_id)
+        self.assertEqual(enriched.browser_name, "Firefox")
+        self.assertIsNone(enriched.site_url)
+        self.assertIsNone(enriched.site_source)
+        self.assertEqual(enriched.browser_automation_error, "Windows UIA host unavailable")
 
     def test_private_window_rejects_a_recent_bridge_and_history(self) -> None:
         snapshot = self._snapshot("Firefox")
@@ -499,9 +501,7 @@ class BrowserEnrichmentTests(unittest.TestCase):
         enriched = enrich_browser_snapshot(
             snapshot,
             44,
-            live_reader=lambda *_: WindowsBrowserUiaResult(None, "private browsing window", private_window=True),
-            history_reader=lambda *_: self.fail("private window must not read history"),
-            history_identity_checker=lambda *_: True,
+            live_reader=lambda *_: WindowsBrowserUiaResult(None, "private browsing window", privacy_state="private"),
             bridge_reader=lambda *_: BrowserMetadata(
                 browser_name="Firefox", site_url="https://example.com/normal"
             ),
@@ -515,9 +515,7 @@ class BrowserEnrichmentTests(unittest.TestCase):
         enriched = enrich_browser_snapshot(
             snapshot,
             44,
-            live_reader=lambda *_: WindowsBrowserUiaResult(None, "private browsing window", private_window=True),
-            history_reader=lambda *_: self.fail("a private window must not be matched against history"),
-            history_identity_checker=lambda *_: True,
+            live_reader=lambda *_: WindowsBrowserUiaResult(None, "private browsing window", privacy_state="private"),
             bridge_reader=lambda *_: None,
         )
         self.assertEqual(enriched.browser_name, "Firefox")
@@ -531,42 +529,12 @@ class BrowserEnrichmentTests(unittest.TestCase):
             snapshot,
             44,
             live_reader=lambda *_: WindowsBrowserUiaResult("https://www.youtube.com/watch?v=abc", None),
-            history_reader=lambda *_: self.fail("history must not replace a live Document URL"),
             bridge_reader=lambda *_: None,
         )
         self.assertEqual(enriched.site_url, "https://www.youtube.com/watch?v=abc")
         self.assertEqual(enriched.site_source, "windows-uia-document")
         self.assertEqual(enriched.youtube_video_id, "abc")
 
-
-class BrowserHistoryIdentityTests(unittest.TestCase):
-    def test_accepts_exact_vendor_install_path(self) -> None:
-        self.assertTrue(is_verified_browser_history_identity(
-            "Google Chrome",
-            r"c:\program files\google\chrome\application\chrome.exe",
-            {"PROGRAMFILES": r"C:\Program Files"},
-        ))
-
-    def test_rejects_same_basename_outside_vendor_install(self) -> None:
-        self.assertFalse(is_verified_browser_history_identity(
-            "Google Chrome",
-            r"C:\Temp\chrome.exe",
-            {"PROGRAMFILES": r"C:\Program Files", "LOCALAPPDATA": r"C:\Users\qa\AppData\Local"},
-        ))
-
-    def test_accepts_beta_binary_only_for_the_beta_profile_identity(self) -> None:
-        path = r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe"
-        environment = {"PROGRAMFILES": r"C:\Program Files"}
-        self.assertTrue(is_verified_browser_history_identity(
-            "Google Chrome Beta",
-            path,
-            environment,
-        ))
-        self.assertFalse(is_verified_browser_history_identity(
-            "Google Chrome",
-            path,
-            environment,
-        ))
 
 class ForegroundSnapshotFreshnessTests(unittest.TestCase):
     def capture(self, windows, identity_reader=None):

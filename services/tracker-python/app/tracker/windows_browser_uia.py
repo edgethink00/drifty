@@ -9,16 +9,17 @@ private stdin/stdout pipe. Raw URLs never leave the local tracker process.
 from __future__ import annotations
 
 import atexit
-import base64
 import json
 import os
 import queue
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlparse
 
 
@@ -170,6 +171,9 @@ function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement, [stri
 }
 
 function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement = $null, [string]$family = 'chromium') {
+  # The private indicator can establish a Gecko private window. Its absence
+  # cannot prove a normal window when an accessibility provider is incomplete.
+  $privacy = 'unknown'
   try {
     if ($null -eq $root -or $root.Current.ControlType -ne [System.Windows.Automation.ControlType]::Window -or
         $root.Current.IsOffscreen -ne $false) { throw 'document window unavailable' }
@@ -185,7 +189,7 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
     if ($family -eq 'gecko') {
       # The browser extension never reported private tabs; neither does this.
       if (Test-GeckoPrivateWindow $root) {
-        return [pscustomobject]@{ found = $false; url = ''; error = 'private browsing window'; private = $true }
+        return [pscustomobject]@{ found = $false; url = ''; error = 'private browsing window'; privacy = 'private' }
       }
       $requiredAncestorId = 'tabbrowser-tabpanels'
       # Only the selected tab's panel holds the page. LibreWolf 156 kept the
@@ -201,7 +205,7 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
     $focusedDocument = Find-FocusedTopLevelDocument $root $treeWalker $focusedElement $requiredAncestorId $requiredAncestorClass
     if ($null -ne $focusedDocument) {
       $focusedUrl = Read-ValidatedDocumentUrl $focusedDocument $rootRect ($family -eq 'gecko')
-      return [pscustomobject]@{ found = $true; url = $focusedUrl; error = '' }
+      return [pscustomobject]@{ found = $true; url = $focusedUrl; error = ''; privacy = $privacy }
     }
 
     $documents = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
@@ -238,7 +242,7 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
       $url = Read-ValidatedDocumentUrl $document $rootRect ($family -eq 'gecko')
     }
     if ($count -ne 1) { throw 'document URL unavailable' }
-    return [pscustomobject]@{ found = $true; url = $url; error = '' }
+    return [pscustomobject]@{ found = $true; url = $url; error = ''; privacy = $privacy }
   } catch {
     # Only our fixed diagnostics leave the host, never provider exception data.
     $message = $_.Exception.Message
@@ -247,7 +251,7 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
         'multiple visible top-level documents', 'document URL unavailable')) {
       $message = 'document provider unavailable'
     }
-    return [pscustomobject]@{ found = $false; url = ''; error = $message }
+    return [pscustomobject]@{ found = $false; url = ''; error = $message; privacy = $privacy }
   }
 }
 
@@ -298,7 +302,9 @@ while ($true) {
 class WindowsBrowserUiaResult:
     url: str | None
     error: str | None
-    private_window: bool = False
+    # "normal" is reserved for a future positive, locale-independent proof.
+    # Today's Windows UIA host reports unknown or proven Gecko private only.
+    privacy_state: Literal["unknown", "normal", "private"] = "unknown"
 
 
 def is_live_uia_browser(app_name: str | None) -> bool:
@@ -337,24 +343,25 @@ def normalize_uia_url(value: str | None) -> str | None:
     return cleaned
 
 
-def parse_uia_response(line: str) -> WindowsBrowserUiaResult:
+def parse_uia_response(line: str, family: str = "chromium") -> WindowsBrowserUiaResult:
     try:
         payload = json.loads(line)
     except (TypeError, json.JSONDecodeError):
         return WindowsBrowserUiaResult(None, "Windows UIA returned invalid JSON.")
     if not isinstance(payload, dict):
         return WindowsBrowserUiaResult(None, "Windows UIA returned an invalid response.")
-    if payload.get("private") is True:
-        return WindowsBrowserUiaResult(None, "private browsing window", private_window=True)
+    if payload.get("privacy") == "private":
+        return WindowsBrowserUiaResult(None, "private browsing window", privacy_state="private")
+    # Do not infer a normal Chromium window from an absent private flag. Even a
+    # Gecko normal reply is trusted only for a Gecko request to this host.
+    privacy_state: Literal["unknown", "normal", "private"] = (
+        "normal" if family == "gecko" and payload.get("privacy") == "normal" else "unknown"
+    )
     normalized = normalize_uia_url(payload.get("url") if payload.get("found") is True else None)
     if normalized:
-        return WindowsBrowserUiaResult(normalized, None)
+        return WindowsBrowserUiaResult(normalized, None, privacy_state=privacy_state)
     error = " ".join(str(payload.get("error") or "document URL unavailable").split())[:240]
-    return WindowsBrowserUiaResult(None, error)
-
-
-def _encoded_powershell(script: str) -> str:
-    return base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    return WindowsBrowserUiaResult(None, error, privacy_state=privacy_state)
 
 
 def _powershell_executable() -> str:
@@ -391,34 +398,44 @@ def _readline_with_timeout(stream, timeout_seconds: float) -> str:
 class _WindowsUiaHost:
     def __init__(self) -> None:
         self._has_completed_request = False
+        self._process: subprocess.Popen[str] | None = None
+        self._script_path: Path | None = None
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        self._process = subprocess.Popen(
-            [
-                _powershell_executable(),
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-EncodedCommand",
-                _encoded_powershell(_POWERSHELL_UIA_HOST),
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-            creationflags=creation_flags,
-        )
-        if self._process.stdout is None or self._process.stdin is None:
-            self.close()
-            raise RuntimeError("Windows UIA host pipes are unavailable.")
         try:
+            # UTF-16LE -EncodedCommand exceeds Windows' 32,767-character
+            # command-line limit for this host. A private temp script keeps the
+            # executable pinned while stdin remains available for requests.
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8-sig", prefix="drifty-uia-", suffix=".ps1", delete=False
+            ) as script:
+                self._script_path = Path(script.name)
+                script.write(_POWERSHELL_UIA_HOST)
+            self._process = subprocess.Popen(
+                [
+                    _powershell_executable(),
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(self._script_path),
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                creationflags=creation_flags,
+            )
+            if self._process.stdout is None or self._process.stdin is None:
+                raise RuntimeError("Windows UIA host pipes are unavailable.")
             ready = _readline_with_timeout(self._process.stdout, _STARTUP_TIMEOUT_SECONDS)
             ready_payload = json.loads(ready)
             if not isinstance(ready_payload, dict) or ready_payload.get("ready") is not True:
                 raise RuntimeError("Windows UIA host did not become ready.")
+            self._remove_script()
         except Exception:
             self.close()
             raise
@@ -436,26 +453,43 @@ class _WindowsUiaHost:
             else _COLD_REQUEST_TIMEOUT_SECONDS
         )
         result = parse_uia_response(
-            _readline_with_timeout(self._process.stdout, timeout_seconds)
+            _readline_with_timeout(self._process.stdout, timeout_seconds), family
         )
         self._has_completed_request = True
         return result
 
     def close(self) -> None:
         process = getattr(self, "_process", None)
-        if process is None or process.poll() is not None:
-            return
         try:
-            if process.stdin is not None:
-                process.stdin.write("QUIT\n")
-                process.stdin.flush()
-            process.wait(timeout=1.0)
-        except Exception:
-            process.kill()
+            if process is None:
+                return
             try:
+                if process.poll() is not None:
+                    return
+                if process.stdin is not None:
+                    process.stdin.write("QUIT\n")
+                    process.stdin.flush()
                 process.wait(timeout=1.0)
             except Exception:
-                pass
+                try:
+                    process.kill()
+                except Exception:
+                    pass
+                try:
+                    process.wait(timeout=1.0)
+                except Exception:
+                    pass
+        finally:
+            self._remove_script()
+
+    def _remove_script(self) -> None:
+        path = getattr(self, "_script_path", None)
+        if path is not None:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                return  # PowerShell may still hold the file; close retries.
+            self._script_path = None
 
 
 _host_lock = threading.Lock()
@@ -486,7 +520,10 @@ def read_live_browser_url(hwnd: int, app_name: str | None) -> WindowsBrowserUiaR
                 return _host.read(hwnd, _uia_family(app_name))
             except Exception as error:
                 if _host is not None:
-                    _host.close()
+                    try:
+                        _host.close()
+                    except Exception:
+                        pass
                     _host = None
                 if attempt == 1:
                     message = " ".join(str(error).split())[:240]

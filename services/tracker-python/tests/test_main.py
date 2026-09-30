@@ -1,9 +1,12 @@
 import hashlib
+import json
 import os
+import sqlite3
 import subprocess
 import sys
 import time
 import unittest
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,13 +17,16 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app import main as tracker_main
+from app.storage import db as tracker_storage
 from app.storage.db import TrackerDatabase
 from app.storage.live_tail import fetch_live_tail
+from app.tracker import browser_history, windows_workspace
 from app.tracker.adaptive_context import developer_diagnostics
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.macos_audio_activity import ForegroundAudioSample
 from app.tracker.power_state import PowerStateSample
 from app.tracker.windows_workspace import build_snapshot as build_windows_snapshot
+from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
 from tests.support_cleanup import temp_dir_closing_databases
 
 
@@ -2387,6 +2393,192 @@ class TrackerMainTests(unittest.TestCase):
         envelopes = [json.loads(line) for line in out.getvalue().splitlines() if line]
         self.assertEqual([envelope["id"] for envelope in envelopes], [1, 2])
         self.assertEqual(envelopes[1]["data"], {"name": "카카오톡"})
+
+
+class BrowserHistoryBackfillUpgradeTests(unittest.TestCase):
+    """Exercise persisted captures through normal reopen and a real daemon tick."""
+
+    captured_at = datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc)
+    window_title = "Upgrade boundary documentation - Google Chrome"
+    history_url = "https://docs.example.test/upgrade-boundary"
+
+    def _add_history_visit(self, root: Path, title: str, url: str, observed_at: datetime) -> None:
+        history = root / "Default" / "History"
+        history.parent.mkdir(parents=True, exist_ok=True)
+        visited_at = int((observed_at.timestamp() + 11_644_473_600) * 1_000_000)
+        with closing(sqlite3.connect(history)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS urls(id INTEGER PRIMARY KEY, url TEXT, title TEXT, last_visit_time INTEGER)"
+            )
+            conn.execute("CREATE TABLE IF NOT EXISTS visits(id INTEGER PRIMARY KEY, url INTEGER, visit_time INTEGER)")
+            cursor = conn.execute(
+                "INSERT INTO urls(url, title, last_visit_time) VALUES (?, ?, ?)",
+                (url, title, visited_at),
+            )
+            conn.execute("INSERT INTO visits(url, visit_time) VALUES (?, ?)", (cursor.lastrowid, visited_at))
+            conn.commit()
+
+    def _windows_browser_snapshot(self, observed_at: datetime) -> Snapshot:
+        return build_windows_snapshot(
+            windows_workspace.ForegroundWindow(hwnd=101, pid=202, title=self.window_title),
+            windows_workspace.ProcessIdentity(
+                exe_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                exe_name="Google Chrome",
+                aumid=None,
+            ),
+            observed_at=observed_at.isoformat(),
+        )
+
+    def _record_legacy_history_miss(self, db: TrackerDatabase, snapshot: Snapshot, platform: str) -> int:
+        # These persisted fields and record_snapshot are unchanged from the
+        # pre-guard writer. Resolve an actual readable History title miss;
+        # an empty History would instead produce no_readable_database.
+        metadata = browser_history.browser_history_metadata(
+            snapshot.app_name, snapshot.window_title, snapshot.observed_at
+        )
+        self.assertEqual(metadata.browser_history_status, "no_match")
+        self.assertTrue(metadata.browser_history_database_found)
+        self.assertIsNone(metadata.site_url)
+        snapshot.browser_name = snapshot.app_name
+        snapshot.browser_automation_status = "unavailable"
+        snapshot.browser_automation_error = "Fixture foreground Document read failed."
+        for field in (
+            "browser_history_status", "browser_history_reason", "browser_history_database_found",
+            "browser_history_profile_count", "browser_history_candidate_count", "browser_history_error_count",
+        ):
+            setattr(snapshot, field, getattr(metadata, field))
+        with patch.object(tracker_storage, "CAPTURE_PLATFORM", platform):
+            db.record_snapshot(snapshot, 5, max_merge_gap_seconds=0)
+        with db.connect() as conn:
+            row = conn.execute("SELECT * FROM activity_segments ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertEqual(row["platform"], platform)
+        self.assertIsNone(row["site_url"])
+        self.assertEqual(json.loads(row["raw_context_json"])["browser_history_status"], "no_match")
+        return int(row["id"])
+
+    def _reopen_and_tick(self, db: TrackerDatabase, observed_at: datetime) -> TrackerDatabase:
+        path = db.db_path
+        db.close()
+        resumed = TrackerDatabase(path)
+        self.assertTrue(resumed.maintenance_result.existed)
+        self.assertIsNone(resumed.maintenance_error)
+        self.assertIsNone(resumed.maintenance_result.quarantined_path)
+        self.assertIsNone(resumed.maintenance_result.restored_backup_path)
+        snapshot = build_windows_snapshot(
+            windows_workspace.ForegroundWindow(hwnd=303, pid=404, title="Fixture editor document"),
+            windows_workspace.ProcessIdentity(exe_path=r"C:\Windows\System32\notepad.exe", exe_name="Notepad", aumid=None),
+            observed_at=observed_at.isoformat(),
+        )
+        # Only platform inputs are supplied. DB preparation/writing, the daemon
+        # backfill call, title matching and History SQLite reads remain real.
+        with patch.object(tracker_main, "DB_PATH", path), patch.object(
+            tracker_storage, "CAPTURE_PLATFORM", "windows"
+        ), patch.object(
+            tracker_main, "current_power_state",
+            return_value=PowerStateSample(observed_at=observed_at, should_capture=True, reason="fixture-active"),
+        ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+            tracker_main, "current_snapshot", return_value=snapshot
+        ):
+            self.assertIsNotNone(tracker_main._daemon_tick(resumed, None))
+        self.assertEqual(resumed.get_meta("last_event_at"), observed_at.isoformat())
+        with resumed.connect() as conn:
+            latest = conn.execute("SELECT * FROM activity_segments ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertEqual(latest["app_name"], snapshot.app_name)
+        return resumed
+
+    def _assert_app_only(self, db: TrackerDatabase, segment_id: int) -> None:
+        with db.connect() as conn:
+            row = conn.execute("SELECT * FROM activity_segments WHERE id = ?", (segment_id,)).fetchone()
+        self.assertEqual(row["app_name"], "Google Chrome")
+        self.assertEqual(row["duration_seconds"], 5)
+        for field in ("site_domain", "site_title", "site_url", "site_source", "youtube_video_id"):
+            self.assertIsNone(row[field], field)
+        self.assertNotIn("browser_history_backfilled", json.loads(row["raw_context_json"]))
+
+    def test_legacy_windows_history_miss_stays_app_only_after_reopen_and_tick(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            root = Path(tmp)
+            self._add_history_visit(root / "chrome", "Unrelated readable page", "https://other.example.test/", self.captured_at)
+            with patch.object(browser_history, "_BROWSER_ROOTS", {"Google Chrome": root / "chrome"}):
+                db = TrackerDatabase(root / "tracker.sqlite3")
+                segment_id = self._record_legacy_history_miss(db, self._windows_browser_snapshot(self.captured_at), "windows")
+                self._add_history_visit(root / "chrome", "Upgrade boundary documentation", self.history_url, self.captured_at)
+                resumed = self._reopen_and_tick(db, self.captured_at + timedelta(seconds=30))
+                self._assert_app_only(resumed, segment_id)
+
+    def test_known_windows_capture_source_refuses_history_with_a_mac_platform_label(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            root = Path(tmp)
+            self._add_history_visit(root / "chrome", "Unrelated readable page", "https://other.example.test/", self.captured_at)
+            with patch.object(browser_history, "_BROWSER_ROOTS", {"Google Chrome": root / "chrome"}):
+                db = TrackerDatabase(root / "tracker.sqlite3")
+                segment_id = self._record_legacy_history_miss(db, self._windows_browser_snapshot(self.captured_at), "macos")
+                self._add_history_visit(root / "chrome", "Upgrade boundary documentation", self.history_url, self.captured_at)
+                resumed = self._reopen_and_tick(db, self.captured_at + timedelta(seconds=30))
+                self._assert_app_only(resumed, segment_id)
+
+    def test_new_windows_failed_live_capture_stays_app_only_after_reopen_and_tick(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            root = Path(tmp)
+            self._add_history_visit(root / "chrome", "Upgrade boundary documentation", self.history_url, self.captured_at)
+            with patch.object(browser_history, "_BROWSER_ROOTS", {"Google Chrome": root / "chrome"}):
+                db = TrackerDatabase(root / "tracker.sqlite3")
+                snapshot = windows_workspace.enrich_browser_snapshot(
+                    self._windows_browser_snapshot(self.captured_at), 101,
+                    live_reader=lambda hwnd, app: WindowsBrowserUiaResult(url=None, error="Fixture Document read failed."),
+                    bridge_reader=lambda app, live_url: None,
+                )
+                self.assertIsNone(snapshot.browser_history_status)
+                with patch.object(tracker_storage, "CAPTURE_PLATFORM", "windows"):
+                    db.record_snapshot(snapshot, 5)
+                with db.connect() as conn:
+                    segment_id = int(conn.execute("SELECT id FROM activity_segments").fetchone()["id"])
+                resumed = self._reopen_and_tick(db, self.captured_at + timedelta(seconds=30))
+                self._assert_app_only(resumed, segment_id)
+
+    def test_mac_history_miss_fills_after_reopen_and_tick(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            root = Path(tmp)
+            self._add_history_visit(root / "chrome", "Unrelated readable page", "https://other.example.test/", self.captured_at)
+            with patch.object(browser_history, "_BROWSER_ROOTS", {"Google Chrome": root / "chrome"}):
+                db = TrackerDatabase(root / "tracker.sqlite3")
+                snapshot = Snapshot(
+                    observed_at=self.captured_at.isoformat(), app_name="Google Chrome", bundle_id="com.google.Chrome",
+                    window_title=self.window_title, source="accessibility", frontmost_capture_source="system-events",
+                )
+                segment_id = self._record_legacy_history_miss(db, snapshot, "macos")
+                self._add_history_visit(root / "chrome", "Upgrade boundary documentation", self.history_url, self.captured_at)
+                resumed = self._reopen_and_tick(db, self.captured_at + timedelta(seconds=30))
+                with resumed.connect() as conn:
+                    row = conn.execute("SELECT * FROM activity_segments WHERE id = ?", (segment_id,)).fetchone()
+                self.assertEqual(row["site_url"], self.history_url)
+                self.assertEqual(row["site_source"], "browser-history-title")
+                self.assertTrue(json.loads(row["raw_context_json"])["browser_history_backfilled"])
+
+    def test_recent_windows_rows_do_not_crowd_mac_history_backfill_out_of_scan(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            root = Path(tmp)
+            self._add_history_visit(root / "chrome", "Unrelated readable page", "https://other.example.test/", self.captured_at)
+            with patch.object(browser_history, "_BROWSER_ROOTS", {"Google Chrome": root / "chrome"}):
+                db = TrackerDatabase(root / "tracker.sqlite3")
+                mac_snapshot = Snapshot(
+                    observed_at=self.captured_at.isoformat(), app_name="Google Chrome", bundle_id="com.google.Chrome",
+                    window_title=self.window_title, source="accessibility", frontmost_capture_source="system-events",
+                )
+                mac_id = self._record_legacy_history_miss(db, mac_snapshot, "macos")
+                windows_ids = [
+                    self._record_legacy_history_miss(
+                        db, self._windows_browser_snapshot(self.captured_at + timedelta(seconds=index)), "windows"
+                    )
+                    for index in range(1, 102)
+                ]
+                self._add_history_visit(root / "chrome", "Upgrade boundary documentation", self.history_url, self.captured_at)
+                resumed = self._reopen_and_tick(db, self.captured_at + timedelta(seconds=120))
+                with resumed.connect() as conn:
+                    mac = conn.execute("SELECT * FROM activity_segments WHERE id = ?", (mac_id,)).fetchone()
+                self.assertEqual(mac["site_url"], self.history_url)
+                for segment_id in windows_ids:
+                    self._assert_app_only(resumed, segment_id)
 
 
 if __name__ == "__main__":

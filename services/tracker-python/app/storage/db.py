@@ -1279,6 +1279,10 @@ class TrackerDatabase:
         # inside the backfill window (the expression index on datetime(ended_at)
         # applies) instead of scanning the 100 most recent context-less rows of
         # all time and discarding the stale ones in Python.
+        # Legacy Windows title misses may remain after an upgrade. Their saved
+        # platform/capture source must prevent History from inventing a URL,
+        # including when a mixed database is opened by a Mac tracker. Exclude
+        # them before LIMIT so they cannot crowd out eligible Mac captures.
         backfill_cutoff = datetime.fromtimestamp(
             observed_at_seconds - config.max_age_seconds, tz=timezone.utc
         ).isoformat()
@@ -1289,6 +1293,8 @@ class TrackerDatabase:
                 SELECT *
                 FROM activity_segments
                 WHERE site_domain IS NULL
+                  AND platform != 'windows'
+                  AND source NOT IN ('win32-foreground', 'win32-foreground-untitled')
                   AND site_title IS NULL
                   AND site_url IS NULL
                   AND youtube_video_id IS NULL

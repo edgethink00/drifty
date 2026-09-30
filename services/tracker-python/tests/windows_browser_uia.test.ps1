@@ -263,12 +263,14 @@ try {
   $pageFocus = New-TestElement 'fx' $paneType $false $null $page
   Assert-Equal 'gecko-focused-page' (Read-TopLevelDocument $ffRoot $walker $documentCondition $pageFocus 'gecko').url 'https://www.youtube.com/watch?v=abc'
   $ffRoot.Children = @($browserPanel)
-  Assert-Equal 'gecko-without-a-page-refused' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko').found $false
+  $normalNoPage = Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko'
+  Assert-Equal 'gecko-without-a-page-refused' $normalNoPage.found $false
+  Assert-Equal 'gecko-no-page-privacy-remains-unknown' $normalNoPage.privacy 'unknown'
   $ffRoot.Children = @($browserPanel, $page)
   $ffRoot.PrivateMarker = New-TestElement 'pm' $paneType $false $null $ffRoot
   $privateRead = Read-TopLevelDocument $ffRoot $walker $documentCondition $pageFocus 'gecko'
   Assert-Equal 'gecko-private-window-not-found' $privateRead.found $false
-  Assert-Equal 'gecko-private-window-flagged' $privateRead.private $true
+  Assert-Equal 'gecko-private-window-flagged' $privateRead.privacy 'private'
   Assert-Equal 'gecko-private-window-has-no-url' $privateRead.url ''
   Assert-Equal 'chromium-ignores-gecko-private-marker' (Read-TopLevelDocument $ffRoot $walker $documentCondition $pageFocus 'chromium').url 'https://www.youtube.com/watch?v=abc'
 

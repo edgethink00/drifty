@@ -500,6 +500,7 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(events[0]["siteSource"], "browser-history-title")
         self.assertEqual(events[0]["confidence"], 0.45)
 
+    @patch("app.storage.db.CAPTURE_PLATFORM", "macos")
     def test_backfill_recent_browser_history_context_updates_retryable_no_match_segment(self) -> None:
         self.database.record_snapshot(
             Snapshot(
@@ -582,6 +583,7 @@ class TrackerDatabaseTests(unittest.TestCase):
             [("Google Chrome", "Lecture - YouTube - Google Chrome", "2026-04-06T09:00:00+00:00")],
         )
 
+    @patch("app.storage.db.CAPTURE_PLATFORM", "macos")
     def test_backfill_recent_browser_history_context_skips_segments_older_than_max_age(self) -> None:
         for observed_at in ("2026-04-06T08:00:00+00:00", "2026-04-06T09:00:00+00:00"):
             self.database.record_snapshot(

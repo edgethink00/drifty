@@ -46,11 +46,25 @@ class WindowsBrowserUiaTests(unittest.TestCase):
 
     def test_private_window_reply_carries_no_page(self) -> None:
         result = parse_uia_response(
-            '{"found":false,"url":"https://example.com/private","error":"private browsing window","private":true}'
+            '{"found":false,"url":"https://example.com/private","error":"private browsing window","privacy":"private"}',
+            "gecko",
         )
         self.assertIsNone(result.url)
-        self.assertTrue(result.private_window)
-        self.assertFalse(parse_uia_response('{"found":false,"url":"","error":"x","private":"true"}').private_window)
+        self.assertEqual(result.privacy_state, "private")
+        self.assertEqual(
+            parse_uia_response('{"found":false,"url":"","error":"x","privacy":"private"}').privacy_state,
+            "private",
+        )
+
+    def test_explicit_normal_reply_is_not_inferred_from_a_false_private_flag(self) -> None:
+        normal = '{"found":false,"url":"","error":"document URL unavailable","privacy":"normal"}'
+        self.assertEqual(parse_uia_response(normal, "gecko").privacy_state, "normal")
+        self.assertEqual(parse_uia_response(normal, "chromium").privacy_state, "unknown")
+        self.assertEqual(parse_uia_response(normal).privacy_state, "unknown")
+        self.assertEqual(
+            parse_uia_response('{"found":false,"url":"","error":"host failed","private":false}', "gecko").privacy_state,
+            "unknown",
+        )
 
     def test_requires_explicit_http_and_preserves_url_identity(self) -> None:
         self.assertIsNone(normalize_uia_url("example.com/docs"))
@@ -100,6 +114,58 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         result = parse_uia_response("not-json")
         self.assertIsNone(result.url)
         self.assertIn("invalid JSON", result.error or "")
+        self.assertEqual(result.privacy_state, "unknown")
+
+    def test_host_failure_has_unknown_privacy(self) -> None:
+        with (
+            patch.object(windows_browser_uia.sys, "platform", "win32"),
+            patch.object(windows_browser_uia, "_host", None),
+            patch.object(windows_browser_uia, "_WindowsUiaHost", side_effect=RuntimeError("host unavailable")),
+        ):
+            result = windows_browser_uia.read_live_browser_url(44, "Firefox")
+        self.assertIsNone(result.url)
+        self.assertEqual(result.privacy_state, "unknown")
+
+    def test_host_close_error_keeps_retry_and_typed_failure(self) -> None:
+        class FailingHost:
+            def read(self, _hwnd, _family):
+                raise TimeoutError("UIA read timed out")
+
+            def close(self):
+                raise OSError("process exit race")
+
+        with (
+            patch.object(windows_browser_uia.sys, "platform", "win32"),
+            patch.object(windows_browser_uia, "_host", None),
+            patch.object(windows_browser_uia, "_WindowsUiaHost", side_effect=[FailingHost(), FailingHost()]) as launch,
+        ):
+            result = windows_browser_uia.read_live_browser_url(44, "Firefox")
+            self.assertIsNone(windows_browser_uia._host)
+        self.assertEqual(launch.call_count, 2)
+        self.assertIsNone(result.url)
+        self.assertEqual(result.error, "UIA read timed out")
+
+    def test_kill_failure_still_removes_owned_host_script(self) -> None:
+        class FailingProcess:
+            stdin = None
+
+            def poll(self):
+                return None
+
+            def wait(self, timeout):
+                raise subprocess.TimeoutExpired("powershell", timeout)
+
+            def kill(self):
+                raise OSError("process already exited")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = Path(temp_dir) / "drifty-uia-host.ps1"
+            script_path.write_text("script", encoding="utf-8")
+            host = object.__new__(windows_browser_uia._WindowsUiaHost)
+            host._process = FailingProcess()
+            host._script_path = script_path
+            host.close()
+            self.assertFalse(script_path.exists())
 
     def test_host_reads_only_unambiguous_top_level_document_value(self) -> None:
         script = windows_browser_uia._POWERSHELL_UIA_HOST
@@ -151,13 +217,19 @@ class WindowsBrowserUiaTests(unittest.TestCase):
                 pass
 
         process = FakeProcess()
+        captured_script = []
+
+        def launch(command, **_kwargs):
+            captured_script.append(Path(command[-1]).read_text(encoding="utf-8-sig"))
+            return process
+
         with (
             patch.object(
                 windows_browser_uia,
                 "_powershell_executable",
                 return_value=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
             ),
-            patch.object(windows_browser_uia.subprocess, "Popen", return_value=process) as popen,
+            patch.object(windows_browser_uia.subprocess, "Popen", side_effect=launch) as popen,
             patch.object(
                 windows_browser_uia,
                 "_readline_with_timeout",
@@ -174,6 +246,11 @@ class WindowsBrowserUiaTests(unittest.TestCase):
             command[0],
             r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
         )
+        self.assertEqual(command[-2], "-File")
+        self.assertNotIn("-EncodedCommand", command)
+        self.assertLess(len(subprocess.list2cmdline(command)), 32767)
+        self.assertEqual(captured_script, [windows_browser_uia._POWERSHELL_UIA_HOST])
+        self.assertFalse(Path(command[-1]).exists())
 
     def test_only_the_first_completed_request_gets_the_cold_provider_budget(self) -> None:
         class FakeInput:
@@ -199,7 +276,7 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         host._has_completed_request = False
         replies = [
             '{"found":true,"url":"https://example.com/first","error":""}',
-            '{"found":true,"url":"https://example.com/second","error":""}',
+            '{"found":true,"url":"https://example.com/second","error":"","privacy":"normal"}',
         ]
         with patch.object(
             windows_browser_uia,
@@ -210,7 +287,9 @@ class WindowsBrowserUiaTests(unittest.TestCase):
             second = host.read(202, "gecko")
 
         self.assertEqual(first.url, "https://example.com/first")
+        self.assertEqual(first.privacy_state, "unknown")
         self.assertEqual(second.url, "https://example.com/second")
+        self.assertEqual(second.privacy_state, "normal")
         self.assertEqual(host._process.stdin.writes, ["READ 101 chromium\n", "READ 202 gecko\n"])
         with self.assertRaises(ValueError):
             host.read(303, "webkit")
@@ -227,6 +306,29 @@ class WindowsBrowserUiaTests(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "win32", "requires Windows PowerShell 5.1")
 class WindowsBrowserUiaPowerShellTests(unittest.TestCase):
+    def test_real_host_file_launch_read_and_cleanup(self) -> None:
+        created_scripts: list[Path] = []
+        original = tempfile.NamedTemporaryFile
+
+        def record_script(*args, **kwargs):
+            script = original(*args, **kwargs)
+            created_scripts.append(Path(script.name))
+            return script
+
+        with patch.object(windows_browser_uia.tempfile, "NamedTemporaryFile", side_effect=record_script):
+            host = windows_browser_uia._WindowsUiaHost()
+        process = host._process
+        try:
+            result = host.read(0)
+            self.assertIsNone(result.url)
+            self.assertEqual(result.error, "document window unavailable or changed")
+        finally:
+            host.close()
+        self.assertIsNotNone(process)
+        self.assertIsNotNone(process.poll())
+        self.assertEqual(len(created_scripts), 1)
+        self.assertFalse(created_scripts[0].exists())
+
     def test_embedded_functions_with_synthetic_uia_objects(self) -> None:
         suite_path = Path(__file__).with_name("windows_browser_uia.test.ps1")
         with tempfile.TemporaryDirectory() as temp_dir:
