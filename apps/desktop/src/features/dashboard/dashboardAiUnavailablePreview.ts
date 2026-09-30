@@ -57,9 +57,9 @@ const DEVICE_LIMIT_ENTITLEMENT = {
   deviceAccess: {
     allowed: false,
     reason: "device_limit_reached",
-    message: "This Drifty Pro plan is already active on 3 desktop devices. Remove a device in Account settings to use Cloud AI here.",
-    activeDeviceCount: 3,
-    maxActiveDevices: 3,
+    message: "This Drifty Pro plan is already active on 2 desktop devices. Remove a device in Account settings to use Cloud AI here.",
+    activeDeviceCount: 2,
+    maxActiveDevices: 2,
     activeWindowDays: 30,
     deviceId: null,
   },
