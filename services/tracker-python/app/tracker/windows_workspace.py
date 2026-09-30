@@ -32,6 +32,7 @@ import ctypes
 import ntpath
 import os
 import sys
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Callable
@@ -55,6 +56,9 @@ _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _APPMODEL_ERROR_NO_APPLICATION = 15703
 _LIVE_UIA_CONFIDENCE = 0.8
 _HISTORY_FALLBACK_CONFIDENCE = 0.45
+# The Windows port's steady-state capture budget is 1.5s. A longer retry
+# could credit the first window's elapsed tracking interval to a new app.
+_FOREGROUND_RETRY_BUDGET_SECONDS = 1.5
 
 _VERIFIED_HISTORY_BROWSER_PATHS: dict[str, tuple[tuple[str, str], ...]] = {
     "Google Chrome": (
@@ -273,7 +277,14 @@ def build_snapshot(
     Pure function so unit tests cover the mapping rules on any platform.
     """
     observed = observed_at or utc_now_iso()
-    if window is None or identity is None:
+    # A window title (or even an executable basename) cannot identify the
+    # owning app when both stable process identifiers are unreadable. Treat it
+    # as a failed capture so callers do not show it as live foreground work.
+    if (
+        window is None
+        or identity is None
+        or identity_key_for(identity.exe_path, identity.aumid) is None
+    ):
         return Snapshot(
             observed_at=observed,
             app_name="Unavailable",
@@ -281,7 +292,10 @@ def build_snapshot(
             window_title=None,
             source="unknown",
             frontmost_capture_source="unavailable",
-            frontmost_capture_error=capture_error or "No foreground window available.",
+            frontmost_capture_error=capture_error or (
+                "Foreground process identity unavailable."
+                if window is not None else "No foreground window available."
+            ),
         )
 
     app_name = None
@@ -478,26 +492,51 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
             "Capture refused: Windows session is unknown or has no interactive desktop.",
         )
 
-    window = read_foreground_window()
-    if window is None:
-        return build_snapshot(None, None, observed, "GetForegroundWindow returned no window.")
-
-    identity, diagnostic = resolve_identity(window)
-    identity_window = read_foreground_window()
-    if identity_window != window:
-        return build_snapshot(
-            None, None, observed,
-            f"Foreground window changed during identity capture ({_foreground_change_kind(window, identity_window)}).",
-        )
-    snapshot = build_snapshot(window, identity, observed, diagnostic)
-    enriched = enrich_browser_snapshot(snapshot, window.hwnd)
-    # URL/bridge/history reads may outlive the original foreground observation.
-    # Never combine an earlier title/process with later browser metadata. This
-    # detects observed changes; it does not make UIA or tab navigation atomic.
-    enriched_window = read_foreground_window()
-    if enriched_window != window:
-        return build_snapshot(
-            None, None, observed,
-            f"Foreground window changed during browser capture ({_foreground_change_kind(window, enriched_window)}).",
-        )
-    return enriched
+    # A tab switch or a new foreground window can race either process identity
+    # or the slower browser URL read. Re-sample the *new* foreground once;
+    # never reuse the first attempt's identity, title, or URL for that window.
+    # Keep a delayed UIA read as a gap; otherwise the daemon would assign its
+    # long pre-switch interval to the new foreground app.
+    capture_started = time.monotonic()
+    for attempt in range(2):
+        if attempt:
+            if time.monotonic() - capture_started > _FOREGROUND_RETRY_BUDGET_SECONDS:
+                return failed
+            observed = utc_now_iso()
+        window = read_foreground_window()
+        if window is None:
+            failed = build_snapshot(None, None, observed, "GetForegroundWindow returned no window.")
+        else:
+            identity, diagnostic = resolve_identity(window)
+            identity_window = read_foreground_window()
+            if identity_window != window:
+                failed = build_snapshot(
+                    None, None, observed,
+                    f"Foreground window changed during identity capture ({_foreground_change_kind(window, identity_window)}).",
+                )
+            else:
+                snapshot = build_snapshot(window, identity, observed, diagnostic)
+                if snapshot.frontmost_capture_source == "unavailable":
+                    failed = snapshot
+                else:
+                    enriched = enrich_browser_snapshot(snapshot, window.hwnd)
+                    # URL/bridge/history reads may outlive the observation.
+                    # Discard the whole candidate if its context changed.
+                    enriched_window = read_foreground_window()
+                    if enriched_window == window:
+                        # Even a stable HWND/title cannot prove that its tab or
+                        # content stayed put during a slow first UIA read. Do
+                        # not credit that entire interval to a late result.
+                        if time.monotonic() - capture_started > _FOREGROUND_RETRY_BUDGET_SECONDS:
+                            return build_snapshot(
+                                None, None, observed,
+                                "Foreground capture exceeded time budget.",
+                            )
+                        return enriched
+                    failed = build_snapshot(
+                        None, None, observed,
+                        f"Foreground window changed during browser capture ({_foreground_change_kind(window, enriched_window)}).",
+                    )
+        if attempt:
+            return failed
+    raise AssertionError("Foreground capture retry exhausted")

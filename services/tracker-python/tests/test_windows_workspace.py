@@ -211,6 +211,40 @@ class BuildSnapshotTests(unittest.TestCase):
         snapshot = build_snapshot(None, None, observed_at="2026-08-17T00:00:00+00:00")
         self.assertIn("foreground window", snapshot.frontmost_capture_error or "")
 
+    def test_unreadable_process_identity_is_a_failed_capture(self) -> None:
+        window = ForegroundWindow(hwnd=1, title="A real window", pid=5)
+        for identity, diagnostic in (
+            (ProcessIdentity(None, None, None), None),
+            (ProcessIdentity(None, "unresolved-uwp", None), "Hosted app not resolved."),
+        ):
+            with self.subTest(identity=identity):
+                snapshot = build_snapshot(window, identity, capture_error=diagnostic)
+                self.assertEqual(snapshot.app_name, "Unavailable")
+                self.assertIsNone(snapshot.bundle_id)
+                self.assertIsNone(snapshot.window_title)
+                self.assertEqual(snapshot.source, "unknown")
+                self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+                self.assertEqual(
+                    snapshot.frontmost_capture_error,
+                    diagnostic or "Foreground process identity unavailable.",
+                )
+
+    def test_named_unavailable_app_and_aumid_only_app_keep_verified_identity(self) -> None:
+        window = ForegroundWindow(hwnd=1, title="A real window", pid=5)
+        named_app = build_snapshot(
+            window, ProcessIdentity(r"C:\Apps\Unavailable.exe", "Unavailable", None)
+        )
+        self.assertEqual(named_app.app_name, "Unavailable")
+        self.assertEqual(named_app.bundle_id, r"c:\apps\unavailable.exe")
+        self.assertEqual(named_app.frontmost_capture_source, "win32-foreground")
+
+        packaged_app = build_snapshot(
+            window, ProcessIdentity(None, None, "Contoso.Editor_abc!Editor")
+        )
+        self.assertEqual(packaged_app.app_name, "Editor")
+        self.assertEqual(packaged_app.bundle_id, "Contoso.Editor_abc!Editor")
+        self.assertEqual(packaged_app.frontmost_capture_source, "uwp-frame-host")
+
 
 class BrowserEnrichmentTests(unittest.TestCase):
     def _snapshot(self, app_name: str = "Google Chrome"):
@@ -447,15 +481,18 @@ class BrowserHistoryIdentityTests(unittest.TestCase):
         ))
 
 class ForegroundSnapshotFreshnessTests(unittest.TestCase):
-    def capture(self, windows):
-        identity = ProcessIdentity(
-            exe_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            exe_name="Google Chrome",
-            aumid=None,
-        )
+    def capture(self, windows, identity_reader=None):
+        def resolve(window):
+            if identity_reader is not None:
+                return identity_reader(window)
+            return ProcessIdentity(
+                exe_path=rf"C:\Apps\app{window.pid}.exe",
+                exe_name=f"app{window.pid}",
+                aumid=None,
+            ), None
 
         def enrich(snapshot, hwnd):
-            snapshot.site_url = "http://127.0.0.1/PageB"
+            snapshot.site_url = f"http://127.0.0.1/{(snapshot.window_title or '').replace(' ', '')}"
             snapshot.site_source = "windows-uia-document"
             return snapshot
 
@@ -463,45 +500,118 @@ class ForegroundSnapshotFreshnessTests(unittest.TestCase):
             patch.object(windows_workspace, "is_windows", return_value=True),
             patch.object(windows_workspace, "process_session_id", return_value=1),
             patch.object(windows_workspace, "read_foreground_window", side_effect=windows),
-            patch.object(windows_workspace, "resolve_identity", return_value=(identity, None)),
+            patch.object(windows_workspace, "resolve_identity", side_effect=resolve) as identity,
             patch.object(windows_workspace, "enrich_browser_snapshot", side_effect=enrich) as enrichment,
         ):
             snapshot = windows_workspace.current_snapshot()
-        return snapshot, enrichment
+        return snapshot, identity, enrichment
 
     def test_stable_foreground_keeps_enrichment(self) -> None:
         stable = ForegroundWindow(hwnd=100, title="Page B", pid=10)
-        snapshot, enrichment = self.capture([stable, stable, stable])
+        snapshot, identity, enrichment = self.capture([stable, stable, stable])
         self.assertEqual(snapshot.window_title, "Page B")
         self.assertEqual(snapshot.site_url, "http://127.0.0.1/PageB")
+        identity.assert_called_once_with(stable)
         enrichment.assert_called_once()
 
-    def test_changed_identity_refuses_before_enrichment(self) -> None:
+    def test_changed_owner_recaptures_new_foreground(self) -> None:
         old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
-        changed = ForegroundWindow(hwnd=100, title="Page A", pid=20)
-        snapshot, enrichment = self.capture([old, changed])
-        enrichment.assert_not_called()
+        changed = ForegroundWindow(hwnd=200, title="Page B", pid=20)
+        snapshot, identity, enrichment = self.capture([old, changed, changed, changed, changed])
+        self.assertEqual(snapshot.bundle_id, r"c:\apps\app20.exe")
+        self.assertEqual(snapshot.window_title, "Page B")
+        self.assertEqual(snapshot.site_url, "http://127.0.0.1/PageB")
+        self.assertEqual(identity.call_count, 2)
+        enrichment.assert_called_once()
+
+    def test_changed_tab_title_recaptures_matching_title_and_url(self) -> None:
+        old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
+        changed = ForegroundWindow(hwnd=100, title="Page B", pid=10)
+        snapshot, identity, enrichment = self.capture([old, old, changed, changed, changed, changed])
+        self.assertEqual(snapshot.window_title, "Page B")
+        self.assertEqual(snapshot.site_url, "http://127.0.0.1/PageB")
+        self.assertEqual(identity.call_count, 2)
+        self.assertEqual(enrichment.call_count, 2)
+
+    def test_second_change_refuses_without_stale_context(self) -> None:
+        old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
+        changed = ForegroundWindow(hwnd=100, title="Page B", pid=10)
+        changed_again = ForegroundWindow(hwnd=100, title="Page C", pid=10)
+        snapshot, identity, enrichment = self.capture(
+            [old, old, changed, changed, changed, changed_again]
+        )
+        self.assertEqual(identity.call_count, 2)
+        self.assertEqual(enrichment.call_count, 2)
         self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
-        self.assertIn("(process)", snapshot.frontmost_capture_error or "")
+        self.assertIn("(title)", snapshot.frontmost_capture_error or "")
+        self.assertIsNone(snapshot.window_title)
+        self.assertIsNone(snapshot.site_url)
+        self.assertIsNone(snapshot.site_source)
+
+    def test_delayed_first_capture_does_not_credit_new_app(self) -> None:
+        old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
+        changed = ForegroundWindow(hwnd=100, title="Page B", pid=10)
+        with patch.object(windows_workspace.time, "monotonic", side_effect=[0.0, 2.0]):
+            snapshot, identity, enrichment = self.capture([old, old, changed])
+        identity.assert_called_once_with(old)
+        enrichment.assert_called_once()
+        self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
         self.assertIsNone(snapshot.site_url)
 
-    def test_changed_foreground_discards_enriched_context(self) -> None:
+    def test_slow_first_read_with_stable_title_is_a_gap(self) -> None:
+        # UIA may return a later same-title tab on the same HWND. A foreground
+        # re-read alone cannot prove which page owned the long interval.
+        stable = ForegroundWindow(hwnd=100, title="Page A", pid=10)
+        with patch.object(windows_workspace.time, "monotonic", side_effect=[0.0, 2.0]):
+            snapshot, identity, enrichment = self.capture([stable, stable, stable])
+        identity.assert_called_once_with(stable)
+        enrichment.assert_called_once()
+        self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+        self.assertIn("time budget", snapshot.frontmost_capture_error or "")
+        self.assertIsNone(snapshot.bundle_id)
+        self.assertIsNone(snapshot.site_url)
+
+    def test_delayed_retry_does_not_credit_new_app(self) -> None:
         old = ForegroundWindow(hwnd=100, title="Page A", pid=10)
-        for changed, expected_kind in (
-            (ForegroundWindow(hwnd=200, title="Page A", pid=10), "handle"),
-            (ForegroundWindow(hwnd=100, title="Page A", pid=20), "process"),
-            (ForegroundWindow(hwnd=100, title="Page B", pid=10), "title"),
-            (None, "missing"),
-        ):
-            with self.subTest(changed=changed):
-                snapshot, enrichment = self.capture([old, old, changed])
-                enrichment.assert_called_once()
-                self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
-                self.assertIn("changed", snapshot.frontmost_capture_error or "")
-                self.assertIn(f"({expected_kind})", snapshot.frontmost_capture_error or "")
-                self.assertIsNone(snapshot.window_title)
-                self.assertIsNone(snapshot.site_url)
-                self.assertIsNone(snapshot.site_source)
+        changed = ForegroundWindow(hwnd=100, title="Page B", pid=10)
+        with patch.object(windows_workspace.time, "monotonic", side_effect=[0.0, 0.2, 2.0]):
+            snapshot, identity, enrichment = self.capture(
+                [old, old, changed, changed, changed, changed]
+            )
+        self.assertEqual(identity.call_count, 2)
+        self.assertEqual(enrichment.call_count, 2)
+        self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+        self.assertIn("time budget", snapshot.frontmost_capture_error or "")
+        self.assertIsNone(snapshot.site_url)
+
+    def test_missing_foreground_once_can_recover(self) -> None:
+        stable = ForegroundWindow(hwnd=100, title="Page B", pid=10)
+        snapshot, identity, enrichment = self.capture([None, stable, stable, stable])
+        self.assertEqual(snapshot.window_title, "Page B")
+        identity.assert_called_once_with(stable)
+        enrichment.assert_called_once()
+
+    def test_unreadable_identity_once_can_recover(self) -> None:
+        stable = ForegroundWindow(hwnd=100, title="Page B", pid=10)
+        valid = ProcessIdentity(r"C:\Apps\app10.exe", "app10", None)
+        reads = iter([(ProcessIdentity(None, None, None), None), (valid, None)])
+        snapshot, identity, enrichment = self.capture(
+            [stable] * 6, identity_reader=lambda _: next(reads)
+        )
+        self.assertEqual(snapshot.bundle_id, r"c:\apps\app10.exe")
+        self.assertEqual(identity.call_count, 2)
+        enrichment.assert_called_once()
+
+    def test_persistent_unreadable_identity_stays_unavailable(self) -> None:
+        stable = ForegroundWindow(hwnd=100, title="Page B", pid=10)
+        snapshot, identity, enrichment = self.capture(
+            [stable] * 4,
+            identity_reader=lambda _: (ProcessIdentity(None, None, None), None),
+        )
+        self.assertEqual(identity.call_count, 2)
+        enrichment.assert_not_called()
+        self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+        self.assertIsNone(snapshot.site_url)
 
 
 class SessionZeroRefusalTests(unittest.TestCase):
