@@ -52,6 +52,7 @@ from app.tracker.adaptive_context.developer_diagnostics import (
 )
 from app.sentry_setup import capture_tracker_exception, init_tracker_sentry, silence_urllib3_libressl_warning
 from app.tracker.windows_idle import is_sleep_gap
+from app.tracker.capture_timeline import CaptureMutation, CaptureTimeline
 from app.tracker.engagement_policy import (
     FOREGROUND_AUDIO_EVIDENCE,
     EngagementDecision,
@@ -1958,11 +1959,17 @@ def apply_engagement_stop(
     idle_seconds: float | None,
     *,
     now: datetime | None = None,
+    input_tick: float | None = None,
 ) -> None:
     if decision.kind == "stop_and_trim_to_input" and idle_seconds is not None:
-        reference_time = now or datetime.now(timezone.utc)
-        idle_started_at = reference_time - timedelta(seconds=idle_seconds)
-        db.trim_latest_segment(idle_started_at.isoformat())
+        if input_tick is not None:
+            db.trim_captured_segments(db.capture_timeline.trims_to_input(input_tick - idle_seconds))
+        else:
+            reference_time = now or datetime.now(timezone.utc)
+            idle_started_at = reference_time - timedelta(seconds=idle_seconds)
+            db.trim_latest_segment(idle_started_at.isoformat())
+    if isinstance(db.capture_timeline, CaptureTimeline):
+        db.capture_timeline.clear_pending()
     db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
     reset_foreground_audio_diagnostics(db, "engagement_stopped")
     db.set_meta("tracker_mode", "idle")
@@ -1975,12 +1982,18 @@ def reset_foreground_audio_diagnostics(db: TrackerDatabase, reason: str) -> None
     db.set_meta("passive_lease_remaining_seconds", "")
 
 
-def handle_power_state_sample(db: TrackerDatabase, power_state: PowerStateSample) -> bool:
+def handle_power_state_sample(db: TrackerDatabase, power_state: PowerStateSample,
+                              *, timeline: CaptureTimeline | None = None) -> bool:
     if power_state.should_capture:
         return False
 
     observed_at = power_state.observed_at.isoformat()
-    db.trim_latest_segment(observed_at)
+    if timeline is None:
+        db.trim_latest_segment(observed_at)
+    # Completed samples already end before suppression in capture order.
+    # A corrected wall clock is not evidence that their supported time should
+    # be shortened. Retain pending input anchors: resuming without new input
+    # must still clean up the provisional interactive time before suppression.
     db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
     reset_foreground_audio_diagnostics(db, "power_suppressed")
     db.set_meta("tracker_mode", "suppressed")
@@ -2204,19 +2217,29 @@ def _daemon_tick(
     """
     if capture_allowed is not None and not capture_allowed():
         return None
-    if handle_power_state_sample(db, current_power_state()):
+    # Non-storage adapters used by callers/tests can retain the standalone
+    # trim API. The daemon's real database owns one non-persisted generation.
+    timeline = db.capture_timeline if isinstance(db.capture_timeline, CaptureTimeline) else None
+    power_state = current_power_state()
+    power_suppressed = (handle_power_state_sample(db, power_state, timeline=timeline)
+                        if timeline is not None else handle_power_state_sample(db, power_state))
+    if power_suppressed:
         return None
 
     idle_seconds = seconds_since_last_input()
+    input_tick = time.monotonic() if timeline is not None else None
     reference_time = datetime.now(timezone.utc)
     engagement = engagement_decision_for_tick(db, idle_seconds, now=reference_time)
     if not engagement.should_capture:
-        apply_engagement_stop(db, engagement, idle_seconds, now=reference_time)
+        apply_engagement_stop(db, engagement, idle_seconds, now=reference_time, input_tick=input_tick)
         return None
 
     _apply_developer_diagnostics_env(db)
     if capture_allowed is not None and not capture_allowed():
         return None
+    # Both OS snapshot providers stamp observed_at at the start of inspection.
+    # Pair it with monotonic time before a potentially blocking foreground read.
+    snapshot_tick = time.monotonic() if timeline is not None else None
     snapshot = current_snapshot(include_system_transient=False)
     # Foreground inspection can block. Discard its result if the owning app
     # exited or cooperative Stop arrived while the OS resolved the snapshot.
@@ -2239,10 +2262,14 @@ def _daemon_tick(
     sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
     if engagement.is_passive:
         passive_merge_gap = PASSIVE_AUDIO_GAP_GRACE_SECONDS if last_capture_tick is not None else 0
-        db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap)
+        mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap)
     else:
         interactive_merge_gap = 0 if windows_sampling_gap else IDLE_THRESHOLD_SECONDS
-        db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=interactive_merge_gap)
+        mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=interactive_merge_gap)
+    if timeline is not None and isinstance(mutation, CaptureMutation):
+        timeline.remember(mutation, snapshot_tick,
+                          input_tick - idle_seconds if idle_seconds is not None else None,
+                          passive=engagement.is_passive, continuous=last_capture_tick is not None)
     enqueue_youtube_metadata_fetch(db, snapshot.youtube_video_id, snapshot.site_url)
     backfill_browser_history_context(db, snapshot.observed_at)
     db.set_meta("last_event_at", snapshot.observed_at)
@@ -2335,6 +2362,8 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
             return
         _write_tracker_pid(daemon_pid)
         db = database()
+        if isinstance(db.capture_timeline, CaptureTimeline):
+            db.capture_timeline = CaptureTimeline()
         db.set_meta("tracker_script_path", _current_script_path())
         db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
         # A grace window is meaningful only inside one uninterrupted daemon

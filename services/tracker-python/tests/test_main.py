@@ -2763,7 +2763,7 @@ class TrackerMainTests(unittest.TestCase):
                 return_value=SimpleNamespace(should_capture=True, is_passive=passive),
             ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
                 tracker_main, "current_snapshot", side_effect=snapshots,
-            ), patch.object(tracker_main.time, "monotonic", side_effect=(100.0, 100.0 + elapsed)), patch.object(
+            ), patch.object(tracker_main.time, "monotonic", side_effect=(100.0,) * 3 + (100.0 + elapsed,) * 3), patch.object(
                 tracker_main, "enqueue_youtube_metadata_fetch",
             ), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
                 tracker_main, "SAMPLE_SECONDS", 5,

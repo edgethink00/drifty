@@ -547,25 +547,28 @@ class TrackerDatabaseTests(unittest.TestCase):
 
         self.assertEqual(self.database.latest_local_engagement_evidence(), "foreground-audio")
 
-    def test_latest_local_engagement_evidence_uses_the_ended_at_index(self) -> None:
-        with self.database.connect() as connection:
-            plan = connection.execute(
-                """
-                EXPLAIN QUERY PLAN
-                SELECT engagement_evidence
-                FROM activity_segments
-                WHERE origin_device_id IS NULL
-                  AND source != ?
-                ORDER BY datetime(ended_at) DESC, id DESC
-                LIMIT 1
-                """,
-                ("browser-history-import",),
-            ).fetchall()
-
-        self.assertTrue(
-            any("idx_activity_segments_ended_at" in row["detail"] for row in plan),
-            [row["detail"] for row in plan],
+    def test_latest_local_engagement_evidence_does_not_scan_newer_excluded_rows(self) -> None:
+        self.database.record_snapshot(
+            Snapshot(observed_at="2026-04-06T09:00:00+00:00", app_name="Owned live app",
+                     bundle_id="owned.live", window_title="Owned", source="qa",
+                     engagement_evidence="foreground-audio"), 5,
         )
+        with self.database.connect() as connection:
+            connection.executemany(
+                """INSERT INTO activity_segments
+                   (started_at,ended_at,duration_seconds,app_name,platform,source,origin_device_id)
+                   VALUES ('2030-01-01T09:00:00+00:00','2030-01-01T09:00:00+00:00',5,'Owned excluded','macos',?,?)""",
+                [("browser-history-import", None), ("qa", "owned-remote")] * 500,
+            )
+        progress_calls = []
+        connection = self.database.connect()
+        connection.set_progress_handler(lambda: progress_calls.append(True) or 0, 100)
+        try:
+            evidence = self.database.latest_local_engagement_evidence()
+        finally:
+            connection.set_progress_handler(None, 0)
+        self.assertEqual(evidence, "foreground-audio")
+        self.assertLess(len(progress_calls), 5)
 
     def test_record_snapshot_refreshes_browser_diagnostics_when_merging(self) -> None:
         self.database.record_snapshot(

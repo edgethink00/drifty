@@ -23,6 +23,7 @@ from app.storage.activity_segment_serialization import (
     serialize_project_trend_activity_row,
 )
 from app.storage.timestamps import parse_iso_datetime
+from app.tracker.capture_timeline import CaptureMutation, CaptureTimeline, CaptureTiming, CaptureTrim
 from app.storage.database_maintenance import (
     DatabasePreparationResult,
     create_rotating_backup,
@@ -143,6 +144,7 @@ class TrackerDatabase:
         self.db_path = db_path
         self.path = db_path
         self.read_only = read_only
+        self.capture_timeline = CaptureTimeline()
         if not self.read_only:
             ensure_directory(self.db_path.parent)
         self._connection: sqlite3.Connection | None = None
@@ -702,6 +704,17 @@ class TrackerDatabase:
             """
         )
 
+        # Live recency follows local capture creation, even after wall-clock
+        # correction. Skip imported/remote tails without scanning their rows.
+        conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS idx_activity_segments_local_live_id
+            ON activity_segments(id DESC)
+            WHERE origin_device_id IS NULL
+              AND source != '{BROWSER_HISTORY_IMPORT_SOURCE}'
+            """
+        )
+
         # One-time backfill: give pre-sync rows a stable uid and seed sync_seq from the
         # rowid so the initial push walks history oldest-first. Runs before the triggers
         # are created so the seeding UPDATEs cannot race the counter.
@@ -1097,11 +1110,15 @@ class TrackerDatabase:
                 (video_id, failed_at, next_retry_at, error_count),
             )
 
-    def record_snapshot(self, snapshot: Snapshot, sample_seconds: int, max_merge_gap_seconds: int | None = None) -> None:
+    def record_snapshot(self, snapshot: Snapshot, sample_seconds: int, max_merge_gap_seconds: int | None = None) -> CaptureMutation:
         # SQLite rejects the whole row for one unpaired UTF-16 surrogate, such as
         # an emoji half left by a truncated Windows title (DRIFTY-MAC-NATIVE-16).
         snapshot = without_lone_surrogates(snapshot)
         with self.connect() as conn:
+            if not conn.in_transaction:
+                # The before/after journal must describe one serialized capture
+                # mutation, not a row another process replaced after our read.
+                conn.execute("BEGIN IMMEDIATE")
             excluded_rules = self._get_excluded_app_rules(conn)
             match = match_app_exclusion(snapshot.app_name, snapshot.bundle_id, excluded_rules)
             if match:
@@ -1110,12 +1127,14 @@ class TrackerDatabase:
             # Only coalesce live, locally-originated segments. Imported history
             # describes the past, and synced segments describe another device's
             # timeline; neither may absorb a new local capture interval.
+            # The last capture is the newest inserted live row, not the greatest
+            # wall time: an older row can end in the future after clock rollback.
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
                 WHERE origin_device_id IS NULL
                   AND source != ?
-                ORDER BY datetime(ended_at) DESC, id DESC
+                ORDER BY id DESC
                 LIMIT 1
                 """,
                 (BROWSER_HISTORY_IMPORT_SOURCE,),
@@ -1209,9 +1228,10 @@ class TrackerDatabase:
                         last["id"],
                     ),
                 )
-                return
+                after = conn.execute("SELECT * FROM activity_segments WHERE id = ?", (last["id"],)).fetchone()
+                return CaptureMutation(CaptureTiming.from_row(last), CaptureTiming.from_row(after), sample_seconds)
 
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO activity_segments (
                     segment_uid,
@@ -1261,6 +1281,8 @@ class TrackerDatabase:
                     snapshot.exclusion_source,
                 ),
             )
+            after = conn.execute("SELECT * FROM activity_segments WHERE id = ?", (cursor.lastrowid,)).fetchone()
+            return CaptureMutation(None, CaptureTiming.from_row(after), sample_seconds)
 
     def latest_local_engagement_evidence(self) -> str | None:
         with self.connect() as conn:
@@ -1270,7 +1292,7 @@ class TrackerDatabase:
                 FROM activity_segments
                 WHERE origin_device_id IS NULL
                   AND source != ?
-                ORDER BY datetime(ended_at) DESC, id DESC
+                ORDER BY id DESC
                 LIMIT 1
                 """,
                 (BROWSER_HISTORY_IMPORT_SOURCE,),
@@ -1279,6 +1301,31 @@ class TrackerDatabase:
             return None
         value = row["engagement_evidence"]
         return value if value == "foreground-audio" else None
+
+    def trim_captured_segments(self, trims: list[CaptureTrim]) -> None:
+        """Reconcile only rows observed in this run, if their timing is unchanged."""
+        deletions = {}
+        with self.connect() as conn:
+            for trim in trims:
+                expected = trim.expected
+                if trim.target is None:
+                    deletions[expected.segment_id] = expected
+                    continue
+                target = trim.target
+                conn.execute(
+                    """
+                    UPDATE activity_segments SET ended_at = ?, duration_seconds = ?
+                    WHERE id = ? AND segment_uid = ? AND started_at = ?
+                      AND ended_at = ? AND duration_seconds = ?
+                      AND origin_device_id IS NULL AND source != ?
+                    """,
+                    (target.ended_at, target.duration_seconds, expected.segment_id,
+                     expected.segment_uid, expected.started_at, expected.ended_at,
+                     expected.duration_seconds, BROWSER_HISTORY_IMPORT_SOURCE),
+                )
+        if deletions:
+            self.delete_activity_segments([str(segment_id) for segment_id in deletions],
+                                          expected_capture_timings=deletions)
 
     def backfill_recent_browser_history_context(
         self,
@@ -1384,12 +1431,13 @@ class TrackerDatabase:
             # Imported history segments describe the past, not the live session, and
             # segments pulled from another synced device describe that device's timeline;
             # idle/power trims must never truncate or delete either.
+            # Trim the current capture, including a new epoch after clock rollback.
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
                 WHERE source != ?
                   AND origin_device_id IS NULL
-                ORDER BY datetime(ended_at) DESC, id DESC
+                ORDER BY id DESC
                 LIMIT 1
                 """,
                 (BROWSER_HISTORY_IMPORT_SOURCE,),
@@ -1920,6 +1968,7 @@ class TrackerDatabase:
         record_tombstone: bool = True,
         *,
         refresh_recovery_backup: bool = True,
+        expected_capture_timings: dict[int, CaptureTiming] | None = None,
     ) -> int:
         normalized_ids = sorted({
             int(segment_id)
@@ -1936,16 +1985,29 @@ class TrackerDatabase:
             refresh_backup=refresh_recovery_backup,
         ) as invalidate_recovery_copies:
             with self.connect() as conn:
+                if expected_capture_timings is not None and not conn.in_transaction:
+                    # Validation and guarded deletion must share a write
+                    # transaction. A SELECT alone does not start Python's
+                    # SQLite transaction and would let another writer replace
+                    # the validated row before its ID is deleted.
+                    conn.execute("BEGIN IMMEDIATE")
                 rows: list[sqlite3.Row] = []
+                columns = "*" if expected_capture_timings is not None else "id, segment_uid"
                 for start in range(0, len(normalized_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
                     batch = normalized_ids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
                     placeholders = ",".join("?" for _ in batch)
                     rows.extend(
                         conn.execute(
-                            f"SELECT id, segment_uid FROM activity_segments WHERE id IN ({placeholders})",
+                            f"SELECT {columns} FROM activity_segments WHERE id IN ({placeholders})",
                             tuple(batch),
                         ).fetchall()
                     )
+                if expected_capture_timings is not None:
+                    rows = [row for row in rows
+                            if row["origin_device_id"] is None
+                            and row["source"] != BROWSER_HISTORY_IMPORT_SOURCE
+                            and CaptureTiming.from_row(row) == expected_capture_timings.get(row["id"])]
+                    normalized_ids = [int(row["id"]) for row in rows]
                 if not rows:
                     return 0
 
@@ -2186,7 +2248,7 @@ class TrackerDatabase:
                 """
                 SELECT id, ended_at, sync_seq FROM activity_segments
                 WHERE origin_device_id IS NULL AND source != ?
-                ORDER BY datetime(ended_at) DESC, id DESC
+                ORDER BY id DESC
                 LIMIT 1
                 """,
                 (BROWSER_HISTORY_IMPORT_SOURCE,),
@@ -4624,11 +4686,14 @@ class TrackerDatabase:
 
     @staticmethod
     def _within_merge_gap(previous_end: str, next_observed_at: str, max_merge_gap_seconds: int | None) -> bool:
-        if max_merge_gap_seconds is None:
-            return True
         previous = TrackerDatabase._timestamp_seconds(previous_end)
         current = TrackerDatabase._timestamp_seconds(next_observed_at)
-        return current - previous <= max_merge_gap_seconds
+        gap_seconds = current - previous
+        # A backward wall-clock correction must not move a committed segment's
+        # end before its start. Preserve that interval and record a new sample.
+        return gap_seconds >= 0 and (
+            max_merge_gap_seconds is None or gap_seconds <= max_merge_gap_seconds
+        )
 
     @staticmethod
     def _backfilled_raw_context_json(
