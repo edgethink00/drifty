@@ -2720,6 +2720,69 @@ class TrackerMainTests(unittest.TestCase):
         history_backfill.assert_not_called()
         self.assertNotIn(call("last_event_at", snapshot.observed_at), mock_db.set_meta.call_args_list)
 
+    def test_daemon_tick_bounds_windows_sampling_gaps_in_stored_activity(self) -> None:
+        cases = (
+            ("win32", 7.4, 7, 1),
+            ("win32", 10.0, 10, 1),
+            ("win32", 10.1, 5, 2),
+            ("win32", 13.0, 5, 2),
+            ("win32", 1800.0, 5, 2),
+            ("darwin", 1800.0, 1800, 2),
+        )
+        for platform, elapsed, credited_seconds, row_count in cases:
+            with self.subTest(platform=platform, elapsed=elapsed):
+                self._assert_stored_sampling_interval(
+                    platform, elapsed, credited_seconds, row_count, passive=False
+                )
+
+    def test_daemon_tick_does_not_bridge_passive_audio_across_windows_sampling_gap(self) -> None:
+        self._assert_stored_sampling_interval("win32", 13.0, 5, 2, passive=True)
+
+    def _assert_stored_sampling_interval(
+        self, platform: str, elapsed: float, credited_seconds: int, row_count: int, *, passive: bool
+    ) -> None:
+        started = datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc)
+        snapshots = [
+            Snapshot(
+                observed_at=(started + timedelta(seconds=offset)).isoformat(),
+                app_name="Synthetic timing app",
+                bundle_id="synthetic.timing.app",
+                window_title="Owned fixture",
+                source="unknown",
+                frontmost_capture_source="win32-foreground",
+            )
+            for offset in (0.0, elapsed)
+        ]
+        with temp_dir_closing_databases() as tmp:
+            database = TrackerDatabase(Path(tmp) / "tracker.sqlite3", perform_maintenance=False)
+            with patch.object(tracker_main.sys, "platform", platform), patch.object(
+                tracker_main, "current_power_state",
+                return_value=PowerStateSample(started, True, "owned fixture"),
+            ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+                tracker_main, "engagement_decision_for_tick",
+                return_value=SimpleNamespace(should_capture=True, is_passive=passive),
+            ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+                tracker_main, "current_snapshot", side_effect=snapshots,
+            ), patch.object(tracker_main.time, "monotonic", side_effect=(100.0, 100.0 + elapsed)), patch.object(
+                tracker_main, "enqueue_youtube_metadata_fetch",
+            ), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
+                tracker_main, "SAMPLE_SECONDS", 5,
+            ):
+                previous_tick = tracker_main._daemon_tick(database, None)
+                self.assertEqual(tracker_main._daemon_tick(database, previous_tick), 100.0 + elapsed)
+            rows = database.connect().execute(
+                "SELECT started_at, ended_at, duration_seconds, engagement_evidence "
+                "FROM activity_segments ORDER BY id"
+            ).fetchall()
+            self.assertEqual(len(rows), row_count)
+            self.assertEqual(sum(row["duration_seconds"] for row in rows), 5 + credited_seconds)
+            if row_count == 2:
+                self.assertEqual(rows[0]["ended_at"], snapshots[0].observed_at)
+                self.assertEqual(rows[1]["started_at"], snapshots[1].observed_at)
+                self.assertEqual(rows[1]["duration_seconds"], credited_seconds)
+            expected_evidence = "foreground-audio" if passive else None
+            self.assertTrue(all(row["engagement_evidence"] == expected_evidence for row in rows))
+
     def test_daemon_tick_records_a_verified_app_named_unavailable(self) -> None:
         mock_db = MagicMock()
         power_state = PowerStateSample(

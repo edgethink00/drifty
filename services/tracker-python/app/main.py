@@ -51,6 +51,7 @@ from app.tracker.adaptive_context.developer_diagnostics import (
     save_developer_diagnostics,
 )
 from app.sentry_setup import capture_tracker_exception, init_tracker_sentry, silence_urllib3_libressl_warning
+from app.tracker.windows_idle import is_sleep_gap
 from app.tracker.engagement_policy import (
     FOREGROUND_AUDIO_EVIDENCE,
     EngagementDecision,
@@ -2226,12 +2227,22 @@ def _daemon_tick(
         return None
     snapshot.engagement_evidence = FOREGROUND_AUDIO_EVIDENCE if engagement.is_passive else None
     capture_tick = time.monotonic()
+    windows_sampling_gap = (
+        sys.platform == "win32"
+        and last_capture_tick is not None
+        and is_sleep_gap(capture_tick - last_capture_tick, SAMPLE_SECONDS)
+    )
+    if windows_sampling_gap:
+        # A long interruption is unobserved time, not activity in the first
+        # foreground app seen after resume. Start a fresh sample and segment.
+        last_capture_tick = None
     sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
     if engagement.is_passive:
         passive_merge_gap = PASSIVE_AUDIO_GAP_GRACE_SECONDS if last_capture_tick is not None else 0
         db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap)
     else:
-        db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
+        interactive_merge_gap = 0 if windows_sampling_gap else IDLE_THRESHOLD_SECONDS
+        db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=interactive_merge_gap)
     enqueue_youtube_metadata_fetch(db, snapshot.youtube_video_id, snapshot.site_url)
     backfill_browser_history_context(db, snapshot.observed_at)
     db.set_meta("last_event_at", snapshot.observed_at)
