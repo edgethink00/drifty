@@ -12,6 +12,7 @@ import { acquireUpdateOperation, pauseUpdatesForVersionTest, resumeUpdatesAfterV
 import { useUpdateController, WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY } from "./useUpdateController";
 import { POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY, fetchUpdatePolicy, fallbackUpdatePolicy } from "./updatePolicy";
 import { WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY } from "./useAutomaticUpdateScheduler";
+import { BUILD_INFO } from "../../buildInfo";
 type DownloadEvent =
   | { readonly event: "Started"; readonly data: { readonly contentLength?: number } }
   | { readonly event: "Progress"; readonly data: { readonly chunkLength: number } }
@@ -572,8 +573,10 @@ describe("background update and idle auto-restart", () => {
 });
 
 describe("Windows unattended stable update", () => {
+  const [major, minor, patch] = BUILD_INFO.version.split(".");
+  const candidateVersion = (offset: number) => `${major}.${minor}.${Number(patch) + offset}`;
   const windowsPolicy = {
-    version: "1.11.25",
+    version: candidateVersion(1),
     policyVersion: 2 as const,
     urgency: "general" as const,
     promptAfterMs: 72 * 60 * 60 * 1000,
@@ -810,7 +813,7 @@ describe("Windows unattended stable update", () => {
 
   it("allows a newer Windows candidate to prepare silently after failed-version recovery is dismissed", async () => {
     localStorage.setItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY, windowsPolicy.version);
-    const newerVersion = "1.11.26";
+    const newerVersion = candidateVersion(2);
     checkMock.mockResolvedValueOnce(update(windowsPolicy.version)).mockResolvedValueOnce(update(newerVersion));
     vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy)
       .mockResolvedValueOnce({ ...windowsPolicy, version: newerVersion });
