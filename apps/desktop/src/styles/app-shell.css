@@ -984,12 +984,35 @@
 
 .tracker-control[data-state="pause"] .live-pill__status-dot {
   background: var(--accent);
-  animation: pulse 1.8s infinite;
+  position: relative;
+  isolation: isolate;
+  box-shadow: none;
 }
 
 .tracker-control[data-state="replay"] .live-pill__status-dot {
   background: var(--accent);
-  animation: pulse 1.8s infinite;
+  position: relative;
+  isolation: isolate;
+  box-shadow: none;
+}
+
+/* Match the shadow halo's 3px-to-9px radius and 1.8s timing with a
+   composited circle, avoiding box-shadow paint on every animation frame. */
+.tracker-control[data-state="pause"] .live-pill__status-dot::before,
+.tracker-control[data-state="replay"] .live-pill__status-dot::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  pointer-events: none;
+  animation: tracker-halo 1.8s infinite;
+}
+
+@keyframes tracker-halo {
+  0%, 100% { transform: scale(calc(1 / 3)); opacity: 1; }
+  50% { transform: scale(1); opacity: 0; }
 }
 
 .tracker-control[data-state="resume"] .live-pill__status-dot {
