@@ -124,6 +124,49 @@ class GitCommitTests(GitRepoTestCase):
         self.assertTrue(collect_commits(self.repo, author_email="dev@example.com"))
         self.assertEqual(collect_commits(self.repo, author_email="someone@else.test"), [])
 
+    def test_author_email_matches_literal_complete_address(self) -> None:
+        own_sha = subprocess.check_output(
+            ["git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True
+        ).strip()[:12]
+        for index, (name, email) in enumerate((
+            ("Other", "dev@exampleXcom"),
+            ("Other", "otherdev@example.com"),
+            ("dev@example.com", "other@example.net"),
+        )):
+            filename = f"foreign-{index}.txt"
+            (self.repo / filename).write_text("foreign work\n", encoding="utf-8")
+            _git(self.repo, "add", filename)
+            _git(self.repo, "commit", "-q", "-m", "foreign", "--author", f"{name} <{email}>")
+
+        # No filter still includes every author; only the email-scoped call narrows.
+        self.assertEqual(len(collect_commits(self.repo)), 4)
+        for pattern_type in ("basic", "extended", "fixed"):
+            with self.subTest(pattern_type=pattern_type):
+                _git(self.repo, "config", "grep.patternType", pattern_type)
+                self.assertEqual(
+                    [event.commit_sha for event in collect_commits(
+                        self.repo, author_email="dev@example.com", limit=1
+                    )],
+                    [own_sha],
+                )
+
+    def test_author_email_alias_survives_extended_pattern_config(self) -> None:
+        (self.repo / "alias.txt").write_text("alias work\n", encoding="utf-8")
+        _git(self.repo, "add", "alias.txt")
+        _git(self.repo, "commit", "-q", "-m", "alias", "--author", "Alias <dev+qa@example.com>")
+        alias_sha = subprocess.check_output(
+            ["git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True
+        ).strip()[:12]
+        for pattern_type in ("basic", "extended", "fixed"):
+            with self.subTest(pattern_type=pattern_type):
+                _git(self.repo, "config", "grep.patternType", pattern_type)
+                self.assertEqual(
+                    [event.commit_sha for event in collect_commits(
+                        self.repo, author_email="dev+qa@example.com"
+                    )],
+                    [alias_sha],
+                )
+
     def test_commits_on_unchecked_out_branches_are_included(self) -> None:
         """Work happens in task worktrees, so HEAD alone is not enough."""
         _git(self.repo, "checkout", "-q", "-b", "feature")
@@ -787,6 +830,37 @@ class AutoRegistrationTests(GitRepoTestCase):
             [repo["repo_path"] for repo in database.list_dev_repos()],
             [str(self.repo)],
         )
+
+    def test_similar_email_and_display_name_do_not_register_foreign_repositories(self) -> None:
+        for index, (name, email) in enumerate((
+            ("Other", "dev@exampleXcom"),
+            ("Other", "otherdev@example.com"),
+            ("dev@example.com", "other@example.net"),
+        )):
+            theirs = self.tmp_path / f"foreign-{index}"
+            theirs.mkdir()
+            _git_init(theirs)
+            (theirs / "foreign.txt").write_text("foreign work\n", encoding="utf-8")
+            _git(theirs, "add", "foreign.txt")
+            _git(theirs, "commit", "-q", "-m", "foreign", "--author", f"{name} <{email}>")
+        database = self._database()
+        self.addCleanup(database.close)
+        self.assertEqual(self._discover(database, force=True), 1)
+        self.assertEqual(
+            [repo["repo_path"] for repo in database.list_dev_repos()],
+            [str(self.repo)],
+        )
+
+    def test_email_alias_auto_registers_with_extended_pattern_config(self) -> None:
+        _git(self.repo, "config", "user.email", "dev+qa@example.com")
+        _git(self.repo, "config", "grep.patternType", "extended")
+        (self.repo / "alias.txt").write_text("alias work\n", encoding="utf-8")
+        _git(self.repo, "add", "alias.txt")
+        _git(self.repo, "commit", "-q", "-m", "alias")
+        database = self._database()
+        self.addCleanup(database.close)
+        self.assertEqual(self._discover(database, force=True), 1)
+        self.assertEqual(database.list_dev_repos()[0]["author_email"], "dev+qa@example.com")
 
     def test_a_second_pass_skips_the_filesystem_walk(self) -> None:
         """Discovery is expensive, so it is watermarked rather than run on

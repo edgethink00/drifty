@@ -196,7 +196,9 @@ def collect_commits(
     if since:
         args.append(f"--since={since}")
     if author_email:
-        args.append(f"--author={author_email}")
+        # This value is an email identity, not a Git regex or a display name.
+        # Delimit the complete address and ignore grep.patternType overrides.
+        args.extend(["--fixed-strings", f"--author=<{author_email}>"])
 
     output = _run_git(repo, args)
     if not output:
