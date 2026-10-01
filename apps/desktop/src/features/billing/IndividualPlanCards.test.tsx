@@ -41,7 +41,7 @@ describe("IndividualPlanCards", () => {
     expect(within(proPlan).getByText("Includes all Free plan features")).toBeTruthy();
     expect(within(proPlan).getByText(/More accurate on ambiguous work/)).toBeTruthy();
     expect(within(proPlan).getByText(/No downloads, API keys, or models to manage/)).toBeTruthy();
-    expect(within(proPlan).getByText(/on up to 2 devices/)).toBeTruthy();
+    expect(within(proPlan).getByText(/on up to 3 devices/)).toBeTruthy();
     expect(within(proPlan).getAllByText(/7-day free trial/).length).toBeGreaterThan(0);
     // Device management lives in the Account rows below, not as a plan benefit.
     expect(within(proPlan).queryByText(/Manage old devices/i)).toBeNull();

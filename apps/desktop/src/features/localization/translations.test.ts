@@ -61,7 +61,7 @@ describe("Korean translations", () => {
     expect(koreanT("history.deleteConfirmDetail", { count: 3 })).toBe("이 기기에서 로컬 활동 기록 3개를 삭제합니다.");
     expect(KOREAN_TRANSLATIONS["settings.account.deleteRetainedHeading"]).toBe("이 기기에 남는 항목");
     expect(KOREAN_TRANSLATIONS["settings.account.deleteLocalImpact"]).toContain("이 기기의 활동 기록");
-    expect(KOREAN_TRANSLATIONS["billing.plan.proFeature4"]).toContain("기기 2대까지");
+    expect(KOREAN_TRANSLATIONS["billing.plan.proFeature4"]).toContain("기기 3대까지");
     for (const table of [ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS]) {
       expect(Object.values(table).filter((value) => /Mac/u.test(value))).toEqual([]);
     }

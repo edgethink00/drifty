@@ -145,7 +145,7 @@ function formatCloudDeviceSummary(
   t: LocalizationController["t"],
 ): string {
   const activeCount = access?.activeDeviceCount ?? devices.filter((device) => device.isActive).length;
-  const maxActiveDevices = access?.maxActiveDevices ?? 2;
+  const maxActiveDevices = access?.maxActiveDevices ?? 3;
   const activeWindowDays = access?.activeWindowDays ?? 30;
   return t("settings.cloudDevices.summary", { active: activeCount, max: maxActiveDevices, days: activeWindowDays });
 }
