@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { readFile, appendFile, lstat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { verifyUpdaterSignatureEnvelope } from "../windows-updater-signature.mjs";
 
 export const QA_BASE = "http://127.0.0.1:19457/windows-updater-qa";
 export const QA_VERSIONS = ["1.11.2401", "1.11.2402"];
@@ -40,7 +41,7 @@ export function qaVersionFromEnvironment(env) {
 
 export function qaManifest(version, signature) {
   assert.ok(QA_VERSIONS.includes(version));
-  assert.equal(Buffer.byteLength(signature), 420);
+  verifyUpdaterSignatureEnvelope(Buffer.from(signature, "utf8"));
   return {
     version,
     notes: "Private Windows updater-cycle QA",

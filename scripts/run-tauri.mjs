@@ -2,10 +2,13 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve, win32 } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { windowsDebugUploadSettings } from "./upload-windows-debug-files.mjs";
+import { frontendSourceExpectation } from "./windows-builder-rehearsal.mjs";
+import { preparedFrontendTauriConfig, verifyPreparedFrontend } from "./windows-frontend-artifacts.mjs";
 import { qaBuildConfig } from "./qa/windows-updater-feed.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -102,12 +105,18 @@ export function validateGoogleCalendarBuildConfig(environment) {
   }
 }
 
-function run(executable, executableArgs, env = process.env) {
+function run(executable, executableArgs, env = process.env, releasePhase = null) {
+  const startedAt = performance.now();
   const result = spawnSync(executable, executableArgs, {
     cwd: repoRoot,
     env,
     stdio: "inherit",
   });
+  if (releasePhase) {
+    const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
+    const label = env.DRIFTY_WINDOWS_SIGN_RELEASE === "1" ? "windows-release" : "windows-build";
+    console.log(`[${label}] phase=${releasePhase} seconds=${elapsedSeconds} exit=${result.status ?? result.signal ?? "spawn-error"}`);
+  }
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
@@ -208,79 +217,55 @@ export function windowsReleaseConfig(env = process.env) {
   };
 }
 
-// Candidate checkouts have separate Cargo target directories. Keep the output
-// layout intact while allowing one bounded compiler cache to span candidates.
-export function windowsReleaseRustCacheEnvironment(
-  env = process.env,
-  fileSystem = { existsSync },
-  execute = spawnSync,
-) {
-  const executable = (env.DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH ?? "").trim();
-  if (!executable) return env;
-  if (!win32.isAbsolute(executable) || !fileSystem.existsSync(executable)) {
-    throw new Error("DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH must name an existing absolute Windows executable.");
-  }
-  if (env.RUSTC_WRAPPER && env.RUSTC_WRAPPER.toLowerCase() !== executable.toLowerCase()) {
-    throw new Error("RUSTC_WRAPPER conflicts with DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH.");
-  }
-  const cacheDirectory = env.SCCACHE_DIR ||
-    (env.LOCALAPPDATA && win32.join(env.LOCALAPPDATA, "DriftyRelease", "rust-compiler-cache"));
-  if (!cacheDirectory || !win32.isAbsolute(cacheDirectory)) {
-    throw new Error("sccache requires an absolute SCCACHE_DIR or LOCALAPPDATA.");
-  }
-  const cacheSize = env.SCCACHE_CACHE_SIZE || "2G";
-  if (!/^(?:[1-9]\d{0,2}M|1G|2G)$/u.test(cacheSize)) {
-    throw new Error("Windows release SCCACHE_CACHE_SIZE must be at most 2G.");
-  }
-  const serverPort = env.SCCACHE_SERVER_PORT || "44286";
-  if (!/^\d+$/u.test(serverPort) || Number(serverPort) < 1024 || Number(serverPort) > 65535) {
-    throw new Error("SCCACHE_SERVER_PORT must be a valid unprivileged port.");
-  }
-  const configured = {
-    ...env,
-    RUSTC_WRAPPER: executable,
-    CARGO_INCREMENTAL: "0",
-    SCCACHE_DIR: cacheDirectory,
-    SCCACHE_CACHE_SIZE: cacheSize,
-    SCCACHE_SERVER_PORT: serverPort,
-  };
-  const version = execute(executable, ["--version"], {
-    env: configured,
-    encoding: "utf8",
-    timeout: 10_000,
-    windowsHide: true,
-  });
-  if (version.error || version.status !== 0 || !/^sccache \d+\.\d+/u.test(version.stdout?.trim() ?? "")) {
-    throw new Error("The Windows release sccache executable failed its version check.");
-  }
-  console.log("Windows release Rust cache statistics (before):");
-  const readiness = execute(executable, ["--show-stats"], {
-    env: configured,
-    stdio: "inherit",
-    timeout: 30_000,
-    windowsHide: true,
-  });
-  if (readiness.error || readiness.status !== 0) {
-    throw new Error("The Windows release sccache server failed its readiness check.");
-  }
-  return configured;
-}
-
-function reportWindowsReleaseRustCacheStats(env) {
-  if (!env.DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH) return;
-  console.log("Windows release Rust cache statistics (after):");
-  const result = spawnSync(env.RUSTC_WRAPPER, ["--show-stats"], {
-    env,
-    stdio: "inherit",
-    timeout: 10_000,
-    windowsHide: true,
-  });
-  if (result.error || result.status !== 0) {
-    console.warn("Could not read sccache statistics after the build.");
+export function validateWindowsReleaseCompiler(env = process.env) {
+  const wrapperVariables = [
+    "DRIFTY_WINDOWS_RELEASE_SCCACHE_PATH",
+    "RUSTC_WRAPPER",
+    "CARGO_BUILD_RUSTC_WRAPPER",
+    "RUSTC_WORKSPACE_WRAPPER",
+    "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+  ];
+  const configured = wrapperVariables.filter((key) => (env[key] ?? "").trim());
+  if (configured.length > 0) {
+    throw new Error(`Windows release compiler wrappers are disabled after the cache pilot: ${configured.join(", ")}.`);
   }
 }
 
-function main(argv = process.argv.slice(2)) {
+export function validatePreparedFrontendQaVersion(qaVersion) {
+  if (qaVersion) throw new Error("Prepared production frontend cannot use a private updater QA version; prepare matching QA assets separately.");
+}
+
+export function distributedWindowsReleaseArguments(argv, environment = process.env) {
+  const flags = ["--windows-builder-config", "--windows-builder-config-sha256", "--internal-windows-builder"];
+  if (!argv.some((arg) => flags.some((flag) => arg === flag || arg.startsWith(`${flag}=`)))) return null;
+  const args = [...argv], result = {};
+  for (const flag of flags) {
+    const index = args.indexOf(flag);
+    if (index < 0 || args.lastIndexOf(flag) !== index) throw new Error("Provide the pinned builder configuration and explicit internal option once.");
+    if (flag === "--internal-windows-builder") { args.splice(index, 1); continue; }
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`Missing ${flag} value.`);
+    result[flag] = value; args.splice(index, 2);
+  }
+  if (args.length !== 3 || args[0] !== "build" || new Set(args.slice(1)).size !== 2
+    || !args.includes("--production") || !args.includes("--windows-release")
+    || !isAbsolute(result["--windows-builder-config"]) || !/^[a-f0-9]{64}$/u.test(result["--windows-builder-config-sha256"])) {
+    throw new Error("Distributed Windows builds require build --production --windows-release and absolute pinned configuration without extra overrides.");
+  }
+  if (["TAURI_CONFIG", "TAURI_CONFIG_PATH", "DRIFTY_WINDOWS_UPDATER_QA", "DRIFTY_WINDOWS_UPDATER_QA_VERSION"].some((key) => environment[key])) {
+    throw new Error("Distributed Windows builds reject inherited Tauri/updater QA overrides.");
+  }
+  return { config: result["--windows-builder-config"], sha256: result["--windows-builder-config-sha256"] };
+}
+
+async function main(argv = process.argv.slice(2)) {
+  const distributed = distributedWindowsReleaseArguments(argv);
+  if (distributed) {
+    const { runPipeline } = await import("./windows-release-pipeline.mjs");
+    runPipeline(distributed.config, distributed.sha256);
+    console.log("Distributed internal Windows candidate verified; publication remains disabled.");
+    return;
+  }
   const args = [...argv];
   const command = args.shift() ?? "build";
   const productionIndex = args.indexOf("--production");
@@ -289,6 +274,22 @@ function main(argv = process.argv.slice(2)) {
   const windowsReleaseIndex = args.indexOf("--windows-release");
   const windowsRelease = windowsReleaseIndex >= 0;
   if (windowsRelease) args.splice(windowsReleaseIndex, 1);
+  const preparedArgs = {};
+  for (const flag of ["--prepared-frontend", "--prepared-frontend-sha256"]) {
+    const index = args.indexOf(flag);
+    if (index >= 0) {
+      if (!args[index + 1] || args[index + 1].startsWith("--") || args.lastIndexOf(flag) !== index) throw new Error("Provide each prepared frontend argument once.");
+      preparedArgs[flag] = args[index + 1]; args.splice(index, 2);
+    }
+  }
+  const hasPrepared = Object.keys(preparedArgs).length > 0;
+  if (hasPrepared && (Object.keys(preparedArgs).length !== 2 || !production || command !== "build" || process.platform !== "win32")) {
+    throw new Error("Prepared frontend requires both pinned arguments and a Windows production build.");
+  }
+  if (hasPrepared && (args.some((arg) => arg === "--config" || arg.startsWith("--config="))
+    || process.env.TAURI_CONFIG || process.env.TAURI_CONFIG_PATH)) {
+    throw new Error("Prepared frontend cannot be combined with unverified Tauri configuration overrides.");
+  }
   const qaIndex = args.indexOf("--windows-updater-qa-version");
   const qaVersion = qaIndex < 0 ? null : args[qaIndex + 1];
   if (qaIndex >= 0) {
@@ -297,6 +298,8 @@ function main(argv = process.argv.slice(2)) {
     args.splice(qaIndex, 2);
     args.push("--features", "windows-updater-qa");
   }
+
+  if (hasPrepared) validatePreparedFrontendQaVersion(qaVersion);
 
   if (command !== "build" && command !== "dev") {
     throw new Error(`Unsupported Tauri command: ${command}`);
@@ -326,9 +329,18 @@ function main(argv = process.argv.slice(2)) {
     ...(windowsRelease ? { DRIFTY_WINDOWS_SIGN_RELEASE: "1" } : {}),
   };
   if (production) Object.assign(releaseEnvironment, productionPostHogConfig(releaseEnvironment));
+  if (hasPrepared) {
+    const manifestFile = resolve(preparedArgs["--prepared-frontend"]);
+    const expected = frontendSourceExpectation(repoRoot, buildCommit, releaseEnvironment);
+    const proof = verifyPreparedFrontend(manifestFile, preparedArgs["--prepared-frontend-sha256"], expected);
+    args.push("--config", JSON.stringify(preparedFrontendTauriConfig(proof, { node: process.execPath,
+      verifier: resolve(repoRoot, "scripts/prepare-windows-frontend.mjs"), repo: repoRoot, manifestFile, expected })));
+  }
+  const timedWindowsBuild = windowsRelease || (process.platform === "win32" && command === "build"
+    && releaseEnvironment.DRIFTY_WINDOWS_BUILD_TIMINGS === "1");
 
   if (windowsRelease) {
-    Object.assign(releaseEnvironment, windowsReleaseRustCacheEnvironment(releaseEnvironment));
+    validateWindowsReleaseCompiler(releaseEnvironment);
     args.push("--config", JSON.stringify({ ...windowsReleaseConfig(), ...(qaVersion ? qaBuildConfig(qaVersion) : {}) }));
     // Fail before the long build when native debug files could not be uploaded.
     windowsDebugUploadSettings(releaseEnvironment);
@@ -343,6 +355,7 @@ function main(argv = process.argv.slice(2)) {
         resolve(repoRoot, "scripts/windows-release-signing-preflight.ps1"),
       ],
       releaseEnvironment,
+      "signing-preflight",
     );
   }
 
@@ -355,12 +368,14 @@ function main(argv = process.argv.slice(2)) {
         process.execPath,
         [resolve(repoRoot, "scripts/prepare-windows-vc-redist.mjs")],
         releaseEnvironment,
+        timedWindowsBuild ? "vc-redist" : null,
       );
     }
     run(
       process.execPath,
       [resolve(repoRoot, "scripts/build-tracker-sidecar.mjs")],
       releaseEnvironment,
+      timedWindowsBuild ? "tracker-sidecar" : null,
     );
   }
 
@@ -384,21 +399,23 @@ function main(argv = process.argv.slice(2)) {
     process.execPath,
     [resolve(repoRoot, "node_modules/@tauri-apps/cli/tauri.js"), command, ...args],
     env,
+    timedWindowsBuild ? "tauri-build-and-bundle" : null,
   );
-  if (windowsRelease) reportWindowsReleaseRustCacheStats(env);
   if (windowsRelease) {
     run(
       process.execPath,
       [resolve(repoRoot, "scripts/sign-windows-updater-artifact.mjs")],
       env,
+      "updater-signature",
     );
     run(
       process.execPath,
       [resolve(repoRoot, "scripts/upload-windows-debug-files.mjs")],
       env,
+      "debug-upload",
     );
   }
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) main();
+if (isMain) main().catch((error) => { console.error(error.message); process.exitCode = 1; });

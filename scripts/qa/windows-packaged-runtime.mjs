@@ -45,6 +45,7 @@ export function parseCli(argv) {
     ["--installer", "installerPath"],
     ["--expected-sha256", "expectedInstallerSha256"],
     ["--expected-authenticode-status", "expectedAuthenticodeStatus"],
+    ["--expected-tracker-authenticode-status", "expectedTrackerAuthenticodeStatus"],
     ["--expected-build-commit", "expectedBuildCommit"],
     ["--expected-app-version", "expectedAppVersion"],
     ["--expected-harness-sha256", "expectedHarnessSha256"],
@@ -89,7 +90,11 @@ export function parseCli(argv) {
   if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(options.expectedAppVersion)) {
     throw new Error("--expected-app-version must be a complete semantic version.");
   }
-  if (options.expectedAuthenticodeStatus === "Valid") {
+  if (options.expectedTrackerAuthenticodeStatus !== undefined
+    && (options.expectedAuthenticodeStatus !== "NotSigned" || options.expectedTrackerAuthenticodeStatus !== "Valid")) {
+    throw new Error("A tracker signature override must be Valid and is allowed only for an unsigned installer rehearsal.");
+  }
+  if (options.expectedAuthenticodeStatus === "Valid" || options.expectedTrackerAuthenticodeStatus === "Valid") {
     if (!/^[a-f0-9]{40}$/i.test(options.expectedSignerThumbprint ?? "")) {
       throw new Error("--expected-signer-thumbprint must be a 40-character SHA-1 certificate thumbprint for Valid artifacts.");
     }
@@ -404,6 +409,17 @@ export function validateAuthenticodeDetails(details, options, artifactLabel) {
   }
 }
 
+// An internal unsigned installer may reuse an exact, already signed native
+// tracker input. Its explicit override still requires the pinned publisher and
+// timestamp; signed-installer acceptance keeps the all-signed policy.
+export function trackerAuthenticodeOptions(options) {
+  if (options.expectedTrackerAuthenticodeStatus !== undefined
+    && (options.expectedAuthenticodeStatus !== "NotSigned" || options.expectedTrackerAuthenticodeStatus !== "Valid")) {
+    throw new Error("A tracker signature override cannot change signed-installer policy.");
+  }
+  return { ...options, expectedAuthenticodeStatus: options.expectedTrackerAuthenticodeStatus ?? options.expectedAuthenticodeStatus };
+}
+
 export async function inspectInstalledBrowserHost(appPath, options, readers = {}) {
   if (!path.win32.isAbsolute(appPath)) throw new Error("Installed app path must be absolute.");
   const hostPath = path.win32.join(path.win32.dirname(appPath), "drifty-browser-host.exe");
@@ -594,9 +610,17 @@ async function removePreexistingInstallation() {
   throw new Error("Too many pre-existing Drifty installations were discovered during cleanup.");
 }
 
-async function waitForMainTarget(port, timeoutMs = 90_000) {
+export function assertAppStartupState(state) {
+  if (state.spawnError) throw new Error(`Installed app could not start: ${state.spawnError}`);
+  if (state.exitCode !== null || state.signal !== null) {
+    throw new Error(`Installed app exited before its main WebView opened (code ${String(state.exitCode)}, signal ${String(state.signal)}).`);
+  }
+}
+
+async function waitForMainTarget(port, startup, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    assertAppStartupState(startup);
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`, {
         signal: AbortSignal.timeout(2_000),
@@ -975,9 +999,12 @@ async function runQa(options) {
     result.tracker.sha256 = await sha256File(trackerPath);
     result.tracker.authenticode = await authenticodeDetails(trackerPath);
     result.tracker.authenticodeStatus = result.tracker.authenticode.status;
-    validateAuthenticodeDetails(result.tracker.authenticode, options, "Installed tracker");
+    const trackerOptions = trackerAuthenticodeOptions(options);
+    result.tracker.expectedAuthenticodeStatus = trackerOptions.expectedAuthenticodeStatus;
+    validateAuthenticodeDetails(result.tracker.authenticode, trackerOptions, "Installed tracker");
     result.browserHost = await inspectInstalledBrowserHost(appPath, options);
 
+    result.app.startup = { exitCode: null, signal: null, spawnError: null };
     appProcess = spawn(appPath, [], {
       env: {
         ...process.env,
@@ -986,10 +1013,16 @@ async function runQa(options) {
       windowsHide: false,
       stdio: "ignore",
     });
-    appProcess.on("error", () => {});
+    appProcess.on("error", (error) => { result.app.startup.spawnError = redactEvidenceText(error.message); });
+    appProcess.on("exit", (code, signal) => {
+      if (!result.debugTransport.mainWindowSelected) {
+        result.app.startup.exitCode = code;
+        result.app.startup.signal = signal;
+      }
+    });
     result.app.processId = appProcess.pid;
 
-    const target = await waitForMainTarget(options.debugPort);
+    const target = await waitForMainTarget(options.debugPort, result.app.startup);
     const listeners = await getListeners(options.debugPort);
     if (listeners.length === 0 || listeners.some((listener) => !["127.0.0.1", "::1"].includes(listener.LocalAddress))) {
       throw new Error(`TCP port ${options.debugPort} is not restricted to loopback.`);
