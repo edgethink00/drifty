@@ -418,7 +418,7 @@ export function buildRecentFocusTargets(segments: ActivitySegment[], historySegm
   const seen = new Set<string>();
   const sortedFocusSegments = segments
     .filter((segment) => classifyActivity(segment, classificationOptions).productivity === "focus")
-    .sort((left, right) => new Date(right.endedAt).getTime() - new Date(left.endedAt).getTime());
+    .sort((left, right) => Date.parse(right.endedAt) - Date.parse(left.endedAt));
 
   const addTarget = (target: DriftAlarmFocusTarget): boolean => {
     const dedupeKey = getFocusTargetIdentity(target);
@@ -440,7 +440,7 @@ export function buildRecentFocusTargets(segments: ActivitySegment[], historySegm
     fallbackCandidates: historySegments,
   };
   const weeklyAppTargets = Array.from(historySegments.reduce((accumulator, segment) => {
-    const endedAtMs = new Date(segment.endedAt).getTime();
+    const endedAtMs = Date.parse(segment.endedAt);
     if (endedAtMs < weeklyFocusStartMs) return accumulator;
     if (classifyActivity(segment, weeklyClassificationOptions).productivity !== "focus") return accumulator;
 
