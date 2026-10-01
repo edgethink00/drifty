@@ -230,12 +230,12 @@ export function formatStartOfDayOptionLabel(minutes: number, locale = UI_LOCALE)
 }
 
 export function filterSegmentsForRange(segments: ActivitySegment[], start: string, end: string): ActivitySegment[] {
-  const startMs = new Date(start).getTime();
-  const endMs = new Date(end).getTime();
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
 
   return segments.filter((segment) => {
-    const segmentStart = new Date(segment.startedAt).getTime();
-    const segmentEnd = new Date(segment.endedAt).getTime();
+    const segmentStart = Date.parse(segment.startedAt);
+    const segmentEnd = Date.parse(segment.endedAt);
     return segmentEnd >= startMs && segmentStart <= endMs;
   });
 }

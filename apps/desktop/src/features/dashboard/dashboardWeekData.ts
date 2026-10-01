@@ -56,17 +56,17 @@ function selectCoveredSourceSegments(
 }
 
 function rangeContains(outer: DashboardHistoryRange, inner: DashboardHistoryRange): boolean {
-  return new Date(outer.start).getTime() <= new Date(inner.start).getTime()
-    && new Date(outer.end).getTime() >= new Date(inner.end).getTime();
+  return Date.parse(outer.start) <= Date.parse(inner.start)
+    && Date.parse(outer.end) >= Date.parse(inner.end);
 }
 
 function filterSegmentsByRange(segments: readonly ActivitySegment[], range: DashboardHistoryRange): ActivitySegment[] {
-  const startMs = new Date(range.start).getTime();
-  const endMs = new Date(range.end).getTime();
+  const startMs = Date.parse(range.start);
+  const endMs = Date.parse(range.end);
 
   return segments.filter((segment) => {
-    const segmentStartMs = new Date(segment.startedAt).getTime();
-    const segmentEndMs = new Date(segment.endedAt).getTime();
+    const segmentStartMs = Date.parse(segment.startedAt);
+    const segmentEndMs = Date.parse(segment.endedAt);
     return segmentEndMs >= startMs && segmentStartMs <= endMs;
   });
 }
