@@ -221,7 +221,7 @@ def _cwd_key(cwd: object) -> str | None:
     return repo_key_for(target)
 
 
-def _iter_json_lines(path: Path):
+def _iter_json_lines(path: Path, *, raise_io_errors: bool = False):
     """Stream one JSON object per line, skipping anything unparseable.
 
     Session files reach hundreds of megabytes, so the file is never read whole.
@@ -229,6 +229,8 @@ def _iter_json_lines(path: Path):
     try:
         handle = path.open("r", encoding="utf-8", errors="replace")
     except OSError:
+        if raise_io_errors:
+            raise
         return
     with handle:
         for line in handle:
@@ -277,7 +279,7 @@ def _build_turn(
     )
 
 
-def parse_codex_session(path: str | Path) -> list[AgentTurn]:
+def parse_codex_session(path: str | Path, *, raise_io_errors: bool = False) -> list[AgentTurn]:
     """Parse one Codex rollout JSONL file into turns.
 
     Turn boundaries come from ``task_started`` / ``task_complete`` event
@@ -298,7 +300,7 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
     turn_identity: str | None = None
     last_seen: datetime | None = None
 
-    for record in _iter_json_lines(file_path):
+    for record in _iter_json_lines(file_path, raise_io_errors=raise_io_errors):
         record_type = record.get("type")
         payload = record.get("payload")
         payload = payload if isinstance(payload, dict) else {}
@@ -375,7 +377,7 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
     return turns
 
 
-def parse_claude_session(path: str | Path) -> list[AgentTurn]:
+def parse_claude_session(path: str | Path, *, raise_io_errors: bool = False) -> list[AgentTurn]:
     """Parse one Claude Code session JSONL file into turns.
 
     This format has no explicit turn-boundary events, so activity is segmented by
@@ -388,7 +390,7 @@ def parse_claude_session(path: str | Path) -> list[AgentTurn]:
     stamps: list[datetime] = []
     last_usage: dict | None = None
 
-    for record in _iter_json_lines(file_path):
+    for record in _iter_json_lines(file_path, raise_io_errors=raise_io_errors):
         session_id = record.get("sessionId") or record.get("session_id")
         if isinstance(session_id, str) and session_id:
             session_key = session_id

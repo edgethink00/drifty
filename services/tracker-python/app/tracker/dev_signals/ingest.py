@@ -8,9 +8,14 @@ ranges are pulled in only on request.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from app.platform_locks import lock_exclusive_nonblocking, unlock
 
 from .adapters import PROVIDERS, ProviderAdapter
 from .git_commits import collect_commits, default_author_email, repo_key_for, resolve_primary_repo
@@ -66,6 +71,88 @@ def _write_watermark(database, provider: str, value: float) -> None:
     database.set_meta(_watermark_key(provider), repr(float(value)))
 
 
+def _file_key(path: Path) -> str:
+    # Only a local fingerprint is persisted, never the session-log path.
+    return hashlib.sha256(str(path).encode("utf-8", errors="surrogatepass")).hexdigest()
+
+
+def _file_version(stat) -> str:
+    # Detect growth and sub-float mtime changes without reading/hashing log bodies.
+    return hashlib.sha256(f"{stat.st_size}:{stat.st_mtime_ns}".encode("ascii")).hexdigest()
+
+
+def _session_file_state(path: Path) -> tuple[float, str]:
+    stat = path.stat()
+    modified = stat.st_mtime
+    version = _file_version(stat)
+    if path.suffix.lower() in {".db", ".sqlite3"}:
+        # A live SQLite producer can commit only to WAL while the main file
+        # stays unchanged. SHM is reader coordination, not activity content.
+        try:
+            wal = path.with_name(path.name + "-wal").stat()
+        except FileNotFoundError:
+            wal = None
+        if wal is not None and wal.st_size > 0:
+            modified = max(modified, wal.st_mtime)
+            version = hashlib.sha256(f"{version}:{_file_version(wal)}".encode("ascii")).hexdigest()
+    return modified, version
+
+
+def _read_session_watermark(database, provider: str) -> tuple[float, dict[str, str]]:
+    raw = database.get_meta(_watermark_key(provider))
+    try:
+        state = json.loads(raw) if raw is not None else None
+        if isinstance(state, dict):
+            modified = float(state["modified"])
+            files = state["files"]
+            if math.isfinite(modified):
+                if isinstance(files, dict) and all(
+                    isinstance(key, str) and isinstance(version, str)
+                    for key, version in files.items()
+                ):
+                    return modified, files
+                if isinstance(files, list) and all(isinstance(key, str) for key in files):
+                    # The earlier path-only checkpoint cannot identify versions.
+                    # Revisit its boundary within the same per-pass budget.
+                    return modified, {}
+    except (TypeError, ValueError, KeyError):
+        pass
+    # A legacy scalar cannot identify which tied files were skipped. Replay
+    # the bounded backfill once; the existing turn upsert prevents duplicates.
+    return 0.0, {}
+
+
+def _read_session_retries(database, provider: str) -> tuple[list[tuple[str, float]], bool]:
+    try:
+        state = json.loads(database.get_meta(_watermark_key(provider)) or "null")
+        if isinstance(state, dict):
+            retry = state.get("retry", [])
+            if isinstance(retry, list):
+                pending: dict[str, float] = {}
+                for item in retry:
+                    if not isinstance(item, list) or len(item) != 2 or not isinstance(item[0], str):
+                        continue
+                    modified = float(item[1])
+                    if math.isfinite(modified):
+                        pending[item[0]] = modified
+                return list(pending.items()), state.get("retryNext") is True
+    except (TypeError, ValueError):
+        pass
+    return [], False
+
+
+def _write_session_watermark(
+    database, provider: str, modified: float, files: dict[str, str],
+    *, retry_files: list[tuple[str, float]] | None = None, retry_next: bool = False,
+) -> None:
+    # Persist the boundary and its completed files together so restarts cannot
+    # retain one half of a checkpoint and silently skip the unread remainder.
+    database.set_meta(
+        _watermark_key(provider),
+        json.dumps({"modified": modified, "files": files, "retry": retry_files or [], "retryNext": retry_next}, sort_keys=True),
+    )
+
+
 def _prepare_provider_identity(database, adapter: ProviderAdapter) -> None:
     """Schedule a one-time Codex reparse when its stored identity changes."""
     if adapter.key != "codex" or not adapter.replace_sessions:
@@ -82,15 +169,23 @@ def _candidate_files(
     watermark: float,
     cutoff: float,
     patterns: tuple[str, ...] = ("*.jsonl",),
+    watermark_files: dict[str, str] | None = None,
+    retry_files: set[str] | None = None,
 ) -> list[tuple[float, Path]]:
-    """Session files newer than the watermark and inside the backfill window."""
+    """Unread session files at/after the watermark inside the backfill window."""
     candidates: list[tuple[float, Path]] = []
+    retry_files = retry_files or set()
     if root.is_file():
         try:
-            modified = root.stat().st_mtime
+            modified, version = _session_file_state(root)
         except OSError:
             return []
-        if modified > watermark and modified >= cutoff:
+        already_read = (
+            modified == watermark
+            and (watermark_files or {}).get(_file_key(root)) == version
+        )
+        retry = _file_key(root) in retry_files
+        if modified >= cutoff and (retry or (modified >= watermark and not already_read)):
             candidates.append((modified, root))
         return candidates
     if not root.is_dir():
@@ -108,10 +203,16 @@ def _candidate_files(
             if not path.is_file():
                 continue
             try:
-                modified = path.stat().st_mtime
+                modified, version = _session_file_state(path)
             except OSError:
                 continue
-            if modified <= watermark or modified < cutoff:
+            retry = _file_key(path) in retry_files
+            if modified < cutoff or (modified < watermark and not retry):
+                continue
+            if (
+                not retry and modified == watermark
+                and (watermark_files or {}).get(_file_key(path)) == version
+            ):
                 continue
             candidates.append((modified, path))
     candidates.sort()
@@ -174,8 +275,26 @@ def ingest_agent_sessions(
 ) -> tuple[int, int, int]:
     """Ingest new agent turns for every registered provider.
 
-    Returns ``(turns_ingested, files_scanned, skipped_files)``.
+    Returns ``(turns_ingested, files_scanned, skipped_files)``. If another
+    importer owns this database, defer this pass without reading or writing it.
     """
+    # The daemon and a manual refresh use separate processes. Their read/parse/
+    # save/checkpoint sequence must not overwrite a newer pass or its retries.
+    # This lock is only for importers; parsing holds no SQLite transaction and
+    # a contended pass defers immediately rather than pausing activity capture.
+    db_path = Path(database.db_path).resolve()
+    lock_path = db_path.with_name(f".{db_path.name}.agent-ingest.lock")
+    # Keep the rendezvous file: unlinking it would let peers lock different files.
+    with lock_path.open("a+b") as lock_file:
+        if not lock_exclusive_nonblocking(lock_file):
+            return 0, 0, 0
+        try:
+            return _ingest_agent_sessions(database, backfill_days=backfill_days, max_files=max_files)
+        finally:
+            unlock(lock_file)
+
+
+def _ingest_agent_sessions(database, *, backfill_days: int, max_files: int) -> tuple[int, int, int]:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=max(1, backfill_days))).timestamp()
     total_turns = 0
     total_scanned = 0
@@ -183,39 +302,90 @@ def ingest_agent_sessions(
 
     for adapter in PROVIDERS:
         _prepare_provider_identity(database, adapter)
-        watermark = _read_watermark(database, adapter.key)
+        watermark, watermark_files = _read_session_watermark(database, adapter.key)
+        retry_state, retry_next = _read_session_retries(database, adapter.key)
+        # Keep a temporarily undiscoverable file until its original backfill
+        # window expires, rather than treating stat/access failure as deletion.
+        retry_times = {key: modified for key, modified in retry_state if modified >= cutoff}
+        retry_files = list(retry_times)
         try:
             roots = adapter.discover()
         except Exception:
             total_skipped += 1
             continue
-        candidates: list[tuple[float, Path]] = []
+        candidates: dict[str, tuple[float, Path]] = {}
         for root in roots:
-            candidates.extend(_candidate_files(root, watermark, cutoff, adapter.patterns))
-        candidates.sort()
+            for item in _candidate_files(root, watermark, cutoff, adapter.patterns, watermark_files, set(retry_files)):
+                candidates[_file_key(item[1])] = item
         if not candidates:
+            if retry_state:
+                _write_session_watermark(
+                    database, adapter.key, watermark, watermark_files,
+                    retry_files=list(retry_times.items()), retry_next=retry_next,
+                )
             continue
 
-        backlog, head = _split_pass(candidates, max_files)
+        pending = [key for key in retry_files if key in candidates]
+        pending_keys = set(pending)
+        fresh = sorted(item for key, item in candidates.items() if key not in pending_keys)
+        budget = max(1, max_files)
+        # A failed retry goes to the tail. Healthy backlog keeps its share;
+        # at budget one, persist which lane goes next across restarts.
+        retry_budget = min(len(pending), budget) if not fresh else min(len(pending), 1)
+        if budget == 1 and pending and fresh:
+            retry_budget = int(retry_next)
+            retry_next = not retry_next
+        retries = [candidates[key] for key in pending[:retry_budget]]
+        retry_queue = [key for key in retry_files if key not in candidates] + pending[retry_budget:]
+        if budget > retry_budget:
+            backlog, head = _split_pass(fresh, budget - retry_budget)
+        else:
+            backlog, head = [], []
         highest = watermark
+        completed_at_highest = dict(watermark_files)
         batch: list[dict] = []
         for modified, path in backlog:
             total_scanned += 1
+            try:
+                # Record the version before parsing. An append during parsing
+                # must remain eligible next time, even if mtime stays equal.
+                _, version = _session_file_state(path)
+            except OSError:
+                total_skipped += 1
+                retry_queue.append(_file_key(path))
+                retry_times[_file_key(path)] = modified
+                continue
             rows = _turn_rows(adapter, path)
             if rows is None:
                 total_skipped += 1
+                retry_queue.append(_file_key(path))
+                retry_times[_file_key(path)] = modified
                 continue
             batch.extend(rows)
-            highest = max(highest, modified)
+            if modified > highest:
+                highest = modified
+                completed_at_highest.clear()
+            completed_at_highest[_file_key(path)] = version
         # The newest files land in the same pass, ahead of the unread middle.
         # They stay behind the watermark so the backlog still gets read.
-        for _, path in head:
+        for modified, path in [*head, *retries]:
             total_scanned += 1
+            try:
+                _, version = _session_file_state(path)
+            except OSError:
+                total_skipped += 1
+                retry_queue.append(_file_key(path))
+                retry_times[_file_key(path)] = modified
+                continue
             rows = _turn_rows(adapter, path)
             if rows is None:
                 total_skipped += 1
+                retry_queue.append(_file_key(path))
+                retry_times[_file_key(path)] = modified
                 continue
             batch.extend(rows)
+            if modified == highest:
+                completed_at_highest[_file_key(path)] = version
 
         total_turns += database.save_agent_session_events(
             batch,
@@ -223,7 +393,10 @@ def ingest_agent_sessions(
         )
         # Only advance the watermark past files this pass actually reached, so a
         # truncated batch resumes instead of skipping the remainder.
-        _write_watermark(database, adapter.key, highest)
+        _write_session_watermark(
+            database, adapter.key, highest, completed_at_highest,
+            retry_files=[(key, retry_times[key]) for key in dict.fromkeys(retry_queue)], retry_next=retry_next,
+        )
 
     return total_turns, total_scanned, total_skipped
 

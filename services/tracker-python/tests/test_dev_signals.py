@@ -1763,6 +1763,135 @@ class IngestRegistryTests(TempDirTestCase):
         found = {path.name for _, path in _candidate_files(root, 0.0, 0.0, ("*.jsonl",))}
         self.assertEqual(found, {"keep.jsonl"})
 
+    def _blocked_importer(self, database, root, *, deny_a=False):
+        ready = self.tmp_path / "importer-ready"
+        release = self.tmp_path / "importer-release"
+        # A separate interpreter exercises real OS lock ownership, including
+        # msvcrt on Windows. Only its fixture discovery and read denial differ
+        # from the registered Codex adapter.
+        code = r"""
+import json, sys, time
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+from app.storage.db import TrackerDatabase
+from app.tracker.dev_signals import ingest as mod
+from app.tracker.dev_signals.adapters import PROVIDERS, ProviderAdapter
+root, db_path, ready, release = map(Path, sys.argv[2:6])
+registered = next(a for a in PROVIDERS if a.key == 'codex')
+real_open = Path.open
+def open_file(path, *args, **kwargs):
+    if sys.argv[6] == '1' and path == root / 'a.jsonl':
+        raise PermissionError('fixture transient denial')
+    return real_open(path, *args, **kwargs)
+def parse(path):
+    if path.name == 'b.jsonl':
+        ready.touch()
+        deadline = time.monotonic() + 20
+        while not release.exists():
+            if time.monotonic() > deadline: raise RuntimeError('fixture release timed out')
+            time.sleep(.01)
+    return registered.parse(path)
+db = TrackerDatabase(db_path, perform_maintenance=False)
+try:
+    provider = ProviderAdapter('codex', lambda: [root], parse, replace_sessions=True)
+    with patch.object(mod, 'PROVIDERS', (provider,)), patch.object(Path, 'open', open_file):
+        print(json.dumps(mod.ingest_agent_sessions(db, max_files=2)), flush=True)
+finally:
+    db.close()
+"""
+        process = subprocess.Popen(
+            [sys.executable, "-u", "-c", code,
+             str(Path(__file__).resolve().parents[1]), str(root), str(database.db_path),
+             str(ready), str(release), "1" if deny_a else "0"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        def cleanup():
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=5)
+        self.addCleanup(cleanup)
+        deadline = time.monotonic() + 15
+        while not ready.exists():
+            if process.poll() is not None:
+                self.fail(process.communicate(timeout=5)[1])
+            if time.monotonic() > deadline:
+                self.fail("fixture importer did not reach its parser")
+            time.sleep(.01)
+        return process, release
+
+    def _concurrent_codex_fixture(self):
+        from app.tracker.dev_signals.adapters import PROVIDERS, ProviderAdapter
+        root = self.tmp_path / "concurrent-codex"
+        root.mkdir()
+        for index, name in enumerate(("a", "b")):
+            records = [
+                {"timestamp": "2026-09-09T01:00:00+00:00", "type": "session_meta", "payload": {"session_id": name}},
+                {"timestamp": "2026-09-09T01:00:00+00:00", "type": "event_msg", "payload": {"type": "task_started", "turn_id": name}},
+                {"timestamp": "2026-09-09T01:01:00+00:00", "type": "event_msg", "payload": {"type": "task_complete"}},
+            ]
+            path = root / f"{name}.jsonl"
+            path.write_text("\n".join(json.dumps(row) for row in records), encoding="utf-8")
+            modified = time.time() - 120 + index
+            os.utime(path, (modified, modified))
+        registered = next(a for a in PROVIDERS if a.key == "codex")
+        adapter = ProviderAdapter("codex", lambda: [root], registered.parse, replace_sessions=True)
+        database = TrackerDatabase(self.tmp_path / "concurrent.sqlite3")
+        self.addCleanup(database.close)
+        database.set_meta("dev_signals_identity_version_codex", "2")
+        return database, root, adapter
+
+    def test_concurrent_importer_defers_without_overwriting_retry(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as mod
+        database, root, adapter = self._concurrent_codex_fixture()
+        process, release = self._blocked_importer(database, root, deny_a=True)
+        with patch.object(mod, "PROVIDERS", (adapter,)):
+            self.assertEqual(ingest_agent_sessions(database), (0, 0, 0))
+            self.assertIsNone(database.get_meta("dev_signals_watermark_codex"))
+            release.touch()
+            out, err = process.communicate(timeout=15)
+            self.assertEqual(process.returncode, 0, err)
+            self.assertEqual(json.loads(out), [1, 2, 1])
+            state = json.loads(database.get_meta("dev_signals_watermark_codex"))
+            self.assertEqual(len(state["retry"]), 1)
+            self.assertEqual(ingest_agent_sessions(database), (1, 1, 0))
+            rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+            self.assertEqual({r["sessionKey"] for r in rows}, {"a", "b"})
+            self.assertEqual(ingest_agent_sessions(database), (0, 0, 0))
+
+    def test_importer_lock_preserves_capture_writes_and_other_databases(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as mod
+        database, root, adapter = self._concurrent_codex_fixture()
+        process, release = self._blocked_importer(database, root)
+        other = TrackerDatabase(self.tmp_path / "other.sqlite3")
+        self.addCleanup(other.close)
+        # An equivalent path must rendezvous on the same importer lock.
+        alias = TrackerDatabase(self.tmp_path / "concurrent-codex" / ".." / "concurrent.sqlite3")
+        self.addCleanup(alias.close)
+        with patch.object(mod, "PROVIDERS", (adapter,)):
+            database.set_meta("fixture_capture_write", "completed")
+            self.assertEqual(database.get_meta("fixture_capture_write"), "completed")
+            self.assertEqual(ingest_agent_sessions(alias), (0, 0, 0))
+            self.assertEqual(ingest_agent_sessions(other), (2, 2, 0))
+            release.touch()
+            _, err = process.communicate(timeout=15)
+            self.assertEqual(process.returncode, 0, err)
+            self.assertEqual(ingest_agent_sessions(database), (0, 0, 0))
+
+    def test_importer_lock_releases_when_owner_is_terminated(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as mod
+        database, root, adapter = self._concurrent_codex_fixture()
+        process, _ = self._blocked_importer(database, root)
+        with patch.object(mod, "PROVIDERS", (adapter,)):
+            self.assertEqual(ingest_agent_sessions(database), (0, 0, 0))
+            process.kill()
+            process.communicate(timeout=5)
+            self.assertEqual(ingest_agent_sessions(database), (2, 2, 0))
+            self.assertEqual(ingest_agent_sessions(database), (0, 0, 0))
+
     def test_empty_discover_ingests_nothing(self) -> None:
         from app.tracker.dev_signals import ingest as ingest_mod
         from app.tracker.dev_signals.adapters import ProviderAdapter
@@ -1848,6 +1977,509 @@ class IngestRegistryTests(TempDirTestCase):
             self.assertEqual(keys, {"a", "b", "c", "d", "e"})
         finally:
             ingest_mod.PROVIDERS = original_providers
+
+    def test_equal_mtimes_drain_across_bounded_passes_and_restarts(self) -> None:
+        from app.tracker.dev_signals import ingest as ingest_mod
+
+        for budget in (1, 2, 3):
+            with self.subTest(budget=budget):
+                root = self.tmp_path / f"tied-{budget}"
+                adapter = self._stub_provider(root, ["a", "b", "c", "d", "e"])
+                modified = time.time() - 60
+                for path in root.iterdir():
+                    os.utime(path, (modified, modified))
+                db_path = self.tmp_path / f"tied-{budget}.sqlite3"
+                original = ingest_mod.PROVIDERS
+                ingest_mod.PROVIDERS = (adapter,)
+                try:
+                    for _ in range(5):
+                        # Resume solely from persisted metadata, as after an app restart.
+                        database = TrackerDatabase(db_path)
+                        self.addCleanup(database.close)
+                        _, scanned, _ = ingest_agent_sessions(database, max_files=budget)
+                        self.assertLessEqual(scanned, budget)
+                        database.close()
+                    rows = database.fetch_agent_session_events(
+                        "2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00",
+                    )
+                    self.assertEqual({row["sessionKey"] for row in rows}, {"a", "b", "c", "d", "e"})
+                    self.assertEqual(len(rows), 5)
+                    self.assertEqual(ingest_agent_sessions(database, max_files=budget), (0, 0, 0))
+                finally:
+                    ingest_mod.PROVIDERS = original
+
+    def test_new_file_at_completed_watermark_is_ingested(self) -> None:
+        from app.tracker.dev_signals import ingest as ingest_mod
+
+        root = self.tmp_path / "arrival"
+        adapter = self._stub_provider(root, ["b", "c"])
+        modified = time.time() - 60
+        for path in root.iterdir():
+            os.utime(path, (modified, modified))
+        original = ingest_mod.PROVIDERS
+        ingest_mod.PROVIDERS = (adapter,)
+        try:
+            database = TrackerDatabase(self.tmp_path / "tracker.sqlite3")
+            ingest_agent_sessions(database)
+            # A copied log may preserve an existing modification time and sort earlier.
+            path = root / "a.jsonl"
+            path.write_text("{}", encoding="utf-8")
+            os.utime(path, (modified, modified))
+            self.assertEqual(ingest_agent_sessions(database), (1, 1, 0))
+            rows = database.fetch_agent_session_events(
+                "2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00",
+            )
+            self.assertEqual({row["sessionKey"] for row in rows}, {"a", "b", "c"})
+        finally:
+            ingest_mod.PROVIDERS = original
+
+    def test_legacy_watermark_replays_backfill_to_recover_skipped_ties(self) -> None:
+        from app.tracker.dev_signals import ingest as ingest_mod
+
+        adapter = self._stub_provider(self.tmp_path / "legacy", ["a", "b", "c"])
+        original = ingest_mod.PROVIDERS
+        ingest_mod.PROVIDERS = (adapter,)
+        try:
+            database = TrackerDatabase(self.tmp_path / "tracker.sqlite3")
+            database.set_meta("dev_signals_watermark_stub", repr(time.time()))
+            for _ in range(3):
+                ingest_agent_sessions(database, max_files=1)
+            rows = database.fetch_agent_session_events(
+                "2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00",
+            )
+            self.assertEqual({row["sessionKey"] for row in rows}, {"a", "b", "c"})
+            self.assertEqual(ingest_agent_sessions(database), (0, 0, 0))
+        finally:
+            ingest_mod.PROVIDERS = original
+
+    def test_completed_boundary_file_growth_is_reparsed_after_restart(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        for discover_file in (False, True):
+            with self.subTest(discover_file=discover_file):
+                root = self.tmp_path / f"growing-{discover_file}"
+                root.mkdir()
+                path = root / "session.jsonl"
+                records = [
+                    {"timestamp": "2026-09-09T01:00:00+00:00", "type": "session_meta", "payload": {"session_id": "growing"}},
+                    {"timestamp": "2026-09-09T01:00:00+00:00", "type": "event_msg", "payload": {"type": "task_started", "turn_id": "first"}},
+                    {"timestamp": "2026-09-09T01:01:00+00:00", "type": "event_msg", "payload": {"type": "task_complete"}},
+                ]
+                path.write_text("\n".join(json.dumps(row) for row in records) + "\n", encoding="utf-8")
+                modified = time.time() - 60
+                os.utime(path, (modified, modified))
+                adapter = ProviderAdapter("codex", lambda: [path if discover_file else root], parse_codex_session, replace_sessions=True)
+                db_path = self.tmp_path / f"growing-{discover_file}.sqlite3"
+                with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+                    database = TrackerDatabase(db_path)
+                    self.addCleanup(database.close)
+                    ingest_agent_sessions(database, max_files=1)
+                    database.close()
+                    with path.open("a", encoding="utf-8") as handle:
+                        for record in [
+                            {"timestamp": "2026-09-09T01:02:00+00:00", "type": "event_msg", "payload": {"type": "task_started", "turn_id": "second"}},
+                            {"timestamp": "2026-09-09T01:03:00+00:00", "type": "event_msg", "payload": {"type": "task_complete"}},
+                        ]:
+                            handle.write(json.dumps(record) + "\n")
+                    os.utime(path, (modified, modified))
+                    database = TrackerDatabase(db_path)
+                    self.addCleanup(database.close)
+                    _, scanned, skipped = ingest_agent_sessions(database, max_files=1)
+                    rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+                    self.assertEqual((scanned, skipped), (1, 0))
+                    self.assertEqual(len(rows), 2)
+                    self.assertEqual(sum(row["activeSeconds"] for row in rows), 120)
+                    self.assertEqual(ingest_agent_sessions(database, max_files=1), (0, 0, 0))
+                state = json.loads(database.get_meta("dev_signals_watermark_codex"))
+                self.assertEqual(len(state["files"]), 1)
+                self.assertNotIn(str(path), database.get_meta("dev_signals_watermark_codex"))
+
+    def test_boundary_file_changed_during_parse_is_read_again(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        root = self.tmp_path / "concurrent-append"
+        original = self._stub_provider(root, ["a"])
+        path = root / "a.jsonl"
+        modified = path.stat().st_mtime
+        changed = False
+
+        def parse(candidate):
+            nonlocal changed
+            rows = original.parse(candidate)
+            if not changed:
+                changed = True
+                candidate.write_text("{}\n{}\n", encoding="utf-8")
+                os.utime(candidate, (modified, modified))
+            return rows
+
+        adapter = ProviderAdapter("stub", lambda: [root], parse)
+        database = TrackerDatabase(self.tmp_path / "append.sqlite3")
+        self.addCleanup(database.close)
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            self.assertEqual(ingest_agent_sessions(database, max_files=1)[1], 1)
+            # The first parse must checkpoint the version it began reading.
+            self.assertEqual(ingest_agent_sessions(database, max_files=1)[1], 1)
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (0, 0, 0))
+            rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+            self.assertEqual(len(rows), 1)
+
+    def test_path_only_checkpoint_replays_just_its_boundary(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+
+        root = self.tmp_path / "path-only"
+        adapter = self._stub_provider(root, ["older", "boundary"])
+        path = root / "boundary.jsonl"
+        database = TrackerDatabase(self.tmp_path / "path-only.sqlite3")
+        self.addCleanup(database.close)
+        database.set_meta("dev_signals_watermark_stub", json.dumps({
+            "modified": path.stat().st_mtime,
+            "files": [ingest_mod._file_key(path)],
+        }))
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (1, 1, 0))
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (0, 0, 0))
+            rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+            self.assertEqual([row["sessionKey"] for row in rows], ["boundary"])
+
+    def test_checkpoint_failure_replays_saved_rows_without_duplicates(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+
+        root = self.tmp_path / "checkpoint-failure"
+        adapter = self._stub_provider(root, ["a", "b", "c"])
+        modified = time.time() - 60
+        for path in root.iterdir():
+            os.utime(path, (modified, modified))
+        db_path = self.tmp_path / "checkpoint-failure.sqlite3"
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            with patch.object(database, "set_meta", side_effect=OSError("interrupted checkpoint")):
+                with self.assertRaises(OSError):
+                    ingest_agent_sessions(database, max_files=2)
+            database.close()
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            for _ in range(3):
+                self.assertLessEqual(ingest_agent_sessions(database, max_files=2)[1], 2)
+            rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+            self.assertEqual({row["sessionKey"] for row in rows}, {"a", "b", "c"})
+            self.assertEqual(len(rows), 3)
+
+    def test_failed_file_at_tied_boundary_is_retried_after_restart(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        root = self.tmp_path / "tied-failure"
+        original = self._stub_provider(root, ["a", "b"])
+        modified = time.time() - 60
+        for path in root.iterdir():
+            os.utime(path, (modified, modified))
+        failed = False
+
+        def parse(path):
+            nonlocal failed
+            if path.stem == "a" and not failed:
+                failed = True
+                raise OSError("temporary parser error")
+            return original.parse(path)
+
+        adapter = ProviderAdapter("stub", lambda: [root], parse)
+        db_path = self.tmp_path / "tied-failure.sqlite3"
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            self.assertEqual(ingest_agent_sessions(database, max_files=2), (1, 2, 1))
+            database.close()
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            self.assertEqual(ingest_agent_sessions(database, max_files=2), (1, 1, 0))
+            rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+            self.assertEqual({row["sessionKey"] for row in rows}, {"a", "b"})
+
+    def test_committed_sqlite_wal_is_ingested_without_main_file_change(self) -> None:
+        import sqlite3
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        path = self.tmp_path / "producer.db"
+        producer = sqlite3.connect(path)
+        self.addCleanup(producer.close)
+        producer.execute("PRAGMA journal_mode=WAL")
+        producer.execute("PRAGMA wal_autocheckpoint=0")
+        producer.executescript("""
+            CREATE TABLE sessions (id TEXT PRIMARY KEY, cwd TEXT, model TEXT);
+            CREATE TABLE session_runs (id INTEGER PRIMARY KEY, session_id TEXT, token_usage TEXT,
+              started_at REAL, last_message_timestamp REAL, finished_at REAL, aborted_at REAL);
+        """)
+        producer.execute("INSERT INTO sessions VALUES ('wal-session', NULL, NULL)")
+        producer.execute("INSERT INTO session_runs VALUES (1, 'wal-session', '{}', 1700000000, 1700000060, 1700000060, NULL)")
+        producer.commit()
+        producer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        before = path.stat()
+        adapter = ProviderAdapter("aside", lambda: [path], parse_aside_store, ("*.db",))
+        db_path = self.tmp_path / "wal-tracker.sqlite3"
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (1, 1, 0))
+            database.close()
+            producer.execute("INSERT INTO session_runs VALUES (2, 'wal-session', '{}', 1700000120, 1700000180, 1700000180, NULL)")
+            producer.commit()
+            after = path.stat()
+            self.assertEqual((before.st_size, before.st_mtime_ns), (after.st_size, after.st_mtime_ns))
+            self.assertEqual(len(parse_aside_store(path)), 2)
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (1, 1, 0))
+            rows = database.fetch_agent_session_events("2023-11-14T00:00:00+00:00", "2023-11-15T00:00:00+00:00")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(sum(row["activeSeconds"] for row in rows), 120)
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (0, 0, 0))
+            producer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            ingest_agent_sessions(database, max_files=1)
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (0, 0, 0))
+            self.assertEqual(len(database.fetch_agent_session_events("2023-11-14T00:00:00+00:00", "2023-11-15T00:00:00+00:00")), 2)
+
+    def test_kiro_sqlite3_wal_commit_is_ingested_after_tracker_restart(self) -> None:
+        import sqlite3
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import PROVIDERS, ProviderAdapter
+
+        registered = next(adapter for adapter in PROVIDERS if adapter.key == "kiro")
+        path = self.tmp_path / "data.sqlite3"
+        producer = sqlite3.connect(path)
+        self.addCleanup(producer.close)
+        producer.execute("PRAGMA journal_mode=WAL")
+        producer.execute("PRAGMA wal_autocheckpoint=0")
+        producer.execute("CREATE TABLE conversations_v2 (key TEXT, conversation_id TEXT, value TEXT)")
+
+        def payload(count):
+            return json.dumps({"history": [{"request_metadata": {
+                "input_token_count": 10, "output_token_count": 5,
+                "end_timestamp": 1700000060 + index * 120,
+            }} for index in range(count)]})
+
+        producer.execute("INSERT INTO conversations_v2 VALUES (?, ?, ?)",
+                         ("/synthetic", "kiro-wal", payload(1)))
+        producer.commit()
+        producer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        before = path.stat()
+        adapter = ProviderAdapter("kiro", lambda: [path], registered.parse, registered.patterns)
+        db_path = self.tmp_path / "kiro-wal-tracker.sqlite3"
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (1, 1, 0))
+            database.close()
+            producer.execute("UPDATE conversations_v2 SET value = ?", (payload(2),))
+            producer.commit()
+            after = path.stat()
+            self.assertEqual((before.st_size, before.st_mtime_ns), (after.st_size, after.st_mtime_ns))
+            self.assertEqual(len(registered.parse(path)), 2)
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (1, 1, 0))
+            rows = database.fetch_agent_session_events("2023-11-14T00:00:00+00:00", "2023-11-15T00:00:00+00:00")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(sum(row["activeSeconds"] for row in rows), 2)
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (0, 0, 0))
+
+    def test_wal_modification_keeps_active_database_inside_backfill(self) -> None:
+        for suffix in (".db", ".sqlite3"):
+            with self.subTest(suffix=suffix):
+                path = self.tmp_path / ("active" + suffix)
+                path.write_bytes(b"main")
+                old = time.time() - 40 * 86400
+                os.utime(path, (old, old))
+                wal = path.with_name(path.name + "-wal")
+                wal.write_bytes(b"committed-wal")
+                for root in (path, self.tmp_path):
+                    found = _candidate_files(root, 0.0, time.time() - 30 * 86400, ("*" + suffix,))
+                    self.assertEqual([candidate for _, candidate in found], [path])
+
+    def test_empty_wal_and_shared_memory_do_not_trigger_repeated_scans(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        root = self.tmp_path / "empty-wal"
+        original = self._stub_provider(root, ["a"])
+        path = root / "a.jsonl"
+        database_file = path.with_suffix(".db")
+        path.rename(database_file)
+        adapter = ProviderAdapter("stub", lambda: [database_file], original.parse, ("*.db",))
+        database = TrackerDatabase(self.tmp_path / "empty-wal.sqlite3")
+        self.addCleanup(database.close)
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            ingest_agent_sessions(database, max_files=1)
+            database_file.with_name(database_file.name + "-wal").write_bytes(b"")
+            database_file.with_name(database_file.name + "-shm").write_bytes(b"reader coordination")
+            self.assertEqual(ingest_agent_sessions(database, max_files=1), (0, 0, 0))
+
+    def test_older_failed_file_is_retried_without_starving_healthy_backlog(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        for budget in (1, 2, 40, 400):
+            with self.subTest(budget=budget):
+                root = self.tmp_path / f"retries-{budget}"
+                original = self._stub_provider(root, ["a", "b", "c", "d", "e", "f"])
+                recovered = False
+                calls = []
+
+                def parse(path):
+                    calls.append(path.stem)
+                    if path.stem == "a" or (path.stem == "b" and not recovered):
+                        raise OSError("temporary or permanent read error")
+                    return original.parse(path)
+
+                adapter = ProviderAdapter("stub", lambda: [root], parse)
+                db_path = self.tmp_path / f"retries-{budget}.sqlite3"
+                with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+                    for _ in range(16):
+                        database = TrackerDatabase(db_path)
+                        self.addCleanup(database.close)
+                        self.assertLessEqual(ingest_agent_sessions(database, max_files=budget)[1], budget)
+                        database.close()
+                    database = TrackerDatabase(db_path)
+                    self.addCleanup(database.close)
+                    rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+                    self.assertEqual({row["sessionKey"] for row in rows}, {"c", "d", "e", "f"})
+                    # A permanent oldest error must not prevent B from recovering.
+                    recovered = True
+                    for _ in range(8):
+                        self.assertLessEqual(ingest_agent_sessions(database, max_files=budget)[1], budget)
+                    rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+                    self.assertEqual({row["sessionKey"] for row in rows}, {"b", "c", "d", "e", "f"})
+                    self.assertEqual(len(rows), 5)
+                    self.assertNotIn(str(root), database.get_meta("dev_signals_watermark_stub"))
+
+    def test_registered_codex_open_failure_is_retried_after_release(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter, PROVIDERS
+
+        root = self.tmp_path / "codex-read-failure"
+        root.mkdir()
+        for index, name in enumerate(("a", "b")):
+            records = [
+                {"timestamp": "2026-09-09T01:00:00+00:00", "type": "session_meta", "payload": {"session_id": name}},
+                {"timestamp": "2026-09-09T01:00:00+00:00", "type": "event_msg", "payload": {"type": "task_started", "turn_id": name}},
+                {"timestamp": "2026-09-09T01:01:00+00:00", "type": "event_msg", "payload": {"type": "task_complete"}},
+            ]
+            path = root / f"{name}.jsonl"
+            path.write_text("\n".join(json.dumps(row) for row in records), encoding="utf-8")
+            modified = time.time() - 120 + index
+            os.utime(path, (modified, modified))
+        registered = next(adapter for adapter in PROVIDERS if adapter.key == "codex")
+        adapter = ProviderAdapter("codex", lambda: [root], registered.parse, replace_sessions=True)
+        db_path = self.tmp_path / "codex-failure.sqlite3"
+        real_open = Path.open
+
+        def open_file(path, *args, **kwargs):
+            if path == root / "a.jsonl":
+                raise PermissionError("temporary sharing failure")
+            return real_open(path, *args, **kwargs)
+
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            with patch.object(Path, "open", open_file):
+                self.assertEqual(ingest_agent_sessions(database, max_files=2), (1, 2, 1))
+            database.close()
+            database = TrackerDatabase(db_path)
+            self.addCleanup(database.close)
+            self.assertEqual(ingest_agent_sessions(database, max_files=2), (1, 1, 0))
+            rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+            self.assertEqual({row["sessionKey"] for row in rows}, {"a", "b"})
+            self.assertEqual(ingest_agent_sessions(database), (0, 0, 0))
+
+    def test_missing_retry_file_survives_then_expires_with_backfill(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        root = self.tmp_path / "deleted-failure"
+        original = self._stub_provider(root, ["a", "b"])
+        adapter = ProviderAdapter("stub", lambda: [root], lambda path: (_ for _ in ()).throw(OSError()))
+        database = TrackerDatabase(self.tmp_path / "deleted-failure.sqlite3")
+        self.addCleanup(database.close)
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            ingest_agent_sessions(database, max_files=2)
+            for path in root.iterdir():
+                path.unlink()
+            ingest_agent_sessions(database, max_files=2)
+            state = json.loads(database.get_meta("dev_signals_watermark_stub"))
+            self.assertEqual(len(state["retry"]), 2)
+            future = datetime.now(timezone.utc) + timedelta(days=40)
+            with patch.object(ingest_mod, "datetime") as clock:
+                clock.now.return_value = future
+                ingest_agent_sessions(database, max_files=2)
+            state = json.loads(database.get_meta("dev_signals_watermark_stub"))
+            self.assertEqual(state["retry"], [])
+
+    def test_retry_survives_temporary_metadata_access_failure(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        root = self.tmp_path / "stat-failure"
+        original = self._stub_provider(root, ["a", "b"])
+        failed = True
+
+        def parse(path):
+            if failed and path.stem == "a":
+                raise OSError("read failure")
+            return original.parse(path)
+
+        adapter = ProviderAdapter("stub", lambda: [root], parse)
+        database = TrackerDatabase(self.tmp_path / "stat-failure.sqlite3")
+        self.addCleanup(database.close)
+        real_state = ingest_mod._session_file_state
+
+        def file_state(path):
+            if path.stem == "a":
+                raise PermissionError("temporary stat/WAL access denial")
+            return real_state(path)
+
+        with patch.object(ingest_mod, "PROVIDERS", (adapter,)):
+            self.assertEqual(ingest_agent_sessions(database, max_files=2), (1, 2, 1))
+            with patch.object(ingest_mod, "_session_file_state", file_state):
+                ingest_agent_sessions(database, max_files=2)
+            failed = False
+            self.assertEqual(ingest_agent_sessions(database, max_files=2), (1, 1, 0))
+            rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+            self.assertEqual({row["sessionKey"] for row in rows}, {"a", "b"})
+
+    def test_jsonl_strict_io_does_not_change_default_empty_parser_contract(self) -> None:
+        from app.tracker.dev_signals.adapters import PROVIDERS
+
+        missing = self.tmp_path / "missing.jsonl"
+        for parser in (parse_codex_session, parse_claude_session):
+            self.assertEqual(parser(missing), [])
+            with self.assertRaises(FileNotFoundError):
+                parser(missing, raise_io_errors=True)
+        empty = self.tmp_path / "empty.jsonl"
+        empty.write_text("not json\n{}\n", encoding="utf-8")
+        for parser in (parse_codex_session, parse_claude_session):
+            self.assertEqual(parser(empty, raise_io_errors=True), [])
+        claude = self.tmp_path / "claude.jsonl"
+        claude.write_text("{}\n", encoding="utf-8")
+        from unittest.mock import patch
+        registered = next(adapter for adapter in PROVIDERS if adapter.key == "claude_code")
+        with patch.object(Path, "open", side_effect=PermissionError("temporary denial")):
+            with self.assertRaises(PermissionError):
+                registered.parse(claude)
 
     def test_codex_identity_upgrade_reparses_files_behind_the_old_watermark_once(self) -> None:
         from app.tracker.dev_signals import ingest as ingest_mod

@@ -1993,10 +1993,10 @@ PROVIDERS: tuple[ProviderAdapter, ...] = (
     ProviderAdapter(
         PROVIDER_CODEX,
         discover_codex,
-        lambda path: parse_jsonl_tree(parse_codex_session, path),
+        lambda path: parse_jsonl_tree(lambda file: parse_codex_session(file, raise_io_errors=True), path),
         replace_sessions=True,
     ),
-    ProviderAdapter(PROVIDER_CLAUDE_CODE, discover_claude, lambda path: parse_jsonl_tree(parse_claude_session, path)),
+    ProviderAdapter(PROVIDER_CLAUDE_CODE, discover_claude, lambda path: parse_jsonl_tree(lambda file: parse_claude_session(file, raise_io_errors=True), path)),
     ProviderAdapter(PROVIDER_ASIDE, discover_aside, parse_aside_store, ("*.db",)),
     ProviderAdapter(PROVIDER_OPENCODE, discover_opencode, parse_opencode_store, ("*.db", "*.json")),
     ProviderAdapter(PROVIDER_GEMINI, discover_gemini, parse_gemini_store, ("*.json", "*.jsonl")),
