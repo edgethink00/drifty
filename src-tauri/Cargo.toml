@@ -70,6 +70,7 @@ window-vibrancy = "0.6"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1" }
 
 [target."cfg(windows)".dependencies]
+dunce = "1.0.5"
 tempfile = "3"
 sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
 uiautomation = "0.25.1"

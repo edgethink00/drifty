@@ -20,6 +20,8 @@ use crate::site_icons::resolve_site_icons_batch;
 use crate::{tracking_activation, tracking_pause};
 mod mutation;
 mod query;
+#[cfg(windows)]
+mod windows_daemon_identity;
 
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -463,9 +465,14 @@ impl TrackerController {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(TrackerError::CommandFailed(error.to_string())),
         };
+        #[cfg(windows)]
+        return Ok(windows_daemon_identity::daemon_matches(pid, &runtime, &db_path));
+
+        #[cfg(unix)]
         let Some(command) = daemon_process_command_line(pid)? else {
             return Ok(false);
         };
+        #[cfg(unix)]
         Ok(tracker_daemon_command_matches(&command, &runtime, &db_path))
     }
 
@@ -943,6 +950,7 @@ fn tracker_daemon_pid_path(db: &Path) -> PathBuf {
         .join("tracker.pid")
 }
 
+#[cfg(any(unix, test))]
 fn tracker_daemon_command_matches(command: &str, runtime: &TrackerRuntime, db: &Path) -> bool {
     let suffix = format!(" daemon --db {}", db.to_string_lossy());
     let Some(prefix) = command.strip_suffix(&suffix) else {
@@ -962,10 +970,8 @@ fn tracker_daemon_command_matches(command: &str, runtime: &TrackerRuntime, db: &
 
 /// Full command line of the daemon process, or None when the pid is gone.
 ///
-/// macOS keeps the historical ps probe; Windows goes through sysinfo
-/// because there is no ps there - the hardcoded call surfaced as
-/// "program not found" in the recovery loop and made daemon inspection
-/// structurally impossible on that platform.
+/// macOS keeps the historical ps probe. Windows checks the parsed arguments
+/// and safely simplifies verbatim paths in windows_daemon_identity.
 #[cfg(unix)]
 fn daemon_process_command_line(pid: u32) -> Result<Option<String>, TrackerError> {
     let output = Command::new("ps")
@@ -977,32 +983,6 @@ fn daemon_process_command_line(pid: u32) -> Result<Option<String>, TrackerError>
     }
     Ok(Some(
         String::from_utf8_lossy(&output.stdout).trim().to_string(),
-    ))
-}
-
-#[cfg(windows)]
-fn daemon_process_command_line(pid: u32) -> Result<Option<String>, TrackerError> {
-    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
-
-    let system_pid = Pid::from_u32(pid);
-    let mut system = System::new();
-    system.refresh_processes_specifics(
-        ProcessesToUpdate::Some(&[system_pid]),
-        true,
-        ProcessRefreshKind::nothing().with_cmd(UpdateKind::OnlyIfNotSet),
-    );
-    let Some(process) = system.process(system_pid) else {
-        return Ok(None);
-    };
-    let cmd = process.cmd();
-    if cmd.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(
-        cmd.iter()
-            .map(|part| part.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join(" "),
     ))
 }
 
