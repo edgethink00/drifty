@@ -23,6 +23,11 @@ from app.tracker.windows_browser_uia import (
 
 
 class WindowsBrowserUiaTests(unittest.TestCase):
+    def setUp(self) -> None:
+        shutdown = patch.object(windows_browser_uia, "_host_shutdown", threading.Event())
+        shutdown.start()
+        self.addCleanup(shutdown.stop)
+
     def test_only_measured_browsers_use_live_uia(self) -> None:
         self.assertTrue(is_live_uia_browser("Google Chrome"))
         self.assertTrue(is_live_uia_browser("Google Chrome Beta"))
@@ -618,6 +623,11 @@ class WindowsBrowserUiaShutdownTests(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "win32", "requires Windows PowerShell 5.1")
 class WindowsBrowserUiaPowerShellTests(unittest.TestCase):
+    def setUp(self) -> None:
+        shutdown = patch.object(windows_browser_uia, "_host_shutdown", threading.Event())
+        shutdown.start()
+        self.addCleanup(shutdown.stop)
+
     def test_real_host_file_launch_read_and_cleanup(self) -> None:
         created_scripts: list[Path] = []
         original = tempfile.NamedTemporaryFile
