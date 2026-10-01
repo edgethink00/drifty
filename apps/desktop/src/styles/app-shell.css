@@ -1206,6 +1206,33 @@
 .live-pill .k.idle::before { background: var(--warn); animation: none; }
 .live-pill .k.unavailable::before { background: var(--gray-seg); animation: none; }
 
+/* Keep the clipped 8px dot's 4px-to-10px halo radius without repainting a
+   box shadow on every frame. The opaque core and clipping stay unchanged. */
+.sidebar--collapsed .live-pill .k.tracking {
+  position: relative;
+  isolation: isolate;
+}
+
+.sidebar--collapsed .live-pill .k.tracking::before {
+  animation: none;
+}
+
+.sidebar--collapsed .live-pill .k.tracking::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  pointer-events: none;
+  animation: collapsed-tracker-halo 1.8s infinite;
+}
+
+@keyframes collapsed-tracker-halo {
+  0%, 100% { transform: scale(0.4); opacity: 1; }
+  50% { transform: scale(1); opacity: 0; }
+}
+
 .user-row {
   display: flex;
   align-items: center;
