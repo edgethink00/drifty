@@ -351,7 +351,7 @@ fn wrapped_label_height(label: &NSTextField, width: f64) -> f64 {
 fn present_update_panel(mtm: MainThreadMarker, panel: &NSPanel) {
     let app = NSApplication::sharedApplication(mtm);
     if app.activationPolicy() != NSApplicationActivationPolicy::Prohibited {
-        app.activate();
+        crate::macos_activation::activate_application(&app);
         panel.setLevel(NSModalPanelWindowLevel);
         panel.makeKeyAndOrderFront(None);
         return;

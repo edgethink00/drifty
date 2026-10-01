@@ -345,9 +345,12 @@ import {
   setNativePetModeFloorHome,
   setNativePetModeGuides,
   updateNativePetMode,
+  type PetModeWindowsDpiEvents,
   type PetVisibilityAction,
 } from "./features/pet-mode/petModeBridge";
 import { usePetModeVisibilityRequests } from "./features/pet-mode/usePetModeVisibilityRequests";
+import { usePetModeNativeSyncDiagnostics } from "./features/pet-mode/usePetModeNativeSyncDiagnostics";
+import { waitForPetModeStartupRetryReadiness } from "./features/pet-mode/petModeNativeReadiness";
 import {
   canTriggerPetModeBrowserXShortcut,
   usePetModeBrowserXShortcut,
@@ -1057,6 +1060,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const latestPetModeRevealRevisionRef = useRef(petModeRevealRevision);
   const petModeSyncMountedRef = useRef(false);
   const [petModeSyncRetryNonce, setPetModeSyncRetryNonce] = useState(0);
+  const { records: petModeNativeSyncDiagnostics, begin: beginPetModeSyncDiagnostic, resolve: resolvePetModeSyncDiagnostic,
+    reject: rejectPetModeSyncDiagnostic, cancel: cancelPetModeSyncDiagnostic,
+    readiness: recordPetModeSyncReadiness } = usePetModeNativeSyncDiagnostics();
   latestPetModeRevealRevisionRef.current = petModeRevealRevision;
 
   useEffect(() => {
@@ -1102,6 +1108,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   const [petModeLabPointerStatus, setPetModeLabPointerStatus] = useState<string | null>(null);
   const [petModeLabInputBounds, setPetModeLabInputBounds] = useState<string | null>(null);
+  const [petModeLabDpiEvents, setPetModeLabDpiEvents] = useState<PetModeWindowsDpiEvents | null>(null);
   // Intentionally session-only: a destructive global shortcut must be armed
   // again after every app launch instead of silently surviving into normal use.
   const [petModeBrowserXShortcutEnabled, setPetModeBrowserXShortcutEnabled] = useState(false);
@@ -1346,20 +1353,58 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     readonly width: number;
     readonly height: number;
     readonly visible: boolean;
+    readonly windowScaleFactor?: number;
+    readonly nativeScaleFactor?: number;
+    readonly windowDpiAwareness?: string;
+    readonly threadDpiAwareness?: string;
+    readonly currentMonitorScaleFactor?: number;
+    readonly expectedRenderWidth?: number;
+    readonly expectedRenderHeight?: number;
+    readonly sampledAtMs?: number;
   }) => (
     `Native input bounds · ${bounds.x}, ${bounds.y} · ${bounds.width}×${bounds.height} · ${bounds.visible ? "visible" : "hidden"}`
+    + (bounds.expectedRenderWidth !== undefined && bounds.expectedRenderHeight !== undefined
+      ? ` · expected ${bounds.expectedRenderWidth}×${bounds.expectedRenderHeight}`
+      : "")
+    + (bounds.windowScaleFactor !== undefined && bounds.nativeScaleFactor !== undefined
+      ? ` · window scale ${Math.round(bounds.windowScaleFactor * 100)}% · native scale ${Math.round(bounds.nativeScaleFactor * 100)}%`
+      : "")
+    + (bounds.windowDpiAwareness !== undefined
+      ? ` · window awareness ${bounds.windowDpiAwareness}`
+      : "")
+    + (bounds.threadDpiAwareness !== undefined
+      ? ` · thread awareness ${bounds.threadDpiAwareness}`
+      : "")
+    + (bounds.windowDpiAwareness !== undefined
+      ? ` · monitor diagnostic ${bounds.currentMonitorScaleFactor !== undefined ? `${Math.round(bounds.currentMonitorScaleFactor * 100)}%` : "unavailable"}`
+      : "")
+    + (bounds.sampledAtMs !== undefined
+      ? ` · sampled ${new Date(bounds.sampledAtMs).toLocaleTimeString([], { hour12: false })}`
+      : "")
   ), []);
 
   useEffect(() => {
     if (!petModeActive) {
       setPetModeLabInputBounds(null);
+      setPetModeLabDpiEvents(null);
       return;
     }
-    if (activeTab !== "settings" || settingsSection !== "dev" || devSettingsSubsection !== "lab") return;
+    if (activeTab !== "settings" || settingsSection !== "dev" || devSettingsSubsection !== "lab") {
+      setPetModeLabInputBounds(null);
+      setPetModeLabDpiEvents(null);
+      return;
+    }
+    setPetModeLabInputBounds(null);
+    setPetModeLabDpiEvents(null);
     let disposed = false;
     const refresh = () => {
       void getNativePetInputBounds().then((bounds) => {
-        if (!disposed && bounds) setPetModeLabInputBounds(formatPetModeInputBounds(bounds));
+        if (!disposed) {
+          setPetModeLabInputBounds(bounds
+            ? formatPetModeInputBounds(bounds)
+            : "Native input bounds unavailable");
+          setPetModeLabDpiEvents(bounds?.windowsDpiEvents ?? null);
+        }
       });
     };
     // The native enable effect runs later in this component. Delay one paint,
@@ -7257,17 +7302,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => { petModeLiveSnapshotRef.current = petModeLiveSnapshot; }, [petModeLiveSnapshot]);
   useEffect(() => {
     if (!isTauriRuntime()) return;
+    let disposed = false;
+    const pendingReveals = pendingPetModeRevealRevisionsRef.current;
+    const readinessAbort = new AbortController();
     const snapshot = petModeActive ? buildPetModeSnapshot(petModeLiveSnapshotRef.current) : null;
     const revealRevision = petModeRevealRevision;
     const isInitialStartupSync = !initialPetModeSyncCompletedRef.current;
     const forceReveal = petModeActive
       && (isInitialStartupSync
         || (revealRevision > handledPetModeRevealRevisionRef.current
-          && !pendingPetModeRevealRevisionsRef.current.has(revealRevision)));
-    if (forceReveal) pendingPetModeRevealRevisionsRef.current.add(revealRevision);
+          && !pendingReveals.has(revealRevision)));
+    if (forceReveal) pendingReveals.add(revealRevision);
     const reducedMotion = typeof window.matchMedia === "function"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const { width, height } = getPetModeWindowSize(petModeSize);
+    const diagnosticToken = beginPetModeSyncDiagnostic({ enabled: petModeActive, width, height, forceReveal,
+      attempt: (petModeRevealRetryAttemptsRef.current.get(revealRevision) ?? 0) + 1 });
     void setNativePetModeEnabled(
       petModeActive,
       snapshot,
@@ -7276,37 +7326,57 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       height,
       forceReveal,
     ).then(() => {
+      if (disposed) return;
+      resolvePetModeSyncDiagnostic(diagnosticToken);
       if (petModeActive) {
         initialPetModeSyncCompletedRef.current = true;
       }
       if (!forceReveal) return;
-      pendingPetModeRevealRevisionsRef.current.delete(revealRevision);
+      pendingReveals.delete(revealRevision);
       petModeRevealRetryAttemptsRef.current.delete(revealRevision);
       handledPetModeRevealRevisionRef.current = Math.max(
         handledPetModeRevealRevisionRef.current,
         revealRevision,
       );
     }).catch((nextError) => {
+      console.warn("Failed to sync Pet Mode window", nextError);
+      if (disposed) return;
+      rejectPetModeSyncDiagnostic(diagnosticToken, nextError);
       if (isInitialStartupSync) {
         initialPetModeSyncCompletedRef.current = false;
       }
-      console.warn("Failed to sync Pet Mode window", nextError);
       if (!forceReveal) return;
-      pendingPetModeRevealRevisionsRef.current.delete(revealRevision);
+      pendingReveals.delete(revealRevision);
       const retryAttempts = petModeRevealRetryAttemptsRef.current.get(revealRevision) ?? 0;
       if (
         petModeSyncMountedRef.current
         && (isInitialStartupSync || revealRevision <= latestPetModeRevealRevisionRef.current)
-        && revealRevision > handledPetModeRevealRevisionRef.current
+        && (isInitialStartupSync || revealRevision > handledPetModeRevealRevisionRef.current)
         && retryAttempts < 1
       ) {
-        // A failed Tauri call must not spend the user's explicit Show request.
-        // Retry once; another click creates a new revision and remains usable.
-        petModeRevealRetryAttemptsRef.current.set(revealRevision, retryAttempts + 1);
-        setPetModeSyncRetryNonce((nonce) => nonce + 1);
+        // Startup uses revision zero, so it must not depend on a manual
+        // Show revision. Retry once for either startup or an explicit request.
+        void waitForPetModeStartupRetryReadiness(nextError, isInitialStartupSync,
+          readinessAbort.signal, (status) => recordPetModeSyncReadiness(diagnosticToken, status))
+          .then(() => {
+            // Waiting never occupies the serialized enable queue. Off/size
+            // cleanup must revoke this request before it can enqueue a retry.
+            if (disposed || !petModeSyncMountedRef.current) return;
+            petModeRevealRetryAttemptsRef.current.set(revealRevision, retryAttempts + 1);
+            setPetModeSyncRetryNonce((nonce) => nonce + 1);
+          }).catch(() => undefined);
       }
     });
-  }, [petModeActive, petModeRevealRevision, petModeSize, petModeSyncRetryNonce]);
+    return () => {
+      // A changed toggle or size owns the next sync. A late rejection from
+      // this request must not retry it or consume the replacement's reveal.
+      disposed = true;
+      readinessAbort.abort();
+      cancelPetModeSyncDiagnostic(diagnosticToken);
+      if (forceReveal) pendingReveals.delete(revealRevision);
+    };
+  }, [beginPetModeSyncDiagnostic, cancelPetModeSyncDiagnostic, petModeActive, petModeRevealRevision, petModeSize,
+    petModeSyncRetryNonce, recordPetModeSyncReadiness, rejectPetModeSyncDiagnostic, resolvePetModeSyncDiagnostic]);
   useEffect(() => {
     if (!isTauriRuntime()) return;
     const points = isDevModeActive ? petModeFloorHomePt : PET_MODE_FLOOR_HOME_PT;
@@ -10989,6 +11059,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     petModeRunBetaEnabled={petModeRunBetaEnabled}
                     petModeLabPointerStatus={petModeLabPointerStatus}
                     petModeLabInputBounds={petModeLabInputBounds}
+                    petModeLabDpiEvents={petModeLabDpiEvents}
+                    petModeNativeSyncDiagnostics={petModeNativeSyncDiagnostics}
                     floatingCompanionDevEnabled={floatingCompanionDevEnabled}
                     floatingCompanionDevSupported={floatingCompanionDevSupported}
                     onFloatingCompanionDevEnabledChange={handleFloatingCompanionDevEnabledChange}
@@ -11050,7 +11122,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     }}
                     onPlacePetModeCenter={() => {
                       void placeNativePetModeAtCenterForLab().then((bounds) => {
-                        if (bounds) setPetModeLabInputBounds(formatPetModeInputBounds(bounds));
+                        if (bounds) {
+                          setPetModeLabInputBounds(formatPetModeInputBounds(bounds));
+                          setPetModeLabDpiEvents(bounds.windowsDpiEvents ?? null);
+                        }
                       }).catch(() => undefined);
                     }}
                     onPreviewPetModeAction={(action) => {

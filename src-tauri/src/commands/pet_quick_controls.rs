@@ -261,14 +261,8 @@ fn resolve_quick_controls_layout(
     controls_width: f64,
 ) -> Result<PetQuickControlsLayout, String> {
     let position = current_pet_logical_position(pet)?;
-    let scale_factor = pet.scale_factor().map_err(|error| error.to_string())?;
-    let size = pet
-        .outer_size()
-        .map_err(|error| error.to_string())?
-        .to_logical::<f64>(scale_factor);
-    let monitor = pet
-        .current_monitor()
-        .map_err(|error| error.to_string())?
+    let (body_width, body_height) = super::pet_mode::pet_size();
+    let monitor = super::pet_mode::resolve_pet_scene_monitor(pet)
         .or_else(|| app.primary_monitor().ok().flatten())
         .ok_or_else(|| "No monitor is available for Pet Mode quick controls".to_string())?;
     let work_area = monitor.work_area();
@@ -277,8 +271,8 @@ fn resolve_quick_controls_layout(
     Ok(layout_pet_quick_controls(
         position.x,
         position.y,
-        size.width,
-        size.height,
+        body_width,
+        body_height,
         work_position.x,
         work_position.y,
         work_size.width,

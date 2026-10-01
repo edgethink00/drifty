@@ -13,6 +13,7 @@ import {
   alignNativePetContact,
   beginNativePetDrag,
   cancelNativePetMotion,
+  createPetManualDragRequestId,
   exitNativePetScreen,
   listenToNativePetDragEnd,
   listenToNativePetDragProbe,
@@ -68,6 +69,7 @@ import {
 } from "./petModeQuickControls";
 import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
 import { preloadPetModeHitRegions, stagePetModeHitRegionTransition } from "./petModeHitRegions";
+import { getPetModeRenderSize, getPetModeSceneStyle } from "./petModeRenderGeometry";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import {
   PET_MODE_AWAY_MS,
@@ -196,13 +198,12 @@ function guaranteedOutcomesEnabled(): boolean {
 function resolveRenderablePetModeSize(): PetModeSize {
   const requested = resolveInitialPetModeSize();
   // The settings webview persists a new size before its native resize finishes.
-  // A bottom-anchored 125% drawing in the old 100% panel puts the head above
-  // the WebView and clips it. Keep the largest requested size that fits the
-  // actual viewport until Windows reports the new panel dimensions.
+  // Include the render padding, not only the body. Keep the largest requested
+  // size that fits until native reports the new surface dimensions.
   for (let index = PET_MODE_SIZES.length - 1; index >= 0; index -= 1) {
     const size = PET_MODE_SIZES[index];
     if (size > requested) continue;
-    const { width, height } = getPetModeWindowSize(size);
+    const { width, height } = getPetModeRenderSize(size);
     if (width <= window.innerWidth + 1 && height <= window.innerHeight + 1) return size;
   }
   return PET_MODE_SIZES[0];
@@ -364,6 +365,7 @@ export function PetModeWindowApp() {
   // `null` means the pet has not completed an autonomous action yet.
   const previousAutonomousActionRef = useRef<PetModeLifeAction | null>(null);
   const manualDragRef = useRef(false);
+  const manualDragRequestRef = useRef<string | null>(null);
   const lastSurfaceRevisionRef = useRef<number | null>(null);
   const seatReconcilePendingRef = useRef(false);
   const seatReconcileInFlightRef = useRef(false);
@@ -471,17 +473,17 @@ export function PetModeWindowApp() {
   }, []);
 
   /**
-   * The dance frames stand the cat taller than the panel at its 1:1 body
-   * scale, so the panel borrows headroom above itself for exactly the dance
-   * phase. Callers raise it before committing the pose and lower it before the
-   * next pose; the phase effect below lowers it after any interruption. Native
-   * also drops it on its own before motion, drag, resize, or hide, so a stale
-   * lower here is a harmless no-op.
+   * Native reserves render padding for every pose. This retained command now
+   * prepares only the dance's screen-edge position and restores its scene
+   * origin afterwards; it does not resize the render window. A failed prepare
+   * must not commit the taller pose at an unprepared screen edge.
    */
   const danceHeadroomRef = useRef(false);
+  const danceHeadroomRequestedRef = useRef(false);
   const danceHeadroomGenerationRef = useRef(0);
   const invalidateDanceHeadroom = useCallback(() => {
     danceHeadroomGenerationRef.current += 1;
+    danceHeadroomRequestedRef.current = false;
     const wasRaised = danceHeadroomRef.current;
     danceHeadroomRef.current = false;
     if (wasRaised) void setNativePetDanceHeadroom(false).catch(() => undefined);
@@ -510,19 +512,30 @@ export function PetModeWindowApp() {
   }, [clearHuntAlert, invalidateDanceHeadroom, stopMusicNote]);
   const raiseDanceHeadroom = useCallback(async () => {
     const generation = ++danceHeadroomGenerationRef.current;
+    danceHeadroomRequestedRef.current = true;
     try {
       await setNativePetDanceHeadroom(true);
     } catch {
-      return;
+      if (generation === danceHeadroomGenerationRef.current) {
+        danceHeadroomRequestedRef.current = false;
+        await setNativePetDanceHeadroom(false).catch(() => undefined);
+      }
+      return false;
     }
     if (generation !== danceHeadroomGenerationRef.current) {
-      await setNativePetDanceHeadroom(false).catch(() => undefined);
-      return;
+      // A newer dance owns the same native correction. A late ACK from the
+      // interrupted request must not restore its position underneath it.
+      if (!danceHeadroomRequestedRef.current) {
+        await setNativePetDanceHeadroom(false).catch(() => undefined);
+      }
+      return false;
     }
     danceHeadroomRef.current = true;
+    return true;
   }, []);
   const lowerDanceHeadroom = useCallback(async () => {
     danceHeadroomGenerationRef.current += 1;
+    danceHeadroomRequestedRef.current = false;
     if (!danceHeadroomRef.current) return;
     danceHeadroomRef.current = false;
     await setNativePetDanceHeadroom(false).catch(() => undefined);
@@ -636,6 +649,17 @@ export function PetModeWindowApp() {
   }, [beginHitRegionTransition, reportLabState]);
 
   const commitVisibility = useCallback((visible: boolean) => {
+    if (!visible) {
+      manualDragRequestRef.current = null;
+      manualDragRef.current = false;
+      sleepingDragRef.current = false;
+      strokeHoldRef.current = false;
+      manualReleaseTokenRef.current = null;
+      manualReleaseSeatCheckPendingRef.current = false;
+      axSeatProbeRevisionRef.current += 1;
+      setAxSeatProbe(null);
+      setDragProbe(null);
+    }
     visibleRef.current = visible;
     setPetVisible(visible);
   }, []);
@@ -884,12 +908,15 @@ export function PetModeWindowApp() {
   }, []);
 
   const finishManualDrag = useCallback((result?: PetModeNativeDragResult, rememberPosition = true) => {
+    if (manualDragRequestRef.current === null
+      || (result?.manualRequestId !== undefined && result.manualRequestId !== manualDragRequestRef.current)) return;
     if (
       !manualDragRef.current
       && phaseRef.current !== "drag"
     ) return;
     suppressQuickControlsAfterInteraction();
     manualDragRef.current = false;
+    manualDragRequestRef.current = null;
     setDragProbe(null);
     axSeatProbeRevisionRef.current += 1;
     setAxSeatProbe(null);
@@ -1190,8 +1217,9 @@ export function PetModeWindowApp() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    void listenToNativePetDragProbe((probe) => {
-      if (disposed) return;
+    void listenToNativePetDragProbe((probe, manualRequestId) => {
+      if (disposed || manualDragRequestRef.current === null
+        || (manualRequestId !== undefined && manualRequestId !== manualDragRequestRef.current)) return;
       setDragProbe(probe);
       if (
         !probe
@@ -1247,7 +1275,9 @@ export function PetModeWindowApp() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    void listenToNativePetDragStart(() => {
+    void listenToNativePetDragStart((manualRequestId) => {
+      if (disposed || manualDragRequestRef.current === null
+        || (manualRequestId !== undefined && manualRequestId !== manualDragRequestRef.current)) return;
       if (!manualDragRef.current || strokeHoldRef.current || phaseRef.current === "drag") return;
       if (timedPauseRef.current !== null || sleepingDragRef.current) return;
       sleepTouchRef.current = 0;
@@ -1272,7 +1302,9 @@ export function PetModeWindowApp() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    void listenToNativePetStrokeDetected(() => {
+    void listenToNativePetStrokeDetected((manualRequestId) => {
+      if (disposed || manualDragRequestRef.current === null
+        || (manualRequestId !== undefined && manualRequestId !== manualDragRequestRef.current)) return;
       strokeHoldRef.current = true;
       // A late drag-start can still arrive after the first reverse. Keep the
       // current resting pose instead of flashing the held sprite.
@@ -1294,7 +1326,11 @@ export function PetModeWindowApp() {
 
   useEffect(() => {
     document.documentElement.dataset.surface = "pet-mode";
-    return () => { delete document.documentElement.dataset.surface; };
+    return () => {
+      manualDragRequestRef.current = null;
+      manualDragRef.current = false;
+      delete document.documentElement.dataset.surface;
+    };
   }, []);
 
   // The native panel remains mounted while Show Pet is off. Without mirroring
@@ -1458,7 +1494,7 @@ export function PetModeWindowApp() {
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void listenToNativePetDragEnd((result) => {
-      if (!result.moved || result.strokeDetected) return;
+      if (disposed || !result.moved || result.strokeDetected) return;
       // The native tracker is the authority for mouse-up. Depending only on
       // the invoke promise can leave WebKit in `drag` after the native loop has
       // already released, especially when the panel crosses app/display
@@ -1675,15 +1711,15 @@ export function PetModeWindowApp() {
       if (token !== actionTokenRef.current) return;
       if (movedToTarget && !fullscreenReturnHandled) {
         if (contacted && danceOnCloseBetaEnabledRef.current && token === actionTokenRef.current) {
-          await raiseDanceHeadroom();
+          const prepared = await raiseDanceHeadroom();
           if (token !== actionTokenRef.current) return;
-          commitPhase("dance");
-          await delay(prefersReducedMotion() ? 40 : PET_MODE_DANCE_DURATION_MS);
-          if (token !== actionTokenRef.current) return;
-          // Lower before the walk home so the return trip starts from the
-          // base-height panel instead of the taller dance frame.
-          await lowerDanceHeadroom();
-          if (token !== actionTokenRef.current) return;
+          if (prepared) {
+            commitPhase("dance");
+            await delay(prefersReducedMotion() ? 40 : PET_MODE_DANCE_DURATION_MS);
+            if (token !== actionTokenRef.current) return;
+            await lowerDanceHeadroom();
+            if (token !== actionTokenRef.current) return;
+          }
         }
         // Every real successful close earns the E04 face for the walk home.
         // Approaches, failed contacts, generic previews, and Show Pet stay
@@ -1808,7 +1844,11 @@ export function PetModeWindowApp() {
     if (action === "stop") {
       interruptForLabCommand();
       setLifeLoopEnabled(false);
-      commitVisibility(true);
+      const token = actionTokenRef.current;
+      // An outing hides the native panel as well as the renderer. Recover both
+      // before settling; a resident pet keeps its current desktop position.
+      await revealForAction();
+      if (token !== actionTokenRef.current) return;
       commitPhase(focusRestingRef.current ? "sit" : "idle");
       return;
     }
@@ -1902,8 +1942,12 @@ export function PetModeWindowApp() {
         pet: 1_200,
       };
       if (action === "dance") {
-        await raiseDanceHeadroom();
+        const prepared = await raiseDanceHeadroom();
         if (token !== actionTokenRef.current) return;
+        if (!prepared) {
+          commitPhase(focusRestingRef.current ? "sit" : "idle");
+          return;
+        }
       }
       commitPhase(phaseByAction[action]);
       const guaranteedOutcomes = guaranteedOutcomesEnabled();
@@ -1921,7 +1965,7 @@ export function PetModeWindowApp() {
     if (token === actionTokenRef.current) {
       commitPhase(focusRestingRef.current ? "sit" : "idle");
     }
-  }, [commitPhase, commitVisibility, interruptForLabCommand, lowerDanceHeadroom, playMusicNote, playOuting, raiseDanceHeadroom, revealForAction, setLifeLoopEnabled]);
+  }, [commitPhase, interruptForLabCommand, lowerDanceHeadroom, playMusicNote, playOuting, raiseDanceHeadroom, revealForAction, setLifeLoopEnabled]);
 
   const wakeSleepingPet = useCallback(async () => {
     const token = ++actionTokenRef.current;
@@ -3209,6 +3253,7 @@ export function PetModeWindowApp() {
     event.stopPropagation();
     void reportNativePetPointer().catch(() => undefined);
     if (typeof event.button === "number" && event.button > 0) return;
+    if (!petModeEnabledRef.current || !visibleRef.current) return;
     suppressQuickControlsAfterInteraction();
     // The annoyed wake-up is one complete relationship beat. A rapid follow-up
     // press must still be consumed by this overlay, but it cannot claim action
@@ -3216,11 +3261,19 @@ export function PetModeWindowApp() {
     // the resolved tap would immediately replace the mark with a happy heart.
     if (phaseRef.current === "anger") return;
     if (manualDragRef.current || sleepingDragRef.current) return;
+    let manualRequestId: string;
+    try { manualRequestId = createPetManualDragRequestId(); } catch (error) {
+      void reportNativePetDragError(error).catch(() => undefined);
+      return;
+    }
     if (automaticInterventionRef.current && activeLabActionRef.current === "intervention") {
       userInterceptedInterventionTokenRef.current = actionTokenRef.current;
     }
     const dragToken = ++actionTokenRef.current;
+    manualReleaseTokenRef.current = null;
+    manualReleaseSeatCheckPendingRef.current = false;
     manualDragRef.current = true;
+    manualDragRequestRef.current = manualRequestId;
     sleepingDragRef.current = timedPauseRef.current !== null;
     // Grabbing a sleepwalking cat ends the walk. Under a pause the drag
     // handler deliberately leaves the pose alone, so restore the sleeping
@@ -3234,17 +3287,19 @@ export function PetModeWindowApp() {
     void cancelNativePetMotion().catch(() => undefined);
     void (async () => {
       try {
-        // Native tracking must begin in the original pointer-down task so it
-        // preserves the exact initial cursor coordinate. Waiting here for the
-        // pickup artwork made short/quick drags lose their first 148 ms and
-        // appear as a tiny twitch. Rust owns that visual hold now: it captures
-        // the pointer immediately, lets WebKit paint, then follows the full
-        // delta without sacrificing input.
+        // Forward the down point and pointer kind in the original task so a
+        // Windows worker starting after mouse-up retains the original anchor.
+        // Rust owns the pickup hold while WebKit paints; waiting here would
+        // lose the first 148 ms of a quick drag. Touch, pen and older callers
+        // keep their native sampled-pointer behavior.
         const result = await beginNativePetDrag(
           event.clientX,
           event.clientY,
           sleepingDragRef.current || prefersReducedMotion() ? 0 : PET_MODE_DRAG_PICKUP_MS,
+          event.pointerType,
+          manualRequestId,
         );
+        if (manualDragRequestRef.current !== manualRequestId) return;
         suppressQuickControlsAfterInteraction();
         // A real pointer drag owns the pet until release. Automatic/lab actions
         // may invalidate their own token while AppKit runs its native tracking
@@ -3255,6 +3310,7 @@ export function PetModeWindowApp() {
           return;
         }
         manualDragRef.current = false;
+        manualDragRequestRef.current = null;
         const wasSleepingDrag = sleepingDragRef.current;
         sleepingDragRef.current = false;
         axSeatProbeRevisionRef.current += 1;
@@ -3274,9 +3330,11 @@ export function PetModeWindowApp() {
         }
         handlePet();
       } catch (error) {
+        if (manualDragRequestRef.current !== manualRequestId) return;
         void reportNativePetDragError(error).catch(() => undefined);
         suppressQuickControlsAfterInteraction();
         manualDragRef.current = false;
+        manualDragRequestRef.current = null;
         const wasSleepingDrag = sleepingDragRef.current;
         sleepingDragRef.current = false;
         axSeatProbeRevisionRef.current += 1;
@@ -3422,7 +3480,7 @@ export function PetModeWindowApp() {
 
   return (
     <main className="pet-mode-surface" data-productivity={snapshot?.productivity ?? "neutral"}>
-      <div className="pet-mode-scale">
+      <div className="pet-mode-scale" style={getPetModeSceneStyle(petModeSize)}>
         <button
           ref={hitTargetRef}
           type="button"

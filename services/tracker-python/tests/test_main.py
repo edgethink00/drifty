@@ -3351,6 +3351,52 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(envelopes[1]["data"], {"name": "카카오톡"})
 
 
+    def test_owned_windows_daemon_waits_for_either_stop_or_owner_and_guards_late_capture(self) -> None:
+        owner = MagicMock()
+        owner.is_alive.return_value = True
+        owner_context = MagicMock()
+        owner_context.__enter__.return_value = owner
+        stop_event = MagicMock()
+        stop_event.requested.return_value = False
+        stop_event.wait.return_value = True
+        lock_file = MagicMock()
+
+        def tick(_db, _last_tick, *, capture_allowed):
+            self.assertTrue(capture_allowed())
+            owner.is_alive.return_value = False
+            self.assertFalse(capture_allowed())
+            owner.is_alive.return_value = True
+            stop_event.requested.return_value = True
+            self.assertFalse(capture_allowed())
+            stop_event.requested.return_value = False
+            return 1.0
+
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            windows_process_liveness, "tracker_app_owner", return_value=owner_context
+        ), patch.dict(sys.modules, {
+            "app.windows_daemon_shutdown": SimpleNamespace(WindowsDaemonStopEvent=lambda _db: stop_event)
+        }), patch.object(tracker_main, "_acquire_tracker_daemon_lock", return_value=lock_file), patch.object(
+            tracker_main, "_release_tracker_daemon_lock"
+        ) as release_lock, patch.object(tracker_main, "_write_tracker_pid"), patch.object(
+            tracker_main, "_remove_pid_record_if_owned"
+        ) as remove_pid, patch.object(tracker_main, "database", return_value=MagicMock()), patch.object(
+            tracker_main, "_maybe_create_periodic_backup", return_value=0.0
+        ), patch.object(tracker_main, "_maybe_ingest_dev_signals", return_value=0.0), patch.object(
+            tracker_main, "_daemon_tick", side_effect=tick
+        ) as run_tick, patch.object(tracker_main, "_close_loaded_windows_capture") as close_capture:
+            tracker_main.daemon()
+
+        run_tick.assert_called_once()
+        stop_event.wait.assert_called_once_with(tracker_main.SAMPLE_SECONDS, owner=owner)
+        owner.wait_until_exit.assert_not_called()
+        stop_event.close.assert_called_once()
+        close_capture.assert_called_once()
+        remove_pid.assert_called_once_with(os.getpid())
+        release_lock.assert_called_once_with(lock_file)
+        owner_context.__exit__.assert_called_once()
+
+
+
 class BrowserHistoryBackfillUpgradeTests(unittest.TestCase):
     """Exercise persisted captures through normal reopen and a real daemon tick."""
 

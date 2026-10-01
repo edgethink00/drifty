@@ -182,14 +182,34 @@
   height: 92.4px;
   color: var(--pet-fur);
   transform-origin: 50% 62%;
-  filter: var(--pet-drop-shadow);
   will-change: transform;
+}
+
+/* Filter the body in an area that includes every authored pose. The small
+   registration box remains unchanged so animation pivots and expressions
+   retain their coordinates. Decorations are siblings of this filter group. */
+.pet-mode-cat__body-effects {
+  position: absolute;
+  left: var(--pet-body-effect-left);
+  top: var(--pet-body-effect-top);
+  width: var(--pet-body-effect-width);
+  height: var(--pet-body-effect-height);
+  filter: var(--pet-drop-shadow);
+  pointer-events: none;
+}
+
+.pet-mode-cat__body-register {
+  position: absolute;
+  left: var(--pet-body-register-left);
+  top: var(--pet-body-register-top);
+  width: 121.2px;
+  height: 92.4px;
 }
 
 .pet-mode-cat.is-mirrored { transform: scaleX(-1); }
 /* An exact-reference Dev frame is intentionally a still: filter/shadow and
    breathing would produce pixels that were not in the approved source frame. */
-.pet-mode-cat.is-source-locked-sit { filter: none; }
+.pet-mode-cat.is-source-locked-sit .pet-mode-cat__body-effects { filter: none; }
 .pet-mode-cat.is-source-locked-sit .pet-mode-cat__motion {
   animation: none;
   transform: none;
@@ -326,9 +346,7 @@
    later committed hunt owns the red alert. */
 .pet-mode-cat.has-sleep-drift-cue.pet-mode-cat--sleep .pet-mode-cat__motion {
   animation: none;
-  filter: var(--pet-drop-shadow);
 }
-.pet-mode-cat.has-sleep-drift-cue { filter: none; }
 .pet-mode-cat.has-sleep-drift-cue .pet-mode-cat__zzz {
   opacity: 0;
   animation: none;

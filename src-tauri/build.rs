@@ -157,6 +157,7 @@ fn main() {
             "watcher_companion_dismiss_moment",
             "extreme_nudge_apply",
             "pet_mode_set_enabled",
+            "pet_mode_get_startup_state",
             "pet_mode_update",
             "pet_mode_visibility_action",
             "pet_mode_intervene",

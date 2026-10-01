@@ -168,6 +168,7 @@
     "allow-managed-ai-delete",
     "allow-extreme-nudge-apply",
     "allow-pet-mode-set-enabled",
+    "allow-pet-mode-get-startup-state",
     "allow-pet-mode-set-size",
     "allow-pet-mode-set-floor-home",
     "allow-pet-mode-update",

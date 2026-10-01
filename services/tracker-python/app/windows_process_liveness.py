@@ -98,7 +98,7 @@ class WindowsProcessOwner:
         The daemon owns both retained handles throughout this wait. Failed or
         unexpected native results stop capture just like an owner-only wait.
         """
-        if self._handle is None:
+        if self._handle is None or stop_event_handle is None:
             return True
         handles = (wintypes.HANDLE * 2)(self._handle, stop_event_handle)
         milliseconds = min(max(int(seconds * 1000), 0), 0xFFFFFFFE)

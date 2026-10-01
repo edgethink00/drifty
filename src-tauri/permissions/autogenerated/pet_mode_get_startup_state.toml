@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-get-startup-state"
+description = "Enables the pet_mode_get_startup_state command without any pre-configured scope."
+commands.allow = ["pet_mode_get_startup_state"]
+
+[[permission]]
+identifier = "deny-pet-mode-get-startup-state"
+description = "Denies the pet_mode_get_startup_state command without any pre-configured scope."
+commands.deny = ["pet_mode_get_startup_state"]

@@ -235,5 +235,54 @@ class WindowsTrackerOwnerTests(unittest.TestCase):
                     child.wait(timeout=3)
 
 
+    def test_original_owner_or_stop_event_wakes_without_reopening_or_closing_handles(self):
+        kernel32 = self.kernel32()
+        kernel32.WaitForMultipleObjects.side_effect = [258, 0, 1, 0xFFFFFFFF]
+        owner = liveness.WindowsProcessOwner(kernel32, 123)
+        self.assertEqual(
+            [owner.wait_until_exit_or_stop(5, 456) for _ in range(4)],
+            [False, True, True, True],
+        )
+        for invocation in kernel32.WaitForMultipleObjects.call_args_list:
+            count, handles, wait_all, timeout_ms = invocation.args
+            self.assertEqual(count, 2)
+            self.assertEqual(list(handles), [123, 456])
+            self.assertFalse(wait_all)
+            self.assertEqual(timeout_ms, 5000)
+        kernel32.OpenProcess.assert_not_called()
+        kernel32.CloseHandle.assert_not_called()
+        owner.close()
+        kernel32.CloseHandle.assert_called_once_with(123)
+
+
+    def test_missing_owner_or_stop_handle_fails_closed_without_native_wait(self):
+        kernel32 = self.kernel32()
+        owner = liveness.WindowsProcessOwner(kernel32, 123)
+        self.assertTrue(owner.wait_until_exit_or_stop(5, None))
+        owner.close()
+        self.assertTrue(owner.wait_until_exit_or_stop(5, 456))
+        kernel32.WaitForMultipleObjects.assert_not_called()
+
+
+    @unittest.skipUnless(sys.platform == "win32", "requires native Windows process/event handles")
+    def test_real_stop_event_wakes_while_original_owner_is_still_alive(self):
+        from app import windows_daemon_shutdown as shutdown
+        api = shutdown._NativeApi()
+        owner = liveness._open_windows_process_owner(
+            os.getpid(), api.creation(api.k.GetCurrentProcess())
+        )
+        event = api.create_event(None)
+        try:
+            self.assertTrue(owner.is_alive())
+            self.assertFalse(owner.wait_until_exit_or_stop(0, event))
+            self.assertTrue(api.k.SetEvent(event))
+            self.assertTrue(owner.wait_until_exit_or_stop(5, event))
+            self.assertTrue(owner.is_alive())
+        finally:
+            api.close(event)
+            owner.close()
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -208,7 +208,8 @@ fn position_entry_frame(
         view.setWantsLayer(true);
         let layer = view.layer().ok_or("Pet panel has no content layer")?;
         let bounds = view.bounds();
-        let visible_width = (right_edge - desired.x).clamp(0.0, bounds.size.width);
+        let render_origin = pet_scene_to_window_position(&window, desired);
+        let visible_width = (right_edge - render_origin.x).clamp(0.0, bounds.size.width);
         let current_position = current_pet_logical_position(&window)?;
         let origin = ns.frame().origin;
         CATransaction::begin();

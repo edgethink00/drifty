@@ -53,22 +53,37 @@ pub(super) fn pointer_pressed() -> bool {
     .any(|key| unsafe { GetAsyncKeyState(key as i32) } < 0)
 }
 
-/// Whether the button that starts a pet drag is still held.
-///
-/// Drag tracking has to follow the same button the press began with, so this
-/// resolves the user's swapped-primary-button setting instead of assuming the
-/// physical left button. Escape stays an explicit release path, matching
-/// `pointer_pressed`.
-pub(super) fn primary_pointer_held() -> bool {
+#[derive(Clone, Copy, Debug)]
+pub(super) struct PrimaryPointerState {
+    pub held: bool,
+    pub cancelled: bool,
+}
+
+/// Follow the user's swapped primary button and distinguish its release from
+/// Escape cancellation. Both still end the boolean held state.
+pub(super) fn primary_pointer_state() -> PrimaryPointerState {
     let escape = unsafe { GetAsyncKeyState(VK_ESCAPE as i32) };
     if escape < 0 {
-        return false;
+        return PrimaryPointerState {
+            held: false,
+            cancelled: true,
+        };
     }
     // SAFETY: SM_SWAPBUTTON is a documented read-only system metric.
     let swapped = unsafe { GetSystemMetrics(SM_SWAPBUTTON) } != 0;
     let primary = if swapped { VK_RBUTTON } else { VK_LBUTTON };
     let state = unsafe { GetAsyncKeyState(primary as i32) };
-    state < 0
+    PrimaryPointerState {
+        held: state < 0,
+        cancelled: false,
+    }
+}
+
+// Preserve the boolean helper for callers that only need the held state;
+// completed-drag classification also needs the cancellation reason.
+#[allow(dead_code)]
+pub(super) fn primary_pointer_held() -> bool {
+    primary_pointer_state().held
 }
 
 fn physical_target(point: (f64, f64)) -> Result<(i32, i32), String> {

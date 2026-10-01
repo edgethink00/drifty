@@ -7,6 +7,8 @@ mod correction_evidence_store;
 mod custom_endpoint_key_store;
 mod donut_icon;
 mod living_soul_store;
+#[cfg(target_os = "macos")]
+mod macos_activation;
 #[cfg(any(target_os = "windows", test))]
 mod main_window_recovery;
 mod native_crash_reports;
@@ -55,6 +57,7 @@ use commands::{
     pet_mode_return_from_outing,
     pet_mode_return_home, pet_mode_finish_fullscreen_intervention,
     pet_mode_complete_fullscreen_close, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
+    pet_mode_get_startup_state,
     pet_mode_set_dance_headroom, pet_mode_set_floor_home, pet_mode_set_presence, pet_mode_set_size,
     pet_mode_stalk_cursor, pet_mode_update,
     pet_mode_update_hit_region, pet_mode_visibility_action, pet_quick_controls_action,
@@ -210,6 +213,9 @@ fn run_exit_cleanup_steps(
 
 fn shutdown_app_for_exit(app: &AppHandle) {
     app.state::<AppExitCoordinator>().shutdown_once(|| {
+        commands::cancel_pet_native_drag_for_app_exit();
+        #[cfg(target_os = "windows")]
+        commands::stop_windows_pet_dpi_reevaluation();
         // Invalidate queued Start/timer/enforcement tokens before shutdown
         // waits on workers or sends the intentional daemon Stop.
         tracking_pause::begin_app_exit(app);
@@ -765,6 +771,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(TrackerController::default())
         .manage(TrackerStartupState::default())
+        .manage(commands::PetModeStartupState::default())
         .on_menu_event(|app, event| handle_app_menu_event(app, event.id().as_ref()));
 
     #[cfg(target_os = "windows")]
@@ -807,7 +814,11 @@ pub fn run() {
                 app,
                 commands::PET_MODE_WINDOW_LABEL,
                 RECOVER_AUXILIARY_WINDOW_SETUP,
-                setup_pet_mode_window,
+                |app| {
+                    let result = setup_pet_mode_window(app);
+                    commands::finish_pet_mode_startup(app.handle(), result.is_ok());
+                    result
+                },
             )?;
             setup_auxiliary_window(
                 app,
@@ -1092,6 +1103,7 @@ pub fn run() {
             living_soul_read,
             living_soul_write,
             pet_mode_set_enabled,
+            pet_mode_get_startup_state,
             pet_mode_set_size,
             pet_mode_set_dance_headroom,
             pet_mode_set_floor_home,

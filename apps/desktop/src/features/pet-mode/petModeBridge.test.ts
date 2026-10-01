@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Assert against the shipped tiers rather than copies of their values: this
 // test exists to prove the bridge forwards the resolved duration, not to pin
 // the timings, which are a product decision that lives in one place.
@@ -79,6 +79,30 @@ describe("pet mode enabled bridge", () => {
       width: 180,
       height: 124,
       forceReveal: false,
+    });
+  });
+
+  it.each(["mouse", "touch", "pen", undefined])(
+    "forwards the drag pointer kind %s while keeping older calls optional",
+    async (pointerType) => {
+      const result = { moved: false, startX: 10, startY: 20, endX: 10, endY: 20 };
+      tauri.invoke.mockResolvedValueOnce(result);
+      const { beginNativePetDrag } = await import("./petModeBridge");
+
+      await expect(beginNativePetDrag(18, 31, 148, pointerType)).resolves.toEqual(result);
+      const expected = { startClientX: 18, startClientY: 31, pickupDelayMs: 148 };
+      expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_begin_drag",
+        pointerType === undefined ? expected : { ...expected, pointerType });
+    },
+  );
+
+  it("forwards a manual request ID without changing older drag arguments", async () => {
+    const result = { manualRequestId: "0000000000001-000001", moved: true, startX: 10, startY: 20, endX: 50, endY: 80 };
+    tauri.invoke.mockResolvedValueOnce(result);
+    const { beginNativePetDrag } = await import("./petModeBridge");
+    await expect(beginNativePetDrag(18, 31, 148, "mouse", result.manualRequestId)).resolves.toEqual(result);
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_begin_drag", {
+      startClientX: 18, startClientY: 31, pickupDelayMs: 148, pointerType: "mouse", manualRequestId: result.manualRequestId,
     });
   });
 
@@ -369,6 +393,105 @@ describe("pet mode enabled bridge", () => {
         maxGripMs: 760,
       },
     });
+  });
+});
+
+describe("manual drag event identity", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    tauriListen.listen.mockReset().mockResolvedValue(vi.fn());
+    window.localStorage.removeItem("drifty.petMode.manualDragClock.v1");
+    delete (globalThis as typeof globalThis & { __driftyManualDragClock?: number }).__driftyManualDragClock;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.removeItem("drifty.petMode.manualDragClock.v1");
+    delete (globalThis as typeof globalThis & { __driftyManualDragClock?: number }).__driftyManualDragClock;
+  });
+
+  it.each(["start", "stroke"] as const)("normalizes tagged and legacy %s events", async (kind) => {
+    const { listenToNativePetDragStart, listenToNativePetStrokeDetected } = await import("./petModeBridge");
+    const callback = vi.fn();
+    await (kind === "start" ? listenToNativePetDragStart : listenToNativePetStrokeDetected)(callback);
+    const listener = tauriListen.listen.mock.calls[0]?.[1] as (event: { payload: unknown }) => void;
+    listener({ payload: { manualRequestId: "0000000000001-000001", value: true } });
+    listener({ payload: true });
+    expect(callback.mock.calls).toEqual([["0000000000001-000001"], [undefined]]);
+  });
+
+  it("normalizes tagged probes, null clears and legacy probes", async () => {
+    const { listenToNativePetDragProbe } = await import("./petModeBridge");
+    const callback = vi.fn();
+    await listenToNativePetDragProbe(callback);
+    const listener = tauriListen.listen.mock.calls[0]?.[1] as (event: { payload: unknown }) => void;
+    const id = "0000000000001-000001";
+    const plan = { kind: "catch", distance: 52, durationMs: 140, targetY: 210, ledge: "Safari" };
+    listener({ payload: { manualRequestId: id, value: plan } });
+    listener({ payload: { manualRequestId: id, value: null } });
+    listener({ payload: plan });
+    listener({ payload: null });
+    expect(callback.mock.calls).toEqual([[plan, id], [null, id], [plan, undefined], [null, undefined]]);
+  });
+
+  it("allocates increasing fixed-width IDs across reload and wall-clock rollback", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    const firstBridge = await import("./petModeBridge");
+    const a = firstBridge.createPetManualDragRequestId();
+    const b = firstBridge.createPetManualDragRequestId();
+    expect(b > a).toBe(true);
+    expect(b).toMatch(/^\d{13}-\d{6}$/);
+    // A full WebView reload loses the in-memory clock, but retains storage.
+    delete (globalThis as typeof globalThis & { __driftyManualDragClock?: number }).__driftyManualDragClock;
+    now.mockReturnValue(1_700_000_000_000);
+    vi.resetModules();
+    const reloaded = await import("./petModeBridge");
+    expect(reloaded.createPetManualDragRequestId() > b).toBe(true);
+  });
+
+  it("keeps memory ordering with denied storage and resumes after reload at a newer time", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new DOMException("Denied", "SecurityError"); });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("Denied", "SecurityError"); });
+    const { createPetManualDragRequestId } = await import("./petModeBridge");
+    const a = createPetManualDragRequestId();
+    now.mockReturnValue(1_700_000_000_000);
+    const b = createPetManualDragRequestId();
+    expect(b > a).toBe(true);
+    delete (globalThis as typeof globalThis & { __driftyManualDragClock?: number }).__driftyManualDragClock;
+    now.mockReturnValue(1_800_000_000_001);
+    vi.resetModules();
+    const reloaded = await import("./petModeBridge");
+    expect(reloaded.createPetManualDragRequestId() > b).toBe(true);
+  });
+
+  it("keeps an accepted boundary seed increasing in memory and after reload", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    const seed = Number.MAX_SAFE_INTEGER - 1_000_000_000_000 - 1;
+    window.localStorage.setItem("drifty.petMode.manualDragClock.v1", JSON.stringify({ seed, offset: 0 }));
+    const { createPetManualDragRequestId } = await import("./petModeBridge");
+    const a = createPetManualDragRequestId();
+    const b = createPetManualDragRequestId();
+    expect(b > a).toBe(true);
+    delete (globalThis as typeof globalThis & { __driftyManualDragClock?: number }).__driftyManualDragClock;
+    vi.resetModules();
+    const reloaded = await import("./petModeBridge");
+    expect(reloaded.createPetManualDragRequestId() > b).toBe(true);
+  });
+
+  it("reports numeric exhaustion without replacing an already allocated clock", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    const clock = globalThis as typeof globalThis & { __driftyManualDragClock?: number };
+    clock.__driftyManualDragClock = Number.MAX_SAFE_INTEGER;
+    const { createPetManualDragRequestId } = await import("./petModeBridge");
+    expect(() => createPetManualDragRequestId()).toThrow("clock is exhausted");
+    expect(clock.__driftyManualDragClock).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it.each(["NaN", "Infinity", "-100", "9007199254740990", "9007199254740992"])("ignores a corrupt persisted clock %s", async (value) => {
+    vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    window.localStorage.setItem("drifty.petMode.manualDragClock.v1", JSON.stringify({ seed: Number(value), offset: 0 }));
+    const { createPetManualDragRequestId } = await import("./petModeBridge");
+    expect(createPetManualDragRequestId()).toBe("1800000000000-000000");
   });
 });
 

@@ -897,6 +897,36 @@ class BoundedBrowserSnapshotTests(unittest.TestCase):
         with worker._condition:
             self.assertTrue(worker._condition.wait_for(lambda: worker._active is None, timeout=1.0))
 
+    def capture_after_slow_identity(self, worker, *, url_finished_at: float):
+        elapsed = [0.0]
+
+        def resolve(window):
+            elapsed[0] = 1.25
+            return ProcessIdentity(rf"C:\Browser{window.pid}\opera.exe", "Opera", None), None
+
+        def read(hwnd, app, *, timeout_seconds):
+            self.assertEqual(timeout_seconds, 0.20)
+            result = worker.read(hwnd, app, timeout_seconds=timeout_seconds)
+            elapsed[0] = url_finished_at
+            return result
+
+        with (
+            # Keep the worker's real timed wait and threading clocks untouched.
+            # Only the composed snapshot's elapsed identity/URL time is controlled.
+            patch.object(windows_workspace, "time", Mock(monotonic=lambda: elapsed[0])),
+            patch.object(windows_workspace, "is_windows", return_value=True),
+            patch.object(windows_workspace, "process_session_id", return_value=1),
+            patch.object(windows_workspace, "read_foreground_window", side_effect=lambda: self.window),
+            patch.object(windows_workspace, "resolve_identity", side_effect=resolve) as identity,
+            patch.object(windows_workspace, "read_browser_url_with_budget", side_effect=read) as url,
+            patch("app.tracker.browser_history.browser_history_metadata") as history,
+        ):
+            snapshot = windows_workspace.current_snapshot()
+        identity.assert_called_once_with(self.window)
+        url.assert_called_once_with(101, "Opera", timeout_seconds=0.20)
+        history.assert_not_called()
+        return snapshot
+
     def test_slow_url_returns_verified_app_quickly_without_mutating_it_later(self) -> None:
         release = self.release()
         started = threading.Event()
@@ -1002,15 +1032,26 @@ class BoundedBrowserSnapshotTests(unittest.TestCase):
             self.assertTrue(release.wait(timeout=3.0))
             return WindowsBrowserUiaResult("https://example.test/late", None)
 
-        began = time.monotonic()
-        snapshot, _ = self.capture(self.worker(read), identity_delay=1.25)
-        elapsed = time.monotonic() - began
-        self.assertGreaterEqual(elapsed, 1.25)
-        self.assertLess(elapsed, 1.55)
+        snapshot = self.capture_after_slow_identity(self.worker(read), url_finished_at=1.45)
         self.assertEqual(snapshot.bundle_id, r"c:\browser10\opera.exe")
         self.assertEqual(snapshot.frontmost_capture_source, "win32-foreground")
         self.assertIsNone(snapshot.site_url)
         self.assertIn("time budget", snapshot.browser_automation_error or "")
+
+    def test_url_completion_past_the_whole_budget_discards_even_stable_identity(self) -> None:
+        release = self.release()
+
+        def read(_hwnd, _app):
+            self.assertTrue(release.wait(timeout=3.0))
+            return WindowsBrowserUiaResult("https://example.test/late", None)
+
+        snapshot = self.capture_after_slow_identity(self.worker(read), url_finished_at=1.501)
+        self.assertIsNone(snapshot.bundle_id)
+        self.assertIsNone(snapshot.window_title)
+        self.assertIsNone(snapshot.site_url)
+        self.assertIsNone(snapshot.site_source)
+        self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+        self.assertIn("time budget", snapshot.frontmost_capture_error or "")
 
 
 class SessionZeroRefusalTests(unittest.TestCase):

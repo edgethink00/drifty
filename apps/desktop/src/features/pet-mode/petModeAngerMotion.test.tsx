@@ -35,8 +35,11 @@ describe("pet anger motion", () => {
       css.indexOf(".pet-mode-cat.has-sleep-drift-cue.pet-mode-cat--sleep"),
       css.indexOf("/* Sitting is a long-held pose"),
     );
-    expect(cueRules).toContain("filter: var(--pet-drop-shadow)");
-    expect(cueRules).toContain(".pet-mode-cat.has-sleep-drift-cue { filter: none; }");
+    // The shared body envelope owns the shadow; the sleep cue keeps its
+    // unfiltered mark outside that group rather than filtering the small pose.
+    const bodyEffects = css.slice(css.indexOf(".pet-mode-cat__body-effects {"), css.indexOf(".pet-mode-cat__body-register {"));
+    expect(bodyEffects).toContain("filter: var(--pet-drop-shadow)");
+    expect(cueRules).not.toContain("filter: var(--pet-drop-shadow)");
     expect(cueRules).toContain("fill: #ff9f0a");
     expect(cueRules).toContain("filter: none");
     expect(cueRules).toContain("transform: translate(-4px, 4px) scale(.92)");

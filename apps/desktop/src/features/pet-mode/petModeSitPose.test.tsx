@@ -13,13 +13,15 @@ import {
 
 const bridge = vi.hoisted(() => ({
   eventHandler: null as ((event: PetModeWindowEvent) => void) | null,
+  beginNativePetDrag: vi.fn().mockResolvedValue({ moved: false, startX: 0, startY: 0, endX: 0, endY: 0 }),
 }));
 
-vi.mock("./petModeBridge", () => ({
+vi.mock("./petModeBridge", async (importOriginal) => ({
+  createPetManualDragRequestId: (await importOriginal<typeof import("./petModeBridge")>()).createPetManualDragRequestId,
   getNativePetQuickControlsState: vi.fn().mockResolvedValue(null),
   listenToNativePetQuickControlsState: vi.fn().mockResolvedValue(vi.fn()),
   alignNativePetContact: vi.fn().mockResolvedValue(undefined),
-  beginNativePetDrag: vi.fn().mockResolvedValue({ moved: false, startX: 0, startY: 0, endX: 0, endY: 0 }),
+  beginNativePetDrag: bridge.beginNativePetDrag,
   cancelNativePetMotion: vi.fn().mockResolvedValue(undefined),
   setNativePetDanceHeadroom: vi.fn().mockResolvedValue(true),
   listenToNativePetDragEnd: vi.fn().mockResolvedValue(vi.fn()),
@@ -164,13 +166,17 @@ describe("pet sit pose", () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." }), {
+    // jsdom has no native PointerEvent; MouseEvent retains the down coordinates.
+    fireEvent(screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." }), new MouseEvent("pointerdown", {
+      bubbles: true,
       clientX: 72,
       clientY: 60,
-    });
+    }));
     await act(async () => { await Promise.resolve(); });
 
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("happy");
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(1);
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledWith(72, 60, expect.any(Number), undefined, expect.stringMatching(/^\d{13}-\d{6}$/));
   });
 
   it("uses the approved D frame unchanged when the Dev lab selects it", async () => {

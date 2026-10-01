@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
-use tauri::{AppHandle, Emitter, LogicalPosition, WebviewWindow};
+use tauri::{AppHandle, LogicalPosition, WebviewWindow};
 
-use super::pet_mode::{current_pet_logical_position, probe_pet_drop_plan};
+use super::pet_mode::{current_pet_logical_position, current_pet_render_geometry, emit_pet_drag_event, probe_pet_drop_plan, PetDragLease};
+#[cfg(not(target_os = "macos"))]
+use super::pet_mode::pet_scene_to_window_position;
 #[cfg(target_os = "windows")]
 use super::windows_overlay::{
     configure_windows_overlay, show_windows_overlay, WindowsOverlayInputMode,
@@ -45,6 +47,13 @@ enum PetPanelGestureEvent {
     StrokeDetected,
 }
 
+#[cfg(any(target_os = "windows", test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PetPanelPressEnd {
+    Released,
+    Cancelled,
+}
+
 impl PetPanelGestureState {
     fn observe(
         &mut self,
@@ -79,6 +88,46 @@ impl PetPanelGestureState {
     fn begin_following_pointer(&mut self) {
         if *self == Self::DragPickup {
             *self = Self::Dragging;
+        }
+    }
+
+    #[cfg(any(target_os = "windows", test))]
+    fn observe_windows_press(
+        &mut self,
+        elapsed_ms: u64,
+        pointer_dx: f64,
+        pointer_dy: f64,
+        stroking: bool,
+        cancelled: bool,
+    ) -> Option<PetPanelGestureEvent> {
+        if cancelled {
+            None
+        } else {
+            self.observe(elapsed_ms, pointer_dx, pointer_dy, stroking)
+        }
+    }
+
+    #[cfg(any(target_os = "windows", test))]
+    fn finish_mouse_press(
+        &mut self,
+        explicit_mouse: bool,
+        pointer_dx: f64,
+        pointer_dy: f64,
+        end: PetPanelPressEnd,
+    ) -> Option<PetPanelGestureEvent> {
+        // The held-pointer grace gives a stroke time to reverse. Once this
+        // explicit mouse press has ended, a still-pending relocation cannot
+        // produce another reversal. Preserve its final delta even when the
+        // worker first runs after button-up. Stroke remains terminal.
+        if explicit_mouse
+            && end == PetPanelPressEnd::Released
+            && *self == Self::Pending
+            && is_pet_drag_delta(pointer_dx, pointer_dy)
+        {
+            *self = Self::DragPickup;
+            Some(PetPanelGestureEvent::DragStarted)
+        } else {
+            None
         }
     }
 
@@ -448,7 +497,7 @@ pub fn show_pet_panel_at_position(
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
         app.run_on_main_thread(crate::panic_guard::contained("pet_panel::show_pet_panel_at_position", move || {
             let res = window_for_main
-                .set_position(desired)
+                .set_position(pet_scene_to_window_position(&window_for_main, desired))
                 .map_err(|error| error.to_string())
                 .and_then(|_| show_pet_panel_on_main_thread(&app_for_main, &window_for_main));
             let _ = sender.send(res);
@@ -463,7 +512,7 @@ pub fn show_pet_panel_at_position(
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         window
-            .set_position(desired)
+            .set_position(pet_scene_to_window_position(window, desired))
             .map_err(|error| error.to_string())?;
         show_pet_panel(app, window)
     }
@@ -545,17 +594,135 @@ fn show_pet_panel_on_main_thread(app: &AppHandle, window: &WebviewWindow) -> Res
 
 use std::time::{Duration, Instant};
 
-/// New window origin that keeps the initial grab offset attached to the
-/// pointer. All values share one coordinate space; the caller feeds Cocoa
-/// global points so no y-flip or scale conversion is needed.
-fn pet_drag_origin(
-    start_origin: (f64, f64),
-    start_mouse: (f64, f64),
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(super) struct PetPanelMouseDownAnchor {
+    canonical_grab: (f64, f64),
+    physical_down: (f64, f64),
+    dpi: f64,
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn pet_mouse_down_anchor(
+    pointer_type: Option<&str>,
+    client: (f64, f64),
+    origin: (f64, f64),
+    dpi: f64,
+    geometry: super::pet_render_geometry::PetRenderGeometry,
+) -> Result<Option<PetPanelMouseDownAnchor>, String> {
+    // Older callers and touch/pen retain the native sampled-pointer path.
+    // Only an explicit mouse pointerdown proves an already-ended mouse press.
+    if pointer_type != Some("mouse") {
+        return Ok(None);
+    }
+    if ![
+        client.0,
+        client.1,
+        origin.0,
+        origin.1,
+        dpi,
+        geometry.scale(),
+        geometry.render_width,
+        geometry.render_height,
+    ]
+    .into_iter()
+    .all(f64::is_finite)
+        || dpi <= 0.0
+        || geometry.scale() <= 0.0
+        || client.0 < 0.0
+        || client.0 > geometry.render_width
+        || client.1 < 0.0
+        || client.1 > geometry.render_height
+    {
+        return Err("Pet Mode mouse-down anchor is outside the rendering surface".into());
+    }
+    let anchor = PetPanelMouseDownAnchor {
+        canonical_grab: geometry.canonical_point_at_window(client),
+        physical_down: (origin.0 + client.0 * dpi, origin.1 + client.1 * dpi),
+        dpi,
+    };
+    if ![
+        anchor.canonical_grab.0,
+        anchor.canonical_grab.1,
+        anchor.physical_down.0,
+        anchor.physical_down.1,
+    ]
+    .into_iter()
+    .all(f64::is_finite)
+    {
+        return Err("Pet Mode mouse-down anchor is unavailable".into());
+    }
+    Ok(Some(anchor))
+}
+
+/// Capture before dance headroom is restored: that restoration moves the
+/// window, while these viewport coordinates still describe the down frame.
+pub(super) fn capture_pet_panel_mouse_down(
+    window: &WebviewWindow,
+    client: (f64, f64),
+    pointer_type: Option<&str>,
+) -> Result<Option<PetPanelMouseDownAnchor>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        if pointer_type != Some("mouse") {
+            return Ok(None);
+        }
+        super::pet_mode::run_pet_native_transaction(
+            window,
+            "pet_panel::capture_mouse_down",
+            move |window| {
+                let origin = window.outer_position().map_err(|error| error.to_string())?;
+                let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+                pet_mouse_down_anchor(
+                    Some("mouse"),
+                    client,
+                    (origin.x as f64, origin.y as f64),
+                    dpi,
+                    current_pet_render_geometry(),
+                )
+            },
+        )
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (window, client, pointer_type);
+        Ok(None)
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+const PET_WINDOWS_BUTTON_OBSERVE_GRACE_MS: u64 = 250;
+
+#[cfg(any(target_os = "windows", test))]
+fn pet_windows_press_end(
+    held: bool,
+    cancelled: bool,
+    observed_button_held: bool,
+    elapsed_ms: u64,
+    explicit_mouse: bool,
+) -> Option<PetPanelPressEnd> {
+    if cancelled {
+        Some(PetPanelPressEnd::Cancelled)
+    } else if !held
+        && (explicit_mouse
+            || observed_button_held
+            || elapsed_ms >= PET_WINDOWS_BUTTON_OBSERVE_GRACE_MS)
+    {
+        Some(PetPanelPressEnd::Released)
+    } else {
+        None
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn pet_drag_origin_at_dpi(
+    logical_grab_offset: (f64, f64),
     mouse: (f64, f64),
+    dpi: f64,
 ) -> (f64, f64) {
     (
-        start_origin.0 + (mouse.0 - start_mouse.0),
-        start_origin.1 + (mouse.1 - start_mouse.1),
+        mouse.0 - logical_grab_offset.0 * dpi,
+        mouse.1 - logical_grab_offset.1 * dpi,
     )
 }
 
@@ -578,12 +745,14 @@ fn is_pet_drag_delta(pointer_dx: f64, pointer_dy: f64) -> bool {
 /// main thread can actually paint with effectively zero sampling lag, and
 /// there is no fixed-interval throttle to beat against the display refresh.
 #[cfg(target_os = "macos")]
-pub fn perform_pet_panel_drag(
+pub(super) fn perform_pet_panel_drag(
     app: &AppHandle,
     window: &WebviewWindow,
     _start_client_x: f64,
     _start_client_y: f64,
     pickup_delay_ms: u64,
+    _mouse_down: Option<PetPanelMouseDownAnchor>,
+    lease: &PetDragLease,
 ) -> Result<PetPanelDragOutcome, String> {
     use objc2_app_kit::{NSEvent, NSWindow};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -599,6 +768,7 @@ pub fn perform_pet_panel_drag(
     const LEFT_MOUSE_BUTTON: u32 = 0;
     const MAIN_THREAD_TIMEOUT: Duration = Duration::from_millis(250);
 
+    lease.ensure_current()?;
     let start_pointer = app.cursor_position().map_err(|error| error.to_string())?;
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
     let gesture_started = Instant::now();
@@ -609,21 +779,27 @@ pub fn perform_pet_panel_drag(
         start_pointer.y / scale_factor,
     );
 
-    // Capture the drag anchor (window origin + pointer) in Cocoa global
-    // points on the main thread so every later apply is a pure delta in one
-    // coordinate space, exact across negative/mixed-scale display origins.
+    // Capture the authored point being held, using Cocoa global points on the
+    // main thread. It remains the same point after pet scale or DPI changes.
     let anchor = {
         let (sender, receiver) = sync_channel(1);
         let window_for_anchor = window.clone();
+        let anchor_lease = lease.clone();
         app.run_on_main_thread(crate::panic_guard::contained("pet_panel::perform_pet_panel_drag", move || {
             let result = (|| {
+                anchor_lease.ensure_current().ok()?;
                 let ptr = window_for_anchor.ns_window().ok()?;
                 // SAFETY: Tauri retains this NSWindow and the block runs on
                 // AppKit's main thread.
                 let ns_window: &NSWindow = unsafe { &*ptr.cast::<NSWindow>() };
-                let origin = ns_window.frame().origin;
+                let content = ns_window.contentRectForFrameRect(ns_window.frame());
                 let mouse = NSEvent::mouseLocation();
-                Some(((origin.x, origin.y), (mouse.x, mouse.y)))
+                let point = current_pet_render_geometry().canonical_point_at_window((
+                    mouse.x - content.origin.x,
+                    content.origin.y + content.size.height - mouse.y,
+                ));
+                super::pet_mode::set_pet_drag_grab_point(&anchor_lease, point).ok()?;
+                Some(point)
             })();
             let _ = sender.send(result);
         }))
@@ -633,7 +809,7 @@ pub fn perform_pet_panel_drag(
             .map_err(|_| "Pet Mode drag anchor capture timed out".to_string())?
             .ok_or_else(|| "Pet Mode drag anchor is unavailable".to_string())?
     };
-    let (anchor_origin, anchor_mouse) = anchor;
+    let canonical_grab = anchor;
 
     // Coalesce main-thread applies: at most one block is queued at a time, so
     // a busy main thread never accumulates a backlog of stale positions.
@@ -647,6 +823,7 @@ pub fn perform_pet_panel_drag(
         }
         let flag = Arc::clone(&apply_in_flight);
         let window_for_apply = window.clone();
+        let apply_lease = lease.clone();
         let completion = if wait_for_completion {
             Some(sync_channel::<()>(1))
         } else {
@@ -654,13 +831,17 @@ pub fn perform_pet_panel_drag(
         };
         let completion_sender = completion.as_ref().map(|(sender, _)| sender.clone());
         app.run_on_main_thread(crate::panic_guard::contained("pet_panel::perform_pet_panel_drag", move || {
-            if let Ok(ptr) = window_for_apply.ns_window() {
+            if let Some(ptr) = apply_lease.ensure_current().ok().and_then(|_| window_for_apply.ns_window().ok()) {
                 // SAFETY: Tauri retains this NSWindow and the block runs on
                 // AppKit's main thread.
                 let ns_window: &NSWindow = unsafe { &*ptr.cast::<NSWindow>() };
                 let mouse = NSEvent::mouseLocation();
-                let (x, y) = pet_drag_origin(anchor_origin, anchor_mouse, (mouse.x, mouse.y));
-                let current = ns_window.frame().origin;
+                let frame = ns_window.frame();
+                let content = ns_window.contentRectForFrameRect(frame);
+                let point = current_pet_render_geometry().window_point_for_canonical(canonical_grab);
+                let x = mouse.x - point.0 + frame.origin.x - content.origin.x;
+                let y = mouse.y - (content.size.height - point.1) + frame.origin.y - content.origin.y;
+                let current = frame.origin;
                 // Skip no-op moves so a stationary held pointer does not spam
                 // AppKit with redundant frame notifications.
                 if (x - current.x).abs() >= 0.01 || (y - current.y).abs() >= 0.01 {
@@ -688,6 +869,7 @@ pub fn perform_pet_panel_drag(
     let mut last_probe_at = Instant::now();
 
     loop {
+        lease.ensure_current()?;
         let pointer = app.cursor_position().map_err(|error| error.to_string())?;
         shake_detector.observe(
             gesture_started.elapsed().as_millis().min(u64::MAX as u128) as u64,
@@ -705,9 +887,7 @@ pub fn perform_pet_panel_drag(
                 // visible. Clear its clock so this press can never begin moving
                 // the panel on a later loop iteration.
                 pickup_started_at = None;
-                window
-                    .emit("pet-mode-stroke-detected", true)
-                    .map_err(|error| error.to_string())?;
+                emit_pet_drag_event(window, lease, "pet-mode-stroke-detected", true)?;
             }
             Some(PetPanelGestureEvent::DragStarted) => {
                 pickup_started_at = Some(Instant::now());
@@ -716,9 +896,7 @@ pub fn perform_pet_panel_drag(
                 // boundary prevents a click from flashing the held sprite,
                 // while the native pickup hold below gives WebKit time to paint
                 // it before the panel starts following the cursor.
-                window
-                    .emit("pet-mode-drag-start", true)
-                    .map_err(|error| error.to_string())?;
+                emit_pet_drag_event(window, lease, "pet-mode-drag-start", true)?;
             }
             None => {}
         }
@@ -736,7 +914,7 @@ pub fn perform_pet_panel_drag(
                 last_probe_at = Instant::now();
                 if let Ok(pos) = current_pet_logical_position(window) {
                     if let Ok(plan) = probe_pet_drop_plan(app, window, pos, false) {
-                        let _ = window.emit("pet-mode-drag-probe", &plan);
+                        let _ = emit_pet_drag_event(window, lease, "pet-mode-drag-probe", &plan);
                     }
                 }
             }
@@ -759,6 +937,7 @@ pub fn perform_pet_panel_drag(
                 }
                 // Final settle: wait for the apply so the mouse-up position is
                 // committed before the command reports the end coordinates.
+                lease.ensure_current()?;
                 dispatch_apply(true)?;
             }
             break;
@@ -782,12 +961,14 @@ pub fn perform_pet_panel_drag(
 /// instead: poll the physical cursor, drive the same shared state machine, and
 /// only start following the pointer once the press is classified as a drag.
 #[cfg(target_os = "windows")]
-pub fn perform_pet_panel_drag(
+pub(super) fn perform_pet_panel_drag(
     app: &AppHandle,
     window: &WebviewWindow,
     _start_client_x: f64,
     _start_client_y: f64,
     pickup_delay_ms: u64,
+    mouse_down: Option<PetPanelMouseDownAnchor>,
+    lease: &PetDragLease,
 ) -> Result<PetPanelDragOutcome, String> {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc::sync_channel;
@@ -797,14 +978,21 @@ pub fn perform_pet_panel_drag(
     const MAIN_THREAD_TIMEOUT: Duration = Duration::from_millis(250);
     // Touch and pen produce a webview pointerdown that never sets a mouse
     // button, so an unheld press must resolve as a tap instead of spinning
-    // this worker forever. A real mouse is already held when polling starts.
-    const BUTTON_OBSERVE_GRACE: Duration = Duration::from_millis(250);
+    // this worker forever. An explicit mouse down can already be released
+    // before IPC and the worker queue finish; its immutable anchor proves it.
     // Absolute stop for a button-up edge this process never observes, such as
     // a session lock mid-gesture. Far longer than any deliberate drag.
     const MAX_GESTURE_DURATION: Duration = Duration::from_secs(120);
 
-    let start_pointer = super::pet_cursor_windows::cursor_position()?;
-    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let explicit_mouse = mouse_down.is_some();
+    let (start_pointer, scale_factor) = if let Some(anchor) = mouse_down {
+        (PhysicalPosition::new(anchor.physical_down.0, anchor.physical_down.1), anchor.dpi)
+    } else {
+        (
+            super::pet_cursor_windows::cursor_position()?,
+            window.scale_factor().map_err(|error| error.to_string())?,
+        )
+    };
     let gesture_started = Instant::now();
     let mut shake_detector = PetShakeDetector::default();
     shake_detector.observe(
@@ -813,12 +1001,25 @@ pub fn perform_pet_panel_drag(
         start_pointer.y / scale_factor,
     );
 
-    // Anchor the grab offset in physical pixels. GetPhysicalCursorPos and
-    // outer_position already share that space on every monitor, so a mixed-DPI
-    // desktop needs no per-monitor conversion while the gesture runs.
-    let origin = window.outer_position().map_err(|error| error.to_string())?;
-    let anchor_origin = (origin.x as f64, origin.y as f64);
-    let anchor_pointer = (start_pointer.x, start_pointer.y);
+    // Keep the grabbed scene point attached when the window changes DPI.
+    // Both the body and its transparent offset scale with the current monitor.
+    let grab_lease = lease.clone();
+    let canonical_grab = super::pet_mode::run_pet_native_transaction(window, "pet_panel::capture_windows_grab", move |window| {
+        grab_lease.ensure_current()?;
+        let point = if let Some(anchor) = mouse_down {
+            anchor.canonical_grab
+        } else {
+            let pointer = super::pet_cursor_windows::cursor_position()?;
+            let origin = window.outer_position().map_err(|error| error.to_string())?;
+            let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+            current_pet_render_geometry().canonical_point_at_window((
+                (pointer.x - origin.x as f64) / dpi,
+                (pointer.y - origin.y as f64) / dpi,
+            ))
+        };
+        super::pet_mode::set_pet_drag_grab_point(&grab_lease, point)?;
+        Ok(point)
+    })?;
 
     // Coalesce main-thread applies: at most one move is queued at a time, so a
     // busy main thread never accumulates a backlog of stale positions.
@@ -832,6 +1033,7 @@ pub fn perform_pet_panel_drag(
         }
         let flag = Arc::clone(&apply_in_flight);
         let window_for_apply = window.clone();
+        let apply_lease = lease.clone();
         let completion = if wait_for_completion {
             Some(sync_channel::<()>(1))
         } else {
@@ -841,8 +1043,10 @@ pub fn perform_pet_panel_drag(
         app.run_on_main_thread(crate::panic_guard::contained("pet_panel::perform_pet_panel_drag", move || {
             // Sample the freshest cursor inside the apply so the panel lands on
             // the current pointer rather than the position that queued it.
-            if let Ok(mouse) = super::pet_cursor_windows::cursor_position() {
-                let (x, y) = pet_drag_origin(anchor_origin, anchor_pointer, (mouse.x, mouse.y));
+            if let Some(mouse) = apply_lease.ensure_current().ok().and_then(|_| super::pet_cursor_windows::cursor_position().ok()) {
+                let dpi = window_for_apply.scale_factor().unwrap_or(scale_factor);
+                let offset = current_pet_render_geometry().window_point_for_canonical(canonical_grab);
+                let (x, y) = pet_drag_origin_at_dpi(offset, (mouse.x, mouse.y), dpi);
                 if x.is_finite() && y.is_finite() {
                     let target = PhysicalPosition::new(x.round() as i32, y.round() as i32);
                     // Skip no-op moves so a stationary held pointer does not
@@ -877,6 +1081,7 @@ pub fn perform_pet_panel_drag(
     let mut observed_button_held = false;
 
     loop {
+        lease.ensure_current()?;
         let pointer = super::pet_cursor_windows::cursor_position()?;
         let elapsed_ms = gesture_started.elapsed().as_millis().min(u64::MAX as u128) as u64;
         shake_detector.observe(
@@ -888,15 +1093,14 @@ pub fn perform_pet_panel_drag(
         let dy = pointer.y - start_pointer.y;
         let samples: Vec<_> = shake_detector.samples.iter().copied().collect();
         let stroking = pet_stroke_detected(&samples);
-        match gesture.observe(elapsed_ms, dx, dy, stroking) {
+        let pointer_state = super::pet_cursor_windows::primary_pointer_state();
+        match gesture.observe_windows_press(elapsed_ms, dx, dy, stroking, pointer_state.cancelled) {
             Some(PetPanelGestureEvent::StrokeDetected) => {
                 // A stroke may take over while only the pickup artwork shows.
                 // Clear its clock so this press can never begin moving the
                 // panel on a later loop iteration.
                 pickup_started_at = None;
-                window
-                    .emit("pet-mode-stroke-detected", true)
-                    .map_err(|error| error.to_string())?;
+                emit_pet_drag_event(window, lease, "pet-mode-stroke-detected", true)?;
             }
             Some(PetPanelGestureEvent::DragStarted) => {
                 pickup_started_at = Some(Instant::now());
@@ -905,9 +1109,7 @@ pub fn perform_pet_panel_drag(
                 // a click from flashing the held sprite, while the pickup hold
                 // below gives the webview time to paint it before the panel
                 // starts following the cursor.
-                window
-                    .emit("pet-mode-drag-start", true)
-                    .map_err(|error| error.to_string())?;
+                emit_pet_drag_event(window, lease, "pet-mode-drag-start", true)?;
             }
             None => {}
         }
@@ -923,17 +1125,26 @@ pub fn perform_pet_panel_drag(
                 last_probe_at = Instant::now();
                 if let Ok(pos) = current_pet_logical_position(window) {
                     if let Ok(plan) = probe_pet_drop_plan(app, window, pos, false) {
-                        let _ = window.emit("pet-mode-drag-probe", &plan);
+                        let _ = emit_pet_drag_event(window, lease, "pet-mode-drag-probe", &plan);
                     }
                 }
             }
         }
 
-        let held = super::pet_cursor_windows::primary_pointer_held();
-        observed_button_held |= held;
-        let button_resolved = !held
-            && (observed_button_held || elapsed_ms >= BUTTON_OBSERVE_GRACE.as_millis() as u64);
-        if button_resolved || gesture_started.elapsed() >= MAX_GESTURE_DURATION {
+        observed_button_held |= pointer_state.held;
+        let press_end = pet_windows_press_end(
+            pointer_state.held,
+            pointer_state.cancelled,
+            observed_button_held,
+            elapsed_ms,
+            explicit_mouse,
+        );
+        if press_end.is_some() || gesture_started.elapsed() >= MAX_GESTURE_DURATION {
+            if press_end.is_some_and(|end| {
+                gesture.finish_mouse_press(explicit_mouse, dx, dy, end).is_some()
+            }) {
+                emit_pet_drag_event(window, lease, "pet-mode-drag-start", true)?;
+            }
             // A fast real drag can finish before the visual pickup hold. Keep
             // its full pointer delta instead of degrading it into a click.
             if gesture.moved() {
@@ -946,6 +1157,7 @@ pub fn perform_pet_panel_drag(
                 }
                 // Final settle: wait for the apply so the release position is
                 // committed before the command reports the end coordinates.
+                lease.ensure_current()?;
                 dispatch_apply(true)?;
             }
             break;
@@ -961,13 +1173,16 @@ pub fn perform_pet_panel_drag(
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-pub fn perform_pet_panel_drag(
+pub(super) fn perform_pet_panel_drag(
     _app: &AppHandle,
     window: &WebviewWindow,
     _start_client_x: f64,
     _start_client_y: f64,
     _pickup_delay_ms: u64,
+    _mouse_down: Option<PetPanelMouseDownAnchor>,
+    lease: &PetDragLease,
 ) -> Result<PetPanelDragOutcome, String> {
+    lease.ensure_current()?;
     window.start_dragging().map_err(|error| error.to_string())?;
     Ok(PetPanelDragOutcome {
         moved: true,
@@ -979,8 +1194,9 @@ pub fn perform_pet_panel_drag(
 #[cfg(test)]
 mod tests {
     use super::{
-        is_pet_drag_delta, pet_drag_origin, pet_stroke_detected, PetPanelGestureEvent,
-        PetPanelGestureState, PetShakeDetector, PetShakeSample,
+        is_pet_drag_delta, pet_drag_origin_at_dpi, pet_mouse_down_anchor, pet_stroke_detected,
+        pet_windows_press_end, PetPanelGestureEvent, PetPanelGestureState, PetPanelPressEnd,
+        PetShakeDetector, PetShakeSample,
     };
     #[cfg(target_os = "macos")]
     use super::{pet_panel_native_origin_after_logical_move, pet_panel_needs_main_thread_hop};
@@ -992,10 +1208,24 @@ mod tests {
     }
 
     #[test]
-    fn native_drag_preserves_the_exact_pointer_delta() {
-        let (x, y) = pet_drag_origin((-1884.0, -406.0), (10.0, 20.0), (142.2, 76.4));
+    fn native_drag_preserves_the_exact_pointer_delta_at_a_fixed_dpi() {
+        let grab = (10.0 - (-1884.0), 20.0 - (-406.0));
+        let (x, y) = pet_drag_origin_at_dpi(grab, (142.2, 76.4), 1.0);
         assert!((x - (-1751.8)).abs() < 1e-9);
         assert!((y - (-349.6)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn mixed_dpi_drag_keeps_the_same_authored_point_under_the_pointer() {
+        // The grab includes both rendering padding and the body-local point.
+        // Origins remain physical screen coordinates, including negatives.
+        let grab = (18.0 + 50.0, 64.0 + 40.0);
+        for dpi in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            let mouse = (-1840.25, 100.75);
+            let origin = pet_drag_origin_at_dpi(grab, mouse, dpi);
+            assert!((origin.0 + grab.0 * dpi - mouse.0).abs() < 1e-9);
+            assert!((origin.1 + grab.1 * dpi - mouse.1).abs() < 1e-9);
+        }
     }
 
     #[test]
@@ -1009,6 +1239,221 @@ mod tests {
     fn drag_starts_only_when_the_physical_threshold_is_crossed() {
         assert!(is_pet_drag_delta(7.0, 0.0));
         assert!(is_pet_drag_delta(5.0, 5.0));
+    }
+
+    #[test]
+    fn late_mouse_worker_keeps_the_down_anchor_and_settles_the_full_completed_drag() {
+        let geometry = super::super::pet_render_geometry::pet_render_layout().geometry(180.0);
+        let origin = (-1840.0, -67.0);
+        let client = geometry.window_point_for_canonical((50.0, 40.0));
+        let anchor = pet_mouse_down_anchor(Some("mouse"), client, origin, 1.5, geometry)
+            .unwrap()
+            .unwrap();
+        // IPC finishes after both movement and button-up. The endpoint must
+        // never replace the original down point as the delta/grab baseline.
+        let endpoint = (anchor.physical_down.0 + 90.0, anchor.physical_down.1 + 45.0);
+        let mut gesture = PetPanelGestureState::Pending;
+        assert_eq!(gesture.observe(0, 90.0, 45.0, false), None);
+        let end = pet_windows_press_end(false, false, false, 0, true).unwrap();
+        assert_eq!(end, PetPanelPressEnd::Released);
+        assert_eq!(
+            gesture.finish_mouse_press(true, 90.0, 45.0, end),
+            Some(PetPanelGestureEvent::DragStarted)
+        );
+        gesture.begin_following_pointer();
+        assert!(gesture.moved());
+        let settled = pet_drag_origin_at_dpi(
+            geometry.window_point_for_canonical(anchor.canonical_grab),
+            endpoint,
+            1.5,
+        );
+        assert!((settled.0 - (origin.0 + 90.0)).abs() < 1e-9);
+        assert!((settled.1 - (origin.1 + 45.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_completed_mouse_drag_crosses_the_threshold_without_skipping_held_stroke_grace() {
+        for (dx, dy, moved) in [
+            (0.0, 0.0, false),
+            (6.99, 0.0, false),
+            (7.0, 0.0, true),
+            (5.0, 5.0, true),
+        ] {
+            let mut gesture = PetPanelGestureState::Pending;
+            assert_eq!(gesture.observe(120, dx, dy, false), None);
+            assert!(!gesture.moved());
+            assert!(pet_windows_press_end(true, false, true, 120, true).is_none());
+            assert_eq!(
+                gesture
+                    .finish_mouse_press(true, dx, dy, PetPanelPressEnd::Released)
+                    .is_some(),
+                moved
+            );
+            assert_eq!(gesture.moved(), moved);
+        }
+        let mut held = PetPanelGestureState::Pending;
+        assert_eq!(held.observe(219, 20.0, 0.0, false), None);
+        assert_eq!(
+            held.observe(220, 20.0, 0.0, false),
+            Some(PetPanelGestureEvent::DragStarted)
+        );
+        assert_eq!(held, PetPanelGestureState::DragPickup);
+        // Pickup remains a separate boundary; only the existing visual hold
+        // or final release can begin following the pointer.
+        assert_ne!(held, PetPanelGestureState::Dragging);
+    }
+
+    #[test]
+    fn completed_mouse_release_cannot_reclassify_an_established_stroke() {
+        let mut gesture = PetPanelGestureState::Pending;
+        assert_eq!(
+            gesture.observe(80, 10.0, 0.0, true),
+            Some(PetPanelGestureEvent::StrokeDetected)
+        );
+        assert_eq!(
+            gesture.finish_mouse_press(true, 30.0, 20.0, PetPanelPressEnd::Released),
+            None
+        );
+        gesture.begin_following_pointer();
+        assert!(gesture.stroke_detected());
+        assert!(!gesture.moved());
+    }
+
+    #[test]
+    fn touch_pen_and_older_callers_do_not_invent_a_completed_mouse_drag() {
+        let geometry = super::super::pet_render_geometry::pet_render_layout().geometry(144.0);
+        for pointer_type in [None, Some("touch"), Some("pen"), Some(""), Some("unknown")] {
+            let anchor =
+                pet_mouse_down_anchor(pointer_type, (30.0, 60.0), (100.0, 200.0), 1.5, geometry)
+                    .unwrap();
+            assert!(anchor.is_none());
+            let mut gesture = PetPanelGestureState::Pending;
+            assert_eq!(gesture.observe(120, 90.0, 45.0, false), None);
+            assert!(pet_windows_press_end(false, false, false, 120, anchor.is_some()).is_none());
+            assert!(pet_windows_press_end(false, false, false, 250, anchor.is_some()).is_some());
+            assert_eq!(
+                gesture.finish_mouse_press(
+                    anchor.is_some(),
+                    90.0,
+                    45.0,
+                    PetPanelPressEnd::Released
+                ),
+                None
+            );
+            assert!(!gesture.moved());
+        }
+        // The old caller's observed native mouse latch still resolves on up.
+        assert!(pet_windows_press_end(false, false, true, 20, false).is_some());
+    }
+
+    #[test]
+    fn escape_cancels_a_pending_mouse_press_without_turning_its_delta_into_relocation() {
+        for elapsed_ms in [40, 240] {
+            let mut gesture = PetPanelGestureState::Pending;
+            assert_eq!(
+                gesture.observe_windows_press(elapsed_ms, 90.0, 45.0, false, true),
+                None
+            );
+            let end = pet_windows_press_end(false, true, true, elapsed_ms, true).unwrap();
+            assert_eq!(end, PetPanelPressEnd::Cancelled);
+            assert_eq!(gesture.finish_mouse_press(true, 90.0, 45.0, end), None);
+            gesture.begin_following_pointer();
+            assert!(!gesture.moved());
+            assert!(!gesture.stroke_detected());
+        }
+        // An actual button-up, with no Escape, still completes a short drag.
+        let mut released = PetPanelGestureState::Pending;
+        assert_eq!(
+            released.observe_windows_press(40, 90.0, 45.0, false, false),
+            None
+        );
+        let end = pet_windows_press_end(false, false, true, 40, true).unwrap();
+        assert_eq!(
+            released.finish_mouse_press(true, 90.0, 45.0, end),
+            Some(PetPanelGestureEvent::DragStarted)
+        );
+        assert!(released.moved());
+    }
+
+    #[test]
+    fn mouse_down_anchor_survives_scale_dpi_and_dance_origin_changes() {
+        for pet_scale in [0.5, 1.0, 1.25] {
+            let geometry =
+                super::super::pet_render_geometry::pet_render_layout().geometry(144.0 * pet_scale);
+            for dpi in [1.0, 1.25, 1.5, 1.75, 2.0] {
+                let before_restore = (-1840.0, 60.0);
+                let client = geometry.window_point_for_canonical((50.0, 40.0));
+                let anchor =
+                    pet_mouse_down_anchor(Some("mouse"), client, before_restore, dpi, geometry)
+                        .unwrap()
+                        .unwrap();
+                // Restoring dance headroom moves the window, not the pointer.
+                let restored_origin = (before_restore.0, before_restore.1 - 60.0);
+                let stationary_pointer = anchor.physical_down;
+                let mut gesture = PetPanelGestureState::Pending;
+                assert_eq!(
+                    gesture.finish_mouse_press(
+                        true,
+                        stationary_pointer.0 - anchor.physical_down.0,
+                        stationary_pointer.1 - anchor.physical_down.1,
+                        PetPanelPressEnd::Released,
+                    ),
+                    None
+                );
+                assert!(!gesture.moved());
+                assert_ne!(restored_origin.1, before_restore.1);
+                for new_dpi in [1.0, 1.75] {
+                    let new_geometry =
+                        super::super::pet_render_geometry::pet_render_layout().geometry(108.0);
+                    let endpoint = (anchor.physical_down.0 + 30.0, anchor.physical_down.1 + 15.0);
+                    let offset = new_geometry.window_point_for_canonical(anchor.canonical_grab);
+                    let settled = pet_drag_origin_at_dpi(offset, endpoint, new_dpi);
+                    assert!((settled.0 + offset.0 * new_dpi - endpoint.0).abs() < 1e-9);
+                    assert!((settled.1 + offset.1 * new_dpi - endpoint.1).abs() < 1e-9);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_explicit_mouse_anchor_fails_instead_of_fabricating_a_delta() {
+        let geometry = super::super::pet_render_geometry::pet_render_layout().geometry(180.0);
+        for client in [
+            (f64::NAN, 30.0),
+            (20.0, f64::INFINITY),
+            (-0.01, 0.0),
+            (geometry.render_width + 0.01, 30.0),
+            (20.0, geometry.render_height + 0.01),
+        ] {
+            assert!(
+                pet_mouse_down_anchor(Some("mouse"), client, (100.0, 200.0), 1.5, geometry)
+                    .is_err()
+            );
+        }
+        for dpi in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(pet_mouse_down_anchor(
+                Some("mouse"),
+                (30.0, 60.0),
+                (100.0, 200.0),
+                dpi,
+                geometry
+            )
+            .is_err());
+        }
+        assert!(pet_mouse_down_anchor(
+            Some("mouse"),
+            (30.0, 60.0),
+            (f64::INFINITY, 200.0),
+            1.5,
+            geometry
+        )
+        .is_err());
+        // The full render envelope includes valid decoration/tall-pose points
+        // outside the 144x99 authored body rectangle. Do not clamp those away.
+        let top = pet_mouse_down_anchor(Some("mouse"), (30.0, 0.0), (100.0, 200.0), 1.5, geometry)
+            .unwrap()
+            .unwrap();
+        assert!(top.canonical_grab.1 < 0.0);
     }
 
     #[test]
@@ -1274,7 +1719,7 @@ mod tests {
     fn a_grab_offset_stays_attached_to_the_pointer() {
         // Pointer returns to its anchor -> origin returns to its anchor.
         assert_eq!(
-            pet_drag_origin((300.0, 500.0), (350.0, 520.0), (350.0, 520.0)),
+            pet_drag_origin_at_dpi((50.0, 20.0), (350.0, 520.0), 1.0),
             (300.0, 500.0)
         );
     }

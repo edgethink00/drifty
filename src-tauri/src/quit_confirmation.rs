@@ -233,7 +233,7 @@ fn show_native_quit_confirmation(
         let alert_window = alert.window();
         alert_window.center();
         if application.activationPolicy() != NSApplicationActivationPolicy::Prohibited {
-            application.activate();
+            crate::macos_activation::activate_application(&application);
             alert_window.makeKeyAndOrderFront(None);
         } else {
             alert_window.orderFrontRegardless();
@@ -261,7 +261,7 @@ fn show_native_pause_failure(language: QuitConfirmationLanguage) -> Result<(), S
         let alert_window = alert.window();
         alert_window.center();
         if application.activationPolicy() != NSApplicationActivationPolicy::Prohibited {
-            application.activate();
+            crate::macos_activation::activate_application(&application);
             alert_window.makeKeyAndOrderFront(None);
         } else {
             alert_window.orderFrontRegardless();

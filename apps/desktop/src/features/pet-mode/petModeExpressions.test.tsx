@@ -25,7 +25,8 @@ const bridge = vi.hoisted(() => ({
   returnNativePetHome: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("./petModeBridge", () => ({
+vi.mock("./petModeBridge", async (importOriginal) => ({
+  createPetManualDragRequestId: (await importOriginal<typeof import("./petModeBridge")>()).createPetManualDragRequestId,
   getNativePetQuickControlsState: vi.fn().mockResolvedValue(null),
   listenToNativePetQuickControlsState: vi.fn().mockResolvedValue(vi.fn()),
   alignNativePetContact: vi.fn().mockResolvedValue(undefined),
@@ -226,6 +227,8 @@ describe("pet expressions", () => {
     petOnce();
     await act(async () => { await Promise.resolve(); });
     expect(phase(), "interaction 5").toBe("sleep");
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(5);
+    expect(bridge.beginNativePetDrag.mock.calls.every((call) => /^\d{13}-\d{6}$/.test(call[4]))).toBe(true);
   });
 
   it("counts each recognized stroke as one interaction", async () => {
@@ -258,6 +261,7 @@ describe("pet expressions", () => {
     await waitFor(() => {
       expect(phase(), "stroke 5").toBe("sleep");
     });
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(5);
   });
 
   it("does not settle when the pets are spaced beyond the streak window", async () => {

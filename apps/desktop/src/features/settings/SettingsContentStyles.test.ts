@@ -23,6 +23,26 @@ function readAiSetupStyles(): string {
 }
 
 describe("Settings content styles", () => {
+  it("bounds the Pet Lab ancestor track so full diagnostic rows wrap without omitting values", () => {
+    const styles = readAppStyles();
+    const lab = cssRule(styles, ".pet-mode-lab");
+    const diagnostics = cssRule(styles, ".pet-mode-lab__diagnostics");
+    const row = cssRule(styles, ".pet-mode-lab__diagnostic");
+    const label = cssRule(styles, ".pet-mode-lab__diagnostic span");
+    const value = cssRule(styles, ".pet-mode-lab__diagnostic code");
+
+    // Child wrapping alone cannot constrain an implicit auto grid column or
+    // its grid item's automatic minimum. Keep that ancestor boundary explicit.
+    expectRuleToContain(lab, ["grid-template-columns: minmax(0, 1fr);", "min-width: 0;"]);
+    expectRuleToContain(diagnostics, ["min-width: 0;", "flex-wrap: wrap;"]);
+    expectRuleToContain(row, ["flex-basis: 100%;", "min-width: 0;", "align-items: flex-start;"]);
+    expect(label).toContain("flex-shrink: 0;");
+    expectRuleToContain(value, ["flex: 1;", "min-width: 0;", "overflow-wrap: anywhere;", "white-space: normal;"]);
+    for (const rule of [lab, diagnostics, row, value]) {
+      expect(rule).not.toMatch(/overflow(?:-x)?:\s*(?:hidden|clip)|text-overflow:\s*ellipsis/);
+    }
+  });
+
   it("presents direct settings block headings outside the grouped rows", () => {
     const styles = readAppStyles();
     const blockRule = cssRule(styles, ".content--settings .settings-block:has(> h3)");

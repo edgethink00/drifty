@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, WebviewWindow};
 
-use super::pet_mode::PET_MODE_WINDOW_LABEL;
+use super::pet_mode::{current_pet_render_geometry, pet_geometry_transition_active, PET_MODE_WINDOW_LABEL};
 #[cfg(target_os = "windows")]
 use super::windows_overlay::set_windows_overlay_click_through;
 
@@ -55,31 +55,9 @@ static HIT_REGION_PRESS: Mutex<PressState> = Mutex::new(PressState {
     active: false,
     owned_by_pet: false,
 });
-/// Fraction of the panel height that is dance headroom above the 144×99
-/// artwork canvas. The authored hit regions describe only that canvas, so the
-/// pointer test skips the extra strip and maps the remainder onto the canvas.
-static HIT_REGION_TOP_INSET_RATIO: Mutex<f64> = Mutex::new(0.0);
-
-pub fn set_pet_hit_region_top_inset_ratio(ratio: f64) {
-    if let Ok(mut current) = HIT_REGION_TOP_INSET_RATIO.lock() {
-        *current = if ratio.is_finite() { ratio.clamp(0.0, 0.9) } else { 0.0 };
-    }
-    HIT_REGION_NATIVE_REFRESH_PENDING.store(true, Ordering::Release);
-}
-
-fn hit_region_top_inset_ratio() -> f64 {
-    HIT_REGION_TOP_INSET_RATIO
-        .lock()
-        .map(|ratio| *ratio)
-        .unwrap_or(0.0)
-}
-
 pub fn reset_pet_hit_region() {
     if let Ok(mut state) = HIT_REGION.lock() {
         clear_hit_region_input(&mut state);
-        if let Ok(mut ratio) = HIT_REGION_TOP_INSET_RATIO.lock() {
-            *ratio = 0.0;
-        }
         HIT_REGION_NATIVE_REFRESH_PENDING.store(true, Ordering::Release);
     }
     if let Ok(mut press) = HIT_REGION_PRESS.lock() {
@@ -180,6 +158,16 @@ pub fn pet_hit_region_pointer_inside() -> bool {
 }
 
 pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), String> {
+    if pet_geometry_transition_active() {
+        HIT_REGION_NATIVE_REFRESH_PENDING.store(true, Ordering::Release);
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    if !super::pet_mode::pet_native_thread_is_current(window)? {
+        return super::pet_mode::run_pet_native_transaction(window, "pet_hit_region::refresh_windows", |window| {
+            refresh_pet_hit_region_for_window(&window)
+        });
+    }
     #[cfg(target_os = "macos")]
     {
         use objc2::MainThreadMarker;
@@ -204,7 +192,8 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
             .cursor_position()
             .map_err(|error| error.to_string())?;
         let position = window.outer_position().map_err(|error| error.to_string())?;
-        let size = window.outer_size().map_err(|error| error.to_string())?;
+        let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+        let scene_rect = current_pet_render_geometry().physical_scene_rect(dpi);
         let inside = HIT_REGION
             .lock()
             .map(|state| {
@@ -212,9 +201,7 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
                     &state,
                     pointer.x - position.x as f64,
                     pointer.y - position.y as f64,
-                    size.width as f64,
-                    size.height as f64,
-                    hit_region_top_inset_ratio(),
+                    scene_rect,
                 )
             })
             .unwrap_or(false);
@@ -228,7 +215,8 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
             .cursor_position()
             .map_err(|error| error.to_string())?;
         let position = window.outer_position().map_err(|error| error.to_string())?;
-        let size = window.outer_size().map_err(|error| error.to_string())?;
+        let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+        let scene_rect = current_pet_render_geometry().physical_scene_rect(dpi);
         let inside = HIT_REGION
             .lock()
             .map(|state| {
@@ -236,9 +224,7 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
                     &state,
                     pointer.x - position.x as f64,
                     pointer.y - position.y as f64,
-                    size.width as f64,
-                    size.height as f64,
-                    hit_region_top_inset_ratio(),
+                    scene_rect,
                 )
             })
             .unwrap_or(false);
@@ -266,6 +252,11 @@ fn resolve_windows_press_interaction(pointer_inside: bool, button_down: bool) ->
     let Ok(mut press) = HIT_REGION_PRESS.lock() else {
         return pointer_inside;
     };
+    resolve_press_interaction(&mut press, pointer_inside, button_down)
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn resolve_press_interaction(press: &mut PressState, pointer_inside: bool, button_down: bool) -> bool {
     if button_down {
         if !press.active {
             press.active = true;
@@ -280,18 +271,33 @@ fn resolve_windows_press_interaction(pointer_inside: bool, button_down: bool) ->
 
 #[cfg(target_os = "windows")]
 fn set_windows_pet_interactive(window: &WebviewWindow, interactive: bool) -> Result<(), String> {
-    if HIT_REGION
+    let watermark = HIT_REGION
         .lock()
-        .map(|state| state.pointer_inside == interactive)
-        .unwrap_or(false)
-    {
-        return Ok(());
-    }
+        .map(|state| (state.generation.clone(), state.revision))
+        .map_err(|_| "Pet Mode hit-region state is unavailable".to_string())?;
+    // A mask publication resets pointer_inside before this call. Only the
+    // actual native pointer bit can decide whether a style apply is needed.
+    // Hold no HIT_REGION/PRESS lock across the native transaction or callbacks.
     set_windows_overlay_click_through(window, !interactive)?;
     if let Ok(mut state) = HIT_REGION.lock() {
-        state.pointer_inside = interactive;
+        if complete_windows_hit_region_refresh(&mut state, &watermark, interactive) {
+            HIT_REGION_NATIVE_REFRESH_PENDING.store(false, Ordering::Release);
+        }
     }
     Ok(())
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn complete_windows_hit_region_refresh(
+    state: &mut HitRegionState,
+    watermark: &(String, u64),
+    interactive: bool,
+) -> bool {
+    if state.generation != watermark.0 || state.revision != watermark.1 {
+        return false;
+    }
+    state.pointer_inside = interactive;
+    true
 }
 
 pub fn set_pet_window_interactive(window: &WebviewWindow, interactive: bool) -> Result<(), String> {
@@ -322,7 +328,7 @@ pub fn set_pet_window_interactive(window: &WebviewWindow, interactive: bool) -> 
     }
     #[cfg(target_os = "windows")]
     {
-        set_windows_pet_interactive(window, interactive)?;
+        return set_windows_pet_interactive(window, interactive);
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -330,7 +336,7 @@ pub fn set_pet_window_interactive(window: &WebviewWindow, interactive: bool) -> 
             .set_ignore_cursor_events(!interactive)
             .map_err(|error| error.to_string())?;
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         if let Ok(mut state) = HIT_REGION.lock() {
             state.pointer_inside = interactive;
@@ -584,9 +590,7 @@ fn refresh_pet_hit_region_on_main_thread(window: &WebviewWindow) -> Result<(), S
                 &state,
                 local_x,
                 local_y,
-                bounds.size.width,
-                bounds.size.height,
-                hit_region_top_inset_ratio(),
+                current_pet_render_geometry().physical_scene_rect(1.0),
             );
         // Keep the state lock across the AppKit mutation. A renderer update
         // cannot interleave between the decision and the NSWindow property.
@@ -668,31 +672,28 @@ fn hit_test_physical(
     state: &HitRegionState,
     local_x: f64,
     local_y: f64,
-    physical_width: f64,
-    physical_height: f64,
-    top_inset_ratio: f64,
+    scene_rect: (f64, f64, f64, f64),
 ) -> bool {
-    // Dance headroom sits above the artwork canvas; pointer rows inside it are
-    // click-through and the canvas mapping uses only the remaining height.
-    let inset = physical_height * top_inset_ratio.clamp(0.0, 0.9);
-    let local_y = local_y - inset;
-    let physical_height = physical_height - inset;
+    // Canonical v1 spans still describe only the authored body scene. Every
+    // transparent padding edge and decoration outside it remains click-through.
+    // Use the renderer's uniform scene scale, not the rounded outer window size.
+    let (left, top, scene_width, scene_height) = scene_rect;
+    let local_x = local_x - left;
+    let local_y = local_y - top;
     if state.version != HIT_REGION_VERSION
         || state.spans.is_empty()
-        || physical_width <= 0.0
-        || physical_height <= 0.0
+        || ![local_x, local_y, scene_width, scene_height].into_iter().all(f64::is_finite)
+        || scene_width <= 0.0
+        || scene_height <= 0.0
         || local_x < 0.0
         || local_y < 0.0
-        || local_x >= physical_width
-        || local_y >= physical_height
+        || local_x >= scene_width
+        || local_y >= scene_height
     {
         return false;
     }
-    // AppKit/Tauri cursor coordinates already describe the pointer point in
-    // physical screen space. Adding half a pixel here would shift every test
-    // at 1× and produce asymmetric boundary behavior at mixed scales.
-    let mut x = local_x * BASE_WIDTH / physical_width;
-    let y = local_y * BASE_HEIGHT / physical_height;
+    let mut x = local_x * BASE_WIDTH / scene_width;
+    let y = local_y * BASE_HEIGHT / scene_height;
     if state.mirrored {
         x = BASE_WIDTH - x;
     }
@@ -844,47 +845,113 @@ mod tests {
     }
 
     #[test]
+    fn logical_mask_reset_reconciles_the_native_windows_pointer_bit() {
+        use std::cell::Cell;
+        use super::super::windows_overlay::update_windows_overlay_pointer_policy;
+        const TRANSPARENT: u32 = 0x20;
+        let native_style = Cell::new(0x0808_0080_u32); // interactive layered/no-activate/tool window
+        let unrelated_style = native_style.get();
+        let writes = Cell::new(0);
+        let mut current = HitRegionState {
+            generation: "0000000000010-000000".into(),
+            revision: 42,
+            pointer_inside: true,
+            ..state(false)
+        };
+        clear_hit_region_input(&mut current);
+        assert!(!current.pointer_inside);
+        assert!(current.spans.is_empty());
+        let watermark = (current.generation.clone(), current.revision);
+        let reconcile = || update_windows_overlay_pointer_policy(
+            true, true, TRANSPARENT,
+            || Ok(native_style.get()),
+            |desired| { native_style.set(desired); writes.set(writes.get() + 1); Ok(()) },
+        );
+        assert!(reconcile().unwrap());
+        assert!(complete_windows_hit_region_refresh(&mut current, &watermark, false));
+        assert_eq!(native_style.get(), unrelated_style | TRANSPARENT);
+        assert!(!reconcile().unwrap());
+        assert_eq!(writes.get(), 1); // no repeated frame/style apply after reset/show
+    }
+
+    #[test]
+    fn native_refresh_ack_cannot_clear_a_newer_mask_publication() {
+        let mut current = state(false);
+        let watermark = (current.generation.clone(), current.revision);
+        current.revision += 1;
+        assert!(!complete_windows_hit_region_refresh(&mut current, &watermark, true));
+        assert!(!current.pointer_inside);
+        let watermark = (current.generation.clone(), current.revision);
+        current.generation = "0000000000011-000000".into();
+        assert!(!complete_windows_hit_region_refresh(&mut current, &watermark, true));
+        assert!(!current.pointer_inside);
+    }
+
+    #[test]
+    fn windows_press_keeps_its_first_owner_through_body_and_gutter_crossings() {
+        let mut press = PressState::default();
+        assert!(!resolve_press_interaction(&mut press, false, true));
+        assert!(!resolve_press_interaction(&mut press, true, true));
+        assert!(resolve_press_interaction(&mut press, true, false));
+        assert!(resolve_press_interaction(&mut press, true, true));
+        assert!(resolve_press_interaction(&mut press, false, true));
+        assert!(!resolve_press_interaction(&mut press, false, false));
+        assert!(!press.active);
+    }
+
+    #[test]
     fn hit_test_respects_span_boundaries() {
         let region = state(false);
-        assert!(hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0, 0.0));
-        assert!(hit_test_physical(&region, 29.5, 10.0, 144.0, 99.0, 0.0));
-        assert!(!hit_test_physical(&region, 30.0, 10.0, 144.0, 99.0, 0.0));
-        assert!(!hit_test_physical(&region, 20.0, 10.5, 144.0, 99.0, 0.0));
+        assert!(hit_test_physical(&region, 20.0, 10.0, (0.0, 0.0, 144.0, 99.0)));
+        assert!(hit_test_physical(&region, 29.5, 10.0, (0.0, 0.0, 144.0, 99.0)));
+        assert!(!hit_test_physical(&region, 30.0, 10.0, (0.0, 0.0, 144.0, 99.0)));
+        assert!(!hit_test_physical(&region, 20.0, 10.5, (0.0, 0.0, 144.0, 99.0)));
     }
 
     #[test]
     fn hit_test_scales_physical_pixels() {
         let region = state(false);
-        assert!(hit_test_physical(&region, 40.0, 20.0, 288.0, 198.0, 0.0));
-        assert!(!hit_test_physical(&region, 10.0, 20.0, 288.0, 198.0, 0.0));
+        assert!(hit_test_physical(&region, 40.0, 20.0, (0.0, 0.0, 288.0, 198.0)));
+        assert!(!hit_test_physical(&region, 10.0, 20.0, (0.0, 0.0, 288.0, 198.0)));
     }
 
     #[test]
-    fn hit_test_skips_dance_headroom_above_the_canvas() {
+    fn padded_scene_preserves_body_input_and_all_four_gutters_pass_through() {
         let region = state(false);
-        // A 36-point strip above the 99-point canvas: 135 total, ratio 36/135.
-        let ratio = 36.0 / 135.0;
-        // Rows inside the headroom never hit, even over the canvas' span.
-        assert!(!hit_test_physical(&region, 20.0, 10.0, 144.0, 135.0, ratio));
-        // The same canvas row as before now lives 36 points lower.
-        assert!(hit_test_physical(&region, 20.0, 46.0, 144.0, 135.0, ratio));
-        assert!(!hit_test_physical(&region, 20.0, 46.5, 144.0, 135.0, ratio));
-        // At 2× the strip is 72 physical pixels tall.
-        assert!(hit_test_physical(&region, 40.0, 92.0, 288.0, 270.0, ratio));
-        assert!(!hit_test_physical(&region, 40.0, 20.0, 288.0, 270.0, ratio));
+        for pet_scale in [0.5, 0.75, 1.0, 1.25] {
+            for dpi in [1.0, 1.25, 1.5, 1.75, 2.0] {
+                let scale = pet_scale * dpi;
+                let rect = (18.0 * scale, 64.0 * scale, 144.0 * scale, 99.0 * scale);
+                assert!(hit_test_physical(&region, (18.0 + 20.0) * scale, (64.0 + 10.0) * scale, rect));
+                for point in [(17.9, 74.0), (38.0, 63.9), (162.0, 74.0), (38.0, 163.0)] {
+                    assert!(!hit_test_physical(&region, point.0 * scale, point.1 * scale, rect));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rounded_outer_window_height_cannot_stretch_the_input_mask() {
+        let region = state(false);
+        // 75% at 125% DPI has a 92.8125px scene height. Its native surface may
+        // round to an integer, but the renderer's authored row remains exact.
+        let scale = 0.75 * 1.25;
+        let rect = (0.0, 64.0 * scale, 144.0 * scale, 99.0 * scale);
+        assert!(hit_test_physical(&region, 20.0 * scale, 74.0 * scale, rect));
+        assert!(!hit_test_physical(&region, 20.0 * scale, 74.5 * scale, rect));
     }
 
     #[test]
     fn hit_test_mirrors_canonical_x() {
         let region = state(true);
-        assert!(hit_test_physical(&region, 114.5, 10.0, 144.0, 99.0, 0.0));
-        assert!(!hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0, 0.0));
+        assert!(hit_test_physical(&region, 114.5, 10.0, (0.0, 0.0, 144.0, 99.0)));
+        assert!(!hit_test_physical(&region, 20.0, 10.0, (0.0, 0.0, 144.0, 99.0)));
     }
 
     #[test]
     fn invalid_or_empty_region_is_click_through() {
         let mut region = state(false);
         region.spans.clear();
-        assert!(!hit_test_physical(&region, 20.0, 10.0, 144.0, 99.0, 0.0));
+        assert!(!hit_test_physical(&region, 20.0, 10.0, (0.0, 0.0, 144.0, 99.0)));
     }
 }

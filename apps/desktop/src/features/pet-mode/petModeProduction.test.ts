@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   PET_MODE_COAT_STORAGE_KEY,
@@ -485,10 +486,31 @@ describe("pet size", () => {
   });
 
   it("resizes the native window whenever size or visibility changes", () => {
-    // The window is recreated at its default size each time the pet is shown,
-    // so a non-default size has to be re-applied on that transition too.
-    expect(app).toContain(
-      "[petModeActive, petModeRevealRevision, petModeSize, petModeSyncRetryNonce]",
+    // Visibility, explicit reveal, size, and retry must each resync the native
+    // window. Stable diagnostic callbacks may also appear in this effect.
+    const source = ts.createSourceFile("App.tsx", app, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const syncEffects: ts.CallExpression[] = [];
+    const callsNativeSync = (node: ts.Node): boolean => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+        && node.expression.text === "setNativePetModeEnabled") return true;
+      return ts.forEachChild(node, callsNativeSync) === true;
+    };
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+        && node.expression.text === "useEffect" && node.arguments[0]
+        && callsNativeSync(node.arguments[0])) syncEffects.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    expect(syncEffects).toHaveLength(1);
+    const dependencies = syncEffects[0]?.arguments[1];
+    if (!dependencies || !ts.isArrayLiteralExpression(dependencies)) {
+      throw new Error("The native pet sync effect must have an explicit dependency array");
+    }
+    expect(dependencies.elements.filter(ts.isIdentifier).map((dependency) => dependency.text)).toEqual(
+      expect.arrayContaining([
+        "petModeActive", "petModeRevealRevision", "petModeSize", "petModeSyncRetryNonce",
+      ]),
     );
   });
 });

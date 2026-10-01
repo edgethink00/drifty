@@ -43,6 +43,7 @@ import {
   type PetModeSitArtworkId,
 } from "./petModeSitVariant";
 import { getPetModeRunFrameSource, PET_MODE_RUN_FRAME_SOURCES } from "./petModeRunFrames";
+import { PET_MODE_BODY_EFFECT_STYLE } from "./petModeRenderGeometry";
 
 type PetModeCatPhase =
   | "idle"
@@ -786,7 +787,7 @@ export function PetModeCat({
   if (suspended) return null;
 
   return (
-    <div className={rootClass} aria-hidden={decorative ? true : undefined} aria-label={decorative ? undefined : "Drifty pet cat"} data-phase={phase} data-region-id={regionId} data-sit-artwork={selectedSitVariantId} style={motionGeometry}>
+    <div className={rootClass} aria-hidden={decorative ? true : undefined} aria-label={decorative ? undefined : "Drifty pet cat"} data-phase={phase} data-region-id={regionId} data-sit-artwork={selectedSitVariantId} style={{ ...PET_MODE_BODY_EFFECT_STYLE, ...motionGeometry }}>
       <svg className="pet-mode-cat__filters" width="0" height="0" aria-hidden="true">
         {/* The baked frames are effectively two-tone: body pixels sit near
             luminance 226 and facial detail near 20, with only anti-aliasing in
@@ -917,93 +918,98 @@ export function PetModeCat({
           </feComponentTransfer>
         </filter>
       </svg>
-      <div className="pet-mode-cat__motion">
-        {phase === "paw" ? (
-          <img
-            className="pet-mode-cat__raster pet-mode-cat__raster--paw"
-            src={`/pet-mode/paw/f${String(pawFrame + 1).padStart(3, "0")}.png`}
-            alt=""
-            draggable={false}
-          />
-        ) : phase === "drag" ? (
-          <>
-            <span className="pet-mode-cat__drag-pending-rest">
-              <PetModeRestPoseArtwork pose={dragPickupPose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
-            </span>
-            <img
-              className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__drag-pending-held"
-              src={DRAG_SCRUFF_ASSET}
-              alt=""
-              draggable={false}
-            />
-          </>
-        ) : phase === "release" ? (
-          <>
-            <img
-              className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__release-held"
-              src={DRAG_SCRUFF_ASSET}
-              alt=""
-              draggable={false}
-            />
-            <span className="pet-mode-cat__release-rest">
-              <PetModeRestPoseArtwork pose={dragReleasePose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
-            </span>
-          </>
-        ) : phase === "dance" ? (
-          <img
-            className="pet-mode-cat__raster pet-mode-cat__raster--dance"
-            src={`/pet-mode/dance/f${String(renderedDanceFrame + 1).padStart(3, "0")}.png`}
-            alt=""
-            draggable={false}
-          />
-        ) : lifeMotionAsset ? (
-          <img
-            className="pet-mode-cat__raster pet-mode-cat__raster--life-motion"
-            src={`/pet-mode/life-motion/${lifeMotionAsset}/f${String(renderedLifeMotionFrame + 1).padStart(3, "0")}.png`}
-            alt=""
-            draggable={false}
-          />
-        ) : phase === "sleep" ? (
-          <PetModeSleepPose irritated={sleepDriftExpression || driftCue !== "none"} />
-        ) : phase === "sit" ? (
-          <PetModeSitPose sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
-        ) : usesRunRaster ? (
-          <img
-            className="pet-mode-cat__raster pet-mode-cat__raster--run"
-            src={runFramePath}
-            alt=""
-            draggable={false}
-          />
-        ) : holdsRenderedEntryVector ? (
-          <svg
-            ref={registerWalkVector}
-            className="pet-mode-cat__vector pet-mode-cat__landed-vector"
-            viewBox="0 0 150 120"
-            aria-hidden="true"
-          >
-            {walkVectorBody}
-          </svg>
-        ) : (phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return") && walkFrames.length > 0 ? (
-          <svg ref={registerWalkVector} className="pet-mode-cat__vector" viewBox="0 0 150 120" aria-hidden="true">
-            {walkVectorBody}
-          </svg>
-        ) : usesIdleGaze || usesNoticeGaze ? (
-          <>
-            <img className="pet-mode-cat__raster" src="/pet-mode/gaze/idle-no-pupils.png" alt="" draggable={false} />
-            <span className="pet-mode-cat__idle-pupils" aria-hidden="true">
-              <img className="pet-mode-cat__pupil pet-mode-cat__pupil--left" src="/pet-mode/gaze/pupil-L.png" alt="" draggable={false} />
-              <img className="pet-mode-cat__pupil pet-mode-cat__pupil--right" src="/pet-mode/gaze/pupil-R.png" alt="" draggable={false} />
-            </span>
-          </>
-        ) : (
-          <img
-            className="pet-mode-cat__raster"
-            src="/pet-mode/paw/f001.png"
-            alt=""
-            draggable={false}
-          />
-        )}
-        {usesSeparatedFace ? <span className="pet-mode-cat__face-erase" aria-hidden="true" /> : null}
+      <div className="pet-mode-cat__body-effects">
+        <div className="pet-mode-cat__body-register">
+          <div className="pet-mode-cat__motion">
+            {phase === "paw" ? (
+              <img
+                className="pet-mode-cat__raster pet-mode-cat__raster--paw"
+                src={`/pet-mode/paw/f${String(pawFrame + 1).padStart(3, "0")}.png`}
+                alt=""
+                draggable={false}
+              />
+            ) : phase === "drag" ? (
+              <>
+                <span className="pet-mode-cat__drag-pending-rest">
+                  <PetModeRestPoseArtwork pose={dragPickupPose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
+                </span>
+                <img
+                  className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__drag-pending-held"
+                  src={DRAG_SCRUFF_ASSET}
+                  alt=""
+                  draggable={false}
+                />
+              </>
+            ) : phase === "release" ? (
+              <>
+                <img
+                  className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__release-held"
+                  src={DRAG_SCRUFF_ASSET}
+                  alt=""
+                  draggable={false}
+                />
+                <span className="pet-mode-cat__release-rest">
+                  <PetModeRestPoseArtwork pose={dragReleasePose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
+                </span>
+              </>
+            ) : phase === "dance" ? (
+              <img
+                className="pet-mode-cat__raster pet-mode-cat__raster--dance"
+                src={`/pet-mode/dance/f${String(renderedDanceFrame + 1).padStart(3, "0")}.png`}
+                alt=""
+                draggable={false}
+              />
+            ) : lifeMotionAsset ? (
+              <img
+                className="pet-mode-cat__raster pet-mode-cat__raster--life-motion"
+                src={`/pet-mode/life-motion/${lifeMotionAsset}/f${String(renderedLifeMotionFrame + 1).padStart(3, "0")}.png`}
+                alt=""
+                draggable={false}
+              />
+            ) : phase === "sleep" ? (
+              <PetModeSleepPose irritated={sleepDriftExpression || driftCue !== "none"} />
+            ) : phase === "sit" ? (
+              <PetModeSitPose sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
+            ) : usesRunRaster ? (
+              <img
+                className="pet-mode-cat__raster pet-mode-cat__raster--run"
+                src={runFramePath}
+                alt=""
+                draggable={false}
+              />
+            ) : holdsRenderedEntryVector ? (
+              <svg
+                ref={registerWalkVector}
+                className="pet-mode-cat__vector pet-mode-cat__landed-vector"
+                viewBox="0 0 150 120"
+                aria-hidden="true"
+              >
+                {walkVectorBody}
+              </svg>
+            ) : (phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return") && walkFrames.length > 0 ? (
+              <svg ref={registerWalkVector} className="pet-mode-cat__vector" viewBox="0 0 150 120" aria-hidden="true">
+                {walkVectorBody}
+              </svg>
+            ) : usesIdleGaze || usesNoticeGaze ? (
+              <>
+                <img className="pet-mode-cat__raster" src="/pet-mode/gaze/idle-no-pupils.png" alt="" draggable={false} />
+                <span className="pet-mode-cat__idle-pupils" aria-hidden="true">
+                  <img className="pet-mode-cat__pupil pet-mode-cat__pupil--left" src="/pet-mode/gaze/pupil-L.png" alt="" draggable={false} />
+                  <img className="pet-mode-cat__pupil pet-mode-cat__pupil--right" src="/pet-mode/gaze/pupil-R.png" alt="" draggable={false} />
+                </span>
+              </>
+            ) : (
+              <img
+                className="pet-mode-cat__raster"
+                src="/pet-mode/paw/f001.png"
+                alt=""
+                draggable={false}
+              />
+            )}
+            {usesSeparatedFace ? <span className="pet-mode-cat__face-erase" aria-hidden="true" /> : null}
+          </div>
+          {usesSeparatedFace ? <PetModeExpression phase={phase} /> : null}
+        </div>
       </div>
       <img
         className="pet-mode-cat__drag-preload"
@@ -1012,7 +1018,6 @@ export function PetModeCat({
         aria-hidden="true"
         draggable={false}
       />
-      {usesSeparatedFace ? <PetModeExpression phase={phase} /> : null}
       <span className="pet-mode-cat__toy" aria-hidden="true" />
       <span className="pet-mode-cat__shadow" aria-hidden="true" />
       <span className="pet-mode-cat__heart" aria-hidden="true">♥</span>

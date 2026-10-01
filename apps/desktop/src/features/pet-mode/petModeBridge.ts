@@ -42,12 +42,41 @@ function isPetVisibilityAction(value: unknown): value is PetVisibilityAction {
   return value === "hideOneHour" || value === "turnOff";
 }
 
+/** Memory-only, process-lifetime receipts; messages and policy attempts do not confirm applied DPI. */
+export type PetModeWindowsDpiEvents = {
+  readonly nativeMessageCount: number;
+  readonly nativeLastAtMs?: number;
+  readonly nativeLastDpiX?: number;
+  readonly nativeLastDpiY?: number;
+  readonly tauriScaleChangeCount: number;
+  readonly tauriLastAtMs?: number;
+  readonly tauriLastScaleFactor?: number;
+  /** Optional to distinguish older native builds from an observed zero count. */
+  readonly settingChangeCount?: number;
+  readonly settingChangeLastAtMs?: number;
+  readonly settingChangeLastWparam?: number;
+  readonly displayChangeCount?: number;
+  readonly displayChangeLastAtMs?: number;
+  readonly policyFrameChangeCount?: number;
+  readonly policyFrameChangeLastAtMs?: number;
+};
+
 export type PetModeInputBounds = {
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
   readonly visible: boolean;
+  readonly windowScaleFactor?: number;
+  readonly nativeScaleFactor?: number;
+  readonly windowDpiAwareness?: string;
+  readonly threadDpiAwareness?: string;
+  /** Context-sensitive monitor API diagnostic; not the frame calculation scale. */
+  readonly currentMonitorScaleFactor?: number;
+  readonly windowsDpiEvents?: PetModeWindowsDpiEvents;
+  readonly expectedRenderWidth?: number;
+  readonly expectedRenderHeight?: number;
+  readonly sampledAtMs?: number;
 };
 
 export type PetModeCursorSample = {
@@ -424,6 +453,7 @@ export async function updateNativePetHitRegion(update: PetModeHitRegionUpdate): 
 }
 
 export type PetModeNativeDragResult = {
+  readonly manualRequestId?: string;
   readonly moved: boolean;
   /** Optional while an HMR renderer can still be paired with an older native process. */
   readonly shakeDetected?: boolean;
@@ -435,15 +465,68 @@ export type PetModeNativeDragResult = {
   readonly endY: number;
 };
 
+const manualDragClock = globalThis as typeof globalThis & { __driftyManualDragClock?: number };
+const MANUAL_DRAG_CLOCK_STORAGE_KEY = "drifty.petMode.manualDragClock.v1";
+const MANUAL_DRAG_CLOCK_HEADROOM = 1_000_000_000_000;
+const MAX_MANUAL_DRAG_CLOCK_SEED = Number.MAX_SAFE_INTEGER - MANUAL_DRAG_CLOCK_HEADROOM;
+function boundedManualDragClock(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+function readPersistedManualDragClock(raw: string | null | undefined): number {
+  if (!raw) return 0;
+  const value: unknown = JSON.parse(raw);
+  if (!value || typeof value !== "object" || !("seed" in value) || !("offset" in value)) return 0;
+  const seed = boundedManualDragClock(value.seed);
+  const offset = boundedManualDragClock(value.offset);
+  if (seed !== value.seed || offset !== value.offset || seed > MAX_MANUAL_DRAG_CLOCK_SEED
+    || offset > MANUAL_DRAG_CLOCK_HEADROOM || !Number.isSafeInteger(seed + offset)) return 0;
+  return seed + offset;
+}
+export function createPetManualDragRequestId(): string {
+  // Fixed width permits native to reject a delayed A after a newer B. The
+  // persisted monotonic clock survives full renderer reloads and wall-clock
+  // rollback, while memory retains ordering if storage becomes unavailable.
+  let persisted = 0;
+  try { persisted = readPersistedManualDragClock(globalThis.localStorage?.getItem(MANUAL_DRAG_CLOCK_STORAGE_KEY)); } catch { /* Storage unavailable or corrupt. */ }
+  const now = Date.now() * 1_000;
+  const previous = Math.max(boundedManualDragClock(manualDragClock.__driftyManualDragClock), persisted);
+  if (!Number.isSafeInteger(now) || now < 0 || now > MAX_MANUAL_DRAG_CLOCK_SEED || previous === Number.MAX_SAFE_INTEGER) {
+    throw new Error("Pet Mode manual request clock is exhausted");
+  }
+  const next = Math.max(
+    now,
+    previous + 1,
+  );
+  manualDragClock.__driftyManualDragClock = next;
+  // Validate the persisted seed separately from its generated increments: an
+  // accepted boundary seed must never reset when its counter crosses that
+  // boundary, including after reload. Numeric exhaustion is an explicit error.
+  const seed = Math.min(next, MAX_MANUAL_DRAG_CLOCK_SEED);
+  try { globalThis.localStorage?.setItem(MANUAL_DRAG_CLOCK_STORAGE_KEY, JSON.stringify({ seed, offset: next - seed })); } catch { /* Memory retains ordering. */ }
+  return `${String(Math.floor(next / 1_000)).padStart(13, "0")}-${String(next % 1_000).padStart(6, "0")}`;
+}
+
+type ManualDragEvent<T> = T | { readonly manualRequestId: string; readonly value: T };
+function normalizeManualDragEvent<T>(payload: ManualDragEvent<T>): { value: T; manualRequestId?: string } {
+  if (payload !== null && typeof payload === "object" && "manualRequestId" in payload && "value" in payload) {
+    return payload as { value: T; manualRequestId: string };
+  }
+  return { value: payload as T };
+}
+
 export async function beginNativePetDrag(
   startClientX: number,
   startClientY: number,
   pickupDelayMs: number,
+  pointerType?: string,
+  manualRequestId?: string,
 ): Promise<PetModeNativeDragResult> {
   return invoke<PetModeNativeDragResult>("pet_mode_begin_drag", {
     startClientX,
     startClientY,
     pickupDelayMs,
+    ...(pointerType === undefined ? {} : { pointerType }),
+    ...(manualRequestId === undefined ? {} : { manualRequestId }),
   });
 }
 
@@ -455,17 +538,17 @@ export async function listenToNativePetDragEnd(
 }
 
 export async function listenToNativePetDragStart(
-  onDragStart: () => void,
+  onDragStart: (manualRequestId?: string) => void,
 ): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
-  return listen<boolean>("pet-mode-drag-start", () => onDragStart());
+  return listen<ManualDragEvent<boolean>>("pet-mode-drag-start", ({ payload }) => onDragStart(normalizeManualDragEvent(payload).manualRequestId));
 }
 
 export async function listenToNativePetStrokeDetected(
-  onStrokeDetected: () => void,
+  onStrokeDetected: (manualRequestId?: string) => void,
 ): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
-  return listen<boolean>("pet-mode-stroke-detected", () => onStrokeDetected());
+  return listen<ManualDragEvent<boolean>>("pet-mode-stroke-detected", ({ payload }) => onStrokeDetected(normalizeManualDragEvent(payload).manualRequestId));
 }
 
 export async function reportNativePetDragError(error: unknown): Promise<void> {
@@ -593,10 +676,13 @@ export async function listenToNativePetVisibilityAction(
 }
 
 export async function listenToNativePetDragProbe(
-  onProbe: (probe: PetDropPlan | null) => void,
+  onProbe: (probe: PetDropPlan | null, manualRequestId?: string) => void,
 ): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
-  return listen<PetDropPlan | null>("pet-mode-drag-probe", ({ payload }) => onProbe(payload));
+  return listen<ManualDragEvent<PetDropPlan | null>>("pet-mode-drag-probe", ({ payload }) => {
+    const event = normalizeManualDragEvent(payload);
+    onProbe(event.value, event.manualRequestId);
+  });
 }
 
 export type PetQuickControlsAction =

@@ -33,6 +33,9 @@ import { LEADERBOARD_GRAPH_STYLE_OPTIONS, parseLeaderboardGraphStyle, type Leade
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, previewNativePetModeFacing, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
+import type { PetModeWindowsDpiEvents } from "../pet-mode/petModeBridge";
+import { formatPetModeDpiEventReceipts } from "../pet-mode/petModeDpiDiagnostics";
+import { formatPetModeNativeSyncDiagnostic, type PetModeNativeSyncDiagnostic } from "../pet-mode/petModeNativeSyncDiagnostics";
 import {
   PET_MODE_SIT_VARIANT_STORAGE_KEY,
   PET_MODE_SIT_VARIANT_OPTIONS,
@@ -99,6 +102,8 @@ type DevSettingsSectionProps = {
   readonly petModeRunBetaEnabled: boolean;
   readonly petModeLabPointerStatus: string | null;
   readonly petModeLabInputBounds: string | null;
+  readonly petModeLabDpiEvents?: PetModeWindowsDpiEvents | null;
+  readonly petModeNativeSyncDiagnostics?: readonly PetModeNativeSyncDiagnostic[];
   readonly floatingCompanionDevEnabled: boolean;
   readonly floatingCompanionDevSupported?: boolean;
   readonly onFloatingCompanionDevEnabledChange: (enabled: boolean) => void;
@@ -187,6 +192,8 @@ export function DevSettingsSection({
   petModeRunBetaEnabled,
   petModeLabPointerStatus,
   petModeLabInputBounds,
+  petModeLabDpiEvents,
+  petModeNativeSyncDiagnostics = [],
   floatingCompanionDevEnabled,
   floatingCompanionDevSupported = true,
   onFloatingCompanionDevEnabledChange,
@@ -458,10 +465,21 @@ export function DevSettingsSection({
                 </div>
                 <span className="pet-mode-lab__status" data-active={petModeEnabled}>{petModeLabStatus}</span>
               </div>
-              {petModeLabPointerStatus || petModeLabInputBounds ? (
+              {petModeLabPointerStatus || petModeLabInputBounds || petModeLabDpiEvents || petModeNativeSyncDiagnostics.length > 0 ? (
                 <div className="pet-mode-lab__diagnostics" role="status" aria-label="Pet Mode diagnostics">
                   {petModeLabPointerStatus ? <div className="pet-mode-lab__diagnostic"><span>Contact</span><code>{petModeLabPointerStatus}</code></div> : null}
-                  {petModeLabInputBounds ? <div className="pet-mode-lab__diagnostic"><span>Input</span><code>{petModeLabInputBounds}</code></div> : null}
+                  {petModeLabInputBounds ? <div className="pet-mode-lab__diagnostic" style={{ flexBasis: "100%", minWidth: 0 }}><span style={{ flexShrink: 0 }}>Input</span><code style={{ minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>{petModeLabInputBounds}</code></div> : null}
+                  {petModeLabDpiEvents ? <>
+                    {formatPetModeDpiEventReceipts(petModeLabDpiEvents).map((receipt) => (
+                      <div key={receipt.label} className="pet-mode-lab__diagnostic" style={{ flexBasis: "100%" }}>
+                        <span style={{ flexShrink: 0 }}>{receipt.label}</span><code style={{ minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>{receipt.text}</code>
+                      </div>
+                    ))}
+                    <div className="pet-mode-lab__diagnostic" style={{ flexBasis: "100%" }}>
+                      <span style={{ flexShrink: 0 }}>Scope</span><code style={{ minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>Receipt only; pet messages before subclass installation are not observed. Frame policy counts are call attempts, not success.</code>
+                    </div>
+                  </> : null}
+                  {petModeNativeSyncDiagnostics.map((record) => <div key={record.token} className="pet-mode-lab__diagnostic"><span>Sync</span><code>{formatPetModeNativeSyncDiagnostic(record)}</code></div>)}
                 </div>
               ) : null}
               <div className="pet-mode-lab__groups">

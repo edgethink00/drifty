@@ -3,13 +3,15 @@ use serde_json::{json, Value};
 #[cfg(target_os = "macos")]
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Mutex, MutexGuard};
+use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
-    async_runtime, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor,
-    PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    async_runtime, AppHandle, Emitter, LogicalPosition, Manager, Monitor,
+    PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
+#[cfg(not(target_os = "macos"))]
+use tauri::LogicalSize;
 
 #[cfg(target_os = "macos")]
 use core_graphics::{
@@ -34,12 +36,13 @@ use super::pet_drop_windows::{inferred_bottom_dock, list_on_screen_ledges};
 use super::pet_hit_region::{
     install_pet_hit_region_monitor, pet_hit_region_geometry_refresh_needed,
     pet_hit_region_pointer_inside, refresh_pet_hit_region_for_window, reset_pet_hit_region,
-    set_pet_hit_region_top_inset_ratio, set_pet_window_interactive,
+    set_pet_window_interactive,
 };
 use super::pet_panel::{
     configure_pet_panel, perform_pet_panel_drag, show_pet_panel, show_pet_panel_at_position,
 };
 use super::windows_overlay::{hide_windows_overlay, is_windows_overlay_visible};
+use super::pet_render_geometry::{pet_render_layout, PetRenderGeometry};
 
 #[cfg(target_os = "macos")]
 #[path = "pet_fullscreen.rs"]
@@ -183,7 +186,13 @@ static PET_MODE_SETTLED_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_ROAM_RIGHT: AtomicBool = AtomicBool::new(true);
 static PET_MODE_MOTION_REVISION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_QUICK_CONTROLS_GENERATION: AtomicU64 = AtomicU64::new(0);
-static PET_MODE_DRAG_ACTIVE: AtomicBool = AtomicBool::new(false);
+static PET_MODE_DRAG_SESSION: Mutex<PetDragSessionState> = Mutex::new(PetDragSessionState {
+    closed: false,
+    epoch: 0,
+    current: None,
+    canonical_grab: None,
+    latest_request_id: None,
+});
 // Motion starts are tiny critical sections: claim a revision and emit the
 // matching renderer pose as one ordered operation. This prevents a stale
 // background seat scan from publishing `walk` after a newer intervention has
@@ -196,24 +205,18 @@ static PET_MODE_PREVIEW_RETURN: AtomicBool = AtomicBool::new(false);
 static PET_MODE_PREFERRED_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
 static PET_MODE_ANCHOR_CLEAR_CONFIRMATION: Mutex<Option<PetModeAnchorClearConfirmation>> =
     Mutex::new(None);
-/// The pet panel's current logical size. Every placement calculation needs the
-/// real footprint: with a user-selectable size, treating the panel as a fixed
-/// 144x99 would let a 125% pet clamp to a right edge computed for a smaller
-/// window and hang off the screen.
+/// The authored body scene's current logical size, independent of transparent
+/// rendering padding. Placement, feet, mouth, home, and contact math use this.
 static PET_MODE_SIZE: Mutex<(f64, f64)> = Mutex::new((PET_MODE_WIDTH, PET_MODE_HEIGHT));
-/// Extra height, in base points at 100% size, that the dance pose needs above
-/// the panel. The upright dance frames keep the cat at the same 1:1 body scale
-/// as every other pose, which puts the head about 33 points above the 99-point
-/// panel's top edge; 36 leaves a small margin. The panel grows upward from its
-/// bottom edge only while the pose is on screen, so the paws stay planted on
-/// the same ground line and nothing else has to move.
+static PET_MODE_GEOMETRY_REVISION: AtomicU64 = AtomicU64::new(0);
+static PET_MODE_GEOMETRY_APPLYING: AtomicBool = AtomicBool::new(false);
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+static PET_MODE_GEOMETRY_TRANSACTION: Mutex<()> = Mutex::new(());
+/// Visible dance extent above the authored scene. This is an edge-placement
+/// policy, not a native window resize or the surface's transparent padding.
 const PET_MODE_DANCE_HEADROOM_PT: f64 = 36.0;
-/// Headroom currently added to the panel height, in logical points.
-static PET_MODE_DANCE_HEADROOM: Mutex<f64> = Mutex::new(0.0);
-/// AppKit content-rect origin.y (bottom-left) captured before the first
-/// headroom resize of a dance. Restore uses this so a top-of-screen clamp
-/// that had to shift the panel down does not leave the feet low afterwards.
-static PET_MODE_DANCE_GROUND_ORIGIN_Y: Mutex<Option<f64>> = Mutex::new(None);
+/// The original body origin before a dance's temporary screen-edge correction.
+static PET_MODE_DANCE_ORIGIN: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
 static PET_MODE_FLOOR_HOME_PT: Mutex<f64> = Mutex::new(PET_DROP_FLOOR_HOME_PT);
 static PET_MODE_PREVIEW_RETURN_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
 
@@ -295,7 +298,7 @@ pub(super) fn begin_pet_quick_controls_interaction(app: &AppHandle) -> Result<Op
         }
         let policy = pet_quick_controls_interaction_policy(
             PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed),
-            PET_MODE_DRAG_ACTIVE.load(Ordering::Relaxed),
+            pet_drag_is_active(),
             motion_state.active.map(|active| active.purpose),
         );
         match policy {
@@ -640,6 +643,160 @@ pub struct PetModeInputBounds {
     pub width: u32,
     pub height: u32,
     pub visible: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_scale_factor: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_scale_factor: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_dpi_awareness: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread_dpi_awareness: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_monitor_scale_factor: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub windows_dpi_events: Option<PetModeWindowsDpiEvents>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_render_width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_render_height: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sampled_at_ms: Option<u64>,
+}
+
+/// Bounded, memory-only pet message and native policy call observations.
+/// These are receipts, not proof that a scale or rendering frame was applied.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetModeWindowsDpiEvents {
+    pub native_message_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_last_at_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_last_dpi_x: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_last_dpi_y: Option<u32>,
+    pub tauri_scale_change_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tauri_last_at_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tauri_last_scale_factor: Option<f64>,
+    pub setting_change_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub setting_change_last_at_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub setting_change_last_wparam: Option<u32>,
+    pub display_change_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_change_last_at_ms: Option<u64>,
+    pub policy_frame_change_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_frame_change_last_at_ms: Option<u64>,
+}
+
+#[cfg(any(target_os = "windows", test))]
+impl PetModeWindowsDpiEvents {
+    fn record_native_message(&mut self, wparam: usize, at_ms: u64) {
+        self.native_message_count = self.native_message_count.saturating_add(1);
+        self.native_last_at_ms = Some(at_ms);
+        // WM_DPICHANGED carries numeric X/Y DPI in LOWORD/HIWORD. Do not
+        // inspect its HWND or suggested-rectangle pointer for this receipt.
+        self.native_last_dpi_x = Some((wparam & 0xffff) as u32);
+        self.native_last_dpi_y = Some(((wparam >> 16) & 0xffff) as u32);
+    }
+
+    fn record_tauri_scale_change(&mut self, scale_factor: f64, at_ms: u64) {
+        self.tauri_scale_change_count = self.tauri_scale_change_count.saturating_add(1);
+        self.tauri_last_at_ms = Some(at_ms);
+        self.tauri_last_scale_factor =
+            (scale_factor.is_finite() && scale_factor > 0.0).then_some(scale_factor);
+    }
+
+    fn record_setting_change(&mut self, wparam: usize, at_ms: u64) {
+        self.setting_change_count = self.setting_change_count.saturating_add(1);
+        self.setting_change_last_at_ms = Some(at_ms);
+        // The documented system uiAction is UINT-sized. Never read the
+        // LPARAM string: this numeric value alone does not identify DPI.
+        self.setting_change_last_wparam = Some((wparam & u32::MAX as usize) as u32);
+    }
+
+    fn record_display_change(&mut self, at_ms: u64) {
+        self.display_change_count = self.display_change_count.saturating_add(1);
+        self.display_change_last_at_ms = Some(at_ms);
+    }
+
+    fn record_policy_frame_change(&mut self, at_ms: u64) {
+        self.policy_frame_change_count = self.policy_frame_change_count.saturating_add(1);
+        self.policy_frame_change_last_at_ms = Some(at_ms);
+    }
+}
+
+#[cfg(target_os = "windows")]
+static PET_WINDOWS_DPI_EVENTS: Mutex<PetModeWindowsDpiEvents> =
+    Mutex::new(PetModeWindowsDpiEvents {
+        native_message_count: 0,
+        native_last_at_ms: None,
+        native_last_dpi_x: None,
+        native_last_dpi_y: None,
+        tauri_scale_change_count: 0,
+        tauri_last_at_ms: None,
+        tauri_last_scale_factor: None,
+        setting_change_count: 0,
+        setting_change_last_at_ms: None,
+        setting_change_last_wparam: None,
+        display_change_count: 0,
+        display_change_last_at_ms: None,
+        policy_frame_change_count: 0,
+        policy_frame_change_last_at_ms: None,
+    });
+
+#[cfg(target_os = "windows")]
+fn pet_dpi_event_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn record_windows_pet_dpi_message(wparam: usize) {
+    PET_WINDOWS_DPI_EVENTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .record_native_message(wparam, pet_dpi_event_timestamp_ms());
+}
+
+#[cfg(target_os = "windows")]
+fn record_windows_pet_tauri_scale_change(scale_factor: f64) {
+    PET_WINDOWS_DPI_EVENTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .record_tauri_scale_change(scale_factor, pet_dpi_event_timestamp_ms());
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn record_windows_pet_setting_change(wparam: usize) {
+    PET_WINDOWS_DPI_EVENTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .record_setting_change(wparam, pet_dpi_event_timestamp_ms());
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn record_windows_pet_display_change() {
+    PET_WINDOWS_DPI_EVENTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .record_display_change(pet_dpi_event_timestamp_ms());
+}
+
+/// Record the actual policy FRAMECHANGED call attempt before entering Win32.
+/// The lock is released on return, before a reentrant DPI message can arrive.
+#[cfg(target_os = "windows")]
+pub(super) fn record_windows_pet_policy_frame_change() {
+    PET_WINDOWS_DPI_EVENTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .record_policy_frame_change(pet_dpi_event_timestamp_ms());
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -770,10 +927,193 @@ pub struct PetModeNativeDragResult {
     shake_detected: bool,
     #[serde(default)]
     stroke_detected: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    manual_request_id: Option<String>,
     start_x: f64,
     start_y: f64,
     end_x: f64,
     end_y: f64,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct PetDragLease {
+    lifetime: Arc<AtomicBool>,
+    manual_request_id: Option<String>,
+}
+
+impl PetDragLease {
+    fn new(manual_request_id: Option<String>) -> Result<Self, String> {
+        if manual_request_id.as_ref().is_some_and(|id| {
+            id.len() != 20
+                || id.as_bytes()[13] != b'-'
+                || !id.as_bytes()[..13].iter().all(u8::is_ascii_digit)
+                || !id.as_bytes()[14..].iter().all(u8::is_ascii_digit)
+        }) {
+            return Err("Pet Mode manual request ID is invalid".to_string());
+        }
+        Ok(Self {
+            lifetime: Arc::new(AtomicBool::new(true)),
+            manual_request_id,
+        })
+    }
+
+    pub(super) fn ensure_current(&self) -> Result<(), String> {
+        let state = PET_MODE_DRAG_SESSION
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if state.is_current(self) {
+            Ok(())
+        } else {
+            Err("Pet Mode drag was cancelled".to_string())
+        }
+    }
+}
+
+struct PetDragSessionState {
+    closed: bool,
+    epoch: u64,
+    current: Option<PetDragLease>,
+    canonical_grab: Option<(f64, f64)>,
+    latest_request_id: Option<String>,
+}
+
+impl PetDragSessionState {
+    fn is_current(&self, lease: &PetDragLease) -> bool {
+        lease.lifetime.load(Ordering::Acquire)
+            && self
+                .current
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(&current.lifetime, &lease.lifetime))
+    }
+
+    fn claim(&mut self, lease: &PetDragLease, eligible: bool, expected_epoch: u64) -> bool {
+        // Older clients keep their untagged contract until this process sees
+        // a tagged renderer. Afterwards an unorderable delayed request must
+        // not replace a newer tagged gesture.
+        if self.closed
+            || !eligible
+            || self.epoch != expected_epoch
+            || !lease.lifetime.load(Ordering::Acquire)
+            || (lease.manual_request_id.is_none() && self.latest_request_id.is_some())
+            || lease
+                .manual_request_id
+                .as_ref()
+                .zip(self.latest_request_id.as_ref())
+                .is_some_and(|(id, latest)| id <= latest)
+        {
+            return false;
+        }
+        self.retire_current();
+        if let Some(id) = &lease.manual_request_id {
+            self.latest_request_id = Some(id.clone());
+        }
+        self.current = Some(lease.clone());
+        true
+    }
+
+    fn invalidate(&mut self, close: bool) {
+        self.closed |= close;
+        self.epoch = self.epoch.wrapping_add(1);
+        self.retire_current();
+    }
+
+    fn retire_current(&mut self) {
+        if let Some(current) = self.current.take() {
+            current.lifetime.store(false, Ordering::Release);
+        }
+        self.canonical_grab = None;
+    }
+
+    fn finish(&mut self, lease: &PetDragLease) {
+        if self
+            .current
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(&current.lifetime, &lease.lifetime))
+        {
+            self.retire_current();
+        }
+        lease.lifetime.store(false, Ordering::Release);
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows", test))]
+    fn set_grab(&mut self, lease: &PetDragLease, point: (f64, f64)) -> bool {
+        if !self.is_current(lease) {
+            return false;
+        }
+        self.canonical_grab = Some(point);
+        true
+    }
+}
+
+// Drop also closes a request whose owner callback has not run yet: a timeout
+// or panic must never leave a late callback able to claim a drag session.
+struct PetDragLeaseGuard(PetDragLease);
+impl Drop for PetDragLeaseGuard {
+    fn drop(&mut self) {
+        PET_MODE_DRAG_SESSION
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .finish(&self.0);
+    }
+}
+
+fn pet_drag_is_active() -> bool {
+    let state = PET_MODE_DRAG_SESSION
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    state
+        .current
+        .as_ref()
+        .is_some_and(|lease| state.is_current(lease))
+}
+
+fn invalidate_pet_drag_session(
+    window: &WebviewWindow,
+    visibility_generation: u64,
+) -> Result<bool, String> {
+    // Serialize cancellation with owner applies/emits. A stale lifecycle
+    // callback cannot cancel a gesture belonging to a newer reveal.
+    run_pet_native_transaction(window, "pet_mode::cancel_drag", move |_| {
+        if visibility_generation != PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
+        PET_MODE_DRAG_SESSION
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .invalidate(false);
+        Ok(true)
+    })
+}
+
+pub(crate) fn cancel_pet_native_drag_for_app_exit() {
+    PET_MODE_DRAG_SESSION
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .invalidate(true);
+}
+
+pub(super) fn emit_pet_drag_event<P: Serialize>(
+    window: &WebviewWindow,
+    lease: &PetDragLease,
+    name: &'static str,
+    payload: P,
+) -> Result<(), String> {
+    let payload = serde_json::to_value(payload).map_err(|error| error.to_string())?;
+    let payload = pet_drag_event_payload(name, lease.manual_request_id.as_deref(), payload);
+    let lease = lease.clone();
+    run_pet_native_transaction(window, "pet_mode::emit_drag_event", move |window| {
+        lease.ensure_current()?;
+        window
+            .emit(name, payload)
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn pet_drag_event_payload(name: &str, manual_request_id: Option<&str>, payload: Value) -> Value {
+    match (name, manual_request_id) {
+        ("pet-mode-drag-end", _) | (_, None) => payload,
+        (_, Some(id)) => json!({ "manualRequestId": id, "value": payload }),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -785,13 +1125,231 @@ struct PetModeTargetPoint {
     diagnostic: String,
 }
 
-/// Current pet panel width/height in logical points. Falls back to the base
-/// geometry if the lock is poisoned so placement never panics.
-fn pet_size() -> (f64, f64) {
+/// Authored body scene width/height in logical points. Rendering padding is
+/// excluded; a poisoned lock falls back to the canonical body geometry.
+pub(super) fn pet_size() -> (f64, f64) {
     PET_MODE_SIZE
         .lock()
         .map(|size| *size)
         .unwrap_or((PET_MODE_WIDTH, PET_MODE_HEIGHT))
+}
+
+pub(super) fn current_pet_render_geometry() -> PetRenderGeometry {
+    pet_render_layout().geometry(pet_width())
+}
+
+pub(super) fn pet_geometry_transition_active() -> bool {
+    PET_MODE_GEOMETRY_APPLYING.load(Ordering::Acquire)
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(super) fn set_pet_drag_grab_point(lease: &PetDragLease, point: (f64, f64)) -> Result<(), String> {
+    if PET_MODE_DRAG_SESSION.lock().unwrap_or_else(|error| error.into_inner()).set_grab(lease, point) {
+        Ok(())
+    } else {
+        Err("Pet Mode drag was cancelled".to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn schedule_windows_pet_dpi_refresh(window: WebviewWindow) {
+    // Tao emits ScaleFactorChanged before completing WM_DPICHANGED's own
+    // SetWindowPos. Queue from a worker so our authoritative frame is applied
+    // after that message, using the latest DPI and body size rather than the
+    // event's potentially superseded values.
+    drop(async_runtime::spawn_blocking(move || {
+        let result = run_pet_native_transaction(
+            &window,
+            "pet_mode::refresh_windows_dpi",
+            |window| {
+                #[cfg(debug_assertions)]
+                let before = window.outer_size().map_err(|error| error.to_string())?;
+                let result = apply_pet_mode_geometry_for_revision(
+                    &window,
+                    pet_width(),
+                    PET_MODE_GEOMETRY_REVISION.load(Ordering::SeqCst),
+                    true,
+                );
+                #[cfg(debug_assertions)]
+                eprintln!(
+                    "[pet-mode-dpi] scale={:?} frame_before={before:?} frame_after={:?}",
+                    window.scale_factor(),
+                    window.outer_size(),
+                );
+                result
+            },
+        );
+        if let Err(error) = result {
+            eprintln!("Could not refresh Pet Mode after a DPI change: {error}");
+        }
+    }));
+}
+
+struct PetGeometryTransition;
+
+impl PetGeometryTransition {
+    fn begin() -> Self {
+        PET_MODE_GEOMETRY_APPLYING.store(true, Ordering::Release);
+        Self
+    }
+}
+
+impl Drop for PetGeometryTransition {
+    fn drop(&mut self) {
+        PET_MODE_GEOMETRY_APPLYING.store(false, Ordering::Release);
+    }
+}
+
+pub(super) fn pet_native_thread_is_current(window: &WebviewWindow) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window;
+        Ok(objc2::MainThreadMarker::new().is_some())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
+        // A window's owner thread is the only thread applying its geometry.
+        Ok(unsafe { GetWindowThreadProcessId(hwnd, std::ptr::null_mut()) == GetCurrentThreadId() })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = window;
+        Ok(true)
+    }
+}
+
+pub(super) fn run_pet_native_transaction<R: Send + 'static>(
+    window: &WebviewWindow,
+    label: &'static str,
+    work: impl FnOnce(WebviewWindow) -> Result<R, String> + Send + 'static,
+) -> Result<R, String> {
+    let owned = window.clone();
+    if pet_native_thread_is_current(window)? {
+        return crate::panic_guard::contain_panic(label, || work(owned))
+            .unwrap_or_else(|| Err(format!("{label} failed and was contained")));
+    }
+    let (send, recv) = mpsc::sync_channel(1);
+    window.run_on_main_thread(crate::panic_guard::contained(label, move || {
+        let _ = send.send(work(owned));
+    })).map_err(|error| error.to_string())?;
+    recv.recv_timeout(Duration::from_secs(2))
+        .map_err(|_| format!("{label} did not finish on the native thread"))?
+}
+
+/// Secondary panels share the presentation helper but have no pet padding.
+pub(super) fn pet_scene_to_window_position(
+    window: &WebviewWindow,
+    position: LogicalPosition<f64>,
+) -> LogicalPosition<f64> {
+    if window.label() == PET_MODE_WINDOW_LABEL {
+        current_pet_render_geometry().scene_to_window(position)
+    } else {
+        position
+    }
+}
+
+fn set_pet_scene_position(
+    window: &WebviewWindow,
+    position: LogicalPosition<f64>,
+) -> Result<(), String> {
+    if !pet_native_thread_is_current(window)? {
+        return run_pet_native_transaction(window, "pet_mode::set_scene_position", move |window| {
+            set_pet_scene_position(&window, position)
+        });
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // Ordinary AppKit window moves constrain the transparent surface to
+        // the work area. Only the authored body governs placement; padding
+        // must be allowed above the menu bar or beyond a display edge.
+        set_pet_position_unconstrained(window.app_handle(), window, position)
+    }
+    #[cfg(not(target_os = "macos"))]
+    window
+        .set_position(pet_scene_to_window_position(window, position))
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn current_pet_physical_position(window: &WebviewWindow) -> Result<PhysicalPosition<f64>, String> {
+    if !pet_native_thread_is_current(window)? {
+        return run_pet_native_transaction(window, "pet_mode::read_physical_scene_position", |window| {
+            current_pet_physical_position(&window)
+        });
+    }
+    let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+    let scene = current_pet_logical_position(window)?;
+    Ok(PhysicalPosition::new(scene.x * dpi, scene.y * dpi))
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn set_pet_scene_physical_position(
+    window: &WebviewWindow,
+    position: PhysicalPosition<f64>,
+) -> Result<(), String> {
+    if !pet_native_thread_is_current(window)? {
+        return run_pet_native_transaction(window, "pet_mode::set_physical_scene_position", move |window| {
+            set_pet_scene_physical_position(&window, position)
+        });
+    }
+    let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+    set_pet_scene_position(window, position.to_logical(dpi))
+}
+
+/// Monitor selection uses the body center, never the enlarged transparent
+/// rectangle. Its padding can overlap a neighboring monitor independently.
+pub(super) fn resolve_pet_scene_monitor(window: &WebviewWindow) -> Option<Monitor> {
+    let scene = current_pet_logical_scene_center(window).ok()?;
+    let window_scale = window.scale_factor().ok()?;
+    window.app_handle().available_monitors().ok()?.into_iter().find(|monitor| {
+        pet_scene_monitor_contains(
+            scene,
+            window_scale,
+            *monitor.position(),
+            *monitor.size(),
+            monitor.scale_factor(),
+            cfg!(target_os = "macos"),
+        )
+    })
+}
+
+fn current_pet_logical_scene_center(window: &WebviewWindow) -> Result<LogicalPosition<f64>, String> {
+    let scene = current_pet_logical_position(window)?;
+    let (width, height) = pet_size();
+    Ok(LogicalPosition::new(scene.x + width / 2.0, scene.y + height / 2.0))
+}
+
+fn pet_scene_monitor_contains(
+    logical_scene_center: LogicalPosition<f64>,
+    window_scale: f64,
+    monitor_origin: PhysicalPosition<i32>,
+    monitor_size: PhysicalSize<u32>,
+    monitor_scale: f64,
+    logical_coordinates: bool,
+) -> bool {
+    let (scene, origin, size) = if logical_coordinates {
+        // Tao's macOS monitor origins have each screen's backing factor;
+        // NSWindow positions have the window's. Only logical coordinates
+        // form one common desktop space when those backing factors differ.
+        (
+            logical_scene_center,
+            monitor_origin.to_logical::<f64>(monitor_scale),
+            monitor_size.to_logical::<f64>(monitor_scale),
+        )
+    } else {
+        // Windows monitor and window positions share physical desktop space.
+        let scene = logical_scene_center.to_physical::<f64>(window_scale);
+        (
+            LogicalPosition::new(scene.x, scene.y),
+            LogicalPosition::new(monitor_origin.x as f64, monitor_origin.y as f64),
+            tauri::LogicalSize::new(monitor_size.width as f64, monitor_size.height as f64),
+        )
+    };
+    scene.x >= origin.x && scene.x < origin.x + size.width
+        && scene.y >= origin.y && scene.y < origin.y + size.height
 }
 
 fn pet_dance_headroom_for_width(width: f64) -> f64 {
@@ -799,253 +1357,91 @@ fn pet_dance_headroom_for_width(width: f64) -> f64 {
 }
 
 fn current_pet_dance_headroom() -> f64 {
-    PET_MODE_DANCE_HEADROOM
+    PET_MODE_DANCE_ORIGIN
         .lock()
-        .map(|value| *value)
+        .map(|origin| if origin.is_some() { pet_dance_headroom_for_width(pet_width()) } else { 0.0 })
         .unwrap_or(0.0)
 }
 
-fn pet_hit_region_headroom_ratio(headroom: f64, base_height: f64) -> f64 {
-    if headroom <= 0.0 || base_height <= 0.0 {
-        return 0.0;
-    }
-    headroom / (base_height + headroom)
+fn pet_dance_visible_top(full_screen_top: f64, work_area_top: Option<f64>) -> f64 {
+    work_area_top.map_or(full_screen_top, |top| full_screen_top.max(top))
 }
 
-/// AppKit content-rect geometry for a dance-tall panel: grow upward from
-/// `ground_origin_y`, then shift the whole panel down only when the taller
-/// frame would cross `screen_max_y`. Restoring extra=0 always returns to the
-/// captured ground line so a clamped dance cannot leave the feet low.
-fn pet_dance_headroom_content_rect(
-    ground_origin_y: f64,
-    origin_x: f64,
-    width: f64,
-    base_height: f64,
-    extra: f64,
-    screen_min_y: f64,
-    screen_max_y: f64,
-) -> (f64, f64, f64, f64) {
-    let extra = extra.max(0.0);
-    let height = (base_height + extra).max(base_height);
-    let mut origin_y = ground_origin_y;
-    if extra > 0.0 {
-        let top = origin_y + height;
-        if top > screen_max_y {
-            origin_y = screen_max_y - height;
-        }
-        if origin_y < screen_min_y {
-            origin_y = screen_min_y;
-        }
-    }
-    (origin_x, origin_y, width, height)
+fn pet_dance_screen_top(monitor: &Monitor) -> f64 {
+    let scale = monitor.scale_factor();
+    let full_screen_top = monitor.position().to_logical::<f64>(scale).y;
+    // A macOS menu bar can occlude the upright head even when its pixels are
+    // inside the display. Tauri converts NSScreen.visibleFrame into this same
+    // top-left coordinate space, including displays with a negative origin.
+    #[cfg(target_os = "macos")]
+    let work_area_top = Some(monitor.work_area().position.to_logical::<f64>(scale).y);
+    #[cfg(not(target_os = "macos"))]
+    let work_area_top = None;
+    pet_dance_visible_top(full_screen_top, work_area_top)
 }
 
-/// Grows the panel upward for the dance pose or shrinks it back. Returns
-/// whether the native frame changed. Motion, drag, and hide restore the base
-/// height first. On Windows, a size change during a dance keeps the expanded
-/// frame until the pose ends.
+/// Only the visible upright body is kept below the display's visible top.
+/// Empty surface padding is allowed off-screen and never alters ordinary placement.
+fn pet_dance_scene_y(original_y: f64, visible_extent: f64, screen_top: f64) -> f64 {
+    original_y.max(screen_top + visible_extent.max(0.0))
+}
+
 fn apply_pet_dance_headroom(window: &WebviewWindow, active: bool) -> Result<bool, String> {
-    let (width, height) = pet_size();
-    let next = if active {
-        pet_dance_headroom_for_width(width)
+    if !pet_native_thread_is_current(window)? {
+        return run_pet_native_transaction(window, "pet_mode::apply_dance_edge_position", move |window| {
+            apply_pet_dance_headroom(&window, active)
+        });
+    }
+    let mut original = PET_MODE_DANCE_ORIGIN
+        .lock()
+        .map_err(|_| "Pet Mode dance position state is unavailable".to_string())?;
+    if active {
+        let current = current_pet_logical_position(window)?;
+        let anchor = (*original).unwrap_or(current);
+        let monitor = resolve_pet_scene_monitor(window)
+            .ok_or_else(|| "No monitor is available for Pet Mode dance".to_string())?;
+        let screen_top = pet_dance_screen_top(&monitor);
+        let corrected = LogicalPosition::new(current.x, pet_dance_scene_y(anchor.y, pet_dance_headroom_for_width(pet_width()), screen_top));
+        set_pet_scene_position(window, corrected)?;
+        let changed = original.is_none() || !positions_match(current, corrected);
+        *original = Some(anchor);
+        Ok(changed)
+    } else if let Some(anchor) = *original {
+        set_pet_scene_position(window, anchor)?;
+        *original = None;
+        Ok(true)
     } else {
-        0.0
-    };
-    let current = current_pet_dance_headroom();
-    if (current - next).abs() < f64::EPSILON {
-        return Ok(false);
+        Ok(false)
     }
-    set_pet_panel_height_from_bottom(window, width, height, next)?;
-    if let Ok(mut value) = PET_MODE_DANCE_HEADROOM.lock() {
-        *value = next;
-    }
-    set_pet_hit_region_top_inset_ratio(pet_hit_region_headroom_ratio(next, height));
-    refresh_pet_hit_region_for_window(window)?;
-    Ok(true)
 }
 
 fn restore_pet_dance_headroom(window: &WebviewWindow) {
     let _ = apply_pet_dance_headroom(window, false);
 }
 
-/// Forget any recorded headroom without touching the window. Used when the
-/// caller is about to set the base size explicitly anyway.
-fn forget_pet_dance_headroom() {
-    if let Ok(mut value) = PET_MODE_DANCE_HEADROOM.lock() {
-        *value = 0.0;
-    }
-    if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
-        *ground = None;
-    }
-    set_pet_hit_region_top_inset_ratio(0.0);
-}
-
-/// Changes the panel height while keeping the captured ground line. On macOS
-/// the content rect is converted to a frame so borderless and titled windows
-/// both grow from the paws, not from mixing content size with frame size.
-#[cfg(target_os = "macos")]
-fn set_pet_panel_height_from_bottom(
+fn rehome_pet_during_dance_resize(
     window: &WebviewWindow,
-    width: f64,
-    base_height: f64,
-    extra: f64,
+    home: LogicalPosition<f64>,
 ) -> Result<(), String> {
-    use objc2_foundation::{NSRect, NSSize};
-
-    let window_for_main = window.clone();
-    let (sender, receiver) = mpsc::sync_channel(1);
-    window
-        .run_on_main_thread(crate::panic_guard::contained("pet_mode::set_pet_panel_height_from_bottom", move || {
-            let result = (|| {
-                let ptr = window_for_main.ns_window().ok()?;
-                // Safe: this runs on AppKit's main thread and Tauri retains the
-                // NSWindow for the lifetime of `window_for_main`.
-                let ns_window: &NSWindow = unsafe { &*ptr.cast::<NSWindow>() };
-                let frame = ns_window.frame();
-                let content = ns_window.contentRectForFrameRect(frame);
-                let ground_y = {
-                    let mut ground = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock().ok()?;
-                    if extra > 0.0 && ground.is_none() {
-                        *ground = Some(content.origin.y);
-                    }
-                    (*ground).unwrap_or(content.origin.y)
-                };
-                let screen_frame = ns_window
-                    .screen()
-                    .map(|screen| screen.frame())
-                    .unwrap_or(frame);
-                let (origin_x, origin_y, next_width, next_height) = pet_dance_headroom_content_rect(
-                    ground_y,
-                    content.origin.x,
-                    width,
-                    base_height,
-                    extra,
-                    screen_frame.origin.y,
-                    screen_frame.origin.y + screen_frame.size.height,
-                );
-                let content_size = NSSize::new(next_width, next_height);
-                let new_content = NSRect::new(NSPoint::new(origin_x, origin_y), content_size);
-                let new_frame = ns_window.frameRectForContentRect(new_content);
-                // The panel is pinned unresizable through matching min/max
-                // content sizes, so those move with the frame or AppKit clamps
-                // the resize back to the old height.
-                ns_window.setContentMinSize(content_size);
-                ns_window.setContentMaxSize(content_size);
-                ns_window.setFrame_display(new_frame, true);
-                if extra <= 0.0 {
-                    if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
-                        *ground = None;
-                    }
-                }
-                Some(())
-            })();
-            let _ = sender.send(result);
-        }))
-        .map_err(|error| error.to_string())?;
-    receiver
-        .recv_timeout(Duration::from_millis(250))
-        .map_err(|_| "Pet Mode dance headroom resize timed out".to_string())?
-        .ok_or_else(|| "Pet Mode dance headroom resize is unavailable".to_string())
+    run_pet_native_transaction(window, "pet_mode::rehome_dance_resize", move |window| {
+        let mut original = PET_MODE_DANCE_ORIGIN
+            .lock()
+            .map_err(|_| "Pet Mode dance position state is unavailable".to_string())?;
+        let target = if let Some(anchor) = original.as_mut() {
+            anchor.x = home.x;
+            LogicalPosition::new(home.x, current_pet_logical_position(&window)?.y)
+        } else {
+            // A dance may end while the worker scans the resized home. Its
+            // old corrected Y must not be applied after the restoration.
+            home
+        };
+        set_pet_scene_position(&window, target)
+    })
 }
 
-#[cfg(any(test, not(target_os = "macos")))]
-fn pet_dance_top_left_y(
-    ground_bottom: f64,
-    base_height: f64,
-    extra: f64,
-    screen_top: f64,
-) -> f64 {
-    let top = ground_bottom - base_height - extra.max(0.0);
-    // A resident pet starts only 14 points below the top of a display. Grow
-    // the dance panel upward until it reaches that edge, then move the whole
-    // panel down so the upright head remains on screen. Shrinking must use
-    // the saved ground line to put the paws back where they started.
-    if extra > 0.0 {
-        top.max(screen_top)
-    } else {
-        top
-    }
-}
-
-#[cfg(any(test, not(target_os = "macos")))]
-fn pet_dance_resized_ground_bottom(ground_bottom: f64, old_height: f64, new_height: f64) -> f64 {
-    // Preserve the base pose's top edge when the footprint changes mid-dance.
-    // The expanded panel can still grow upward, and lowering headroom later
-    // returns the resized cat to the same resting seat.
-    ground_bottom + new_height - old_height
-}
-
-#[cfg(any(test, not(target_os = "macos")))]
-fn pet_dance_ground_bottom(base_top: f64, base_height: f64) -> f64 {
-    // The outer height is rounded to whole physical pixels by Windows. Using
-    // that rounded height here, then subtracting the nominal logical height
-    // on restore, moves the resting seat a fraction of a point on each dance.
-    base_top + base_height
-}
-
-#[cfg(not(target_os = "macos"))]
-fn set_pet_panel_height_from_bottom(
-    window: &WebviewWindow,
-    width: f64,
-    base_height: f64,
-    extra: f64,
-) -> Result<(), String> {
-    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
-    let position = window
-        .outer_position()
-        .map_err(|error| error.to_string())?
-        .to_logical::<f64>(scale_factor);
-    let total_height = base_height + extra.max(0.0);
-    let size = LogicalSize::new(width, total_height);
-    let screen_top = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
-        .map(|monitor| monitor.position().to_logical::<f64>(scale_factor).y)
-        .unwrap_or(position.y);
-    let ground_bottom = PET_MODE_DANCE_GROUND_ORIGIN_Y
-        .lock()
-        .ok()
-        .and_then(|value| *value)
-        .unwrap_or_else(|| pet_dance_ground_bottom(position.y, base_height));
-    if extra > 0.0 {
-        if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
-            if ground.is_none() {
-                *ground = Some(ground_bottom);
-            }
-        }
-    }
-    window
-        .set_min_size(None::<LogicalSize<f64>>)
-        .map_err(|error| error.to_string())?;
-    window
-        .set_max_size(None::<LogicalSize<f64>>)
-        .map_err(|error| error.to_string())?;
-    window.set_size(size).map_err(|error| error.to_string())?;
-    // Other platforms keep the top-left corner on resize. Preserve the
-    // captured ground line unless an upward grow would put the head above the
-    // display; shrinking returns the panel to that original ground line.
-    window
-        .set_position(LogicalPosition::new(
-            position.x,
-            pet_dance_top_left_y(ground_bottom, base_height, extra, screen_top),
-        ))
-        .map_err(|error| error.to_string())?;
-    window
-        .set_min_size(Some(size))
-        .map_err(|error| error.to_string())?;
-    window.set_max_size(Some(size)).map_err(|error| error.to_string())?;
-    if extra <= 0.0 {
-        if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
-            *ground = None;
-        }
-    }
-    Ok(())
-}
-
-/// The dance pose stands the cat taller than the panel. The renderer asks for
-/// headroom right before it shows the pose and gives it back right after; the
-/// native side also drops it on its own before motion, drag, or hide so an
-/// interrupted dance cannot strand a taller panel.
+/// Compatibility command: rendering headroom is permanently allocated now.
+/// This command only corrects the tall dance body at the visible display top
+/// and restores the exact body origin after the pose or its interruption.
 #[tauri::command]
 pub fn pet_mode_set_dance_headroom(app: AppHandle, active: bool) -> Result<bool, String> {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
@@ -1118,6 +1514,7 @@ fn reconcile_pet_visibility(app: &AppHandle, window: &WebviewWindow) -> Result<(
             refresh_pet_hit_region_for_window(window)?;
             show_pet_panel(app, window)?;
         } else {
+            if !invalidate_pet_drag_session(window, generation)? { continue; }
             reset_pet_hit_region();
             set_pet_window_interactive(window, false)?;
             hide_windows_overlay(window)?;
@@ -1167,21 +1564,21 @@ fn pet_contact_offsets(facing: &str) -> (f64, f64) {
 }
 
 pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
-    // The panel is always (re)created at the base geometry, so the tracked
-    // size has to start there too. The webview re-applies the user's choice
-    // once it mounts.
+    // Initialize the canonical body size and allocate its full rendering
+    // surface. The WebView re-applies the user's scale once it mounts.
     if let Ok(mut current) = PET_MODE_SIZE.lock() {
         *current = (PET_MODE_WIDTH, PET_MODE_HEIGHT);
     }
+    let render_size = current_pet_render_geometry().window_size();
     let window = WebviewWindowBuilder::new(
         app,
         PET_MODE_WINDOW_LABEL,
         WebviewUrl::App("index.html?driftySurface=pet-mode".into()),
     )
     .title("Drifty Pet Mode")
-    .inner_size(PET_MODE_WIDTH, PET_MODE_HEIGHT)
-    .min_inner_size(PET_MODE_WIDTH, PET_MODE_HEIGHT)
-    .max_inner_size(PET_MODE_WIDTH, PET_MODE_HEIGHT)
+    .inner_size(render_size.width, render_size.height)
+    .min_inner_size(render_size.width, render_size.height)
+    .max_inner_size(render_size.width, render_size.height)
     .decorations(false)
     .shadow(false)
     .resizable(false)
@@ -1208,6 +1605,11 @@ pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
     let hit_region_window = window.clone();
     window.on_window_event(move |event| {
         crate::panic_guard::contain_panic("pet_mode::pet_window_event", || {
+            #[cfg(target_os = "windows")]
+            if let WindowEvent::ScaleFactorChanged { scale_factor, .. } = event {
+                record_windows_pet_tauri_scale_change(*scale_factor);
+                schedule_windows_pet_dpi_refresh(hit_region_window.clone());
+            }
             if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_))
                 && pet_hit_region_geometry_refresh_needed()
             {
@@ -1233,6 +1635,9 @@ pub async fn pet_mode_set_enabled(
     height: f64,
     force_reveal: bool,
 ) -> Result<(), String> {
+    let size_request = enabled
+        .then(|| prepare_pet_geometry_request(width, height))
+        .transpose()?;
     // AX can synchronously message Drifty's own window. Keep both the scan
     // and the visibility-lock wait off AppKit so it can answer those messages
     // and service this worker's window mutations.
@@ -1242,8 +1647,7 @@ pub async fn pet_mode_set_enabled(
             enabled,
             snapshot,
             reduced_motion,
-            width,
-            height,
+            size_request,
             force_reveal,
         )
     })
@@ -1256,8 +1660,7 @@ fn set_pet_mode_enabled(
     enabled: bool,
     snapshot: Option<Value>,
     reduced_motion: bool,
-    width: f64,
-    height: f64,
+    size_request: Option<PetModeGeometryRequest>,
     force_reveal: bool,
 ) -> Result<(), String> {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
@@ -1270,14 +1673,17 @@ fn set_pet_mode_enabled(
     reset_anchor_clear_confirmation();
 
     if !enabled {
+        PET_MODE_ENABLED.store(false, Ordering::Relaxed);
+        if !invalidate_pet_drag_session(&window, _visibility_transition.generation)? {
+            schedule_pet_visibility_reconciliation(app, window);
+            return Ok(());
+        }
         #[cfg(target_os = "macos")]
         pet_fullscreen::clear(&app);
-        PET_MODE_ENABLED.store(false, Ordering::Relaxed);
         PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
         cancel_pet_motion();
         restore_pet_dance_headroom(&window);
-        let (width, height) = pet_size();
-        let _ = window.set_min_size(Some(LogicalSize::new(width, height)));
+        let _ = window.set_min_size(Some(current_pet_render_geometry().window_size()));
         reset_pet_hit_region();
         let _ = set_pet_window_interactive(&window, false);
         let _ = super::pet_quick_controls::hide_pet_quick_controls(&app);
@@ -1287,9 +1693,14 @@ fn set_pet_mode_enabled(
     // Size and placement form one presentation transaction. Applying the
     // persisted size here prevents a cold launch from calculating the entry
     // offset at the default panel size and resizing halfway through the step.
-    #[cfg(target_os = "macos")]
-    restore_pet_dance_headroom(&window);
-    let size_changed = apply_pet_mode_size(&window, width, height)?;
+    let size_request = size_request.ok_or_else(|| "Pet Mode enable size is missing".to_string())?;
+    let size_changed = apply_pet_mode_size_for_revision(&window, size_request.width, size_request.revision)?;
+    #[cfg(target_os = "windows")]
+    if !pet_geometry_request_is_current(size_request.revision, PET_MODE_GEOMETRY_REVISION.load(Ordering::SeqCst)) {
+        // A superseded geometry no-op is not permission to reveal the old
+        // body size. Its replacement request owns presentation instead.
+        return Ok(());
+    }
     let was_enabled = PET_MODE_ENABLED.load(Ordering::Relaxed);
 
     // Both change the panel's level and collection behavior. From this worker
@@ -1315,33 +1726,30 @@ fn set_pet_mode_enabled(
     // snapping an in-flight entrance back home or replaying the choreography.
     if !should_replay_pet_entry(was_enabled, force_reveal) {
         let entry_active = PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed);
-        if (reduced_motion && entry_active) || size_changed {
+        // The size transaction has already kept the held artwork point under
+        // the pointer. Settings also re-send enabled: do not overwrite that
+        // drag position with the ordinary resized-home policy here.
+        let drag_active = pet_drag_is_active();
+        if should_settle_pet_enable_change(entry_active, reduced_motion, size_changed, drag_active) {
             PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
             cancel_pet_motion();
-            if reduced_motion && current_pet_dance_headroom() <= 0.0 {
-                // This resets an interrupted entry, but a dance already has
-                // its resized tall frame. Applying the base footprint here
-                // would clip the upright pose again.
-                let (final_width, final_height) = pet_size();
-                window
-                    .set_size(LogicalSize::new(final_width, final_height))
-                    .map_err(|error| error.to_string())?;
-            }
             if current_pet_dance_headroom() > 0.0 {
-                // Rehome horizontally for the new width without moving a
-                // dance-tall panel off its captured ground line.
+                // Rehome horizontally while retaining the dance's temporary
+                // top-edge correction and its original resting scene Y.
                 let monitor = resolve_pet_home_monitor(&app)
                     .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
                 let home = calculate_pet_home_position_with_nudge(Some(&app), &monitor);
-                let current = current_pet_logical_position(&window)?;
-                window
-                    .set_position(LogicalPosition::new(home.x, current.y))
-                    .map_err(|error| error.to_string())?;
+                rehome_pet_during_dance_resize(&window, home)?;
             } else {
                 position_pet_home(&app, &window, false)?;
             }
         }
+        #[cfg(not(target_os = "windows"))]
         show_pet_panel(&app, &window)?;
+        #[cfg(target_os = "windows")]
+        if !complete_windows_pet_enable(&window, size_request, _visibility_transition.generation, None, None)? {
+            return Ok(());
+        }
         if !PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed) {
             // A renderer can remount while the native panel survives. Reassert
             // the settled state so persisted enabled storage cannot fabricate
@@ -1354,11 +1762,12 @@ fn set_pet_mode_enabled(
         return Ok(());
     }
 
+    restore_pet_dance_headroom(&window);
     cancel_pet_motion();
     let monitor = resolve_pet_home_monitor(&app)
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     let remembered_home = calculate_pet_home_position_with_nudge(Some(&app), &monitor);
-    let (final_width, final_height) = pet_size();
+    let final_width = pet_width();
     let scale_factor = monitor.scale_factor();
     let screen_position = monitor.position().to_logical::<f64>(scale_factor);
     let screen_size = monitor.size().to_logical::<f64>(scale_factor);
@@ -1373,24 +1782,35 @@ fn set_pet_mode_enabled(
     let entry_duration_ms = pet_entry_duration_ms(entry_travel);
     emit_pet_event(&window, json!({ "kind": "facing", "facing": entry.facing }))?;
 
+    #[cfg(target_os = "windows")]
+    if !complete_windows_pet_enable(
+        &window,
+        size_request,
+        _visibility_transition.generation,
+        Some(if reduced_motion { home } else { LogicalPosition::new(entry.start_x, home.y) }),
+        Some(!reduced_motion),
+    )? {
+        return Ok(());
+    }
+
     if reduced_motion {
-        window
-            .set_size(LogicalSize::new(final_width, final_height))
-            .map_err(|error| error.to_string())?;
-        show_pet_panel_at_position(&app, &window, home)?;
-        PET_MODE_ENABLED.store(true, Ordering::Relaxed);
-        PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
+        #[cfg(not(target_os = "windows"))]
+        {
+            show_pet_panel_at_position(&app, &window, home)?;
+            PET_MODE_ENABLED.store(true, Ordering::Relaxed);
+            PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
+        }
         if force_reveal {
             emit_pet_event(&window, json!({ "kind": "reveal" }))?;
         }
         emit_pet_event(&window, json!({ "kind": "entry_complete" }))?;
     } else {
-        window
-            .set_size(LogicalSize::new(final_width, final_height))
-            .map_err(|error| error.to_string())?;
-        show_pet_panel_at_position(&app, &window, LogicalPosition::new(entry.start_x, home.y))?;
-        PET_MODE_ENABLED.store(true, Ordering::Relaxed);
-        PET_MODE_ENTRY_ACTIVE.store(true, Ordering::Relaxed);
+        #[cfg(not(target_os = "windows"))]
+        {
+            show_pet_panel_at_position(&app, &window, LogicalPosition::new(entry.start_x, home.y))?;
+            PET_MODE_ENABLED.store(true, Ordering::Relaxed);
+            PET_MODE_ENTRY_ACTIVE.store(true, Ordering::Relaxed);
+        }
         if force_reveal {
             emit_pet_event(&window, json!({ "kind": "reveal" }))?;
         }
@@ -1463,9 +1883,14 @@ fn animate_pet_entry_window(
         // come fully to rest before the renderer freezes the exact walk SVG.
         let travel_progress = pet_entry_travel_progress(progress);
         let x = start_x + (home.x - start_x) * travel_progress;
-        window
-            .set_position(LogicalPosition::new(x, home.y))
-            .map_err(|error| error.to_string())?;
+        if !apply_pet_window_position_if_motion_current(
+            window,
+            LogicalPosition::new(x, home.y),
+            motion_revision,
+            None,
+        )? {
+            return Ok(());
+        }
         if progress >= 1.0 {
             return Ok(());
         }
@@ -1536,6 +1961,15 @@ fn pet_entry_motion_matches(
 
 fn should_replay_pet_entry(was_enabled: bool, force_reveal: bool) -> bool {
     !was_enabled || force_reveal
+}
+
+fn should_settle_pet_enable_change(
+    entry_active: bool,
+    reduced_motion: bool,
+    size_changed: bool,
+    drag_active: bool,
+) -> bool {
+    !drag_active && ((reduced_motion && entry_active) || size_changed)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1652,6 +2086,10 @@ fn apply_pet_visibility_action(
         #[cfg(target_os = "macos")]
         pet_fullscreen::clear(&app);
         PET_MODE_ENABLED.store(false, Ordering::Relaxed);
+        if !invalidate_pet_drag_session(&window, _visibility_transition.generation)? {
+            schedule_pet_visibility_reconciliation(app, window);
+            return Ok(());
+        }
         PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
         cancel_pet_motion();
         restore_pet_dance_headroom(&window);
@@ -1833,8 +2271,7 @@ pub fn pet_mode_align_contact(
         if error_x.hypot(error_y) <= 0.5 {
             break;
         }
-        window
-            .set_position(LogicalPosition::new(
+        set_pet_scene_position(&window, LogicalPosition::new(
                 position.x + error_x,
                 position.y + error_y,
             ))
@@ -1885,33 +2322,30 @@ fn set_pet_position_unconstrained(
     window: &WebviewWindow,
     desired: LogicalPosition<f64>,
 ) -> Result<(), String> {
-    let current = current_pet_logical_position(window)?;
-    let delta_x = desired.x - current.x;
-    let delta_y = desired.y - current.y;
+    fn apply(window: &WebviewWindow, desired: LogicalPosition<f64>) -> Result<(), String> {
+        let current = current_pet_logical_position(window)?;
+        let ptr = window.ns_window().map_err(|error| error.to_string())?;
+        // Safe: both callers reach this only on AppKit's main thread.
+        let ns_window: &NSWindow = unsafe { &*ptr.cast::<NSWindow>() };
+        let frame = ns_window.frame();
+        ns_window.setFrameOrigin(NSPoint::new(
+            frame.origin.x + desired.x - current.x,
+            frame.origin.y - (desired.y - current.y),
+        ));
+        Ok(())
+    }
+    if objc2::MainThreadMarker::new().is_some() {
+        return apply(window, desired);
+    }
     let window_for_main = window.clone();
-    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-
+    let (sender, receiver) = mpsc::sync_channel(1);
     app.run_on_main_thread(crate::panic_guard::contained("pet_mode::set_pet_position_unconstrained", move || {
-        let result = (|| {
-            let ptr = window_for_main.ns_window().ok()?;
-            // Safe: this runs on AppKit's main thread and Tauri retains the
-            // NSWindow for the lifetime of `window_for_main`.
-            let ns_window: &NSWindow = unsafe { &*ptr.cast::<NSWindow>() };
-            let frame = ns_window.frame();
-            ns_window.setFrameOrigin(NSPoint::new(
-                frame.origin.x + delta_x,
-                frame.origin.y - delta_y,
-            ));
-            Some(())
-        })();
-        let _ = sender.send(result);
+        let _ = sender.send(apply(&window_for_main, desired));
     }))
     .map_err(|error| error.to_string())?;
-
     receiver
         .recv_timeout(Duration::from_millis(250))
-        .map_err(|_| "Pet Mode native contact move timed out".to_string())?
-        .ok_or_else(|| "Pet Mode native contact move is unavailable".to_string())
+        .map_err(|_| "Pet Mode native body move timed out".to_string())?
 }
 
 #[tauri::command]
@@ -2035,6 +2469,10 @@ pub fn pet_mode_set_presence(
         refresh_pet_hit_region_for_window(&window)?;
         show_pet_panel(&app, &window)?;
     } else {
+        if !invalidate_pet_drag_session(&window, command_generation)? {
+            schedule_pet_visibility_reconciliation(app, window);
+            return Ok(());
+        }
         restore_pet_dance_headroom(&window);
         // Presence changes are a native lifecycle boundary. Clear the region
         // as well as the current AppKit flag so a missed renderer update cannot
@@ -2070,11 +2508,16 @@ pub fn pet_mode_set_interactive(app: AppHandle, interactive: bool) -> Result<(),
 /// unresizable by the user, so those have to be relaxed before the resize and
 /// re-pinned to the new size afterwards.
 #[tauri::command]
-pub fn pet_mode_set_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
+pub async fn pet_mode_set_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Ok(());
     };
-    apply_pet_mode_size(&window, width, height).map(|_| ())
+    let request = prepare_pet_geometry_request(width, height)?;
+    // A Windows geometry transaction can wait while Tauri applies its native
+    // mutations. Keep every lock-taking size caller off the UI thread.
+    async_runtime::spawn_blocking(move || apply_pet_mode_size_for_revision(&window, request.width, request.revision).map(|_| ()))
+        .await
+        .map_err(|error| format!("Pet Mode size task failed: {error}"))?
 }
 
 fn current_floor_home_pt() -> f64 {
@@ -2095,82 +2538,343 @@ pub fn pet_mode_set_floor_home(points: f64) -> Result<f64, String> {
     Ok(next)
 }
 
-fn apply_pet_mode_size(window: &WebviewWindow, width: f64, height: f64) -> Result<bool, String> {
+#[derive(Clone, Copy)]
+struct PetModeGeometryRequest {
+    width: f64,
+    revision: u64,
+}
+
+fn prepare_pet_geometry_request(width: f64, height: f64) -> Result<PetModeGeometryRequest, String> {
     if !(width.is_finite() && height.is_finite()) || width <= 0.0 || height <= 0.0 {
         return Err("Pet Mode size must be a positive, finite size".to_string());
     }
-    let changed = PET_MODE_SIZE
-        .lock()
-        .map(|current| {
-            (current.0 - width).abs() > f64::EPSILON || (current.1 - height).abs() > f64::EPSILON
-        })
-        .unwrap_or(true);
-    // A repeated enabled sync must not disturb a native entrance already in
-    // flight. If the requested final footprint is current, leave the live
-    // panel untouched.
-    if !changed {
+    let revision = PET_MODE_GEOMETRY_REVISION.fetch_add(1, Ordering::SeqCst) + 1;
+    Ok(PetModeGeometryRequest { width, revision })
+}
+
+fn pet_geometry_request_is_current(revision: u64, current: u64) -> bool {
+    revision == current
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn pet_enable_presentation_is_current(
+    request_revision: u64,
+    current_revision: u64,
+    request_generation: u64,
+    current_generation: u64,
+) -> bool {
+    pet_geometry_request_is_current(request_revision, current_revision)
+        && request_generation == current_generation
+}
+
+#[cfg(any(target_os = "windows", test))]
+struct PetEnableCompletionObservation {
+    geometry_revision: u64,
+    visibility_generation: u64,
+    enabled: bool,
+    scene_size: (f64, f64),
+    frame_size: (u32, u32),
+    scale_factor: f64,
+    visible: bool,
+}
+
+/// False retires stale work without turning it into a new reveal/retry. An
+/// accepted Win32 API call alone is not an applied presentation acknowledgment.
+#[cfg(any(target_os = "windows", test))]
+fn pet_enable_completion_applied(
+    request: PetModeGeometryRequest,
+    visibility_generation: u64,
+    observed: PetEnableCompletionObservation,
+) -> Result<bool, String> {
+    if !pet_enable_presentation_is_current(request.revision, observed.geometry_revision, visibility_generation, observed.visibility_generation)
+        || !observed.enabled
+    {
         return Ok(false);
     }
-
-    // A size change during a Windows dance must resize the tall panel as one
-    // operation. Shrinking it to the base size while the renderer still shows
-    // the upright pose clips the head for the remainder of that action.
-    #[cfg(not(target_os = "macos"))]
-    if current_pet_dance_headroom() > 0.0 {
-        let (old_width, old_height) = pet_size();
-        let old_extra = current_pet_dance_headroom();
-        let old_ground = PET_MODE_DANCE_GROUND_ORIGIN_Y
-            .lock()
-            .map_err(|_| "Pet Mode dance ground line is unavailable".to_string())?
-            .ok_or_else(|| "Pet Mode dance ground line is missing".to_string())?;
-        let next_ground = pet_dance_resized_ground_bottom(old_ground, old_height, height);
-        let next_extra = pet_dance_headroom_for_width(width);
-        if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
-            *ground = Some(next_ground);
-        }
-        if let Err(error) = set_pet_panel_height_from_bottom(window, width, height, next_extra) {
-            if let Ok(mut ground) = PET_MODE_DANCE_GROUND_ORIGIN_Y.lock() {
-                *ground = Some(old_ground);
-            }
-            // A failed native resize may have partially changed the panel;
-            // try to restore the prior dance footprint before returning.
-            let _ = set_pet_panel_height_from_bottom(window, old_width, old_height, old_extra);
-            return Err(error);
-        }
-        if let Ok(mut current) = PET_MODE_SIZE.lock() {
-            *current = (width, height);
-        }
-        if let Ok(mut extra) = PET_MODE_DANCE_HEADROOM.lock() {
-            *extra = next_extra;
-        }
-        set_pet_hit_region_top_inset_ratio(pet_hit_region_headroom_ratio(next_extra, height));
-        refresh_pet_hit_region_for_window(window)?;
-        return Ok(true);
+    let geometry = pet_render_layout().geometry(request.width);
+    let expected = geometry.window_size().to_physical::<u32>(observed.scale_factor);
+    let scene_matches = (observed.scene_size.0 - geometry.scene_width).abs() < f64::EPSILON
+        && (observed.scene_size.1 - geometry.scene_height).abs() < f64::EPSILON;
+    if !scene_matches
+        || observed.frame_size != (expected.width, expected.height)
+        || !observed.visible
+    {
+        return Err(format!(
+            "Pet Mode enable presentation did not complete: body={:?}, frame={:?}, expected_frame=({}, {}), visible={}",
+            observed.scene_size, observed.frame_size, expected.width, expected.height, observed.visible,
+        ));
     }
-
-    // The explicit base size below replaces any dance headroom.
-    forget_pet_dance_headroom();
-    let size = LogicalSize::new(width, height);
-    window
-        .set_min_size(None::<LogicalSize<f64>>)
-        .map_err(|error| error.to_string())?;
-    window
-        .set_max_size(None::<LogicalSize<f64>>)
-        .map_err(|error| error.to_string())?;
-    window.set_size(size).map_err(|error| error.to_string())?;
-    window
-        .set_min_size(Some(size))
-        .map_err(|error| error.to_string())?;
-    window
-        .set_max_size(Some(size))
-        .map_err(|error| error.to_string())?;
-    // Placement math reads this rather than the base constants, so it has to
-    // land before the next move, roam, or clamp runs.
-    if let Ok(mut current) = PET_MODE_SIZE.lock() {
-        *current = (width, height);
-    }
-    refresh_pet_hit_region_for_window(window)?;
     Ok(true)
+}
+
+#[cfg(target_os = "windows")]
+fn complete_windows_pet_enable(
+    window: &WebviewWindow,
+    request: PetModeGeometryRequest,
+    visibility_generation: u64,
+    position: Option<LogicalPosition<f64>>,
+    entry_active: Option<bool>,
+) -> Result<bool, String> {
+    // A timed-out queued completion cannot show an old pet after a newer Off
+    // or size request. Show, enabled state and its readback share this guard.
+    run_pet_native_transaction(window, "pet_mode::complete_enable_presentation", move |window| {
+        use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+        let revision = PET_MODE_GEOMETRY_REVISION.load(Ordering::SeqCst);
+        let generation = PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst);
+        if !pet_enable_presentation_is_current(request.revision, revision, visibility_generation, generation) {
+            return Ok(false);
+        }
+        if let Some(position) = position {
+            show_pet_panel_at_position(window.app_handle(), &window, position)?;
+        } else {
+            show_pet_panel(window.app_handle(), &window)?;
+        }
+        if let Some(entry_active) = entry_active {
+            PET_MODE_ENABLED.store(true, Ordering::Relaxed);
+            PET_MODE_ENTRY_ACTIVE.store(entry_active, Ordering::Relaxed);
+        }
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
+        let dpi = unsafe { GetDpiForWindow(hwnd) };
+        if dpi == 0 {
+            return Err("Could not read the Pet Mode native DPI at enable completion".to_string());
+        }
+        // outer_size is a fresh GetWindowRect read in Tao, unlike its cached
+        // scale factor/visibility flags. The HWND is borderless and shadowless.
+        let frame = window.outer_size().map_err(|error| error.to_string())?;
+        let visible = is_windows_overlay_visible(&window);
+        let result = pet_enable_completion_applied(request, visibility_generation, PetEnableCompletionObservation {
+            geometry_revision: PET_MODE_GEOMETRY_REVISION.load(Ordering::SeqCst),
+            visibility_generation: PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst),
+            enabled: PET_MODE_ENABLED.load(Ordering::Relaxed),
+            scene_size: pet_size(),
+            frame_size: (frame.width, frame.height),
+            scale_factor: dpi as f64 / 96.0,
+            visible,
+        });
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "[pet-mode-enable] width={} revision={} generation={} native_dpi={} cached_scale={:?} frame={}x{} visible={} completion={result:?}",
+            request.width, request.revision, visibility_generation, dpi, window.scale_factor(), frame.width, frame.height, visible,
+        );
+        result
+    })
+}
+
+fn pet_scene_origin_after_resize(
+    origin: LogicalPosition<f64>,
+    old: PetRenderGeometry,
+    next: PetRenderGeometry,
+    grabbed_pointer: Option<LogicalPosition<f64>>,
+    canonical_grab: Option<(f64, f64)>,
+) -> LogicalPosition<f64> {
+    if let Some(pointer) = grabbed_pointer {
+        // A moving pointer can be ahead of the last coalesced native apply.
+        // The drag worker's captured point remains authoritative at a resize.
+        let point = canonical_grab.unwrap_or_else(|| (
+            (pointer.x - origin.x) / old.scale(),
+            (pointer.y - origin.y) / old.scale(),
+        ));
+        pet_scene_origin_at_grab(pointer, next, point)
+    } else {
+        origin
+    }
+}
+
+fn pet_scene_origin_at_grab(
+    pointer: LogicalPosition<f64>,
+    geometry: PetRenderGeometry,
+    point: (f64, f64),
+) -> LogicalPosition<f64> {
+    LogicalPosition::new(
+        pointer.x - point.0 * geometry.scale(),
+        pointer.y - point.1 * geometry.scale(),
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn apply_windows_pet_render_frame(
+    window: &WebviewWindow,
+    next: PetRenderGeometry,
+    origin: LogicalPosition<f64>,
+) -> Result<(), String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
+    let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+    let position = next.scene_to_window(origin).to_physical::<i32>(dpi);
+    let size = next.window_size().to_physical::<u32>(dpi);
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
+    // The pet HWND is borderless and shadowless, so its frame is its content
+    // surface. One native call changes position and size on the owning thread;
+    // worker-side Tauri set_size/set_position would enqueue separate messages.
+    if unsafe {
+        SetWindowPos(hwnd, std::ptr::null_mut(), position.x, position.y, size.width as i32, size.height as i32, SWP_NOACTIVATE | SWP_NOZORDER)
+    } == 0 {
+        return Err(format!("Could not apply the Pet Mode render frame: {}", std::io::Error::last_os_error()));
+    }
+    Ok(())
+}
+
+fn apply_pet_mode_size_for_revision(
+    window: &WebviewWindow,
+    width: f64,
+    revision: u64,
+) -> Result<bool, String> {
+    apply_pet_mode_geometry_for_revision(window, width, revision, false)
+}
+
+/// None is a no-op; Some(false) repairs the native surface without changing
+/// body size or the caller's resized-home policy.
+fn pet_geometry_update_kind(
+    previous_scene: (f64, f64),
+    next: PetRenderGeometry,
+    refresh_native_frame: bool,
+) -> Option<bool> {
+    let body_changed = (previous_scene.0 - next.scene_width).abs() >= f64::EPSILON
+        || (previous_scene.1 - next.scene_height).abs() >= f64::EPSILON;
+    (body_changed || refresh_native_frame).then_some(body_changed)
+}
+
+fn apply_pet_mode_geometry_for_revision(
+    window: &WebviewWindow,
+    width: f64,
+    revision: u64,
+    refresh_native_frame: bool,
+) -> Result<bool, String> {
+    if !pet_native_thread_is_current(window)? {
+        return run_pet_native_transaction(window, "pet_mode::apply_render_geometry", move |window| {
+            apply_pet_mode_geometry_for_revision(&window, width, revision, refresh_native_frame)
+        });
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let _geometry_transaction = PET_MODE_GEOMETRY_TRANSACTION
+        .lock()
+        .map_err(|_| "Pet Mode geometry transaction is unavailable".to_string())?;
+    if !pet_geometry_request_is_current(revision, PET_MODE_GEOMETRY_REVISION.load(Ordering::SeqCst)) {
+        return Ok(false);
+    }
+    // Legacy callers send a rounded body height. Art is uniformly scaled by
+    // width, so native anchors and hit tests use the same exact scene height.
+    let next = pet_render_layout().geometry(width);
+    let (old_width, old_height) = pet_size();
+    #[cfg(target_os = "windows")]
+    let refresh_native_frame = refresh_native_frame || {
+        let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+        let actual = window.outer_size().map_err(|error| error.to_string())?;
+        actual != next.window_size().to_physical::<u32>(dpi)
+    };
+    let Some(body_changed) =
+        pet_geometry_update_kind((old_width, old_height), next, refresh_native_frame)
+    else {
+        return Ok(false);
+    };
+    let old = current_pet_render_geometry();
+    let scene_origin = current_pet_logical_position(window)?;
+    let pointer = if pet_drag_is_active() {
+        let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+        Some(pet_cursor_in_scene_space(window.app_handle(), dpi)?)
+    } else {
+        None
+    };
+    let canonical_grab = PET_MODE_DRAG_SESSION.lock().ok().and_then(|value| value.canonical_grab);
+    let mut scene_origin = pet_scene_origin_after_resize(scene_origin, old, next, pointer, canonical_grab);
+    let dance_anchor = PET_MODE_DANCE_ORIGIN.lock().ok().and_then(|value| *value);
+    if let Some(anchor) = dance_anchor {
+        if let Some(monitor) = resolve_pet_scene_monitor(window) {
+            let screen_top = pet_dance_screen_top(&monitor);
+            scene_origin.y = pet_dance_scene_y(anchor.y, pet_dance_headroom_for_width(next.scene_width), screen_top);
+        }
+    }
+    let recover_entry = PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed)
+        && PET_MODE_ENABLED.load(Ordering::Relaxed);
+    let entry_monitor = recover_entry.then(|| resolve_pet_home_monitor(window.app_handle())).flatten();
+    let size = next.window_size();
+    if !pet_geometry_request_is_current(revision, PET_MODE_GEOMETRY_REVISION.load(Ordering::SeqCst)) {
+        return Ok(false);
+    }
+    let transition = PetGeometryTransition::begin();
+    #[cfg(target_os = "windows")]
+    {
+        // Tao revalidates the current frame when each bound changes. Relax
+        // bounds while the old scene is still published; defer those callbacks.
+        window.set_min_size(None::<LogicalSize<f64>>).map_err(|error| error.to_string())?;
+        window.set_max_size(None::<LogicalSize<f64>>).map_err(|error| error.to_string())?;
+    }
+    // Re-entrant moved/resized input callbacks see the same scene geometry as
+    // the frame being applied. External position readers use this native
+    // thread too, so they cannot combine an old frame with a new scene inset.
+    if let Ok(mut current) = PET_MODE_SIZE.lock() {
+        *current = (next.scene_width, next.scene_height);
+    }
+    if recover_entry {
+        // The entry's target was authored at its opening body/display size.
+        // Retire only this entry and settle at the current home; other run/drop
+        // continuations retain their existing command outcomes and tokens.
+        cancel_pet_motion();
+        if let Some(monitor) = &entry_monitor {
+            scene_origin = calculate_pet_home_position(monitor);
+        }
+    }
+    let result = (|| {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_foundation::{NSRect, NSSize};
+        let ptr = window.ns_window().map_err(|error| error.to_string())?;
+        // Safe: the transaction is serialized on AppKit's main thread above.
+        let ns = unsafe { &*ptr.cast::<NSWindow>() };
+        let content = ns.contentRectForFrameRect(ns.frame());
+        let content_size = NSSize::new(size.width, size.height);
+        let delta = LogicalPosition::new(scene_origin.x - current_pet_logical_position(window)?.x, scene_origin.y - current_pet_logical_position(window)?.y);
+        let origin = NSPoint::new(
+            content.origin.x + delta.x,
+            content.origin.y + content.size.height - size.height - delta.y,
+        );
+        let frame = ns.frameRectForContentRect(NSRect::new(origin, content_size));
+        ns.setContentMinSize(content_size);
+        ns.setContentMaxSize(content_size);
+        ns.setFrame_display(frame, true);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        apply_windows_pet_render_frame(window, next, scene_origin)?;
+        // The HWND remains unresizable; failure to repin bounds after its
+        // frame applied must not roll the published scene back to the old size.
+        let _ = window.set_min_size(Some(size));
+        let _ = window.set_max_size(Some(size));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        window.set_min_size(None::<LogicalSize<f64>>).map_err(|error| error.to_string())?;
+        window.set_max_size(None::<LogicalSize<f64>>).map_err(|error| error.to_string())?;
+        window.set_size(size).map_err(|error| error.to_string())?;
+        window.set_min_size(Some(size)).map_err(|error| error.to_string())?;
+        window.set_max_size(Some(size)).map_err(|error| error.to_string())?;
+    }
+    Ok::<(), String>(())
+    })();
+    if let Err(error) = result {
+        if let Ok(mut current) = PET_MODE_SIZE.lock() {
+            *current = (old_width, old_height);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let _ = window.set_min_size(Some(old.window_size()));
+            let _ = window.set_max_size(Some(old.window_size()));
+        }
+        if recover_entry {
+            if let Some(monitor) = &entry_monitor {
+                let _ = set_pet_scene_position(window, calculate_pet_home_position(monitor));
+            }
+            let _ = emit_pet_event(window, json!({ "kind": "entry_complete" }));
+        }
+        return Err(error);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    set_pet_scene_position(window, scene_origin)?;
+    drop(transition);
+    refresh_pet_hit_region_for_window(window)?;
+    if recover_entry {
+        emit_pet_event(window, json!({ "kind": "entry_complete" }))?;
+    }
+    Ok(body_changed)
 }
 
 #[tauri::command]
@@ -2179,20 +2883,45 @@ pub async fn pet_mode_begin_drag(
     start_client_x: f64,
     start_client_y: f64,
     pickup_delay_ms: u64,
+    pointer_type: Option<String>,
+    manual_request_id: Option<String>,
 ) -> Result<PetModeNativeDragResult, String> {
-    // Capture and cancellation share one native command boundary. The
-    // best-effort renderer-side cancellation may race this invoke; doing it
-    // here guarantees an in-flight walk cannot fight the manual pointer.
-    super::pet_quick_controls::revoke_pet_quick_controls_interaction(&app);
-    cancel_pet_motion();
+    let visibility_generation = PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst);
+    let claim_epoch = PET_MODE_DRAG_SESSION
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .epoch;
+    let lease = PetDragLease::new(manual_request_id)?;
+    let _lease_guard = PetDragLeaseGuard(lease.clone());
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
-    // A pointer pickup during a dance must track the base-height panel, or
-    // the later shrink would move the cat under the cursor.
-    restore_pet_dance_headroom(&window);
-    let before = current_pet_logical_position(&window)?;
-    PET_MODE_DRAG_ACTIVE.store(true, Ordering::Relaxed);
+    let prepare_lease = lease.clone();
+    let (mouse_down, before) =
+        run_pet_native_transaction(&window, "pet_mode::claim_drag", move |window| {
+            let eligible = visibility_generation
+                == PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst)
+                && PET_MODE_ENABLED.load(Ordering::Relaxed)
+                && is_windows_overlay_visible(&window);
+            if !PET_MODE_DRAG_SESSION
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .claim(&prepare_lease, eligible, claim_epoch)
+            {
+                return Err("Pet Mode drag was cancelled".to_string());
+            }
+            // Claim before capture so an older queued drag can no longer move this
+            // frame. Rejected hidden/stale requests do not cancel a newer motion.
+            super::pet_quick_controls::revoke_pet_quick_controls_interaction(window.app_handle());
+            cancel_pet_motion();
+            let mouse_down = super::pet_panel::capture_pet_panel_mouse_down(
+                &window,
+                (start_client_x, start_client_y),
+                pointer_type.as_deref(),
+            )?;
+            restore_pet_dance_headroom(&window);
+            Ok((mouse_down, current_pet_logical_position(&window)?))
+        })?;
     #[cfg(debug_assertions)]
     eprintln!(
         "[pet-mode-drag] begin client=({start_client_x:.1},{start_client_y:.1}) window={before:?}"
@@ -2202,6 +2931,7 @@ pub async fn pet_mode_begin_drag(
     // frames while the native panel follows the cursor.
     let drag_app = app.clone();
     let drag_window = window.clone();
+    let worker_lease = lease.clone();
     let drag = tauri::async_runtime::spawn_blocking(move || {
         perform_pet_panel_drag(
             &drag_app,
@@ -2209,12 +2939,14 @@ pub async fn pet_mode_begin_drag(
             start_client_x,
             start_client_y,
             pickup_delay_ms,
+            mouse_down,
+            &worker_lease,
         )
     })
     .await
     .map_err(|error| format!("Pet Mode drag task failed: {error}"));
-    PET_MODE_DRAG_ACTIVE.store(false, Ordering::Relaxed);
     let drag = drag??;
+    lease.ensure_current()?;
     let after = current_pet_logical_position(&window)?;
     #[cfg(debug_assertions)]
     {
@@ -2227,6 +2959,7 @@ pub async fn pet_mode_begin_drag(
         moved: drag.moved,
         shake_detected: drag.shake_detected,
         stroke_detected: drag.stroke_detected,
+        manual_request_id: lease.manual_request_id.clone(),
         start_x: before.x,
         start_y: before.y,
         end_x: after.x,
@@ -2237,9 +2970,7 @@ pub async fn pet_mode_begin_drag(
     // callback even though the global mouse button is already up; this event
     // lets the renderer begin its reviewed release immediately and is safe to
     // receive twice because the web state machine is idempotent.
-    window
-        .emit("pet-mode-drag-end", &result)
-        .map_err(|error| error.to_string())?;
+    emit_pet_drag_event(&window, &lease, "pet-mode-drag-end", &result)?;
     Ok(result)
 }
 
@@ -2265,14 +2996,111 @@ pub fn pet_mode_input_bounds(app: AppHandle) -> Result<PetModeInputBounds, Strin
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    #[cfg(target_os = "windows")]
+    return run_pet_native_transaction(&window, "pet_mode::read_input_bounds", |window| {
+        read_pet_mode_input_bounds(&window)
+    });
+    #[cfg(not(target_os = "windows"))]
+    read_pet_mode_input_bounds(&window)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_dpi_awareness_label(
+    context: windows_sys::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT,
+) -> String {
+    use windows_sys::Win32::UI::HiDpi::{
+        AreDpiAwarenessContextsEqual, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE,
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, DPI_AWARENESS_CONTEXT_SYSTEM_AWARE,
+        DPI_AWARENESS_CONTEXT_UNAWARE, DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED,
+    };
+    if context.is_null() {
+        return "unavailable".to_string();
+    }
+    // Context handles are opaque: compare with Win32 instead of exporting or
+    // interpreting their numeric representation. Keep PMv1 and PMv2 distinct.
+    for (known_context, label) in [
+        (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, "per_monitor_v2"),
+        (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE, "per_monitor"),
+        (DPI_AWARENESS_CONTEXT_SYSTEM_AWARE, "system"),
+        (DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED, "unaware_gdi_scaled"),
+        (DPI_AWARENESS_CONTEXT_UNAWARE, "unaware"),
+    ] {
+        if unsafe { AreDpiAwarenessContextsEqual(context, known_context) } != 0 {
+            return label.to_string();
+        }
+    }
+    "unknown".to_string()
+}
+
+fn read_pet_mode_input_bounds(window: &WebviewWindow) -> Result<PetModeInputBounds, String> {
     let position = window.outer_position().map_err(|error| error.to_string())?;
     let size = window.outer_size().map_err(|error| error.to_string())?;
+    #[cfg(target_os = "windows")]
+    let (window_scale_factor, native_scale_factor, expected_render_width, expected_render_height, sampled_at_ms) = {
+        use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
+        let dpi = unsafe { GetDpiForWindow(hwnd) };
+        if dpi == 0 {
+            return Err("Could not read the Pet Mode native DPI for Lab bounds".to_string());
+        }
+        let native_scale = dpi as f64 / 96.0;
+        let expected = current_pet_render_geometry().window_size().to_physical::<u32>(native_scale);
+        (
+            Some(window.scale_factor().map_err(|error| error.to_string())?),
+            Some(native_scale),
+            Some(expected.width),
+            Some(expected.height),
+            Some(SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64),
+        )
+    };
+    #[cfg(not(target_os = "windows"))]
+    let (window_scale_factor, native_scale_factor, expected_render_width, expected_render_height, sampled_at_ms) = (None, None, None, None, None);
+    #[cfg(target_os = "windows")]
+    let (window_dpi_awareness, thread_dpi_awareness, current_monitor_scale_factor) = {
+        use windows_sys::Win32::UI::HiDpi::{
+            GetThreadDpiAwarenessContext, GetWindowDpiAwarenessContext,
+        };
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
+        // This getter already runs on the owning window thread. Tao's monitor
+        // scale uses the context-sensitive GetDpiForMonitor path; it is a Lab
+        // diagnostic only, never the authority for expected frames or resize.
+        let monitor_scale = window.current_monitor().ok().flatten()
+            .map(|monitor| monitor.scale_factor())
+            .filter(|scale| scale.is_finite() && *scale > 0.0);
+        (
+            Some(windows_dpi_awareness_label(unsafe { GetWindowDpiAwarenessContext(hwnd) })),
+            Some(windows_dpi_awareness_label(unsafe { GetThreadDpiAwarenessContext() })),
+            monitor_scale,
+        )
+    };
+    #[cfg(not(target_os = "windows"))]
+    let (window_dpi_awareness, thread_dpi_awareness, current_monitor_scale_factor) = (None, None, None);
+    // Copy the bounded receipts only. Reading Lab bounds must not heal the
+    // window, resample DPI, clear counters, or dispatch another event.
+    #[cfg(target_os = "windows")]
+    let windows_dpi_events = Some(
+        PET_WINDOWS_DPI_EVENTS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone(),
+    );
+    #[cfg(not(target_os = "windows"))]
+    let windows_dpi_events = None;
     Ok(PetModeInputBounds {
         x: position.x,
         y: position.y,
         width: size.width,
         height: size.height,
-        visible: is_windows_overlay_visible(&window),
+        visible: is_windows_overlay_visible(window),
+        window_scale_factor,
+        native_scale_factor,
+        window_dpi_awareness,
+        thread_dpi_awareness,
+        current_monitor_scale_factor,
+        windows_dpi_events,
+        expected_render_width,
+        expected_render_height,
+        sampled_at_ms,
     })
 }
 
@@ -2283,22 +3111,16 @@ pub fn pet_mode_cursor_sample(app: AppHandle) -> Result<PetModeCursorSample, Str
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
     let visible = is_windows_overlay_visible(&window);
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
-    let position = window
-        .outer_position()
-        .map_err(|error| error.to_string())?
-        .to_logical::<f64>(scale_factor);
-    let size = window
-        .outer_size()
-        .map_err(|error| error.to_string())?
-        .to_logical::<f64>(scale_factor);
-    let cursor = pet_cursor_position(&app)?.to_logical::<f64>(scale_factor);
+    let position = current_pet_logical_position(&window)?;
+    let (width, height) = pet_size();
+    let cursor = pet_cursor_in_scene_space(&app, scale_factor)?;
     Ok(PetModeCursorSample {
         cursor_x: cursor.x,
         cursor_y: cursor.y,
         window_x: position.x,
         window_y: position.y,
-        window_width: size.width,
-        window_height: size.height,
+        window_width: width,
+        window_height: height,
         visible,
     })
 }
@@ -2364,9 +3186,7 @@ fn place_pet_mode_at_center_for_lab(app: AppHandle) -> Result<PetModeInputBounds
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
-    let monitor = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
+    let monitor = resolve_pet_scene_monitor(&window)
         .or_else(|| resolve_pet_home_monitor(&app))
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     let scale_factor = monitor.scale_factor();
@@ -2375,8 +3195,7 @@ fn place_pet_mode_at_center_for_lab(app: AppHandle) -> Result<PetModeInputBounds
     let work_size = work_area.size.to_logical::<f64>(scale_factor);
     let target = calculate_pet_center_position(work_position, work_size.width, work_size.height);
     cancel_pet_motion();
-    window
-        .set_position(target)
+    set_pet_scene_position(&window, target)
         .map_err(|error| error.to_string())?;
     // Exercise the same resident-home policy as a completed manual drag. The
     // center drop must remain temporary rather than replacing the upper lane.
@@ -2394,9 +3213,7 @@ pub async fn pet_mode_roam(app: AppHandle, post_drop: Option<bool>) -> Result<()
             .get_webview_window(PET_MODE_WINDOW_LABEL)
             .ok_or_else(|| "Pet Mode window is not available".to_string())?;
         if post_drop.unwrap_or(false) {
-            let monitor = window
-                .current_monitor()
-                .map_err(|error| error.to_string())?
+            let monitor = resolve_pet_scene_monitor(&window)
                 .or_else(|| resolve_pet_home_monitor(&app))
                 .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
             let scale_factor = monitor.scale_factor();
@@ -2516,8 +3333,7 @@ pub async fn pet_mode_prepare_outing_hunt(
         if !pet_outing_is_current(outing_generation) {
             return Ok(None);
         }
-        window
-            .set_position(start)
+        set_pet_scene_position(&window, start)
             .map_err(|error| error.to_string())?;
         if !pet_outing_is_current(outing_generation) {
             reconcile_pet_visibility(&app, &window)?;
@@ -2558,8 +3374,7 @@ pub async fn pet_mode_return_from_outing(
         if !pet_outing_is_current(outing_generation) {
             return Ok(());
         }
-        window
-            .set_position(start)
+        set_pet_scene_position(&window, start)
             .map_err(|error| error.to_string())?;
         if !pet_outing_is_current(outing_generation) {
             reconcile_pet_visibility(&app, &window)?;
@@ -2592,9 +3407,19 @@ pub async fn pet_mode_return_from_outing(
 pub fn current_pet_logical_position(
     window: &WebviewWindow,
 ) -> Result<LogicalPosition<f64>, String> {
+    if !pet_native_thread_is_current(window)? {
+        return run_pet_native_transaction(window, "pet_mode::read_scene_position", |window| {
+            current_pet_logical_position(&window)
+        });
+    }
     let position = window.outer_position().map_err(|error| error.to_string())?;
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
-    Ok(position.to_logical(scale_factor))
+    let native = position.to_logical(scale_factor);
+    Ok(if window.label() == PET_MODE_WINDOW_LABEL {
+        current_pet_render_geometry().window_to_scene(native)
+    } else {
+        native
+    })
 }
 
 pub fn probe_pet_drop_plan(
@@ -2603,9 +3428,7 @@ pub fn probe_pet_drop_plan(
     pos: LogicalPosition<f64>,
     force_floor: bool,
 ) -> Result<PetDropPlan, String> {
-    let monitor = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
+    let monitor = resolve_pet_scene_monitor(&window)
         .or_else(|| resolve_pet_home_monitor(app))
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     let scale_factor = monitor.scale_factor();
@@ -2680,9 +3503,7 @@ pub async fn pet_mode_resolve_drop(
     let start = current_pet_logical_position(&window)?;
     let plan = probe_pet_drop_plan(&app, &window, start, force_floor)?;
 
-    let monitor = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
+    let monitor = resolve_pet_scene_monitor(&window)
         .or_else(|| resolve_pet_home_monitor(&app))
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     let scale_factor = monitor.scale_factor();
@@ -2712,8 +3533,7 @@ pub async fn pet_mode_resolve_drop(
         clamp_height,
     );
     if matches!(plan.kind, PetDropKind::AlreadyOn) && (target.y - start.y).abs() >= 1.0 {
-        window
-            .set_position(target)
+        set_pet_scene_position(&window, target)
             .map_err(|error| error.to_string())?;
     }
     let should_animate = matches!(plan.kind, PetDropKind::Catch | PetDropKind::Hop)
@@ -2751,12 +3571,12 @@ fn animate_pet_window_drop(
         }
         let t = (started.elapsed().as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0);
         let eased = t * t;
-        window
-            .set_position(LogicalPosition::new(
+        if !apply_pet_window_position_if_motion_current(window, LogicalPosition::new(
                 start.x + (target.x - start.x) * eased,
                 start.y + (target.y - start.y) * eased,
-            ))
-            .map_err(|error| error.to_string())?;
+            ), motion_revision, None)? {
+            return Ok(());
+        }
         if t >= 1.0 {
             break;
         }
@@ -2838,9 +3658,7 @@ fn remember_and_resolve_pet_position(
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
     let position = current_pet_logical_position(&window)?;
-    let monitor = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
+    let monitor = resolve_pet_scene_monitor(&window)
         .or_else(|| resolve_pet_home_monitor(&app))
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     let scale_factor = monitor.scale_factor();
@@ -2909,9 +3727,7 @@ fn reconcile_resident_pet_position(
             SeatDecisionReason::PetHidden,
         ));
     }
-    let monitor = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
+    let monitor = resolve_pet_scene_monitor(&window)
         .or_else(|| resolve_pet_home_monitor(app))
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     let scale_factor = monitor.scale_factor();
@@ -2981,9 +3797,7 @@ fn probe_current_pet_ax_seat(
             SeatDecisionReason::PetHidden,
         ));
     }
-    let monitor = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
+    let monitor = resolve_pet_scene_monitor(&window)
         .or_else(|| resolve_pet_home_monitor(app))
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     let scale_factor = monitor.scale_factor();
@@ -3877,8 +4691,7 @@ fn position_pet_home(
             "walk",
         )
     } else {
-        window
-            .set_position(target)
+        set_pet_scene_position(&window, target)
             .map_err(|error| error.to_string())
     }
 }
@@ -4002,8 +4815,7 @@ fn apply_pet_seat_resolution(
     }
     cancel_pet_motion();
     if reduced_motion {
-        window
-            .set_position(target)
+        set_pet_scene_position(&window, target)
             .map_err(|error| error.to_string())?;
     } else {
         animate_pet_window_toward_with_purpose(
@@ -4208,6 +5020,17 @@ fn calculate_pet_outing_return_start(monitor: &Monitor, side: &str) -> LogicalPo
 }
 
 fn resolve_pet_cursor_monitor(app: &AppHandle) -> Option<Monitor> {
+    #[cfg(target_os = "macos")]
+    {
+        let cursor = pet_cursor_in_scene_space(app, 1.0).ok()?;
+        return app.available_monitors().ok()?.into_iter().find(|monitor| {
+            pet_scene_monitor_contains(
+                cursor, 1.0, *monitor.position(), *monitor.size(), monitor.scale_factor(), true,
+            )
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
     let cursor = app.cursor_position().ok()?;
     app.available_monitors().ok()?.into_iter().find(|monitor| {
         let position = monitor.position();
@@ -4220,6 +5043,7 @@ fn resolve_pet_cursor_monitor(app: &AppHandle) -> Option<Monitor> {
         }
         .contains((cursor.x, cursor.y))
     })
+    }
 }
 
 fn clamp_pet_position(
@@ -4670,6 +5494,28 @@ fn pet_cursor_position(app: &AppHandle) -> Result<PhysicalPosition<f64>, String>
     }
 }
 
+fn pet_cursor_in_scene_space(
+    app: &AppHandle,
+    window_scale: f64,
+) -> Result<LogicalPosition<f64>, String> {
+    // Tao encodes the global NSEvent point using the primary screen's scale,
+    // even while the pet is on a different screen. Windows uses physical pixels.
+    #[cfg(target_os = "macos")]
+    let primary_scale = Some(app.primary_monitor().map_err(|error| error.to_string())?
+        .ok_or_else(|| "The primary screen is unavailable".to_string())?.scale_factor());
+    #[cfg(not(target_os = "macos"))]
+    let primary_scale = None;
+    Ok(pet_cursor_sample_in_scene_space(pet_cursor_position(app)?, window_scale, primary_scale))
+}
+
+fn pet_cursor_sample_in_scene_space(
+    cursor: PhysicalPosition<f64>,
+    window_scale: f64,
+    macos_primary_scale: Option<f64>,
+) -> LogicalPosition<f64> {
+    cursor.to_logical(macos_primary_scale.unwrap_or(window_scale))
+}
+
 #[cfg(target_os = "windows")]
 fn primary_pointer_pressed() -> bool {
     super::pet_cursor_windows::pointer_pressed()
@@ -4740,11 +5586,11 @@ fn stalk_pet_toward_cursor(
         })
         .collect::<Vec<_>>();
     let initial_cursor = pet_cursor_position(app)?;
-    let initial_position = window.outer_position().map_err(|error| error.to_string())?;
-    let panel_size = window.outer_size().map_err(|error| error.to_string())?;
+    let initial_position = current_pet_physical_position(&window)?;
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
     let cursor_point = (initial_cursor.x, initial_cursor.y);
-    let panel_size = (panel_size.width as f64, panel_size.height as f64);
+    let scene_size = pet_size();
+    let panel_size = (scene_size.0 * scale_factor, scene_size.1 * scale_factor);
     let panel_center = (
         initial_position.x as f64 + panel_size.0 / 2.0,
         initial_position.y as f64 + panel_size.1 / 2.0,
@@ -4836,8 +5682,8 @@ fn stalk_pet_toward_cursor(
         if !screen_frame.contains(cursor) {
             break PetModeStalkOutcome::DifferentDisplay;
         }
-        let position = window.outer_position().map_err(|error| error.to_string())?;
-        let current = (position.x as f64, position.y as f64);
+        let position = current_pet_physical_position(&window)?;
+        let current = (position.x, position.y);
         if request.retarget_cursor {
             captured_cursor = cursor;
             let next_facing = pet_mode_chase_facing(
@@ -4878,10 +5724,9 @@ fn stalk_pet_toward_cursor(
         // the next outer_position sample made completion depend on AppKit's
         // rounded/stale panel position, so a parked pointer could leave the cat
         // stepping in place until the user nudged it.
-        window
-            .set_position(PhysicalPosition::new(
-                next.0.round() as i32,
-                next.1.round() as i32,
+        set_pet_scene_physical_position(&window, PhysicalPosition::new(
+                next.0,
+                next.1,
             ))
             .map_err(|error| error.to_string())?;
         if reached_target {
@@ -4972,10 +5817,10 @@ fn carry_pet_mode_cursor(
         .and_then(CGEvent::new)
         .map_err(|_| "Could not read the macOS cursor position".to_string())?
         .location();
-    let initial_window = window.outer_position().map_err(|error| error.to_string())?;
+    let initial_window = current_pet_physical_position(&window)?;
     let initial_window = (initial_window.x as f64, initial_window.y as f64);
-    let panel_size = window.outer_size().map_err(|error| error.to_string())?;
-    let panel_size = (panel_size.width as f64, panel_size.height as f64);
+    let scene_size = pet_size();
+    let panel_size = (scene_size.0 * scale_factor, scene_size.1 * scale_factor);
     if !screen_frame.contains(initial) {
         return Ok(PetModeCursorCarryResult {
             outcome: PetModeCursorCarryOutcome::DifferentDisplay,
@@ -5026,10 +5871,9 @@ fn carry_pet_mode_cursor(
         });
     }
 
-    window
-        .set_position(PhysicalPosition::new(
-            return_window.0.round() as i32,
-            return_window.1.round() as i32,
+    set_pet_scene_physical_position(&window, PhysicalPosition::new(
+            return_window.0,
+            return_window.1,
         ))
         .map_err(|error| format!("Could not pivot the Pet Mode window: {error}"))?;
     emit_pet_event(
@@ -5116,10 +5960,9 @@ fn carry_pet_mode_cursor(
             Duration::from_millis(request.cursor_lag_ms),
             elapsed >= duration,
         );
-        window
-            .set_position(PhysicalPosition::new(
-                next_window_x.round() as i32,
-                return_window.1.round() as i32,
+        set_pet_scene_physical_position(&window, PhysicalPosition::new(
+                next_window_x,
+                return_window.1,
             ))
             .map_err(|error| format!("Could not carry the Pet Mode window: {error}"))?;
         // set_position can cross the UI-thread boundary. Recheck cancellation
@@ -5309,8 +6152,7 @@ fn animate_pet_window_with_facing_guarded_and_purpose(
     purpose: Option<&'static str>,
     expected_motion_revision: Option<u64>,
 ) -> Result<bool, String> {
-    // Motion math reads the panel's top-left; a dance-tall panel would start
-    // the trip 36 points high and drop when the pose ends.
+    // Finish any temporary dance edge displacement before body-scene motion.
     restore_pet_dance_headroom(window);
     let start = current_pet_logical_position(window)?;
     let distance = ((target.x - start.x).powi(2) + (target.y - start.y).powi(2)).sqrt();
@@ -5488,24 +6330,15 @@ fn apply_pet_window_position_if_motion_current(
     motion_revision: u64,
     outing_generation: Option<u64>,
 ) -> Result<bool, String> {
-    let app = window.app_handle().clone();
-    let position_window = window.clone();
-    let (sender, receiver) = mpsc::sync_channel(1);
-    app.run_on_main_thread(crate::panic_guard::contained("pet_mode::apply_pet_window_position_if_motion_current", move || {
-        let result = if !pet_window_motion_is_current(motion_revision, outing_generation) {
+    run_pet_native_transaction(window, "pet_mode::apply_pet_window_position_if_motion_current", move |window| {
+        if !pet_window_motion_is_current(motion_revision, outing_generation) {
             Ok(false)
         } else {
-            position_window
-                .set_position(target)
+            set_pet_scene_position(&window, target)
                 .map_err(|error| error.to_string())
                 .map(|_| pet_window_motion_is_current(motion_revision, outing_generation))
-        };
-        let _ = sender.send(result);
-    }))
-    .map_err(|error| error.to_string())?;
-    receiver
-        .recv()
-        .map_err(|_| "Pet Mode main-thread position result was dropped".to_string())?
+        }
+    })
 }
 
 fn finish_pet_window_motion(motion_revision: u64) {
@@ -5646,7 +6479,7 @@ fn resolve_pet_home_monitor(app: &AppHandle) -> Option<Monitor> {
         .unwrap_or(false)
     {
         if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
-            if let Ok(Some(monitor)) = window.current_monitor() {
+            if let Some(monitor) = resolve_pet_scene_monitor(&window) {
                 return Some(monitor);
             }
         }
@@ -5657,7 +6490,7 @@ fn resolve_pet_home_monitor(app: &AppHandle) -> Option<Monitor> {
         }
     }
     if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
-        if let Ok(Some(monitor)) = window.current_monitor() {
+        if let Some(monitor) = resolve_pet_scene_monitor(&window) {
             return Some(monitor);
         }
     }
@@ -5852,6 +6685,305 @@ return "closed_browser_tab""#
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fresh_drag_session() -> PetDragSessionState {
+        PetDragSessionState {
+            closed: false,
+            epoch: 0,
+            current: None,
+            canonical_grab: None,
+            latest_request_id: None,
+        }
+    }
+
+    fn tagged_drag(sequence: u8) -> PetDragLease {
+        PetDragLease::new(Some(format!("0000000000001-{sequence:06}"))).unwrap()
+    }
+
+    #[test]
+    fn pet_drag_session_off_on_rejects_queued_a_effects_and_preserves_b_grab() {
+        let mut state = fresh_drag_session();
+        let a = tagged_drag(1);
+        assert!(state.claim(&a, true, state.epoch));
+        assert!(state.set_grab(&a, (20.0, 30.0)));
+        let queued_a = a.clone();
+
+        state.invalidate(false); // Off or presence hide.
+        let b = tagged_drag(2);
+        assert!(state.claim(&b, true, state.epoch));
+        assert!(state.set_grab(&b, (80.0, 60.0)));
+
+        // Model native owner callbacks queued by A and run after B's claim.
+        let mut moves_and_events = Vec::new();
+        if state.is_current(&queued_a) {
+            moves_and_events.extend(["move", "start", "stroke", "probe", "end"]);
+        }
+        state.finish(&a); // A's late error/panic/completion cleanup.
+        assert!(moves_and_events.is_empty());
+        assert!(state.is_current(&b));
+        assert_eq!(state.canonical_grab, Some((80.0, 60.0)));
+        assert!(!state.set_grab(&a, (0.0, 0.0)));
+        assert_eq!(state.canonical_grab, Some((80.0, 60.0)));
+    }
+
+    #[test]
+    fn pet_drag_session_presence_hide_reveal_rejects_an_unclaimed_a() {
+        let mut state = fresh_drag_session();
+        let a = tagged_drag(1);
+        let queued_epoch = state.epoch;
+        state.invalidate(false); // Presence hide does not change outing generation.
+        assert!(!state.claim(&a, true, queued_epoch)); // The frame is visible again.
+        assert!(state.current.is_none());
+        assert!(state.claim(&tagged_drag(2), true, state.epoch));
+    }
+
+    #[test]
+    fn pet_drag_session_rejected_hidden_or_older_start_does_not_cancel_b() {
+        let mut state = fresh_drag_session();
+        let b = tagged_drag(2);
+        assert!(state.claim(&b, true, state.epoch));
+        assert!(state.set_grab(&b, (80.0, 60.0)));
+        assert!(!state.claim(&tagged_drag(3), false, state.epoch));
+        assert!(!state.claim(&tagged_drag(1), true, state.epoch));
+        assert!(state.is_current(&b));
+        assert_eq!(state.canonical_grab, Some((80.0, 60.0)));
+    }
+
+    #[test]
+    fn pet_drag_session_new_gesture_retires_old_worker_before_capture() {
+        let mut state = fresh_drag_session();
+        let a = tagged_drag(1);
+        let b = tagged_drag(2);
+        let a_entry_epoch = state.epoch;
+        let b_entry_epoch = state.epoch;
+        assert!(state.claim(&a, true, a_entry_epoch));
+        assert!(state.claim(&b, true, b_entry_epoch));
+        assert!(!state.is_current(&a));
+        assert!(!a.lifetime.load(Ordering::Acquire));
+        assert!(state.is_current(&b));
+    }
+
+    #[test]
+    fn pet_drag_session_normal_a_finish_does_not_cancel_pending_b() {
+        let mut state = fresh_drag_session();
+        let a = tagged_drag(1);
+        assert!(state.claim(&a, true, state.epoch));
+        let b = tagged_drag(2);
+        let b_entry_epoch = state.epoch;
+        state.finish(&a);
+        assert!(state.claim(&b, true, b_entry_epoch));
+        assert!(state.is_current(&b));
+    }
+
+    #[test]
+    fn pet_drag_session_quit_or_timed_out_prepare_cannot_claim_later() {
+        let mut state = fresh_drag_session();
+        let timed_out = tagged_drag(1);
+        state.finish(&timed_out); // Guard dropped while owner callback was queued.
+        assert!(!state.claim(&timed_out, true, state.epoch));
+        let pending = tagged_drag(2);
+        let queued_epoch = state.epoch;
+        state.invalidate(true); // Committed Quit.
+        assert!(!state.claim(&pending, true, queued_epoch));
+        assert!(!state.claim(&tagged_drag(3), true, state.epoch));
+    }
+
+    #[test]
+    fn pet_drag_session_legacy_clients_work_until_a_tagged_renderer_claims() {
+        let mut state = fresh_drag_session();
+        let legacy_a = PetDragLease::new(None).unwrap();
+        assert!(state.claim(&legacy_a, true, state.epoch));
+        state.finish(&legacy_a);
+        assert!(state.claim(&PetDragLease::new(None).unwrap(), true, state.epoch));
+        let b = tagged_drag(2);
+        assert!(state.claim(&b, true, state.epoch));
+        assert!(!state.claim(&PetDragLease::new(None).unwrap(), true, state.epoch));
+        assert!(state.is_current(&b));
+    }
+
+    #[test]
+    fn pet_drag_session_event_contract_keeps_legacy_payloads_and_tags_new_events() {
+        let id = "0000000000001-000001";
+        for name in [
+            "pet-mode-drag-start",
+            "pet-mode-stroke-detected",
+            "pet-mode-drag-probe",
+        ] {
+            assert_eq!(pet_drag_event_payload(name, None, json!(true)), json!(true));
+            assert_eq!(
+                pet_drag_event_payload(name, Some(id), json!(true)),
+                json!({ "manualRequestId": id, "value": true })
+            );
+        }
+        assert_eq!(
+            pet_drag_event_payload("pet-mode-drag-probe", None, Value::Null),
+            Value::Null
+        );
+        assert_eq!(
+            pet_drag_event_payload("pet-mode-drag-probe", Some(id), Value::Null),
+            json!({ "manualRequestId": id, "value": null })
+        );
+        let end = json!({ "manualRequestId": id, "moved": true });
+        assert_eq!(
+            pet_drag_event_payload("pet-mode-drag-end", Some(id), end.clone()),
+            end
+        );
+        for invalid in [
+            "",
+            "0000000000001-00000",
+            "0000000000001x000001",
+            "000000000000a-000001",
+        ] {
+            assert!(PetDragLease::new(Some(invalid.to_string())).is_err());
+        }
+    }
+    #[test]
+    fn windows_pet_dpi_receipts_distinguish_native_ingress_from_tauri_delivery() {
+        let mut receipts = PetModeWindowsDpiEvents::default();
+        receipts.record_native_message((168 << 16) | 168, 1_000);
+        receipts.record_tauri_scale_change(1.75, 1_002);
+        let before_return = receipts.clone();
+
+        receipts.record_native_message((144 << 16) | 144, 2_000);
+        assert_eq!(receipts.native_message_count, 2);
+        assert_eq!(receipts.native_last_dpi_x, Some(144));
+        assert_eq!(receipts.native_last_dpi_y, Some(144));
+        assert_eq!(receipts.native_last_at_ms, Some(2_000));
+        assert_eq!(receipts.tauri_scale_change_count, 1);
+        assert_eq!(receipts.tauri_last_scale_factor, Some(1.75));
+        assert_eq!(receipts.tauri_last_at_ms, Some(1_002));
+
+        // A getter snapshot is a copy: subsequent receipts cannot rewrite an
+        // earlier sample or turn a native-only receipt into a Tauri receipt.
+        assert_eq!(before_return.native_message_count, 1);
+        assert_eq!(before_return.native_last_dpi_x, Some(168));
+        receipts.record_tauri_scale_change(1.5, 2_005);
+        assert_eq!(receipts.tauri_scale_change_count, 2);
+        assert_eq!(receipts.tauri_last_scale_factor, Some(1.5));
+        assert_eq!(receipts.native_message_count, 2);
+    }
+
+    #[test]
+    fn windows_pet_dpi_receipts_export_only_bounded_numeric_fields() {
+        let mut receipts = PetModeWindowsDpiEvents::default();
+        assert_eq!(
+            serde_json::to_value(&receipts).unwrap(),
+            json!({
+                "nativeMessageCount": 0,
+                "tauriScaleChangeCount": 0,
+                "settingChangeCount": 0,
+                "displayChangeCount": 0,
+                "policyFrameChangeCount": 0,
+            }),
+        );
+        receipts.record_native_message((192 << 16) | 144, 3_000);
+        receipts.record_tauri_scale_change(1.5, 3_001);
+        receipts.record_setting_change(159, 3_002);
+        receipts.record_display_change(3_003);
+        receipts.record_policy_frame_change(3_004);
+        assert_eq!(
+            serde_json::to_value(&receipts).unwrap(),
+            json!({
+                "nativeMessageCount": 1,
+                "nativeLastAtMs": 3_000,
+                "nativeLastDpiX": 144,
+                "nativeLastDpiY": 192,
+                "tauriScaleChangeCount": 1,
+                "tauriLastAtMs": 3_001,
+                "tauriLastScaleFactor": 1.5,
+                "settingChangeCount": 1,
+                "settingChangeLastAtMs": 3_002,
+                "settingChangeLastWparam": 159,
+                "displayChangeCount": 1,
+                "displayChangeLastAtMs": 3_003,
+                "policyFrameChangeCount": 1,
+                "policyFrameChangeLastAtMs": 3_004,
+            }),
+        );
+        for scale in [f64::NAN, f64::INFINITY, 0.0, -1.0] {
+            receipts.record_tauri_scale_change(scale, 3_002);
+            assert_eq!(receipts.tauri_last_scale_factor, None);
+            assert_eq!(receipts.tauri_last_at_ms, Some(3_002));
+            assert!(!serde_json::to_value(&receipts)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .contains_key("tauriLastScaleFactor"));
+        }
+        assert_eq!(receipts.tauri_scale_change_count, 5);
+    }
+
+    #[test]
+    fn windows_pet_dpi_receipts_keep_settings_display_and_policy_independent() {
+        let mut receipts = PetModeWindowsDpiEvents::default();
+        receipts.record_native_message((168 << 16) | 168, 1_000);
+        receipts.record_tauri_scale_change(1.75, 1_002);
+        // Preserve only the documented UINT-sized action even if higher
+        // WPARAM bits are set. No setting receipt is interpreted as DPI.
+        receipts.record_setting_change(((1_u64 << 40) | 159) as usize, 2_000);
+        receipts.record_policy_frame_change(2_010);
+        let before_display = receipts.clone();
+        receipts.record_display_change(2_020);
+        receipts.record_setting_change(0, 2_030);
+
+        assert_eq!(receipts.setting_change_count, 2);
+        assert_eq!(receipts.setting_change_last_wparam, Some(0));
+        assert_eq!(receipts.setting_change_last_at_ms, Some(2_030));
+        assert_eq!(receipts.display_change_count, 1);
+        assert_eq!(receipts.display_change_last_at_ms, Some(2_020));
+        assert_eq!(receipts.policy_frame_change_count, 1);
+        assert_eq!(receipts.policy_frame_change_last_at_ms, Some(2_010));
+        assert_eq!(receipts.native_message_count, 1);
+        assert_eq!(receipts.native_last_dpi_x, Some(168));
+        assert_eq!(receipts.native_last_at_ms, Some(1_000));
+        assert_eq!(receipts.tauri_scale_change_count, 1);
+        assert_eq!(receipts.tauri_last_scale_factor, Some(1.75));
+        assert_eq!(receipts.tauri_last_at_ms, Some(1_002));
+        assert_eq!(before_display.setting_change_last_wparam, Some(159));
+        assert_eq!(before_display.display_change_count, 0);
+        assert_eq!(before_display.display_change_last_at_ms, None);
+    }
+
+    #[test]
+    fn windows_pet_dpi_receipts_saturate_counts_but_keep_latest_receipt() {
+        let mut receipts = PetModeWindowsDpiEvents {
+            setting_change_count: u64::MAX,
+            display_change_count: u64::MAX,
+            policy_frame_change_count: u64::MAX,
+            ..Default::default()
+        };
+        receipts.record_setting_change(47, 4_000);
+        receipts.record_display_change(4_010);
+        receipts.record_policy_frame_change(4_020);
+        assert_eq!(receipts.setting_change_count, u64::MAX);
+        assert_eq!(receipts.display_change_count, u64::MAX);
+        assert_eq!(receipts.policy_frame_change_count, u64::MAX);
+        assert_eq!(receipts.setting_change_last_wparam, Some(47));
+        assert_eq!(receipts.setting_change_last_at_ms, Some(4_000));
+        assert_eq!(receipts.display_change_last_at_ms, Some(4_010));
+        assert_eq!(receipts.policy_frame_change_last_at_ms, Some(4_020));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_dpi_awareness_diagnostic_distinguishes_contexts_without_a_window() {
+        use windows_sys::Win32::UI::HiDpi::{
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE,
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+            DPI_AWARENESS_CONTEXT_SYSTEM_AWARE, DPI_AWARENESS_CONTEXT_UNAWARE,
+            DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED,
+        };
+        for (context, expected) in [
+            (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, "per_monitor_v2"),
+            (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE, "per_monitor"),
+            (DPI_AWARENESS_CONTEXT_SYSTEM_AWARE, "system"),
+            (DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED, "unaware_gdi_scaled"),
+            (DPI_AWARENESS_CONTEXT_UNAWARE, "unaware"),
+            (std::ptr::null_mut(), "unavailable"),
+        ] {
+            assert_eq!(windows_dpi_awareness_label(context), expected);
+        }
+    }
 
     #[test]
     fn selected_tab_cross_check_accepts_a_matching_active_tab() {
@@ -7375,99 +8507,346 @@ mod tests {
     }
 
     #[test]
-    fn dance_headroom_grows_up_from_the_ground_line_when_the_screen_has_room() {
-        let (x, y, width, height) = pet_dance_headroom_content_rect(
-            80.0, 200.0, 144.0, 99.0, 36.0, 0.0, 900.0,
-        );
-        assert_eq!((x, y, width, height), (200.0, 80.0, 144.0, 135.0));
+    fn dance_edge_correction_moves_only_the_visible_pose_and_preserves_its_anchor() {
+        assert_eq!(pet_dance_scene_y(14.0, 36.0, 0.0), 36.0);
+        assert_eq!(pet_dance_scene_y(60.0, 36.0, 0.0), 60.0);
+        assert_eq!(pet_dance_scene_y(-1066.0, 36.0, -1080.0), -1044.0);
+        assert_eq!(pet_dance_scene_y(14.0, 45.0, 0.0), 45.0);
     }
 
     #[test]
-    fn dance_headroom_shifts_down_only_enough_to_keep_the_head_on_screen() {
-        // Tab-X sits near the top of a 900pt display. 80+135=215 is fine;
-        // a cat whose ground line is 880 would grow to 1015 without a clamp.
-        let (x, y, width, height) = pet_dance_headroom_content_rect(
-            880.0, 40.0, 144.0, 99.0, 36.0, 0.0, 900.0,
-        );
-        assert_eq!((x, y, width, height), (40.0, 765.0, 144.0, 135.0));
-        assert!((y + height - 900.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn dance_headroom_restore_returns_to_the_captured_ground_line() {
-        let (_, raised_y, _, raised_height) = pet_dance_headroom_content_rect(
-            880.0, 40.0, 144.0, 99.0, 36.0, 0.0, 900.0,
-        );
-        assert_eq!(raised_y, 765.0);
-        assert_eq!(raised_height, 135.0);
-        let (_, y, _, height) = pet_dance_headroom_content_rect(
-            880.0, 40.0, 144.0, 99.0, 0.0, 0.0, 900.0,
-        );
-        assert_eq!((y, height), (880.0, 99.0));
-    }
-
-    #[test]
-    fn windows_dance_headroom_keeps_the_head_on_screen_and_restores_the_ground_line() {
-        // The usual Windows home is 14 points below the top edge. An upright
-        // dance extends above that base panel, so preserving the ground line
-        // would otherwise put the panel (and head) at y = -22.
-        let ground_bottom = 14.0 + PET_MODE_HEIGHT;
-        assert_eq!(
-            pet_dance_top_left_y(ground_bottom, PET_MODE_HEIGHT, 36.0, 0.0),
-            0.0
-        );
-        assert_eq!(
-            pet_dance_top_left_y(ground_bottom, PET_MODE_HEIGHT, 0.0, 0.0),
-            14.0
-        );
-
-        // Away from the edge, the feet stay in place; a monitor above the
-        // primary display uses its own (negative) top coordinate.
-        assert_eq!(
-            pet_dance_top_left_y(60.0 + PET_MODE_HEIGHT, PET_MODE_HEIGHT, 36.0, 0.0),
-            24.0
-        );
-        assert_eq!(
-            pet_dance_top_left_y(
-                -1066.0 + PET_MODE_HEIGHT,
-                PET_MODE_HEIGHT,
-                36.0,
-                -1080.0
-            ),
-            -1080.0
-        );
-        assert_eq!(pet_dance_top_left_y(14.0 + 124.0, 124.0, 45.0, 0.0), 0.0);
-    }
-
-    #[test]
-    fn windows_dance_resize_keeps_headroom_and_restores_the_resized_seat() {
-        let old_ground = 14.0 + PET_MODE_HEIGHT;
-        let next_ground = pet_dance_resized_ground_bottom(old_ground, PET_MODE_HEIGHT, 124.0);
-        assert_eq!(next_ground, 138.0);
-        assert_eq!(pet_dance_top_left_y(next_ground, 124.0, 45.0, 0.0), 0.0);
-        assert_eq!(pet_dance_top_left_y(next_ground, 124.0, 0.0, 0.0), 14.0);
-    }
-
-    #[test]
-    fn windows_dance_restore_does_not_accumulate_physical_pixel_rounding() {
-        let base_top = 18.0 / 1.25;
-        for base_height in [50.0, 74.0, 99.0, 124.0] {
-            let ground = pet_dance_ground_bottom(base_top, base_height);
-            assert!((pet_dance_top_left_y(ground, base_height, 0.0, 0.0) - base_top).abs() < 1e-9);
+    fn dance_extent_follows_uniform_pet_size() {
+        for scale in [0.5, 0.75, 1.0, 1.25] {
+            let width = PET_MODE_WIDTH * scale;
+            assert_eq!(pet_dance_headroom_for_width(width), 36.0 * scale);
         }
-        // At 100%, a 99pt logical panel is 123.75 physical pixels. Windows
-        // reports 124px; treating that rounded outer height as the ground
-        // would move a resting cat by 0.2pt every dance/restore cycle.
-        let rounded_outer_height = (99.0_f64 * 1.25).round() / 1.25;
-        assert!(rounded_outer_height > 99.0);
-        assert!(pet_dance_top_left_y(base_top + rounded_outer_height, 99.0, 0.0, 0.0) > base_top);
     }
 
     #[test]
-    fn dance_headroom_scales_with_pet_size_and_maps_hit_inset() {
-        assert!((pet_dance_headroom_for_width(144.0) - 36.0).abs() < f64::EPSILON);
-        assert!((pet_dance_headroom_for_width(180.0) - 45.0).abs() < f64::EPSILON);
-        assert!((pet_hit_region_headroom_ratio(36.0, 99.0) - 36.0 / 135.0).abs() < 1e-12);
-        assert_eq!(pet_hit_region_headroom_ratio(0.0, 99.0), 0.0);
+    fn macos_scene_monitor_selection_uses_one_logical_space_for_mixed_backing_scales() {
+        // Tao scales each CGDisplayBounds origin with that display's backing
+        // factor, but the NSWindow scene center uses the window's factor.
+        // The resulting physical rectangles overlap even for adjacent screens.
+        let monitors = [
+            (PhysicalPosition::new(0, 0), PhysicalSize::new(2880, 1800), 2.0),
+            (PhysicalPosition::new(1440, 0), PhysicalSize::new(1920, 1080), 1.0),
+        ];
+        let scene = LogicalPosition::new(1590.0, 500.0);
+        let selected = monitors.iter().position(|(origin, size, scale)| {
+            pet_scene_monitor_contains(scene, 1.0, *origin, *size, *scale, true)
+        });
+        assert_eq!(selected, Some(1), "the body is on the backing-1 external display");
+        for window_scale in [1.0, 1.25, 2.0] {
+            assert!(!pet_scene_monitor_contains(scene, window_scale, monitors[0].0, monitors[0].1, 2.0, true));
+            assert!(pet_scene_monitor_contains(scene, window_scale, monitors[1].0, monitors[1].1, 1.0, true));
+        }
     }
+
+    #[test]
+    fn macos_scene_monitor_selection_handles_negative_origins_and_half_open_boundaries() {
+        for scale in [1.0, 1.25, 2.0] {
+            let monitors = [
+                (LogicalPosition::new(-1920.0, 0.0), tauri::LogicalSize::new(1920.0, 1080.0)),
+                (LogicalPosition::new(0.0, 0.0), tauri::LogicalSize::new(1440.0, 900.0)),
+                (LogicalPosition::new(0.0, -1080.0), tauri::LogicalSize::new(1920.0, 1080.0)),
+            ];
+            for (point, expected) in [
+                ((-1920.0, 0.0), Some(0)),
+                ((-0.25, 0.0), Some(0)),
+                ((0.0, 0.0), Some(1)),
+                ((1439.75, 899.75), Some(1)),
+                ((0.0, -1080.0), Some(2)),
+                ((1919.75, -0.25), Some(2)),
+                ((1440.0, 0.0), None),
+                ((1920.0, -0.25), None),
+                ((-1920.25, 0.0), None),
+                ((-10.0, 1080.0), None),
+                ((-0.25, -0.25), None),
+            ] {
+                let selected = monitors.iter().position(|(origin, size)| {
+                    pet_scene_monitor_contains(
+                        LogicalPosition::new(point.0, point.1), scale,
+                        origin.to_physical(scale), size.to_physical(scale), scale, true,
+                    )
+                });
+                assert_eq!(selected, expected, "point {point:?}, backing scale {scale}");
+            }
+        }
+    }
+
+    #[test]
+    fn macos_scene_monitor_selection_handles_a_mixed_scale_display_above_primary() {
+        let scene = LogicalPosition::new(1590.0, -500.0);
+        assert!(!pet_scene_monitor_contains(
+            scene, 2.0, PhysicalPosition::new(0, 0), PhysicalSize::new(1440, 900), 1.0, true,
+        ));
+        assert!(pet_scene_monitor_contains(
+            scene, 2.0, PhysicalPosition::new(0, -2160), PhysicalSize::new(3840, 2160), 2.0, true,
+        ));
+    }
+
+    #[test]
+    fn windows_scene_monitor_selection_keeps_physical_desktop_coordinates() {
+        let scene = LogicalPosition::new(1590.0, 500.0);
+        let primary = (PhysicalPosition::new(0, 0), PhysicalSize::new(2880, 1800));
+        let external = (PhysicalPosition::new(2880, 0), PhysicalSize::new(1920, 1080));
+        assert!(!pet_scene_monitor_contains(scene, 2.0, primary.0, primary.1, 2.0, false));
+        assert!(pet_scene_monitor_contains(scene, 2.0, external.0, external.1, 1.0, false));
+        assert!(pet_scene_monitor_contains(scene, 1.0, primary.0, primary.1, 2.0, false));
+        assert!(!pet_scene_monitor_contains(scene, 1.0, external.0, external.1, 1.0, false));
+    }
+
+    #[test]
+    fn macos_cursor_sample_and_held_resize_use_primary_backing_scale() {
+        let old = pet_render_layout().geometry(PET_MODE_WIDTH);
+        let next = pet_render_layout().geometry(PET_MODE_WIDTH * 1.25);
+        let origin = LogicalPosition::new(-1884.0, 20.0);
+        let grab = (50.0, 40.0);
+        let expected_pointer = LogicalPosition::new(-1822.0, 52.0);
+        let cursor = expected_pointer.to_physical::<f64>(2.0);
+        for window_scale in [1.0, 1.25, 2.0] {
+            let pointer = pet_cursor_sample_in_scene_space(cursor, window_scale, Some(2.0));
+            assert_eq!(pointer, expected_pointer);
+            let resized = pet_scene_origin_after_resize(origin, old, next, Some(pointer), Some(grab));
+            assert_eq!(resized.x + grab.0 * next.scale(), expected_pointer.x);
+            assert_eq!(resized.y + grab.1 * next.scale(), expected_pointer.y);
+        }
+    }
+
+    #[test]
+    fn windows_cursor_sample_keeps_the_window_scale_factor() {
+        let cursor = PhysicalPosition::new(1590.0, -500.0);
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            assert_eq!(
+                pet_cursor_sample_in_scene_space(cursor, scale, None),
+                cursor.to_logical::<f64>(scale),
+            );
+        }
+    }
+
+    #[test]
+    fn macos_dance_ceiling_keeps_scaled_heads_below_the_menu_bar() {
+        // A 24pt menu bar on a backing-2 display occupies 48 physical pixels.
+        let display_top = PhysicalPosition::new(0, 0).to_logical::<f64>(2.0).y;
+        let visible_top = PhysicalPosition::new(0, 48).to_logical::<f64>(2.0).y;
+        let ceiling = pet_dance_visible_top(display_top, Some(visible_top));
+        assert_eq!(ceiling, 24.0);
+        for (scale, expected_scene_y) in [
+            (0.5, 42.0),
+            (0.75, 51.0),
+            (1.0, 60.0),
+            (1.25, 69.0),
+        ] {
+            let extent = pet_dance_headroom_for_width(PET_MODE_WIDTH * scale);
+            let scene_y = pet_dance_scene_y(14.0, extent, ceiling);
+            assert_eq!(scene_y, expected_scene_y);
+            assert_eq!(scene_y - extent, visible_top);
+        }
+    }
+
+    #[test]
+    fn macos_dance_ceiling_handles_a_display_above_the_primary_screen() {
+        let display_top = PhysicalPosition::new(0, -2160).to_logical::<f64>(2.0).y;
+        let visible_top = PhysicalPosition::new(0, -2112).to_logical::<f64>(2.0).y;
+        let ceiling = pet_dance_visible_top(display_top, Some(visible_top));
+        assert_eq!(ceiling, -1056.0);
+        let extent = pet_dance_headroom_for_width(PET_MODE_WIDTH * 1.25);
+        assert_eq!(pet_dance_scene_y(-1066.0, extent, ceiling), -1011.0);
+        // An auto-hidden menu bar leaves the full display available.
+        assert_eq!(
+            pet_dance_visible_top(display_top, Some(display_top)),
+            display_top
+        );
+    }
+
+    #[test]
+    fn macos_dance_ceiling_does_not_displace_a_centered_body_anchor() {
+        let ceiling = pet_dance_visible_top(0.0, Some(24.0));
+        let original_anchor_y = 300.0;
+        let extent = pet_dance_headroom_for_width(PET_MODE_WIDTH * 1.25);
+        assert_eq!(
+            pet_dance_scene_y(original_anchor_y, extent, ceiling),
+            original_anchor_y
+        );
+    }
+
+    #[test]
+    fn dance_ceiling_without_macos_work_area_preserves_the_display_top_policy() {
+        let ceiling = pet_dance_visible_top(0.0, None);
+        assert_eq!(ceiling, 0.0);
+        assert_eq!(pet_dance_scene_y(14.0, 45.0, ceiling), 45.0);
+        assert_eq!(pet_dance_visible_top(-1080.0, None), -1080.0);
+    }
+
+    #[test]
+    fn a_late_geometry_request_cannot_overwrite_a_newer_size() {
+        assert!(pet_geometry_request_is_current(12, 12));
+        assert!(!pet_geometry_request_is_current(11, 12));
+        assert!(!pet_geometry_request_is_current(12, 13));
+    }
+
+    fn enabled_pet_completion(scale_factor: f64) -> PetEnableCompletionObservation {
+        let geometry = pet_render_layout().geometry(180.0);
+        let frame = geometry.window_size().to_physical::<u32>(scale_factor);
+        PetEnableCompletionObservation {
+            geometry_revision: 12,
+            visibility_generation: 7,
+            enabled: true,
+            scene_size: (geometry.scene_width, geometry.scene_height),
+            frame_size: (frame.width, frame.height),
+            scale_factor,
+            visible: true,
+        }
+    }
+
+    #[test]
+    fn enable_completion_requires_the_requested_body_native_frame_and_visibility() {
+        let request = PetModeGeometryRequest { width: 180.0, revision: 12 };
+        for dpi in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            assert_eq!(pet_enable_completion_applied(request, 7, enabled_pet_completion(dpi)), Ok(true));
+            let mut hidden = enabled_pet_completion(dpi);
+            hidden.visible = false;
+            assert!(pet_enable_completion_applied(request, 7, hidden).is_err());
+            let mut old_frame = enabled_pet_completion(dpi);
+            let initial = pet_render_layout().geometry(PET_MODE_WIDTH).window_size().to_physical::<u32>(dpi);
+            old_frame.frame_size = (initial.width, initial.height);
+            assert!(pet_enable_completion_applied(request, 7, old_frame).is_err());
+            let mut old_body = enabled_pet_completion(dpi);
+            old_body.scene_size = (PET_MODE_WIDTH, PET_MODE_HEIGHT);
+            assert!(pet_enable_completion_applied(request, 7, old_body).is_err());
+        }
+    }
+
+    #[test]
+    fn enable_completion_rejects_a_frame_left_at_the_previous_display_dpi() {
+        let request = PetModeGeometryRequest { width: 180.0, revision: 12 };
+        let mut observed = enabled_pet_completion(1.75);
+        observed.scale_factor = 1.5;
+        assert!(pet_enable_completion_applied(request, 7, observed).is_err());
+    }
+
+    #[test]
+    fn late_enable_completion_never_retries_superseded_size_or_off() {
+        let request = PetModeGeometryRequest { width: 180.0, revision: 12 };
+        for cause in ["size", "off", "generation"] {
+            let mut observed = enabled_pet_completion(1.5);
+            observed.visible = false;
+            observed.frame_size = (252, 236);
+            match cause {
+                "size" => observed.geometry_revision = 13,
+                "off" => {
+                    observed.enabled = false;
+                    observed.visibility_generation = 8;
+                }
+                _ => observed.visibility_generation = 8,
+            }
+            assert!(!pet_enable_presentation_is_current(request.revision, observed.geometry_revision, 7, observed.visibility_generation));
+            assert_eq!(pet_enable_completion_applied(request, 7, observed), Ok(false));
+        }
+    }
+
+    #[test]
+    fn live_dpi_changes_repair_the_surface_without_a_pet_size_change_or_rehome() {
+        for pet_scale in [0.5, 0.75, 1.0, 1.25] {
+            let geometry = pet_render_layout().geometry(PET_MODE_WIDTH * pet_scale);
+            let unchanged_scene = (geometry.scene_width, geometry.scene_height);
+            let mut physical_frame = geometry.window_size().to_physical::<u32>(1.0);
+            // The observed regression held the old physical frame while the
+            // settings pet percent stayed unchanged across OS scale changes.
+            for dpi in [1.25, 1.75, 1.5, 1.0] {
+                let expected = geometry.window_size().to_physical::<u32>(dpi);
+                assert_ne!(physical_frame, expected);
+                let update = pet_geometry_update_kind(
+                    unchanged_scene,
+                    geometry,
+                    physical_frame != expected,
+                );
+                assert_eq!(update, Some(false), "DPI repairs must bypass the same-body no-op without triggering resized-home policy");
+                physical_frame = expected;
+                assert_eq!(
+                    pet_geometry_update_kind(unchanged_scene, geometry, false),
+                    None,
+                );
+                // A scale event also reasserts the WebView's native bounds if
+                // Windows already resized the HWND before our queued job.
+                assert_eq!(
+                    pet_geometry_update_kind(unchanged_scene, geometry, true),
+                    Some(false),
+                );
+            }
+        }
+        let base = pet_render_layout().geometry(PET_MODE_WIDTH);
+        let larger = pet_render_layout().geometry(PET_MODE_WIDTH * 1.25);
+        assert_eq!(
+            pet_geometry_update_kind((base.scene_width, base.scene_height), larger, false),
+            Some(true),
+        );
+    }
+
+    #[test]
+    fn a_live_dpi_refresh_uses_the_drag_workers_original_authored_grab() {
+        let point = (50.0, 40.0);
+        let physical_pointer = PhysicalPosition::new(-1840.25, 100.75);
+        for pet_scale in [0.5, 0.75, 1.0, 1.25] {
+            let geometry = pet_render_layout().geometry(PET_MODE_WIDTH * pet_scale);
+            for dpi in [1.0, 1.25, 1.5, 1.75, 2.0] {
+                let scene =
+                    pet_scene_origin_at_grab(physical_pointer.to_logical(dpi), geometry, point);
+                let window = geometry.scene_to_window(scene);
+                let held_point = geometry.window_point_for_canonical(point);
+                assert!(((window.x + held_point.0) * dpi - physical_pointer.x).abs() < 1e-9);
+                assert!(((window.y + held_point.1) * dpi - physical_pointer.y).abs() < 1e-9);
+            }
+        }
+    }
+
+    #[test]
+    fn resizing_a_moving_grab_keeps_the_workers_captured_point() {
+        let mut state = fresh_drag_session();
+        let lease = tagged_drag(1);
+        assert!(state.claim(&lease, true, state.epoch));
+        assert!(state.set_grab(&lease, (50.0, 40.0)));
+        let old = pet_render_layout().geometry(144.0);
+        let origin = LogicalPosition::new(-1884.0, 20.0);
+        // The pointer moved after the previous owner apply. A resize reaches
+        // the owner before the next coalesced drag apply catches the frame up.
+        let pointer = LogicalPosition::new(origin.x + 50.0 + 12.0, origin.y + 40.0 - 8.0);
+        for scale in [0.5, 0.75, 1.0, 1.25] {
+            let next = pet_render_layout().geometry(144.0 * scale);
+            let resized = pet_scene_origin_after_resize(origin, old, next, Some(pointer), state.canonical_grab);
+            let captured = state.canonical_grab.unwrap();
+            assert!((resized.x + captured.0 * scale - pointer.x).abs() < 1e-9,
+                "resize must keep the same authored X point as the drag worker");
+            assert!((resized.y + captured.1 * scale - pointer.y).abs() < 1e-9,
+                "resize must keep the same authored Y point as the drag worker");
+            let following = pet_scene_origin_at_grab(pointer, next, captured);
+            assert_eq!(resized, following, "the next drag apply must not correct a resize jump");
+        }
+    }
+
+    #[test]
+    fn resizing_during_a_grab_preserves_the_authored_point_in_world_space() {
+        let old = pet_render_layout().geometry(144.0);
+        let origin = LogicalPosition::new(-1884.0, 20.0);
+        let pointer = LogicalPosition::new(origin.x + 50.0, origin.y + 40.0);
+        for scale in [0.5, 0.75, 1.0, 1.25] {
+            let next = pet_render_layout().geometry(144.0 * scale);
+            let resized = pet_scene_origin_after_resize(origin, old, next, Some(pointer), None);
+            assert!((resized.x + 50.0 * scale - pointer.x).abs() < 1e-9);
+            assert!((resized.y + 40.0 * scale - pointer.y).abs() < 1e-9);
+            // The settings sync reaches set_enabled after this geometry
+            // transaction. Its resting-home policy must preserve this grab.
+            let size_changed = scale != 1.0;
+            for reduced_motion in [false, true] {
+                assert!(!should_settle_pet_enable_change(false, reduced_motion, size_changed, true));
+                assert_eq!(should_settle_pet_enable_change(false, reduced_motion, size_changed, false), size_changed);
+            }
+            let resting = pet_scene_origin_after_resize(origin, old, next, None, Some((50.0, 40.0)));
+            assert_eq!(resting, origin);
+        }
+        // Switching to reduced motion still settles an unheld entry.
+        assert!(should_settle_pet_enable_change(true, true, false, false));
+        assert!(!should_settle_pet_enable_change(true, false, false, false));
+    }
+
 }
