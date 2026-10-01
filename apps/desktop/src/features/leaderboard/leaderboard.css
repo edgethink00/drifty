@@ -309,9 +309,9 @@
 
 .leaderboard-public-profile .app-btn--primary.profile-btn:hover:not(:disabled),
 .leaderboard-panel .profile-embeds .app-btn--primary.profile-btn:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: var(--canvas);
   transform: none;
 }
 
@@ -2586,9 +2586,9 @@
 .hero-action-btn.app-btn--primary > svg { color: currentColor; opacity: 1; }
 
 .hero-action-btn.app-btn--primary:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: var(--canvas);
   transform: translateY(-1px);
 }
 

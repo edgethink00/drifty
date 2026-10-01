@@ -1153,7 +1153,7 @@ describe("App onboarding", () => {
     expect(trackerStart).toHaveBeenLastCalledWith({ resumePaused: true });
     expect(parsePostOnboardingSidebarGuideRecord(
       window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
-    )).toMatchObject({ status: "active", step: "activity" });
+    )).toMatchObject({ status: "active", step: "welcome" });
 
     const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
     expect(storedValue).toBeTruthy();
@@ -1904,7 +1904,7 @@ describe("App onboarding", () => {
     await advanceToPermissionsStep();
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /^enable$/i })[0]);
+    fireEvent.click(screen.getByRole("button", { name: /^allow in settings$/i }));
 
     await waitFor(() => {
       expect(accessibilityRequestAccess).toHaveBeenCalled();
@@ -2674,11 +2674,27 @@ describe("App onboarding", () => {
     fireEvent.click(await screen.findByRole("tab", { name: /^Previews$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^Replay tutorial$/i }));
 
-    expect(await screen.findByRole("region", { name: /go deeper only when you need to/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /^welcome to drifty$/i })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(document.querySelector(".cmd-overlay")).toBeNull();
+    expect(screen.getByRole("dialog", { name: /^welcome to drifty$/i })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Settings$/ })).toBeNull();
     expect(parsePostOnboardingSidebarGuideRecord(
       window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
-    )).toMatchObject({ status: "active", step: "activity" });
+    )).toMatchObject({ status: "active", step: "welcome" });
+    expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
+    fireEvent.click(screen.getByRole("button", { name: /^Show me around$/i }));
+    expect(await screen.findByRole("dialog", { name: /where your day adds up/i })).toBeTruthy();
+    for (const title of [/make labels fit your work/i, /a cat that closes the drift/i, /still here in the menu bar/i]) {
+      fireEvent.click(screen.getByRole("button", { name: /^Next$/i }));
+      expect(await screen.findByRole("dialog", { name: title })).toBeTruthy();
+    }
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Start using Drifty$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /still here in the menu bar/i })).toBeNull());
+    expect(parsePostOnboardingSidebarGuideRecord(
+      window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
+    )).toMatchObject({ status: "completed", step: "tracking" });
     expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
   });
 

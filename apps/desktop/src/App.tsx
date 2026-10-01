@@ -175,6 +175,7 @@ import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/first
 import { isInitialDailyFocusQuietPeriod, isInstallDayReviewEligible } from "./features/onboarding/initialExperiencePolicy";
 import { resolveFirstDayTargetDay, useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
+import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
 import { PostOnboardingSidebarGuide } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
 import { isPostOnboardingSidebarGuideReviewEnabled } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
@@ -476,6 +477,7 @@ import { compactHistoryRangeContains, compactHistoryRangeKey, findDisplayableCom
 import { getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
 import { EMPTY_ACTIVITY_SEGMENTS, latestActivitySegmentCursor, mergeActivitySegments } from "./lib/activitySegments";
 import { scheduleIdleWork } from "./lib/scheduleIdleWork";
+
 
 const LazyClassificationPage = lazy(async () => ({
   default: (await import("./features/classification/ClassificationPage")).ClassificationPage,
@@ -1671,6 +1673,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     window.location.search,
     import.meta.env.DEV,
   );
+  const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
   const {
     isActive: postOnboardingSidebarGuideActive,
     step: postOnboardingSidebarGuideStep,
@@ -1682,43 +1685,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   } = usePostOnboardingSidebarGuide(
     postOnboardingSidebarGuideReviewEnabled ? "review" : user?.id ?? "local",
   );
-  const postOnboardingAccountGuideActive = postOnboardingSidebarGuideActive
-    && postOnboardingSidebarGuideStep === "account";
-  const postOnboardingAccountGuideWasActiveRef = useRef(false);
-  useEffect(() => {
-    if (postOnboardingAccountGuideActive) {
-      postOnboardingAccountGuideWasActiveRef.current = true;
-      if (
-        activeTab !== "settings"
-        && !onboardingOpen
-        && !preparingFirstDay
-        && !authModalOpen
-        && !feedbackModalOpen
-        && !upgradePlanModalOpen
-        && !accountDeletionModalOpen
-        && !cmdOpen
-      ) setAccountMenuOpen(true);
-      return;
-    }
-    if (!postOnboardingAccountGuideWasActiveRef.current) return;
-    postOnboardingAccountGuideWasActiveRef.current = false;
-    setAccountMenuOpen(false);
-  }, [
-    accountDeletionModalOpen,
-    activeTab,
-    authModalOpen,
-    cmdOpen,
-    feedbackModalOpen,
-    onboardingOpen,
-    postOnboardingAccountGuideActive,
-    preparingFirstDay,
-    upgradePlanModalOpen,
-  ]);
   const toggleAccountMenu = useCallback(() => {
-    setAccountMenuOpen((open) => (postOnboardingAccountGuideActive ? true : !open));
-  }, [postOnboardingAccountGuideActive]);
+    setAccountMenuOpen((open) => !open);
+  }, []);
   const replayPostOnboardingSidebarGuide = useCallback(() => {
-    setSidebarCollapsed(false);
     selectDay(logicalTodayIsoDate(startOfDayMinutes));
     navigateToTab("dashboard", "Today");
     restartPostOnboardingSidebarGuide();
@@ -6693,11 +6663,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCmdOpen((v) => !v); }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (postOnboardingSidebarGuideActive && postOnboardingSidebarGuideStep) return;
+        setCmdOpen((v) => !v);
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [postOnboardingSidebarGuideActive, postOnboardingSidebarGuideStep]);
 
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const isTodaySelected = selectedDay === todayDay;
@@ -10461,6 +10435,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       <PostOnboardingSidebarGuide
         step={shouldShowPostOnboardingSidebarGuide ? postOnboardingSidebarGuideStep : null}
         navigationRefreshEnabled={canUseNavigationRefresh}
+        hostPlatform={introHostPlatform}
+        theme={theme}
         onAdvance={advancePostOnboardingSidebarGuide}
         onBack={retreatPostOnboardingSidebarGuide}
         onDismiss={dismissPostOnboardingSidebarGuide}

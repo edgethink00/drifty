@@ -58,7 +58,11 @@
   cursor: not-allowed;
 }
 
-/* One filled action per action group. */
+/* One filled action per action group. Hover stays on the neutral ink ramp,
+   like .modal-btn--primary: jumping from ink to the brand accent read as a
+   different button rather than the same one reacting, and competed with the
+   accent used for highlights and illustrations. --text-muted is one step
+   lighter in light mode and one step darker in dark mode. */
 .app-btn--primary {
   background: var(--text);
   border-color: var(--text);
@@ -66,9 +70,9 @@
 }
 
 .app-btn--primary:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: var(--canvas);
 }
 
 /* Shared tinted danger treatment across page, dialog, and Settings actions. */

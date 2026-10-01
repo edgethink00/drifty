@@ -1,0 +1,16 @@
+.sidebar-guide-narrative-host { position: relative; width: 100%; height: 100%; }
+.sidebar-guide-narrative-art__cat { position: absolute; width: 144px; height: 99px; transform-origin: 0 0; pointer-events: none; }
+.sidebar-guide-narrative-art { display: block; width: 100%; height: 100%; font-family: inherit; letter-spacing: -.01em; }
+.sidebar-guide-narrative-art--bleed { overflow: visible; }
+.real-art__card { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; filter: drop-shadow(0 4px 8px rgb(20 24 12 / 12%)); }
+.real-art__flat { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+.real-art__menu { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; filter: drop-shadow(0 6px 12px rgb(20 24 12 / 22%)); }
+.real-art__window { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; filter: drop-shadow(0 8px 16px rgb(20 24 12 / 16%)); }
+.real-art__menubar { fill: color-mix(in srgb, var(--surface) 78%, transparent); }
+.real-art__dock { fill: color-mix(in srgb, var(--surface) 62%, transparent); stroke: var(--line-strong); }
+.real-art__halo { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 5 4; }
+
+.real-art__lens { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.real-art__halo { vector-effect: non-scaling-stroke; }
+@media (prefers-reduced-motion: reduce) { .sidebar-guide-narrative-art__cat { transition: none !important; } }
+.sidebar-guide-narrative-host--settled *, .sidebar-guide-narrative-host--settled .sidebar-guide-narrative-art__cat { transition: none !important; }

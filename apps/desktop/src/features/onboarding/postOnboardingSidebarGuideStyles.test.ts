@@ -1,21 +1,21 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-
 const styles = readFileSync(new URL("./post-onboarding-sidebar-guide.css", import.meta.url), "utf8");
-
-describe("post-onboarding sidebar guide styles", () => {
-  it("dims the four surrounding regions without blurring the user's day", () => {
-    expect(styles).toContain('data-edge="top"');
-    expect(styles).toContain('data-edge="bottom"');
-    expect(styles).not.toMatch(/\.post-onboarding-sidebar-guide__scrim\s*\{[^}]*backdrop-filter/s);
-    expect(styles).toMatch(/\.post-onboarding-sidebar-guide__scrim\s*\{[^}]*pointer-events: auto/s);
-    expect(styles).not.toMatch(/\.post-onboarding-sidebar-guide__highlight\s*\{[^}]*backdrop-filter/s);
+describe("centered app intro styles", () => {
+  it("centers a stable frame without menu-dependent geometry or movement", () => {
+    expect(styles).toContain("place-items: center");
+    expect(styles).toContain("height: 346px");
+    expect(styles).not.toContain("--sidebar-guide-anchor");
+    expect(styles).toContain("border-radius: var(--modal-radius-standard)");
+    expect(styles).toContain("border-radius: calc(var(--modal-radius-standard) - var(--guide-stage-gap))");
+    expect(styles).not.toContain("data-moving");
+    expect(styles).not.toContain("data-edge");
   });
-
-  it("respects reduced motion and uses the existing app button system", () => {
+  it("supports reduced motion, small windows, themes and the app button system", () => {
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(styles).toContain("background: var(--shell-floating-surface-strong)");
-    expect(styles).toContain("border-top: 1px solid var(--line)");
+    expect(styles).toContain("max-height: calc(100dvh - 40px)");
+    expect(styles).toContain(":root[data-theme=\"dark\"] .post-onboarding-sidebar-guide__visual");
+    expect(styles).toContain("__actions .app-btn { --btn-h: var(--modal-action-height); border-radius: var(--modal-action-radius);");
     expect(styles).not.toContain("transition: all");
   });
 });

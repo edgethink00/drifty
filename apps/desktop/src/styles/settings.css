@@ -476,8 +476,8 @@
 }
 
 .settings-btn--primary:hover {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--text-muted);
+  border-color: var(--text-muted);
   color: var(--canvas);
 }
 

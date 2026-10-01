@@ -114,11 +114,15 @@ export function OnboardingDesignCodeContent({
     <>
       <form
         className="onboarding-card dc-onb-card"
+        data-step={flow.step}
         onSubmit={handleSubmit}
         aria-busy={flow.isCompleting}
       >
         <div className="dc-onb-scroll" ref={scrollRef} data-overflow={scrollEdges}>
           <div className={contentClassName}>
+            {flow.step === "ready" ? (
+              <span className="dc-onb-ready-seal" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6" /></svg></span>
+            ) : null}
             {showTitle ? (
               <h1 className="dc-onb-title" id="onboarding-title" ref={flow.titleRef} tabIndex={-1}>
                 {title}

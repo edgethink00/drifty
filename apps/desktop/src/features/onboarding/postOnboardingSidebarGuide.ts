@@ -3,16 +3,15 @@ export const POST_ONBOARDING_SIDEBAR_GUIDE_REVIEW_QUERY_PARAM = "driftySidebarGu
 export const POST_ONBOARDING_SIDEBAR_GUIDE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
 
 /**
- * Where things live, nothing more. The user lands on Today with their first
- * result already on screen, so the tour skips the dashboard and covers only
- * the menus they would otherwise have to discover: Activity, tracking, and
- * the Account menu.
+ * A centered introduction: welcome, where the day adds up, correcting it, the optional pet, and last
+ * the menu bar ring, the one thing to remember before the window is closed. Step ids are unchanged,
+ * so records saved under the previous order (tracking before account) stay valid.
  */
-export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["activity", "tracking", "account"] as const;
+export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["welcome", "day", "activity", "account", "tracking"] as const;
 
-/** Records saved before the dashboard step was dropped resume at the next step. */
+/** Keep existing records and completed/dismissed choices compatible. */
 const RETIRED_GUIDE_STEPS: Readonly<Record<string, PostOnboardingSidebarGuideStep>> = {
-  dashboard: "activity",
+  dashboard: "day",
 };
 
 export type PostOnboardingSidebarGuideStep = typeof POST_ONBOARDING_SIDEBAR_GUIDE_STEPS[number];
@@ -103,7 +102,7 @@ export function beginPostOnboardingSidebarGuide(
   return {
     version: 1,
     status: "active",
-    step: "activity",
+    step: "welcome",
     startedAt: timestamp,
     updatedAt: timestamp,
   };

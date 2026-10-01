@@ -31,6 +31,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
             description={t("onboarding.permissions.accessibilityDescription")}
             pill={accessibilityEnabled ? t("onboarding.permissions.allowed") : t("common.required")}
             tone={accessibilityEnabled ? "success" : "required"}
+            actionLabel={accessibilityEnabled ? t("onboarding.permissions.allowed") : t("onboarding.permissions.allowInSettings")}
             disabled={accessibilityEnabled}
             onClick={() => void flow.handleRequestAccessibilityClick()}
           />
@@ -61,6 +62,12 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
           />
         ) : null}
       </ul>
+      {flow.accessibilityRequired && !accessibilityEnabled ? (
+        <div className="dc-onb-permission-path">
+          <strong>{t("onboarding.permissions.accessibilityRecoveryTitle")}</strong>
+          <p>{t("onboarding.permissions.accessibilityRecoveryBody")}</p>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -84,7 +91,12 @@ function PermissionRow({
 }) {
   const { t } = useLocalization();
   return (
-    <li className="dc-onb-row">
+    <li className={`dc-onb-row dc-onb-row--${tone}`}>
+      <span className="dc-onb-permission-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          {tone === "success" ? <path d="m5 12 4 4L19 6" /> : <><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z" /><path d="M12 8v5m0 3h.01" /></>}
+        </svg>
+      </span>
       <div className="dc-onb-row__copy">
         <span className="dc-onb-row__title">{title}</span>
         <span className="dc-onb-row__desc">{description}</span>

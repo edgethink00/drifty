@@ -2,377 +2,144 @@
   position: fixed;
   inset: 0;
   z-index: 70;
-  visibility: hidden;
-  pointer-events: none;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  isolation: isolate;
+  --sidebar-guide-page-shift: 16px;
 }
-
-.post-onboarding-sidebar-guide--positioned {
-  visibility: visible;
-}
-
+.post-onboarding-sidebar-guide[data-navigation-direction="backward"] { --sidebar-guide-page-shift: -16px; }
 .post-onboarding-sidebar-guide__scrim {
-  position: fixed;
-  /* Dim without blurring: the first thing a new user wants to read is their
-     own day, so the surrounding content stays legible. The scrim takes the
-     clicks it covers, so the guide never drifts out of step with the screen;
-     the highlighted section itself stays clickable through the gap. */
-  background: color-mix(in srgb, var(--canvas) 34%, transparent);
-  pointer-events: auto;
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--text) 24%, transparent);
   animation: sidebar-guide-fade-in 160ms var(--ease-out-quart) backwards;
 }
-
-.post-onboarding-sidebar-guide__scrim[data-edge="top"] {
-  inset: 0 0 auto;
-  height: var(--sidebar-guide-anchor-top);
-}
-
 .post-onboarding-sidebar-guide__drag-strip {
   position: fixed;
   top: 0;
   left: 96px;
   right: 0;
   height: var(--window-chrome-height, 32px);
-  pointer-events: auto;
 }
-
-.post-onboarding-sidebar-guide__scrim[data-edge="left"] {
-  left: 0;
-  top: var(--sidebar-guide-anchor-top);
-  width: var(--sidebar-guide-anchor-left);
-  height: var(--sidebar-guide-anchor-height);
-}
-
-.post-onboarding-sidebar-guide__scrim[data-edge="right"] {
-  right: 0;
-  top: var(--sidebar-guide-anchor-top);
-  width: calc(100vw - var(--sidebar-guide-anchor-right));
-  height: var(--sidebar-guide-anchor-height);
-}
-
-.post-onboarding-sidebar-guide__scrim[data-edge="bottom"] {
-  inset: var(--sidebar-guide-anchor-bottom) 0 0;
-}
-
-.post-onboarding-sidebar-guide__highlight {
-  position: fixed;
-  left: calc(var(--sidebar-guide-anchor-left) - var(--sidebar-guide-highlight-padding));
-  top: calc(var(--sidebar-guide-anchor-top) - var(--sidebar-guide-highlight-padding));
-  width: calc(var(--sidebar-guide-anchor-width) + 2 * var(--sidebar-guide-highlight-padding));
-  height: calc(var(--sidebar-guide-anchor-height) + 2 * var(--sidebar-guide-highlight-padding));
-  border: 1px solid color-mix(in srgb, var(--accent) 64%, var(--line-strong));
-  border-radius: var(--sidebar-guide-highlight-radius);
-  background: color-mix(in srgb, var(--accent-soft) 7%, transparent);
-  box-shadow:
-    0 8px 24px color-mix(in srgb, var(--text) 7%, transparent),
-    inset 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
-  animation: sidebar-guide-highlight-in 160ms var(--ease-out-quart) backwards;
-}
-
 .post-onboarding-sidebar-guide__panel {
+  position: relative;
   box-sizing: border-box;
-  position: fixed;
-  left: var(--sidebar-guide-panel-left);
-  top: var(--sidebar-guide-panel-top);
   display: grid;
-  gap: var(--space-3);
-  width: min(296px, calc(100vw - 1.75rem));
-  max-height: calc(100vh - 1.75rem);
-  padding: var(--space-4);
-  border: 1px solid color-mix(in srgb, var(--line-strong) 76%, transparent);
-  border-radius: var(--radius-md);
-  background: var(--shell-floating-surface-strong);
+  /* The copy column is sized to its text: large type in a narrow column fills the card, so the space
+     between the copy and the actions stays about a third of the card. */
+  grid-template-columns: 43% 57%;
+  grid-template-rows: minmax(0, 1fr);
+  width: min(740px, 100%);
+  height: 346px;
+  max-height: calc(100dvh - 40px);
+  /* The intro is an app dialog, so it takes the standard modal shell: 26px corner, 22px content
+     inset (8px stage gap + 14px column padding), the shell border and shadow from modal-chrome.css,
+     and a stage radius concentric with the corner (26 - 8 = 18px, --radius-lg). */
+  --guide-stage-gap: 8px;
+  padding: var(--guide-stage-gap);
+  border: 1px solid var(--line);
+  border-radius: var(--modal-radius-standard);
+  background: var(--surface);
   color: var(--text);
-  backdrop-filter: blur(24px) saturate(1.16);
-  -webkit-backdrop-filter: blur(24px) saturate(1.16);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.14),
-    inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
-  pointer-events: auto;
+  box-shadow: 0 1px 2px rgba(28, 28, 25, 0.05), 0 24px 56px color-mix(in srgb, #1c1c19 10%, transparent);
   overflow: auto;
   overscroll-behavior: contain;
-  transform-origin: left center;
-  /* Arrives like the app's other anchored popups: 160ms on the shared easing,
-     emerging from the sidebar it points at. `backwards` so nothing is held
-     after entry and the exit fade below can take over. */
-  animation: sidebar-guide-panel-in 160ms var(--ease-out-quart) backwards;
+  animation: sidebar-guide-fade-in 160ms var(--ease-out-quart) backwards;
 }
-
-.post-onboarding-sidebar-guide__close {
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  display: grid;
-  place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-soft);
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
-}
-
-.post-onboarding-sidebar-guide__close:hover {
-  background: var(--bg-2);
-  color: var(--text);
-}
-
-.post-onboarding-sidebar-guide__close:active {
-  transform: scale(0.96);
-}
-
-.post-onboarding-sidebar-guide__close:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.post-onboarding-sidebar-guide__close svg {
-  width: 0.9rem;
-  height: 0.9rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-}
-
-.post-onboarding-sidebar-guide__meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding-right: 2rem;
-  color: var(--text-soft);
-  font-size: var(--type-caption-size);
-  font-weight: 650;
-  line-height: 1.3;
-}
-
-.post-onboarding-sidebar-guide__sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.post-onboarding-sidebar-guide__copy {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.post-onboarding-sidebar-guide__copy-inner {
-  display: grid;
-  gap: var(--space-2);
-}
-
-/* The panel is focused so keyboard users start inside the guide; the panel
-   itself is the focus cue, so it draws no extra ring. */
-.post-onboarding-sidebar-guide__panel:focus {
-  outline: none;
-}
-
-/* Step change: the panel and the lit section glide to the next place while
-   the new words settle in, instead of everything jumping in one frame. */
-.post-onboarding-sidebar-guide[data-moving] .post-onboarding-sidebar-guide__panel {
-  transition:
-    left 240ms var(--ease-out-quart),
-    top 240ms var(--ease-out-quart);
-}
-
-.post-onboarding-sidebar-guide[data-moving] .post-onboarding-sidebar-guide__highlight {
-  transition:
-    left 240ms var(--ease-out-quart),
-    top 240ms var(--ease-out-quart),
-    width 240ms var(--ease-out-quart),
-    height 240ms var(--ease-out-quart),
-    border-radius 240ms var(--ease-out-quart);
-}
-
-.post-onboarding-sidebar-guide[data-moving] .post-onboarding-sidebar-guide__scrim {
-  transition:
-    top 240ms var(--ease-out-quart),
-    left 240ms var(--ease-out-quart),
-    width 240ms var(--ease-out-quart),
-    height 240ms var(--ease-out-quart);
-}
-
-.post-onboarding-sidebar-guide__copy-inner,
-.post-onboarding-sidebar-guide__meta {
-  animation: sidebar-guide-copy-in 180ms var(--ease-out-quart) backwards;
-}
-
-/* Closing is a decision already made: a quick accelerating fade, as the app's
-   anchored popups leave. */
-.post-onboarding-sidebar-guide[data-phase="exiting"] > * {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 100ms cubic-bezier(0.4, 0, 1, 1);
-}
-
-.post-onboarding-sidebar-guide__copy strong {
-  max-width: 24ch;
-  font-size: 1rem;
-  font-weight: 690;
-  line-height: 1.3;
-  letter-spacing: -0.018em;
-  text-wrap: balance;
-}
-
-.post-onboarding-sidebar-guide__copy p {
-  max-width: 39ch;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  line-height: 1.55;
-  text-wrap: pretty;
-}
-
-.post-onboarding-sidebar-guide__footer,
-.post-onboarding-sidebar-guide__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.post-onboarding-sidebar-guide__footer {
-  flex-wrap: wrap;
-  justify-content: space-between;
-  margin-top: var(--space-1);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line);
-}
-
-.post-onboarding-sidebar-guide__actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  margin-inline-start: auto;
-}
-
-/* "Skip guide" is a quiet text action. Its label lines up with the copy's
-   left edge (the hover chip may bleed into the panel padding), and the
-   trimmed padding keeps Skip, Back, and the last step's wider action on one
-   row inside the 296px panel. */
-.post-onboarding-sidebar-guide__footer > .app-btn--quiet {
-  padding-inline: var(--space-2);
-  margin-inline-start: calc(-1 * var(--space-2));
-}
-
-.sidebar-guide-section {
+.post-onboarding-sidebar-guide__panel:focus { outline: none; }
+.post-onboarding-sidebar-guide__left {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  border-radius: var(--radius-sm);
+  padding: 16px 20px 14px 18px;
+  min-width: 0;
 }
-
-@keyframes sidebar-guide-panel-in {
-  from {
-    opacity: 0;
-    transform: translate3d(-0.25rem, 0, 0) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+/* The header is the progress dots alone, on the title's left edge. */
+.post-onboarding-sidebar-guide__header { display: flex; align-items: center; height: 8px; margin: 6px 0 22px; }
+.post-onboarding-sidebar-guide__dots { display: flex; align-items: center; gap: 7px; }
+/* The install onboarding's dot (18% ink), one step larger; the active step stretches into a pill. */
+.post-onboarding-sidebar-guide__dots i { width: 7px; height: 7px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--text) 18%, transparent); transition: width 160ms var(--ease-out-quart), background-color 160ms var(--ease-out-quart); }
+.post-onboarding-sidebar-guide__dots i[data-active] { width: 20px; background: var(--accent); }
+.post-onboarding-sidebar-guide__copy { flex: 1; position: relative; }
+.post-onboarding-sidebar-guide__copy-inner,
+.post-onboarding-sidebar-guide__visual-page { animation: sidebar-guide-copy-in 180ms var(--ease-out-quart) backwards; }
+.post-onboarding-sidebar-guide__visual-page { position: absolute; inset: 0; }
+.post-onboarding-sidebar-guide[data-navigation-direction="forward"] .post-onboarding-sidebar-guide__copy-inner,
+.post-onboarding-sidebar-guide[data-navigation-direction="backward"] .post-onboarding-sidebar-guide__copy-inner,
+.post-onboarding-sidebar-guide[data-navigation-direction="forward"] .post-onboarding-sidebar-guide__visual-page,
+.post-onboarding-sidebar-guide[data-navigation-direction="backward"] .post-onboarding-sidebar-guide__visual-page {
+  animation: sidebar-guide-page-in 240ms var(--ease-out-quart) both;
 }
-
-@keyframes sidebar-guide-highlight-in {
-  from {
-    opacity: 0;
-    transform: scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.post-onboarding-sidebar-guide__copy-previous { position: absolute; inset: 0; }
+.post-onboarding-sidebar-guide__copy-previous,
+.post-onboarding-sidebar-guide[data-navigation-direction] .post-onboarding-sidebar-guide__visual-page--previous {
+  pointer-events: none;
+  animation: sidebar-guide-page-out 240ms var(--ease-out-quart) both;
 }
-
-@keyframes sidebar-guide-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.post-onboarding-sidebar-guide__copy h2 {
+  margin: 0 0 10px;
+  max-width: 20ch;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.28;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  white-space: pre-line;
 }
-
-@keyframes sidebar-guide-copy-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 2px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.post-onboarding-sidebar-guide__copy p { margin: 0; color: var(--text-muted); font-size: 1rem; line-height: 1.45; text-wrap: pretty; }
+.post-onboarding-sidebar-guide__copy .guide-keep { white-space: nowrap; }
+.post-onboarding-sidebar-guide__actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; }
+/* Dialog actions use the modal action size (36px / 11px, see modal-chrome.css) with the shared app
+   button type. Back/Skip is a soft filled button (the quiet button's own hover wash) of the same width,
+   so the two actions read as a pair. */
+.post-onboarding-sidebar-guide__actions .app-btn { --btn-h: var(--modal-action-height); border-radius: var(--modal-action-radius); padding-inline: var(--space-4); min-width: 104px; }
+.post-onboarding-sidebar-guide:not([data-keyboard]) .post-onboarding-sidebar-guide__actions .app-btn:focus-visible { outline: none; }
+.post-onboarding-sidebar-guide__actions .app-btn--quiet { background: var(--bg-2); color: var(--text); }
+.post-onboarding-sidebar-guide__actions .app-btn--quiet:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 9%, var(--bg-2)); }
+.post-onboarding-sidebar-guide__visual {
+  position: relative;
+  min-height: 0;
+  margin: 0;
+  border-radius: calc(var(--modal-radius-standard) - var(--guide-stage-gap));
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 2%, var(--canvas));
+  min-width: 0;
+  display: grid;
+  place-items: center;
 }
-
-.post-onboarding-sidebar-guide__panel--nudge {
-  /* The entry animation stays first in the list so removing the nudge does
-     not replay the panel's arrival. */
-  animation:
-    sidebar-guide-panel-in 160ms var(--ease-out-quart) backwards,
-    sidebar-guide-panel-nudge 360ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+:root[data-theme="dark"] .post-onboarding-sidebar-guide__visual { background: color-mix(in srgb, var(--text) 9%, var(--canvas)); }
+.post-onboarding-sidebar-guide[data-phase="exiting"] { opacity: 0; transition: opacity 100ms cubic-bezier(0.4, 0, 1, 1); }
+.sidebar-guide-section { display: flex; flex-direction: column; gap: 3px; border-radius: var(--radius-sm); }
+:root[data-locale="ko"] .post-onboarding-sidebar-guide__copy { word-break: keep-all; overflow-wrap: break-word; }
+@keyframes sidebar-guide-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sidebar-guide-copy-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@keyframes sidebar-guide-page-in { from { opacity: 0; transform: translateX(var(--sidebar-guide-page-shift)); } to { opacity: 1; transform: none; } }
+@keyframes sidebar-guide-page-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(calc(-1 * var(--sidebar-guide-page-shift))); } }
+@media (max-width: 759px) {
+  .post-onboarding-sidebar-guide__actions { gap: 8px; }
 }
-
-@keyframes sidebar-guide-panel-nudge {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  20% { transform: translate3d(-5px, 0, 0); }
-  45% { transform: translate3d(5px, 0, 0); }
-  70% { transform: translate3d(-3px, 0, 0); }
+@media (max-width: 539px) {
+  .post-onboarding-sidebar-guide { padding: 12px; }
+  /* Stacked: the copy area fits the tallest card (253px at 360px wide, English) plus one wrapped line,
+     at one fixed height so the card does not resize while paging. */
+  .post-onboarding-sidebar-guide__panel { height: 534px; max-height: calc(100dvh - 24px); grid-template-columns: 1fr; grid-template-rows: 1fr 240px; }
+  .post-onboarding-sidebar-guide__visual { min-height: 0; }
 }
-
-:root[data-locale="ko"] .post-onboarding-sidebar-guide__copy strong,
-:root[data-locale="ko"] .post-onboarding-sidebar-guide__copy p {
-  word-break: keep-all;
-  overflow-wrap: break-word;
-}
-
-@media (max-width: 639px) {
-  .post-onboarding-sidebar-guide__panel {
-    right: 0.875rem;
-    left: 0.875rem;
-    width: auto;
-  }
-
-  .post-onboarding-sidebar-guide__close {
-    width: 2.75rem;
-    height: 2.75rem;
-    top: 0.15rem;
-    right: 0.15rem;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .post-onboarding-sidebar-guide,
   .post-onboarding-sidebar-guide__panel,
-  .post-onboarding-sidebar-guide__highlight,
   .post-onboarding-sidebar-guide__scrim,
-  .post-onboarding-sidebar-guide__copy-inner,
-  .post-onboarding-sidebar-guide__meta {
-    animation: none;
-  }
-
-  .post-onboarding-sidebar-guide[data-moving] .post-onboarding-sidebar-guide__panel,
-  .post-onboarding-sidebar-guide[data-moving] .post-onboarding-sidebar-guide__highlight,
-  .post-onboarding-sidebar-guide[data-moving] .post-onboarding-sidebar-guide__scrim {
-    transition: none;
-  }
-
-  /* No shake without motion: a brief accent ring answers the blocked click. */
-  .post-onboarding-sidebar-guide__panel--nudge {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+  .post-onboarding-sidebar-guide[data-navigation-direction] .post-onboarding-sidebar-guide__copy-inner,
+  .post-onboarding-sidebar-guide[data-navigation-direction] .post-onboarding-sidebar-guide__copy-previous,
+  .post-onboarding-sidebar-guide[data-navigation-direction] .post-onboarding-sidebar-guide__visual-page,
+  .post-onboarding-sidebar-guide__dots i { animation: none; transition: none; }
+  .post-onboarding-sidebar-guide__copy-previous,
+  .post-onboarding-sidebar-guide__visual-page--previous { display: none; }
 }
-
 @media (forced-colors: active) {
-  .post-onboarding-sidebar-guide__scrim {
-    background: Canvas;
-    opacity: 0.72;
-  }
-
-  .post-onboarding-sidebar-guide__highlight,
-  .post-onboarding-sidebar-guide__panel {
-    border-color: Highlight;
-  }
+  .post-onboarding-sidebar-guide__scrim { background: Canvas; opacity: 0.72; }
+  .post-onboarding-sidebar-guide__panel { border-color: Highlight; }
 }

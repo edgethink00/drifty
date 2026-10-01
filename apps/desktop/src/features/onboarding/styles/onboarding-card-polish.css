@@ -1,0 +1,104 @@
+/* Scoped first-run surfaces. Setup policy and provider branches stay in the flow. */
+.onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row {
+  align-items: flex-start;
+  padding: 18px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dc-onb-permission-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--dc-onb-line);
+  border-radius: 10px;
+  color: var(--dc-onb-text);
+  background: var(--dc-onb-raised);
+}
+.dc-onb-permission-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.dc-onb-row--success .dc-onb-permission-icon {
+  color: var(--dc-onb-success);
+  background: color-mix(
+    in srgb,
+    var(--dc-onb-success) 8%,
+    var(--dc-onb-surface)
+  );
+}
+.onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row__copy {
+  flex: 1;
+  min-width: 180px;
+}
+.onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row__action {
+  margin-left: 46px;
+  width: calc(100% - 46px);
+  justify-content: space-between;
+}
+.dc-onb-permission-path {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--dc-onb-line);
+  border-radius: 12px;
+  background: var(--dc-onb-raised);
+  color: var(--dc-onb-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.dc-onb-permission-path strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--dc-onb-text);
+  font-weight: 600;
+}
+.dc-onb-permission-path p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.onboarding-card.dc-onb-card[data-step="nudges"] .dc-onb-cat-card,
+.onboarding-card.dc-onb-card[data-step="nudges"] .dc-onb-intervene__option {
+  padding: 14px 16px;
+  border-radius: 14px;
+}
+.dc-onb-ready-seal {
+  float: left;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-right: 12px;
+  border-radius: 12px;
+  background: color-mix(
+    in srgb,
+    var(--dc-onb-success) 10%,
+    var(--dc-onb-surface)
+  );
+  color: var(--dc-onb-success);
+}
+.dc-onb-ready-seal svg {
+  width: 23px;
+  height: 23px;
+}
+.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-title {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+}
+.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-ready-item > svg {
+  color: var(--dc-onb-success);
+}
+:root[data-locale="ko"] .dc-onb-permission-path {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+@media (forced-colors: active) {
+  .dc-onb-permission-icon,
+  .dc-onb-ready-seal,
+  .dc-onb-permission-path {
+    color: CanvasText;
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
+}

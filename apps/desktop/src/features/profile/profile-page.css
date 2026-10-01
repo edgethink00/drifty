@@ -48,9 +48,9 @@
 }
 
 .profile-page .app-btn--primary.profile-btn:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: var(--canvas);
   transform: none;
 }
 
@@ -559,9 +559,9 @@
 }
 
 .profile-page--v2 .app-btn--primary.profile-btn:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: var(--canvas);
   transform: none;
 }
 
