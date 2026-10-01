@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -144,7 +145,7 @@ class SshConnectionTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         args, kwargs = calls[0]
-        self.assertEqual(args[0], "/usr/bin/ssh")
+        self.assertEqual(args[0], shutil.which("ssh") if sys.platform == "win32" else "/usr/bin/ssh")
         self.assertIn("-n", args)
         self.assertIn("BatchMode=yes", args)
         self.assertIn("StrictHostKeyChecking=yes", args)
@@ -152,6 +153,53 @@ class SshConnectionTests(unittest.TestCase):
         self.assertNotIn("shell", kwargs)
         self.assertTrue(kwargs["text"])
         self.assertTrue(kwargs["capture_output"])
+
+    def test_windows_resolves_installed_client_for_test_and_collection(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ssh_sources as ssh_mod
+
+        calls = []
+        client = "C:/Program Files/OpenSSH/ssh.exe"
+
+        def runner(args, **kwargs):
+            calls.append((args, kwargs))
+            if kwargs.get("input") is None:
+                return subprocess.CompletedProcess(args, 0, stdout="drifty-ssh-ready", stderr="")
+            return subprocess.CompletedProcess(args, 0, stdout='{"version":1,"turns":[],"commits":[]}', stderr="")
+
+        with patch.object(sys, "platform", "win32"), patch("shutil.which", return_value=client):
+            self.assertTrue(check_ssh_agent_source("worker", runner=runner)["ok"])
+            self.assertTrue(collect_ssh_agent_source(CapturingDatabase(), "worker", runner=runner)["ok"])
+        self.assertEqual([args[0] for args, _ in calls], [client, client])
+        self.assertIn("-n", calls[0][0])
+        self.assertNotIn("-n", calls[1][0])
+        for args, kwargs in calls:
+            self.assertIn("BatchMode=yes", args)
+            self.assertIn("StrictHostKeyChecking=yes", args)
+            self.assertNotIn("shell", kwargs)
+
+    def test_windows_missing_client_never_invokes_runner(self) -> None:
+        from unittest.mock import Mock, patch
+        from app.tracker.dev_signals import ssh_sources as ssh_mod
+
+        runner = Mock(return_value=subprocess.CompletedProcess([], 0, stdout="drifty-ssh-ready", stderr=""))
+        with patch.object(sys, "platform", "win32"), patch("shutil.which", return_value=None):
+            self.assertEqual(check_ssh_agent_source("worker", runner=runner)["code"], "ssh_unavailable")
+            self.assertEqual(collect_ssh_agent_source(CapturingDatabase(), "worker", runner=runner)["code"], "ssh_unavailable")
+        runner.assert_not_called()
+
+    def test_unix_keeps_system_client_and_ignores_path_override(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import ssh_sources as ssh_mod
+
+        calls = []
+        def runner(args, **kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout="drifty-ssh-ready", stderr="")
+        with patch.object(sys, "platform", "darwin"), patch("shutil.which", return_value="/untrusted/ssh") as which:
+            self.assertTrue(check_ssh_agent_source("worker", runner=runner)["ok"])
+        which.assert_not_called()
+        self.assertEqual(calls[0][0], "/usr/bin/ssh")
 
     def test_maps_host_key_auth_and_timeout_failures(self) -> None:
         def failed(stderr):

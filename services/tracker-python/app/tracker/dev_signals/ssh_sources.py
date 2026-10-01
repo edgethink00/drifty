@@ -17,6 +17,8 @@ import json
 import os
 import re
 import shlex
+import shutil
+import sys
 import subprocess
 import zlib
 from datetime import datetime, timezone
@@ -528,6 +530,15 @@ def _run(args: list[str], *, runner: Runner, input_text: str | None = None, time
     )
 
 
+def _ssh_base_args() -> list[str]:
+    # Windows has no /usr/bin/ssh. Resolve its installed OpenSSH client using
+    # the process PATH and keep the executable as one argv item (no shell).
+    client = shutil.which("ssh") if sys.platform == "win32" else SSH_PATH
+    if client is None:
+        raise FileNotFoundError("The system SSH client is unavailable.")
+    return [client, *SSH_BASE_ARGS[1:]]
+
+
 def test_ssh_agent_source(host_value: object, *, runner: Runner = subprocess.run) -> dict[str, Any]:
     try:
         host = validate_ssh_host(host_value)
@@ -536,8 +547,8 @@ def test_ssh_agent_source(host_value: object, *, runner: Runner = subprocess.run
     # The tracker sidecar receives its own command protocol on stdin. Keep a
     # connection-only probe from inheriting and consuming that pipe; collection
     # intentionally omits -n because it streams the exporter over SSH stdin.
-    args = [*SSH_BASE_ARGS, "-n", host, "printf drifty-ssh-ready"]
     try:
+        args = [*_ssh_base_args(), "-n", host, "printf drifty-ssh-ready"]
         completed = _run(args, runner=runner, timeout=15)
     except FileNotFoundError:
         return _result(False, "ssh_unavailable", "The system SSH client is unavailable.", host)
@@ -679,8 +690,8 @@ def collect_ssh_agent_source(
     except ValueError as error:
         return _result(False, "invalid_host", str(error), **_empty_collection())
     days = max(1, min(int(backfill_days), MAX_BACKFILL_DAYS))
-    args = [*SSH_BASE_ARGS, host, f"python3 - {days}"]
     try:
+        args = [*_ssh_base_args(), host, f"python3 - {days}"]
         completed = _run(args, runner=runner, input_text=REMOTE_EXPORTER_SCRIPT, timeout=45)
     except FileNotFoundError:
         failure = _result(False, "ssh_unavailable", "The system SSH client is unavailable.", host)
