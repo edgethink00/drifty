@@ -401,6 +401,73 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         self.assertEqual(Path(f"{quarantine}-wal").read_bytes(), b"original wal sidecar")
         self.assertEqual(Path(f"{quarantine}-shm").read_bytes(), remaining_shm)
 
+    def test_interrupted_quarantine_without_backup_preserves_sidecars_on_retry(self) -> None:
+        original = b"corrupt source with no verified backup"
+        self.db_path.write_bytes(original)
+        wal_path = Path(f"{self.db_path}-wal")
+        shm_path = Path(f"{self.db_path}-shm")
+        wal_path.write_bytes(b"uncheckpointed source wal")
+        shm_path.write_bytes(b"source shm")
+        replace = os.replace
+
+        def fail_wal_move(source, destination):
+            if Path(source) == wal_path:
+                raise PermissionError("wal sharing denial")
+            return replace(source, destination)
+
+        with patch(
+            "app.storage.database_maintenance.os.replace", side_effect=fail_wal_move
+        ), self.assertRaisesRegex(PermissionError, "wal sharing denial"):
+            TrackerDatabase(self.db_path)
+        self.assertFalse(self.db_path.exists())
+        remaining_shm = shm_path.read_bytes()
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "recovery is pending"):
+            TrackerDatabase(self.db_path, perform_maintenance=False)
+
+        recovered = TrackerDatabase(self.db_path)
+        self.addCleanup(recovered.close)
+        quarantine = recovered.maintenance_result.quarantined_path
+        self.assertIsNotNone(quarantine)
+        self.assertEqual(quarantine.read_bytes(), original)
+        self.assertEqual(Path(f"{quarantine}-wal").read_bytes(), b"uncheckpointed source wal")
+        self.assertEqual(Path(f"{quarantine}-shm").read_bytes(), remaining_shm)
+        self.assertIsNone(recovered.maintenance_result.restored_backup_path)
+        self.assertTrue(quick_check_database(self.db_path))
+        self.assertFalse((self.db_path.parent / ".tracker.sqlite3.recovery-pending").exists())
+
+    def test_no_backup_quarantine_resumes_after_process_exit_during_source_move(self) -> None:
+        original = b"corrupt source requiring quarantine only"
+        self.db_path.write_bytes(original)
+        wal_path = Path(f"{self.db_path}-wal")
+        wal_path.write_bytes(b"preserve wal across process exit")
+        script = "\n".join((
+            "import os, sys",
+            "from pathlib import Path",
+            "from unittest.mock import patch",
+            "from app.storage.database_maintenance import prepare_database",
+            "path = Path(sys.argv[1])",
+            "replace = os.replace",
+            "def exit_after_move(source, destination):",
+            "    replace(source, destination)",
+            "    if Path(source) == path: os._exit(73)",
+            "with patch('app.storage.database_maintenance.os.replace', side_effect=exit_after_move):",
+            "    prepare_database(path)",
+        ))
+        failed = subprocess.run(
+            [sys.executable, "-c", script, str(self.db_path)],
+            cwd=SERVICE_ROOT, capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(failed.returncode, 73, failed.stderr)
+        self.assertFalse(self.db_path.exists())
+        recovered = TrackerDatabase(self.db_path)
+        self.addCleanup(recovered.close)
+        quarantine = recovered.maintenance_result.quarantined_path
+        self.assertIsNotNone(quarantine)
+        self.assertEqual(quarantine.read_bytes(), original)
+        self.assertEqual(Path(f"{quarantine}-wal").read_bytes(), b"preserve wal across process exit")
+        self.assertTrue(quick_check_database(self.db_path))
+        self.assertIsNone(recovered.maintenance_result.restored_backup_path)
+
     def test_missing_database_with_old_recovery_copies_is_a_fresh_install(self) -> None:
         self._seed_windows_recovery()
         recovered = TrackerDatabase(self.db_path)
@@ -495,11 +562,12 @@ class DatabaseMaintenanceTests(unittest.TestCase):
             TrackerDatabase(self.db_path)
         record = next(self.db_path.parent.glob("*.recovery-pending"))
         valid_record = record.read_text()
-        record.write_text("../foreign.sqlite3")
-
-        with self.assertRaisesRegex(sqlite3.DatabaseError, "invalid pending"):
-            TrackerDatabase(self.db_path)
-        self.assertFalse(self.db_path.exists())
+        for invalid in ("../foreign.sqlite3", "quarantine-only:../foreign.sqlite3"):
+            with self.subTest(record=invalid):
+                record.write_text(invalid)
+                with self.assertRaisesRegex(sqlite3.DatabaseError, "invalid pending"):
+                    TrackerDatabase(self.db_path)
+                self.assertFalse(self.db_path.exists())
         record.write_text(valid_record)
         with closing(TrackerDatabase(self.db_path)) as recovered:
             self._assert_windows_recovery(recovered)
