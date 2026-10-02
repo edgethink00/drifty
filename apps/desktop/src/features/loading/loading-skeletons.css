@@ -362,10 +362,11 @@
 }
 
 .deferred-tab-skeleton--trends.insights-fit-window .alarm-follow-through {
-  min-height: 138px;
-  max-height: 138px;
-  height: 138px;
+  min-height: 117px;
+  max-height: 117px;
+  height: 117px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .deferred-tab-skeleton--trends.insights-fit-window #insights-weekly-attention-rhythm {

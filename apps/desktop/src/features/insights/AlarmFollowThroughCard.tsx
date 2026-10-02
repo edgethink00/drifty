@@ -53,24 +53,26 @@ export function AlarmFollowThroughCard({ followThrough }: AlarmFollowThroughCard
       aria-label={t("trends.followThrough.title")}
     >
       <div className="alarm-follow-through__head">
-        <div className="insight-section__label">{t("trends.followThrough.title")}</div>
-        <span className="alarm-follow-through__help">
-          <button
-            type="button"
-            className="help-trigger alarm-follow-through__help-trigger"
-            aria-label={t("trends.followThrough.ruleAria")}
-            aria-describedby="alarm-follow-through-help"
-          >
-            ?
-          </button>
-          {/* The threshold stays reachable rather than printed: a wrapping
-              sentence owned a third of a half-column card, but a rate whose
-              rule cannot be found at all is the focus-profile mistake. */}
-          <span className="alarm-follow-through__tip" id="alarm-follow-through-help" role="tooltip">
-            {t("trends.followThrough.rule", {
-              window: String(FOLLOW_THROUGH_WINDOW_MINUTES),
-              minimum: String(FOLLOW_THROUGH_MIN_FOCUS_MINUTES),
-            })}
+        <span className="alarm-follow-through__rate-label">
+          {structure === "integrated" ? null : t("trends.followThrough.rateLabel")}
+          <span className="alarm-follow-through__help">
+            <button
+              type="button"
+              className="help-trigger alarm-follow-through__help-trigger"
+              aria-label={t("trends.followThrough.ruleAria")}
+              aria-describedby="alarm-follow-through-help"
+            >
+              ?
+            </button>
+            {/* The threshold stays reachable rather than printed: a wrapping
+                sentence owned a third of a half-column card, but a rate whose
+                rule cannot be found at all is the focus-profile mistake. */}
+            <span className="alarm-follow-through__tip" id="alarm-follow-through-help" role="tooltip">
+              {t("trends.followThrough.rule", {
+                window: String(FOLLOW_THROUGH_WINDOW_MINUTES),
+                minimum: String(FOLLOW_THROUGH_MIN_FOCUS_MINUTES),
+              })}
+            </span>
           </span>
         </span>
         <span className="alarm-follow-through__total">
@@ -78,13 +80,14 @@ export function AlarmFollowThroughCard({ followThrough }: AlarmFollowThroughCard
         </span>
       </div>
 
-      <div className="alarm-follow-through__metric">
-        <strong>{ratePercent}</strong>
-        <span>{t("trends.followThrough.rateLabel")}</span>
+      <div className="alarm-follow-through__lede">
+        <div className="alarm-follow-through__metric">
+          <strong>{ratePercent}</strong>
+        </div>
+        <p className="alarm-follow-through__median" title={medianLabel}>
+          {variant === "baseline" && !structure ? medianLabel : <><span>{t("trends.followThrough.timeLabel")}</span> <strong>{median === null ? "—" : `${median}${isKorean ? "분" : "m"}`}</strong></>}
+        </p>
       </div>
-      <p className="alarm-follow-through__median" title={medianLabel}>
-        {variant === "baseline" && !structure ? medianLabel : <><span>{t("trends.followThrough.timeLabel")}</span> <strong>{median === null ? "—" : `${median}${isKorean ? "분" : "m"}`}</strong></>}
-      </p>
 
       {variant === "share" && <div className="alarm-follow-through__distribution" aria-hidden="true">
         {PATHS.map(path => <span key={path.id} className={`alarm-follow-through__fill alarm-follow-through__fill--${path.tone}`} style={{width: `${followThrough.totalAlarms > 0 ? followThrough.pathCounts[path.id] / followThrough.totalAlarms * 100 : 0}%`}} />)}

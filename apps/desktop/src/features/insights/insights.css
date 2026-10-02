@@ -149,13 +149,25 @@
   min-width: 0;
 }
 
-.alarm-follow-through .insight-section__label { margin-bottom: 0; }
-
 .alarm-follow-through__head {
   align-items: center;
   display: flex;
+  gap: 0.35rem;
+  min-height: 0;
+}
+
+.alarm-follow-through__lede {
+  display: contents;
+}
+
+.alarm-follow-through__rate-label {
+  align-items: center;
+  color: var(--text-soft);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 0.71875rem;
   gap: 0.25rem;
-  min-height: 1.5rem;
+  min-width: 0;
 }
 
 .alarm-follow-through__total {
@@ -1325,32 +1337,14 @@
 .weekly-productivity-trend-card__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.5rem;
   flex-wrap: nowrap;
-  padding: 0 0.15rem;
+  /* .wt-plot reserves 2.75rem on the right and the hour tick hangs 2.28rem
+     back into that gutter, so the tick's right edge is 0.47rem inside the
+     plot. The mode switch sits on that edge instead of a section title. */
+  padding: 0 0.47rem 0.15rem 0.86rem;
   min-width: 0;
-}
-
-.weekly-productivity-trend-card__head > div:not(.wt-toggle) {
-  display: grid;
-  gap: 0.16rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.weekly-productivity-trend-card__head .insight-section__label {
-  margin-bottom: 0;
-  letter-spacing: calc(0.07em * var(--caps-tracking-scale, 1));
-  /* The title is kept short ("Weekly" / "주간 분석") so it shares one row with
-     the three-mode toggle. If a longer translation ever does not fit, it
-     folds between words instead of being clipped mid-word; two lines at this
-     size stay within the toggle's height, so the card keeps the height its
-     loading skeleton reserves and nothing below it moves when the body loads. */
-  white-space: normal;
-  overflow-wrap: normal;
-  line-height: 1;
-  overflow: hidden;
 }
 
 .weekly-productivity-trend-card__legend {
@@ -2699,14 +2693,20 @@
   padding: 0;
 }
 .insights-stacked__breakdown .weekly-summary-rail .flow-compact-split-chart__panel {
-  padding: var(--space-4) var(--space-1);
+  padding: 12px var(--space-1) 8px;
 }
-.insights-stacked__breakdown .flow-compact-split-chart__panel + .flow-compact-split-chart__panel,
+.insights-stacked__breakdown .weekly-summary-rail .flow-compact-split-chart__panel--circle {
+  gap: 14px;
+}
 .insights-stacked__breakdown .weekly-productivity-trend-card + .weekly-summary-rail {
   border-top: 1px solid var(--line);
 }
+.insights-stacked__breakdown .flow-compact-split-chart__panel + .flow-compact-split-chart__panel {
+  border-top: 0;
+  padding-top: 10px;
+}
 .insights-stacked__breakdown .weekly-productivity-trend-card {
-  padding-bottom: var(--space-4);
+  padding-bottom: 12px;
 }
 .insights-stacked__breakdown .wt-plot {
   box-shadow: none;
@@ -2843,12 +2843,53 @@
 .insights-fit-window [data-alarm-structure="list-led"] .alarm-follow-through__median { grid-column: 2; grid-row: 2; align-self: center; text-align: right; }
 .insights-fit-window [data-alarm-structure="list-led"] .alarm-follow-through__paths { grid-column: 1 / -1; grid-row: 3; }
 .insights-fit-window [data-alarm-structure="list-led"] .alarm-follow-through__row { grid-template-columns: 8rem minmax(0, 1fr) 2rem; }
-.insights-fit-window [data-alarm-structure="split-led"] { grid-template-columns: minmax(8rem, 0.7fr) minmax(0, 1.3fr); grid-template-rows: auto 48px auto; column-gap: 24px; }
-.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__metric { flex-direction: column-reverse; align-items: start; gap: 6px; }
+.insights-fit-window [data-alarm-structure="split-led"] {
+  align-content: start;
+  column-gap: 20px;
+  grid-template-columns: minmax(8.5rem, 0.68fr) minmax(0, 1.32fr);
+  grid-template-rows: auto auto;
+  row-gap: 4px;
+}
+.insights-fit-window .alarm-follow-through[data-alarm-structure="split-led"] {
+  padding: 10px 16px;
+}
+.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__lede {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+}
+.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__metric { align-items: start; gap: 0; margin: 0; }
 .insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__metric strong { font-size: 2rem; line-height: 1; }
-.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__median { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 0.75rem; }
-.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__paths { border-left: 1px solid var(--line); padding-left: 20px; align-self: stretch; align-content: space-between; }
-.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__row { grid-template-columns: 6rem minmax(0, 1fr) 1.5rem; }
+.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__median {
+  align-items: baseline;
+  display: flex;
+  font-size: 0.75rem;
+  gap: 8px;
+  justify-content: space-between;
+  line-height: 1.2;
+  margin: 0;
+}
+.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__paths {
+  align-content: center;
+  align-self: center;
+  border-left: 1px solid var(--line);
+  gap: 3px;
+  grid-column: 2;
+  grid-row: 2;
+  padding-left: 16px;
+}
+.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__row {
+  grid-template-columns: 6.25rem minmax(0, 1fr) 1.75rem;
+  min-height: 0;
+  padding-block: 0;
+}
+.insights-fit-window [data-alarm-structure="split-led"] .alarm-follow-through__meta {
+  line-height: 1.15;
+}
 .insights-fit-window .alarm-follow-through[data-alarm-structure="integrated"] { grid-template-columns: 1fr; grid-template-rows: auto auto auto; row-gap: 4px; padding-block: 8px; }
 .insights-fit-window [data-alarm-structure="integrated"] .alarm-follow-through__metric { display: none; }
 .insights-fit-window [data-alarm-structure="integrated"] .alarm-follow-through__paths { grid-column: 1; grid-row: 2; }

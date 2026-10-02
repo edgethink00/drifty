@@ -74,7 +74,7 @@ function TrendsDeferredFallback({ label }: { readonly label: string }) {
         {/* Left column: patterns */}
         <div className="insights-stacked__patterns">
           {/* 1. Alarm follow-through card */}
-          <section className="alarm-follow-through editorial-panel editorial-panel--soft insight-section">
+          <section className="alarm-follow-through editorial-panel editorial-panel--soft insight-section" data-alarm-layout="baseline" data-alarm-structure="split-led">
             <div className="alarm-follow-through__head">
               <div className="insight-section__label">
                 <span className="loading-skeleton-line loading-skeleton-line--label" />
@@ -84,12 +84,14 @@ function TrendsDeferredFallback({ label }: { readonly label: string }) {
               </span>
             </div>
 
-            <div className="alarm-follow-through__metric">
-              <span className="loading-skeleton-line loading-skeleton-line--metric" />
-              <span className="loading-skeleton-line loading-skeleton-line--detail" />
-            </div>
-            <div className="alarm-follow-through__median">
-              <span className="loading-skeleton-line loading-skeleton-line--time" />
+            <div className="alarm-follow-through__lede">
+              <div className="alarm-follow-through__metric">
+                <span className="loading-skeleton-line loading-skeleton-line--metric" />
+                <span className="loading-skeleton-line loading-skeleton-line--detail" />
+              </div>
+              <div className="alarm-follow-through__median">
+                <span className="loading-skeleton-line loading-skeleton-line--time" />
+              </div>
             </div>
 
             <div className="alarm-follow-through__paths">
@@ -171,9 +173,6 @@ function TrendsDeferredFallback({ label }: { readonly label: string }) {
           <div className="insights-row--weekly-categories insights-row--weekly-categories--all weekly-cat-row">
             <section className="editorial-panel editorial-panel--soft insight-section weekly-productivity-trend-card deferred-trends-weekly-chart">
               <div className="weekly-productivity-trend-card__head">
-                <div>
-                  <span className="loading-skeleton-line loading-skeleton-line--label" />
-                </div>
                 <div className="wt-toggle">
                   <span className="loading-skeleton-line loading-skeleton-line--control" />
                 </div>

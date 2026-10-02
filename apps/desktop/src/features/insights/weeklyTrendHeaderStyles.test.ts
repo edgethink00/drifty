@@ -14,18 +14,15 @@ describe("Insights weekly breakdown header", () => {
     return match.groups.body;
   }
 
-  it("keeps the title and the mode toggle on one row so the card matches its loading skeleton", () => {
+  it("keeps the mode toggle on one row, aligned to the hour-axis edge", () => {
     // A second row made the loaded card taller than the skeleton, which moved
     // everything below it when the Insights body finished loading.
-    expect(ruleBody(".weekly-productivity-trend-card__head")).toMatch(/flex-wrap:\s*nowrap;/u);
+    const head = ruleBody(".weekly-productivity-trend-card__head");
+    expect(head).toMatch(/flex-wrap:\s*nowrap;/u);
+    expect(head).toMatch(/justify-content:\s*flex-end;/u);
   });
 
-  it("folds a long title between words instead of clipping it behind a three-mode toggle", () => {
-    const label = ruleBody(".weekly-productivity-trend-card__head .insight-section__label");
-    expect(label).toMatch(/white-space:\s*normal;/u);
-    expect(label).toMatch(/overflow-wrap:\s*normal;/u);
-    // Two lines at line-height 1 fit inside the toggle's height, so folding
-    // never grows the row.
-    expect(label).toMatch(/line-height:\s*1;/u);
+  it("does not reserve a title beside the mode toggle", () => {
+    expect(styles).not.toMatch(/\.weekly-productivity-trend-card__head \.insight-section__label/u);
   });
 });

@@ -35,7 +35,6 @@ export function WeeklyTrendChart({
   return (
     <section className="editorial-panel editorial-panel--soft insight-section productivity-insight-groups__weekly-trend weekly-productivity-trend-card" aria-label={t("trends.weeklyTrendAria")}>
       <div className="weekly-productivity-trend-card__head">
-        <div><span className="label-mono insight-section__label">{t("trends.weeklyTitle")}</span></div>
         <div className="wt-toggle" role="group" aria-label={t("trends.breakdownModeAria")}>
           <button type="button" className={`wt-toggle-btn${mode === "productivity" ? " is-active" : ""}`} data-mode="productivity" aria-pressed={mode === "productivity"} onClick={() => onModeChange("productivity")}>{t("common.productivity")}</button>
           <button type="button" className={`wt-toggle-btn${mode === "category" ? " is-active" : ""}`} data-mode="category" aria-pressed={mode === "category"} onClick={() => onModeChange("category")}>{t("common.category")}</button>
