@@ -69,7 +69,7 @@
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.1em;
+  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -229,7 +229,7 @@
   color: #5f645c;
   font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 

@@ -80,7 +80,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.12em;
+  letter-spacing: calc(0.12em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -145,7 +145,7 @@
   color: var(--accent);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -292,7 +292,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -639,7 +639,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.71875rem;
-  letter-spacing: 0.06em;
+  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
 }
 
 .week-v2-rank__day {
@@ -1798,7 +1798,7 @@
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 650;
-  letter-spacing: 0.14em;
+  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 

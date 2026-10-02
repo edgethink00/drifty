@@ -748,7 +748,7 @@
 .content--team .projects-table__head span {
   font-family: var(--font-mono);
   font-size: 0.71875rem;
-  letter-spacing: 0.1em;
+  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--text-muted);
 }
@@ -842,7 +842,7 @@
 .content--team .pt-total small {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--text-muted);
 }
@@ -1036,7 +1036,7 @@
 .content--team .team-code-inline {
   font-family: var(--font-mono);
   font-size: 0.9em;
-  letter-spacing: 0.06em;
+  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
 }
 
 @media (max-width: 860px) {
@@ -1256,7 +1256,7 @@
 .team-code strong {
   font-family: var(--font-mono);
   font-size: 1.02rem;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   color: var(--text);
   font-weight: 640;
 }

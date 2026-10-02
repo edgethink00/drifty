@@ -353,7 +353,7 @@
   font-family: var(--font-mono);
   font-size: 0.71875rem;
   justify-content: space-between;
-  letter-spacing: .08em;
+  letter-spacing: calc(.08em * var(--caps-tracking-scale, 1));
   list-style: none;
   padding: 11px 13px;
   text-transform: uppercase;
@@ -415,7 +415,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: .08em;
+  letter-spacing: calc(.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -446,7 +446,7 @@
   display: block;
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: .1em;
+  letter-spacing: calc(.1em * var(--caps-tracking-scale, 1));
   margin-bottom: 4px;
   text-transform: uppercase;
 }

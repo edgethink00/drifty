@@ -435,7 +435,7 @@
   font-family: var(--font-mono);
   font-size: 0.71875rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
   color: var(--text-muted);
 }
 
@@ -512,7 +512,7 @@
   font-family: var(--font-mono);
   font-size: 0.71875rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
   color: var(--text-muted);
 }
 
@@ -662,7 +662,7 @@
 .projects-page .projects-table__head span {
   font-family: var(--font-mono);
   font-size: 0.71875rem;
-  letter-spacing: 0.1em;
+  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--text-muted);
   white-space: nowrap;

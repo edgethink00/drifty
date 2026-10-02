@@ -69,10 +69,14 @@
         min-height: 100%;
         background: transparent;
         color: var(--boot-text);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
       }
+      /* The boot shell paints before the app stylesheet defines --font-sans, so
+         each stack falls back to system faces until then. This rule outranks the
+         app's plain body rule; without the token it pinned inherited text to
+         Segoe and Malgun Gothic after the app loaded. */
       html[data-platform="windows"] body {
-        font-family: "Segoe UI Variable Text", "Segoe UI", "Malgun Gothic", sans-serif;
+        font-family: var(--font-sans, "Segoe UI Variable Text", "Segoe UI", "Malgun Gothic", sans-serif);
       }
       html[data-platform="windows"][data-boot-active="true"],
       html[data-platform="windows"][data-boot-active="true"] body {

@@ -2320,7 +2320,7 @@ button.individual-plan-card:focus-visible {
   flex: 0 0 auto;
   font-size: 0.6875rem;
   font-weight: 660;
-  letter-spacing: 0.06em;
+  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
   line-height: 1;
   min-height: 1.25rem;
   padding: 0 0.45rem;
@@ -2842,7 +2842,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 }
 
 .classification-rule-candidates__heading {
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 

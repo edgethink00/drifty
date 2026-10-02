@@ -301,7 +301,7 @@
   font-family: var(--font-mono, ui-monospace, Menlo, monospace);
   font-size: 0.71875rem;
   justify-content: space-between;
-  letter-spacing: 0.06em;
+  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
   margin-top: 0.25rem;
 }
 
@@ -396,7 +396,7 @@
   color: color-mix(in srgb, var(--ink) 55%, transparent);
   font-family: var(--font-mono, ui-monospace, Menlo, monospace);
   font-size: 0.71875rem;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -514,7 +514,7 @@
   font-family: var(--font-mono);
   font-size: var(--type-overline-size);
   font-weight: 640;
-  letter-spacing: 0.1em;
+  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
   padding: 0.18rem 0.5rem;
   text-transform: uppercase;
   white-space: nowrap;
@@ -813,7 +813,7 @@
 
 .profile-page--v2 .profile-theme-picker__label {
   color: color-mix(in srgb, var(--text-soft) 92%, transparent);
-  letter-spacing: 0.14em;
+  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
 }
 
 .profile-page--v2 .profile-range-picker {

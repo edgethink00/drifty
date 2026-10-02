@@ -49,7 +49,7 @@
   color: var(--accent-strong);
   font-size: .68rem;
   font-weight: 760;
-  letter-spacing: .08em;
+  letter-spacing: calc(.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -163,7 +163,7 @@
 }
 
 .eodr-metric__label {
-  letter-spacing: .08em;
+  letter-spacing: calc(.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 

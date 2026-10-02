@@ -147,7 +147,7 @@
   font-family: var(--font-mono);
   font-size: 0.71875rem;
   font-weight: 600;
-  letter-spacing: .12em;
+  letter-spacing: calc(.12em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 

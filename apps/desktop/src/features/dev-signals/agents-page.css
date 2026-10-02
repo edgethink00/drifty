@@ -263,7 +263,7 @@
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--type-overline-size);
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 

@@ -308,7 +308,7 @@
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--type-overline-size);
-  letter-spacing: 0.14em;
+  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 

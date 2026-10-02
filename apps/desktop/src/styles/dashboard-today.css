@@ -19,7 +19,7 @@
 .hero-stat .k {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: .14em;
+  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--text-soft);
   margin-bottom: 3px;
@@ -734,7 +734,7 @@
 .chart-block .chart-title {
   font-family: var(--font-mono);
   font-size: 0.71875rem;
-  letter-spacing: .14em;
+  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--text-soft);
 }
@@ -750,7 +750,7 @@
 .coach-card .k {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: .16em;
+  letter-spacing: calc(.16em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--text-soft);
   margin-bottom: 5px;
@@ -783,7 +783,7 @@
 .peak-card .k {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: .16em;
+  letter-spacing: calc(.16em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--accent);
   margin-bottom: 4px;
@@ -831,7 +831,7 @@
   color: var(--canvas);
   font-family: var(--font-mono);
   font-size: 0.71875rem;
-  letter-spacing: .1em;
+  letter-spacing: calc(.1em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   border: none;
   cursor: pointer;
@@ -860,7 +860,7 @@
 }
 
 .pcard-v3:last-child { border-bottom: none; }
-.pcard-v3 .ptag { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: .14em; text-transform: uppercase; }
+.pcard-v3 .ptag { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: calc(.14em * var(--caps-tracking-scale, 1)); text-transform: uppercase; }
 
 .pcard-v3 .ptitle {
   font-family: var(--font-display);

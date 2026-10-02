@@ -65,7 +65,7 @@
   background:
     radial-gradient(120% 90% at 50% 8%, #fdfaf4 0%, #faf8f3 45%, #f5f2ea 100%);
   color: #1c1c19;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   z-index: 40;
 }

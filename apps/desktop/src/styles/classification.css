@@ -1394,7 +1394,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: .13em;
+  letter-spacing: calc(.13em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -1580,7 +1580,7 @@
 .next-peak .k {
   font-family: var(--font-mono);
   font-size: 0.71875rem;
-  letter-spacing: .14em;
+  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--accent);
   margin-bottom: 7px;
@@ -1609,7 +1609,7 @@
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: 0.71875rem;
-  letter-spacing: .1em;
+  letter-spacing: calc(.1em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   border: none;
 }

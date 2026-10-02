@@ -133,7 +133,7 @@
 .leaderboard-toolbar__stats .label-mono,
 .leaderboard-row__meta--compact .label-mono {
   font-size: 0.6875rem;
-  letter-spacing: 0.13em;
+  letter-spacing: calc(0.13em * var(--caps-tracking-scale, 1));
   white-space: nowrap;
 }
 
@@ -166,7 +166,7 @@
   padding: 0.38rem 0.72rem;
   border-radius: 999px;
   font-size: 0.6875rem;
-  letter-spacing: 0.1em;
+  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
   white-space: nowrap;
 }
 
@@ -390,7 +390,7 @@
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
 }
 
 .leaderboard-podium-card__avatar {
@@ -448,7 +448,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: 0.1em;
+  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -1930,7 +1930,7 @@
   font-family: var(--font-mono);
   font-size: 0.71875rem;
   font-weight: 650;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   padding: 0 var(--space-1);
   text-transform: uppercase;
 }

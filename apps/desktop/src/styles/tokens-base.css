@@ -1,6 +1,48 @@
 /* ==================================================   Drifty — design system  ·  light/dark · olive green
    ========================================================= */
 
+/* Windows has no system face that pairs Latin and Hangul at matching weights:
+   Malgun Gothic ships only Semilight/Regular/Bold, so every 500 weight fell to
+   Regular and every 560+ weight jumped to Bold beside Segoe's exact weights.
+   Pretendard (SIL OFL 1.1, notice in public/third-party/Pretendard-OFL.txt)
+   carries both scripts on one continuous weight axis. It is bundled, so it
+   renders the same glyphs on every Windows machine. */
+@font-face {
+  font-family: "Drifty Pretendard";
+  src: url("../assets/fonts/PretendardVariable.woff2") format("woff2-variations"),
+       url("../assets/fonts/PretendardVariable.woff2") format("woff2");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: block;
+}
+
+/* Same file, limited to Hangul and the space. Placed ahead of the Latin mono
+   face, it keeps digits and Latin in the mono face while Korean words in mono
+   labels stop inheriting the 0.6em monospace space ("사용  내역  없음"). */
+@font-face {
+  font-family: "Drifty Hangul Companion";
+  src: url("../assets/fonts/PretendardVariable.woff2") format("woff2-variations"),
+       url("../assets/fonts/PretendardVariable.woff2") format("woff2");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0020, U+00A0, U+1100-11FF, U+3130-318F, U+AC00-D7A3;
+}
+
+/* Windows mono labels and figures. Cascadia Mono reads as a code-editor face
+   beside Pretendard; Geist Mono (SIL OFL 1.1, notice in
+   public/third-party/GeistMono-OFL.txt) is the closest match to SF Mono in the
+   2026-10-02 variant review and is bundled, so Windows 10 does not fall back
+   to Consolas. */
+@font-face {
+  font-family: "Drifty Geist Mono";
+  src: url("../assets/fonts/GeistMonoVariable.woff2") format("woff2-variations"),
+       url("../assets/fonts/GeistMonoVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
 /* ---------------------------------------------------------
    Viewport-linked type scale
 
@@ -99,6 +141,10 @@ html {
      partner for Cascadia's Latin. */
   --font-mono: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, "Malgun Gothic", "Fira Code", monospace;
   --font-ui: var(--font-sans);
+  /* Wide tracking (0.06em and up) is written for Latin capitals and multiplies
+     this scale. Hangul has no case, so the same spacing only pulls syllables
+     apart ("개 인", "사용 내역 없음"); :lang(ko) below keeps a trace of it. */
+  --caps-tracking-scale: 1;
   --type-overline-size: 0.6875rem;
   --type-control-size: 0.75rem;
   /* 액션 버튼 라벨 전용. --type-control-size 는 mono 로 조판되는 작은
@@ -239,10 +285,12 @@ html {
    Apple names; the base stack in this file still covers any surface that has
    not had data-platform applied yet. */
 :root[data-platform="windows"] {
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", "Malgun Gothic", sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI", "Malgun Gothic", sans-serif;
-  --font-serif: "Georgia", serif;
-  --font-mono: "Cascadia Mono", "Cascadia Code", "Consolas", "Malgun Gothic", ui-monospace, monospace;
+  --font-sans: "Drifty Pretendard", "Segoe UI Variable Text", "Segoe UI", "Malgun Gothic", sans-serif;
+  --font-display: "Drifty Pretendard", "Segoe UI Variable Display", "Segoe UI", "Malgun Gothic", sans-serif;
+  /* Georgia defaults to old-style figures and has no Hangul, so large serif
+     totals bounced and Korean titles fell to the system serif. */
+  --font-serif: var(--font-display);
+  --font-mono: "Drifty Geist Mono", "Cascadia Mono", "Consolas", "Drifty Pretendard", "Malgun Gothic", monospace;
   --window-nav-offset-x: 12px;
   --windows-titlebar-height: 32px;
   --windows-caption-button-width: 46px;
@@ -350,6 +398,14 @@ html {
      carry no text. In light mode the tint pushes the block toward its own near
      white label, so the light theme uses a lighter dose than dark. */
   --week-event-surface-tint: 12%;
+}
+
+:lang(ko) {
+  --caps-tracking-scale: 0.15;
+}
+
+:root[data-platform="windows"]:lang(ko) {
+  --font-mono: "Drifty Hangul Companion", "Drifty Geist Mono", "Cascadia Mono", "Consolas", "Drifty Pretendard", "Malgun Gothic", monospace;
 }
 
 :root[data-platform="windows"][data-theme="light"] {

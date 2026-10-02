@@ -121,7 +121,7 @@
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
-  letter-spacing: .1em;
+  letter-spacing: calc(.1em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -185,7 +185,7 @@
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: .06em;
+  letter-spacing: calc(.06em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -220,7 +220,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: .12em;
+  letter-spacing: calc(.12em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -280,7 +280,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: .12em;
+  letter-spacing: calc(.12em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 

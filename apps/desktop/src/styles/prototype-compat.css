@@ -361,7 +361,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 .pg-head .eyebrow {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: .18em;
+  letter-spacing: calc(.18em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--accent);
   margin-bottom: 4px;
@@ -561,7 +561,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 .clf-stat .eyebrow {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: .14em;
+  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--text-soft);
 }
@@ -599,7 +599,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 .day-nav__current .eyebrow {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  letter-spacing: .14em;
+  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
   color: var(--text-soft);
 }
 .day-nav__current strong {
@@ -925,7 +925,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--type-control-size);
-  letter-spacing: .08em;
+  letter-spacing: calc(.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
@@ -1058,7 +1058,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 .metric-tile .eyebrow {
   font-family: var(--font-mono);
   font-size: var(--type-overline-size);
-  letter-spacing: .14em;
+  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
   color: var(--text-soft);
 }
@@ -1404,7 +1404,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: .08em;
+  letter-spacing: calc(.08em * var(--caps-tracking-scale, 1));
   text-transform: uppercase;
 }
 
