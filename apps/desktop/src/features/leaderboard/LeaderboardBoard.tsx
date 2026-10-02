@@ -19,6 +19,7 @@ export type LeaderboardBoardProps = {
   readonly filteredLeaderboard: readonly LeaderboardRow[];
   readonly isLoading?: boolean;
   readonly isSplitPreview?: boolean;
+  /** Split-preview variant B shows the page title here instead of in a page header row. */
   readonly isOptedIn: boolean;
   readonly leaderboard: readonly LeaderboardRow[];
   readonly participantCount: number | null;

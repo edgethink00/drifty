@@ -66,13 +66,19 @@ export function LeaderboardPage({
   previewLayout,
 }: LeaderboardPageProps) {
   const { t } = useLocalization();
+  // The split preview drops the title row so both panels start at the top.
+  const flushTop = previewLayout === "split-v2";
   return (
-    <div className="page">
-      <div className="pg-head">
-        <div>
-          <h1>{t("leaderboard.title")}</h1>
+    <div className={flushTop ? "page page--lb-flush" : "page"}>
+      {flushTop ? (
+        <h1 className="sr-only">{t("leaderboard.title")}</h1>
+      ) : (
+        <div className="pg-head">
+          <div>
+            <h1>{t("leaderboard.title")}</h1>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="leaderboard-page-layout">
         <LeaderboardView

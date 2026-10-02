@@ -113,7 +113,7 @@ describe("LeaderboardView", () => {
     expect(screen.queryByText(/nothing is published until you join/i)).toBeNull();
     const hero = screen.getByLabelText(/your leaderboard participation/i);
     const heroJoin = within(hero).getByRole("button", { name: /join leaderboard/i });
-    const privacyNote = within(hero).getByText(/only focus totals and your public profile are shared/i);
+    const privacyNote = within(hero).getByText(/only focus totals are shared/i);
     expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
     expect(heroJoin.getAttribute("aria-describedby")).toBe(privacyNote.id);
 
@@ -1257,5 +1257,12 @@ describe("LeaderboardView", () => {
     expect(screen.getByText(/calculating your local focus totals/i)).toBeTruthy();
     expect(screen.getByText(/AI is catching up on recent activity/i)).toBeTruthy();
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("keeps the split preview free of decorative titles (the page h1 stays screen-reader only)", () => {
+    const { container } = renderView({ previewLayout: "split-v2" });
+    expect(container.querySelector(".lb-v2")).toBeTruthy();
+    expect(container.querySelector(".lb-v2__inline-title")).toBeNull();
+    expect(container.querySelector(".lb-v2__eyebrow")).toBeNull();
   });
 });

@@ -45,8 +45,9 @@ describe("leaderboard operate layout styles", () => {
   it("keeps status beside period controls so search does not jump during refresh", () => {
     const previewToolbar = ".content--leaderboard .lb-v2 .leaderboard-board-block .leaderboard-toolbar";
     expect(ruleContaining(".content--leaderboard .leaderboard-board-block .leaderboard-toolbar", /flex-wrap:/)).toMatch(/flex-wrap:\s*wrap;/);
+    // Narrow boards stack controls, stats, then search; with room the toolbar
+    // collapses to a single row since only the Total focus stat remains.
     expect(rules(previewToolbar).some((body) => /"controls status" "stats stats" "search search"/.test(body))).toBe(true);
-    expect(rules(previewToolbar).some((body) => /"controls status" "stats search"/.test(body))).toBe(true);
     expect(ruleContaining(previewToolbar, /grid-template-areas:/)).toMatch(/"controls stats search"/);
     expect(ruleContaining(".content--leaderboard .lb-v2 .leaderboard-toolbar__control-row", /display:/)).toMatch(/display:\s*contents;/);
     expect(rules(previewToolbar).some((body) => /display:\s*flex;/.test(body))).toBe(true);
@@ -55,4 +56,14 @@ describe("leaderboard operate layout styles", () => {
     expect(ruleContaining(".content--leaderboard .lb-v2 .leaderboard-list-head__metrics", /grid-column:/)).toMatch(/grid-column:\s*2;/);
   });
 
+  it("lays Embed and Share side by side at equal width in the split preview", () => {
+    const shareRow = '.lb-v2 .leaderboard-hero__share-actions';
+    expect(ruleContaining(shareRow, /grid-auto-flow:/)).toMatch(/grid-auto-flow:\s*column;/);
+    expect(ruleContaining(shareRow, /grid-auto-columns:/)).toMatch(/grid-auto-columns:\s*minmax\(0, 1fr\);/);
+  });
+
+  it("starts the split preview at the top of the page once the title row is gone", () => {
+    const flushPage = ".content--leaderboard .page.page--lb-flush";
+    expect(ruleContaining(flushPage, /grid-template-rows:/)).toMatch(/grid-template-rows:\s*minmax\(0, 1fr\);/);
+  });
 });
