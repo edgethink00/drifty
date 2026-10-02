@@ -485,10 +485,135 @@ class CaptureClockTests(unittest.TestCase):
                 self.capture(240, correction=-300)
         self.assertEqual({row["segment_uid"] for row in self.rows()}, unsupported | {uid})
         self.assertEqual(self.deleted_uids(), set())
-        self.assertTrue(self.db.capture_timeline.points)
+        self.assertTrue(self.db.capture_timeline.pending_input_trims)
         self.capture(245, correction=-300)
         self.assert_supported_prefix(uid)
         self.assertEqual(self.deleted_uids(), unsupported)
+
+    @contextmanager
+    def failed_cleanup(self, count):
+        original_guard = storage_db.permanent_deletion_guard
+        failures = []
+
+        @contextmanager
+        def fail_guard(*args, **kwargs):
+            with original_guard(*args, **kwargs) as invalidate:
+                def attempt():
+                    if len(failures) < count:
+                        failures.append(self.elapsed)
+                        raise PermissionError("owned pending cleanup failure")
+                    invalidate()
+                yield attempt
+
+        with patch.object(storage_db, "permanent_deletion_guard", fail_guard), patch.object(
+            main, "capture_tracker_exception"
+        ):
+            yield failures
+
+    def test_failed_stop_retries_after_input_or_passive_activity_resumes(self):
+        for kind in ("input", "passive"):
+            for count in (1, 3):
+                with self.subTest(kind=kind, count=count), self.owned_database():
+                    self.audio = False
+                    uid = self.active_prefix()
+                    for elapsed in range(65, 236, 5):
+                        self.capture(elapsed, correction=-300)
+                    with self.failed_cleanup(count) as failures:
+                        for elapsed in range(240, 240 + count * 5, 5):
+                            with self.assertRaises(PermissionError):
+                                self.capture(elapsed, correction=-300)
+                            self.last = None
+                        resume = 240 + count * 5
+                        self.audio = kind == "passive"
+                        for elapsed in range(resume, resume + 16, 5):
+                            self.capture(elapsed, idle=0 if kind == "input" else elapsed - 60,
+                                         correction=-300)
+                        self.assertEqual(len(failures), count)
+                    passive_rows = [row for row in self.rows()
+                                    if row["engagement_evidence"] == "foreground-audio"]
+                    self.audio = False
+                    if kind == "input":
+                        last_input = resume + 15
+                        for elapsed in range(last_input + 5, last_input + 181, 5):
+                            self.capture(elapsed, idle=elapsed - last_input, correction=-300)
+                        expected = 75
+                    else:
+                        self.capture(resume + 35, correction=-300)
+                        expected = 80
+                    after = self.rows()
+                    self.assertEqual(sum(row["duration_seconds"] for row in after), expected)
+                    original = next(row for row in after if row["segment_uid"] == uid)
+                    self.assertEqual(original["duration_seconds"], 60)
+                    self.assertEqual(original["ended_at"], (self.anchor + timedelta(seconds=60)).isoformat())
+                    self.assertTrue(all(row in after for row in passive_rows))
+                    self.assertNotIn(uid, self.deleted_uids())
+
+    def test_new_supported_captures_continue_while_cleanup_still_fails(self):
+        for kind in ("input", "passive"):
+            with self.subTest(kind=kind), self.owned_database():
+                self.audio = False
+                uid = self.active_prefix()
+                for elapsed in range(65, 236, 5):
+                    self.capture(elapsed, correction=-300)
+                with self.failed_cleanup(3) as failures:
+                    with self.assertRaises(PermissionError):
+                        self.capture(240, correction=-300)
+                    self.last = None
+                    self.audio = kind == "passive"
+                    for elapsed in range(245, 261, 5):
+                        self.assertIsNotNone(self.capture(
+                            elapsed, idle=0 if kind == "input" else elapsed - 60, correction=-300
+                        ))
+                    self.assertEqual(failures, [240, 245, 250])
+                    # Repeated cleanup errors isolate the old queued row,
+                    # while the new supported context still coalesces normally.
+                    self.assertEqual(len(self.rows()), 2)
+                passive_rows = [row for row in self.rows()
+                                if row["engagement_evidence"] == "foreground-audio"]
+                self.audio = False
+                if kind == "input":
+                    for elapsed in range(265, 441, 5):
+                        self.capture(elapsed, idle=elapsed - 260, correction=-300)
+                    expected = 75
+                else:
+                    self.capture(280, correction=-300)
+                    expected = 80
+                after = self.rows()
+                self.assertEqual(sum(row["duration_seconds"] for row in after), expected)
+                self.assertTrue(all(row in after for row in passive_rows))
+                self.assertEqual(next(row for row in after if row["segment_uid"] == uid)["duration_seconds"], 60)
+                self.assertNotIn(uid, self.deleted_uids())
+
+    def test_delayed_cleanup_preserves_intervening_timing_uid_and_protected_origins(self):
+        for change in ("timing", "uid", "import", "remote"):
+            with self.subTest(change=change), self.owned_database():
+                self.audio = False
+                uid = self.active_prefix()
+                for elapsed in range(65, 236, 5):
+                    self.capture(elapsed, correction=-300)
+                with self.failed_cleanup(1):
+                    with self.assertRaises(PermissionError):
+                        self.capture(240, correction=-300)
+                    self.last = None
+                    queued_row = self.rows()[-1]
+                    with self.db.connect() as conn:
+                        if change == "timing":
+                            conn.execute("UPDATE activity_segments SET duration_seconds = 999 WHERE id = ?",
+                                         (queued_row["id"],))
+                        elif change == "uid":
+                            conn.execute("UPDATE activity_segments SET segment_uid = 'owned-replacement' WHERE id = ?",
+                                         (queued_row["id"],))
+                        elif change == "import":
+                            conn.execute("UPDATE activity_segments SET source = ? WHERE id = ?",
+                                         (storage_db.BROWSER_HISTORY_IMPORT_SOURCE, queued_row["id"]))
+                        else:
+                            conn.execute("UPDATE activity_segments SET origin_device_id = 'owned-remote' WHERE id = ?",
+                                         (queued_row["id"],))
+                    protected = self.rows()[-1]
+                    self.capture(245, correction=-300)
+                self.assertEqual(next(row for row in self.rows() if row["id"] == protected["id"]), protected)
+                self.assertNotIn(protected["segment_uid"], self.deleted_uids())
+                self.assertNotIn(uid, self.deleted_uids())
 
     def test_zero_and_negative_merge_gaps_choose_capture_order(self):
         self.active_prefix()

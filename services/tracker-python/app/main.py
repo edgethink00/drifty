@@ -1953,6 +1953,13 @@ def engagement_decision_for_tick(
     )
 
 
+def _retry_pending_input_cleanup(db: TrackerDatabase, timeline: CaptureTimeline) -> None:
+    if timeline.pending_input_trims:
+        db.trim_captured_segments(list(timeline.pending_input_trims.values()))
+        timeline.pending_input_trims.clear()
+        timeline.cleanup_retry_logged = False
+
+
 def apply_engagement_stop(
     db: TrackerDatabase,
     decision: EngagementDecision,
@@ -1961,15 +1968,17 @@ def apply_engagement_stop(
     now: datetime | None = None,
     input_tick: float | None = None,
 ) -> None:
+    timeline = db.capture_timeline if isinstance(db.capture_timeline, CaptureTimeline) else None
     if decision.kind == "stop_and_trim_to_input" and idle_seconds is not None:
-        if input_tick is not None:
-            db.trim_captured_segments(db.capture_timeline.trims_to_input(input_tick - idle_seconds))
+        if input_tick is not None and timeline is not None:
+            timeline.queue_input_stop(input_tick - idle_seconds)
         else:
             reference_time = now or datetime.now(timezone.utc)
             idle_started_at = reference_time - timedelta(seconds=idle_seconds)
             db.trim_latest_segment(idle_started_at.isoformat())
-    if isinstance(db.capture_timeline, CaptureTimeline):
-        db.capture_timeline.clear_pending()
+    if timeline is not None:
+        _retry_pending_input_cleanup(db, timeline)
+        timeline.clear_observations()
     db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
     reset_foreground_audio_diagnostics(db, "engagement_stopped")
     db.set_meta("tracker_mode", "idle")
@@ -2234,6 +2243,23 @@ def _daemon_tick(
         apply_engagement_stop(db, engagement, idle_seconds, now=reference_time, input_tick=input_tick)
         return None
 
+    pending_cleanup_failed = False
+    if timeline is not None and timeline.pending_input_trims:
+        try:
+            _retry_pending_input_cleanup(db, timeline)
+        except Exception:
+            # Cleanup is recoverable maintenance. Keep its frozen plans, but
+            # do not lose newly supported activity while a backup is locked.
+            # Capture below cannot merge into a still-queued target.
+            # The original failed stop already reaches the daemon's error
+            # reporter. Do not synchronously flush telemetry on every active
+            # retry; it can delay capture while the same error persists.
+            if not timeline.cleanup_retry_logged:
+                print("tracker idle cleanup retry failed:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                timeline.cleanup_retry_logged = True
+            pending_cleanup_failed = True
+
     _apply_developer_diagnostics_env(db)
     if capture_allowed is not None and not capture_allowed():
         return None
@@ -2260,12 +2286,16 @@ def _daemon_tick(
         # foreground app seen after resume. Start a fresh sample and segment.
         last_capture_tick = None
     sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
+    capture_options = ({"unmergeable_segment_uids": frozenset(timeline.pending_input_trims)}
+                       if pending_cleanup_failed and timeline is not None else {})
     if engagement.is_passive:
         passive_merge_gap = PASSIVE_AUDIO_GAP_GRACE_SECONDS if last_capture_tick is not None else 0
-        mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap)
+        mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap,
+                                      **capture_options)
     else:
         interactive_merge_gap = 0 if windows_sampling_gap else IDLE_THRESHOLD_SECONDS
-        mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=interactive_merge_gap)
+        mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=interactive_merge_gap,
+                                      **capture_options)
     if timeline is not None and isinstance(mutation, CaptureMutation):
         timeline.remember(mutation, snapshot_tick,
                           input_tick - idle_seconds if idle_seconds is not None else None,

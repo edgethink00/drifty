@@ -53,11 +53,22 @@ class CaptureTimeline:
         self.points: list[CapturePoint] = []
         self.floors: dict[str, CaptureFloor] = {}
         self.input_tick: float | None = None
+        # Frozen UTC/UID trim plans survive later input and passive samples.
+        # They are process-local and separate from the bounded observations.
+        self.pending_input_trims: dict[str, CaptureTrim] = {}
+        self.cleanup_retry_logged = False
 
-    def clear_pending(self) -> None:
+    def clear_observations(self) -> None:
         self.points.clear()
         self.floors.clear()
         self.input_tick = None
+
+    def queue_input_stop(self, input_tick: float) -> None:
+        for trim in self.trims_to_input(input_tick):
+            self.pending_input_trims[trim.expected.segment_uid] = trim
+        # New activity starts a fresh observation window even if guarded
+        # cleanup cannot complete. Its input cannot bless the old idle tail.
+        self.clear_observations()
 
     def input_boundary(self, input_tick: float) -> float:
         # OS input age and Python's elapsed clock need not advance equally
@@ -70,7 +81,7 @@ class CaptureTimeline:
         if passive or input_tick is None:
             # Audio-supported time and unavailable idle detection must not be
             # retroactively treated as unsupported interactive samples.
-            self.clear_pending()
+            self.clear_observations()
             return
         input_tick = self.input_boundary(input_tick)
         uid = mutation.after.segment_uid

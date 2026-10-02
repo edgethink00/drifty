@@ -1110,7 +1110,10 @@ class TrackerDatabase:
                 (video_id, failed_at, next_retry_at, error_count),
             )
 
-    def record_snapshot(self, snapshot: Snapshot, sample_seconds: int, max_merge_gap_seconds: int | None = None) -> CaptureMutation:
+    def record_snapshot(
+        self, snapshot: Snapshot, sample_seconds: int, max_merge_gap_seconds: int | None = None,
+        *, unmergeable_segment_uids: frozenset[str] = frozenset(),
+    ) -> CaptureMutation:
         # SQLite rejects the whole row for one unpaired UTF-16 surrogate, such as
         # an emoji half left by a truncated Windows title (DRIFTY-MAC-NATIVE-16).
         snapshot = without_lone_surrogates(snapshot)
@@ -1184,6 +1187,7 @@ class TrackerDatabase:
 
             if (
                 last
+                and last["segment_uid"] not in unmergeable_segment_uids
                 and (exact_context_match or (history_enrichment and same_engagement_evidence))
                 and self._within_merge_gap(last["ended_at"], snapshot.observed_at, max_merge_gap_seconds)
             ):
