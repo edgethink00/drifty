@@ -585,6 +585,78 @@ describe("Windows unattended stable update", () => {
     message: null,
   };
 
+  it.each([
+    { name: "hidden tray window with a visible WebView", visible: false, minimized: false, documentVisibility: "visible", shortThreshold: true },
+    { name: "minimized window with a visible WebView", visible: true, minimized: true, documentVisibility: "visible", shortThreshold: true },
+    { name: "visible window with a stale hidden WebView", visible: true, minimized: false, documentVisibility: "hidden", shortThreshold: false },
+    { name: "unknown native visibility", visible: undefined, minimized: undefined, documentVisibility: "hidden", shortThreshold: false },
+    { name: "failed native visibility probe", visible: "reject", minimized: false, documentVisibility: "hidden", shortThreshold: false },
+  ])("uses native visibility for $name", async ({ visible, minimized, documentVisibility, shortThreshold }) => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => documentVisibility });
+    try {
+      checkMock.mockResolvedValue(update(windowsPolicy.version));
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+      invokeMock.mockImplementation(async (command: string) => {
+        if (command === "plugin:window|is_visible") {
+          if (visible === "reject") throw new Error("Native window unavailable");
+          return visible;
+        }
+        if (command === "plugin:window|is_minimized") return minimized;
+        return undefined;
+      });
+      let idleSeconds = 180;
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        hostPlatform: "windows",
+        getIdleSeconds: async () => idleSeconds,
+      }));
+      await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      const installs = () => invokeMock.mock.calls.filter(([command]) => command === "windows_install_prepared_stable_update");
+      expect(installs()).toHaveLength(shortThreshold ? 1 : 0);
+      expect(invokeMock).toHaveBeenCalledWith("plugin:window|is_visible", { label: "main" });
+      if (!shortThreshold) {
+        idleSeconds = 900;
+        await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+        expect(installs()).toHaveLength(1);
+      }
+      expect(installs()[0]).toEqual(["windows_install_prepared_stable_update", { expectedVersion: windowsPolicy.version, silent: true }]);
+      unmount();
+    } finally {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not use the short threshold when the native window reopens during the idle probe", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      checkMock.mockResolvedValue(update(windowsPolicy.version));
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce(windowsPolicy);
+      let visible = false;
+      invokeMock.mockImplementation(async (command: string) => {
+        if (command === "plugin:window|is_visible") return visible;
+        if (command === "plugin:window|is_minimized") return false;
+        return undefined;
+      });
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        hostPlatform: "windows",
+        getIdleSeconds: async () => { visible = true; return 180; },
+      }));
+      await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(invokeMock).toHaveBeenCalledWith("plugin:window|is_visible", { label: "main" });
+      expect(invokeMock).not.toHaveBeenCalledWith("windows_install_prepared_stable_update", expect.anything());
+      unmount();
+    } finally {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      vi.useRealTimers();
+    }
+  });
+
   it("lets a manual Windows update launch NSIS without an app-side relaunch", async () => {
     const next = update(windowsPolicy.version);
     checkMock.mockResolvedValue(next);

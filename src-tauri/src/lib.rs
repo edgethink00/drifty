@@ -650,7 +650,18 @@ fn app_restart_after_update(app: AppHandle, silent: Option<bool>) {
             mark_silent_update_relaunch(&app_data_dir);
         }
     }
-    run_update_restart(|| shutdown_app_for_exit(&app), || app.restart());
+    run_update_restart(
+        || shutdown_app_for_exit(&app),
+        || {
+            // A synchronous IPC command can run on the main thread. On Windows,
+            // direct restart skips Exit and leaves the single-instance mutex
+            // alive while the replacement starts. Let Exit release it first.
+            #[cfg(target_os = "windows")]
+            app.request_restart();
+            #[cfg(not(target_os = "windows"))]
+            app.restart();
+        },
+    );
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

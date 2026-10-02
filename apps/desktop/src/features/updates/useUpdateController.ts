@@ -37,6 +37,22 @@ export const UPDATE_IDLE_CHECK_INTERVAL_MS = 30 * 1000;
 export const UPDATE_IDLE_PROBE_FAILURE_THRESHOLD = 20;
 export const WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY = "drifty.updates.windowsInstallAttempt.v1";
 
+async function isUpdateWindowHidden(hostPlatform: "macos" | "windows" | "other"): Promise<boolean> {
+  if (hostPlatform !== "windows") {
+    return typeof document !== "undefined" && document.visibilityState === "hidden";
+  }
+  // WebView2 can report a visible document after the native window hides to
+  // the tray. Only a native observation can admit the shorter idle threshold.
+  try {
+    const visible = await invoke<boolean>("plugin:window|is_visible", { label: "main" });
+    if (visible === false) return true;
+    if (visible !== true) return false;
+    return await invoke<boolean>("plugin:window|is_minimized", { label: "main" }) === true;
+  } catch {
+    return false;
+  }
+}
+
 function readFailedWindowsInstallVersion(): string | null {
   if (typeof window === "undefined") return null;
   const attemptedVersion = window.localStorage.getItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY);
@@ -625,12 +641,14 @@ export function useUpdateController({
       idleCheckInFlight = true;
       void (async () => {
         try {
-          const isHiddenBefore = typeof document !== "undefined" && document.visibilityState === "hidden";
+          const isHiddenBefore = await isUpdateWindowHidden(hostPlatform);
           const idleSeconds = getIdle ? await getIdle().catch(() => null) : null;
           if (disposed || restartInFlight) return;
           if (canSafelyRestartRef.current && !canSafelyRestartRef.current()) return;
 
-          const isHiddenAfter = typeof document !== "undefined" && document.visibilityState === "hidden";
+          const isHiddenAfter = await isUpdateWindowHidden(hostPlatform);
+          if (disposed || restartInFlight) return;
+          if (canSafelyRestartRef.current && !canSafelyRestartRef.current()) return;
           let isSafeToRestart = false;
           if (idleSeconds !== null && Number.isFinite(idleSeconds)) {
             setIdleProbeFailures(0);
