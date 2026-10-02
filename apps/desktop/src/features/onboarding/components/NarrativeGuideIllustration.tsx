@@ -23,6 +23,12 @@ function menuBarClock(ko: boolean) {
   const time = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(SAMPLE_NOW).replace(/\u202f/g, " ");
   return ko ? "(" + weekday + ") " + time : weekday + " " + time;
 }
+/** The Windows taskbar clock: time over the short date in the Windows default format for the language. */
+function taskbarClock(ko: boolean) {
+  const time = new Intl.DateTimeFormat(ko ? "ko-KR" : "en-US", { hour: "numeric", minute: "2-digit" }).format(SAMPLE_NOW).replace(/\u202f/g, " ");
+  const y = SAMPLE_NOW.getFullYear(), m = SAMPLE_NOW.getMonth() + 1, d = SAMPLE_NOW.getDate();
+  return { time, date: ko ? y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0") : m + "/" + d + "/" + y };
+}
 
 const CAT_STYLE = {
   position: "relative", width: 144, height: 99,
@@ -120,7 +126,7 @@ export function NarrativeGuideIllustration({ step, hostPlatform = "macos", theme
     dayShort: t("common.day"), weekShort: t("common.week"), now: t("common.now"),
     focusValue: formatLocalizedCompactDurationFromSeconds(FOCUS_SECONDS, ko ? "ko" : "en"), focusWord: ko ? "집중했습니다" : "Focused for", focusValueFirst: ko, share: t("dashboard.today.share"),
     date: new Intl.DateTimeFormat(ko ? "ko-KR" : "en-US", { month: ko ? "long" : "short", day: "numeric", weekday: "short" }).format(SAMPLE_DAY),
-    menuClock: menuBarClock(ko),
+    menuClock: menuBarClock(ko), trayTime: taskbarClock(ko).time, trayDate: taskbarClock(ko).date,
     hours: [0, 1, 2, 3, 4, 5, 6, 7].map(i => formatLocalizedCompactHourLabel(4 + i * 3, ko ? "ko" : "en")), cancel: t("common.cancel"), apply: t("classification.correction.apply"),
     settings: t("postOnboarding.sidebarGuide.settingsLabel"), aiSettings: t("account.aiSettings"), language: t("postOnboarding.sidebarGuide.languageLabel"), languageValue: ko ? "한국어" : "English",
     darkMode: t("account.darkMode"), pet: t("settings.pet.show"), update: t("account.checkForUpdates"), feedback: t("account.sendFeedback"), signIn: t("account.signIn"), recording: t("tracker.trackingNow"),

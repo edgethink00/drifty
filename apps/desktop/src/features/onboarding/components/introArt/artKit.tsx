@@ -3,6 +3,7 @@ import { NavIcon } from "../../../../app/AppShell";
 import type { NavIconType } from "../../../../app/navigation";
 import driftyIcon from "../../../../assets/drifty-icon.png";
 import driftyMark from "../../../../assets/drifty-mark.svg";
+import { BUILD_INFO } from "../../../../buildInfo";
 
 /**
  * Review-only drawing kit for the intro cards. Every piece copies a real Drifty surface:
@@ -168,16 +169,7 @@ export function MenuBar({ w = 400, theme, shares = DAY_SHARES, ringGlow = false,
     <Txt x={w - 10} y={14.5} size={9.5} anchor="end" fill={ink}>10:04</Txt>
   </g>;
 }
-/** bleed extends the taskbar background past the art frame so a wider or taller panel still shows it edge to edge. */
-export function Taskbar({ theme, y = 318, w = 400, bleed = false }: { theme: ArtTheme; y?: number; w?: number; bleed?: boolean }) {
-  return <g transform={"translate(0 " + y + ")"}>
-    {bleed ? <rect x={-w} width={w * 3} height={32 + 350} className="real-art__menubar" /> : <rect width={w} height={32} className="real-art__menubar" />}
-    <g transform="translate(150 8)"><rect width="16" height="16" rx="3" fill="var(--accent)" opacity=".85" />{[0, 1, 2, 3].map(i => <rect key={i} x={2.5 + (i % 2) * 6} y={2.5 + Math.floor(i / 2) * 6} width="5" height="5" rx=".8" fill="var(--surface)" />)}</g>
-    {[176, 200, 224].map(x => <rect key={x} x={x} y={8} width="16" height="16" rx="4" fill="var(--surface-strong)" stroke="var(--line-strong)" />)}
-    <BrandMark x={w - 82} y={8} size={16} theme={theme} />
-    <Bar x={w - 56} y={14} w={14} h={3.5} fill="var(--text-soft)" opacity={.55} /><Txt x={w - 10} y={20} size={9} anchor="end">10:04</Txt>
-  </g>;
-}
+/* The Windows taskbar lives in windowsShell.tsx. */
 export function Dock({ x = 100, y = 300, w = 200 }: { x?: number; y?: number; w?: number }) {
   return <g transform={"translate(" + x + " " + y + ")"}>
     <rect width={w} height={42} rx={13} className="real-art__dock" />
@@ -198,7 +190,7 @@ export function trayLabels(ko: boolean) {
     header: ko ? "활동 기록 일시 정지" : "Pause Tracking", p15: ko ? "15분 동안" : "15 Minutes", p30: ko ? "30분 동안" : "30 Minutes",
     p60: ko ? "1시간 동안" : "1 Hour", forever: ko ? "직접 다시 시작할 때까지" : "Forever", resume: ko ? "활동 기록 다시 시작" : "Resume Tracking",
     drift: ko ? "딴짓 알림: 감지 중" : "Drift alerts: Monitoring", driftPaused: ko ? "딴짓 알림: 일시 정지됨" : "Drift alerts: Paused",
-    dashboard: ko ? "대시보드 열기" : "Open Dashboard", settings: ko ? "설정" : "Settings", version: "Drifty 1.11.24",
+    dashboard: ko ? "대시보드 열기" : "Open Dashboard", settings: ko ? "설정" : "Settings", version: "Drifty " + BUILD_INFO.version,
     update: ko ? "업데이트 확인…" : "Check for Updates...", quit: ko ? "Drifty 종료" : "Quit",
     resumesAt: (time: string) => ko ? "일시 정지됨 · " + time + "에 다시 시작" : "Paused · resumes at " + time,
   };
@@ -220,15 +212,17 @@ export function trayRowTop(row: TrayRow, state: "running" | "paused" = "running"
   for (const item of trayRows(ko, state, "10:19")) { if (item.id === row) return cursor; cursor += item.id === "sep" ? 9 : rowH; }
   return cursor;
 }
-export function TrayMenu({ x, y, w = 176, ko, active, state = "running", resumeAt = "10:19", rowH = 17 }: { x: number; y: number; w?: number; ko: boolean; active?: TrayRow; state?: "running" | "paused"; resumeAt?: string; rowH?: number }) {
+/** highlight "neutral" is the Windows 11 context menu's grey hover; macOS fills the row with the accent. */
+export function TrayMenu({ x, y, w = 176, ko, active, state = "running", resumeAt = "10:19", rowH = 17, highlight = "accent" }: { x: number; y: number; w?: number; ko: boolean; active?: TrayRow; state?: "running" | "paused"; resumeAt?: string; rowH?: number; highlight?: "accent" | "neutral" }) {
   let cursor = 6;
   const nodes = trayRows(ko, state, resumeAt).map((row, i) => {
     const top = cursor;
     if (row.id === "sep") { cursor += 9; return <path key={"s" + i} d={"M8 " + (top + 4.5) + "H" + (w - 8)} stroke="var(--line-strong)" />; }
     cursor += rowH;
     const on = active === row.id;
-    return <g key={row.id}>{on && <rect x={4} y={top} width={w - 8} height={rowH} rx={4.5} fill="var(--accent)" />}
-      <Txt x={12} y={top + rowH * 0.7} size={9.4} fill={on ? "var(--surface)" : row.disabled ? "var(--text-soft)" : "var(--text)"}>{row.text}</Txt></g>;
+    const filled = on && highlight === "accent";
+    return <g key={row.id}>{on && <rect x={4} y={top} width={w - 8} height={rowH} rx={4.5} fill={filled ? "var(--accent)" : "var(--text)"} opacity={filled ? 1 : 0.08} data-tray-highlight={highlight} />}
+      <Txt x={12} y={top + rowH * 0.7} size={9.4} fill={filled ? "var(--surface)" : row.disabled ? "var(--text-soft)" : "var(--text)"}>{row.text}</Txt></g>;
   });
   return <g transform={"translate(" + x + " " + y + ")"}><rect width={w} height={cursor + 6} rx={9} className="real-art__menu" />{nodes}</g>;
 }

@@ -80,6 +80,29 @@ describe("centered app introduction", () => {
     expect(document.body.textContent).not.toMatch(/menu bar/);
   });
 
+  it("keeps the Windows tray badge in the hidden-icons flyout, with the app button only while the window is open", () => {
+    const props = callbacks();
+    const has = (selector: string) => document.querySelector(selector) !== null;
+    render(<PostOnboardingSidebarGuide step="welcome" hostPlatform="windows" {...props} />);
+    expect(has("[data-windows-taskbar]")).toBe(true);
+    expect(has("[data-windows-taskbar-app]")).toBe(true);
+    // A new install's tray icon starts in the hidden-icons flyout, so the welcome card shows it there.
+    expect(has("[data-windows-tray-overflow] [data-windows-tray-badge]")).toBe(true);
+    expect(document.querySelectorAll("[data-windows-tray-badge]")).toHaveLength(1);
+    cleanup();
+    render(<PostOnboardingSidebarGuide step="tracking" hostPlatform="windows" {...props} />);
+    // The window is closed on this card, so the app button is gone; the menu opens from the badge in the
+    // same flyout and uses the Windows grey hover.
+    expect(has("[data-windows-taskbar-app]")).toBe(false);
+    expect(has("[data-windows-tray-overflow] [data-windows-tray-badge]")).toBe(true);
+    expect(document.querySelectorAll("[data-windows-tray-badge]")).toHaveLength(1);
+    expect(document.querySelector("[data-tray-highlight]")?.getAttribute("data-tray-highlight")).toBe("neutral");
+    cleanup();
+    render(<PostOnboardingSidebarGuide step="tracking" hostPlatform="macos" {...props} />);
+    expect(has("[data-windows-taskbar]")).toBe(false);
+    expect(document.querySelector("[data-tray-highlight]")?.getAttribute("data-tray-highlight")).toBe("accent");
+  });
+
   it("keeps Windows welcome and tracking artwork platform-neutral in dark mode", () => {
     const props = callbacks();
     const { rerender } = render(<PostOnboardingSidebarGuide step="welcome" hostPlatform="windows" theme="dark" {...props} />);

@@ -1,8 +1,9 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
 import type { PostOnboardingSidebarGuideStep } from "../../postOnboardingSidebarGuide";
 import type { HostPlatform } from "../../../../lib/api/accessibilityClient";
-import { AppIcon, Bar, DAY_SHARES, Taskbar, TrayMenu, TrayRing, trayMenuHeight, trayRowTop, type ArtTheme } from "./artKit";
+import { AppIcon, Bar, DAY_SHARES, TrayMenu, TrayRing, trayMenuHeight, trayRowTop, type ArtTheme } from "./artKit";
 import { APP_W, AppShell, ClassificationPage, CorrectionEditor, Scaled, TodayPage, type NavActive, type RealLabels } from "./realApp";
+import { WIN_APP, WIN_OVERFLOW_TRAY, WIN_TASKBAR, WindowsTaskbar } from "./windowsShell";
 
 /*
  * The post-onboarding introduction's illustrations, drawn from real Drifty surfaces. The menu bar and Dock
@@ -145,12 +146,15 @@ export function StoryScene({ step, theme, ko, platform, labels, driftClosed = fa
   const windows = platform === "windows";
   const today = <TodayPage labels={labels} theme={theme} />;
   const clock = labels.menuClock ?? "";
+  // Both Windows taskbar cards keep the badge where a new install finds it: in the open hidden-icons flyout.
+  const taskbar = (appOpen: boolean) => <WindowsTaskbar theme={theme} time={labels.trayTime ?? ""} date={labels.trayDate ?? ""} appOpen={appOpen} trayLit={!appOpen} overflowOpen />;
 
+  // Windows: the app's taskbar button (the window is open now) and the tray badge where a new install
+  // finds it, in the open hidden-icons flyout, each with one arrow like the Dock icon and ring on the Mac card.
   if (step === "welcome") return windows ? <g>
-    <Taskbar theme={theme} bleed />
-    <AppIcon x={196} y={322} size={24} />
-    <Arc from={{ x: 244, y: 214 }} to={{ x: 333, y: 302 }} lift={-26} />
-    <Arc from={{ x: 150, y: 212 }} to={{ x: 206, y: 302 }} lift={-24} />
+    {taskbar(true)}
+    <Arc from={{ x: 70, y: 150 }} to={{ x: WIN_APP.x - 4, y: WIN_TASKBAR.y - 10 }} lift={-30} />
+    <Arc from={{ x: 346, y: 150 }} to={{ x: WIN_OVERFLOW_TRAY.x + 20, y: WIN_OVERFLOW_TRAY.y - 4 }} lift={24} />
   </g> : <g>
     <StatusBar theme={theme} clock={clock} />
     <DeskDock />
@@ -180,17 +184,19 @@ export function StoryScene({ step, theme, ko, platform, labels, driftClosed = fa
   }
 
   // Menu bar: the last card. The menu drops from the lit icon and the arrow reopens the window.
-  const mk = 0.95, mw = 176 * mk, mh = trayMenuHeight("running") * mk;
-  // macOS drops a status item's menu from the item's left edge, just under the bar.
-  const menu = windows ? { x: 400 - mw - 10, y: 318 - mh - 6 } : { x: RING.x - 18, y: BAR_H + 3 };
+  // macOS drops a status item's menu from the item's left edge, just under the bar. Windows opens the
+  // tray menu at the click, here the badge pressed inside the hidden-icons flyout, and flips it upward
+  // near the bottom of the screen, so its bottom-left corner sits at the badge.
+  const mk = windows ? 0.88 : 0.95, mh = trayMenuHeight("running") * mk;
+  const menu = windows ? { x: WIN_OVERFLOW_TRAY.x + 10, y: WIN_OVERFLOW_TRAY.y - mh } : { x: RING.x - 18, y: BAR_H + 3 };
   const dash = { x: menu.x, y: menu.y + (trayRowTop("dashboard") + 8.5) * mk };
-  const win = windows ? { x: 22, y: 34, w: 190 } : { x: 18, y: 214, w: 176 };
+  const win = windows ? { x: 18, y: 40, w: 160 } : { x: 18, y: 214, w: 176 };
   return <g>
-    {windows ? <Taskbar theme={theme} bleed /> : <StatusBar theme={theme} clock={clock} lit />}
+    {windows ? taskbar(false) : <StatusBar theme={theme} clock={clock} lit />}
     <AppWindow {...win} srcH={700} opacity={0.45} active="day" labels={labels} theme={theme} page={today} />
-    <Scaled x={menu.x} y={menu.y} k={mk}><TrayMenu x={0} y={0} ko={ko} active="dashboard" /></Scaled>
+    <Scaled x={menu.x} y={menu.y} k={mk}><TrayMenu x={0} y={0} ko={ko} active="dashboard" highlight={windows ? "neutral" : "accent"} /></Scaled>
     {windows
-      ? <Arc from={{ x: dash.x - 8, y: dash.y }} to={{ x: win.x + win.w * 0.62, y: win.y + 700 * (win.w / APP_W) + 8 }} lift={-28} />
+      ? <Arc from={{ x: dash.x - 8, y: dash.y }} to={{ x: win.x + win.w * 0.62, y: win.y + 700 * (win.w / APP_W) + 8 }} lift={20} />
       : <Arc from={{ x: dash.x - 8, y: dash.y }} to={{ x: win.x + win.w * 0.36, y: win.y - 8 }} lift={30} />}
   </g>;
 }

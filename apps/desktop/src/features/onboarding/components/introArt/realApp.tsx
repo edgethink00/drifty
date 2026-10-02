@@ -12,6 +12,9 @@ export const APP_H = 800;
 export type RealLabels = {
   /** Menu bar clock at the sample "now" (18:08, Wed), e.g. "(수) 오후 6:08" / "Wed 6:08 PM". */
   readonly menuClock?: string;
+  /** Windows taskbar clock at the same "now", as Windows prints it: "오후 6:08" over "2026-09-30", "6:08 PM" over "9/30/2026". */
+  readonly trayTime?: string;
+  readonly trayDate?: string;
   readonly day: string; readonly week: string; readonly classification: string; readonly projects: string; readonly insights: string; readonly history: string;
   readonly guest: string; readonly focus: string; readonly drift: string; readonly neutral: string;
   readonly groupDashboard: string; readonly groupActivity: string; readonly groupSocial: string; readonly leaderboard: string;
