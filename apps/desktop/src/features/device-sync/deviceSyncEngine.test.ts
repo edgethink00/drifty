@@ -8,8 +8,37 @@ import {
   SYNC_PUSH_SEQ_KEY,
   runSyncPullCycle,
   runSyncPushCycle,
+  runSyncCycle,
   type DeviceSyncEngineDeps,
 } from "./deviceSyncEngine";
+
+describe("runSyncCycle exclusion account boundary", () => {
+  it("rejects a stale account before touching exclusions", async () => {
+    const { tracker } = makeTracker({
+      snapshot: emptySnapshot({ [SYNC_ACCOUNT_ID_KEY]: "user-2" }),
+      outboxPages: [],
+    });
+    const syncExcludedApps = vi.fn();
+    const pushBatch = vi.fn();
+    await expect(runSyncCycle({ tracker, pushBatch, syncAccountId: "user-1", syncExcludedApps }, "manual"))
+      .rejects.toThrow("account scope changed");
+    expect(syncExcludedApps).not.toHaveBeenCalled();
+    expect(pushBatch).not.toHaveBeenCalled();
+  });
+
+  it("does not push history after the account changes during exclusion sync", async () => {
+    const { tracker } = makeTracker({
+      snapshot: emptySnapshot({ [SYNC_ACCOUNT_ID_KEY]: "user-1" }),
+      outboxPages: [],
+    });
+    const pushBatch = vi.fn();
+    await expect(runSyncCycle({
+      tracker, pushBatch, syncAccountId: "user-1",
+      syncExcludedApps: async () => { await tracker.setSyncState({ [SYNC_ACCOUNT_ID_KEY]: "user-2" }); },
+    }, "manual")).rejects.toThrow("account scope changed");
+    expect(pushBatch).not.toHaveBeenCalled();
+  });
+});
 
 function outboxSegment(syncSeq: number): SyncOutboxSegment {
   return {

@@ -141,7 +141,7 @@ export function useDeviceSyncController({
             resolveDeviceId: refreshDeviceLabels,
             syncAccountId: accountId,
             isSyncAccountCurrent: isScopeCurrent,
-            syncExcludedApps: syncExcludedAppsForAccount,
+            syncExcludedApps: (scopeAccountId) => syncExcludedAppsForAccount(scopeAccountId, isScopeCurrent),
           },
           reason,
         );

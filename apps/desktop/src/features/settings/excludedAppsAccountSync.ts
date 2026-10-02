@@ -46,14 +46,31 @@ function asRecord(row: {
   };
 }
 
-export async function syncExcludedAppsForAccount(accountId: string): Promise<void> {
+export async function syncExcludedAppsForAccount(
+  accountId: string,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
   if (!supabase) return;
+  const client = supabase;
+  const assertCurrentAccount = async () => {
+    if (!isCurrent()) throw new Error("Device sync account scope changed.");
+    const { data, error } = await client.auth.getSession();
+    if (error) throw error;
+    if (data.session?.user.id !== accountId || !isCurrent()) {
+      throw new Error("Device sync account scope changed.");
+    }
+  };
+  await assertCurrentAccount();
   const localRows = ((await trackerClient.getExcludedApps({ includeTombstones: true })) ?? []).map(asRecord);
-  const { data, error } = await supabase
+  await assertCurrentAccount();
+  const { data, error } = await client
     .from("user_excluded_apps")
     .select("id, name, bundle_id, source, tombstone, updated_at")
     .eq("user_id", accountId);
   if (error) throw error;
+  // A response can still belong to the previous account after auth or the
+  // controller's generation changes. Never merge it into the current tracker.
+  await assertCurrentAccount();
   const remoteRows = (data ?? []).map((row) => asRecord({
     id: String(row.id),
     name: String(row.name),
@@ -69,6 +86,7 @@ export async function syncExcludedAppsForAccount(accountId: string): Promise<voi
   for (const row of merged) {
     const local = localById.get(row.id);
     if (!local || newer(row.updatedAt, local.updatedAt)) {
+      await assertCurrentAccount();
       await trackerClient.saveExcludedApp({
         id: row.id,
         name: row.name,
@@ -80,7 +98,8 @@ export async function syncExcludedAppsForAccount(accountId: string): Promise<voi
     }
     const remote = remoteById.get(row.id);
     if (!remote || newer(row.updatedAt, remote.updatedAt)) {
-      const { error: upsertError } = await supabase.from("user_excluded_apps").upsert({
+      await assertCurrentAccount();
+      const { error: upsertError } = await client.from("user_excluded_apps").upsert({
         user_id: accountId,
         id: row.id,
         name: row.name,
@@ -92,4 +111,5 @@ export async function syncExcludedAppsForAccount(accountId: string): Promise<voi
       if (upsertError) throw upsertError;
     }
   }
+  await assertCurrentAccount();
 }

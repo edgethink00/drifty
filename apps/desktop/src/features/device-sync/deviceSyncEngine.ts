@@ -259,7 +259,9 @@ export type SyncCycleResult = {
 
 export async function runSyncCycle(deps: DeviceSyncEngineDeps, reason: DeviceSyncCycleReason): Promise<SyncCycleResult> {
   if (deps.syncAccountId && deps.syncExcludedApps) {
+    assertSyncAccount(await deps.tracker.getSyncState(), deps);
     await deps.syncExcludedApps(deps.syncAccountId);
+    assertSyncAccount(await deps.tracker.getSyncState(), deps);
   }
   const pushStatus = await runSyncPushCycle(deps, reason);
   const pull = await runSyncPullCycle(deps);
