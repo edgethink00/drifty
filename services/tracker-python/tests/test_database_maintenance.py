@@ -229,6 +229,206 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         self.assertEqual(list(backup_dir.glob("*")), [])
         database.close()
 
+    def test_unreadable_backup_preserves_source_until_latest_copy_can_be_retried(self) -> None:
+        for with_older in (False, True):
+            for fault in (PermissionError("backup access denied"),
+                          sqlite3.OperationalError("disk I/O error")):
+                with self.subTest(older=with_older, fault=type(fault).__name__):
+                    with TemporaryDirectory() as directory:
+                        db_path = Path(directory) / "tracker.sqlite3"
+                        database = TrackerDatabase(db_path)
+                        base = datetime.now(timezone.utc) - timedelta(hours=2)
+                        self._insert_marker(database, "older")
+                        if with_older:
+                            create_rotating_backup(database.connect(), db_path,
+                                                   now=base, interval_seconds=0)
+                        self._insert_marker(database, "latest")
+                        latest = create_rotating_backup(
+                            database.connect(), db_path,
+                            now=base + timedelta(hours=1), interval_seconds=0,
+                        )
+                        database.close()
+                        original_backup = latest.read_bytes()
+                        original_source = b"confirmed corrupt source"
+                        db_path.write_bytes(original_source)
+                        check = quick_check_database
+                        attempted = []
+
+                        def fail_latest(path, **kwargs):
+                            if path == latest:
+                                attempted.append(path)
+                                raise fault
+                            return check(path, **kwargs)
+
+                        with patch("app.storage.database_maintenance.quick_check_database",
+                                   side_effect=fail_latest):
+                            with self.assertRaises(type(fault)):
+                                TrackerDatabase(db_path)
+
+                        self.assertEqual(attempted, [latest])
+                        self.assertEqual(db_path.read_bytes(), original_source)
+                        self.assertEqual(latest.read_bytes(), original_backup)
+                        self.assertFalse(database_quarantine_dir(db_path).exists())
+                        self.assertFalse((db_path.parent / ".tracker.sqlite3.recovery-pending").exists())
+                        recovered = TrackerDatabase(db_path)
+                        try:
+                            self.assertEqual(recovered.get_meta("maintenance-test"), "latest")
+                            self.assertEqual(recovered.maintenance_result.restored_backup_path, latest)
+                        finally:
+                            recovered.close()
+
+    def test_unreadable_backup_directory_does_not_publish_an_empty_replacement(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        self._insert_marker(database, "retry-directory")
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        database.close()
+        original_backup = backup.read_bytes()
+        original_source = b"confirmed corrupt source"
+        self.db_path.write_bytes(original_source)
+        read_directory = Path.iterdir
+        attempted = []
+
+        def deny_directory(path):
+            if path == backup.parent:
+                attempted.append(path)
+                raise PermissionError("backup directory access denied")
+            return read_directory(path)
+
+        with patch.object(Path, "iterdir", deny_directory):
+            with self.assertRaisesRegex(PermissionError, "directory access denied"):
+                TrackerDatabase(self.db_path)
+
+        self.assertEqual(attempted, [backup.parent])
+        self.assertEqual(self.db_path.read_bytes(), original_source)
+        self.assertEqual(backup.read_bytes(), original_backup)
+        self.assertFalse(database_quarantine_dir(self.db_path).exists())
+        recovered = TrackerDatabase(self.db_path)
+        try:
+            self.assertEqual(recovered.get_meta("maintenance-test"), "retry-directory")
+        finally:
+            recovered.close()
+
+    def test_unreadable_recovery_directory_prevents_delete_and_tombstone_commit(self) -> None:
+        for folder_name in ("database-backups", "database-quarantine"):
+            with self.subTest(directory=folder_name), TemporaryDirectory() as directory:
+                db_path = Path(directory) / "tracker.sqlite3"
+                database = TrackerDatabase(db_path)
+                try:
+                    database.insert_segment({
+                        "segment_uid": "must-remain-until-copies-removed",
+                        "started_at": "2026-08-02T09:00:00+00:00",
+                        "ended_at": "2026-08-02T09:01:00+00:00",
+                        "duration_seconds": 60,
+                        "app_name": "Recovery directory guard",
+                    })
+                    connection = database.connect()
+                    segment_id = str(connection.execute(
+                        "SELECT id FROM activity_segments").fetchone()[0])
+                    backup = create_rotating_backup(connection, db_path, interval_seconds=0)
+                    quarantine = database_quarantine_dir(db_path) / "tracker-corrupt-owned.sqlite3"
+                    quarantine.parent.mkdir()
+                    quarantine.write_bytes(backup.read_bytes())
+                    original_backup = backup.read_bytes()
+                    original_quarantine = quarantine.read_bytes()
+                    before_deletions = [tuple(row) for row in connection.execute(
+                        "SELECT * FROM sync_deletions").fetchall()]
+                    read_directory = Path.iterdir
+                    attempted = []
+
+                    def deny_directory(path):
+                        if path == db_path.parent / folder_name:
+                            attempted.append(path)
+                            raise PermissionError("recovery directory access denied")
+                        return read_directory(path)
+
+                    with patch.object(Path, "iterdir", deny_directory):
+                        with self.assertRaisesRegex(PermissionError, "directory access denied"):
+                            database.delete_activity_segments([segment_id])
+
+                    self.assertEqual(attempted, [db_path.parent / folder_name])
+                    self.assertEqual(connection.execute(
+                        "SELECT segment_uid FROM activity_segments").fetchone()[0],
+                        "must-remain-until-copies-removed")
+                    self.assertEqual([tuple(row) for row in connection.execute(
+                        "SELECT * FROM sync_deletions").fetchall()], before_deletions)
+                    # Enumeration must finish for both folders before any copy is removed.
+                    self.assertEqual(backup.read_bytes(), original_backup)
+                    self.assertEqual(quarantine.read_bytes(), original_quarantine)
+
+                    self.assertEqual(database.delete_activity_segments([segment_id]), 1)
+                    self.assertEqual(connection.execute(
+                        "SELECT count(*) FROM activity_segments").fetchone()[0], 0)
+                    self.assertFalse(quarantine.exists())
+                    self.assertEqual(connection.execute(
+                        "SELECT count(*) FROM sync_deletions").fetchone()[0],
+                        len(before_deletions) + 1)
+                    for snapshot in database_backup_dir(db_path).iterdir():
+                        with closing(sqlite3.connect(snapshot)) as copy:
+                            self.assertEqual(copy.execute(
+                                "SELECT count(*) FROM activity_segments").fetchone()[0], 0)
+                finally:
+                    database.close()
+
+    def test_backup_metadata_access_error_is_not_treated_as_a_missing_file(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        self._insert_marker(database, "metadata-retry")
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        database.close()
+        original_source = b"confirmed corrupt source"
+        self.db_path.write_bytes(original_source)
+        metadata = Path.stat
+
+        def deny_metadata(path, *args, **kwargs):
+            if path == backup:
+                raise PermissionError("backup metadata access denied")
+            return metadata(path, *args, **kwargs)
+
+        with patch.object(Path, "stat", deny_metadata):
+            with self.assertRaisesRegex(PermissionError, "metadata access denied"):
+                prepare_database(self.db_path)
+            with self.assertRaisesRegex(PermissionError, "metadata access denied"):
+                quick_check_database(backup, immutable=True)
+
+        self.assertEqual(self.db_path.read_bytes(), original_source)
+        self.assertFalse(database_quarantine_dir(self.db_path).exists())
+        recovered = TrackerDatabase(self.db_path)
+        try:
+            self.assertEqual(recovered.get_meta("maintenance-test"), "metadata-retry")
+        finally:
+            recovered.close()
+
+    def test_periodic_backup_can_replace_an_unreadable_snapshot_from_healthy_live_data(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        try:
+            self._insert_marker(database, "old")
+            previous = create_rotating_backup(
+                database.connect(), self.db_path,
+                now=datetime.now(timezone.utc) - timedelta(days=2), interval_seconds=0,
+            )
+            self._insert_marker(database, "healthy-current")
+            check = quick_check_database
+            attempted = []
+
+            def deny_previous(path, **kwargs):
+                if path == previous:
+                    attempted.append(path)
+                    raise sqlite3.OperationalError("unable to open database file")
+                return check(path, **kwargs)
+
+            with patch("app.storage.database_maintenance.quick_check_database",
+                       side_effect=deny_previous):
+                created = database.create_periodic_backup()
+
+            self.assertEqual(attempted, [previous])
+            self.assertIsNotNone(created)
+            self.assertEqual(database.get_meta("maintenance-test"), "healthy-current")
+            with closing(sqlite3.connect(created)) as snapshot:
+                self.assertEqual(snapshot.execute(
+                    "SELECT value FROM tracker_meta WHERE key = 'maintenance-test'"
+                ).fetchone()[0], "healthy-current")
+        finally:
+            database.close()
+
     def test_confirmed_corruption_is_quarantined_and_restored_from_latest_valid_backup(self) -> None:
         database = TrackerDatabase(self.db_path)
         self._insert_marker(database, "recover-me")

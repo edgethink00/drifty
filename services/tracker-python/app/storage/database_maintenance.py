@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
+import stat
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
@@ -127,6 +128,14 @@ def _is_confirmed_corruption_error(error: sqlite3.DatabaseError) -> bool:
     return any(marker in message for marker in _CORRUPTION_ERROR_MARKERS)
 
 
+def _is_regular_file(path: Path) -> bool:
+    # Path.is_file() can hide access/I/O errors on newer Python versions.
+    try:
+        return stat.S_ISREG(path.stat().st_mode)
+    except FileNotFoundError:
+        return False
+
+
 def quick_check_database(path: Path, *, immutable: bool = False) -> bool:
     """Return whether SQLite confirms that ``path`` is internally consistent.
 
@@ -135,7 +144,7 @@ def quick_check_database(path: Path, *, immutable: bool = False) -> bool:
     ever lead the caller to quarantine a user's source-of-truth database.
     """
 
-    if not path.is_file():
+    if not _is_regular_file(path):
         return False
     uri = f"{path.resolve().as_uri()}?mode=ro"
     if immutable:
@@ -186,27 +195,33 @@ def _backup_created_at(db_path: Path, backup_path: Path) -> datetime:
     return datetime.fromtimestamp(backup_path.stat().st_mtime, tz=timezone.utc)
 
 
-def _backup_candidates(db_path: Path) -> list[Path]:
-    backup_dir = database_backup_dir(db_path)
-    if not backup_dir.is_dir():
+def _recovery_files(directory: Path, pattern: str) -> list[Path]:
+    # glob() may silently yield nothing when a directory cannot be read.
+    # Recovery and permanent deletion must distinguish that from no copies.
+    try:
+        entries = list(directory.iterdir())
+    except FileNotFoundError:
         return []
+    return [
+        path for path in entries
+        if path.match(pattern) and _is_regular_file(path)
+    ]
+
+
+def _backup_candidates(db_path: Path) -> list[Path]:
     return sorted(
-        (path for path in backup_dir.glob(_backup_pattern(db_path)) if path.is_file()),
+        _recovery_files(database_backup_dir(db_path), _backup_pattern(db_path)),
         key=lambda path: (_backup_created_at(db_path, path), path.name),
         reverse=True,
     )
 
 
 def _quarantine_candidates(db_path: Path) -> list[Path]:
-    quarantine_dir = database_quarantine_dir(db_path)
-    if not quarantine_dir.is_dir():
-        return []
     return sorted(
-        path
-        for path in quarantine_dir.glob(
-            f"{db_path.stem}-corrupt-*{db_path.suffix}*"
+        _recovery_files(
+            database_quarantine_dir(db_path),
+            f"{db_path.stem}-corrupt-*{db_path.suffix}*",
         )
-        if path.is_file()
     )
 
 
@@ -260,13 +275,16 @@ def permanent_deletion_guard(
                     on_backup_error(error)
 
 
-def _latest_valid_backup(db_path: Path) -> Path | None:
+def _latest_valid_backup(db_path: Path, *, skip_unreadable: bool = False) -> Path | None:
     for candidate in _backup_candidates(db_path):
         try:
             if quick_check_database(candidate, immutable=True):
                 return candidate
         except (OSError, sqlite3.DatabaseError):
-            continue
+            # Only confirmed corruption permits trying an older recovery copy.
+            # A healthy live DB may still create a new periodic backup.
+            if not skip_unreadable:
+                raise
     return None
 
 
@@ -347,7 +365,7 @@ def prepare_database(db_path: Path, *, now: datetime | None = None) -> DatabaseP
 
 
 def _backup_is_due(db_path: Path, now: datetime, interval_seconds: int) -> bool:
-    latest = _latest_valid_backup(db_path)
+    latest = _latest_valid_backup(db_path, skip_unreadable=True)
     if latest is None:
         return True
     elapsed_seconds = (
