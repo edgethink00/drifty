@@ -147,13 +147,15 @@ function GuideLayer({
     if (rootRef.current) rootRef.current.inert = exiting;
   }, [exiting]);
   // The intro has its own content. It never opens or highlights live menus.
-  // Keep the app out of keyboard and accessibility navigation until it leaves.
+  // Keep the app out of keyboard and accessibility navigation until it leaves. On Windows the client
+  // titlebar sits outside .app-shell and above every dialog, so its app controls (sidebar, history,
+  // AI status, update) are held too; caption buttons and the drag region stay usable, as in a native
+  // Windows dialog.
   useEffect(() => {
-    const app = document.querySelector<HTMLElement>(".app-shell");
-    if (!app) return;
-    const wasInert = app.inert;
-    app.inert = true;
-    return () => { app.inert = wasInert; };
+    const held = Array.from(document.querySelectorAll<HTMLElement>(".app-shell, .windows-titlebar__leading, .windows-titlebar__trailing"))
+      .map(element => ({ element, wasInert: element.inert }));
+    for (const { element } of held) element.inert = true;
+    return () => { for (const { element, wasInert } of held) element.inert = wasInert; };
   }, []);
   // Restore app interaction before the focus trap restores the previous target.
   useModalFocusTrap(panelRef, { initialFocusSelector: "[data-intro-next]", explicitTabNavigation: true });

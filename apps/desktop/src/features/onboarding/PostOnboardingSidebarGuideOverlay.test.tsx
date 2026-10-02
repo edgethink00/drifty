@@ -41,6 +41,25 @@ describe("centered app introduction", () => {
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent).toMatch(/Use Insights to see patterns and History/);
   });
 
+  it("holds the Windows titlebar's app controls but keeps its window controls while the intro is open", () => {
+    const titlebar = document.createElement("header");
+    titlebar.className = "windows-titlebar";
+    titlebar.innerHTML = '<div class="windows-titlebar__drag-region"></div><div class="windows-titlebar__leading"><button>Sidebar</button></div>'
+      + '<div class="windows-titlebar__trailing"><button>AI setup</button></div><div class="windows-caption-controls"><button>Close</button></div>';
+    document.body.append(titlebar);
+    const part = (selector: string) => titlebar.querySelector<HTMLElement>(selector)!;
+    try {
+      const { unmount } = render(<PostOnboardingSidebarGuide step="welcome" hostPlatform="windows" {...callbacks()} />);
+      expect(part(".windows-titlebar__leading").inert).toBe(true);
+      expect(part(".windows-titlebar__trailing").inert).toBe(true);
+      expect(part(".windows-caption-controls").inert).toBeFalsy();
+      expect(part(".windows-titlebar__drag-region").inert).toBeFalsy();
+      unmount();
+      expect(part(".windows-titlebar__leading").inert).toBeFalsy();
+      expect(part(".windows-titlebar__trailing").inert).toBeFalsy();
+    } finally { titlebar.remove(); }
+  });
+
   it("traps focus inside the intro and restores app interaction and focus after removal", async () => {
     const app = document.createElement("div");
     app.className = "app-shell";
