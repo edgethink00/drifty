@@ -134,6 +134,29 @@ describe("Windows bundled typography", () => {
     // Digits and Latin must stay in the mono face so figures keep aligning.
     expect(range).not.toMatch(/U\+00(2[1-9A-F]|[3-7][0-9A-F])/);
   });
+
+  it("keeps code and typed values off the proportional Hangul companion", () => {
+    // The companion owns U+0020; in commands it broke monospace spacing.
+    for (const selector of [":root", ':root[data-platform="windows"]']) {
+      const code = windowsStack("font-code", selector);
+      expect(code, selector).not.toMatch(/Drifty Hangul Companion/);
+      expect(code, selector).toBe(windowsStack("font-mono", selector));
+    }
+    const scope = tokens.match(/:is\(([^)]*)\)\s*\{\s*--font-mono:\s*var\(--font-code\);/);
+    expect(scope, "code scope rule").toBeTruthy();
+    for (const element of ["code", "kbd", "pre", "input", "textarea", ".developer-command-preview__command"]) {
+      expect(scope?.[1].split(",").map((s) => s.trim()), element).toContain(element);
+    }
+  });
+
+  it("gives macOS Korean mono labels the companion ahead of SF Mono", () => {
+    // SF Mono's 0.6em space split "기록 시간" apart on macOS too.
+    const value = windowsStack("font-mono", ":root:lang(ko)");
+    expect(value.startsWith('"Drifty Hangul Companion"')).toBe(true);
+    expect(value.indexOf("Drifty Hangul Companion")).toBeLessThan(value.indexOf("SF Mono"));
+    // The Windows Korean override must still win where it applies.
+    expect(tokens.indexOf(":root:lang(ko) {")).toBeLessThan(tokens.indexOf(':root[data-platform="windows"]:lang(ko) {'));
+  });
 });
 
 describe("typography cascade hygiene", () => {

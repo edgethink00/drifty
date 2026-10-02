@@ -140,6 +140,9 @@ html {
      read, not column-aligned, so the clean proportional face is the right
      partner for Cascadia's Latin. */
   --font-mono: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, "Malgun Gothic", "Fira Code", monospace;
+  /* Code keeps true monospace spaces; the Korean mono override below adds a
+     proportional Hangul companion that must not reach command or code text. */
+  --font-code: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, "Malgun Gothic", "Fira Code", monospace;
   --font-ui: var(--font-sans);
   /* Wide tracking (0.06em and up) is written for Latin capitals and multiplies
      this scale. Hangul has no case, so the same spacing only pulls syllables
@@ -291,6 +294,7 @@ html {
      totals bounced and Korean titles fell to the system serif. */
   --font-serif: var(--font-display);
   --font-mono: "Drifty Geist Mono", "Cascadia Mono", "Consolas", "Drifty Pretendard", "Malgun Gothic", monospace;
+  --font-code: "Drifty Geist Mono", "Cascadia Mono", "Consolas", "Drifty Pretendard", "Malgun Gothic", monospace;
   --window-nav-offset-x: 12px;
   --windows-titlebar-height: 32px;
   --windows-caption-button-width: 46px;
@@ -404,8 +408,24 @@ html {
   --caps-tracking-scale: 0.15;
 }
 
+/* macOS Korean mono labels had the same gap: SF Mono's 0.6em space split
+   "기록 시간" and "오전 9:14" apart. The range-limited companion takes only
+   Hangul and the space, so Latin and figures stay in SF Mono. Windows
+   overrides this below with its own mono face. */
+:root:lang(ko) {
+  --font-mono: "Drifty Hangul Companion", "SF Mono", ui-monospace, "Cascadia Mono", Consolas, "Malgun Gothic", "Fira Code", monospace;
+}
+
 :root[data-platform="windows"]:lang(ko) {
   --font-mono: "Drifty Hangul Companion", "Drifty Geist Mono", "Cascadia Mono", "Consolas", "Drifty Pretendard", "Malgun Gothic", monospace;
+}
+
+/* The companion also owns U+0020, so inside commands, code, and typed values it
+   swapped monospace spaces for proportional ones ("drifty summary --day" lost
+   its column rhythm). These elements resolve their mono token to the code
+   stack instead; Korean labels keep the companion. */
+:is(code, kbd, pre, samp, input, textarea, .developer-command-preview__command) {
+  --font-mono: var(--font-code);
 }
 
 :root[data-platform="windows"][data-theme="light"] {
