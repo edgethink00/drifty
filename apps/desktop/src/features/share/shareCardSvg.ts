@@ -61,8 +61,9 @@ export const SHARE_CARD_EXPORT_SIZES: Record<ShareCardFormat, { width: number; h
 
 const SQUARE = { width: 340, height: 340 } as const;
 const PORTRAIT = { width: 324, height: 576 } as const;
-const FONT_SANS = "-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif";
-const FONT_MONO = "'SF Mono', ui-monospace, Menlo, monospace";
+// Windows faces follow the Apple ones; see the stack note in shareCardUnifiedSvg.ts.
+const FONT_SANS = "-apple-system, 'SF Pro Display', 'Helvetica Neue', 'Segoe UI Variable Display', 'Segoe UI', 'Malgun Gothic', sans-serif";
+const FONT_MONO = "'SF Mono', ui-monospace, Menlo, 'Cascadia Mono', Consolas, 'Apple SD Gothic Neo', 'Malgun Gothic', monospace";
 
 type ShareCardPalette = {
   readonly canvas: string;

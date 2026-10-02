@@ -225,14 +225,21 @@ const H = 900;
 const LOGO = driftyWordmarkDataUrl;
 const H_RICH = 1170;
 
+// An SVG drawn as an image cannot use the app's bundled web fonts, and Apple's
+// faces cannot be embedded, so each stack names the closest Windows system face
+// after the macOS ones. The Apple Hangul faces are named ahead of the Windows
+// ones so a Mac that also has Office's Malgun Gothic or Batang renders as
+// before. Cambria comes before Georgia because Georgia's default old-style
+// figures dropped the "5" in "5h 15m" below the baseline; Batang keeps Korean
+// serif titles in a myeongjo face, matching AppleMyungjo on macOS.
 const F = {
-  sans: "'Avenir Next', -apple-system, BlinkMacSystemFont, sans-serif",
-  grotesk: "'Helvetica Neue', 'Avenir Next', sans-serif",
-  serif: "'Iowan Old Style', 'New York', Baskerville, Georgia, serif",
-  mono: "Menlo, 'SF Mono', monospace",
+  sans: "'Avenir Next', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI', 'Malgun Gothic', sans-serif",
+  grotesk: "'Helvetica Neue', 'Avenir Next', 'Apple SD Gothic Neo', 'Segoe UI Variable Display', 'Segoe UI', 'Malgun Gothic', sans-serif",
+  serif: "'Iowan Old Style', 'New York', Baskerville, Cambria, Georgia, AppleMyungjo, Batang, serif",
+  mono: "Menlo, 'SF Mono', 'Cascadia Mono', Consolas, 'Apple SD Gothic Neo', 'Malgun Gothic', monospace",
 };
 // Title locked: Iowan / weight 500 / size 61 (toggles removed).
-const TITLE_FONT = { value: "'Iowan Old Style', 'New York', Baskerville, Georgia, serif", spacing: -0.8 };
+const TITLE_FONT = { value: F.serif, spacing: -0.8 };
 const TITLE_WEIGHT = 500;
 const TITLE_SIZE = 61;
 let selectedSurface = 'ink'; // ink | paper — collapses color-only card variants
@@ -381,7 +388,7 @@ const RANK_DY = RANK_PANEL_Y - 156; // +13 from the old tight frame
 const chromeTitle = (p, text, x = 84, y = 111, anchor) => {
   const size = 61;
   return tx(x, y, text, {
-    font: "'Iowan Old Style', 'New York', Baskerville, Georgia, serif",
+    font: F.serif,
     size,
     floor: size,
     fill: p.ink,

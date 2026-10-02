@@ -385,3 +385,68 @@ describe("shareable focus-time fallback", () => {
     expect(svg).not.toContain("live leaderboard");
   });
 });
+
+describe("share card font stacks", () => {
+  // The card is rasterized from an SVG image, which cannot use the app's
+  // bundled web fonts, so Windows renders whatever system face each stack
+  // reaches. Before these stacks named Windows faces, cards fell to Arial,
+  // Courier New, and Georgia's old-style figures.
+  const APPLE_FIRST = new Set(["Avenir Next", "-apple-system", "Helvetica Neue", "Iowan Old Style", "Menlo", "SF Mono", "SF Pro Display"]);
+  const WINDOWS = new Set(["Segoe UI Variable Display", "Segoe UI", "Cambria", "Cascadia Mono", "Consolas"]);
+  const APPLE_HANGUL = new Set(["-apple-system", "Apple SD Gothic Neo", "AppleMyungjo"]);
+  const koreanDay: ShareCardData = { ...DAY, language: "ko" };
+  const koreanWeek: ShareWeekCardData = { ...WEEK, language: "ko" };
+
+  function stacks(): Set<string> {
+    const found = new Set<string>();
+    for (const { value: story } of UNIFIED_STORY_OPTIONS) {
+      for (const format of ["landscape", "square", "portrait"] as const) {
+        for (const theme of ["light", "dark"] as const) {
+          for (const svg of [
+            () => renderShareCardSvg({ communityModels: MODELS, data: DAY, format, theme, story }),
+            () => renderShareCardSvg({ communityModels: MODELS, data: koreanDay, format, theme, story }),
+            () => renderShareWeekCardSvg({ communityModels: MODELS, data: WEEK, format, theme, story }),
+            () => renderShareWeekCardSvg({ communityModels: MODELS, data: koreanWeek, format, theme, story }),
+          ]) {
+            let markup = "";
+            try { markup = svg(); } catch { continue; }
+            for (const match of markup.matchAll(/font-family="([^"]+)"/g)) found.add(match[1]);
+          }
+        }
+      }
+    }
+    for (const match of renderLockedShareRankSvg({ theme: "light", period: "daily" }).matchAll(/font-family="([^"]+)"/g)) found.add(match[1]);
+    return found;
+  }
+
+  const families = (stack: string) => stack.split(",").map((name) => name.trim().replace(/^['"]|['"]$/g, ""));
+
+  it("keeps a macOS face first and names a Windows face in every stack", () => {
+    const all = stacks();
+    expect(all.size).toBeGreaterThan(0);
+    for (const stack of all) {
+      const names = families(stack);
+      expect(APPLE_FIRST.has(names[0]), stack).toBe(true);
+      expect(names.some((name) => WINDOWS.has(name)), stack).toBe(true);
+    }
+  });
+
+  it("lets a macOS Hangul face win before Malgun Gothic or Batang", () => {
+    // A Mac with Office installs both; without this the Mac card would change.
+    for (const stack of stacks()) {
+      const names = families(stack);
+      const windowsHangul = names.findIndex((name) => name === "Malgun Gothic" || name === "Batang");
+      if (windowsHangul < 0) continue;
+      expect(names.slice(0, windowsHangul).some((name) => APPLE_HANGUL.has(name)), stack).toBe(true);
+    }
+  });
+
+  it("reaches Cambria's lining figures before Georgia's old-style figures", () => {
+    for (const stack of stacks()) {
+      const names = families(stack);
+      if (!names.includes("Georgia")) continue;
+      expect(names.indexOf("Cambria"), stack).toBeGreaterThanOrEqual(0);
+      expect(names.indexOf("Cambria"), stack).toBeLessThan(names.indexOf("Georgia"));
+    }
+  });
+});
