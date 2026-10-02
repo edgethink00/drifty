@@ -22,7 +22,7 @@ describe("companion milestone previews", () => {
       "rank",
     ]);
     expect(events.map((event) => event.id)).toEqual([
-      "companion-preview-focus-1h-123",
+      "companion-preview-focus-3h-123",
       "companion-preview-record-30d-123",
       "companion-preview-weekly-final-rank-3-123",
       "companion-preview-weekly-final-rank-2-123",
@@ -87,7 +87,7 @@ describe("milestone stat values", () => {
     );
 
     expect(stats).toEqual([
-      62 * 60,
+      3 * 3600 + 12 * 60,
       81 * 60,
       13 * 3600 + 12 * 60,
       14 * 3600 + 12 * 60,
@@ -96,8 +96,8 @@ describe("milestone stat values", () => {
   });
 
   it("states a figure that actually clears the threshold it celebrates", () => {
-    const oneHour = buildCompanionMilestonePreview("focus-1h", 123);
+    const firstRung = buildCompanionMilestonePreview("focus-3h", 123);
 
-    expect(oneHour.statSeconds).toBeGreaterThanOrEqual(3600);
+    expect(firstRung.statSeconds).toBeGreaterThanOrEqual(3 * 3600);
   });
 });

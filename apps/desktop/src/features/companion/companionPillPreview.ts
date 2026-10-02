@@ -16,7 +16,7 @@ export type CompanionPreviewCopyOptions = {
 };
 
 export const COMPANION_MILESTONE_PREVIEW_OPTIONS = [
-  { id: "focus-1h", label: "1h focus" },
+  { id: "focus-3h", label: "3h focus" },
   { id: "record-30d", label: "30-day record" },
   { id: "weekly-final-rank-3", label: "Weekly final #3" },
   { id: "weekly-final-rank-2", label: "Weekly final #2" },
@@ -125,17 +125,17 @@ export function buildCompanionMilestonePreview(
   const base = { kind: "milestone" as const, id: `companion-preview-${previewId}-${now}` };
 
   switch (previewId) {
-    case "focus-1h":
+    case "focus-3h":
       return {
         ...base,
         milestoneKind: "total",
         tier: 1,
-        title: translate("companion.milestone.day1hTitle"),
-        subtitle: translate("companion.milestone.day1hSubtitle"),
+        title: translate("companion.milestone.day3hTitle"),
+        subtitle: translate("companion.milestone.day3hSubtitle"),
         destination: "dashboard",
         /* A preview states the figure it was drawn against, so the headline and
            the number never contradict each other the way live demo data would. */
-        statSeconds: 62 * 60,
+        statSeconds: 3 * 3600 + 12 * 60,
       };
     case "record-30d":
       return {

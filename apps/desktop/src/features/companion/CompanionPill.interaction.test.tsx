@@ -269,10 +269,10 @@ describe("CompanionPill native interactions", () => {
       id: "stat-1",
       milestoneKind: "total" as const,
       tier: 1 as const,
-      title: "1 hour of focus",
-      subtitle: "A solid hour, captured automatically.",
+      title: "3 hours of focus",
+      subtitle: "A solid stretch, captured automatically.",
       destination: "dashboard" as const,
-      statSeconds: 62 * 60,
+      statSeconds: 3 * 3600 + 12 * 60,
     };
     const props = {
       peekEvent: null,
@@ -284,8 +284,8 @@ describe("CompanionPill native interactions", () => {
 
     /* Past an hour it reads as h:mm, so it is not mistaken for minutes:seconds
        on a surface where the resting pill already shows 2:41 that way. */
-    expect(container.querySelector(".mile__stat")?.textContent).toBe("1:02");
-    expect(container.querySelector(".mile__stat")?.getAttribute("aria-label")).toBe("1:02 today");
+    expect(container.querySelector(".mile__stat")?.textContent).toBe("3:12");
+    expect(container.querySelector(".mile__stat")?.getAttribute("aria-label")).toBe("3:12 today");
     expect(container.querySelector(".mile__action")?.textContent).toContain("View day");
 
     /* A record is about the run that beat it, not the whole day. */
@@ -315,7 +315,7 @@ describe("CompanionPill native interactions", () => {
         }}
       />,
     );
-    expect(container.querySelector(".mile__stat")?.getAttribute("aria-label")).toBe("1:02 7 days");
+    expect(container.querySelector(".mile__stat")?.getAttribute("aria-label")).toBe("3:12 7 days");
     expect(container.querySelector(".mile__action")?.textContent).toContain("View rank");
 
     rerender(<CompanionPill {...props} momentEvent={{ ...milestone, statSeconds: null }} />);

@@ -13,43 +13,43 @@ describe("Companion daily focus milestones", () => {
   afterEach(() => window.localStorage.clear());
 
   it("baselines an existing day without replaying stale celebrations", () => {
-    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 4 * 60 * 60, null);
+    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 6 * 60 * 60, null);
 
-    expect(progress.celebrated).toEqual(["day1h", "day3h"]);
-    expect(progress.observedFocusSeconds).toBe(4 * 60 * 60);
+    expect(progress.celebrated).toEqual(["day3h", "day5h"]);
+    expect(progress.observedFocusSeconds).toBe(6 * 60 * 60);
   });
 
-  it("announces the 1-hour rung exactly when live focus crosses it", () => {
-    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 59 * 60 + 59, null);
+  it("announces the 3-hour rung exactly when live focus crosses it", () => {
+    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 3 * 60 * 60 - 1, null);
     const result = evaluateCompanionDailyFocusMilestones({
       progress,
       day: "2026-08-03",
-      focusSecondsToday: 60 * 60,
+      focusSecondsToday: 3 * 60 * 60,
       announce: true,
     });
 
     expect(result.events).toHaveLength(1);
     expect(result.events[0]).toMatchObject({
-      id: "companion-daily-focus:2026-08-03:day1h",
+      id: "companion-daily-focus:2026-08-03:day3h",
       milestoneKind: "total",
       tier: 1,
-      title: "1 hour of focus today",
-      statSeconds: 60 * 60,
+      title: "3 hours of focus today",
+      statSeconds: 3 * 60 * 60,
     });
   });
 
   it("returns multiple distinct rungs in chronological order", () => {
-    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 59 * 60, null);
+    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 3 * 60 * 60 - 60, null);
     const result = evaluateCompanionDailyFocusMilestones({
       progress,
       day: "2026-08-03",
-      focusSecondsToday: 3 * 60 * 60 + 1,
+      focusSecondsToday: 5 * 60 * 60 + 1,
       announce: true,
     });
 
     expect(result.events.map((event) => event.title)).toEqual([
-      "1 hour of focus today",
       "3 hours of focus today",
+      "5 hours of focus today",
     ]);
   });
 
@@ -72,43 +72,43 @@ describe("Companion daily focus milestones", () => {
   });
 
   it("consumes thresholds silently while announcements are muted", () => {
-    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 59 * 60, null);
+    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 3 * 60 * 60 - 60, null);
     const muted = evaluateCompanionDailyFocusMilestones({
       progress,
       day: "2026-08-03",
-      focusSecondsToday: 61 * 60,
+      focusSecondsToday: 3 * 60 * 60 + 60,
       announce: false,
     });
     const shownAgain = evaluateCompanionDailyFocusMilestones({
       progress: muted.progress,
       day: "2026-08-03",
-      focusSecondsToday: 62 * 60,
+      focusSecondsToday: 3 * 60 * 60 + 120,
       announce: true,
     });
 
     expect(muted.events).toEqual([]);
-    expect(muted.progress.celebrated).toContain("day1h");
+    expect(muted.progress.celebrated).toContain("day3h");
     expect(shownAgain.events).toEqual([]);
   });
 
   it("does not repeat a celebration after a classification correction", () => {
-    const before = initializeCompanionDailyFocusMilestones("2026-08-03", 59 * 60, null);
+    const before = initializeCompanionDailyFocusMilestones("2026-08-03", 3 * 60 * 60 - 60, null);
     const crossed = evaluateCompanionDailyFocusMilestones({
       progress: before,
       day: "2026-08-03",
-      focusSecondsToday: 61 * 60,
+      focusSecondsToday: 3 * 60 * 60 + 60,
       announce: true,
     });
     const corrected = evaluateCompanionDailyFocusMilestones({
       progress: crossed.progress,
       day: "2026-08-03",
-      focusSecondsToday: 58 * 60,
+      focusSecondsToday: 3 * 60 * 60 - 120,
       announce: true,
     });
     const recrossed = evaluateCompanionDailyFocusMilestones({
       progress: corrected.progress,
       day: "2026-08-03",
-      focusSecondsToday: 62 * 60,
+      focusSecondsToday: 3 * 60 * 60 + 120,
       announce: true,
     });
 
@@ -134,15 +134,30 @@ describe("Companion daily focus milestones", () => {
   });
 
   it("persists only safe milestone ids and ignores corrupt storage", () => {
-    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 60 * 60, null);
+    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 3 * 60 * 60, null);
     persistCompanionDailyFocusMilestones(progress);
     expect(readCompanionDailyFocusMilestones()).toEqual({
       day: "2026-08-03",
-      celebrated: ["day1h"],
+      celebrated: ["day3h"],
     });
 
     window.localStorage.setItem(COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY, "{broken");
     expect(readCompanionDailyFocusMilestones()).toBeNull();
+  });
+
+  /* A rung retired by a ladder change must not survive in storage: the stored
+     id fails validation, the record reads as absent, and the next baseline
+     re-marks every already-crossed rung without announcing it. */
+  it("discards stored progress that names a retired rung", () => {
+    window.localStorage.setItem(
+      COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY,
+      JSON.stringify({ day: "2026-08-03", celebrated: ["day1h", "day3h"] }),
+    );
+
+    expect(readCompanionDailyFocusMilestones()).toBeNull();
+
+    const progress = initializeCompanionDailyFocusMilestones("2026-08-03", 4 * 60 * 60);
+    expect(progress.celebrated).toEqual(["day3h"]);
   });
 
   describe("canEvaluateCompanionDailyFocus", () => {

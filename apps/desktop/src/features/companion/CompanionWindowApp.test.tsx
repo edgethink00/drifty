@@ -154,13 +154,13 @@ const pendingReviewMoment: EndOfDayReviewEvent = {
 
 const focusMilestone = {
   kind: "milestone" as const,
-  id: "day1h",
+  id: "day3h",
   milestoneKind: "total" as const,
   tier: 1 as const,
-  title: "1 hour of focus today",
-  subtitle: "The day has real work in it now",
+  title: "3 hours of focus today",
+  subtitle: "A solid day by any measure",
   destination: "dashboard" as const,
-  statSeconds: 3_600,
+  statSeconds: 10_800,
 };
 
 describe("CompanionWindowApp", () => {
@@ -643,7 +643,7 @@ describe("CompanionWindowApp", () => {
     expect(milestone?.dataset.auto).toBe("running");
   });
 
-  it("opens View day from a one-hour focus milestone", async () => {
+  it("opens View day from a focus milestone", async () => {
     vi.useFakeTimers();
     const { container } = render(<CompanionWindowApp />);
     await act(async () => undefined);
@@ -652,7 +652,7 @@ describe("CompanionWindowApp", () => {
     act(() => bridge.transitionHandler?.({ state: "milestone", phase: "started", anchor: "center" }));
     act(() => vi.advanceTimersByTime(180));
 
-    expect(container.textContent).toContain("1 hour of focus today");
+    expect(container.textContent).toContain("3 hours of focus today");
     expect(container.querySelector(".mile__action")?.textContent).toContain("View day");
     fireEvent.click(container.querySelector(".mile__action")!);
     expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
@@ -825,16 +825,6 @@ describe("CompanionWindowApp", () => {
     act(() => {
       bridge.showHandler?.({
         kind: "milestone",
-        id: "day1h",
-        milestoneKind: "total",
-        tier: 1,
-        title: "1 hour of focus today",
-        subtitle: "The day has real work in it now",
-        destination: "dashboard",
-        statSeconds: 3_600,
-      });
-      bridge.showHandler?.({
-        kind: "milestone",
         id: "day3h",
         milestoneKind: "total",
         tier: 1,
@@ -843,20 +833,30 @@ describe("CompanionWindowApp", () => {
         destination: "dashboard",
         statSeconds: 10_800,
       });
+      bridge.showHandler?.({
+        kind: "milestone",
+        id: "day5h",
+        milestoneKind: "total",
+        tier: 1,
+        title: "5 hours of focus today",
+        subtitle: "A strong day of real work",
+        destination: "dashboard",
+        statSeconds: 18_000,
+      });
     });
 
-    expect(container.textContent).toContain("1 hour of focus today");
-    expect(container.textContent).not.toContain("3 hours of focus today");
+    expect(container.textContent).toContain("3 hours of focus today");
+    expect(container.textContent).not.toContain("5 hours of focus today");
 
     const dismiss = container.querySelector<HTMLButtonElement>(".view--milestone .card__close");
     expect(dismiss).not.toBeNull();
     fireEvent.click(dismiss!);
 
     act(() => vi.advanceTimersByTime(859));
-    expect(container.textContent).not.toContain("3 hours of focus today");
+    expect(container.textContent).not.toContain("5 hours of focus today");
 
     act(() => vi.advanceTimersByTime(1));
-    expect(container.textContent).toContain("3 hours of focus today");
+    expect(container.textContent).toContain("5 hours of focus today");
   });
 
   it("lets an extreme nudge preempt and permanently discard an active milestone", async () => {
@@ -865,11 +865,11 @@ describe("CompanionWindowApp", () => {
     await act(async () => undefined);
 
     act(() => bridge.showHandler?.(focusMilestone));
-    expect(container.textContent).toContain("1 hour of focus today");
+    expect(container.textContent).toContain("3 hours of focus today");
     act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview()));
 
     expect(container.textContent).toContain("Closed YouTube for you.");
-    expect(container.textContent).not.toContain("1 hour of focus today");
+    expect(container.textContent).not.toContain("3 hours of focus today");
     expect(readCompanionEngagementMetrics()).toMatchObject({
       milestone_shown: 1,
       extreme_nudge_shown: 1,
@@ -878,7 +878,7 @@ describe("CompanionWindowApp", () => {
 
     fireEvent.click(container.querySelector(".view--nudge .card__close")!);
     act(() => vi.advanceTimersByTime(1_000));
-    expect(container.textContent).not.toContain("1 hour of focus today");
+    expect(container.textContent).not.toContain("3 hours of focus today");
   });
 
   it("replaces Not a drift with one learning acknowledgement", async () => {
@@ -967,11 +967,11 @@ describe("CompanionWindowApp", () => {
     });
 
     expect(container.textContent).toContain("Day review");
-    expect(container.textContent).not.toContain("1 hour of focus today");
+    expect(container.textContent).not.toContain("3 hours of focus today");
 
     fireEvent.click(container.querySelector(".view--eod .card__close")!);
     await act(async () => vi.advanceTimersByTimeAsync(860));
-    expect(container.textContent).toContain("1 hour of focus today");
+    expect(container.textContent).toContain("3 hours of focus today");
   });
 
   it("never queues a second day review behind the one being shown", async () => {

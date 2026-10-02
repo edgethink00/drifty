@@ -42,7 +42,7 @@ export function canEvaluateCompanionDailyFocus({
   return segmentsLoadedDay === day;
 }
 
-export type CompanionDailyFocusMilestoneId = "day1h" | "day3h" | "day8h";
+export type CompanionDailyFocusMilestoneId = "day3h" | "day5h" | "day8h";
 
 export type CompanionDailyFocusMilestoneProgress = {
   readonly day: string;
@@ -65,17 +65,17 @@ type DailyFocusMilestoneDefinition = {
 
 export const COMPANION_DAILY_FOCUS_MILESTONES: readonly DailyFocusMilestoneDefinition[] = [
   {
-    id: "day1h",
-    thresholdSeconds: 60 * 60,
-    titleKey: "companion.milestone.day1hTitle",
-    subtitleKey: "companion.milestone.day1hSubtitle",
-    tier: 1,
-  },
-  {
     id: "day3h",
     thresholdSeconds: 3 * 60 * 60,
     titleKey: "companion.milestone.day3hTitle",
     subtitleKey: "companion.milestone.day3hSubtitle",
+    tier: 1,
+  },
+  {
+    id: "day5h",
+    thresholdSeconds: 5 * 60 * 60,
+    titleKey: "companion.milestone.day5hTitle",
+    subtitleKey: "companion.milestone.day5hSubtitle",
     tier: 1,
   },
   {
@@ -230,5 +230,5 @@ function isStoredProgress(value: unknown): value is StoredCompanionDailyFocusMil
 }
 
 function isDailyFocusMilestoneId(value: unknown): value is CompanionDailyFocusMilestoneId {
-  return value === "day1h" || value === "day3h" || value === "day8h";
+  return value === "day3h" || value === "day5h" || value === "day8h";
 }

@@ -27,15 +27,15 @@ describe("useCompanionDailyFocusMilestones", () => {
         focusSecondsToday: props.focusSecondsToday,
         announcementsEnabled: true,
       }),
-      { initialProps: { focusSecondsToday: 3_599 } },
+      { initialProps: { focusSecondsToday: 10_799 } },
     );
 
-    rerender({ focusSecondsToday: 3_600 });
+    rerender({ focusSecondsToday: 10_800 });
 
     expect(bridge.showMilestone).toHaveBeenCalledOnce();
     expect(bridge.showMilestone).toHaveBeenCalledWith(expect.objectContaining({
-      id: "companion-daily-focus:2026-08-03:day1h",
-      statSeconds: 3_600,
+      id: "companion-daily-focus:2026-08-03:day3h",
+      statSeconds: 10_800,
     }));
   });
 
@@ -49,11 +49,11 @@ describe("useCompanionDailyFocusMilestones", () => {
           announcementsEnabled: props.announcementsEnabled,
         })
       ),
-      { initialProps: { focusSecondsToday: 3_599, announcementsEnabled: false } },
+      { initialProps: { focusSecondsToday: 10_799, announcementsEnabled: false } },
     );
 
-    rerender({ focusSecondsToday: 3_600, announcementsEnabled: false });
-    rerender({ focusSecondsToday: 3_601, announcementsEnabled: true });
+    rerender({ focusSecondsToday: 10_800, announcementsEnabled: false });
+    rerender({ focusSecondsToday: 10_801, announcementsEnabled: true });
 
     expect(bridge.showMilestone).not.toHaveBeenCalled();
   });
@@ -61,7 +61,7 @@ describe("useCompanionDailyFocusMilestones", () => {
   /* A stale-day total that arrives under an unchanged day reads as a live
      crossing: the baseline was taken while today was still empty, and the
      same-day path has no rollover reset to absorb the jump. This is the shape
-     behind a "1 hour of focus" alert on a day that never had one. */
+     behind a "3 hours of focus" alert on a day that never had one. */
   it("announces a stale-day total when the caller keeps vouching for it", () => {
     const { rerender } = renderHook(
       (props: { focusSecondsToday: number }) => (
@@ -75,8 +75,8 @@ describe("useCompanionDailyFocusMilestones", () => {
       { initialProps: { focusSecondsToday: 0 } },
     );
 
-    // The loaded segments still describe the previous day (2h38m of focus).
-    rerender({ focusSecondsToday: 9_480 });
+    // The loaded segments still describe the previous day (3h06m of focus).
+    rerender({ focusSecondsToday: 11_160 });
 
     expect(bridge.showMilestone).toHaveBeenCalledOnce();
   });
@@ -99,9 +99,9 @@ describe("useCompanionDailyFocusMilestones", () => {
       { initialProps: { ready: true, focusSecondsToday: 0 } },
     );
 
-    // The loaded segments now describe the *previous* day (2h38m of focus). The
+    // The loaded segments now describe the *previous* day (3h06m of focus). The
     // caller detects the mismatch and withdraws readiness for that window.
-    rerender({ ready: false, focusSecondsToday: 9_480 });
+    rerender({ ready: false, focusSecondsToday: 11_160 });
     expect(bridge.showMilestone).not.toHaveBeenCalled();
 
     // Today's real segments land: only a few minutes of focus.
@@ -124,12 +124,12 @@ describe("useCompanionDailyFocusMilestones", () => {
       { initialProps: { ready: false, focusSecondsToday: 0 } },
     );
 
-    rerender({ ready: true, focusSecondsToday: 3_540 });
-    rerender({ ready: true, focusSecondsToday: 3_600 });
+    rerender({ ready: true, focusSecondsToday: 10_740 });
+    rerender({ ready: true, focusSecondsToday: 10_800 });
 
     expect(bridge.showMilestone).toHaveBeenCalledOnce();
     expect(bridge.showMilestone).toHaveBeenCalledWith(expect.objectContaining({
-      id: "companion-daily-focus:2026-08-15:day1h",
+      id: "companion-daily-focus:2026-08-15:day3h",
     }));
   });
 });
