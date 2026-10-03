@@ -28,6 +28,7 @@ import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClass
 import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
+import { WindowsBlurPreviewRow } from "./WindowsBlurPreviewRow";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { LEADERBOARD_GRAPH_STYLE_OPTIONS, parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "../leaderboard/leaderboardGraphStyle";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
@@ -741,15 +742,10 @@ export function DevSettingsSection({
             <span className="settings-beta-badge">Beta</span>
           </h3>
           {hostPlatform === "windows" ? (
-            <div className="settings-row">
-              <div>
-                <div className="lbl">Window blur (Preview)</div>
-                <div className="desc">Off keeps the original opaque window. On tries a blurred desktop background on supported Windows 11 devices; if blur fails, the window stays opaque.</div>
-              </div>
-              <div className="ctrl">
-                <Toggle checked={windowsBlurPreviewEnabled} onChange={onWindowsBlurPreviewEnabledChange} ariaLabel="Toggle Window blur Preview" />
-              </div>
-            </div>
+            <WindowsBlurPreviewRow
+              enabled={windowsBlurPreviewEnabled}
+              onEnabledChange={onWindowsBlurPreviewEnabledChange}
+            />
           ) : null}
           <DevSettingsDeviceSyncBlock
             deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
