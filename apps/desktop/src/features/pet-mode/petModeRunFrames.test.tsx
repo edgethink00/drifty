@@ -46,7 +46,7 @@ describe("pet mode run frames", () => {
     expect(petModeCss).toContain(".pet-mode-cat.is-mirrored { transform: scaleX(-1); }");
   });
 
-  it("wraps frame paths and renders the authored run only when its beta is on", () => {
+  it("wraps frame paths and renders the authored run by default", () => {
     expect(getPetModeRunFrameSource(0)).toBe("/pet-mode/run/f001.png");
     expect(getPetModeRunFrameSource(17)).toBe("/pet-mode/run/f001.png");
     expect(getPetModeRunFrameSource(-1)).toBe("/pet-mode/run/f017.png");
@@ -60,7 +60,7 @@ describe("pet mode run frames", () => {
     });
 
     const view = render(
-      <PetModeCat phase="run" facing="right" pawFrame={0} fastRunBetaEnabled frameOverride={26} decorative />,
+      <PetModeCat phase="run" facing="right" pawFrame={0} frameOverride={26} decorative />,
     );
     const cat = view.container.querySelector(".pet-mode-cat")!;
     const run = cat.querySelector<HTMLImageElement>(".pet-mode-cat__raster--run");
@@ -69,7 +69,7 @@ describe("pet mode run frames", () => {
     expect((cat as HTMLElement).style.getPropertyValue("--pet-chase-lean")).toBe("0deg");
   });
 
-  it("keeps the existing fast vector gait as the default run", async () => {
+  it("keeps the existing fast vector gait for an explicit opt-out", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       json: vi.fn().mockResolvedValue({ frames: ["M0 0 L150 0 L150 120 Z"], cycleSeconds: 1 }),
     }));
@@ -79,7 +79,7 @@ describe("pet mode run frames", () => {
     });
 
     const view = render(
-      <PetModeCat phase="run" facing="right" pawFrame={0} frameOverride={0} publishHitRegion={false} />,
+      <PetModeCat phase="run" facing="right" pawFrame={0} fastRunEnabled={false} frameOverride={0} publishHitRegion={false} />,
     );
 
     await waitFor(() => expect(view.container.querySelector(".pet-mode-cat__vector")).not.toBeNull());
@@ -89,7 +89,7 @@ describe("pet mode run frames", () => {
     expect((cat as HTMLElement).style.getPropertyValue("--pet-chase-lean")).not.toBe("0deg");
   });
 
-  it("keeps the vector gait visible until every beta frame is decoded", async () => {
+  it("keeps the vector gait visible until every run frame is decoded", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       json: vi.fn().mockResolvedValue({ frames: ["M0 0 L150 0 L150 120 Z"], cycleSeconds: 1 }),
     }));
@@ -107,7 +107,7 @@ describe("pet mode run frames", () => {
         phase="run"
         facing="right"
         pawFrame={0}
-        fastRunBetaEnabled
+        fastRunEnabled
         frameOverride={0}
         publishHitRegion={false}
       />,
@@ -136,7 +136,7 @@ describe("pet mode run frames", () => {
         phase="run"
         facing="right"
         pawFrame={0}
-        fastRunBetaEnabled
+        fastRunEnabled
         frameOverride={6}
         publishHitRegion={false}
       />,
@@ -148,7 +148,7 @@ describe("pet mode run frames", () => {
         phase="paw"
         facing="right"
         pawFrame={0}
-        fastRunBetaEnabled
+        fastRunEnabled
         fastRunPawArrival
         publishHitRegion={false}
       />,
@@ -172,7 +172,7 @@ describe("pet mode run frames", () => {
         phase="paw"
         facing="right"
         pawFrame={7}
-        fastRunBetaEnabled
+        fastRunEnabled
         fastRunPawArrival
         publishHitRegion={false}
       />,
@@ -195,7 +195,7 @@ describe("pet mode run frames", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
 
     const view = render(
-      <PetModeCat phase="run" facing="right" pawFrame={0} fastRunBetaEnabled publishHitRegion={false} />,
+      <PetModeCat phase="run" facing="right" pawFrame={0} fastRunEnabled publishHitRegion={false} />,
     );
     await waitFor(() => expect(view.container.querySelector(".pet-mode-cat__raster--run")).not.toBeNull());
     const firstFrame = getPetModeRunFrameSource(0);
@@ -206,7 +206,7 @@ describe("pet mode run frames", () => {
     }, { timeout: 1_000 });
   });
 
-  it("falls back to the vector gait when beta frame decoding fails", async () => {
+  it("falls back to the vector gait when default run frame decoding fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       json: vi.fn().mockResolvedValue({ frames: ["M0 0 L150 0 L150 120 Z"], cycleSeconds: 1 }),
     }));
@@ -221,7 +221,6 @@ describe("pet mode run frames", () => {
         phase="run"
         facing="right"
         pawFrame={0}
-        fastRunBetaEnabled
         frameOverride={0}
         publishHitRegion={false}
       />,

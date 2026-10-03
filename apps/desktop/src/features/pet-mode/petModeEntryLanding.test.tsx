@@ -56,7 +56,7 @@ describe("entry landing", () => {
     let decode!: () => void;
     const decoded = new Promise<void>((resolve) => { decode = resolve; });
     vi.stubGlobal("Image", class { src = ""; decode() { return decoded; } });
-    const view = render(<PetModeCat phase="entry" facing="left" pawFrame={0} entrySequence={1} fastRunBetaEnabled />);
+    const view = render(<PetModeCat phase="entry" facing="left" pawFrame={0} entrySequence={1} fastRunEnabled />);
     await act(async () => undefined);
     const cat = view.getByLabelText("Drifty pet cat");
     await tick(360);

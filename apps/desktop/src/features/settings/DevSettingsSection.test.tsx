@@ -194,26 +194,26 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("button", { name: /Play Flow/ })).toBeNull();
   });
 
-  it("keeps the fast-run beta opt-in in Dev and dependent on the pet", () => {
+  it("keeps the fast-run diagnostic override in Dev and dependent on the pet", () => {
     const offProps = renderProductionDevSettings({
       activeSubsection: "lab",
       petModeEnabled: false,
-      petModeRunBetaEnabled: false,
+      petModeFastRunEnabled: false,
     });
-    const disabledToggle = screen.getByRole("switch", { name: "Toggle the beta fast-run animation" });
+    const disabledToggle = screen.getByRole("switch", { name: "Toggle the fast-run animation" });
     expect(disabledToggle.getAttribute("aria-checked")).toBe("false");
     expect(disabledToggle.hasAttribute("disabled")).toBe(true);
     fireEvent.click(disabledToggle);
-    expect(offProps.onPetModeRunBetaEnabledChange).not.toHaveBeenCalled();
+    expect(offProps.onPetModeFastRunEnabledChange).not.toHaveBeenCalled();
 
     cleanup();
     const onProps = renderProductionDevSettings({
       activeSubsection: "lab",
       petModeEnabled: true,
-      petModeRunBetaEnabled: false,
+      petModeFastRunEnabled: false,
     });
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle the beta fast-run animation" }));
-    expect(onProps.onPetModeRunBetaEnabledChange).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle the fast-run animation" }));
+    expect(onProps.onPetModeFastRunEnabledChange).toHaveBeenCalledWith(true);
   });
 
   it("shows the real pet phase and keeps Lab actions available while the cat is busy", async () => {

@@ -45,7 +45,7 @@ describe("PetModeCat suspension", () => {
       phase: "idle" as const,
       facing: "right" as const,
       pawFrame: 0,
-      fastRunBetaEnabled: true,
+      fastRunEnabled: true,
     };
     const view = render(<PetModeCat {...props} suspended />);
     await act(async () => undefined);
@@ -72,7 +72,7 @@ describe("PetModeCat suspension", () => {
       phase: "idle" as const,
       facing: "right" as const,
       pawFrame: 0,
-      fastRunBetaEnabled: true,
+      fastRunEnabled: true,
     };
     const view = render(<PetModeCat {...props} />);
     await act(async () => undefined);
@@ -101,7 +101,7 @@ describe("PetModeCat suspension", () => {
       src = "";
       decode() { return new Promise<void>(() => undefined); }
     });
-    const cat = <PetModeCat phase="idle" facing="right" pawFrame={0} fastRunBetaEnabled />;
+    const cat = <PetModeCat phase="idle" facing="right" pawFrame={0} fastRunEnabled />;
 
     render(cat);
     await act(async () => undefined);
@@ -122,7 +122,7 @@ describe("PetModeCat suspension", () => {
   it.each<PetModeCatPhase>(["entry", "walk", "run", "stalk", "return", "stretch", "tail"])(
     "stops %s clocks and clears once, then resumes without reloading assets",
     async (phase) => {
-      const props = { phase, facing: "right" as const, pawFrame: 0, fastRunBetaEnabled: true, hitRegionInteractive: true };
+      const props = { phase, facing: "right" as const, pawFrame: 0, fastRunEnabled: true, hitRegionInteractive: true };
       const view = render(<PetModeCat {...props} />);
       await act(async () => undefined);
       await advance(100);

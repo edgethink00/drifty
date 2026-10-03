@@ -100,7 +100,7 @@ function ArtCat({ place, motion, dx, shown = true }: { readonly place: ArtCatPla
     : { visibility: "hidden" };
   return <div ref={ref} className="sidebar-guide-narrative-art__cat" style={style} aria-hidden="true">
     <div style={CAT_STYLE}>{motion
-      ? <PetModeCat phase={motion.phase} facing="left" pawFrame={motion.phase === "paw" ? motion.frame : 0} frameOverride={motion.phase === "run" ? motion.frame : undefined} fastRunBetaEnabled publishHitRegion={false} decorative />
+      ? <PetModeCat phase={motion.phase} facing="left" pawFrame={motion.phase === "paw" ? motion.frame : 0} frameOverride={motion.phase === "run" ? motion.frame : undefined} fastRunEnabled publishHitRegion={false} decorative />
       : <PetModeCat phase="idle" facing="left" pawFrame={0} publishHitRegion={false} decorative />}</div>
   </div>;
 }

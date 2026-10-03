@@ -87,7 +87,7 @@ export function PetModeCat({
   phase,
   facing,
   pawFrame,
-  fastRunBetaEnabled = false,
+  fastRunEnabled = true,
   fastRunPawArrival = false,
   runSequence = 0,
   runTravelDistance,
@@ -121,7 +121,7 @@ export function PetModeCat({
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
   readonly pawFrame: number;
-  readonly fastRunBetaEnabled?: boolean;
+  readonly fastRunEnabled?: boolean;
   /** True only while an intervention paw overlaps the end of a fast run. */
   readonly fastRunPawArrival?: boolean;
   readonly runSequence?: number;
@@ -190,7 +190,7 @@ export function PetModeCat({
     && typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const usesRunRaster = phase === "run"
-    && fastRunBetaEnabled
+    && fastRunEnabled
     && (decorative || runFramesReady)
     && !runFramesFailed;
   const runUsesVectorFallback = phase === "run" && !usesRunRaster;
@@ -227,7 +227,7 @@ export function PetModeCat({
   }, [decorative, suspended, walkFrames.length]);
 
   useEffect(() => {
-    if (decorative || !fastRunBetaEnabled) {
+    if (decorative || !fastRunEnabled) {
       runFramesLoadGenerationRef.current += 1;
       runFramesLoadStartedRef.current = false;
       setRunFramesReady(false);
@@ -256,7 +256,7 @@ export function PetModeCat({
         console.warn("[pet-mode] run frames failed to preload; falling back to vector gait", error);
         captureSentryException(error, { tags: { surface: "pet-mode", asset: "run-frames" } });
       });
-  }, [decorative, fastRunBetaEnabled, runFramesReady, suspended]);
+  }, [decorative, fastRunEnabled, runFramesReady, suspended]);
 
   useEffect(() => {
     if (
@@ -368,7 +368,7 @@ export function PetModeCat({
         startDelayMs: runStartDelayMs,
         sizeScale,
         landingFrame: PET_MODE_ENTRY_REST_FRAME,
-        handoffLeadMs: fastRunBetaEnabled ? PET_MODE_INTERVENTION_PAW_LEAD_MS : 0,
+        handoffLeadMs: fastRunEnabled ? PET_MODE_INTERVENTION_PAW_LEAD_MS : 0,
       }
       : undefined;
     // Entry is synchronized to native's own travel clock. Later motion phases
@@ -472,7 +472,7 @@ export function PetModeCat({
     // playIntervention): native always travels, so the legs must keep up.
     if (
       phase !== "run"
-      || !fastRunBetaEnabled
+      || !fastRunEnabled
       || !runFramesReady
       || runFramesFailed
       || frameOverride !== undefined
@@ -535,7 +535,7 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, runDurationMs, runFramesFailed, runFramesReady, runSequence, runStartDelayMs, runTravelDistance, sizeScale, suspended]);
+  }, [facing, fastRunEnabled, frameOverride, hitRegionInteractive, phase, runDurationMs, runFramesFailed, runFramesReady, runSequence, runStartDelayMs, runTravelDistance, sizeScale, suspended]);
 
   useLayoutEffect(() => {
     if (suspended || phase !== "dance" || reducedMotion) return undefined;
@@ -634,7 +634,7 @@ export function PetModeCat({
   const hasLiveDNeutralSit = phase === "sit" && usesLiveD && !hasLiveDSitGaze;
   const groundsFastRunPawArrival = phase === "paw"
     && fastRunPawArrival
-    && fastRunBetaEnabled
+    && fastRunEnabled
     && runFramesReady
     && !runFramesFailed;
   const bridgesFastRunPawArrival = groundsFastRunPawArrival

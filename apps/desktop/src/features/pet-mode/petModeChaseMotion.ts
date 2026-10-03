@@ -72,7 +72,7 @@ export const PET_MODE_LEAN_PIVOT_Y = 96;
  */
 const PROFILES: Record<PetModeChaseMotionKind, PetModeChaseProfile> = {
   walk: { leanDeg: 0.6, bounceUnits: 0.35, headSwingDeg: 0.9, headLeadUnits: 0.35 },
-  // Used only by the vector default/fallback. The authored beta run carries
+  // Used only by the vector override/fallback. The authored run carries
   // this motion inside its raster frames and PetModeCat suppresses this layer.
   run: { leanDeg: 3.2, bounceUnits: 1.5, headSwingDeg: 2.4, headLeadUnits: 1.15 },
   stalk: { leanDeg: 2.1, bounceUnits: 0.9, headSwingDeg: 1.5, headLeadUnits: 0.8 },

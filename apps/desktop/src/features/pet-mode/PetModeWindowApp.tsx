@@ -98,7 +98,7 @@ import {
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
   PET_MODE_INTERVENTION_PAW_LEAD_MS,
-  PET_MODE_RUN_BETA_STORAGE_KEY,
+  PET_MODE_FAST_RUN_STORAGE_KEY,
   PET_MODE_SIZES,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
@@ -120,7 +120,7 @@ import {
   pickPetModePostDropReaction,
   resolveInitialPetModeCoat,
   resolveInitialPetModeHiddenUntil,
-  resolveInitialPetModeRunBetaEnabled,
+  resolveInitialPetModeFastRunEnabled,
   resolveInitialPetModeSize,
   resolvePetModePresent,
   shouldShowPetModeMusicNote,
@@ -259,7 +259,7 @@ export function PetModeWindowApp() {
   const [runDurationMs, setRunDurationMs] = useState<number | undefined>(undefined);
   const [runStartDelayMs, setRunStartDelayMs] = useState<number | undefined>(undefined);
   const [petModeSize, setPetModeSize] = useState(resolveRenderablePetModeSize);
-  const [fastRunBetaEnabled, setFastRunBetaEnabled] = useState(resolveInitialPetModeRunBetaEnabled);
+  const [fastRunEnabled, setFastRunEnabled] = useState(resolveInitialPetModeFastRunEnabled);
   const [danceOnCloseBetaEnabled, setDanceOnCloseBetaEnabled] = useState(resolveInitialPetModeDanceOnCloseBetaEnabled);
   const danceOnCloseBetaEnabledRef = useRef(danceOnCloseBetaEnabled);
   danceOnCloseBetaEnabledRef.current = danceOnCloseBetaEnabled;
@@ -1421,17 +1421,17 @@ export function PetModeWindowApp() {
     };
   }, []);
 
-  // Fast run is an opt-in visual beta. Keep the pet webview synchronized with
+  // Fast run ships on by default. Keep the pet webview synchronized with
   // the user-facing settings window without adding a new native command; both
   // webviews already share localStorage for coat and size preferences.
   useEffect(() => {
-    const applyFastRunBeta = () => {
-      setFastRunBetaEnabled(resolveInitialPetModeRunBetaEnabled());
+    const applyFastRunPreference = () => {
+      setFastRunEnabled(resolveInitialPetModeFastRunEnabled());
     };
-    applyFastRunBeta();
+    applyFastRunPreference();
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== PET_MODE_RUN_BETA_STORAGE_KEY) return;
-      applyFastRunBeta();
+      if (event.key !== null && event.key !== PET_MODE_FAST_RUN_STORAGE_KEY) return;
+      applyFastRunPreference();
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
@@ -1551,7 +1551,7 @@ export function PetModeWindowApp() {
       // keeps its authored cadence even when the system asks for reduced
       // motion. Windows reports that whenever its Animation effects switch is
       // off, and the old 8ms paw plus native jump read as a teleport.
-      const overlapsRunAndPaw = fastRunBetaEnabled;
+      const overlapsRunAndPaw = fastRunEnabled;
       let resolveRunTiming: ((timing: PetModeInterventionRunTiming) => void) | null = null;
       const runTimingPromise = overlapsRunAndPaw
         ? new Promise<PetModeInterventionRunTiming>((resolve) => {
@@ -1741,7 +1741,7 @@ export function PetModeWindowApp() {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
       }
     }
-  }, [commitFacing, commitPhase, endWatchForVisit, fastRunBetaEnabled, lowerDanceHeadroom, raiseDanceHeadroom, revealForAction, stopMusicNote]);
+  }, [commitFacing, commitPhase, endWatchForVisit, fastRunEnabled, lowerDanceHeadroom, raiseDanceHeadroom, revealForAction, stopMusicNote]);
 
   const playOuting = useCallback(async (awayMilliseconds: number) => {
     if (!petOutingsEnabledRef.current) return;
@@ -3498,7 +3498,7 @@ export function PetModeWindowApp() {
             phase={phase}
             facing={facing}
             pawFrame={pawFrame}
-            fastRunBetaEnabled={fastRunBetaEnabled}
+            fastRunEnabled={fastRunEnabled}
             fastRunPawArrival={phase === "paw"
               && interventionSceneRef.current?.token === actionTokenRef.current}
             runSequence={runSequence}

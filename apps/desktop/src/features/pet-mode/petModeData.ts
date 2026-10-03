@@ -7,7 +7,7 @@ import type { WatcherSnapshot } from "../companion/watcherData";
 // their chosen coat instead of silently reverting to the defaults.
 export const PET_MODE_STORAGE_KEY = "drifty.pet.enabled";
 export const PET_MODE_COAT_STORAGE_KEY = "drifty.pet.coat";
-export const PET_MODE_RUN_BETA_STORAGE_KEY = "drifty.pet.fastRunBeta.v1";
+export const PET_MODE_FAST_RUN_STORAGE_KEY = "drifty.pet.fastRun.v1";
 export const PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY = "drifty.pet.danceOnCloseBeta.v1";
 export const PET_MODE_LEGACY_STORAGE_KEY = "drifty.dev.petMode";
 export const PET_MODE_LEGACY_COAT_STORAGE_KEY = "drifty.dev.petModeCoat";
@@ -746,9 +746,7 @@ export function resolveInitialPetModeEnabled(): boolean {
 }
 
 /**
- * The authored run remains an explicit beta. Missing, unreadable, and legacy
- * storage all resolve to the shipped vector gait so an app update cannot
- * silently change the pet's movement.
+ * Dance after close remains an explicit beta, independent of the fast run.
  */
 export function resolveInitialPetModeDanceOnCloseBetaEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -759,12 +757,17 @@ export function resolveInitialPetModeDanceOnCloseBetaEnabled(): boolean {
   }
 }
 
-export function resolveInitialPetModeRunBetaEnabled(): boolean {
-  if (typeof window === "undefined") return false;
+/**
+ * Fast run ships on by default. The old beta key also stored automatic defaults,
+ * so it cannot distinguish an opt-out; the production preference starts fresh.
+ * Explicit production opt-outs persist. Asset failure still uses the vector gait.
+ */
+export function resolveInitialPetModeFastRunEnabled(): boolean {
+  if (typeof window === "undefined") return true;
   try {
-    return window.localStorage.getItem(PET_MODE_RUN_BETA_STORAGE_KEY) === "1";
+    return window.localStorage.getItem(PET_MODE_FAST_RUN_STORAGE_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 

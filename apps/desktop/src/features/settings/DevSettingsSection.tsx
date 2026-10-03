@@ -99,7 +99,7 @@ type DevSettingsSectionProps = {
   readonly projectClassificationCorrectionsBusy: boolean;
   readonly projectPassRuns: readonly ProjectPassRun[];
   readonly petModeEnabled: boolean;
-  readonly petModeRunBetaEnabled: boolean;
+  readonly petModeFastRunEnabled: boolean;
   readonly petModeLabPointerStatus: string | null;
   readonly petModeLabInputBounds: string | null;
   readonly petModeLabDpiEvents?: PetModeWindowsDpiEvents | null;
@@ -133,7 +133,7 @@ type DevSettingsSectionProps = {
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
   readonly onReplayTutorial: () => void;
-  readonly onPetModeRunBetaEnabledChange: (enabled: boolean) => void;
+  readonly onPetModeFastRunEnabledChange: (enabled: boolean) => void;
   readonly onPreviewPetModeIntervention: () => void;
   readonly onRehearsePetModeIntercept: () => void;
   readonly onPreviewPetModeBrowserTabClose: () => void;
@@ -189,7 +189,7 @@ export function DevSettingsSection({
   projectClassificationCorrectionsBusy,
   projectPassRuns,
   petModeEnabled,
-  petModeRunBetaEnabled,
+  petModeFastRunEnabled,
   petModeLabPointerStatus,
   petModeLabInputBounds,
   petModeLabDpiEvents,
@@ -223,7 +223,7 @@ export function DevSettingsSection({
   onOpenDebugLogs,
   onOpenReplayOnboarding,
   onReplayTutorial,
-  onPetModeRunBetaEnabledChange,
+  onPetModeFastRunEnabledChange,
   onPreviewPetModeIntervention,
   onRehearsePetModeIntercept,
   onPreviewPetModeBrowserTabClose,
@@ -290,8 +290,8 @@ export function DevSettingsSection({
   const refreshInterventionLedger = useCallback(() => {
     setInterventionLedgerSummaries(buildInterventionLedgerSummaries());
   }, [buildInterventionLedgerSummaries]);
-  const fastRunLabelId = `pet-run-beta-label-${fastRunId}`;
-  const fastRunDescriptionId = `pet-run-beta-desc-${fastRunId}`;
+  const fastRunLabelId = `pet-fast-run-label-${fastRunId}`;
+  const fastRunDescriptionId = `pet-fast-run-desc-${fastRunId}`;
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
   const [danceOnCloseBetaEnabled, setDanceOnCloseBetaEnabled] = useState(resolveInitialPetModeDanceOnCloseBetaEnabled);
@@ -491,20 +491,20 @@ export function DevSettingsSection({
           <div className="pet-mode-lab__row">
             <div className="pet-mode-lab__row-copy">
               <div className="lbl">Motion</div>
-              <div className="desc">Choose the experimental renderer used by fast intervention travel.</div>
+              <div className="desc">Review fast intervention travel and experimental close celebrations.</div>
             </div>
             <div className="pet-mode-lab__target-stack">
-              <div className="pet-mode-lab__experiment-policy" data-active={petModeRunBetaEnabled}>
+              <div className="pet-mode-lab__experiment-policy" data-active={petModeFastRunEnabled}>
                 <span>
                   <strong className="settings-label-with-badge" id={fastRunLabelId}>
-                    {t("settings.pet.fastRun")} <span className="status-badge status-badge--beta">{t("common.beta")}</span>
+                    {t("settings.pet.fastRun")}
                   </strong>
                   <small id={fastRunDescriptionId}>{t("settings.pet.fastRunDescription")}</small>
                 </span>
                 <Toggle
-                  checked={petModeRunBetaEnabled}
+                  checked={petModeFastRunEnabled}
                   disabled={!petModeEnabled}
-                  onChange={onPetModeRunBetaEnabledChange}
+                  onChange={onPetModeFastRunEnabledChange}
                   ariaLabel={t("settings.pet.toggleFastRun")}
                   ariaDescribedBy={`${fastRunLabelId} ${fastRunDescriptionId}`}
                 />

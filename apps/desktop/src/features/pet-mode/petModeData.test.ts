@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PET_MODE_AWAY_MS,
   PET_MODE_BLINK_DURATION_MS,
@@ -9,7 +9,7 @@ import {
   PET_MODE_INTERVENTION_RUN_SPEED,
   PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
   PET_MODE_RUN_CYCLE_DURATION_MS,
-  PET_MODE_RUN_BETA_STORAGE_KEY,
+  PET_MODE_FAST_RUN_STORAGE_KEY,
   PET_MODE_RUN_FRAME_COUNT,
   PET_MODE_BLINK_INTERVAL_MAX_MS,
   PET_MODE_BLINK_INTERVAL_MIN_MS,
@@ -65,7 +65,7 @@ import {
   buildPetModePreviewInterventionTarget,
   buildPetModeSnapshot,
   resolveInitialPetModeEnabled,
-  resolveInitialPetModeRunBetaEnabled,
+  resolveInitialPetModeFastRunEnabled,
   persistPetModeHiddenUntil,
   persistPetModeFloorHomePt,
   PET_MODE_FLOOR_HOME_PT,
@@ -86,12 +86,31 @@ describe("petModeData", () => {
     expect(resolveInitialPetModeEnabled()).toBe(true);
   });
 
-  it("keeps the authored fast run off until its beta is explicitly enabled", () => {
-    expect(resolveInitialPetModeRunBetaEnabled()).toBe(false);
-    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
-    expect(resolveInitialPetModeRunBetaEnabled()).toBe(true);
-    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "0");
-    expect(resolveInitialPetModeRunBetaEnabled()).toBe(false);
+  it("defaults fast run on and preserves production opt-outs", () => {
+    expect(resolveInitialPetModeFastRunEnabled()).toBe(true);
+    window.localStorage.setItem(PET_MODE_FAST_RUN_STORAGE_KEY, "1");
+    expect(resolveInitialPetModeFastRunEnabled()).toBe(true);
+    window.localStorage.setItem(PET_MODE_FAST_RUN_STORAGE_KEY, "0");
+    expect(resolveInitialPetModeFastRunEnabled()).toBe(false);
+  });
+
+  it("retires automatic beta defaults without changing the stored beta", () => {
+    window.localStorage.setItem("drifty.pet.fastRunBeta.v1", "0");
+    expect(resolveInitialPetModeFastRunEnabled()).toBe(true);
+    expect(window.localStorage.getItem("drifty.pet.fastRunBeta.v1")).toBe("0");
+    window.localStorage.setItem(PET_MODE_FAST_RUN_STORAGE_KEY, "unexpected");
+    expect(resolveInitialPetModeFastRunEnabled()).toBe(true);
+  });
+
+  it("uses the shipped default when preference storage is unavailable", () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+    try {
+      expect(resolveInitialPetModeFastRunEnabled()).toBe(true);
+    } finally {
+      getItem.mockRestore();
+    }
   });
 
   it("implements the agreed 60 percent resident loop", () => {

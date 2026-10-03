@@ -24,7 +24,7 @@ import {
   PET_MODE_INTERVENTION_PAW_LEAD_MS,
   PET_MODE_PRESENT_MS,
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
-  PET_MODE_RUN_BETA_STORAGE_KEY,
+  PET_MODE_FAST_RUN_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_SEAT_CLEAR_CONFIRM_MS,
   PET_MODE_DROWSY_RESETTLE_MS,
@@ -1835,7 +1835,7 @@ describe("PetModeWindowApp", () => {
   ])("starts paw preparation 150ms before the native run arrives (system reduced motion %s)", async (_label, reducedMotion) => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_FAST_RUN_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: reducedMotion }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -3549,7 +3549,7 @@ describe("PetModeWindowApp", () => {
 
   it("keeps input closed until overlapping pose and facing transitions both settle", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_FAST_RUN_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
     const releases: Array<() => void> = [];
     bridge.stagePetModeHitRegionTransition.mockImplementation(() => new Promise<void>((resolve) => {
@@ -3590,8 +3590,11 @@ describe("PetModeWindowApp", () => {
     });
   });
 
-  it("switches between the default vector run and beta raster run on storage updates", async () => {
+  it("defaults to authored fast run and applies opt-out storage updates live", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    // Previous builds wrote the beta's default OFF automatically on startup.
+    // That retired default must not suppress the production animation.
+    window.localStorage.setItem("drifty.pet.fastRunBeta.v1", "0");
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       json: vi.fn().mockResolvedValue({ frames: walkFrames, cycleSeconds: 1 }),
@@ -3605,12 +3608,12 @@ describe("PetModeWindowApp", () => {
 
     act(() => bridge.eventHandler?.({ kind: "motion", motion: "run" }));
     await act(async () => { await Promise.resolve(); });
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-region-id")).toBe("gait:0");
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-region-id")).toBe("run-gait:0");
 
     await act(async () => {
-      window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
+      window.localStorage.setItem(PET_MODE_FAST_RUN_STORAGE_KEY, "1");
       window.dispatchEvent(new StorageEvent("storage", {
-        key: PET_MODE_RUN_BETA_STORAGE_KEY,
+        key: PET_MODE_FAST_RUN_STORAGE_KEY,
         newValue: "1",
       }));
       await Promise.resolve();
@@ -3619,9 +3622,9 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-region-id")).toBe("run-gait:0");
 
     act(() => {
-      window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "0");
+      window.localStorage.setItem(PET_MODE_FAST_RUN_STORAGE_KEY, "0");
       window.dispatchEvent(new StorageEvent("storage", {
-        key: PET_MODE_RUN_BETA_STORAGE_KEY,
+        key: PET_MODE_FAST_RUN_STORAGE_KEY,
         newValue: "0",
       }));
     });

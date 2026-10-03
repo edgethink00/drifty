@@ -913,7 +913,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     quietHours,
     petModeEnabled,
     petModeCoat,
-    petModeRunBetaEnabled,
+    petModeFastRunEnabled,
     petModeSize,
     setCelebrationsEnabled,
     setDayReviewEnabled,
@@ -925,7 +925,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setQuietHours,
     setPetModeEnabled,
     setPetModeCoat,
-    setPetModeRunBetaEnabled,
+    setPetModeFastRunEnabled,
     setPetModeSize,
     watcherMode,
     watcherPeekEnabled,
@@ -11035,7 +11035,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
                     projectClassificationCorrectionsBusy={projectClassification.running}
                     petModeEnabled={petModeEnabled}
-                    petModeRunBetaEnabled={petModeRunBetaEnabled}
+                    petModeFastRunEnabled={petModeFastRunEnabled}
                     petModeLabPointerStatus={petModeLabPointerStatus}
                     petModeLabInputBounds={petModeLabInputBounds}
                     petModeLabDpiEvents={petModeLabDpiEvents}
@@ -11071,7 +11071,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onInstallLatestBuild={() => void developerPreReleaseUpdateController.installLatestBuild()}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
                     onReplayTutorial={replayPostOnboardingSidebarGuide}
-                    onPetModeRunBetaEnabledChange={setPetModeRunBetaEnabled}
+                    onPetModeFastRunEnabledChange={setPetModeFastRunEnabled}
                     onPreviewPetModeIntervention={() => {
                       const target = buildPetModePreviewInterventionTarget(segments);
                       if (target) {

@@ -41,12 +41,12 @@ import {
 } from "./watcherData";
 import {
   PET_MODE_COAT_STORAGE_KEY,
-  PET_MODE_RUN_BETA_STORAGE_KEY,
+  PET_MODE_FAST_RUN_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_STORAGE_KEY,
   resolveInitialPetModeCoat,
   resolveInitialPetModeEnabled,
-  resolveInitialPetModeRunBetaEnabled,
+  resolveInitialPetModeFastRunEnabled,
   resolveInitialPetModeSize,
   type PetModeCoat,
   type PetModeSize,
@@ -65,7 +65,7 @@ type UseCompanionSettingsControllerResult = {
   readonly macosNotificationEnabled: boolean;
   readonly petModeEnabled: boolean;
   readonly petModeCoat: PetModeCoat;
-  readonly petModeRunBetaEnabled: boolean;
+  readonly petModeFastRunEnabled: boolean;
   readonly petModeSize: PetModeSize;
   readonly quietHours: QuietHoursSettings;
   readonly handleWatcherPeriodicMaxChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -79,7 +79,7 @@ type UseCompanionSettingsControllerResult = {
   readonly setMacosNotificationEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeCoat: Dispatch<SetStateAction<PetModeCoat>>;
-  readonly setPetModeRunBetaEnabled: Dispatch<SetStateAction<boolean>>;
+  readonly setPetModeFastRunEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeSize: Dispatch<SetStateAction<PetModeSize>>;
   readonly setQuietHours: Dispatch<SetStateAction<QuietHoursSettings>>;
   readonly setWatcherMode: Dispatch<SetStateAction<WatcherMode>>;
@@ -110,7 +110,7 @@ export function useCompanionSettingsController({
   const [quietHours, setQuietHours] = useState<QuietHoursSettings>(resolveInitialQuietHours);
   const [petModeEnabled, setPetModeEnabled] = useState(resolveInitialPetModeEnabled);
   const [petModeCoat, setPetModeCoat] = useState<PetModeCoat>(resolveInitialPetModeCoat);
-  const [petModeRunBetaEnabled, setPetModeRunBetaEnabled] = useState(resolveInitialPetModeRunBetaEnabled);
+  const [petModeFastRunEnabled, setPetModeFastRunEnabled] = useState(resolveInitialPetModeFastRunEnabled);
   const [petModeSize, setPetModeSize] = useState<PetModeSize>(resolveInitialPetModeSize);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
@@ -176,8 +176,8 @@ export function useCompanionSettingsController({
   }, [petModeCoat]);
 
   useEffect(() => {
-    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, petModeRunBetaEnabled ? "1" : "0");
-  }, [petModeRunBetaEnabled]);
+    window.localStorage.setItem(PET_MODE_FAST_RUN_STORAGE_KEY, petModeFastRunEnabled ? "1" : "0");
+  }, [petModeFastRunEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(PET_MODE_SIZE_STORAGE_KEY, String(petModeSize));
@@ -214,7 +214,7 @@ export function useCompanionSettingsController({
     macosNotificationEnabled,
     petModeEnabled,
     petModeCoat,
-    petModeRunBetaEnabled,
+    petModeFastRunEnabled,
     petModeSize,
     quietHours,
     handleWatcherPeriodicMaxChange,
@@ -228,7 +228,7 @@ export function useCompanionSettingsController({
     setMacosNotificationEnabled,
     setPetModeEnabled,
     setPetModeCoat,
-    setPetModeRunBetaEnabled,
+    setPetModeFastRunEnabled,
     setPetModeSize,
     setQuietHours,
     setWatcherMode,
