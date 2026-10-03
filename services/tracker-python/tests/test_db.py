@@ -3090,6 +3090,151 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["projectId"])
 
+    def _project_window_input(self, segment_ids: list[int], **fields: object) -> dict:
+        return {
+            "windowId": "w-qa",
+            "windowStartedAt": "2026-04-06T09:00:00+00:00",
+            "windowEndedAt": "2026-04-06T09:03:00+00:00",
+            "durationSeconds": 180,
+            "segmentOverlaps": [{"segmentId": str(sid), "durationSeconds": 180} for sid in segment_ids],
+            **fields,
+        }
+
+    def test_project_window_late_result_does_not_recreate_deleted_activity_references(self) -> None:
+        deleted = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        kept = self._insert_segment_returning_id("2026-04-06T09:03:00+00:00")
+        late = self._project_window_input([deleted])
+        self.database.save_project_window_assignments([late])
+        self.database.delete_activity_segments([str(deleted)])
+        self.assertEqual(self.database.get_project_window_assignments(), [])
+
+        result = self.database.save_project_window_assignments([
+            late,
+            self._project_window_input([kept], windowStartedAt="2026-04-06T09:03:00+00:00",
+                                       windowEndedAt="2026-04-06T09:06:00+00:00"),
+        ])
+
+        self.assertEqual(result, {"saved": 1, "skippedManual": 0})
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            self.assertEqual(conn.execute("SELECT id FROM activity_segments").fetchall(), [(kept,)])
+        self.assertEqual(
+            [row["segmentOverlaps"] for row in self.database.get_project_window_assignments()],
+            [[{"segmentId": str(kept), "durationSeconds": 180}]],
+        )
+
+    def test_project_window_late_result_skips_entire_partially_deleted_window(self) -> None:
+        kept = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        deleted = self._insert_segment_returning_id("2026-04-06T09:01:00+00:00")
+        late = self._project_window_input([kept, deleted])
+        self.database.save_project_window_assignments([late])
+        self.database.delete_activity_segments([str(deleted)])
+
+        self.assertEqual(self.database.save_project_window_assignments([late])["saved"], 0)
+        self.assertEqual(self.database.get_project_window_assignments(), [])
+
+    def test_project_window_batch_skips_deleted_personal_project_and_preserves_existing_result(self) -> None:
+        sid = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        kept = self.database.save_project({"name": "Kept"})["id"]
+        gone = self.database.save_project({"name": "Gone"})["id"]
+        self.database.save_project_window_assignments([self._project_window_input([sid], projectId=kept)])
+        self.database.delete_project(gone)
+
+        result = self.database.save_project_window_assignments([
+            self._project_window_input([sid], projectId=kept,
+                                       windowStartedAt="2026-04-06T09:03:00+00:00",
+                                       windowEndedAt="2026-04-06T09:06:00+00:00"),
+            self._project_window_input([sid], projectId=gone),
+        ])
+
+        self.assertEqual(result, {"saved": 1, "skippedManual": 0})
+        self.assertEqual([row["projectId"] for row in self.database.get_project_window_assignments()], [kept, kept])
+
+    def test_project_window_batch_skips_deleted_team_project(self) -> None:
+        sid = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        self.database.upsert_team_projects("org-qa", [{"id": "gone", "name": "Gone"}, {"id": "kept", "name": "Kept"}])
+        late = self._project_window_input([sid], teamProjectId="gone")
+        self.database.upsert_team_projects("org-qa", [{"id": "kept", "name": "Kept"}])
+
+        result = self.database.save_project_window_assignments([
+            late, self._project_window_input([sid], teamProjectId="kept"),
+        ])
+
+        self.assertEqual(result, {"saved": 1, "skippedManual": 0})
+        self.assertEqual([row["teamProjectId"] for row in self.database.get_project_window_assignments()], ["kept"])
+
+    def test_project_window_reference_check_handles_more_than_one_sqlite_variable_batch(self) -> None:
+        with self.database.connect() as conn:
+            conn.executemany(
+                "INSERT INTO activity_segments (started_at, ended_at, duration_seconds, app_name, platform, source)"
+                " VALUES ('2026-04-06T09:00:00+00:00', '2026-04-06T09:03:00+00:00', 1, 'QA', 'macos', 'qa')",
+                [()] * 1001,
+            )
+            ids = [row["id"] for row in conn.execute("SELECT id FROM activity_segments")]
+        late = self._project_window_input(ids)
+        self.assertEqual(self.database.save_project_window_assignments([late])["saved"], 1)
+        self.database.delete_activity_segments([str(ids[-1])])
+        self.assertEqual(self.database.save_project_window_assignments([late])["saved"], 0)
+        self.assertEqual(self.database.get_project_window_assignments(), [])
+
+    def test_project_window_reference_check_serializes_concurrent_activity_deletion(self) -> None:
+        sid = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        other = sqlite3.connect(self.db_path, timeout=0)
+        attempted = []
+        def delete_before_window_insert(statement: str) -> None:
+            if "INSERT INTO project_window_assignments" not in statement:
+                return
+            try:
+                other.execute("DELETE FROM activity_segments WHERE id = ?", (sid,))
+                other.commit()
+                attempted.append("deleted")
+            except sqlite3.OperationalError as error:
+                attempted.append(str(error))
+                other.rollback()
+        self.database.connect().set_trace_callback(delete_before_window_insert)
+        try:
+            self.assertEqual(self.database.save_project_window_assignments([self._project_window_input([sid])])["saved"], 1)
+        finally:
+            self.database.connect().set_trace_callback(None)
+            other.close()
+
+        self.assertEqual(attempted, ["database is locked"])
+        self.database.delete_activity_segments([str(sid)])
+        self.assertEqual(self.database.get_project_window_assignments(), [])
+
+    def test_project_window_invalid_batches_remain_noops_during_writer_contention(self) -> None:
+        sid = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        other = sqlite3.connect(self.db_path, timeout=0)
+        other.execute("BEGIN IMMEDIATE")
+        self.database.connect().execute("PRAGMA busy_timeout = 0")
+        try:
+            self.assertEqual(self.database.save_project_window_assignments([])["saved"], 0)
+            result = self.database.save_project_window_assignments([
+                {},
+                self._project_window_input([sid], windowEndedAt="invalid"),
+                self._project_window_input([sid], durationSeconds=0),
+                self._project_window_input([sid], projectId="personal", teamProjectId="team"),
+            ])
+            self.assertEqual(result, {"saved": 0, "skippedManual": 0})
+        finally:
+            other.rollback()
+            other.close()
+        self.assertEqual(self.database.get_project_window_assignments(), [])
+
+    def test_project_window_batch_still_rolls_back_unexpected_sqlite_errors(self) -> None:
+        sid = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        with self.database.connect() as conn:
+            conn.execute(
+                "CREATE TRIGGER qa_abort_window BEFORE INSERT ON project_window_assignments"
+                " WHEN NEW.window_id = 'abort' BEGIN SELECT RAISE(ABORT, 'qa window abort'); END"
+            )
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "qa window abort"):
+            self.database.save_project_window_assignments([
+                self._project_window_input([sid]),
+                self._project_window_input([sid], windowId="abort", windowStartedAt="2026-04-06T09:03:00+00:00",
+                                           windowEndedAt="2026-04-06T09:06:00+00:00"),
+            ])
+        self.assertEqual(self.database.get_project_window_assignments(), [])
+
     def test_project_window_assignment_roundtrip_upsert_and_range(self) -> None:
         project_a = self.database.save_project({"name": "A", "description": "a"})["id"]
         project_b = self.database.save_project({"name": "B", "description": "b"})["id"]

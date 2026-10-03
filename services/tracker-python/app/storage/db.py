@@ -3318,6 +3318,8 @@ class TrackerDatabase:
     def save_project_window_assignments(self, assignments: list[dict[str, Any]]) -> dict[str, int]:
         saved = 0
         timestamp = datetime.now(timezone.utc).isoformat()
+        if not assignments:
+            return {"saved": 0, "skippedManual": 0}
         with self.connect() as conn:
             for item in assignments:
                 window_id = str(item.get("windowId", item.get("window_id", ""))).strip()
@@ -3375,13 +3377,39 @@ class TrackerDatabase:
                 if duration_seconds <= 0:
                     continue
 
-                conn.execute(
+                if not conn.in_transaction:
+                    # A daemon idle trim can delete activity while AI results arrive.
+                    # Reserve the writer only after structural validation, then keep
+                    # reference checks and all window writes serialized.
+                    conn.execute("BEGIN IMMEDIATE")
+                # A deleted segment invalidates the whole fixed window, just as
+                # _delete_project_windows_for_segment_ids does for stored rows.
+                # Do not recreate it from a late result or retain its old duration.
+                segment_ids = list({overlap["segmentId"] for overlap in overlaps})
+                references_exist = True
+                for start in range(0, len(segment_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+                    batch = segment_ids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+                    placeholders = ",".join("?" for _ in batch)
+                    existing_count = conn.execute(
+                        f"SELECT COUNT(*) FROM activity_segments WHERE id IN ({placeholders})",
+                        tuple(batch),
+                    ).fetchone()[0]
+                    if existing_count != len(batch):
+                        references_exist = False
+                        break
+                if not references_exist:
+                    continue
+
+                cursor = conn.execute(
                     """
                     INSERT INTO project_window_assignments (
                         window_started_at, window_id, window_ended_at, duration_seconds,
                         segment_overlaps_json, project_id, team_project_id, source,
                         confidence, reason, pass_id, chunk_fingerprint, assigned_at, stale
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ai', ?, ?, ?, ?, ?, ?)
+                    )
+                    SELECT ?, ?, ?, ?, ?, ?, ?, 'ai', ?, ?, ?, ?, ?, ?
+                    WHERE (? IS NULL OR EXISTS (SELECT 1 FROM projects WHERE id = ?))
+                      AND (? IS NULL OR EXISTS (SELECT 1 FROM team_projects WHERE id = ?))
                     ON CONFLICT(window_started_at) DO UPDATE SET
                         window_id = excluded.window_id,
                         window_ended_at = excluded.window_ended_at,
@@ -3411,9 +3439,14 @@ class TrackerDatabase:
                         item.get("chunkFingerprint", item.get("chunk_fingerprint")),
                         item.get("assignedAt") or item.get("assigned_at") or timestamp,
                         1 if item.get("stale") else 0,
+                        project_id or None,
+                        project_id or None,
+                        team_project_id or None,
+                        team_project_id or None,
                     ),
                 )
-                saved += 1
+                if cursor.rowcount > 0:
+                    saved += 1
         return {"saved": saved, "skippedManual": 0}
 
     def get_project_window_assignments(
