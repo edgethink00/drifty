@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { remainingLabelText } from "../loading/remainingEstimateCopy";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import { onboardingActivityLabel } from "./onboardingOptionLabels";
 import type {
   FirstDayPreparationPhase,
   FirstDayPreparationPlan,
 } from "./firstDayPreparationProgress";
 import { useFirstDayPreparationTrack } from "./useFirstDayPreparationTrack";
+import { FirstDayTokenStage } from "./FirstDayDiscoveryStack";
+import { FIRST_DAY_LANDING_MS, useVerdictFlights } from "./firstDayPrepMotion";
+import type { FirstDayChart, FirstDayDiscoveries } from "./firstDayPreparationStory";
+import type { AppIconMap } from "@drifty/domain";
 import "./styles/first-day-preparation.css";
 
 export type { FirstDayPreparationPhase, FirstDayPreparationPlan } from "./firstDayPreparationProgress";
@@ -21,6 +26,7 @@ type PhaseCopy = {
 };
 
 const LINE_ROTATION_MS = 8450;
+const EMPTY_ITEMS: readonly never[] = [];
 
 // Fallback for a caller that does not declare its phases: the screen bands the
 // run around whichever phases it actually sees. The app always passes a plan,
@@ -47,6 +53,13 @@ type FirstDayPreparationScreenProps = {
   readonly plan?: FirstDayPreparationPlan;
   /** First work activity from onboarding (e.g. "Designing"), used to personalize the classifying copy. */
   readonly workActivityLabel?: string | null;
+  /** What the run has found so far in the day being prepared; null before anything has loaded. */
+  readonly discoveries?: FirstDayDiscoveries | null;
+  /** The loaded part of the day, drawn hour by hour; null before anything has loaded. */
+  readonly chart?: FirstDayChart | null;
+  /** Which day is being prepared, so the closing line names it ("yesterday" rather than "today"). */
+  readonly dayRelation?: "today" | "yesterday" | "earlier";
+  readonly appIcons?: AppIconMap;
 };
 
 export function FirstDayPreparationScreen({
@@ -57,14 +70,22 @@ export function FirstDayPreparationScreen({
   plan = IMPLICIT_PLAN,
   progress,
   workActivityLabel,
+  discoveries = null,
+  chart = null,
+  dayRelation = "today",
+  appIcons,
 }: FirstDayPreparationScreenProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const { effectiveLanguage, t } = useLocalization();
   const phaseCopy = useMemo<Record<FirstDayPreparationPhase, PhaseCopy>>(() => ({
     importing: { title: t("onboarding.preparing.importTitle"), lines: [t("onboarding.preparing.importLine1"), t("onboarding.preparing.importLine2")] },
     downloading: { title: t("onboarding.preparing.downloadTitle"), lines: [t("onboarding.preparing.downloadLine1"), t("onboarding.preparing.downloadLine2")] },
     classifying: { title: t("onboarding.preparing.classifyTitle"), lines: [t("onboarding.preparing.classifyLine1"), t("onboarding.preparing.classifyLine2"), t("onboarding.preparing.classifyLine3"), t("onboarding.preparing.classifyLine4")] },
-    ready: { title: t("onboarding.preparing.readyTitle"), lines: [t("onboarding.preparing.readyLine")] },
-  }), [t]);
+    ready: {
+      title: t("onboarding.preparing.readyTitle"),
+      lines: [t(dayRelation === "yesterday" ? "onboarding.preparing.readyLineYesterday" : dayRelation === "earlier" ? "onboarding.preparing.readyLineEarlier" : "onboarding.preparing.readyLine")],
+    },
+  }), [dayRelation, t]);
   const copy = phaseCopy[phase];
   const lines = useMemo(
     () => (phase === "classifying" ? classifyingLines(onboardingActivityLabel(workActivityLabel ?? "", effectiveLanguage), phaseCopy.classifying, t) : phaseCopy[phase].lines),
@@ -74,7 +95,14 @@ export function FirstDayPreparationScreen({
   const { determinate, longWait, percent, remaining } = useFirstDayPreparationTrack({ phase, plan, progress });
   const remainingCopy = remainingLabelText(remaining, t);
   const ready = phase === "ready";
+  const readyHighlight = ready && chart?.longestFocus
+    ? t("onboarding.preparing.longestFocus", {
+      time: formatLocalizedTimeLabel(chart.longestFocus.startedAt, effectiveLanguage),
+      duration: formatLocalizedCompactDurationFromSeconds(chart.longestFocus.seconds, effectiveLanguage),
+    })
+    : null;
   const firstFailureActionRef = useRef<HTMLButtonElement>(null);
+  useVerdictFlights(rootRef, discoveries?.items ?? EMPTY_ITEMS);
 
   useEffect(() => {
     if (failure) firstFailureActionRef.current?.focus();
@@ -134,39 +162,43 @@ export function FirstDayPreparationScreen({
   }
 
   return (
-    <div className="first-day-prep">
+    <div className="first-day-prep" ref={rootRef} style={{ "--land-delay": FIRST_DAY_LANDING_MS + "ms" } as CSSProperties}>
       <div className="first-day-prep__drag" data-tauri-drag-region />
       <div className="first-day-prep__panel">
-        <div className={`first-day-prep__mark${ready ? " first-day-prep__mark--ready" : ""}`} aria-hidden="true">
-          <span className="first-day-prep__mark-glow" />
-          <svg className="first-day-prep__hourglass" viewBox="0 0 1024 1024" width="96" height="96" role="img">
-            <defs>
-              <linearGradient id="firstDayPrepAurora" x1="0.12" y1="0" x2="0.9" y2="1">
-                <stop offset="0" stopColor="#f7b267" />
-                <stop offset="0.5" stopColor="#f4845f" />
-                <stop offset="1" stopColor="#b18cff" />
-              </linearGradient>
-            </defs>
-            {ready ? (
-              /* The wait resolves into a check drawn in the same aurora, so the
-                 last thing the gate shows is an answer rather than more waiting. */
-              <path
-                className="first-day-prep__check"
-                d="M300 530 455 690 730 348"
-                fill="none"
-                stroke="url(#firstDayPrepAurora)"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="92"
-              />
-            ) : (
-              /* Drifty hourglass mark: top chamber points down into the neck, bottom chamber rises from it. */
-              <g fill="url(#firstDayPrepAurora)">
-                <path d="M266 270h492L512 510z" />
-                <path d="M512 514 758 754H266z" />
-              </g>
-            )}
-          </svg>
+        <div className="first-day-prep__hero">
+          <FirstDayTokenStage discoveries={discoveries} appIcons={appIcons} />
+          <div className={`first-day-prep__mark${ready ? " first-day-prep__mark--ready" : ""}`} aria-hidden="true">
+            <span className="first-day-prep__mark-glow" />
+            <span className="first-day-prep__mark-tint" />
+            <svg className="first-day-prep__hourglass" viewBox="0 0 1024 1024" width="96" height="96" role="img">
+              <defs>
+                <linearGradient id="firstDayPrepAurora" x1="0.12" y1="0" x2="0.9" y2="1">
+                  <stop offset="0" stopColor="#f7b267" />
+                  <stop offset="0.5" stopColor="#f4845f" />
+                  <stop offset="1" stopColor="#b18cff" />
+                </linearGradient>
+              </defs>
+              {ready ? (
+                /* The wait resolves into a check drawn in the same aurora, so the
+                   last thing the gate shows is an answer rather than more waiting. */
+                <path
+                  className="first-day-prep__check"
+                  d="M300 530 455 690 730 348"
+                  fill="none"
+                  stroke="url(#firstDayPrepAurora)"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="92"
+                />
+              ) : (
+                /* Drifty hourglass mark: top chamber points down into the neck, bottom chamber rises from it. */
+                <g fill="url(#firstDayPrepAurora)">
+                  <path d="M266 270h492L512 510z" />
+                  <path d="M512 514 758 754H266z" />
+                </g>
+              )}
+            </svg>
+          </div>
         </div>
 
         {/* Only the copy is announced. The bar now inches forward continuously,
@@ -176,6 +208,8 @@ export function FirstDayPreparationScreen({
         <div className="first-day-prep__copy" role="status" aria-live="polite">
           <h1 className="first-day-prep__title" key={copy.title}>{copy.title}</h1>
           <p className="first-day-prep__line" key={line}>{line}</p>
+          {/* The one fact the wait earns: the prepared day's longest focus, which the first intro card opens on. */}
+          {readyHighlight ? <p className="first-day-prep__highlight">{readyHighlight}</p> : null}
         </div>
 
         <div

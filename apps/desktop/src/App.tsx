@@ -172,6 +172,9 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
+import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
+import { buildFirstDayChart, buildFirstDayDiscoveries } from "./features/onboarding/firstDayPreparationStory";
+import { isFirstDayReviewEnabled } from "./features/onboarding/firstDayPreparationReviewData";
 import { isInitialDailyFocusQuietPeriod, isInstallDayReviewEligible } from "./features/onboarding/initialExperiencePolicy";
 import { resolveFirstDayTargetDay, useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
@@ -1674,6 +1677,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     window.location.search,
     import.meta.env.DEV,
   );
+  const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
   const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
   const {
     isActive: postOnboardingSidebarGuideActive,
@@ -1932,6 +1936,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       rules: classificationRules,
     }),
     [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, segments, showAiClassificationImpact],
+  );
+  // The first-day preparation screen stacks up what the run has loaded for the day it is preparing.
+  const firstDayDiscoveries = useMemo(
+    () => (preparingFirstDay ? buildFirstDayDiscoveries(segments, selectedDayClassificationOptions) : null),
+    [preparingFirstDay, segments, selectedDayClassificationOptions],
+  );
+  const firstDayChart = useMemo(
+    () => (preparingFirstDay ? buildFirstDayChart(segments, selectedDayClassificationOptions) : null),
+    [preparingFirstDay, segments, selectedDayClassificationOptions],
   );
   const companionFocusRecordClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
@@ -10127,6 +10140,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     );
   }
 
+  if (firstDayReviewEnabled) {
+    return (
+      <SiteIconProvider value={siteIcons}>
+        <LocalizationProvider controller={localization}>
+          <FirstDayPreparationReview appIcons={appIcons} />
+        </LocalizationProvider>
+      </SiteIconProvider>
+    );
+  }
+
   if (preparingFirstDay) {
     return (
       <SiteIconProvider value={siteIcons}>
@@ -10142,6 +10165,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             plan={firstDayPreparationPlan}
             progress={firstDayPreparationProgress}
             workActivityLabel={firstDayWorkLabel}
+            discoveries={firstDayDiscoveries}
+            chart={firstDayChart}
+            dayRelation={selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "today" : selectedDay === shiftIsoDate(logicalTodayIsoDate(startOfDayMinutes), -1) ? "yesterday" : "earlier"}
+            appIcons={appIcons}
           />
           <ModalPresence>{promoHandoffAccountDialog}</ModalPresence>
           {latestBuildPrompt}

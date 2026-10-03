@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { FirstDayPreparationScreen } from "./FirstDayPreparationScreen";
+import { buildFirstDayChart, buildFirstDayDiscoveries } from "./firstDayPreparationStory";
+import { buildFirstDayReviewSegments } from "./firstDayPreparationReviewData";
 
 afterEach(() => {
   cleanup();
@@ -204,5 +206,50 @@ describe("FirstDayPreparationScreen", () => {
 
     expect(screen.queryByText("Your day is ready")).toBeNull();
     expect(document.querySelector(".first-day-prep__check")).toBeNull();
+  });
+});
+
+describe("FirstDayPreparationScreen classification motion", () => {
+  const day = "2026-09-30";
+  const discoveriesAt = (classified: number) => buildFirstDayDiscoveries(buildFirstDayReviewSegments(day, classified));
+
+  it("keeps every found source circling the hourglass, and lets a classified one leave", () => {
+    const { rerender } = render(<FirstDayPreparationScreen phase="classifying" progress={0.4} discoveries={discoveriesAt(0)} />);
+    const stage = document.querySelector(".first-day-prep__stage");
+    expect(stage?.querySelectorAll("[data-token]")).toHaveLength(discoveriesAt(0).items.length);
+    expect(stage?.querySelectorAll('[data-token][data-verdict="pending"]')).toHaveLength(discoveriesAt(0).items.length);
+    rerender(<FirstDayPreparationScreen phase="classifying" progress={0.6} discoveries={discoveriesAt(12)} />);
+    expect(stage?.querySelectorAll('[data-token]:not([data-verdict="pending"])').length).toBeGreaterThan(0);
+  });
+
+  it("shows only the icons while waiting: no day chart and no Focus, Neutral or Drift totals", () => {
+    render(<FirstDayPreparationScreen phase="classifying" progress={0.6} discoveries={discoveriesAt(12)} />);
+    expect(document.querySelector(".first-day-prep__ribbon")).toBeNull();
+    expect(document.querySelector(".focus-drift-pill")).toBeNull();
+    expect(document.querySelector(".bar-row")).toBeNull();
+  });
+
+  it("closes on the prepared day's longest focus once it is ready", () => {
+    const chart = buildFirstDayChart(buildFirstDayReviewSegments(day, 99));
+    expect(chart?.longestFocus).toBeTruthy();
+    render(<FirstDayPreparationScreen phase="ready" progress={1} chart={chart} dayRelation="yesterday" />);
+    expect(screen.getByText(/^Longest focus: /)).toBeTruthy();
+    expect(screen.getByText("Here's how yesterday actually went.")).toBeTruthy();
+  });
+
+  it("keeps the waiting icons moving before history has loaded", () => {
+    render(<FirstDayPreparationScreen phase="importing" progress={null} />);
+    expect(document.querySelectorAll(".first-day-prep__token--slot").length).toBeGreaterThan(0);
+  });
+
+  it("uses native app icons by bundle identity as soon as the cache resolves, alongside site icons", () => {
+    const discoveries = buildFirstDayDiscoveries(buildFirstDayReviewSegments(day, 0, "mixed"));
+    const { rerender } = render(<FirstDayPreparationScreen phase="classifying" progress={0.32} discoveries={discoveries} appIcons={{}} />);
+    const token = document.querySelector('[data-find-key="app:com.apple.dt.Xcode"]');
+    expect(token?.querySelector(".first-day-prep__token-letter")).toBeTruthy();
+    rerender(<FirstDayPreparationScreen phase="classifying" progress={0.32} discoveries={discoveries} appIcons={{ "com.apple.dt.Xcode": "data:image/png;base64,cached" }} />);
+    expect(token?.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,cached");
+    expect(token?.querySelector(".first-day-prep__token-letter")).toBeNull();
+    expect(document.querySelector('[data-find-key="site:youtube.com"]')).toBeTruthy();
   });
 });
