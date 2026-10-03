@@ -219,9 +219,13 @@ export function DashboardPage({
   ].filter(Boolean).join(" ");
   const isDashboardReplayActive = dashboardReplay !== null;
   const hasMeasuredActivity = totalSeconds > 0 || hasTimelineData || isDashboardReplayActive;
+  const logicalToday = logicalTodayIsoDate(startOfDayMinutes);
+  const selectedDayDisplayLabel = effectiveLanguage === "ko" ? formatLocalizedDayLabel(selectedDay, effectiveLanguage) : selectedDayLabel;
   const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
-    ?? (statusRunning
-      ? t("dashboard.today.trackerLiveDetail", { date: effectiveLanguage === "ko" ? formatLocalizedDayLabel(selectedDay, effectiveLanguage) : selectedDayLabel })
+    ?? (selectedDay !== logicalToday
+      ? t("dashboard.today.noActivityForDayDetail", { date: selectedDayDisplayLabel })
+      : statusRunning
+      ? t("dashboard.today.trackerLiveDetail", { date: selectedDayDisplayLabel })
       : t("dashboard.today.trackerPausedDetail"));
   const focusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const focusDuration = hasMeasuredActivity
@@ -245,8 +249,6 @@ export function DashboardPage({
     (dashPeriod === "Today" && hasMeasuredActivity)
     || (dashPeriod === "Week" && totalSeconds > 0)
   );
-  const logicalToday = logicalTodayIsoDate(startOfDayMinutes);
-
   // Share cards are assembled only after the modal opens. The shape is aggregate-only:
   // category/productivity totals and derived hourly/daily rhythm, never raw activity rows.
   // Exported card content stays English even when the surrounding app chrome is Korean.

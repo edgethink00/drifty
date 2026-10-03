@@ -12,7 +12,10 @@ import { ENGLISH_TRANSLATIONS } from "../localization/translations";
 
 // Auto-cleanup isn't unmounting between cases here, so broad role/text queries
 // otherwise collide with a prior render's DOM. Tear down explicitly.
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 vi.mock("../../lib/analytics/useProFunnelExposure", () => ({ useProFunnelExposure: vi.fn(() => ({ current: null })) }));
 
@@ -37,6 +40,9 @@ type DashboardPageFixtureOptions = {
   readonly initialDataLoading?: boolean;
   readonly flowBlocks?: FlowBlock[];
   readonly summaryFlowBlocks?: FlowBlock[];
+  readonly selectedDay?: string;
+  readonly selectedDayLabel?: string;
+  readonly statusRunning?: boolean;
   readonly totalSeconds?: number;
   readonly weekRows?: ComponentProps<typeof DashboardPage>["weekRows"];
   readonly language?: DisplayLanguage;
@@ -76,10 +82,10 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       historyClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       historySegments={[]}
       initialDataLoading={options.initialDataLoading ?? false}
-      selectedDay="2026-06-29"
-      selectedDayLabel="Mon, Jun 29"
+      selectedDay={options.selectedDay ?? "2026-06-29"}
+      selectedDayLabel={options.selectedDayLabel ?? "Mon, Jun 29"}
       startOfDayMinutes={4 * 60}
-      statusRunning={true}
+      statusRunning={options.statusRunning ?? true}
       totalSeconds={options.totalSeconds ?? 0}
       weekCalendarEvents={new Map()}
       weekCurrentCalendarDay={null}
@@ -257,6 +263,40 @@ describe("DashboardPage demo replay empty data", () => {
     expect(svg).toContain("Focus time");
     expect(svg).not.toContain("집중 시간");
     expect(svg).not.toContain("Estimated focus percentile");
+  });
+});
+
+describe("DashboardPage empty day tracking guidance", () => {
+  it.each([true, false])("describes a past empty day independently of tracker running=%s", (statusRunning) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 3, 13));
+    renderDashboardWithNoData({ dashboardReplay: null, statusRunning });
+
+    expect(screen.getByRole("note").textContent).toContain("No activity was recorded for Mon, Jun 29.");
+    expect(screen.queryByText(/Tracker is live|Tracking is paused/)).toBeNull();
+  });
+
+  it("localizes the past empty day without claiming to record it", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 3, 13));
+    renderDashboardWithNoData({ dashboardReplay: null, language: "ko", selectedDay: "2026-10-02" });
+
+    expect(screen.getByRole("note").textContent).toContain("10월 2일 (금)에 기록된 활동이 없습니다.");
+    expect(screen.queryByText(/활동을 기록 중/)).toBeNull();
+  });
+
+  it.each([true, false])("keeps current logical-day guidance before the day boundary, running=%s", (statusRunning) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 3, 3));
+    renderDashboardWithNoData({
+      dashboardReplay: null, statusRunning,
+      selectedDay: "2026-10-02", selectedDayLabel: "Fri, Oct 2",
+    });
+
+    expect(screen.getByRole("note").textContent).toContain(statusRunning
+      ? "Tracker is live for Fri, Oct 2."
+      : ENGLISH_TRANSLATIONS["dashboard.today.trackerPausedDetail"]);
+    expect(screen.queryByText(/No activity was recorded for/)).toBeNull();
   });
 });
 
