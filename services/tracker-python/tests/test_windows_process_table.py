@@ -85,7 +85,93 @@ class WindowsProcessTableTests(unittest.TestCase):
     def test_generic_query_keeps_twenty_second_timeout(self) -> None:
         with patch.object(wpt.subprocess, "run", return_value=_completed("[]")) as run:
             self.assertEqual(wpt.windows_process_table(), {})
-        self.assertEqual(run.call_args.kwargs["timeout"], 20)
+        self.assertGreater(run.call_args.kwargs["timeout"], 19)
+        self.assertLessEqual(run.call_args.kwargs["timeout"], 20)
+
+    def test_native_query_preserves_unicode_quotes_and_control_characters(self) -> None:
+        import json
+
+        command = 'tracker.exe --db C:\\한글 😀\\"qa"\tline\nend.sqlite3'
+        payload = '\ufeff' + json.dumps([{"ProcessId":1234,"CommandLine":command}], ensure_ascii=False)
+        with patch.object(wpt.subprocess, "run", return_value=_completed(payload)) as run:
+            self.assertEqual(wpt.windows_process_table(), {1234: command})
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-16le")
+        self.assertEqual(run.call_args.kwargs["errors"], "strict")
+
+    def test_query_script_is_private_static_and_cleaned_up(self) -> None:
+        script_path = None
+
+        def inspect_query(args, **kwargs):
+            nonlocal script_path
+            script_path = Path(args[-1])
+            self.assertEqual(script_path.read_text(encoding="ascii"), wpt._SCRIPT_HOST_QUERY)
+            self.assertIn("//B", args)
+            self.assertIn("//U", args)
+            return _completed("[]")
+
+        with patch.object(wpt.subprocess, "run", side_effect=inspect_query):
+            self.assertEqual(wpt.windows_process_table(), {})
+        self.assertFalse(script_path.parent.exists())
+
+    def test_disabled_script_host_falls_back_without_changing_policy(self) -> None:
+        with patch.object(wpt.subprocess, "run", side_effect=[
+            _completed("Windows Script Host access is disabled", returncode=1),
+            _completed('[{"ProcessId":7,"CommandLine":"owned.exe"}]'),
+        ]) as run:
+            self.assertEqual(wpt.windows_process_table(), {7: "owned.exe"})
+        self.assertEqual(run.call_args_list[1].args[0][0], "powershell")
+        self.assertNotIn("//S", run.call_args_list[0].args[0])
+
+    def test_invalid_native_output_falls_back(self) -> None:
+        with patch.object(wpt.subprocess, "run", side_effect=[
+            _completed("not json"), _completed("[]"),
+        ]) as run:
+            self.assertEqual(wpt.windows_process_table(), {})
+        self.assertEqual(run.call_count, 2)
+
+    def test_fallback_shares_remaining_stop_deadline(self) -> None:
+        clock = [10.0]
+
+        def query(args, **kwargs):
+            if args[0] != "powershell":
+                self.assertEqual(kwargs["timeout"], 3.0)
+                clock[0] = 11.25
+                raise OSError("script host unavailable")
+            self.assertEqual(kwargs["timeout"], 1.75)
+            return _completed("[]")
+
+        with patch.object(wpt.time, "monotonic", side_effect=lambda: clock[0]), patch.object(
+            wpt.subprocess, "run", side_effect=query
+        ) as run:
+            self.assertEqual(wpt.windows_process_table(deadline=13.0), {})
+        self.assertEqual(run.call_count, 2)
+
+    def test_native_timeout_does_not_grant_fallback_another_budget(self) -> None:
+        clock = [10.0]
+
+        def query(*args, **kwargs):
+            clock[0] = 13.0
+            raise subprocess.TimeoutExpired(cmd="cscript", timeout=3)
+
+        with patch.object(wpt.time, "monotonic", side_effect=lambda: clock[0]), patch.object(
+            wpt.subprocess, "run", side_effect=query
+        ) as run:
+            self.assertIsNone(wpt.windows_process_table(deadline=13.0))
+        run.assert_called_once()
+        self.assertIsNone(wpt._cached_table)
+
+    def test_snapshot_completed_after_deadline_is_not_cached(self) -> None:
+        clock = [10.0]
+
+        def query(*args, **kwargs):
+            clock[0] = 13.0
+            return _completed("[]")
+
+        with patch.object(wpt.time, "monotonic", side_effect=lambda: clock[0]), patch.object(
+            wpt.subprocess, "run", side_effect=query
+        ):
+            self.assertIsNone(wpt.windows_process_table(deadline=13.0))
+        self.assertIsNone(wpt._cached_table)
 
     def test_stop_deadline_bounds_a_real_slow_query(self) -> None:
         run = subprocess.run

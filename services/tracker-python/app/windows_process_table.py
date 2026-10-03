@@ -19,8 +19,11 @@ an unreadable table must never look like an empty one.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import tempfile
 import time
+from pathlib import Path
 
 __all__ = ["windows_process_table", "windows_process_command"]
 
@@ -32,6 +35,34 @@ _POWERSHELL_QUERY = (
     "ConvertTo-Json -Compress -Depth 2"
 )
 _QUERY_TIMEOUT_SECONDS = 20
+
+# Windows PowerShell's managed startup can take over six seconds when our x64
+# sidecar runs under ARM emulation, exceeding Stop's three-second inspection
+# budget. The native script host queries the same WMI fields without that
+# startup cost. Keep PowerShell as a fallback for hosts that disable WSH.
+# Serialize explicitly: legacy JScript does not provide JSON.stringify.
+_SCRIPT_HOST_QUERY = r'''
+function quoted(value) {
+    var text = String(value), result = '"';
+    for (var i = 0; i < text.length; i++) {
+        var ch = text.charAt(i), code = text.charCodeAt(i);
+        if (ch === '"' || ch === '\\') result += '\\' + ch;
+        else if (code < 32) result += '\\u' + ('0000' + code.toString(16)).slice(-4);
+        else result += ch;
+    }
+    return result + '"';
+}
+var service = GetObject('winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2');
+var cursor = new Enumerator(service.ExecQuery(
+    'SELECT ProcessId,CommandLine FROM Win32_Process', 'WQL', 48));
+var rows = [];
+for (; !cursor.atEnd(); cursor.moveNext()) {
+    var item = cursor.item(), pid = Number(item.ProcessId), command = item.CommandLine;
+    rows.push('{"ProcessId":' + pid + ',"CommandLine":' +
+        (command == null ? 'null' : quoted(command)) + '}');
+}
+WScript.StdOut.Write('[' + rows.join(',') + ']');
+'''
 
 # A CIM snapshot costs ~480ms on the Phase 1 test host, and that cost is
 # PowerShell start-up rather than the query: an equivalent WQL projection
@@ -64,14 +95,55 @@ def windows_process_table(*, deadline: float | None = None) -> dict | None:
     """
     global _cached_table, _cached_at
     now = time.monotonic()
-    timeout_seconds = _QUERY_TIMEOUT_SECONDS
+    query_deadline = now + _QUERY_TIMEOUT_SECONDS
     if deadline is not None:
-        timeout_seconds = min(timeout_seconds, deadline - now)
-        if timeout_seconds <= 0:
-            return None
+        query_deadline = min(query_deadline, deadline)
+    if query_deadline <= now:
+        return None
     if _cached_table is not None and now - _cached_at < _CACHE_TTL_SECONDS:
         return dict(_cached_table)
 
+    processes = _script_host_process_table(query_deadline)
+    if processes is None:
+        processes = _powershell_process_table(query_deadline)
+    completed_at = time.monotonic()
+    if processes is None or completed_at >= query_deadline:
+        return None
+    _cached_table = processes
+    _cached_at = completed_at
+    return dict(processes)
+
+
+def _script_host_process_table(deadline: float) -> dict | None:
+    try:
+        # A private temporary directory prevents a shared, predictable script
+        # path. Only static query code is written; command lines stay in memory.
+        with tempfile.TemporaryDirectory(prefix="drifty-process-query-") as directory:
+            script = Path(directory) / "query.js"
+            script.write_text(_SCRIPT_HOST_QUERY, encoding="ascii")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            host = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "cscript.exe"
+            result = subprocess.run(
+                [str(host), "//Nologo", "//U", "//B", str(script)],
+                capture_output=True,
+                text=True,
+                encoding="utf-16le",
+                errors="strict",
+                timeout=remaining,
+                check=False,
+                creationflags=_no_window_flag(),
+            )
+            return _parse_process_table(result)
+    except Exception:
+        return None
+
+
+def _powershell_process_table(deadline: float) -> dict | None:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None
     try:
         result = subprocess.run(
             [
@@ -87,17 +159,21 @@ def windows_process_table(*, deadline: float | None = None) -> dict | None:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=timeout_seconds,
+            timeout=remaining,
             check=False,
             creationflags=_no_window_flag(),
         )
     except Exception:
         return None
+    return _parse_process_table(result)
+
+
+def _parse_process_table(result: subprocess.CompletedProcess) -> dict | None:
     if result.returncode != 0 or not result.stdout.strip():
         return None
 
     try:
-        payload = json.loads(result.stdout)
+        payload = json.loads(result.stdout.lstrip("\ufeff"))
     except json.JSONDecodeError:
         return None
     # A single process serializes as an object rather than a list.
@@ -116,12 +192,7 @@ def windows_process_table(*, deadline: float | None = None) -> dict | None:
         # daemons, and dropping them keeps the table shaped like the Unix one.
         if isinstance(pid, int) and isinstance(command, str) and command.strip():
             processes[pid] = command.strip()
-    completed_at = time.monotonic()
-    if deadline is not None and completed_at >= deadline:
-        return None
-    _cached_table = processes
-    _cached_at = completed_at
-    return dict(processes)
+    return processes
 
 
 def _no_window_flag() -> int:
