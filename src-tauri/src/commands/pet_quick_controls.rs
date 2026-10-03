@@ -3,17 +3,19 @@ use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-};
+#[cfg(not(target_os = "windows"))]
+use tauri::LogicalSize;
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use super::pet_mode::{current_pet_logical_position, PET_MODE_WINDOW_LABEL};
+#[cfg(not(target_os = "windows"))]
+use super::pet_mode::current_pet_logical_position;
+use super::pet_mode::PET_MODE_WINDOW_LABEL;
 use super::pet_panel::configure_pet_panel;
 #[cfg(not(target_os = "macos"))]
-use {super::pet_panel::show_pet_panel_at_position, tauri::LogicalPosition};
-use super::windows_overlay::set_windows_overlay_click_through;
-#[cfg(not(target_os = "macos"))]
 use super::windows_overlay::hide_windows_overlay;
+use super::windows_overlay::{is_windows_overlay_visible, set_windows_overlay_click_through};
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+use {super::pet_panel::show_pet_panel_at_position, tauri::LogicalPosition};
 
 #[cfg(target_os = "macos")]
 mod motion;
@@ -62,6 +64,12 @@ static PET_QUICK_CONTROLS_MENU_OPEN: AtomicBool = AtomicBool::new(false);
 // Session state remains available to a newly mounted pet even when the main
 // webview could not persist its temporary override.
 static PET_QUICK_CONTROLS_STATE: Mutex<Option<PetQuickControlsState>> = Mutex::new(None);
+// Keep the presented content width in points while a menu or feedback owns it.
+// Dividing a transitional physical frame by a cached DPI would change that
+// width during a live scale change. This value never stores a DPI or position.
+#[cfg(target_os = "windows")]
+static PET_QUICK_CONTROLS_PRESENTED_WIDTH: AtomicU64 =
+    AtomicU64::new(PET_QUICK_CONTROLS_KO_IDLE_WIDTH.to_bits());
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -197,6 +205,9 @@ fn prepare_pet_quick_controls_size(
     window: &WebviewWindow,
     state: &PetQuickControlsState,
 ) -> Result<f64, String> {
+    #[cfg(target_os = "windows")]
+    let current = f64::from_bits(PET_QUICK_CONTROLS_PRESENTED_WIDTH.load(Ordering::Relaxed));
+    #[cfg(not(target_os = "windows"))]
     let current = window
         .inner_size()
         .map_err(|error| error.to_string())?
@@ -205,7 +216,10 @@ fn prepare_pet_quick_controls_size(
     let desired = quick_controls_width(&state.language, quick_controls_paused(state));
     let held = pet_quick_controls_acknowledgement_held()
         || PET_QUICK_CONTROLS_MENU_OPEN.load(Ordering::Relaxed);
-    if quick_controls_resize_needed(window.is_visible().unwrap_or(false), held, current, desired) {
+    if quick_controls_resize_needed(is_windows_overlay_visible(window), held, current, desired) {
+        // Windows applies the whole frame at the pet's current native DPI below.
+        // A hidden toolbar's cached scale can still belong to the previous DPI.
+        #[cfg(not(target_os = "windows"))]
         window
             .set_size(LogicalSize::new(desired, PET_QUICK_CONTROLS_HEIGHT))
             .map_err(|error| error.to_string())?;
@@ -260,14 +274,25 @@ fn resolve_quick_controls_layout(
     pet: &WebviewWindow,
     controls_width: f64,
 ) -> Result<PetQuickControlsLayout, String> {
+    #[cfg(target_os = "windows")]
+    let scale = windows_pet_scale(pet)?;
+    #[cfg(target_os = "windows")]
+    let position = super::pet_mode::current_pet_render_geometry().window_to_scene(
+        pet.outer_position()
+            .map_err(|error| error.to_string())?
+            .to_logical::<f64>(scale),
+    );
+    #[cfg(not(target_os = "windows"))]
     let position = current_pet_logical_position(pet)?;
     let (body_width, body_height) = super::pet_mode::pet_size();
     let monitor = super::pet_mode::resolve_pet_scene_monitor(pet)
         .or_else(|| app.primary_monitor().ok().flatten())
         .ok_or_else(|| "No monitor is available for Pet Mode quick controls".to_string())?;
     let work_area = monitor.work_area();
-    let work_position = work_area.position.to_logical::<f64>(monitor.scale_factor());
-    let work_size = work_area.size.to_logical::<f64>(monitor.scale_factor());
+    #[cfg(not(target_os = "windows"))]
+    let scale = monitor.scale_factor();
+    let work_position = work_area.position.to_logical::<f64>(scale);
+    let work_size = work_area.size.to_logical::<f64>(scale);
     Ok(layout_pet_quick_controls(
         position.x,
         position.y,
@@ -281,7 +306,115 @@ fn resolve_quick_controls_layout(
     ))
 }
 
+#[cfg(target_os = "windows")]
+fn windows_pet_scale(pet: &WebviewWindow) -> Result<f64, String> {
+    super::pet_cursor_windows::window_scale_factor(pet)
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn quick_controls_physical_frame(
+    layout: PetQuickControlsLayout,
+    width: f64,
+    scale: f64,
+) -> Result<(tauri::PhysicalPosition<i32>, tauri::PhysicalSize<u32>), String> {
+    let values = [
+        layout.x * scale,
+        layout.y * scale,
+        width * scale,
+        PET_QUICK_CONTROLS_HEIGHT * scale,
+    ];
+    if !scale.is_finite()
+        || scale <= 0.0
+        || !values.into_iter().all(f64::is_finite)
+        || values[..2]
+            .iter()
+            .any(|value| value.round() < i32::MIN as f64 || value.round() > i32::MAX as f64)
+        || values[2..]
+            .iter()
+            .any(|value| value.round() < 1.0 || value.round() > i32::MAX as f64)
+    {
+        return Err("Pet quick-controls frame is outside the physical desktop".into());
+    }
+    Ok((
+        tauri::PhysicalPosition::new(values[0].round() as i32, values[1].round() as i32),
+        tauri::PhysicalSize::new(values[2].round() as u32, values[3].round() as u32),
+    ))
+}
+
+#[cfg(target_os = "windows")]
+fn position_windows_quick_controls(
+    window: &WebviewWindow,
+    pet: &WebviewWindow,
+    layout: PetQuickControlsLayout,
+    width: f64,
+) -> Result<(), String> {
+    let scale = windows_pet_scale(pet)?;
+    let (position, size) = quick_controls_physical_frame(layout, width, scale)?;
+    // Position first so Windows can deliver the real monitor DPI change to a
+    // previously hidden toolbar. All calls run on the window's owner thread.
+    // Physical coordinates and constraints never reuse the toolbar's old scale.
+    window
+        .set_position(position)
+        .map_err(|error| error.to_string())?;
+    let (_, minimum) = quick_controls_physical_frame(layout, PET_QUICK_CONTROLS_MIN_WIDTH, scale)?;
+    let (_, maximum) =
+        quick_controls_physical_frame(layout, PET_QUICK_CONTROLS_EN_PAUSED_WIDTH, scale)?;
+    window
+        .set_min_size(Some(minimum))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_max_size(Some(maximum))
+        .map_err(|error| error.to_string())?;
+    window.set_size(size).map_err(|error| error.to_string())?;
+    PET_QUICK_CONTROLS_PRESENTED_WIDTH.store(width.to_bits(), Ordering::Relaxed);
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn refresh_windows_quick_controls_dpi(app: AppHandle) {
+    // ScaleFactorChanged arrives before Tao finishes its suggested frame.
+    // Read the latest pet/state in a later owner-thread transaction. A queued
+    // refresh cannot reveal a toolbar that was hidden in the meantime.
+    drop(tauri::async_runtime::spawn_blocking(move || {
+        let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) else {
+            return;
+        };
+        let result = super::pet_mode::run_pet_native_transaction(
+            &window,
+            "pet_quick_controls::refresh_windows_dpi",
+            move |window| {
+                if !is_windows_overlay_visible(&window) {
+                    return Ok(());
+                }
+                let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
+                    return Ok(());
+                };
+                if !is_windows_overlay_visible(&pet) {
+                    return hide_pet_quick_controls_window(&window);
+                }
+                let Some(state) = pet_quick_controls_get_state()? else {
+                    return Ok(());
+                };
+                let width = prepare_pet_quick_controls_size(&window, &state)?;
+                let layout = resolve_quick_controls_layout(&app, &pet, width)?;
+                position_windows_quick_controls(&window, &pet, layout, width)
+            },
+        );
+        if let Err(error) = result {
+            eprintln!("Could not refresh pet quick controls DPI: {error}");
+        }
+    }));
+}
+
 fn hide_pet_quick_controls_window(window: &WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    if !super::pet_mode::pet_native_thread_is_current(window)? {
+        return super::pet_mode::run_pet_native_transaction(
+            window,
+            "pet_quick_controls::hide",
+            |window| hide_pet_quick_controls_window(&window),
+        );
+    }
     #[cfg(target_os = "macos")]
     return motion::hide_immediately(window);
     // Off macOS the bar is a layered overlay: drop its click-through state and
@@ -400,6 +533,15 @@ pub fn setup_pet_quick_controls_window(app: &tauri::App) -> tauri::Result<()> {
     .build()?;
 
     configure_pet_panel(&window)?;
+    #[cfg(target_os = "windows")]
+    {
+        let app = window.app_handle().clone();
+        window.on_window_event(move |event| {
+            if matches!(event, tauri::WindowEvent::ScaleFactorChanged { .. }) {
+                refresh_windows_quick_controls_dpi(app.clone());
+            }
+        });
+    }
     #[cfg(target_os = "macos")]
     apply_pet_quick_controls_material(&window);
     let _ = set_windows_overlay_click_through(&window, true);
@@ -430,7 +572,18 @@ pub fn pet_quick_controls_set_visible(app: AppHandle, visible: bool) -> Result<b
             set_pet_quick_controls_visible(&app, visible)
         });
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) else {
+            return Ok(false);
+        };
+        return super::pet_mode::run_pet_native_transaction(
+            &window,
+            "pet_quick_controls::set_visible",
+            move |_| set_pet_quick_controls_visible(&app, visible),
+        );
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     set_pet_quick_controls_visible(&app, visible)
 }
 
@@ -463,7 +616,7 @@ fn set_pet_quick_controls_visible(app: &AppHandle, visible: bool) -> Result<bool
         hide_pet_quick_controls_window(&window)?;
         return Ok(false);
     };
-    if !matches!(pet.is_visible(), Ok(true)) {
+    if !is_windows_overlay_visible(&pet) {
         hide_pet_quick_controls_window(&window)?;
         return Ok(false);
     }
@@ -494,7 +647,12 @@ fn set_pet_quick_controls_visible(app: &AppHandle, visible: bool) -> Result<bool
         );
         #[cfg(target_os = "macos")]
         motion::show(&window, layout)?;
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            position_windows_quick_controls(&window, &pet, layout, controls_width)?;
+            super::windows_overlay::show_windows_overlay(&window)?;
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         show_pet_panel_at_position(&app, &window, LogicalPosition::new(layout.x, layout.y))?;
         Ok(true)
     })();
@@ -509,6 +667,21 @@ pub fn pet_quick_controls_sync_state(
     app: AppHandle,
     state: PetQuickControlsState,
 ) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    if let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
+        return super::pet_mode::run_pet_native_transaction(
+            &window,
+            "pet_quick_controls::sync_state",
+            move |_| sync_pet_quick_controls_state(&app, state),
+        );
+    }
+    sync_pet_quick_controls_state(&app, state)
+}
+
+fn sync_pet_quick_controls_state(
+    app: &AppHandle,
+    state: PetQuickControlsState,
+) -> Result<(), String> {
     if !is_supported_quick_controls_state(&state) {
         return Err("unsupported pet quick controls state".to_string());
     }
@@ -516,6 +689,8 @@ pub fn pet_quick_controls_sync_state(
         .lock()
         .map_err(|error| error.to_string())?
         .replace(state.clone());
+    #[cfg(not(target_os = "macos"))]
+    let _ = previous_state;
     if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
         pet.emit("pet-quick-controls-state", &state)
             .map_err(|error| error.to_string())?;
@@ -533,13 +708,15 @@ pub fn pet_quick_controls_sync_state(
     // the next presentation. This also keeps external locale changes readable.
     if !pet_quick_controls_acknowledgement_held()
         && !PET_QUICK_CONTROLS_MENU_OPEN.load(Ordering::Relaxed)
-        && matches!(window.is_visible(), Ok(true))
+        && is_windows_overlay_visible(&window)
     {
         if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
             let layout = resolve_quick_controls_layout(&app, &pet, controls_width)?;
             #[cfg(target_os = "macos")]
             motion::relocate(&window, layout)?;
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "windows")]
+            position_windows_quick_controls(&window, &pet, layout, controls_width)?;
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             window
                 .set_position(LogicalPosition::new(layout.x, layout.y))
                 .map_err(|error| error.to_string())?;
@@ -563,7 +740,7 @@ pub fn pet_quick_controls_cursor_inside(app: AppHandle) -> bool {
     let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) else {
         return false;
     };
-    if !matches!(window.is_visible(), Ok(true)) {
+    if !is_windows_overlay_visible(&window) {
         return false;
     }
 
@@ -572,7 +749,31 @@ pub fn pet_quick_controls_cursor_inside(app: AppHandle) -> bool {
         return macos_cursor_inside_window(&app, &window).unwrap_or(false);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        return super::pet_mode::run_pet_native_transaction(
+            &window,
+            "pet_quick_controls::cursor_inside",
+            |window| {
+                if !is_windows_overlay_visible(&window) {
+                    return Ok(false);
+                }
+                let position = window.outer_position().map_err(|error| error.to_string())?;
+                let size = window.outer_size().map_err(|error| error.to_string())?;
+                let cursor = super::pet_cursor_windows::cursor_position()?;
+                Ok(point_inside_rect(
+                    cursor.x,
+                    cursor.y,
+                    position.x as f64,
+                    position.y as f64,
+                    size.width as f64,
+                    size.height as f64,
+                ))
+            },
+        )
+        .unwrap_or(false);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let Ok(position) = window.outer_position() else {
             return false;
@@ -725,6 +926,12 @@ pub async fn pet_quick_controls_action(app: AppHandle, action: String) -> Result
         set_pet_quick_controls_acknowledgement_held(&app, false);
         return Err("Pet quick-controls action window is unavailable".to_string());
     }
+    if action == "openDashboard" || action == "openSettings" {
+        // Changing the hidden renderer's tab is not enough for an explicit
+        // open. Use the normal tray/reopen path to restore and focus the main
+        // window; background pet actions continue to leave it in place.
+        crate::reveal_main_window(&app);
+    }
     Ok(())
 }
 
@@ -740,6 +947,69 @@ mod tests {
         PET_QUICK_CONTROLS_MIN_WIDTH, PET_QUICK_CONTROLS_SCREEN_INSET,
     };
     use serde_json::json;
+
+    #[test]
+    fn toolbar_stays_centered_below_the_pet_at_each_live_dpi() {
+        // Independent physical pet fixture. Its canonical width is 144 and
+        // feet are at y=249; a 300-point toolbar has an 8-point gap below it.
+        for (scale, expected) in [
+            (1.0, (372, 257, 300, 36)),
+            (2.0, (744, 514, 600, 72)),
+            (2.25, (837, 578, 675, 81)),
+        ] {
+            let layout = layout_pet_quick_controls(
+                450.0, 150.0, 144.0, 99.0, 0.0, 0.0, 1280.0, 720.0, 300.0,
+            );
+            let (position, size) =
+                super::quick_controls_physical_frame(layout, 300.0, scale).unwrap();
+            assert_eq!((position.x, position.y, size.width, size.height), expected);
+            assert!((position.x as f64 + size.width as f64 / 2.0 - 522.0 * scale).abs() <= 0.5);
+            assert!((position.y as f64 - 249.0 * scale - 8.0 * scale).abs() <= 0.5);
+        }
+    }
+
+    #[test]
+    fn toolbar_physical_frame_preserves_negative_desktop_origins() {
+        let layout = layout_pet_quick_controls(
+            -900.0, -200.0, 144.0, 99.0, -1280.0, -720.0, 1280.0, 720.0, 300.0,
+        );
+        let (position, size) = super::quick_controls_physical_frame(layout, 300.0, 2.25).unwrap();
+        assert_eq!(
+            (position.x, position.y, size.width, size.height),
+            (-2201, -209, 675, 81)
+        );
+        assert!(point_inside_rect(
+            -1900.0,
+            -180.0,
+            position.x as f64,
+            position.y as f64,
+            size.width as f64,
+            size.height as f64
+        ));
+    }
+
+    #[test]
+    fn toolbar_rejects_invalid_physical_frames_before_native_calls() {
+        let layout = super::PetQuickControlsLayout {
+            x: 0.0,
+            y: 0.0,
+            placement: "below",
+        };
+        for scale in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::MAX] {
+            assert!(super::quick_controls_physical_frame(layout, 300.0, scale).is_err());
+        }
+        for width in [0.0, -300.0, f64::NAN, f64::INFINITY, i32::MAX as f64] {
+            assert!(super::quick_controls_physical_frame(layout, width, 2.25).is_err());
+        }
+        for x in [f64::NAN, f64::INFINITY, i32::MAX as f64, i32::MIN as f64] {
+            assert!(super::quick_controls_physical_frame(
+                super::PetQuickControlsLayout { x, ..layout },
+                300.0,
+                2.25
+            )
+            .is_err());
+        }
+    }
 
     fn state_with_override(
         language: &str,

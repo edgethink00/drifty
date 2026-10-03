@@ -12,6 +12,10 @@ const nativeMenu = vi.hoisted(() => ({
   create: vi.fn(),
   popup: vi.fn().mockResolvedValue(undefined),
 }));
+const nativeItems = vi.hoisted(() => ({
+  create: vi.fn(),
+  nextRid: 0,
+}));
 
 vi.mock("../companion/watcherBridge", () => ({
   isTauriRuntime: () => runtime.isTauri,
@@ -25,7 +29,20 @@ vi.mock("@tauri-apps/api/menu", () => ({
   Menu: {
     new: nativeMenu.create,
   },
+  MenuItem: { new: nativeItems.create },
 }));
+
+beforeEach(() => {
+  nativeItems.create.mockReset();
+  nativeItems.create.mockImplementation(async (options) => ({
+    ...options,
+    rid: ++nativeItems.nextRid,
+    kind: "MenuItem",
+    close: vi.fn().mockResolvedValue(undefined),
+  }));
+  nativeMenu.popup.mockReset().mockResolvedValue(undefined);
+  nativeMenu.close.mockReset().mockResolvedValue(undefined);
+});
 
 describe("openNativePetModeMenu", () => {
   beforeEach(() => {
@@ -67,6 +84,45 @@ describe("openNativePetModeMenu", () => {
     expect(actions.onOpenSettings).toHaveBeenCalledOnce();
     options.items[5].action();
     expect(actions.onPresenceModeChange).toHaveBeenCalledWith("drift_only");
+  });
+
+  it("retains action resources until native selection and releases them after dismissal", async () => {
+    const actions = {
+      onOpenDashboard: vi.fn(), onOpenSettings: vi.fn(), onHideForOneHour: vi.fn(),
+      onPresenceModeChange: vi.fn(), onTurnOffPet: vi.fn(),
+    };
+    let dismiss!: () => void;
+    nativeMenu.popup.mockImplementationOnce(() => new Promise<void>((resolve) => { dismiss = resolve; }));
+    const opened = openNativePetModeMenu(actions);
+    await vi.waitFor(() => expect(nativeMenu.popup).toHaveBeenCalledOnce());
+    const items = nativeMenu.create.mock.calls[0][0].items;
+    const resources = items.filter((item: { rid?: number }) => typeof item.rid === "number");
+    expect(resources).toHaveLength(6);
+    for (const item of resources) expect(item.close).not.toHaveBeenCalled();
+    items[1].action();
+    expect(actions.onOpenSettings).toHaveBeenCalledOnce();
+    dismiss();
+    await expect(opened).resolves.toBe(true);
+    for (const item of resources) expect(item.close).toHaveBeenCalledOnce();
+    expect(nativeMenu.close).toHaveBeenCalledOnce();
+  });
+
+  it("releases partial construction and preserves a popup failure despite cleanup failure", async () => {
+    const actions = {
+      onOpenDashboard: vi.fn(), onOpenSettings: vi.fn(), onHideForOneHour: vi.fn(),
+      onPresenceModeChange: vi.fn(), onTurnOffPet: vi.fn(),
+    };
+    const partial = { rid: 777, close: vi.fn().mockResolvedValue(undefined) };
+    nativeItems.create.mockResolvedValueOnce(partial).mockRejectedValueOnce(new Error("item failed"));
+    await expect(openNativePetModeMenu(actions)).rejects.toThrow("item failed");
+    expect(partial.close).toHaveBeenCalledOnce();
+    expect(nativeMenu.create).not.toHaveBeenCalled();
+
+    nativeMenu.popup.mockRejectedValueOnce(new Error("popup failed"));
+    nativeMenu.close.mockRejectedValueOnce(new Error("close failed"));
+    await expect(openNativePetModeMenu(actions)).rejects.toThrow("popup failed");
+    const resources = nativeMenu.create.mock.calls[0][0].items.filter((item: { rid?: number }) => typeof item.rid === "number");
+    for (const item of resources) expect(item.close).toHaveBeenCalledOnce();
   });
 
   it("offers the way back once the pet only appears when drifting", async () => {

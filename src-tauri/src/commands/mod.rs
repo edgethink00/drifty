@@ -24,6 +24,7 @@ mod pet_mode_startup;
 mod pet_mode_ax_control_veto;
 mod pet_panel;
 mod pet_render_geometry;
+mod pet_surface;
 mod pet_quick_controls;
 mod sentry_smoke;
 mod share_card;

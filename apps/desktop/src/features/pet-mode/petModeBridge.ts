@@ -74,9 +74,65 @@ export type PetModeInputBounds = {
   /** Context-sensitive monitor API diagnostic; not the frame calculation scale. */
   readonly currentMonitorScaleFactor?: number;
   readonly windowsDpiEvents?: PetModeWindowsDpiEvents;
+  /** Memory-only native press observations; reading does not refresh input. */
+  readonly windowsInput?: {
+    readonly latest: WindowsPetInputSample | null;
+    readonly lastPress: WindowsPetInputSample | null;
+    readonly rendererPointerDownCount: number;
+    readonly dragRequestCount: number;
+  };
+  /** Current owned geometry/hit query, separate from the retained press sample. */
+  readonly windowsSurface?: {
+    readonly clientWidth: number;
+    readonly clientHeight: number;
+    readonly webviewX: number;
+    readonly webviewY: number;
+    readonly webviewWidth: number;
+    readonly webviewHeight: number;
+    readonly cursorClientX: number;
+    readonly cursorClientY: number;
+    readonly pointTargetInsidePet: boolean;
+    /** Missing/null fields remain unknown on older or unsupported native builds. */
+    readonly webviewScale?: {
+      readonly rasterizationScale: number | null;
+      readonly boundsMode: number | null;
+      readonly detectsMonitorScaleChanges: boolean | null;
+      readonly zoomFactor: number | null;
+      readonly backgroundAlpha: number | null;
+      readonly parentMatchesPet: boolean | null;
+    } | null;
+    readonly children?: ReadonlyArray<{
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+      readonly dpi: number | null;
+      readonly visible: boolean;
+      readonly enabled: boolean;
+      readonly pointInRect: boolean;
+    }>;
+    readonly childrenTruncated?: boolean;
+    readonly childBoundsReadFailures?: number;
+    readonly layeredAlpha?: number | null;
+  };
   readonly expectedRenderWidth?: number;
   readonly expectedRenderHeight?: number;
   readonly sampledAtMs?: number;
+};
+
+export type WindowsPetInputSample = {
+  readonly sampledAtMs: number;
+  readonly scaleFactor: number;
+  readonly windowClientX: number;
+  readonly windowClientY: number;
+  readonly maskRevision: number;
+  readonly maskSpanCount: number;
+  readonly maskInside: boolean;
+  readonly buttonDown: boolean;
+  readonly interactive: boolean;
+  readonly ignoredCursorEventsBeforeApply: boolean | null;
+  readonly ignoredCursorEvents: boolean | null;
+  readonly policyApplied: boolean;
 };
 
 export type PetModeCursorSample = {

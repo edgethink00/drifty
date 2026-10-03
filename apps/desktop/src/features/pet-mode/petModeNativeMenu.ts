@@ -1,4 +1,4 @@
-import { Menu, type MenuOptions } from "@tauri-apps/api/menu";
+import { Menu, MenuItem, type MenuItemOptions, type MenuOptions } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauriRuntime } from "../companion/watcherBridge";
 import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
@@ -26,6 +26,42 @@ export type PetModeAutomaticCloseMenuState = {
   readonly override: PetQuickControlsAutomaticCloseOverridePayload | null;
   readonly language?: "en" | "ko";
 };
+
+async function popupPetMenu(items: NonNullable<MenuOptions["items"]>): Promise<boolean> {
+  const ownedItems: MenuItem[] = [];
+  const retainedItems: NonNullable<MenuOptions["items"]> = [];
+  let menu: Menu | undefined;
+  let operationFailed = false;
+  try {
+    for (const item of items) {
+      if (!("rid" in item) && "action" in item && typeof item.action === "function") {
+        // Tauri 2.12's inline item builder drops the item's wrapper after
+        // append, removing its JS action channel while native paint survives.
+        // Explicit resources retain those channels through popup dismissal.
+        const resource = await MenuItem.new(item as MenuItemOptions);
+        ownedItems.push(resource);
+        retainedItems.push(resource);
+      } else {
+        retainedItems.push(item);
+      }
+    }
+    menu = await Menu.new({ items: retainedItems });
+    await menu.popup(undefined, getCurrentWindow());
+    return true;
+  } catch (error) {
+    operationFailed = true;
+    throw error;
+  } finally {
+    // Attempt every release even after partial construction or popup failure.
+    // Preserve the original operation error if cleanup also fails.
+    const released = await Promise.allSettled([
+      ...(menu ? [menu.close()] : []),
+      ...ownedItems.map((item) => item.close()),
+    ]);
+    const failed = released.find((result) => result.status === "rejected");
+    if (!operationFailed && failed?.status === "rejected") throw failed.reason;
+  }
+}
 
 function petModeMenuCopy(language: "en" | "ko") {
   if (language === "ko") {
@@ -125,13 +161,7 @@ export async function openNativeAutomaticCloseMenu(
     );
   }
 
-  const menu = await Menu.new({ items });
-  try {
-    await menu.popup(undefined, getCurrentWindow());
-    return true;
-  } finally {
-    await menu.close();
-  }
+  return popupPetMenu(items);
 }
 
 /**
@@ -152,57 +182,48 @@ export async function openNativePetModeMenu(
 
   const copy = petModeMenuCopy(state.language ?? resolveInitialDisplayLanguage());
   const presenceMode = state.presenceMode ?? "always";
-  const menu = await Menu.new({
-    items: [
-      {
-        id: "pet-open-dashboard",
-        text: copy.openDashboard,
-        action: actions.onOpenDashboard,
+  return popupPetMenu([
+    {
+      id: "pet-open-dashboard",
+      text: copy.openDashboard,
+      action: actions.onOpenDashboard,
+    },
+    {
+      id: "pet-open-settings",
+      text: copy.openSettings,
+      action: actions.onOpenSettings,
+    },
+    { item: "Separator" },
+    {
+      id: "pet-automatic-close-settings",
+      text: copy.automaticCloseSettings,
+      action: actions.onOpenSettings,
+    },
+    {
+      id: "pet-hide-one-hour",
+      text: copy.hideOneHour,
+      action: actions.onHideForOneHour,
+    },
+    // The ladder reads top to bottom as escalating quiet: hide for an hour,
+    // only come when needed, off. Each step keeps drift alerts working.
+    presenceMode === "drift_only"
+      ? {
+        id: "pet-presence-always",
+        text: copy.stayAlways,
+        action: () => actions.onPresenceModeChange("always"),
+      }
+      : {
+        id: "pet-presence-drift-only",
+        text: copy.showOnlyOnDrift,
+        action: () => actions.onPresenceModeChange("drift_only"),
       },
-      {
-        id: "pet-open-settings",
-        text: copy.openSettings,
-        action: actions.onOpenSettings,
-      },
-      { item: "Separator" },
-      {
-        id: "pet-automatic-close-settings",
-        text: copy.automaticCloseSettings,
-        action: actions.onOpenSettings,
-      },
-      {
-        id: "pet-hide-one-hour",
-        text: copy.hideOneHour,
-        action: actions.onHideForOneHour,
-      },
-      // The ladder reads top to bottom as escalating quiet: hide for an hour,
-      // only come when needed, off. Each step keeps drift alerts working.
-      presenceMode === "drift_only"
-        ? {
-          id: "pet-presence-always",
-          text: copy.stayAlways,
-          action: () => actions.onPresenceModeChange("always"),
-        }
-        : {
-          id: "pet-presence-drift-only",
-          text: copy.showOnlyOnDrift,
-          action: () => actions.onPresenceModeChange("drift_only"),
-        },
-      { item: "Separator" },
-      {
-        id: "pet-turn-off",
-        text: copy.turnOffPet,
-        action: actions.onTurnOffPet,
-      },
-    ],
-  });
-
-  try {
-    await menu.popup(undefined, getCurrentWindow());
-    return true;
-  } finally {
-    await menu.close();
-  }
+    { item: "Separator" },
+    {
+      id: "pet-turn-off",
+      text: copy.turnOffPet,
+      action: actions.onTurnOffPet,
+    },
+  ]);
 }
 
 /**
@@ -220,26 +241,17 @@ export async function openNativePetTurnOffSuggestionMenu(
   if (!isTauriRuntime()) return false;
 
   const copy = petModeMenuCopy(state.language ?? resolveInitialDisplayLanguage());
-  const menu = await Menu.new({
-    items: [
-      { id: "pet-turn-off-suggestion-header", text: copy.turnOffSuggestionHeader, enabled: false },
-      {
-        id: "pet-turn-off-suggestion-drift-only",
-        text: copy.turnOffSuggestionDriftOnly,
-        action: actions.onChooseDriftOnly,
-      },
-      {
-        id: "pet-turn-off-suggestion-confirm",
-        text: copy.turnOffSuggestionConfirm,
-        action: actions.onConfirmTurnOff,
-      },
-    ],
-  });
-
-  try {
-    await menu.popup(undefined, getCurrentWindow());
-    return true;
-  } finally {
-    await menu.close();
-  }
+  return popupPetMenu([
+    { id: "pet-turn-off-suggestion-header", text: copy.turnOffSuggestionHeader, enabled: false },
+    {
+      id: "pet-turn-off-suggestion-drift-only",
+      text: copy.turnOffSuggestionDriftOnly,
+      action: actions.onChooseDriftOnly,
+    },
+    {
+      id: "pet-turn-off-suggestion-confirm",
+      text: copy.turnOffSuggestionConfirm,
+      action: actions.onConfirmTurnOff,
+    },
+  ]);
 }

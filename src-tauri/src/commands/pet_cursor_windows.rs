@@ -37,6 +37,17 @@ pub(super) fn cursor_position() -> Result<PhysicalPosition<f64>, String> {
     Ok(PhysicalPosition::new(point.x as f64, point.y as f64))
 }
 
+/// Match pointer coordinates to the HWND's current physical rendering scale.
+/// Tao's cached scale can retain the launch DPI after a live display change.
+pub(super) fn window_scale_factor(window: &WebviewWindow) -> Result<f64, String> {
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
+    let dpi = unsafe { GetDpiForWindow(hwnd) };
+    if dpi == 0 {
+        return Err("Pet display DPI is unavailable".into());
+    }
+    Ok(dpi as f64 / 96.0)
+}
+
 pub(super) fn pointer_pressed() -> bool {
     // Only the high bit is current state. The low, since-last-call bit is not
     // reliable across processes. Either physical mouse button cancels, also

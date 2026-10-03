@@ -672,7 +672,7 @@ pub(super) fn capture_pet_panel_mouse_down(
             "pet_panel::capture_mouse_down",
             move |window| {
                 let origin = window.outer_position().map_err(|error| error.to_string())?;
-                let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+                let dpi = super::pet_cursor_windows::window_scale_factor(&window)?;
                 pet_mouse_down_anchor(
                     Some("mouse"),
                     client,
@@ -990,7 +990,7 @@ pub(super) fn perform_pet_panel_drag(
     } else {
         (
             super::pet_cursor_windows::cursor_position()?,
-            window.scale_factor().map_err(|error| error.to_string())?,
+            super::pet_cursor_windows::window_scale_factor(window)?,
         )
     };
     let gesture_started = Instant::now();
@@ -1011,7 +1011,7 @@ pub(super) fn perform_pet_panel_drag(
         } else {
             let pointer = super::pet_cursor_windows::cursor_position()?;
             let origin = window.outer_position().map_err(|error| error.to_string())?;
-            let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+            let dpi = super::pet_cursor_windows::window_scale_factor(&window)?;
             current_pet_render_geometry().canonical_point_at_window((
                 (pointer.x - origin.x as f64) / dpi,
                 (pointer.y - origin.y as f64) / dpi,

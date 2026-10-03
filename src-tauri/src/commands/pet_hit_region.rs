@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -55,6 +55,74 @@ static HIT_REGION_PRESS: Mutex<PressState> = Mutex::new(PressState {
     active: false,
     owned_by_pet: false,
 });
+
+/// Two memory-only observations, not a pointer history. Read-only Lab bounds
+/// can compare a real native press with renderer delivery without changing the
+/// input policy or dispatching synthetic events.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsPetInputSample {
+    sampled_at_ms: u64,
+    scale_factor: f64,
+    window_client_x: f64,
+    window_client_y: f64,
+    mask_revision: u64,
+    mask_span_count: usize,
+    mask_inside: bool,
+    button_down: bool,
+    interactive: bool,
+    ignored_cursor_events_before_apply: Option<bool>,
+    ignored_cursor_events: Option<bool>,
+    policy_applied: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsPetInputDiagnostics {
+    latest: Option<WindowsPetInputSample>,
+    last_press: Option<WindowsPetInputSample>,
+    renderer_pointer_down_count: u64,
+    drag_request_count: u64,
+}
+
+#[cfg(any(target_os = "windows", test))]
+impl WindowsPetInputDiagnostics {
+    fn observe(&mut self, sample: WindowsPetInputSample) {
+        if sample.button_down && !self.latest.as_ref().is_some_and(|last| last.button_down) {
+            self.last_press = Some(sample.clone());
+        }
+        self.latest = Some(sample);
+    }
+}
+
+#[cfg(target_os = "windows")]
+static WINDOWS_INPUT_DIAGNOSTICS: Mutex<WindowsPetInputDiagnostics> =
+    Mutex::new(WindowsPetInputDiagnostics {
+        latest: None,
+        last_press: None,
+        renderer_pointer_down_count: 0,
+        drag_request_count: 0,
+    });
+
+#[cfg(target_os = "windows")]
+pub(super) fn windows_pet_input_diagnostics() -> WindowsPetInputDiagnostics {
+    WINDOWS_INPUT_DIAGNOSTICS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone()
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn record_windows_renderer_pointer_down() {
+    let mut state = WINDOWS_INPUT_DIAGNOSTICS.lock().unwrap_or_else(|error| error.into_inner());
+    state.renderer_pointer_down_count = state.renderer_pointer_down_count.saturating_add(1);
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn record_windows_drag_request() {
+    let mut state = WINDOWS_INPUT_DIAGNOSTICS.lock().unwrap_or_else(|error| error.into_inner());
+    state.drag_request_count = state.drag_request_count.saturating_add(1);
+}
 pub fn reset_pet_hit_region() {
     if let Ok(mut state) = HIT_REGION.lock() {
         clear_hit_region_input(&mut state);
@@ -187,26 +255,53 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
     }
     #[cfg(target_os = "windows")]
     {
-        let pointer = window
-            .app_handle()
-            .cursor_position()
-            .map_err(|error| error.to_string())?;
+        let pointer = super::pet_cursor_windows::cursor_position()?;
         let position = window.outer_position().map_err(|error| error.to_string())?;
-        let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+        let dpi = super::pet_cursor_windows::window_scale_factor(window)?;
         let scene_rect = current_pet_render_geometry().physical_scene_rect(dpi);
-        let inside = HIT_REGION
+        let (inside, mask_revision, mask_span_count) = HIT_REGION
             .lock()
             .map(|state| {
-                hit_test_physical(
-                    &state,
-                    pointer.x - position.x as f64,
-                    pointer.y - position.y as f64,
-                    scene_rect,
+                (
+                    hit_test_physical(
+                        &state,
+                        pointer.x - position.x as f64,
+                        pointer.y - position.y as f64,
+                        scene_rect,
+                    ),
+                    state.revision,
+                    state.spans.len() / 3,
                 )
             })
-            .unwrap_or(false);
-        let interactive = resolve_windows_press_interaction(inside, windows_mouse_button_down());
-        set_windows_pet_interactive(window, interactive)
+            .unwrap_or((false, 0, 0));
+        let button_down = windows_mouse_button_down();
+        let interactive = resolve_windows_press_interaction(inside, button_down);
+        let ignored_cursor_events_before_apply =
+            super::windows_overlay::windows_overlay_ignores_cursor_events(window).ok();
+        let result = set_windows_pet_interactive(window, interactive);
+        let sample = WindowsPetInputSample {
+            sampled_at_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            scale_factor: dpi,
+            window_client_x: (pointer.x - position.x as f64) / dpi,
+            window_client_y: (pointer.y - position.y as f64) / dpi,
+            mask_revision,
+            mask_span_count,
+            mask_inside: inside,
+            button_down,
+            interactive,
+            ignored_cursor_events_before_apply,
+            ignored_cursor_events:
+                super::windows_overlay::windows_overlay_ignores_cursor_events(window).ok(),
+            policy_applied: result.is_ok(),
+        };
+        WINDOWS_INPUT_DIAGNOSTICS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .observe(sample);
+        result
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -728,6 +823,43 @@ fn content_point_from_top_left(
 mod tests {
     use super::*;
 
+    #[test]
+    fn input_diagnostics_preserve_the_press_edge_after_hover_and_release() {
+        let sample = |at, down, inside| WindowsPetInputSample {
+            sampled_at_ms: at,
+            scale_factor: 2.25,
+            window_client_x: 84.0,
+            window_client_y: 96.0,
+            mask_revision: 7,
+            mask_span_count: 192,
+            mask_inside: inside,
+            button_down: down,
+            interactive: inside,
+            ignored_cursor_events_before_apply: Some(true),
+            ignored_cursor_events: Some(!inside),
+            policy_applied: true,
+        };
+        let mut state = WindowsPetInputDiagnostics::default();
+        state.observe(sample(1, false, true));
+        state.observe(sample(2, true, true));
+        // Dragging outside the body and then looking at Lab bounds must not
+        // replace the original mask/pointer/policy observation at button down.
+        state.observe(sample(3, true, false));
+        state.observe(sample(4, false, false));
+        assert_eq!(state.last_press.as_ref().unwrap().sampled_at_ms, 2);
+        assert!(state.last_press.as_ref().unwrap().mask_inside);
+        assert_eq!(state.latest.as_ref().unwrap().sampled_at_ms, 4);
+        let readback = serde_json::to_value(state.clone()).unwrap();
+        assert_eq!(readback["lastPress"]["ignoredCursorEventsBeforeApply"], true);
+        assert_eq!(readback["lastPress"]["ignoredCursorEvents"], false);
+        assert_eq!(readback["lastPress"]["policyApplied"], true);
+        assert_eq!(state.last_press.as_ref().unwrap().sampled_at_ms, 2);
+        state.observe(sample(5, true, false));
+        assert_eq!(state.last_press.as_ref().unwrap().sampled_at_ms, 5);
+        assert!(!state.last_press.as_ref().unwrap().mask_inside);
+        assert_eq!(readback["lastPress"]["sampledAtMs"], 2);
+    }
+
     fn state(mirrored: bool) -> HitRegionState {
         HitRegionState {
             generation: "test".into(),
@@ -916,10 +1048,25 @@ mod tests {
     }
 
     #[test]
+    fn live_dpi_body_input_must_follow_the_current_physical_scene() {
+        let region = state(false);
+        for dpi in [1.0, 1.25, 1.5, 1.75, 2.0, 2.25] {
+            let pointer = ((18.0 + 20.0) * dpi, (64.0 + 10.0) * dpi);
+            let current = (18.0 * dpi, 64.0 * dpi, 144.0 * dpi, 99.0 * dpi);
+            assert!(hit_test_physical(&region, pointer.0, pointer.1, current));
+            if dpi != 1.0 {
+                // The native body has scaled while a launch-DPI mask treats
+                // this same visible pixel as transparent, forwarding input.
+                assert!(!hit_test_physical(&region, pointer.0, pointer.1, (18.0, 64.0, 144.0, 99.0)));
+            }
+        }
+    }
+
+    #[test]
     fn padded_scene_preserves_body_input_and_all_four_gutters_pass_through() {
         let region = state(false);
         for pet_scale in [0.5, 0.75, 1.0, 1.25] {
-            for dpi in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            for dpi in [1.0, 1.25, 1.5, 1.75, 2.0, 2.25] {
                 let scale = pet_scale * dpi;
                 let rect = (18.0 * scale, 64.0 * scale, 144.0 * scale, 99.0 * scale);
                 assert!(hit_test_physical(&region, (18.0 + 20.0) * scale, (64.0 + 10.0) * scale, rect));

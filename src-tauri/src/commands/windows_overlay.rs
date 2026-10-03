@@ -536,7 +536,16 @@ fn apply_native_overlay_policy(
     unsafe {
         let current = read_windows_overlay_extended_style(hwnd)
             .map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
-        let mut desired = current | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        let mut desired = current | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        if reference_data == PET_DPI_OBSERVER_REFERENCE {
+            // Establish WebView composition with the first native reveal
+            // before adding Layered. Adding it while this pet is still hidden
+            // makes body input miss after live DPI increases on Windows.
+            // The reveal commits Layered in the same owner-thread transaction.
+            desired &= !WS_EX_LAYERED;
+        } else {
+            desired |= WS_EX_LAYERED;
+        }
         desired &= !WS_EX_APPWINDOW;
         if mode.ignores_pointer() {
             desired |= WS_EX_TRANSPARENT;
@@ -583,6 +592,27 @@ fn apply_native_overlay_policy(
         }
     }
     Ok(())
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn reveal_windows_pet_surface(
+    initialize_layered: bool,
+    show: impl FnOnce(),
+    initialize: impl FnOnce() -> Result<(), String>,
+    position: impl FnOnce() -> Result<(), String>,
+    conceal: impl FnOnce(),
+) -> Result<(), String> {
+    show();
+    let result = (|| {
+        if initialize_layered {
+            initialize()?;
+        }
+        position()
+    })();
+    if result.is_err() {
+        conceal();
+    }
+    result
 }
 
 pub fn configure_windows_overlay(
@@ -632,6 +662,18 @@ pub fn set_windows_overlay_click_through(
     }
 }
 
+#[cfg(target_os = "windows")]
+pub(super) fn windows_overlay_ignores_cursor_events(
+    window: &WebviewWindow,
+) -> Result<bool, String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::WS_EX_TRANSPARENT;
+    if !super::pet_mode::pet_native_thread_is_current(window)? {
+        return Err("Windows overlay input diagnostics require its owner thread".to_string());
+    }
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
+    Ok(read_windows_overlay_extended_style(hwnd)? & WS_EX_TRANSPARENT != 0)
+}
+
 /// Read shown/hidden state, not occlusion by another window. Tao's Windows
 /// visibility getter also reads this native bit; its style setters have a
 /// separate cached VISIBLE flag that our no-activation setup must not rebuild.
@@ -674,11 +716,73 @@ pub fn hide_windows_overlay(window: &WebviewWindow) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 pub fn show_windows_overlay(window: &WebviewWindow) -> Result<(), String> {
+    use windows_sys::Win32::Foundation::{GetLastError, SetLastError, ERROR_SUCCESS};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-        SWP_SHOWWINDOW, SW_SHOWNOACTIVATE,
+        SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNOACTIVATE,
+        WS_EX_LAYERED,
     };
 
+    if window.label() == super::pet_mode::PET_MODE_WINDOW_LABEL {
+        if !super::pet_mode::pet_native_thread_is_current(window)? {
+            return Err("Windows pet reveal requires its owner thread".into());
+        }
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
+        let current = read_windows_overlay_extended_style(hwnd)?;
+        let initialize_layered = current & WS_EX_LAYERED == 0;
+        // The existing presentation gates have already prepared the scene,
+        // mask, position, and pointer policy. There is no sleep or event-loop
+        // hop between this no-activation reveal and its Layered commit. Retain
+        // every pointer/style bit, and never reset Layered on DPI or re-show.
+        return reveal_windows_pet_surface(
+            initialize_layered,
+            || unsafe {
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            },
+            || unsafe {
+                SetLastError(ERROR_SUCCESS);
+                let previous =
+                    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (current | WS_EX_LAYERED) as isize);
+                if previous == 0 && GetLastError() != ERROR_SUCCESS {
+                    return Err(
+                        windows_error("failed to initialize Windows pet composition").to_string(),
+                    );
+                }
+                Ok(())
+            },
+            || unsafe {
+                let frame = if initialize_layered {
+                    SWP_FRAMECHANGED
+                } else {
+                    0
+                };
+                if SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW | frame,
+                ) == 0
+                {
+                    return Err(
+                        windows_error("failed to reveal Windows pet without activation")
+                            .to_string(),
+                    );
+                }
+                Ok(())
+            },
+            || unsafe {
+                // A failed first commit stays hidden and retryable; restoring
+                // the original style also retains its current pointer policy.
+                ShowWindow(hwnd, SW_HIDE);
+                if initialize_layered {
+                    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, current as isize);
+                }
+            },
+        );
+    }
     let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
     // ShowWindow returning zero only means the window was previously hidden.
     // SetWindowPos is the operation whose failure is actionable.
@@ -706,6 +810,77 @@ pub fn show_windows_overlay(window: &WebviewWindow) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pet_first_reveal_commits_layered_after_show_and_reshow_does_not_reset_it() {
+        use std::cell::RefCell;
+        for first in [true, false] {
+            let calls = RefCell::new(Vec::new());
+            reveal_windows_pet_surface(
+                first,
+                || calls.borrow_mut().push("show_noactivate"),
+                || {
+                    calls.borrow_mut().push("layered");
+                    Ok(())
+                },
+                || {
+                    calls.borrow_mut().push("position_noactivate");
+                    Ok(())
+                },
+                || panic!("successful reveal must not conceal the pet"),
+            )
+            .unwrap();
+            assert_eq!(
+                *calls.borrow(),
+                if first {
+                    vec!["show_noactivate", "layered", "position_noactivate"]
+                } else {
+                    vec!["show_noactivate", "position_noactivate"]
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn failed_pet_reveal_conceals_without_reporting_or_continuing_success() {
+        use std::cell::RefCell;
+        for fail_init in [true, false] {
+            let calls = RefCell::new(Vec::new());
+            let result = reveal_windows_pet_surface(
+                true,
+                || calls.borrow_mut().push("show"),
+                || {
+                    calls.borrow_mut().push("layered");
+                    if fail_init {
+                        Err("style failed".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    calls.borrow_mut().push("position");
+                    Err("position failed".into())
+                },
+                || calls.borrow_mut().push("conceal"),
+            );
+            assert_eq!(
+                result.unwrap_err(),
+                if fail_init {
+                    "style failed"
+                } else {
+                    "position failed"
+                }
+            );
+            assert_eq!(
+                *calls.borrow(),
+                if fail_init {
+                    vec!["show", "layered", "conceal"]
+                } else {
+                    vec!["show", "layered", "position", "conceal"]
+                }
+            );
+        }
+    }
 
     #[test]
     fn dpi_reevaluation_coalesces_broadcasts_before_the_owner_apply() {

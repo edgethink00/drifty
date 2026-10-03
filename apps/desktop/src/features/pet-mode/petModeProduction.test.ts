@@ -404,6 +404,13 @@ describe("pet promoted out of Dev", () => {
     expect(heldGuard).toBeLessThan(hideBranch);
   });
 
+  it("restores the main window only for explicit dashboard and settings opens", () => {
+    const action = petQuickControlsRustContract.slice(petQuickControlsRustContract.indexOf("pub async fn pet_quick_controls_action"));
+    expect(action).toContain('if action == "openDashboard" || action == "openSettings"');
+    expect(action).toContain("crate::reveal_main_window(&app)");
+    expect(action.indexOf('main.emit("pet-quick-controls-action"')).toBeLessThan(action.indexOf("crate::reveal_main_window(&app)"));
+  });
+
   it("offers the visibility toggle in the account menu", () => {
     expect(accountMenu).toContain('t("settings.pet.show")');
     expect(accountMenu).toContain('role="menuitemcheckbox"');

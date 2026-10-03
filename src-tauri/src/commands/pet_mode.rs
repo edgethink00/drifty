@@ -656,12 +656,18 @@ pub struct PetModeInputBounds {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub windows_dpi_events: Option<PetModeWindowsDpiEvents>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub windows_input: Option<super::pet_hit_region::WindowsPetInputDiagnostics>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub windows_surface: Option<WindowsPetSurfaceBounds>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_render_width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_render_height: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sampled_at_ms: Option<u64>,
 }
+
+use super::pet_surface::WindowsPetSurfaceBounds;
 
 /// Bounded, memory-only pet message and native policy call observations.
 /// These are receipts, not proof that a scale or rendering frame was applied.
@@ -1175,6 +1181,9 @@ fn schedule_windows_pet_dpi_refresh(window: WebviewWindow) {
                     "[pet-mode-dpi] scale={:?} frame_before={before:?} frame_after={:?}",
                     window.scale_factor(),
                     window.outer_size(),
+                );
+                super::pet_quick_controls::refresh_windows_quick_controls_dpi(
+                    window.app_handle().clone(),
                 );
                 result
             },
@@ -2378,6 +2387,8 @@ pub fn pet_mode_report_contact(
 
 #[tauri::command]
 pub fn pet_mode_report_pointer(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    super::pet_hit_region::record_windows_renderer_pointer_down();
     if let Some(main) = app.get_webview_window("main") {
         let at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -2886,6 +2897,8 @@ pub async fn pet_mode_begin_drag(
     pointer_type: Option<String>,
     manual_request_id: Option<String>,
 ) -> Result<PetModeNativeDragResult, String> {
+    #[cfg(target_os = "windows")]
+    super::pet_hit_region::record_windows_drag_request();
     let visibility_generation = PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst);
     let claim_epoch = PET_MODE_DRAG_SESSION
         .lock()
@@ -3032,6 +3045,7 @@ fn windows_dpi_awareness_label(
     "unknown".to_string()
 }
 
+
 fn read_pet_mode_input_bounds(window: &WebviewWindow) -> Result<PetModeInputBounds, String> {
     let position = window.outer_position().map_err(|error| error.to_string())?;
     let size = window.outer_size().map_err(|error| error.to_string())?;
@@ -3086,6 +3100,14 @@ fn read_pet_mode_input_bounds(window: &WebviewWindow) -> Result<PetModeInputBoun
     );
     #[cfg(not(target_os = "windows"))]
     let windows_dpi_events = None;
+    #[cfg(target_os = "windows")]
+    let windows_input = Some(super::pet_hit_region::windows_pet_input_diagnostics());
+    #[cfg(not(target_os = "windows"))]
+    let windows_input = None;
+    #[cfg(target_os = "windows")]
+    let windows_surface = Some(super::pet_surface::read_windows_pet_surface_bounds(window)?);
+    #[cfg(not(target_os = "windows"))]
+    let windows_surface = None;
     Ok(PetModeInputBounds {
         x: position.x,
         y: position.y,
@@ -3098,6 +3120,8 @@ fn read_pet_mode_input_bounds(window: &WebviewWindow) -> Result<PetModeInputBoun
         thread_dpi_awareness,
         current_monitor_scale_factor,
         windows_dpi_events,
+        windows_input,
+        windows_surface,
         expected_render_width,
         expected_render_height,
         sampled_at_ms,
