@@ -507,6 +507,36 @@ mod tests {
         assert_eq!(attempts, 1);
     }
 
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_worker_shutdown_bounds_an_in_flight_process_inspection() {
+        let dir = tempfile::tempdir().expect("owned recovery inspection fixture");
+        let pid_path = dir.path().join("inspection.pid");
+        let worker_pid_path = pid_path.clone();
+        let worker = TrackerRecoveryWorker::default();
+        worker.start(move |_| {
+            let mut command = std::process::Command::new("/usr/bin/python3");
+            command.args(["-c", "import os,pathlib,sys,time;pathlib.Path(sys.argv[1]).write_text(str(os.getpid()));time.sleep(3);print('synthetic daemon')"]);
+            command.arg(&worker_pid_path);
+            assert!(crate::tracker::inspect_process_command_for_test(command).is_err());
+            HEALTH_POLL_INTERVAL
+        }).expect("start real recovery worker");
+
+        let ready_deadline = Instant::now() + HEALTH_POLL_INTERVAL + Duration::from_secs(5);
+        while !pid_path.exists() && Instant::now() < ready_deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let ready = pid_path.exists();
+        let started = Instant::now();
+        let failed = worker.shutdown();
+        assert!(ready, "inspection did not start before shutdown");
+        assert!(!failed, "recovery worker panicked during inspection");
+        assert!(started.elapsed() < Duration::from_secs(2), "joining the in-flight worker exceeded its exit budget");
+        let pid = std::fs::read_to_string(pid_path).unwrap();
+        assert!(!std::process::Command::new("/bin/kill").args(["-0", pid.trim()]).stderr(std::process::Stdio::null()).status().unwrap().success());
+    }
+
     #[test]
     fn recovery_worker_starts_once_and_shutdown_interrupts_its_wait() {
         let worker = TrackerRecoveryWorker::default();

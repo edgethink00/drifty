@@ -974,16 +974,96 @@ fn tracker_daemon_command_matches(command: &str, runtime: &TrackerRuntime, db: &
 /// and safely simplifies verbatim paths in windows_daemon_identity.
 #[cfg(unix)]
 fn daemon_process_command_line(pid: u32) -> Result<Option<String>, TrackerError> {
-    let output = Command::new("ps")
-        .args(["-p", &pid.to_string(), "-o", "command="])
-        .output()
+    let mut command = Command::new("ps");
+    command.args(["-p", &pid.to_string(), "-o", "command="]);
+    daemon_process_command_line_from(command)
+}
+
+#[cfg(all(test, unix))]
+pub(crate) fn inspect_process_command_for_test(
+    command: Command,
+) -> Result<Option<String>, TrackerError> {
+    daemon_process_command_line_from(command)
+}
+
+#[cfg(unix)]
+fn daemon_process_command_line_from(mut command: Command) -> Result<Option<String>, TrackerError> {
+    use std::io::Read;
+    use std::os::fd::AsRawFd;
+
+    const INSPECTION_TIMEOUT: Duration = Duration::from_secs(1);
+    const MAX_INSPECTION_OUTPUT: usize = 256 * 1024;
+
+    let started = Instant::now();
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
         .map_err(|error| TrackerError::CommandFailed(error.to_string()))?;
-    if !output.status.success() {
-        return Ok(None);
+    let result = (|| {
+        let mut stdout = child.stdout.take().ok_or_else(|| {
+            TrackerError::CommandFailed("process inspection stdout unavailable".into())
+        })?;
+        // Drain on this thread without blocking on pipe capacity or an inherited
+        // pipe after child exit. No reader thread can outlive the exit deadline.
+        let fd = stdout.as_raw_fd();
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        if flags == -1 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1
+        {
+            return Err(TrackerError::CommandFailed(
+                std::io::Error::last_os_error().to_string(),
+            ));
+        }
+
+        let mut output = Vec::new();
+        let mut eof = false;
+        let mut buffer = [0_u8; 8192];
+        loop {
+            loop {
+                if started.elapsed() >= INSPECTION_TIMEOUT {
+                    return Err(TrackerError::CommandFailed(
+                        "process inspection timed out".into(),
+                    ));
+                }
+                match stdout.read(&mut buffer) {
+                    Ok(0) => {
+                        eof = true;
+                        break;
+                    }
+                    Ok(count) => {
+                        if output.len() + count > MAX_INSPECTION_OUTPUT {
+                            return Err(TrackerError::CommandFailed(
+                                "process inspection output exceeded limit".into(),
+                            ));
+                        }
+                        output.extend_from_slice(&buffer[..count]);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(error) => return Err(TrackerError::CommandFailed(error.to_string())),
+                }
+            }
+            if let Some(status) = child
+                .try_wait()
+                .map_err(|error| TrackerError::CommandFailed(error.to_string()))?
+            {
+                if !status.success() {
+                    return Ok(None);
+                }
+                if eof {
+                    return Ok(Some(String::from_utf8_lossy(&output).trim().to_string()));
+                }
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    })();
+    if result.is_err() {
+        // This handle owns only the inspection child, never the inspected daemon.
+        let _ = child.kill();
+        let _ = child.wait();
     }
-    Ok(Some(
-        String::from_utf8_lossy(&output.stdout).trim().to_string(),
-    ))
+    result
 }
 
 fn invoke_one_shot(
@@ -2646,6 +2726,97 @@ mod tests {
             &runtime,
             db,
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_inspection_returns_before_the_exit_cleanup_budget() {
+        let dir = tempfile::tempdir().expect("owned inspection fixture");
+        let pid_path = dir.path().join("inspection.pid");
+        let mut command = Command::new("/usr/bin/python3");
+        command.args(["-c", "import os,pathlib,sys,time;pathlib.Path(sys.argv[1]).write_text(str(os.getpid()));time.sleep(3);print('synthetic daemon')"]);
+        command.arg(&pid_path);
+        let started = Instant::now();
+        let result = daemon_process_command_line_from(command);
+        assert!(
+            matches!(&result, Err(TrackerError::CommandFailed(message)) if message == "process inspection timed out"),
+            "a stalled inspection must time out: {result:?}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "inspection exceeded exit budget: {:?}",
+            started.elapsed()
+        );
+        let pid = std::fs::read_to_string(pid_path).expect("child started");
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", pid.trim()])
+                .stderr(Stdio::null())
+                .status()
+                .expect("inspect fixture pid")
+                .success(),
+            "timed-out inspection was not reaped"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_inspection_preserves_trimmed_output_and_unavailable_pid() {
+        let mut command = Command::new("/usr/bin/python3");
+        command.args(["-c", "print('  synthetic daemon  ')"]);
+        assert_eq!(
+            daemon_process_command_line_from(command).unwrap(),
+            Some("synthetic daemon".into())
+        );
+        let mut command = Command::new("/usr/bin/python3");
+        command.args(["-c", "import sys;sys.exit(9)"]);
+        assert_eq!(daemon_process_command_line_from(command).unwrap(), None);
+        assert!(daemon_process_command_line(std::process::id())
+            .unwrap()
+            .is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_inspection_drains_output_larger_than_pipe_capacity() {
+        let mut command = Command::new("/usr/bin/python3");
+        command.args([
+            "-c",
+            "import sys;sys.stdout.write('x'*100000);sys.stdout.flush()",
+        ]);
+        let result = daemon_process_command_line_from(command).unwrap().unwrap();
+        assert_eq!(result.len(), 100000);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_inspection_rejects_oversized_output_without_waiting_for_child() {
+        let mut command = Command::new("/usr/bin/python3");
+        command.args([
+            "-c",
+            "import sys,time;sys.stdout.write('x'*1000000);sys.stdout.flush();time.sleep(3)",
+        ]);
+        let started = Instant::now();
+        let result = daemon_process_command_line_from(command);
+        assert!(
+            matches!(result, Err(TrackerError::CommandFailed(message)) if message == "process inspection output exceeded limit")
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_inspection_still_waits_for_child_after_stdout_eof() {
+        let mut command = Command::new("/usr/bin/python3");
+        command.args(["-c", "import os,time;os.close(1);time.sleep(3)"]);
+        let started = Instant::now();
+        let result = daemon_process_command_line_from(command);
+        assert!(matches!(
+            result,
+            Err(TrackerError::CommandFailed(message)) if message == "process inspection timed out"
+        ));
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 
     #[cfg(unix)]

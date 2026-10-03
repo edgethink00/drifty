@@ -1006,6 +1006,7 @@ dependencies = [
  "dunce",
  "flate2",
  "keyring",
+ "libc",
  "log",
  "muda",
  "objc2",
