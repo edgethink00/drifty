@@ -1401,15 +1401,63 @@ fn kill_serve_process(mut proc: ServeProcess) {
     let _ = SERVE_CHILD_PID.compare_exchange(pid, 0, Ordering::SeqCst, Ordering::SeqCst);
 }
 
-fn serve_round_trip(proc: &mut ServeProcess, line: &str) -> Result<String, TrackerError> {
+#[derive(Clone, Copy)]
+struct ServeInvocationBudget {
+    started: Instant,
+    timeout: Duration,
+}
+
+impl ServeInvocationBudget {
+    fn new() -> Self {
+        Self {
+            started: Instant::now(),
+            timeout: serve_round_trip_timeout(),
+        }
+    }
+
+    fn remaining(self) -> Result<Duration, TrackerError> {
+        let remaining = self.timeout.saturating_sub(self.started.elapsed());
+        if remaining.is_zero() {
+            Err(TrackerError::ServeTimedOut(self.timeout))
+        } else {
+            Ok(remaining)
+        }
+    }
+}
+
+const SERVE_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(5);
+
+fn lock_serve_slot_until<'a>(
+    slot: &'a Mutex<Option<ServeProcess>>,
+    budget: ServeInvocationBudget,
+) -> Result<std::sync::MutexGuard<'a, Option<ServeProcess>>, TrackerError> {
+    loop {
+        let remaining = budget.remaining()?;
+        match slot.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(TryLockError::Poisoned(_)) => {
+                return Err(TrackerError::CommandFailed("serve lock poisoned".into()));
+            }
+            Err(TryLockError::WouldBlock) => {
+                thread::sleep(remaining.min(SERVE_LOCK_POLL_INTERVAL));
+            }
+        }
+    }
+}
+
+fn serve_round_trip(
+    proc: &mut ServeProcess,
+    line: &str,
+    budget: ServeInvocationBudget,
+) -> Result<String, TrackerError> {
     proc.stdin
         .write_all(line.as_bytes())
         .map_err(serve_io_err)?;
     proc.stdin.write_all(b"\n").map_err(serve_io_err)?;
     proc.stdin.flush().map_err(serve_io_err)?;
 
-    let timeout = serve_round_trip_timeout();
-    match proc.responses.recv_timeout(timeout) {
+    let remaining = budget.remaining()?;
+    match proc.responses.recv_timeout(remaining) {
         Ok(Ok(response)) if response.is_empty() => Err(TrackerError::CommandFailed(
             "serve process closed its output".into(),
         )),
@@ -1419,7 +1467,7 @@ fn serve_round_trip(proc: &mut ServeProcess, line: &str) -> Result<String, Track
             // A wedged sidecar would otherwise hold the serve mutex forever;
             // kill it so the slot resets and a later call respawns.
             let _ = proc.child.kill();
-            Err(TrackerError::ServeTimedOut(timeout))
+            Err(TrackerError::ServeTimedOut(budget.timeout))
         }
         Err(RecvTimeoutError::Disconnected) => Err(TrackerError::CommandFailed(
             "serve reader thread terminated".into(),
@@ -1462,11 +1510,11 @@ fn serve_request_with_lock_mode(
     retry_safety: SidecarCommandRetrySafety,
     lock_mode: ServeLockMode,
 ) -> Result<String, TrackerError> {
+    // Lock admission and response waiting spend one invocation budget.
+    let budget = ServeInvocationBudget::new();
     let slot = serve_slot();
     let mut guard = match lock_mode {
-        ServeLockMode::Wait => slot
-            .lock()
-            .map_err(|_| TrackerError::CommandFailed("serve lock poisoned".into()))?,
+        ServeLockMode::Wait => lock_serve_slot_until(slot, budget)?,
         ServeLockMode::SkipIfBusy => match slot.try_lock() {
             Ok(guard) => guard,
             Err(TryLockError::WouldBlock) => {
@@ -1477,6 +1525,8 @@ fn serve_request_with_lock_mode(
             }
         },
     };
+
+    budget.remaining()?;
 
     // Discard a process spawned for a different runtime/db (paths can change
     // between dev runs); it will be respawned below.
@@ -1494,6 +1544,7 @@ fn serve_request_with_lock_mode(
     let retry_attempts = serve_retry_attempts(retry_safety);
     let mut last_err = TrackerError::CommandFailed("serve process unavailable".into());
     for _ in 0..retry_attempts {
+        budget.remaining()?;
         if guard.is_none() {
             *guard = Some(spawn_serve_process(runtime, db)?);
         }
@@ -1505,9 +1556,10 @@ fn serve_request_with_lock_mode(
         }
         let line = framed.to_string();
 
+        budget.remaining()?;
         let attempt = {
             match guard.as_mut() {
-                Some(proc) => serve_round_trip(proc, &line),
+                Some(proc) => serve_round_trip(proc, &line, budget),
                 None => Err(TrackerError::CommandFailed(
                     "serve process unavailable".into(),
                 )),
@@ -3176,6 +3228,107 @@ done
         assert!(response.contains("pong"), "unexpected response {response}");
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+
+    #[cfg(unix)]
+    #[test]
+    fn serve_waiting_calls_share_the_invocation_timeout_budget() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
+        shutdown_serve_process();
+        let dir = temp_dir_path("serve-lock-budget");
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let script = dir.join("fake-hung-serve");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nif [ \"$1\" = \"warmup\" ]; then exit 0; fi\nexec sleep 600\n",
+        )
+        .expect("write fake sidecar");
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(Command::new(&script)
+            .arg("warmup")
+            .status()
+            .unwrap()
+            .success());
+        const TIMEOUT_MS: u64 = 300;
+        std::env::set_var(
+            "DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS",
+            TIMEOUT_MS.to_string(),
+        );
+        let runtime = std::sync::Arc::new(TrackerRuntime::packaged_sidecar(script));
+        let db = std::sync::Arc::new(dir.join("db.sqlite3"));
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
+        let handles: Vec<_> = (0..3)
+            .map(|_| {
+                let runtime = runtime.clone();
+                let db = db.clone();
+                let barrier = barrier.clone();
+                thread::spawn(move || {
+                    barrier.wait();
+                    let started = Instant::now();
+                    let result = serve_request(
+                        &runtime,
+                        &db,
+                        &json!({"command":"ping","payload":{}}),
+                        SidecarCommandRetrySafety::Mutation,
+                    );
+                    (started.elapsed(), result)
+                })
+            })
+            .collect();
+        barrier.wait();
+        let outcomes: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        std::env::remove_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS");
+        shutdown_serve_process();
+        std::fs::remove_dir_all(dir).unwrap();
+        for (_, result) in &outcomes {
+            assert!(
+                matches!(result, Err(TrackerError::ServeTimedOut(d)) if *d == Duration::from_millis(TIMEOUT_MS))
+            );
+        }
+        let elapsed: Vec<_> = outcomes.iter().map(|(d, _)| d.as_millis()).collect();
+        eprintln!("concurrent serve durations_ms={elapsed:?}");
+        assert!(
+            outcomes
+                .iter()
+                .all(|(d, _)| *d < Duration::from_millis(650)),
+            "lock waiting must share the invocation budget: {elapsed:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn serve_waiter_timeout_does_not_submit_or_cancel_another_call() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
+        shutdown_serve_process();
+        let guard = serve_slot().lock().unwrap();
+        std::env::set_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS", "100");
+        let handle = thread::spawn(|| {
+            let runtime =
+                TrackerRuntime::packaged_sidecar(PathBuf::from("/never-spawn-qa-sidecar"));
+            let started = Instant::now();
+            let result = serve_request(
+                &runtime,
+                Path::new("/unused-qa-db"),
+                &json!({"command":"stop_tracking"}),
+                SidecarCommandRetrySafety::Mutation,
+            );
+            (started.elapsed(), result)
+        });
+        thread::sleep(Duration::from_millis(250));
+        drop(guard);
+        let (elapsed, result) = handle.join().unwrap();
+        std::env::remove_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS");
+        assert!(
+            matches!(result, Err(TrackerError::ServeTimedOut(d)) if d == Duration::from_millis(100)),
+            "waiter must expire before process submission: {result:?}"
+        );
+        assert!(
+            elapsed < Duration::from_millis(200),
+            "waiter took {elapsed:?}"
+        );
+        assert!(serve_slot().lock().unwrap().is_none());
     }
 
     #[test]
