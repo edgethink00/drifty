@@ -8,6 +8,9 @@ __pycache__/
 *.pyc
 Cargo.lock
 !src-tauri/Cargo.lock
+# The standalone Windows icon smoke crate is independently locked and built.
+!/scripts/qa/windows-icon-runtime-smoke/Cargo.lock
+/scripts/qa/windows-icon-runtime-smoke/target/
 # No trailing slash: also ignores a symlinked target/gen (a symlink is a file-mode
 # blob, so `target/` alone would let `git add -A` stage the artifact).
 src-tauri/target

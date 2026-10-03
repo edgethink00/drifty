@@ -1013,6 +1013,7 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-foundation",
  "objc2-quartz-core",
+ "quick-xml 0.39.4",
  "reqwest 0.12.28",
  "security-framework 3.7.0",
  "security-framework-sys",

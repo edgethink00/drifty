@@ -39,7 +39,7 @@ export function qaVersionFromEnvironment(env) {
   return version;
 }
 
-export function qaManifest(version, signature) {
+export function qaManifest(version, signature, baseUrl = QA_BASE) {
   assert.ok(QA_VERSIONS.includes(version));
   verifyUpdaterSignatureEnvelope(Buffer.from(signature, "utf8"));
   return {
@@ -47,15 +47,16 @@ export function qaManifest(version, signature) {
     notes: "Private Windows updater-cycle QA",
     pub_date: "2026-09-30T00:00:00Z",
     platforms: { "windows-x86_64": {
-      url: `${QA_BASE}/${version}-win/drifty_${version}_x64-setup.exe`, signature,
+      url: `${baseUrl}/${version}-win/drifty_${version}_x64-setup.exe`, signature,
     } },
   };
 }
 
-export async function startQaFeed({ root, records, controlFile, logFile }) {
+export async function startQaFeed({ root, records, controlFile, logFile, port = 19457 }) {
   assert.equal(records.length, 2);
   const assets = new Map();
   const manifests = new Map();
+  const manifestRecords = [];
   for (const [index, record] of records.entries()) {
     assert.equal(record.version, QA_VERSIONS[index]);
     assert.match(record.sha256, /^[a-f0-9]{64}$/u);
@@ -65,13 +66,14 @@ export async function startQaFeed({ root, records, controlFile, logFile }) {
     assert.equal(createHash("sha256").update(bytes).digest("hex"), record.sha256);
     assert.equal(bytes.subarray(0, 2).toString(), "MZ");
     const signature = (await readFile(`${file}.sig`, "utf8")).trim();
-    manifests.set(record.version, qaManifest(record.version, signature));
+    manifestRecords.push({ version: record.version, signature });
     assets.set(`/windows-updater-qa/${record.version}-win/drifty_${record.version}_x64-setup.exe`, bytes);
   }
   const requests = [];
+  let expectedHost;
   const server = createServer(async (request, response) => {
     try {
-      if (request.method !== "GET" || request.headers.host !== "127.0.0.1:19457") {
+      if (request.method !== "GET" || request.headers.host !== expectedHost) {
         response.writeHead(403).end(); return;
       }
       const state = JSON.parse(await readFile(controlFile, "utf8"));
@@ -114,9 +116,16 @@ export async function startQaFeed({ root, records, controlFile, logFile }) {
     } catch { response.destroy(); }
   });
   await new Promise((resolve, reject) => {
-    server.once("error", reject); server.listen(19457, "127.0.0.1", resolve);
+    server.once("error", reject); server.listen(port, "127.0.0.1", resolve);
   });
-  return { server, requests };
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  expectedHost = `127.0.0.1:${address.port}`;
+  const baseUrl = `http://${expectedHost}/windows-updater-qa`;
+  for (const record of manifestRecords) {
+    manifests.set(record.version, qaManifest(record.version, record.signature, baseUrl));
+  }
+  return { server, requests, baseUrl };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
