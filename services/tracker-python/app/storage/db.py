@@ -22,7 +22,7 @@ from app.storage.activity_segment_serialization import (
     serialize_dashboard_week_activity_row,
     serialize_project_trend_activity_row,
 )
-from app.storage.timestamps import parse_iso_datetime
+from app.storage.timestamps import history_ends_after, parse_iso_datetime
 from app.tracker.capture_timeline import CaptureMutation, CaptureTimeline, CaptureTiming, CaptureTrim
 from app.storage.database_maintenance import (
     DatabasePreparationResult,
@@ -217,6 +217,7 @@ class TrackerDatabase:
         else:
             connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
+        connection.create_function("history_ends_after", 2, history_ends_after)
         connection.execute("PRAGMA foreign_keys = ON")
         # The daemon and the serve process write this database concurrently
         # (and delete_history_range runs VACUUM); wait for a contended lock
@@ -1646,12 +1647,17 @@ class TrackerDatabase:
         start: str | None,
         end: str | None,
         table_name: str | None = None,
+        *,
+        strict_start: bool = False,
     ) -> str:
         started_at = f"{table_name}.started_at" if table_name else "started_at"
         ended_at = f"{table_name}.ended_at" if table_name else "ended_at"
         if start:
             query += f" AND datetime({ended_at}) >= datetime(?)"
             params.append(TrackerDatabase._normalize_range_bound(start))
+            if strict_start:
+                query += f" AND history_ends_after({ended_at}, ?)"
+                params.append(TrackerDatabase._normalize_range_bound(start))
         if end:
             query += f" AND datetime({started_at}) <= datetime(?)"
             params.append(TrackerDatabase._normalize_range_bound(end))
@@ -2071,6 +2077,7 @@ class TrackerDatabase:
             segment_params,
             start_bound,
             end_bound,
+            strict_start=True,
         )
         segment_video_params: list[Any] = []
         segment_video_subquery = self._append_overlap_filters(
@@ -2078,6 +2085,7 @@ class TrackerDatabase:
             segment_video_params,
             start_bound,
             end_bound,
+            strict_start=True,
         )
 
         activity_segments = 0
@@ -2147,6 +2155,8 @@ class TrackerDatabase:
                         window_params: list[Any] = []
                         if start_bound:
                             window_query += " AND datetime(window_ended_at) >= datetime(?)"
+                            window_params.append(self._normalize_range_bound(start_bound))
+                            window_query += " AND history_ends_after(window_ended_at, ?)"
                             window_params.append(self._normalize_range_bound(start_bound))
                         if end_bound:
                             window_query += " AND datetime(window_started_at) <= datetime(?)"
