@@ -42,6 +42,8 @@ function analysisModelLabel(setup: AnalysisAiSetupState): string {
 }
 
 export interface ProjectsPageProps {
+  readonly createRequested?: boolean;
+  readonly onCreateRequestHandled?: () => void;
   readonly projects: readonly Project[];
   readonly assignments: readonly ProjectAssignmentRecord[];
   readonly selectedDay: string;
@@ -169,6 +171,10 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const [rangeMode, setRangeMode] = useState<TrendRangeMode>("week");
   const [windowOffset, setWindowOffset] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (props.createRequested) setSelectedProjectId(null);
+  }, [props.createRequested]);
 
   const activeProjects = props.projects.filter((project) => project.status === "active");
   const selectedProject = selectedProjectId
@@ -345,6 +351,8 @@ export function ProjectsPage(props: ProjectsPageProps) {
       ) : (
         <>
           <ProjectsManager
+            createRequested={props.createRequested}
+            onCreateRequestHandled={props.onCreateRequestHandled}
             projects={props.projects}
             totalSecondsByProject={libraryTotalSecondsByProject}
             lastActivityByProject={libraryLastActivityByProject}

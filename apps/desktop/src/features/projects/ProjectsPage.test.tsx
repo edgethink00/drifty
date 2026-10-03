@@ -38,6 +38,19 @@ function baseProps(overrides: Partial<ProjectsPageProps> = {}): ProjectsPageProp
 }
 
 describe("ProjectsPage", () => {
+  it("opens a blank creation editor when requested from an existing project detail", async () => {
+    const projects = [{ id: "p1", name: "Drifty", description: "Mac app", color: "#6366f1", status: "active" as const, anchors: [], createdAt: "", updatedAt: "" }];
+    const onCreateRequestHandled = vi.fn();
+    const props = baseProps({ projects, onCreateRequestHandled });
+    const { rerender } = render(<ProjectsPage {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
+
+    rerender(<ProjectsPage {...props} createRequested />);
+    const editor = await screen.findByRole("dialog", { name: "New project" });
+    expect((within(editor).getByLabelText("Name") as HTMLInputElement).value).toBe("");
+    expect(onCreateRequestHandled).toHaveBeenCalledOnce();
+  });
+
   it("keeps assignment refresh loading on the button instead of showing chunk progress", () => {
     render(
       <ProjectsPage

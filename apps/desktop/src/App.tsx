@@ -1230,6 +1230,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const presentedEndOfDayReviewDayRef = useRef<string | null>(null);
   const [driftAlarmEvent, setDriftAlarmEvent] = useState<DriftAlarmEvent | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [newProjectRequested, setNewProjectRequested] = useState(false);
 
   useEffect(() => {
     appIconsRef.current = appIcons;
@@ -10632,6 +10633,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {/* Projects */}
         {activeTab === "projects" && projectClassificationFeatureEnabled ? (
           <LazyProjectsPage
+            createRequested={newProjectRequested}
+            onCreateRequestHandled={() => setNewProjectRequested(false)}
             projects={projectClassification.projects}
             assignments={projectClassification.assignments}
             selectedDay={selectedDay}
@@ -11178,6 +11181,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             setCmdOpen(false);
           }}
           onNewProject={() => {
+            setNewProjectRequested(true);
             handleCmdNav("projects");
           }}
           onReclassifyRecent={() => {

@@ -13,6 +13,8 @@ const DEFAULT_PROJECT_COLOR = "#6366f1";
 type StatusFilter = "all" | ProjectStatus;
 
 export interface ProjectsManagerProps {
+  readonly createRequested?: boolean;
+  readonly onCreateRequestHandled?: () => void;
   readonly projects: readonly Project[];
   /** Tracked seconds attributed to each project within the current trend window. */
   readonly totalSecondsByProject: ReadonlyMap<string, number>;
@@ -50,6 +52,8 @@ function formatLastActivity(day: string | undefined, language: "en" | "ko"): str
  * is readable in the Edit modal.
  */
 export function ProjectsManager({
+  createRequested = false,
+  onCreateRequestHandled,
   projects,
   totalSecondsByProject,
   lastActivityByProject,
@@ -65,8 +69,16 @@ export function ProjectsManager({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const menuTrigger = useRef<HTMLButtonElement | null>(null);
+  const createTrigger = useRef<HTMLButtonElement | null>(null);
   // null = closed; "new" = create; otherwise the project being edited.
   const [editing, setEditing] = useState<Project | "new" | null>(null);
+
+  useEffect(() => {
+    if (!createRequested || busy) return;
+    createTrigger.current?.focus({ preventScroll: true });
+    setEditing("new");
+    onCreateRequestHandled?.();
+  }, [createRequested, busy, onCreateRequestHandled]);
 
   const filtered = useMemo(() => {
     const trimmedQuery = query.trim().toLowerCase();
@@ -132,7 +144,7 @@ export function ProjectsManager({
               <li><span>3</span><strong>{t("projects.firstRun.stepRefresh")}</strong></li>
             </ol>
           </div>
-          <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditing("new"); }}>
+          <button ref={createTrigger} type="button" className="app-btn app-btn--primary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditing("new"); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             {t("projects.create")}
           </button>
@@ -163,7 +175,7 @@ export function ProjectsManager({
               onChange={setStatusFilter}
             />
             <span className="projects-toolbar__spacer" />
-            <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditing("new"); }}>
+            <button ref={createTrigger} type="button" className="app-btn app-btn--primary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditing("new"); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
               {t("projects.new")}
             </button>

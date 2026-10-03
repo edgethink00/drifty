@@ -39,6 +39,18 @@ function baseProps(overrides: Partial<ProjectsManagerProps> = {}): ProjectsManag
 }
 
 describe("ProjectsManager", () => {
+  it("waits for project loading before consuming a creation request", async () => {
+    const onCreateRequestHandled = vi.fn();
+    const props = baseProps({ createRequested: true, onCreateRequestHandled });
+    const { rerender } = render(<ProjectsManager {...props} busy />);
+    expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull();
+    expect(onCreateRequestHandled).not.toHaveBeenCalled();
+
+    rerender(<ProjectsManager {...props} busy={false} />);
+    expect(await screen.findByRole("dialog", { name: "New project" })).toBeTruthy();
+    expect(onCreateRequestHandled).toHaveBeenCalledOnce();
+  });
+
   it("keeps the row options menu on screen through its exit and takes it out of reach while it fades", async () => {
     render(<ProjectsManager {...baseProps()} />);
     fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
