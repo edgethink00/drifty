@@ -10429,7 +10429,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             }}
             onSignOut={() => {
               setAccountMenuOpen(false);
-              void signOut();
+              void signOut().catch((nextError) => {
+                setError(toErrorMessage(nextError));
+              });
             }}
           />
         </div>

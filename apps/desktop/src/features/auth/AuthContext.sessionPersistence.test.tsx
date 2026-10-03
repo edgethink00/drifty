@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type AuthChangeHandler = (event: string, session: Session | null) => void;
 
-const { authMocks, getSession, onAuthStateChange, setSession, signInWithPassword, invoke } = vi.hoisted(() => {
+const { authMocks, getSession, onAuthStateChange, setSession, signInWithPassword, signOut, invoke } = vi.hoisted(() => {
   const mocks: { authChangeHandler: AuthChangeHandler | null } = {
     authChangeHandler: null,
   };
@@ -26,6 +26,7 @@ const { authMocks, getSession, onAuthStateChange, setSession, signInWithPassword
     }),
     setSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     signInWithPassword: vi.fn(),
+    signOut: vi.fn().mockResolvedValue({ error: null }),
     invoke: vi.fn().mockResolvedValue([]),
   };
 });
@@ -56,7 +57,7 @@ vi.mock("../../lib/supabase/client", () => ({
       signInAnonymously: vi.fn().mockResolvedValue({ data: { session: null, user: null }, error: null }),
       signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: null }, error: null }),
       signInWithPassword,
-      signOut: vi.fn().mockResolvedValue({ error: null }),
+      signOut,
       signUp: vi.fn(),
     },
   },
@@ -129,6 +130,8 @@ describe("AuthContext desktop session persistence", () => {
     getSession.mockResolvedValue({ data: { session: null } });
     setSession.mockResolvedValue({ data: { session: null }, error: null });
     signInWithPassword.mockReset();
+    signOut.mockReset();
+    signOut.mockResolvedValue({ error: null });
     invoke.mockResolvedValue([]);
     authMocks.authChangeHandler = null;
     tauriMocks.getCurrent.mockResolvedValue(null);
@@ -225,6 +228,141 @@ describe("AuthContext desktop session persistence", () => {
 
     await act(async () => { await latestAuth.current?.signOut(); });
     expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session");
+  });
+
+
+  it("does not complete sign-out when the saved desktop credential cannot be cleared", async () => {
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    const session = createSession();
+    const clearError = new Error("Synthetic native credential deletion denied");
+    getSession.mockResolvedValue({ data: { session } });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_load_saved_session") return null;
+      if (command === "auth_clear_saved_session") throw clearError;
+      return undefined;
+    });
+    render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+    await waitFor(() => expect(latestAuth.current?.status).toBe("authenticated"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+
+    let received: unknown;
+    await act(async () => {
+      try { await latestAuth.current?.signOut(); }
+      catch (error) { received = error; }
+    });
+    expect(received).toBe(clearError);
+    expect(signOut).not.toHaveBeenCalled();
+    expect(latestAuth.current?.status).toBe("authenticated");
+    expect(latestAuth.current?.session).toEqual(session);
+  });
+
+
+  it("serializes old saves, coalesces sign-out, and prevents token events from repopulating the credential", async () => {
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    const session = createSession();
+    const pendingSave = createDeferred<void>();
+    const pendingClear = createDeferred<void>();
+    const cloudLogout = createDeferred<{ error: null }>();
+    let storedCredential: string | null = null;
+    getSession.mockResolvedValue({ data: { session } });
+    signOut.mockReturnValue(cloudLogout.promise);
+    invoke.mockImplementation(async (command: string, args?: { value: string }) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_load_saved_session") return null;
+      if (command === "auth_save_session") {
+        if (JSON.parse(args!.value).accessToken === "pending-refresh") await pendingSave.promise;
+        storedCredential = args!.value;
+      }
+      if (command === "auth_clear_saved_session") {
+        await pendingClear.promise;
+        storedCredential = null;
+      }
+      return undefined;
+    });
+    render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+    await waitFor(() => expect(latestAuth.current?.status).toBe("authenticated"));
+    await waitFor(() => expect(storedCredential).not.toBeNull());
+    invoke.mockClear();
+    act(() => authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "pending-refresh" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    act(() => { first = latestAuth.current!.signOut(); second = latestAuth.current!.signOut(); });
+    expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+    expect(signOut).not.toHaveBeenCalled();
+    await act(async () => { pendingSave.resolve(undefined); });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session"));
+    expect(signOut).not.toHaveBeenCalled();
+
+    await act(async () => { pendingClear.resolve(undefined); });
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+    expect(storedCredential).toBeNull();
+    await act(async () => {
+      authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "post-clear-refresh" });
+      await Promise.resolve();
+    });
+    expect(storedCredential).toBeNull();
+    expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(1);
+    await act(async () => { cloudLogout.resolve({ error: null }); await Promise.all([first, second]); });
+    expect(invoke.mock.calls.filter(([command]) => command === "auth_clear_saved_session")).toHaveLength(1);
+    expect(latestAuth.current?.status).toBe("unauthenticated");
+    expect(storedCredential).toBeNull();
+  });
+
+  it("propagates a returned cloud sign-out error while keeping the native credential cleared", async () => {
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    const session = createSession();
+    const cloudError = new Error("Synthetic cloud sign-out failure");
+    let cleared = false;
+    getSession.mockResolvedValue({ data: { session } });
+    signOut.mockResolvedValue({ error: cloudError });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_load_saved_session") return null;
+      if (command === "auth_clear_saved_session") cleared = true;
+      return undefined;
+    });
+    render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+    await waitFor(() => expect(latestAuth.current?.status).toBe("authenticated"));
+    let received: unknown;
+    await act(async () => { try { await latestAuth.current!.signOut(); } catch (error) { received = error; } });
+    expect(received).toBe(cloudError);
+    expect(cleared).toBe(true);
+    expect(latestAuth.current?.session).toEqual(session);
+    expect(latestAuth.current?.status).toBe("authenticated");
+  });
+
+  it("recovers the native write queue and supports retry after a clear error", async () => {
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    const session = createSession();
+    let denyClear = true;
+    let storedCredential: string | null = null;
+    getSession.mockResolvedValue({ data: { session } });
+    invoke.mockImplementation(async (command: string, args?: { value: string }) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_load_saved_session") return null;
+      if (command === "auth_save_session") storedCredential = args!.value;
+      if (command === "auth_clear_saved_session") {
+        if (denyClear) throw "Synthetic credential-store clear error";
+        storedCredential = null;
+      }
+      return undefined;
+    });
+    render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+    await waitFor(() => expect(latestAuth.current?.status).toBe("authenticated"));
+    let received: unknown;
+    await act(async () => { try { await latestAuth.current!.signOut(); } catch (error) { received = error; } });
+    expect(received).toBe("Synthetic credential-store clear error");
+    expect(signOut).not.toHaveBeenCalled();
+    denyClear = false;
+    act(() => authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "retry-refresh" }));
+    await waitFor(() => expect(storedCredential && JSON.parse(storedCredential).accessToken).toBe("retry-refresh"));
+    await act(async () => { await latestAuth.current!.signOut(); });
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(storedCredential).toBeNull();
+    expect(latestAuth.current?.status).toBe("unauthenticated");
   });
 
   it("finishes a pending native save before a later sign-out clear", async () => {

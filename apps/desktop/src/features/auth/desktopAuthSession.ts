@@ -11,6 +11,7 @@ export type DesktopSessionClearSkipReason =
 
 export type SaveDesktopSessionOptions = {
   readonly allowClear?: boolean;
+  readonly throwOnError?: boolean;
   readonly skipReason?: DesktopSessionClearSkipReason;
 };
 

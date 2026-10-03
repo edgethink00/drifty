@@ -335,6 +335,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const tauriInvokeRef = useRef<TauriInvoke | null>(null);
   const saveSequenceRef = useRef(0);
   const nativeSessionWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const signOutInProgressRef = useRef(false);
+  const signOutPromiseRef = useRef<Promise<void> | null>(null);
   const googleOAuthAttemptSequenceRef = useRef(0);
   const googleOAuthAttemptRef = useRef<GoogleOAuthAttempt | null>(null);
   const googleOAuthExpiryTimeoutRef = useRef<number | null>(null);
@@ -512,6 +514,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const saveId = saveSequenceRef.current + 1;
     saveSequenceRef.current = saveId;
     const operation = nextSession ? "save" : "clear";
+    if (signOutInProgressRef.current && !options.throwOnError) {
+      recordAuthDiagnostic("auth.native_save.skipped", {
+        saveId, operation, reason: "explicit-sign-out",
+      });
+      return;
+    }
     if (!nextSession && options.allowClear === false) {
       recordAuthDiagnostic("auth.native_save.skipped", {
         saveId,
@@ -521,6 +529,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (!invoke) {
+      if (options.throwOnError && isTauriRuntime()) {
+        throw new Error("Saved sign-in information could not be cleared. Try signing out again.");
+      }
       recordAuthDiagnostic("auth.native_save.skipped", {
         saveId,
         operation,
@@ -552,6 +563,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...getAuthDiagnosticError(error),
         });
         console.warn("Unable to persist desktop auth session.", error);
+        if (options.throwOnError) throw error;
       }
     };
     // OS credential writes can finish out of order when auth events arrive close together.
@@ -2059,6 +2071,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     if (!supabase) return;
+    if (signOutPromiseRef.current) return signOutPromiseRef.current;
     if (readPendingPasswordRecovery() && sessionRef.current?.user && !user) {
       await cancelPasswordRecovery();
       if (readPendingPasswordRecovery() && sessionRef.current?.user && !user) {
@@ -2066,29 +2079,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
-    clearGoogleOAuthAttempt();
-    clearPendingPasswordRecovery();
-    setPasswordRecoveryState({ phase: "idle", email: null });
-    setCallbackStatus(null);
-    recordAuthDiagnostic("auth.sign_out.start", getSessionDiagnosticSummary(sessionRef.current));
+    const signOutAttempt = (async () => {
+      signOutInProgressRef.current = true;
+      try {
+        clearGoogleOAuthAttempt();
+        clearPendingPasswordRecovery();
+        setPasswordRecoveryState({ phase: "idle", email: null });
+        setCallbackStatus(null);
+        recordAuthDiagnostic("auth.sign_out.start", getSessionDiagnosticSummary(sessionRef.current));
+        // Existing native writes finish first. New auth-event writes stay
+        // suppressed until the explicit logout transition has completed.
+        await saveDesktopSession(null, { throwOnError: true });
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        applySessionState(null);
+        recordAuthDiagnostic("auth.sign_out.complete", { hasSession: false });
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_out",
+          method: "unknown",
+          result: "success",
+        });
+      } catch (error) {
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_out",
+          method: "unknown",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(error),
+        });
+        throw error;
+      } finally {
+        signOutInProgressRef.current = false;
+      }
+    })();
+    signOutPromiseRef.current = signOutAttempt;
     try {
-      await supabase.auth.signOut();
-      applySessionState(null);
-      await saveDesktopSession(null);
-      recordAuthDiagnostic("auth.sign_out.complete", { hasSession: false });
-      capturePostHogEvent("cloud_auth_action", {
-        action: "sign_out",
-        method: "unknown",
-        result: "success",
-      });
-    } catch (error) {
-      capturePostHogEvent("cloud_auth_action", {
-        action: "sign_out",
-        method: "unknown",
-        result: "error",
-        error_kind: toAnalyticsErrorKind(error),
-      });
-      throw error;
+      await signOutAttempt;
+    } finally {
+      if (signOutPromiseRef.current === signOutAttempt) signOutPromiseRef.current = null;
     }
   }
 
