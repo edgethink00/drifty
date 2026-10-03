@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { useAppIconPresentation } from "./useAppIconPresentation";
 
 const APP_COLORS = [
   ["Visual Studio Code", "#3b82f6"],
@@ -38,6 +39,7 @@ export function AppGlyph({
   size?: "sm" | "md" | "lg";
   iconSrc?: string | null;
 }) {
+  const presentedIcon = useAppIconPresentation(iconSrc);
   const [iconFailed, setIconFailed] = useState(false);
   const style = { ["--app-glyph-color" as const]: colorForApp(appName) } as CSSProperties;
 
@@ -49,7 +51,7 @@ export function AppGlyph({
     return (
       <img
         className={`app-icon app-icon--${size}`}
-        src={iconSrc}
+        src={presentedIcon ?? iconSrc}
         alt=""
         aria-hidden="true"
         onError={() => setIconFailed(true)}

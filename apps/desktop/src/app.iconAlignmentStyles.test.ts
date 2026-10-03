@@ -29,19 +29,22 @@ describe("mixed app and favicon alignment styles", () => {
     expect(computed.justifyContent).toBe("center");
   });
 
-  it("keeps resolved site images on the block cover layout", () => {
+  it("keeps resolved app and site images on a block layout without cropping artwork", () => {
     const style = document.createElement("style");
     style.textContent = readAppStyles();
     document.head.append(style);
 
-    const image = document.createElement("img");
-    image.className = "site-favicon";
-    document.body.append(image);
+    for (const className of ["site-favicon", "app-icon app-icon--md"]) {
+      const image = document.createElement("img");
+      image.className = className;
+      document.body.append(image);
 
-    const computed = getComputedStyle(image);
+      const computed = getComputedStyle(image);
 
-    expect(computed.display).toBe("block");
-    expect(computed.objectFit).toBe("cover");
+      expect(computed.display).toBe("block");
+      expect(computed.objectFit).toBe("contain");
+      if (image.classList.contains("app-icon")) expect(computed.borderRadius).toBe("0");
+    }
   });
 
   it("uses stable icon slots for source rows that mix app icons and favicons", () => {

@@ -358,8 +358,10 @@
 }
 .app-icon, img.site-favicon {
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
+.app-icon { border-radius: 0; }
+img.site-favicon { border-radius: 20%; }
 .usage-identity-icon--md .app-glyph--md, .usage-identity-icon--md .app-icon--md, .usage-identity-icon--md .site-favicon { width: 44px; height: 44px; }
 
 /* ── Animations ── */

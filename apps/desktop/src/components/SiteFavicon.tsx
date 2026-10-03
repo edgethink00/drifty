@@ -1,3 +1,4 @@
+import { useAppIconPresentation } from "./useAppIconPresentation";
 import { useSiteIcon } from "./SiteIconContext";
 
 /**
@@ -24,7 +25,8 @@ export function SiteFavicon({
   iconSrc?: string | null;
 }) {
   const cachedIconSrc = useSiteIcon(domain);
-  const iconSrc = explicitIconSrc ?? cachedIconSrc ?? fallbackIconSrc ?? null;
+  const appFallback = useAppIconPresentation(explicitIconSrc || cachedIconSrc ? null : fallbackIconSrc);
+  const iconSrc = explicitIconSrc ?? cachedIconSrc ?? appFallback ?? null;
 
   if (!iconSrc) {
     return (
