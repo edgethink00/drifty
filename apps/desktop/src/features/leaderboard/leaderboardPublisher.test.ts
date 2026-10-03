@@ -152,9 +152,9 @@ describe("leaderboardPublisher", () => {
 
     expect(result.success).toBe(true);
     expect(publishOwnFocusTotal).toHaveBeenCalledTimes(3);
-    expect(publishOwnFocusTotal).toHaveBeenCalledWith(expect.objectContaining({ period: "daily" }), undefined, { updateProfile: false });
-    expect(publishOwnFocusTotal).toHaveBeenCalledWith(expect.objectContaining({ period: "weekly" }), undefined, { updateProfile: false });
-    expect(publishOwnFocusTotal).toHaveBeenCalledWith(expect.objectContaining({ period: "monthly" }), undefined, { updateProfile: false });
+    expect(publishOwnFocusTotal).toHaveBeenCalledWith(expect.objectContaining({ period: "daily" }), undefined, { updateProfile: false, requireOptIn: true });
+    expect(publishOwnFocusTotal).toHaveBeenCalledWith(expect.objectContaining({ period: "weekly" }), undefined, { updateProfile: false, requireOptIn: true });
+    expect(publishOwnFocusTotal).toHaveBeenCalledWith(expect.objectContaining({ period: "monthly" }), undefined, { updateProfile: false, requireOptIn: true });
   });
 
   it("rebuilds stale publish windows against the current logical day before publishing", async () => {
@@ -179,7 +179,7 @@ describe("leaderboardPublisher", () => {
     expect(publishOwnFocusTotal).toHaveBeenCalledWith(
       expect.objectContaining({ period: "daily", window_end_date: today }),
       undefined,
-      { updateProfile: false },
+      { updateProfile: false, requireOptIn: true },
     );
   });
 

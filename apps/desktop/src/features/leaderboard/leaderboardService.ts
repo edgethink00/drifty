@@ -74,6 +74,7 @@ export interface LeaderboardResult<T = undefined> {
 
 export type PublishOwnFocusTotalOptions = {
   readonly updateProfile?: boolean;
+  readonly requireOptIn?: boolean;
 };
 
 export type LeaderboardCheckpointPayload = {
@@ -131,6 +132,11 @@ export function previewLeaderboardRows(period: LeaderboardPeriod, limit: number)
   return rows.slice(0, limit);
 }
 
+type LeaderboardWriteResult = { error: { message: string } | null };
+type LeaderboardUpdateQuery = PromiseLike<LeaderboardWriteResult> & {
+  eq: (column: string, value: string | boolean) => LeaderboardUpdateQuery;
+};
+
 type LeaderboardClient = {
   auth: {
     getUser: () => Promise<{
@@ -139,6 +145,7 @@ type LeaderboardClient = {
     }>;
   };
   from: (table: LeaderboardTable) => {
+    update: (payload: Record<string, unknown>) => LeaderboardUpdateQuery;
     upsert: (payload: Record<string, unknown>, options: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
     select: (columns: string) => {
       eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: { display_name?: string | null; focus_seconds_7d?: number | null; window_start_date?: string | null; window_end_date?: string | null; timezone?: string | null; opted_in?: boolean | null; updated_at?: string | null } | null; error: { message: string } | null }> };
@@ -547,9 +554,14 @@ export async function publishOwnFocusTotal(
       }
     }
 
-    const { error } = await resolvedClient.from("leaderboard_focus_totals").upsert(payload, {
-      onConflict: "user_id,period",
-    });
+    // Automatic publication may only update an existing, still opted-in row.
+    // The final SQL predicate preserves opt-out even across renderers/devices.
+    const { error } = options.requireOptIn
+      ? await resolvedClient.from("leaderboard_focus_totals").update(payload)
+        .eq("user_id", user.id).eq("period", payload.period).eq("opted_in", true)
+      : await resolvedClient.from("leaderboard_focus_totals").upsert(payload, {
+        onConflict: "user_id,period",
+      });
 
     if (error) {
       return { success: false, error: error.message };

@@ -138,7 +138,7 @@ export async function publishLeaderboardPayloads(
     };
 
     if (mode === "auto") {
-      return publishOwnFocusTotal(input, undefined, { updateProfile: false });
+      return publishOwnFocusTotal(input, undefined, { updateProfile: false, requireOptIn: true });
     }
 
     return publishOwnFocusTotal(input);

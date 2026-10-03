@@ -677,7 +677,7 @@ describe("App leaderboard participation", () => {
       window_start_date: today,
       window_end_date: today,
       timezone,
-    }, undefined, { updateProfile: false });
+    }, undefined, { updateProfile: false, requireOptIn: true });
     expect(publishOwnFocusTotal).toHaveBeenCalledWith({
       profileDisplayName: "Alex Remote",
       period: "weekly",
@@ -686,7 +686,7 @@ describe("App leaderboard participation", () => {
       window_start_date: windowStartDay,
       window_end_date: today,
       timezone,
-    }, undefined, { updateProfile: false });
+    }, undefined, { updateProfile: false, requireOptIn: true });
     expect(publishOwnFocusTotal).toHaveBeenCalledWith({
       profileDisplayName: "Alex Remote",
       period: "monthly",
@@ -695,7 +695,7 @@ describe("App leaderboard participation", () => {
       window_start_date: monthStartDay,
       window_end_date: today,
       timezone,
-    }, undefined, { updateProfile: false });
+    }, undefined, { updateProfile: false, requireOptIn: true });
   });
 
   it("does not automatically republish opted-in users when the remote row is in the current hour slot", async () => {
@@ -905,7 +905,7 @@ describe("App leaderboard participation", () => {
       window_start_date: windowStartDay,
       window_end_date: today,
       timezone,
-    }, undefined, { updateProfile: false });
+    }, undefined, { updateProfile: false, requireOptIn: true });
   });
 
   it("shows joined controls after a signed-out anonymous join refresh", async () => {
