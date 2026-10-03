@@ -504,6 +504,46 @@ class ApplySyncedSegmentsTests(DeviceSyncTestCase):
         self.assertEqual(len(remaining), 1)
         self.assertIsNone(remaining[0]["origin_device_id"])
 
+    def test_remote_purge_invalidates_pull_checkpoints_without_a_followup_state_write(self) -> None:
+        self._insert_local_segment(0)
+        remote = self._remote_segment(
+            "99999999-0000-0000-0000-000000000028",
+            started_at="2026-07-06T09:02:00+00:00",
+            ended_at="2026-07-06T09:03:00+00:00",
+        )
+        self.database.apply_synced_segments([remote])
+        preserved = {
+            "sync_account_id": "account-a", "sync_push_seq": "42",
+            "sync_generation": "7", "sync_device_id": LOCAL_DEVICE_ID,
+            "sync_last_pushed_at": "2026-07-06T09:04:00Z",
+        }
+        self.database.set_sync_state({
+            **preserved,
+            "sync_pull_cursor": "2026-07-06T09:04:00Z|remote",
+            "sync_deletion_pull_cursor": "2026-07-06T09:04:00Z|deleted",
+            "sync_last_pulled_at": "2026-07-06T09:04:00Z",
+        })
+
+        self.assertEqual(self.database.purge_remote_segments(), 1)
+        # Model an auth transition superseding the caller before it can clear
+        # state. A reopened database must itself permit a complete repull.
+        reopened = TrackerDatabase(self.db_path)
+        state = reopened.get_sync_state()["state"]
+        self.assertEqual({key: state[key] for key in preserved}, preserved)
+        for key in ("sync_pull_cursor", "sync_deletion_pull_cursor", "sync_last_pulled_at"):
+            self.assertNotIn(key, state)
+        self.assertEqual(reopened.apply_synced_segments([remote])["inserted"], 1)
+        with reopened.connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM activity_segments").fetchone()[0], 2)
+
+    def test_remote_purge_clears_a_stale_pull_checkpoint_when_rows_are_already_absent(self) -> None:
+        self.database.set_sync_state({"sync_pull_cursor": "stale", "sync_push_seq": "42"})
+        self.assertEqual(self.database.purge_remote_segments(), 0)
+        state = self.database.get_sync_state()["state"]
+        self.assertNotIn("sync_pull_cursor", state)
+        self.assertEqual(state["sync_account_id"], "account-a")
+        self.assertEqual(state["sync_push_seq"], "42")
+
     def test_purge_remote_segments_removes_referencing_project_windows(self) -> None:
         self.database.apply_synced_segments([
             self._remote_segment(

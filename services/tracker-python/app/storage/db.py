@@ -2645,6 +2645,14 @@ class TrackerDatabase:
                         "SELECT id FROM activity_segments WHERE origin_device_id IS NOT NULL"
                     )
                 }
+                # Authentication can change while the caller awaits this purge.
+                # Invalidate pull checkpoints in the same transaction as the
+                # rows, even if the caller abandons its later state write. Keep
+                # the account/generation and device-global push cursor intact.
+                conn.execute(
+                    "DELETE FROM tracker_meta WHERE key IN (?, ?, ?)",
+                    ("sync_pull_cursor", "sync_deletion_pull_cursor", "sync_last_pulled_at"),
+                )
                 if not remote_segment_ids:
                     return 0
                 invalidate_recovery_copies()

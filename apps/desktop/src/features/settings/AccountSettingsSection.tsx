@@ -618,7 +618,9 @@ function organizationRoleLabel(role: OrganizationSeatDisplay["role"], t: Localiz
 function describeDeviceSyncStatus(status: DeviceSyncStatus | undefined, t: LocalizationController["t"]): string {
   if (!status || !status.enabled) return t("settings.account.syncWaiting");
   const parts: string[] = [];
-  if (status.backfill && status.backfill.pushedSeq < status.backfill.totalSeq) {
+  // Sequence gaps can come from received rows or already-covered history.
+  // They are not upload work after the actual outbox has drained.
+  if (status.pendingPushCount > 0 && status.backfill && status.backfill.pushedSeq < status.backfill.totalSeq) {
     const percent = status.backfill.totalSeq > 0
       ? Math.min(100, Math.floor((status.backfill.pushedSeq / status.backfill.totalSeq) * 100))
       : 0;

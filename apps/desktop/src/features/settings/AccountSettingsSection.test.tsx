@@ -681,6 +681,21 @@ describe("AccountSettingsSection organization seat", () => {
     openUrlMock.mockResolvedValue(undefined);
   });
 
+  it.each([0, 1])("reports upload work from the outbox rather than sequence gaps (pending %s)", (pendingPushCount) => {
+    render(<AccountSettingsSection {...accountProps({
+      deviceSyncEnabled: true,
+      onDeviceSyncEnabledChange: vi.fn(),
+      deviceSyncStatus: {
+        enabled: true, deviceId: "device-current", pendingPushCount,
+        backfill: { pushedSeq: 5, totalSeq: 10 },
+        lastPushedAt: "2026-10-03T16:00:00Z", lastPulledAt: "2026-10-03T16:01:00Z",
+        lastError: null, lastErrorCode: null, lastErrorHttpStatus: null, lastErrorLockedReason: null,
+      },
+    })} />);
+    expect(Boolean(screen.queryByText(/Uploading history \(50%\)/))).toBe(pendingPushCount > 0);
+    expect(screen.getByText(/Last upload/)).toBeTruthy();
+  });
+
   it("keeps owner cloud deletion available when device sync is off or Pro access has expired", () => {
     const onPurgeDeviceSyncData = vi.fn();
     render(

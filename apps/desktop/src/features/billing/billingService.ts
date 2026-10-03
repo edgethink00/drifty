@@ -1,3 +1,4 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { supabase } from "../../lib/supabase/client";
 import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
 import type { CloudDeviceAccess, CloudDeviceRecord } from "../cloud-devices/cloudDeviceService";
@@ -121,6 +122,47 @@ const GENERIC_BILLING_ERROR = "Unable to check billing status.";
 export const COUPON_REDEMPTION_TIMEOUT_MS = 20_000;
 export const BILLING_ENTITLEMENT_TIMEOUT_MS = 20_000;
 
+async function invokeEntitlementRead(
+  client: NonNullable<BillingClient>,
+  functionName: string,
+  body: unknown,
+  signal: AbortSignal,
+): Promise<{ data: BillingEntitlementResponse | null; error: unknown }> {
+  const isRead = functionName === "get-cloud-trial-entitlement" || functionName === "get-billing-entitlement";
+  if (!supabase || client !== supabase || !isTauri() || !isRead) {
+    return client.functions.invoke<BillingEntitlementResponse>(functionName, {
+      body, signal, timeout: BILLING_ENTITLEMENT_TIMEOUT_MS,
+    });
+  }
+
+  // An absent function's gateway response omits content-type from its CORS
+  // allowlist. WebViews therefore hide the 404 behind a fetch error, preventing
+  // the explicitly supported legacy-server fallback. Native HTTP preserves the
+  // actual status; only a confirmed 404 may invoke the auto-granting getter.
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sign in to check billing status.");
+  signal.throwIfAborted();
+  const response = await invoke<{ status: number; body: string }>("cloud_sync_http_post", {
+    request: {
+      url: `${String(import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "")}/functions/v1/${functionName}`,
+      bearerToken: accessToken,
+      apikey: String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? ""),
+      bodyJson: body,
+      timeoutMs: BILLING_ENTITLEMENT_TIMEOUT_MS,
+    },
+  });
+  signal.throwIfAborted();
+  if (response.status >= 400) {
+    return { data: null, error: { context: new Response(response.body, { status: response.status }) } };
+  }
+  try {
+    return { data: JSON.parse(response.body) as BillingEntitlementResponse, error: null };
+  } catch {
+    throw new Error("Billing entitlement returned an invalid response.");
+  }
+}
+
 async function invokeEntitlement(
   client: NonNullable<BillingClient>,
   functionName: string,
@@ -136,9 +178,7 @@ async function invokeEntitlement(
   });
   try {
     return await Promise.race([
-      client.functions.invoke<BillingEntitlementResponse>(functionName, {
-        body, signal: controller.signal, timeout: BILLING_ENTITLEMENT_TIMEOUT_MS,
-      }),
+      invokeEntitlementRead(client, functionName, body, controller.signal),
       timeout,
     ]);
   } finally {
