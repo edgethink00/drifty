@@ -31,7 +31,7 @@ vi.mock("./accountStatsService", () => ({
 
 describe("useAccountStatsPublisher assessment gate", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.publish.mockResolvedValue({ success: true, error: null });
   });
 
@@ -65,11 +65,13 @@ describe("useAccountStatsPublisher assessment gate", () => {
     expect(mocks.recordAttempt).not.toHaveBeenCalled();
   });
 
-  it("does not reuse a payload across a deactivate-reactivate cycle", async () => {
+  it("rebuilds after reactivation without reusing the previous in-flight payload", async () => {
     let resolvePayload: ((payload: { windowEndDay: string }) => void) | null = null;
     mocks.buildPayload.mockReturnValueOnce(new Promise((resolve) => {
       resolvePayload = resolve;
     }));
+    const freshPayload = { windowEndDay: "fresh-after-reactivation" };
+    mocks.buildPayload.mockResolvedValueOnce(freshPayload);
     const { rerender } = renderHook(
       (props: { active: boolean }) => useAccountStatsPublisher({
         active: props.active,
@@ -88,8 +90,9 @@ describe("useAccountStatsPublisher assessment gate", () => {
       await Promise.resolve();
     });
 
-    expect(mocks.publish).not.toHaveBeenCalled();
-    expect(mocks.recordAttempt).not.toHaveBeenCalled();
+    expect(mocks.buildPayload).toHaveBeenCalledTimes(2);
+    expect(mocks.publish).toHaveBeenCalledExactlyOnceWith(freshPayload, undefined, { expectedUserId: "user-1" });
+    expect(mocks.recordAttempt).toHaveBeenCalledTimes(1);
   });
 
   it("does not publish an in-flight payload after unmount", async () => {
@@ -112,6 +115,88 @@ describe("useAccountStatsPublisher assessment gate", () => {
     });
 
     expect(mocks.publish).not.toHaveBeenCalled();
+    expect(mocks.recordAttempt).not.toHaveBeenCalled();
+  });
+
+  it("starts the new account while the previous account's build is still pending", async () => {
+    let resolveA!: (payload: unknown) => void;
+    mocks.buildPayload.mockReturnValueOnce(new Promise((resolve) => { resolveA = resolve; }))
+      .mockResolvedValue({ windowEndDay: "fresh-b" });
+    const { rerender } = renderHook(
+      (props: { userScopeKey: string }) => useAccountStatsPublisher({
+        ...props, active: true, startOfDayMinutes: 0, includeAiClassifications: true,
+      }),
+      { initialProps: { userScopeKey: "account-a" } },
+    );
+    await waitFor(() => expect(mocks.buildPayload).toHaveBeenCalledTimes(1));
+    rerender({ userScopeKey: "account-b" });
+    await waitFor(() => expect(mocks.buildPayload).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({ userScopeKey: "account-b" })));
+    await act(async () => { resolveA({ windowEndDay: "stale-a" }); });
+    expect(mocks.publish).toHaveBeenCalledTimes(1);
+    expect(mocks.publish).toHaveBeenCalledWith({ windowEndDay: "fresh-b" }, undefined, { expectedUserId: "account-b" });
+    expect(mocks.recordAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not record a publish result after its account is no longer active", async () => {
+    let resolvePublishA!: (result: { success: boolean; error: null }) => void;
+    mocks.buildPayload.mockResolvedValue({ windowEndDay: "synthetic-day" });
+    mocks.publish.mockReturnValueOnce(new Promise((resolve) => { resolvePublishA = resolve; }));
+    const { rerender } = renderHook(
+      (props: { active: boolean }) => useAccountStatsPublisher({
+        ...props, userScopeKey: "account-a", startOfDayMinutes: 0, includeAiClassifications: true,
+      }),
+      { initialProps: { active: true } },
+    );
+    await waitFor(() => expect(mocks.publish).toHaveBeenCalledTimes(1));
+    rerender({ active: false });
+    await act(async () => { resolvePublishA({ success: true, error: null }); });
+    expect(mocks.recordAttempt).not.toHaveBeenCalled();
+  });
+
+  it("does not release the new account's in-flight slot when the old build completes", async () => {
+    let resolveA!: (payload: unknown) => void;
+    let resolveB!: (payload: unknown) => void;
+    mocks.buildPayload
+      .mockReturnValueOnce(new Promise((resolve) => { resolveA = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveB = resolve; }));
+    const { rerender } = renderHook(
+      (props: { userScopeKey: string }) => useAccountStatsPublisher({
+        ...props, active: true, startOfDayMinutes: 0, includeAiClassifications: true,
+      }),
+      { initialProps: { userScopeKey: "account-a" } },
+    );
+    await waitFor(() => expect(mocks.buildPayload).toHaveBeenCalledTimes(1));
+    rerender({ userScopeKey: "account-b" });
+    await waitFor(() => expect(mocks.buildPayload).toHaveBeenCalledTimes(2));
+    await act(async () => { resolveA({ windowEndDay: "stale-a" }); });
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(mocks.buildPayload).toHaveBeenCalledTimes(2);
+    await act(async () => { resolveB({ windowEndDay: "fresh-b" }); });
+    expect(mocks.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores an in-flight publish result after unmount", async () => {
+    let resolvePublish!: (result: { success: boolean; error: null }) => void;
+    mocks.buildPayload.mockResolvedValue({ windowEndDay: "synthetic-day" });
+    mocks.publish.mockReturnValueOnce(new Promise((resolve) => { resolvePublish = resolve; }));
+    const { unmount } = renderHook(() => useAccountStatsPublisher({
+      active: true, userScopeKey: "account-a", startOfDayMinutes: 0, includeAiClassifications: true,
+    }));
+    await waitFor(() => expect(mocks.publish).toHaveBeenCalledTimes(1));
+    unmount();
+    await act(async () => { resolvePublish({ success: true, error: null }); });
+    expect(mocks.recordAttempt).not.toHaveBeenCalled();
+  });
+  it("does not back off the old account when the authenticated owner has already changed", async () => {
+    mocks.buildPayload.mockResolvedValue({ windowEndDay: "synthetic-day" });
+    mocks.publish.mockResolvedValue({
+      success: false, error: "The signed-in account changed before stats publication", accountChanged: true,
+    });
+    renderHook(() => useAccountStatsPublisher({
+      active: true, userScopeKey: "account-a", startOfDayMinutes: 0, includeAiClassifications: true,
+    }));
+    await waitFor(() => expect(mocks.publish).toHaveBeenCalledTimes(1));
     expect(mocks.recordAttempt).not.toHaveBeenCalled();
   });
 });

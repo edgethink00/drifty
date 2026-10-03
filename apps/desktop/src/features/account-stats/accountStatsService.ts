@@ -7,6 +7,11 @@ import type { AccountStatsPayload } from "./accountStatsPayload";
 export interface AccountStatsResult {
   success: boolean;
   error: string | null;
+  readonly accountChanged?: true;
+}
+
+export interface AccountStatsPublishOptions {
+  readonly expectedUserId?: string;
 }
 
 type AccountStatsClient = {
@@ -23,12 +28,17 @@ function resolveClient(client?: AccountStatsClient | null): AccountStatsClient |
 }
 
 /** Upsert the full account summary for the signed-in user (one row per user). */
-export async function publishAccountStats(payload: AccountStatsPayload, client?: AccountStatsClient | null): Promise<AccountStatsResult> {
+export async function publishAccountStats(
+  payload: AccountStatsPayload, client?: AccountStatsClient | null, options: AccountStatsPublishOptions = {},
+): Promise<AccountStatsResult> {
   const resolved = resolveClient(client);
   if (!resolved) return { success: false, error: "Supabase is not configured" };
   const { data } = await resolved.auth.getUser();
   const userId = data.user?.id ?? null;
   if (!userId) return { success: false, error: "Not authenticated" };
+  if (options.expectedUserId !== undefined && userId !== options.expectedUserId) {
+    return { success: false, error: "The signed-in account changed before stats publication", accountChanged: true };
+  }
 
   try {
     const { error } = await resolved.from("account_activity_summaries").upsert({

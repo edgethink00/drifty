@@ -35,7 +35,7 @@ export interface UseAccountStatsPublisherInput {
 
 export function useAccountStatsPublisher(input: UseAccountStatsPublisherInput): void {
   const { active, userScopeKey, startOfDayMinutes, includeAiClassifications, includeBuiltInHeuristics, builtInHeuristicsUnavailableSince } = input;
-  const inFlightRef = useRef(false);
+  const inFlightRef = useRef<{ active: boolean; key: string } | null>(null);
   const publicationContextKey = JSON.stringify([
     active,
     userScopeKey,
@@ -51,8 +51,8 @@ export function useAccountStatsPublisher(input: UseAccountStatsPublisherInput): 
 
   const runCycle = useCallback(async () => {
     const publicationContext = publicationContextRef.current;
-    if (!publicationContext.active || shouldUsePreviewData() || inFlightRef.current) return;
-    inFlightRef.current = true;
+    if (!publicationContext.active || shouldUsePreviewData() || inFlightRef.current === publicationContext) return;
+    inFlightRef.current = publicationContext;
     try {
       // Recomputed every run so day rollover is picked up by the next trigger.
       const windowEndDay = logicalTodayIsoDate(startOfDayMinutes);
@@ -70,12 +70,13 @@ export function useAccountStatsPublisher(input: UseAccountStatsPublisherInput): 
       if (!decision.shouldPublish) return;
 
       if (publicationContextRef.current !== publicationContext) return;
-      const result = await publishAccountStats(payload);
+      const result = await publishAccountStats(payload, undefined, { expectedUserId: userScopeKey });
+      if (publicationContextRef.current !== publicationContext || result.accountChanged) return;
       recordAccountStatsPublishAttempt({ userScopeKey, payloadKey, success: result.success, now: new Date() });
     } catch {
       // Tracker/build failures: no state write — the next trigger simply retries.
     } finally {
-      inFlightRef.current = false;
+      if (inFlightRef.current === publicationContext) inFlightRef.current = null;
     }
   }, [builtInHeuristicsUnavailableSince, includeAiClassifications, includeBuiltInHeuristics, startOfDayMinutes, userScopeKey]);
 
