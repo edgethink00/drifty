@@ -8731,11 +8731,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const deletedIds = new Set(ids);
       setHistorySearchSegments((currentSegments) => currentSegments.filter((segment) => !deletedIds.has(segment.id)));
       await refresh(selectedDayRef.current);
+      if (isPolicySignedIn) await focusCard.refresh();
     } catch (caught) {
       setError(toErrorMessage(caught));
       throw caught;
     }
-  }, [clearLocalActivityCaches, isDashboardDemoReplayActive, isPreviewSurface, refresh, shouldBlockLocalTrackerAccess]);
+  }, [focusCard.refresh, isPolicySignedIn, clearLocalActivityCaches, isDashboardDemoReplayActive, isPreviewSurface, refresh, shouldBlockLocalTrackerAccess]);
 
   const handleDeleteHistorySegments = useCallback(async (ids: readonly string[]) => {
     if (ids.length === 0 || historyDeleting) return;
@@ -8748,12 +8749,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const deletedIds = new Set(ids);
       setHistorySearchSegments((currentSegments) => currentSegments.filter((segment) => !deletedIds.has(segment.id)));
       await refresh(selectedDayRef.current);
+      if (isPolicySignedIn) await focusCard.refresh();
     } catch (e) {
       setError(toErrorMessage(e));
     } finally {
       setHistoryDeleting(false);
     }
-  }, [clearLocalActivityCaches, historyDeleting, refresh]);
+  }, [focusCard.refresh, isPolicySignedIn, clearLocalActivityCaches, historyDeleting, refresh]);
 
   const [deleteHistoryModalOpen, setDeleteHistoryModalOpen] = useState(false);
 
@@ -8766,9 +8768,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       // Metrics refresh is best-effort after a bulk delete; the views below still reload.
     }
     await refresh(selectedDayRef.current);
+    if (isPolicySignedIn) await focusCard.refresh();
     await syncLeaderboardPublication("history_deleted", { bypassSlotGate: true });
     await refreshLeaderboardData();
-  }, [clearLocalActivityCaches, refresh, refreshLeaderboardData, syncLeaderboardPublication]);
+  }, [focusCard.refresh, isPolicySignedIn, clearLocalActivityCaches, refresh, refreshLeaderboardData, syncLeaderboardPublication]);
 
   useEffect(() => {
     selectedDayRef.current = selectedDay;

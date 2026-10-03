@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   buildPayload: vi.fn(),
   publish: vi.fn(),
   refreshAggregates: vi.fn(),
+  fetchOwn: vi.fn(),
 }));
 
 vi.mock("./focusCardPublisher", () => ({
@@ -18,7 +19,7 @@ vi.mock("./focusCardService", () => ({
     shareCategoryBreakdown: false,
     shareHourlyPattern: false,
   },
-  fetchOwnFocusCard: vi.fn().mockResolvedValue({ success: true, data: null }),
+  fetchOwnFocusCard: mocks.fetchOwn,
   publishFocusCard: mocks.publish,
   refreshFocusCardAggregates: mocks.refreshAggregates,
   setFocusCardDetailFlags: vi.fn().mockResolvedValue({ success: true }),
@@ -30,6 +31,8 @@ describe("useFocusCard classification assessment gate", () => {
     vi.clearAllMocks();
     mocks.buildPayload.mockResolvedValue({ focusSeconds7d: 3_600 });
     mocks.publish.mockResolvedValue({ success: true });
+    mocks.fetchOwn.mockResolvedValue({ success: true, data: null });
+    mocks.refreshAggregates.mockResolvedValue({ success: true });
   });
 
   it("keeps the public aggregate unchanged while AI classification is pending", async () => {
@@ -132,4 +135,33 @@ describe("useFocusCard classification assessment gate", () => {
     expect(enabled).toBe(false);
     expect(mocks.publish).not.toHaveBeenCalled();
   });
+  it("refreshes an enabled card from the recomputed payload while assessment is ready", async () => {
+    mocks.fetchOwn.mockResolvedValue({ success: true, data: { enabled: true } });
+    const { result } = renderHook(() => useFocusCard({ windowEndDay: "2026-09-04",
+      startOfDayMinutes: 0, includeAiClassifications: true, classificationAssessmentReady: true }));
+    await act(async () => { await result.current.refresh(); });
+    expect(mocks.refreshAggregates).toHaveBeenCalledWith({ focusSeconds7d: 3_600 });
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it("does not publish a disabled card during post-delete refresh", async () => {
+    mocks.fetchOwn.mockResolvedValue({ success: true, data: { enabled: false } });
+    const { result } = renderHook(() => useFocusCard({ windowEndDay: "2026-09-04",
+      startOfDayMinutes: 0, includeAiClassifications: true, classificationAssessmentReady: true }));
+    await act(async () => { await result.current.refresh(); });
+    expect(result.current.enabled).toBe(false);
+    expect(mocks.refreshAggregates).not.toHaveBeenCalled();
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it("preserves the assessment pause gate during post-delete refresh", async () => {
+    mocks.fetchOwn.mockResolvedValue({ success: true, data: { enabled: true } });
+    const { result } = renderHook(() => useFocusCard({ windowEndDay: "2026-09-04",
+      startOfDayMinutes: 0, includeAiClassifications: true, classificationAssessmentReady: false }));
+    await act(async () => { await result.current.refresh(); });
+    expect(result.current.error).toMatch(/AI classification is paused/i);
+    expect(mocks.refreshAggregates).not.toHaveBeenCalled();
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
 });

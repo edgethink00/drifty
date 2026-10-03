@@ -13,7 +13,7 @@ import type { FocusCardDetailFlags } from "./focusCardService";
 
 // Drives the public focus card's opt-in from the Embed panel. Kept off the leaderboard
 // auto-publish hot path: the card is (re)published when the user enables it and refreshed
-// when the panel opens. `enabled` is null until the first status load.
+// when the panel opens or local history is deleted. `enabled` is null until the first status load.
 //
 // Detail opt-ins (category breakdown / hourly rhythm) live on the SERVER row —
 // it is the single source of truth, so the get_focus_card gate and the publisher can never
@@ -54,55 +54,81 @@ export function useFocusCard(input: UseFocusCardInput): FocusCardControls {
   const [previewPayload, setPreviewPayload] = useState<FocusCardPayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const operationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const refreshSequenceRef = useRef(0);
+  // Refreshes wait for earlier aggregate writes, so an old publication cannot
+  // restore deleted totals. Explicit publications keep their existing timing
+  // (including detail withdrawal) and register completion before later refreshes.
+  const runOperation = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
+    const queued = operationQueueRef.current.then(operation, operation);
+    operationQueueRef.current = queued.then(() => undefined, () => undefined);
+    return queued;
+  }, []);
+  const runPublication = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
+    const previous = operationQueueRef.current;
+    const published = operation();
+    operationQueueRef.current = Promise.allSettled([previous, published]).then(() => undefined);
+    return published;
+  }, []);
   const classificationAssessmentGateRef = useRef({ ready: classificationAssessmentReady });
   if (classificationAssessmentGateRef.current.ready !== classificationAssessmentReady) {
     classificationAssessmentGateRef.current = { ready: classificationAssessmentReady };
   }
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(() => {
+    const sequence = ++refreshSequenceRef.current;
     const assessmentGate = classificationAssessmentGateRef.current;
-    const [result, localPreview] = await Promise.all([
-      fetchOwnFocusCard(),
-      buildFocusCardPayloadFromTracker({
+    return runOperation(async () => {
+      if (sequence !== refreshSequenceRef.current) return;
+      const [result, localPreview] = await Promise.all([
+        fetchOwnFocusCard(),
+        buildFocusCardPayloadFromTracker({
+          windowEndDay,
+          startOfDayMinutes,
+          includeAiClassifications,
+          includeBuiltInHeuristics,
+          builtInHeuristicsUnavailableSince,
+          shareCategoryBreakdown: true,
+          shareHourlyPattern: true,
+        }).catch(() => null),
+      ]);
+      // A newer deletion can arrive while the old payload is being built.
+      if (sequence !== refreshSequenceRef.current) return;
+      const nextEnabled = result.success ? (result.data?.enabled ?? false) : false;
+      const nextFlags = result.success ? (result.data?.detailFlags ?? DEFAULT_FOCUS_CARD_DETAIL_FLAGS) : DEFAULT_FOCUS_CARD_DETAIL_FLAGS;
+      setEnabled(nextEnabled);
+      setDetailFlags(nextFlags);
+      setPreviewPayload(localPreview);
+      if (result.success
+        && nextEnabled
+        && localPreview
+        && assessmentGate.ready
+        && classificationAssessmentGateRef.current === assessmentGate) {
+        const published = await refreshFocusCardAggregates(localPreview);
+        if (sequence === refreshSequenceRef.current) {
+          setError(published.success ? null : (published.error ?? "Couldn't refresh your public focus summary."));
+        }
+      } else if (result.success && nextEnabled && !classificationAssessmentGateRef.current.ready) {
+        setError("AI classification is paused. Your public focus summary will stay unchanged until it catches up.");
+      }
+    });
+  }, [builtInHeuristicsUnavailableSince, classificationAssessmentReady, includeAiClassifications, includeBuiltInHeuristics, runOperation, startOfDayMinutes, windowEndDay]);
+
+  const publishWithFlags = useCallback((flags: FocusCardDetailFlags) => {
+    const assessmentGate = classificationAssessmentGateRef.current;
+    return runPublication(async () => {
+      const payload = await buildFocusCardPayloadFromTracker({
         windowEndDay,
         startOfDayMinutes,
         includeAiClassifications,
         includeBuiltInHeuristics,
         builtInHeuristicsUnavailableSince,
-        shareCategoryBreakdown: true,
-        shareHourlyPattern: true,
-      }).catch(() => null),
-    ]);
-    const nextEnabled = result.success ? (result.data?.enabled ?? false) : false;
-    const nextFlags = result.success ? (result.data?.detailFlags ?? DEFAULT_FOCUS_CARD_DETAIL_FLAGS) : DEFAULT_FOCUS_CARD_DETAIL_FLAGS;
-    setEnabled(nextEnabled);
-    setDetailFlags(nextFlags);
-    setPreviewPayload(localPreview);
-    if (result.success
-      && nextEnabled
-      && localPreview
-      && assessmentGate.ready
-      && classificationAssessmentGateRef.current === assessmentGate) {
-      const published = await refreshFocusCardAggregates(localPreview);
-      setError(published.success ? null : (published.error ?? "Couldn't refresh your public focus summary."));
-    } else if (result.success && nextEnabled && !classificationAssessmentGateRef.current.ready) {
-      setError("AI classification is paused. Your public focus summary will stay unchanged until it catches up.");
-    }
-  }, [builtInHeuristicsUnavailableSince, classificationAssessmentReady, includeAiClassifications, includeBuiltInHeuristics, startOfDayMinutes, windowEndDay]);
-
-  const publishWithFlags = useCallback(async (flags: FocusCardDetailFlags) => {
-    const assessmentGate = classificationAssessmentGateRef.current;
-    const payload = await buildFocusCardPayloadFromTracker({
-      windowEndDay,
-      startOfDayMinutes,
-      includeAiClassifications,
-      includeBuiltInHeuristics,
-      builtInHeuristicsUnavailableSince,
-      ...flags,
+        ...flags,
+      });
+      if (!assessmentGate.ready || classificationAssessmentGateRef.current !== assessmentGate) return null;
+      return publishFocusCard(payload, true);
     });
-    if (!assessmentGate.ready || classificationAssessmentGateRef.current !== assessmentGate) return null;
-    return publishFocusCard(payload, true);
-  }, [builtInHeuristicsUnavailableSince, includeAiClassifications, includeBuiltInHeuristics, startOfDayMinutes, windowEndDay]);
+  }, [builtInHeuristicsUnavailableSince, includeAiClassifications, includeBuiltInHeuristics, runPublication, startOfDayMinutes, windowEndDay]);
 
   const enable = useCallback(async (): Promise<boolean> => {
     setBusy(true);
