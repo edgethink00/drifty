@@ -1003,9 +1003,28 @@ class TrackerDatabase:
             return False
         return not row["next_retry_at"] or row["next_retry_at"] <= timestamp
 
-    def save_youtube_metadata(self, metadata: YouTubeVideoMetadata) -> None:
+    @staticmethod
+    def _youtube_metadata_write_is_allowed(
+        conn: sqlite3.Connection, video_id: str, require_activity_reference: bool,
+    ) -> bool:
+        if not require_activity_reference:
+            return True
+        # The reference check and metadata write share one write transaction.
+        # A concurrent deletion cannot commit between them.
+        if not conn.in_transaction:
+            conn.execute("BEGIN IMMEDIATE")
+        return conn.execute(
+            "SELECT 1 FROM activity_segments WHERE youtube_video_id = ? LIMIT 1",
+            (video_id,),
+        ).fetchone() is not None
+
+    def save_youtube_metadata(
+        self, metadata: YouTubeVideoMetadata, *, require_activity_reference: bool = False,
+    ) -> None:
         fetched_at = datetime.now(timezone.utc).isoformat()
         with self.connect() as conn:
+            if not self._youtube_metadata_write_is_allowed(conn, metadata.video_id, require_activity_reference):
+                return
             conn.execute(
                 """
                 INSERT INTO youtube_video_metadata(
@@ -1066,10 +1085,14 @@ class TrackerDatabase:
                 ),
             )
 
-    def save_youtube_metadata_failure(self, video_id: str) -> None:
+    def save_youtube_metadata_failure(
+        self, video_id: str, *, require_activity_reference: bool = False,
+    ) -> None:
         now = datetime.now(timezone.utc)
         failed_at = now.isoformat()
         with self.connect() as conn:
+            if not self._youtube_metadata_write_is_allowed(conn, video_id, require_activity_reference):
+                return
             row = conn.execute(
                 "SELECT error_count FROM youtube_video_metadata WHERE video_id = ?",
                 (video_id,),
@@ -1986,7 +2009,7 @@ class TrackerDatabase:
                     # the validated row before its ID is deleted.
                     conn.execute("BEGIN IMMEDIATE")
                 rows: list[sqlite3.Row] = []
-                columns = "*" if expected_capture_timings is not None else "id, segment_uid"
+                columns = "*" if expected_capture_timings is not None else "id, segment_uid, youtube_video_id"
                 for start in range(0, len(normalized_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
                     batch = normalized_ids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
                     placeholders = ",".join("?" for _ in batch)
@@ -2020,6 +2043,18 @@ class TrackerDatabase:
                         tuple(batch),
                     )
                     deleted += cursor.rowcount
+                # Only prune metadata associated with these removed segments.
+                # Other retained cache rows and videos still referenced survive.
+                video_ids = sorted({row["youtube_video_id"] for row in rows if row["youtube_video_id"]})
+                for start in range(0, len(video_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+                    batch = video_ids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+                    placeholders = ",".join("?" for _ in batch)
+                    conn.execute(
+                        f"DELETE FROM youtube_video_metadata WHERE video_id IN ({placeholders}) "
+                        "AND video_id NOT IN (SELECT youtube_video_id FROM activity_segments "
+                        "WHERE youtube_video_id IS NOT NULL)",
+                        tuple(batch),
+                    )
                 deleted_uids = [
                     row["segment_uid"] for row in rows if row["segment_uid"] is not None
                 ]

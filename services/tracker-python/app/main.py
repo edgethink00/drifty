@@ -2051,11 +2051,11 @@ def _fetch_youtube_metadata_background(db_path: Path, video_id: str, site_url: s
         if not db.youtube_metadata_should_fetch(video_id):
             return
         metadata = fetch_youtube_metadata(site_url, video_id, timeout_seconds=YOUTUBE_METADATA_TIMEOUT_SECONDS)
-        db.save_youtube_metadata(metadata)
+        db.save_youtube_metadata(metadata, require_activity_reference=True)
     except Exception:
         if db is None:
             db = TrackerDatabase(db_path, perform_maintenance=False)
-        db.save_youtube_metadata_failure(video_id)
+        db.save_youtube_metadata_failure(video_id, require_activity_reference=True)
     finally:
         try:
             if db is not None:

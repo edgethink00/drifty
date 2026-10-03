@@ -3210,7 +3210,7 @@ class TrackerMainTests(unittest.TestCase):
                 db_path, "worker-video", "https://www.youtube.com/watch?v=worker-video"
             )
         constructor.assert_called_once_with(db_path, perform_maintenance=False)
-        worker_db.save_youtube_metadata_failure.assert_called_once_with("worker-video")
+        worker_db.save_youtube_metadata_failure.assert_called_once_with("worker-video", require_activity_reference=True)
         worker_db.close.assert_called_once()
         self.assertNotIn("worker-video", tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
 
@@ -3257,6 +3257,12 @@ class TrackerMainTests(unittest.TestCase):
         video_id = "separate-connection-video"
         with temp_dir_closing_databases() as tmp:
             db = TrackerDatabase(Path(tmp) / "tracker.sqlite3")
+            db.record_snapshot(Snapshot(
+                observed_at="2026-10-03T09:00:00+00:00",
+                app_name="Synthetic Browser", bundle_id="fixture.browser",
+                window_title="Synthetic QA video", source="accessibility",
+                youtube_video_id=video_id,
+            ), 5)
             try:
                 with patch("app.main.threading.Thread", side_effect=capture_thread), patch.object(
                     tracker_main, "fetch_youtube_metadata",
