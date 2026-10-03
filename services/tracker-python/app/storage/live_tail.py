@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.storage.db import TrackerDatabase
+from app.storage.db import BROWSER_HISTORY_IMPORT_SOURCE, TrackerDatabase
 
 DEFAULT_LIVE_TAIL_LIMIT = 8
 MAX_LIVE_TAIL_LIMIT = 50
@@ -67,9 +67,34 @@ def fetch_live_tail(
         tail_filters.append("activity_segments.id > ?")
         params.append(after_id)
 
+    if after_id is not None and after_ended_at:
+        # A clock correction can leave the latest local capture below the
+        # timestamp high-water mark. Replay that one live row so its continued
+        # duration reaches the renderer. Imported/other-device rows do not
+        # represent the capture loop's mutable tail.
+        tail_filters.append("""
+            (activity_segments.id = (
+                SELECT id FROM activity_segments
+                WHERE origin_device_id IS NULL AND source != ?
+                ORDER BY id DESC LIMIT 1
+            ) AND datetime(activity_segments.ended_at) < datetime(?))
+        """)
+        params.extend((BROWSER_HISTORY_IMPORT_SOURCE, TrackerDatabase._normalize_range_bound(after_ended_at)))
+
     if tail_filters:
         query += f" AND ({' OR '.join(tail_filters)})"
-        query += " ORDER BY datetime(activity_segments.ended_at) ASC, activity_segments.id ASC LIMIT ?"
+        if after_id is not None:
+            # Consume new ids in insertion order before replaying older rows.
+            # Timestamp order can jump past unseen ids in a bounded page.
+            query += """
+                ORDER BY
+                    CASE WHEN activity_segments.id > ? THEN 0 ELSE 1 END ASC,
+                    CASE WHEN activity_segments.id > ? THEN activity_segments.id END ASC,
+                    activity_segments.id DESC LIMIT ?
+            """
+            params.extend((after_id, after_id))
+        else:
+            query += " ORDER BY datetime(activity_segments.ended_at) ASC, activity_segments.id ASC LIMIT ?"
     else:
         query += " ORDER BY datetime(activity_segments.ended_at) DESC, activity_segments.id DESC LIMIT ?"
     params.append(resolved_limit)

@@ -15,8 +15,18 @@ export function activitySegmentEndedAtMs(segment: ActivitySegment): number {
 export function latestActivitySegmentCursor(segments: readonly ActivitySegment[]): LiveTailCursor {
   let latestSegment: ActivitySegment | null = null;
   let latestEndedAtMs = Number.NEGATIVE_INFINITY;
+  let highestIdSegment: ActivitySegment | null = null;
+  let highestId = Number.NEGATIVE_INFINITY;
 
   for (const segment of segments) {
+    // Insert order and wall time are independent after history imports or a
+    // clock correction. Advancing only the newest timestamp can replay the
+    // same bounded page forever and hide later captures.
+    const id = Number(segment.id);
+    if (Number.isFinite(id) && id > highestId) {
+      highestIdSegment = segment;
+      highestId = id;
+    }
     const endedAtMs = activitySegmentEndedAtMs(segment);
     if (endedAtMs > latestEndedAtMs) {
       latestSegment = segment;
@@ -37,7 +47,7 @@ export function latestActivitySegmentCursor(segments: readonly ActivitySegment[]
   }
 
   return {
-    afterSegmentId: latestSegment?.id ?? null,
+    afterSegmentId: highestIdSegment?.id ?? latestSegment?.id ?? null,
     afterEndedAt: latestSegment?.endedAt ?? null,
   };
 }
