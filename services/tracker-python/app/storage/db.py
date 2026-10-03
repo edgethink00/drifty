@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
 from app.fs_safety import ensure_directory
+from app.storage.ai_review_schema import ensure_ai_review_schema
 from app.text_safety import without_lone_surrogates
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
 from app.capture_platform import CAPTURE_PLATFORM
@@ -474,24 +475,6 @@ class TrackerDatabase:
                 CREATE INDEX IF NOT EXISTS idx_project_pass_runs_ran_at
                 ON project_pass_runs(ran_at DESC);
 
-                CREATE TABLE IF NOT EXISTS ai_review_events (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  segment_id INTEGER NOT NULL,
-                  pass_id INTEGER NOT NULL REFERENCES project_pass_runs(id),
-                  prev_category TEXT,
-                  prev_productivity TEXT,
-                  prev_source TEXT,
-                  new_category TEXT,
-                  new_productivity TEXT,
-                  confidence REAL,
-                  reason TEXT,
-                  created_at TEXT NOT NULL,
-                  reverted_at TEXT
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_ai_review_events_segment
-                ON ai_review_events(segment_id, created_at DESC);
-
                 CREATE TABLE IF NOT EXISTS sync_counter (
                   id INTEGER PRIMARY KEY CHECK (id = 1),
                   seq INTEGER NOT NULL
@@ -573,6 +556,7 @@ class TrackerDatabase:
             )
             self._ensure_columns(conn)
             self._ensure_sync_schema(conn)
+            ensure_ai_review_schema(conn)
             self._ensure_default_excluded_apps(conn)
 
     def _ensure_columns(self, conn: sqlite3.Connection) -> None:
