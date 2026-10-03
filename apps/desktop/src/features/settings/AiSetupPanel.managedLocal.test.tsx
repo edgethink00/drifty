@@ -2,6 +2,8 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
+import { localAiProviderConfigFromSetup } from "./localAiClassificationOptions";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
 
 describe("AiSetupPanel managed local model setup", () => {
@@ -47,7 +49,7 @@ describe("AiSetupPanel managed local model setup", () => {
   });
 
   it("installs, reveals, and deletes the selected managed local model from the model dropdown", async () => {
-    renderPanel();
+    const panel = renderPanel({ initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, driftyRoute: "local" } });
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
     fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
@@ -67,6 +69,8 @@ describe("AiSetupPanel managed local model setup", () => {
     const deleteButton = await within(modelBeingUsed).findByRole("button", { name: /^Delete Qwen 3\.5 4B managed local model$/i });
     if (!(deleteButton instanceof HTMLButtonElement)) throw new Error("Delete control should be a button.");
     await waitFor(() => expect(deleteButton.disabled).toBe(false));
+    expect(panel.getLocalAiSetup().managedLocalBaseUrl).toBe("http://127.0.0.1:39217/v1");
+    expect(localAiProviderConfigFromSetup(panel.getLocalAiSetup())).not.toBeNull();
     fireEvent.click(deleteButton);
 
     // Deletion is destructive: the dropdown click only opens a confirmation dialog — nothing is deleted yet.
@@ -75,5 +79,10 @@ describe("AiSetupPanel managed local model setup", () => {
     fireEvent.click(within(confirmDialog).getByRole("button", { name: /^Delete model$/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_delete", { modelId: "drifty-qwen3-5-4b-default" }));
+    await waitFor(() => expect(panel.getLocalAiSetup().managedLocalBaseUrl).toBe(""));
+    expect(panel.getLocalAiSetup().managedLocalModel).toBe("");
+    expect(panel.getLocalAiSetup().managedLocalModelId).toBe("drifty-qwen3-5-4b-default");
+    expect(panel.getLocalAiSetup().driftyRoute).toBe("local");
+    expect(localAiProviderConfigFromSetup(panel.getLocalAiSetup())).toBeNull();
   });
 });

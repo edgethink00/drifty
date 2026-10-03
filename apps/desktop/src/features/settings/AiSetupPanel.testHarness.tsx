@@ -170,9 +170,11 @@ export function renderPanel({
   const onManageCloudDevices = vi.fn();
   const onLocalAiConnectionTestResult = vi.fn();
   let setConnectionStatus: Dispatch<SetStateAction<AiConnectionStatus>> | null = null;
+  let observedSetup = initialSetup;
 
   function Harness() {
     const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(initialSetup);
+    observedSetup = localAiSetup;
     const [currentConnectionStatus, setCurrentConnectionStatus] = useState<AiConnectionStatus>(connectionStatus);
     const connectionTest = useAiConnectionTestRunner({
       localAiSetup,
@@ -213,6 +215,7 @@ export function renderPanel({
     onManageCloudDevices,
     onStartCloudSetup,
     unmount: rendered.unmount,
+    getLocalAiSetup: () => observedSetup,
     setConnectionStatus: (nextConnectionStatus: AiConnectionStatus) => {
       if (!setConnectionStatus) throw new AiSetupPanelTestHarnessError("AI setup panel test harness is not mounted.");
       setConnectionStatus(nextConnectionStatus);

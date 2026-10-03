@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LocalAiSetupState } from "./localAiSetup";
+import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 import {
   fallbackManagedLocalAiStatus,
   installingManagedLocalAiStatus,
   MANAGED_LOCAL_AI_FALLBACK_CATALOG,
+  type ManagedLocalAiStatus,
 } from "./managedLocalAiClient";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 
@@ -16,6 +17,7 @@ type StatusEventHandler = (event: { readonly payload: unknown }) => void;
 
 const clientMocks = vi.hoisted(() => ({
   getManagedLocalAiStatus: vi.fn(),
+  deleteManagedLocalAiModel: vi.fn(),
   listManagedLocalAiModels: vi.fn(),
   listen: vi.fn(),
   unlisten: vi.fn(),
@@ -26,6 +28,7 @@ vi.mock("./managedLocalAiClient", async (importOriginal) => {
   return {
     ...actual,
     getManagedLocalAiStatus: clientMocks.getManagedLocalAiStatus,
+    deleteManagedLocalAiModel: clientMocks.deleteManagedLocalAiModel,
     listManagedLocalAiModels: clientMocks.listManagedLocalAiModels,
   };
 });
@@ -146,3 +149,87 @@ function deferred<T>() {
   });
   return { promise, resolve: resolvePromise };
 }
+
+describe("useManagedLocalAiSetup model deletion boundaries", () => {
+  const activeId = "drifty-qwen3-5-4b-default";
+  const otherId = "drifty-gemma-4-12b-local";
+  const readySetup: LocalAiSetupState = {
+    ...DEFAULT_LOCAL_AI_SETUP,
+    driftyRoute: "local",
+    managedLocalModelId: activeId,
+    managedLocalBaseUrl: "http://127.0.0.1:39217/v1",
+    managedLocalModel: "drifty-qwen3.5-4b-local",
+  };
+  const installed = (ids: readonly string[]) => ids.map((id) => ({ id, artifactDir: "/synthetic/" + id }));
+  const deleted = (ids: readonly string[] = []): ManagedLocalAiStatus => ({
+    ...fallbackManagedLocalAiStatus("Synthetic successful deletion"),
+    state: "not_installed",
+    installedModels: installed(ids),
+  });
+
+  beforeEach(() => {
+    clientMocks.deleteManagedLocalAiModel.mockReset();
+    clientMocks.listManagedLocalAiModels.mockResolvedValue(MANAGED_LOCAL_AI_FALLBACK_CATALOG);
+    clientMocks.getManagedLocalAiStatus.mockResolvedValue({
+      ...installingManagedLocalAiStatus(activeId, installed([activeId, otherId])),
+      state: "running", baseUrl: readySetup.managedLocalBaseUrl, model: readySetup.managedLocalModel,
+    });
+  });
+
+  async function renderReady(initialSetup = readySetup) {
+    const hook = renderHook(() => {
+      const [setup, setSetup] = useState(initialSetup);
+      const managed = useManagedLocalAiSetup(true, setSetup);
+      return { setup, setSetup, managed };
+    });
+    await waitFor(() => expect(hook.result.current.managed.status?.state).toBe("running"));
+    return hook;
+  }
+
+  it("keeps the active endpoint after deleting a different installed model", async () => {
+    clientMocks.deleteManagedLocalAiModel.mockResolvedValue(deleted([activeId]));
+    const { result } = await renderReady();
+    await act(async () => { await result.current.managed.deleteModel(otherId); });
+    expect(clientMocks.deleteManagedLocalAiModel).toHaveBeenCalledWith(otherId);
+    expect(result.current.setup).toEqual(readySetup);
+  });
+
+  it("does not interpret a busy native install response as completed deletion", async () => {
+    clientMocks.deleteManagedLocalAiModel.mockResolvedValue(
+      installingManagedLocalAiStatus(otherId, installed([activeId])),
+    );
+    const { result } = await renderReady();
+    await act(async () => { await result.current.managed.deleteModel(activeId); });
+    expect(result.current.managed.status?.state).toBe("installing");
+    expect(result.current.setup).toEqual(readySetup);
+  });
+
+  it("preserves the setup when native deletion rejects", async () => {
+    clientMocks.deleteManagedLocalAiModel.mockRejectedValue(new Error("Synthetic deletion denied"));
+    const { result } = await renderReady();
+    await act(async () => { await result.current.managed.deleteModel(activeId); });
+    expect(result.current.managed.status?.state).toBe("error");
+    expect(result.current.setup).toEqual(readySetup);
+  });
+
+  it("preserves a newer selected model while the previous deletion is pending", async () => {
+    const deletion = deferred<ManagedLocalAiStatus>();
+    clientMocks.deleteManagedLocalAiModel.mockReturnValue(deletion.promise);
+    const { result } = await renderReady();
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.managed.deleteModel(activeId); });
+    const newer = { ...readySetup, managedLocalModelId: otherId, managedLocalModel: "drifty-gemma4-12b-local" };
+    act(() => { result.current.setSetup(newer); });
+    await act(async () => { deletion.resolve(deleted([otherId])); await pending; });
+    expect(result.current.setup).toEqual(newer);
+  });
+
+  it("clears deleted runtime details without changing the chosen provider or route", async () => {
+    clientMocks.deleteManagedLocalAiModel.mockResolvedValue(deleted());
+    const setup = { ...readySetup, provider: "self_hosted" as const,
+      selfHostedBaseUrl: "http://127.0.0.1:11434/v1", selfHostedModel: "synthetic-other-model" };
+    const { result } = await renderReady(setup);
+    await act(async () => { await result.current.managed.deleteModel(activeId); });
+    expect(result.current.setup).toEqual({ ...setup, managedLocalBaseUrl: "", managedLocalModel: "" });
+  });
+});

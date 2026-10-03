@@ -21,10 +21,12 @@ import { normalizeManagedLocalModelId, type LocalAiSetupState } from "./localAiS
 type ManagedLocalAiAction = (modelId: string) => Promise<ManagedLocalAiStatus>;
 type SyncManagedSetupOptions = {
   readonly activateProvider: boolean;
+  readonly deletedModelId?: string;
 };
 type RunActionOptions = {
   readonly activateProvider: boolean;
   readonly optimisticInstalling: boolean;
+  readonly deletedModelId?: string;
 };
 
 const MANAGED_LOCAL_AI_STATUS_EVENT = "managed-ai-status";
@@ -66,8 +68,12 @@ export function useManagedLocalAiSetup(
       const managedLocalModelId = runtimeReady
         ? normalizeManagedLocalModelId(nextStatus.selectedModelId)
         : current.managedLocalModelId;
-      const managedLocalBaseUrl = runtimeReady ? nextStatus.baseUrl : current.managedLocalBaseUrl;
-      const managedLocalModel = runtimeReady ? nextStatus.model : current.managedLocalModel;
+      const configuredModelDeleted = options.deletedModelId !== undefined
+        && normalizeManagedLocalModelId(current.managedLocalModelId) === options.deletedModelId
+        && nextStatus.state === "not_installed"
+        && !nextStatus.installedModels.some((model) => model.id === options.deletedModelId);
+      const managedLocalBaseUrl = runtimeReady ? nextStatus.baseUrl : configuredModelDeleted ? "" : current.managedLocalBaseUrl;
+      const managedLocalModel = runtimeReady ? nextStatus.model : configuredModelDeleted ? "" : current.managedLocalModel;
       if (
         current.provider === provider
         && current.driftyRoute === driftyRoute
@@ -207,7 +213,10 @@ export function useManagedLocalAiSetup(
       // activate the wrong model id/base URL, and let the user advance mid-download.
       // A return about the model we're installing is applied as normal.
       if (!options.optimisticInstalling || nextStatus.selectedModelId === modelId) {
-        syncManagedSetup(nextStatus, { activateProvider: options.activateProvider });
+        syncManagedSetup(nextStatus, {
+          activateProvider: options.activateProvider,
+          ...(options.deletedModelId ? { deletedModelId: options.deletedModelId } : {}),
+        });
         notifyReadyOnce(nextStatus);
         if (mountedRef.current) setStatus(nextStatus);
       }
@@ -224,7 +233,7 @@ export function useManagedLocalAiSetup(
     catalog,
     loading,
     status,
-    deleteModel: (modelId) => runAction(modelId, deleteManagedLocalAiModel, { activateProvider: false, optimisticInstalling: false }),
+    deleteModel: (modelId) => runAction(modelId, deleteManagedLocalAiModel, { activateProvider: false, optimisticInstalling: false, deletedModelId: modelId }),
     installModel: (modelId) => runAction(modelId, installManagedLocalAiModel, { activateProvider: activateProviderOnInstall, optimisticInstalling: true }),
     startModel: (modelId) => runAction(modelId, startManagedLocalAi, { activateProvider: true, optimisticInstalling: false }),
     refresh,
