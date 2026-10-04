@@ -18,8 +18,9 @@ import { PillBrandMark, PillDismissIcon } from "./CompanionPillIcons";
  * day was spent). The pair below names what a good stretch looked like; top
  * apps says where the time actually went.
  *
- * A "vs yesterday" delta used to ride on the head. It was only ever populated
- * by the Dev mock, so production never showed it and the row does without.
+ * When yesterday was watched long enough, each ring row carries its change
+ * against the day before at the same time of day. Only the direction that is
+ * better (more focus, less drift) takes the accent; neutral time never does.
  */
 
 type RingStyle = CSSProperties & { "--seg"?: string };
@@ -68,6 +69,10 @@ export function CompanionPillDayReview({
     ? formatClockShort(longestRunStart, effectiveLanguage)
     : null;
   const trackedDuration = formatReviewClockDuration(totalSeconds);
+  const comparison = event.comparison;
+  const comparisonLabel = comparison
+    ? t(comparison.scope === "wholeDay" ? "companion.dayReview.vsDayBeforeWhole" : "companion.dayReview.vsDayBefore")
+    : undefined;
   const longestCaption = longestRun > 0
     ? (longestRunStartLabel
       ? t("companion.dayReview.fromTime", { time: longestRunStartLabel })
@@ -123,29 +128,32 @@ export function CompanionPillDayReview({
                 <span>%</span>
               </b>
             </div>
-            <div className="eodv12__cats">
+            <div className="eodv12__cats" data-compare={comparison ? "" : undefined}>
               <CategoryRow
                 label={t("activity.productivity.focus")}
                 seconds={focusSeconds}
                 tone="var(--p-focus)"
-                deltaSeconds={event.comparison?.focusDeltaSeconds}
-                deltaTone="good"
+                deltaSeconds={comparison?.focusDeltaSeconds}
+                better="higher"
+                comparisonLabel={comparisonLabel}
                 language={effectiveLanguage}
               />
               <CategoryRow
                 label={t("activity.productivity.drift")}
                 seconds={driftSeconds}
                 tone="var(--p-drift)"
-                deltaSeconds={event.comparison?.driftDeltaSeconds}
-                deltaTone="good"
+                deltaSeconds={comparison?.driftDeltaSeconds}
+                better="lower"
+                comparisonLabel={comparisonLabel}
                 language={effectiveLanguage}
               />
               <CategoryRow
                 label={t("activity.productivity.neutral")}
                 seconds={neutralSeconds}
                 tone="var(--p-neutral)"
-                deltaSeconds={event.comparison?.otherDeltaSeconds}
-                deltaTone="flat"
+                deltaSeconds={comparison?.otherDeltaSeconds}
+                better="none"
+                comparisonLabel={comparisonLabel}
                 language={effectiveLanguage}
               />
             </div>
@@ -271,23 +279,32 @@ function CategoryRow({
   seconds,
   tone,
   deltaSeconds,
-  deltaTone,
+  better,
   language,
+  comparisonLabel,
 }: {
   label: string;
   seconds: number;
   tone: string;
   deltaSeconds?: number;
-  deltaTone: "good" | "flat";
+  /** Which direction of change is the good one for this row. */
+  better: "higher" | "lower" | "none";
   language: LocalizationController["effectiveLanguage"];
+  /** What the change is measured against, for the tooltip and assistive name. */
+  comparisonLabel?: string;
 }) {
+  const deltaTone = typeof deltaSeconds === "number" && deltaSeconds !== 0
+    && ((better === "higher" && deltaSeconds > 0) || (better === "lower" && deltaSeconds < 0))
+    ? "good" as const
+    : "flat" as const;
   return (
     <div className="eod__row" style={{ "--seg": tone } as RingStyle}>
       <span>{label}</span>
       <b>{formatReviewClockDuration(seconds)}</b>
-      {typeof deltaSeconds === "number" ? (
-        <ReviewDelta seconds={deltaSeconds} tone={deltaTone} language={language} />
-      ) : null}
+      {/* Under a minute of change reads as "no change": an empty cell keeps the columns aligned. */}
+      {typeof deltaSeconds === "number" ? (Math.abs(deltaSeconds) >= 60
+        ? <ReviewDelta seconds={deltaSeconds} tone={deltaTone} language={language} title={comparisonLabel} />
+        : <i className="eod__delta" aria-hidden="true" />) : null}
     </div>
   );
 }
@@ -297,15 +314,17 @@ function ReviewDelta({
   tone,
   language,
   suffix = "",
+  title,
 }: {
   seconds: number;
   tone: "good" | "flat";
   language: LocalizationController["effectiveLanguage"];
   suffix?: string;
+  title?: string;
 }) {
   const direction = seconds < 0 ? "▼" : "▲";
   return (
-    <i className="eod__delta" data-delta={tone}>
+    <i className="eod__delta" data-delta={tone} title={title}>
       {direction}{formatFocusedMinutes(Math.abs(seconds), language)}{suffix}
     </i>
   );

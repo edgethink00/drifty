@@ -127,7 +127,7 @@ describe("CompanionPillDayReview", () => {
     expect(screen.getByText("Best this week")).toBeTruthy();
     // The head row is Focus (4:12, captioned with the 6:34 tracked total) and
     // Longest streak (1:48, from the minute that run actually began). The
-    // "vs yesterday" delta is gone: production never had comparison data.
+    // head carries no "vs yesterday" delta; the comparison lives on the ring rows.
     expect(screen.getByText("Focus", { selector: ".eodsec" })).toBeTruthy();
     expect(screen.getAllByText("4:12").length).toBeGreaterThan(0);
     expect(screen.getByText("of 6:34 tracked")).toBeTruthy();
@@ -160,6 +160,24 @@ describe("CompanionPillDayReview", () => {
     expect(onOpenDashboard).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByTitle("Dismiss"));
     expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it("accents only the better direction of each change against the day before", () => {
+    const { container } = renderReview({ ...reviewEvent, comparison: { focusDeltaSeconds: -600, driftDeltaSeconds: 900, otherDeltaSeconds: 0 } });
+    const deltas = Array.from(container.querySelectorAll(".eodv12__cats .eod__delta[data-delta]"));
+    // Less focus and more drift are reported plainly, never in the accent; no change shows no arrow.
+    expect(deltas.map((delta) => [delta.textContent, delta.getAttribute("data-delta")])).toEqual([
+      ["▼10m", "flat"], ["▲15m", "flat"],
+    ]);
+    expect(deltas[0].getAttribute("title")).toBe("vs. the day before at this time");
+    cleanup();
+    const better = renderReview({ ...reviewEvent, comparison: { focusDeltaSeconds: 600, driftDeltaSeconds: -900, otherDeltaSeconds: 300 } });
+    expect(Array.from(better.container.querySelectorAll(".eodv12__cats .eod__delta[data-delta]")).map((delta) => delta.getAttribute("data-delta")))
+      .toEqual(["good", "good", "flat"]);
+    cleanup();
+    // A catch-up review compares two finished days, and says so.
+    const wholeDay = renderReview({ ...reviewEvent, comparison: { focusDeltaSeconds: 600, driftDeltaSeconds: 0, otherDeltaSeconds: 0, scope: "wholeDay" } });
+    expect(wholeDay.container.querySelector(".eodv12__cats .eod__delta[data-delta]")?.getAttribute("title")).toBe("vs. the whole day before");
   });
 
   it("keeps English copy when the display language is English", () => {
@@ -315,5 +333,11 @@ describe("CompanionPillDayReview", () => {
     const pendingNotice = screen.getByText("Connect AI to finish this review").closest(".eodv12__pending");
     expect(pendingNotice?.hasAttribute("data-tone")).toBe(false);
     expect(screen.getByRole("button", { name: "AI settings" })).toBeTruthy();
+  });
+  it("shows no change arrow for a change under a minute", () => {
+    renderReview({ ...reviewEvent, comparison: { focusDeltaSeconds: 2_280, driftDeltaSeconds: -540, otherDeltaSeconds: 20 } });
+    expect(document.querySelectorAll(".eod__row .eod__delta[data-delta]")).toHaveLength(2);
+    // The empty cell keeps the third row's time aligned without reading as a change.
+    expect(document.querySelectorAll(".eod__row .eod__delta:not([data-delta])")).toHaveLength(1);
   });
 });

@@ -7992,6 +7992,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
   }, []);
 
+  /* The review compares with the previous logical day; a missing timeline only drops the comparison. */
+  const loadPreviousReviewDaySegments = useCallback(async (day: string): Promise<ActivitySegment[] | undefined> => {
+    const previousDay = shiftIsoDate(day, -1);
+    try {
+      return materializeBuiltInHeuristicTimeline(await trackerClient.getTimeline(getLogicalDayRange(previousDay, previousDay, startOfDayMinutes))).segments;
+    } catch {
+      return undefined;
+    }
+  }, [materializeBuiltInHeuristicTimeline, startOfDayMinutes]);
   const presentScheduledDayReview = useCallback(async (request: DayReviewPresentationRequest): Promise<DayReviewDeliveryResult> => {
     let leaderboardCelebration: LeaderboardCelebration | undefined;
     try {
@@ -8004,14 +8013,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     } catch {
       leaderboardCelebration = undefined;
     }
+    const previousDaySegments = await loadPreviousReviewDaySegments(request.day);
     const event = await buildEndOfDayReviewEvent({
       day: request.day,
       generatedAt: new Date().toISOString(),
       segments: request.segments,
+      previousDaySegments,
+      startOfDayMinutes,
       leaderboardCelebration,
     });
     return showEndOfDayReview({ ...event, presentationDay: request.day, expiresAt: request.expiresAt });
-  }, [buildEndOfDayReviewEvent, isPolicySignedIn, isSupabaseConfigured, showEndOfDayReview]);
+  }, [buildEndOfDayReviewEvent, isPolicySignedIn, isSupabaseConfigured, loadPreviousReviewDaySegments, showEndOfDayReview, startOfDayMinutes]);
 
   useDayReviewScheduler({
     active: END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED

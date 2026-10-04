@@ -2,6 +2,11 @@ import {
   buildAppUsageSummaries,
   buildProductivityDurations,
   classifyActivityDetailed,
+  isBrowserHistoryImportSegment,
+  isFailedForegroundCaptureSegment,
+  logicalDayEndExclusiveMs,
+  logicalDayStartMs,
+  shiftIsoDate,
   secondsToLabel,
   type ActivitySegment,
   type AppIconMap,
@@ -48,6 +53,8 @@ export type EndOfDayReviewComparison = {
   focusDeltaSeconds: number;
   driftDeltaSeconds: number;
   otherDeltaSeconds: number;
+  /** sameTime: yesterday up to this time of day (a live evening review). wholeDay: two finished days (a catch-up review). */
+  scope?: "sameTime" | "wholeDay";
 };
 
 export type EndOfDayReviewDailySignals = {
@@ -104,10 +111,61 @@ export type EndOfDayReviewEvent = {
   isMock?: boolean;
 };
 
+/** Yesterday must have been watched for at least this long (imports excluded) to be compared against. */
+export const END_OF_DAY_REVIEW_COMPARISON_MIN_OBSERVED_SECONDS = 3 * 60 * 60;
+
+/**
+ * Today against yesterday up to the same point of the day: a review at 8 PM compares with yesterday
+ * until 8 PM, and a catch-up review of a finished day compares whole days. Yesterday only counts when
+ * Drifty watched enough of it; time rebuilt from browser history is not a day Drifty saw.
+ */
+export function buildEndOfDayReviewComparison({
+  day,
+  generatedAt,
+  previousDaySegments,
+  current,
+  classificationOptions,
+  startOfDayMinutes = 0,
+}: {
+  day: string;
+  generatedAt: string;
+  previousDaySegments: readonly ActivitySegment[];
+  current: { readonly focusSeconds: number; readonly driftSeconds: number; readonly neutralSeconds: number };
+  classificationOptions?: ClassificationOptions;
+  startOfDayMinutes?: number;
+}): EndOfDayReviewComparison | undefined {
+  const observed = previousDaySegments.filter((segment) => !isBrowserHistoryImportSegment(segment) && !isFailedForegroundCaptureSegment(segment));
+  const observedSeconds = observed.reduce((total, segment) => total + Math.max(0, segment.durationSeconds), 0);
+  if (observedSeconds < END_OF_DAY_REVIEW_COMPARISON_MIN_OBSERVED_SECONDS) return undefined;
+  const previousDay = shiftIsoDate(day, -1);
+  const elapsedMs = Date.parse(generatedAt) - logicalDayStartMs(day, startOfDayMinutes);
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return undefined;
+  const previousDayEndMs = logicalDayEndExclusiveMs(previousDay, startOfDayMinutes);
+  const cutoffMs = Math.min(logicalDayStartMs(previousDay, startOfDayMinutes) + elapsedMs, previousDayEndMs);
+  const clipped = observed.flatMap((segment) => {
+    const startMs = Date.parse(segment.startedAt);
+    const endMs = Date.parse(segment.endedAt);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= cutoffMs) return [];
+    if (endMs <= cutoffMs) return [segment];
+    const share = endMs > startMs ? (cutoffMs - startMs) / (endMs - startMs) : 0;
+    return [{ ...segment, endedAt: new Date(cutoffMs).toISOString(), durationSeconds: segment.durationSeconds * share }];
+  });
+  const previous = buildProductivityDurations(clipped, classificationOptions);
+  const secondsOf = (label: "focus" | "drift" | "neutral") => previous.find((entry) => entry.productivity === label)?.totalSeconds ?? 0;
+  return {
+    focusDeltaSeconds: Math.round(current.focusSeconds - secondsOf("focus")),
+    driftDeltaSeconds: Math.round(current.driftSeconds - secondsOf("drift")),
+    otherDeltaSeconds: Math.round(current.neutralSeconds - secondsOf("neutral")),
+    scope: cutoffMs >= previousDayEndMs ? "wholeDay" : "sameTime",
+  };
+}
+
 export function buildEndOfDayReviewSummary({
   day,
   generatedAt,
   segments,
+  previousDaySegments,
+  startOfDayMinutes = 0,
   appIcons = {},
   classificationOptions,
   leaderboardCelebration,
@@ -117,6 +175,9 @@ export function buildEndOfDayReviewSummary({
   day: string;
   generatedAt: string;
   segments: ActivitySegment[];
+  /** The previous logical day, for the "vs yesterday" rows. Omitted or too thin: no comparison. */
+  previousDaySegments?: readonly ActivitySegment[];
+  startOfDayMinutes?: number;
   appIcons?: AppIconMap;
   classificationOptions?: ClassificationOptions;
   leaderboardCelebration?: LeaderboardCelebration;
@@ -165,19 +226,26 @@ export function buildEndOfDayReviewSummary({
     breakdownSources: buildBreakdownSources(segments, appIcons, classificationOptions),
     categorySummaries: buildCategorySummaries(segments, totalSeconds, classificationOptions),
     sourceSummaries: buildSourceSummaries(segments, totalSeconds, appIcons),
-    /* Cross-day comparison data is not yet part of the live summary input.
-       Keep production honest, while the deterministic Dev preview reproduces
-       the reviewed card state instead of silently dropping those rows. */
+    /* The Dev preview keeps its reviewed fixed rows; a live review compares
+       with yesterday up to the same point of the day when yesterday was
+       watched long enough. */
     highlightLabel: resolvedAssessment
       ? undefined
       : resolvedLeaderboardCelebration
       ? `#${resolvedLeaderboardCelebration.rank} of ${resolvedLeaderboardCelebration.participantCount} · 8 PM`
       : isMock ? "Best this week" : undefined,
-    comparison: isMock && !resolvedAssessment ? {
+    comparison: resolvedAssessment ? undefined : isMock ? {
       focusDeltaSeconds: 38 * 60,
       driftDeltaSeconds: -9 * 60,
       otherDeltaSeconds: 5 * 60,
-    } : undefined,
+    } : previousDaySegments ? buildEndOfDayReviewComparison({
+      day,
+      generatedAt,
+      previousDaySegments,
+      current: { focusSeconds, driftSeconds, neutralSeconds },
+      classificationOptions,
+      startOfDayMinutes,
+    }) : undefined,
     dailySignals: resolvedAssessment ? undefined : dailySignals,
     leaderboardCelebration: resolvedLeaderboardCelebration,
     assessment: resolvedAssessment,

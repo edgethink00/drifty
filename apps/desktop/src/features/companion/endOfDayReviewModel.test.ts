@@ -2,6 +2,7 @@ import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drif
 import { describe, expect, it } from "vitest";
 import {
   buildEndOfDayReviewDailySignals,
+  buildEndOfDayReviewComparison,
   buildEndOfDayReviewSummary,
   type EndOfDayReviewEvent,
 } from "./endOfDayReviewModel";
@@ -63,6 +64,79 @@ function buildReviewEvent(segments: ActivitySegment[]): EndOfDayReviewEvent {
     segments,
   });
 }
+
+/** A segment on a local wall-clock hour of the given day, so day boundaries follow the test machine. */
+function localSegment(day: string, startHour: number, minutes: number, productivity: ProductivityLabel, imported = false): ActivitySegment {
+  const startedAt = new Date(day + "T" + String(startHour).padStart(2, "0") + ":00:00");
+  return {
+    id: day + "-" + startHour + "-" + productivity,
+    startedAt: startedAt.toISOString(),
+    endedAt: new Date(startedAt.getTime() + minutes * 60_000).toISOString(),
+    durationSeconds: minutes * 60,
+    appName: "Code",
+    bundleId: "com.example.code",
+    windowTitle: "work",
+    platform: "macos",
+    source: imported ? "browser-history-import" : "accessibility",
+    classification: {
+      category: productivity === "drift" ? "entertainment" : productivity === "focus" ? "workspace" : "utility",
+      productivity,
+      source: "manual",
+      confidence: 1,
+    },
+  };
+}
+
+describe("buildEndOfDayReviewComparison", () => {
+  const today = "2026-04-07";
+  const yesterday = "2026-04-06";
+  const at8pm = new Date(today + "T20:00:00").toISOString();
+
+  it("compares with yesterday only up to the same time of day", () => {
+    const comparison = buildEndOfDayReviewComparison({
+      day: today,
+      generatedAt: at8pm,
+      previousDaySegments: [
+        localSegment(yesterday, 9, 180, "focus"),
+        localSegment(yesterday, 19, 120, "drift"), // only 19:00-20:00 counts at 8 PM
+        localSegment(yesterday, 21, 60, "focus"), // after 8 PM: not yet comparable
+      ],
+      current: { focusSeconds: 4 * 3600, driftSeconds: 30 * 60, neutralSeconds: 0 },
+    });
+    expect(comparison).toEqual({ focusDeltaSeconds: 3600, driftDeltaSeconds: -30 * 60, otherDeltaSeconds: 0, scope: "sameTime" });
+  });
+
+  it("compares whole days for a catch-up review of a finished day", () => {
+    const nextMorning = new Date("2026-04-08T08:00:00").toISOString();
+    const comparison = buildEndOfDayReviewComparison({
+      day: today,
+      generatedAt: nextMorning,
+      previousDaySegments: [localSegment(yesterday, 9, 180, "focus"), localSegment(yesterday, 21, 60, "focus")],
+      current: { focusSeconds: 4 * 3600, driftSeconds: 0, neutralSeconds: 0 },
+    });
+    expect(comparison?.focusDeltaSeconds).toBe(0);
+    expect(comparison?.scope).toBe("wholeDay");
+  });
+
+  it("skips a yesterday Drifty did not watch long enough, counting imported history as unwatched", () => {
+    const current = { focusSeconds: 3600, driftSeconds: 0, neutralSeconds: 0 };
+    expect(buildEndOfDayReviewComparison({ day: today, generatedAt: at8pm, current, previousDaySegments: [localSegment(yesterday, 9, 170, "focus")] })).toBeUndefined();
+    expect(buildEndOfDayReviewComparison({
+      day: today,
+      generatedAt: at8pm,
+      current,
+      previousDaySegments: [localSegment(yesterday, 9, 120, "focus"), localSegment(yesterday, 13, 240, "focus", true)],
+    })).toBeUndefined();
+    // A live review without the previous day keeps the rows off.
+    expect(buildEndOfDayReviewSummary({ day: today, generatedAt: at8pm, segments: [localSegment(today, 9, 240, "focus")] }).comparison).toBeUndefined();
+    expect(buildEndOfDayReviewSummary({
+      day: today,
+      generatedAt: at8pm,
+      segments: [localSegment(today, 9, 240, "focus")],
+      previousDaySegments: [localSegment(yesterday, 9, 180, "focus")],
+    }).comparison).toEqual({ focusDeltaSeconds: 3600, driftDeltaSeconds: 0, otherDeltaSeconds: 0, scope: "sameTime" });
+  });
+});
 
 describe("buildEndOfDayReviewDailySignals", () => {
   it("does not turn unclassified known-app time into focus while AI is unavailable", () => {

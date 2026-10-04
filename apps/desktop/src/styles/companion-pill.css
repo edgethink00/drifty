@@ -1529,3 +1529,16 @@ html[data-surface="companion"] #root {
   .companion-pill-surface .card__close-ring circle,
   .companion-pill-surface .pill__clip::after { transition: none !important; animation: none !important; }
 }
+
+/* With a change against the day before, the rows share one grid: dot, label, time and change each
+   take a column, so every time lines up whatever the changes say ("▲1h 2m" or none). */
+.companion-pill-surface .eodv12__cats[data-compare] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 9px;
+  row-gap: 5.5px;
+}
+.companion-pill-surface .eodv12__cats[data-compare] .eod__row { display: contents; }
+.companion-pill-surface .eodv12__cats[data-compare] .eod__delta { min-width: 0; margin-left: 0; justify-self: end; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__cats[data-compare] { column-gap: 7px; row-gap: 3px; }

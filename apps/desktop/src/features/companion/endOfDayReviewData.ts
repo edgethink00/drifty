@@ -10,6 +10,9 @@ export type EndOfDayReviewSummaryInput = {
   day: string;
   generatedAt: string;
   segments: ActivitySegment[];
+  /** The previous logical day, for the "vs yesterday" rows. */
+  previousDaySegments?: readonly ActivitySegment[];
+  startOfDayMinutes?: number;
   leaderboardCelebration?: LeaderboardCelebration;
   /** `null` explicitly previews the ordinary fully assessed state. */
   assessment?: EndOfDayReviewPendingAssessment | null;
