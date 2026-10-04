@@ -2203,14 +2203,20 @@ export function logicalDayStartMs(day: string, startOfDayMinutes = 0): number {
 }
 
 export function logicalDayEndExclusiveMs(day: string, startOfDayMinutes = 0): number {
-  const end = new Date(logicalDayStartMs(day, startOfDayMinutes));
-  end.setDate(end.getDate() + 1);
-  return end.getTime();
+  const [year, month, date] = day.split("-").map(Number);
+  // Rebuild the configured local clock boundary. A skipped hour can normalize
+  // today's start forward; carrying that normalized hour would extend tomorrow.
+  return new Date(year, month - 1, date + 1, 0, normalizeStartOfDayMinutes(startOfDayMinutes), 0, 0).getTime();
 }
 
 export function logicalDayIsoDateForDate(date: Date, startOfDayMinutes = 0): string {
-  const logicalDate = new Date(date.getTime() - normalizeStartOfDayMinutes(startOfDayMinutes) * 60 * 1000);
-  return isoDateForLocalDate(logicalDate);
+  const day = isoDateForLocalDate(date);
+  // A logical day starts at a local clock time, not an elapsed-hour offset.
+  // Subtracting hours assigns the wrong date around timezone offset changes.
+  if (date.getTime() >= logicalDayStartMs(day, startOfDayMinutes)) return day;
+  const previousDate = new Date(date);
+  previousDate.setDate(previousDate.getDate() - 1);
+  return isoDateForLocalDate(previousDate);
 }
 
 export function logicalMinuteOfDay(minuteOfDay: number, startOfDayMinutes = 0): number {
