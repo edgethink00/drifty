@@ -3296,6 +3296,7 @@ class TrackerDatabase:
                         chunk_fingerprint = excluded.chunk_fingerprint,
                         assigned_at = excluded.assigned_at,
                         stale = excluded.stale
+                    WHERE excluded.source = 'manual' OR activity_project_assignments.source != 'manual'
                     """,
                     (
                         segment_id,
@@ -3314,6 +3315,16 @@ class TrackerDatabase:
                 )
                 if cursor.rowcount > 0:
                     saved += 1
+                elif source != "manual":
+                    # A manual correction can commit after the optimistic read.
+                    # The UPSERT enforces priority while holding the writer lock;
+                    # missing segment/project references are not manual skips.
+                    current = conn.execute(
+                        "SELECT source FROM activity_project_assignments WHERE segment_id = ?",
+                        (segment_id,),
+                    ).fetchone()
+                    if current is not None and current["source"] == "manual":
+                        skipped_manual += 1
         return {"saved": saved, "skippedManual": skipped_manual}
 
     def get_project_assignments(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
@@ -3712,6 +3723,7 @@ class TrackerDatabase:
                         chunk_fingerprint = excluded.chunk_fingerprint,
                         assigned_at = excluded.assigned_at,
                         stale = excluded.stale
+                    WHERE excluded.source = 'manual' OR team_project_assignments.source != 'manual'
                     """,
                     (
                         segment_id,
@@ -3729,6 +3741,16 @@ class TrackerDatabase:
                 )
                 if cursor.rowcount > 0:
                     saved += 1
+                elif source != "manual":
+                    # A manual correction can commit after the optimistic read.
+                    # The UPSERT enforces priority while holding the writer lock;
+                    # missing segment/project references are not manual skips.
+                    current = conn.execute(
+                        "SELECT source FROM team_project_assignments WHERE segment_id = ?",
+                        (segment_id,),
+                    ).fetchone()
+                    if current is not None and current["source"] == "manual":
+                        skipped_manual += 1
         return {"saved": saved, "skippedManual": skipped_manual}
 
     def get_team_project_assignments(
