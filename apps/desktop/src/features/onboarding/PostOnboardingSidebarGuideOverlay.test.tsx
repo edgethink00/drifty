@@ -1,13 +1,118 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { PostOnboardingSidebarGuide } from "./PostOnboardingSidebarGuideOverlay";
+import { POST_ONBOARDING_STORY_GUIDE_STEPS } from "./postOnboardingSidebarGuide";
+import { buildFirstDayRecap } from "./firstDayStory";
+import { buildFirstDayReviewSegments, buildIntroReviewCase } from "./introStoryReview";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const callbacks = () => ({ onAdvance: vi.fn(), onBack: vi.fn(), onDismiss: vi.fn() });
 
 describe("centered app introduction", () => {
+  const recap = buildFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-30"), day: "2026-09-30", today: "2026-10-01" });
+
+  it("tells the user's own first day on the story cards", () => {
+    const props = callbacks();
+    const { rerender } = render(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap} {...props} />);
+    expect(screen.getByRole("dialog", { name: "You focused for 4h 41m in your browser yesterday" })).toBeTruthy();
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("Your longest stretch was 1h 4m on github.com, from 2:02 PM.");
+    // The first story card pages on with Next; only the sample welcome offers "Show me around".
+    expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
+    rerender(<PostOnboardingSidebarGuide step="drift" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap} {...props} />);
+    expect(screen.getByRole("dialog", { name: "Drift in your browser took 2h 1m" })).toBeTruthy();
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("Most of it went to youtube.com: 1h 12m. If some of it wasn't drift, you can correct it.");
+    expect(document.querySelector("[data-art-scene='drift']")).toBeTruthy();
+  });
+
+  it("says plainly when there was almost no drift, scoped to the browser when the day was rebuilt, and looks ahead on the decision card", () => {
+    const props = callbacks();
+    const day = "2026-09-30", today = "2026-10-01";
+    const rebuilt = buildFirstDayRecap({ ...buildIntroReviewCase("noDrift", () => day), today });
+    const { rerender } = render(<PostOnboardingSidebarGuide step="drift" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={rebuilt} {...props} />);
+    expect(screen.getByRole("dialog", { name: "Almost no drift in your browser" })).toBeTruthy();
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent).toBe("From now on, time in your apps is recorded too.");
+    rerender(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={rebuilt}
+      decision={{ autoCloseEnabled: false, petEnabled: false, onAutoCloseChange: vi.fn(), onPetChange: vi.fn() }} {...props} />);
+    expect(screen.getByRole("dialog", { name: "When drift shows up" })).toBeTruthy();
+
+    const watched = buildFirstDayRecap({ ...buildIntroReviewCase("watched", () => day), today });
+    const watchedLow = buildFirstDayRecap({ segments: buildIntroReviewCase("watched", () => day).segments.filter((segment) => segment.classification?.productivity !== "drift"), day, today });
+    rerender(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={watched} {...props} />);
+    expect(screen.getByRole("dialog", { name: "You focused for 4h 41m yesterday" })).toBeTruthy();
+    rerender(<PostOnboardingSidebarGuide step="drift" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={watchedLow} {...props} />);
+    expect(screen.getByRole("dialog", { name: "A day with almost no drift" })).toBeTruthy();
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent).toBe("Nothing was classified as drift.");
+  });
+
+  it("offers Automatic close and the desktop cat, never Drift alerts, and asks in a popup before closing", async () => {
+    const onAutoCloseChange = vi.fn();
+    const onPetChange = vi.fn();
+    const props = callbacks();
+    render(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
+      decision={{ autoCloseEnabled: false, petEnabled: false, onAutoCloseChange, onPetChange }} {...props} />);
+    expect(screen.getByRole("dialog", { name: "When drift runs long" })).toBeTruthy();
+    // First-run keeps Drift alerts a Settings choice (product decision 2026-09-22).
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByText(/let me know|alert me/i)).toBeNull();
+    expect(screen.getAllByRole("switch").map((control) => control.getAttribute("aria-label"))).toEqual(["Automatic close", "Show desktop cat"]);
+    fireEvent.click(screen.getByRole("switch", { name: "Show desktop cat" }));
+    expect(onPetChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Automatic close" }));
+    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
+    expect(onAutoCloseChange).not.toHaveBeenCalled();
+    // With the cat off the preview has no cat and the body has no cat line.
+    expect(popup.querySelector(".close-preview__cat")).toBeNull();
+    expect(popup.textContent).not.toContain("Pet the cat");
+    // The card keeps its own Back and Next behind the popup.
+    expect(document.querySelector("[data-intro-next]")).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(within(popup).getByRole("button", { name: "Keep off" })));
+    // Escape keeps Automatic close off and leaves the intro open.
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(props.onDismiss).not.toHaveBeenCalled();
+    expect(onAutoCloseChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Automatic close" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Turn on" }));
+    expect(onAutoCloseChange).toHaveBeenLastCalledWith(true);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
+  it("lets the desktop cat close the tab in the Automatic close preview when the cat is on", async () => {
+    render(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
+      decision={{ autoCloseEnabled: false, petEnabled: true, onAutoCloseChange: vi.fn(), onPetChange: vi.fn() }} {...callbacks()} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Automatic close" }));
+    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
+    expect(popup.querySelector(".close-preview__cat .pet-mode-cat")).toBeTruthy();
+    expect(popup.textContent).toContain("Pet the cat while it walks over to keep it open.");
+  });
+
+  it("pairs the cat tile with its switch: touching the tile turns the cat on, and a hidden cat sleeps in the picture", () => {
+    const onPetChange = vi.fn();
+    const props = callbacks();
+    const { rerender } = render(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
+      decision={{ autoCloseEnabled: false, petEnabled: false, onAutoCloseChange: vi.fn(), onPetChange }} {...props} />);
+    const cat = screen.getByRole("button", { name: "Pet the desktop cat" });
+    expect(cat.getAttribute("aria-pressed")).toBe("false");
+    expect(document.querySelector(".sidebar-guide-narrative-art__cat .pet-mode-cat--sleep")).toBeTruthy();
+    fireEvent.click(cat);
+    expect(onPetChange).toHaveBeenLastCalledWith(true);
+
+    rerender(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
+      decision={{ autoCloseEnabled: false, petEnabled: true, onAutoCloseChange: vi.fn(), onPetChange }} {...props} />);
+    const shown = screen.getByRole("button", { name: "Pet the desktop cat" });
+    expect(shown.getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector(".sidebar-guide-narrative-art__cat .pet-mode-cat--sleep")).toBeNull();
+    // Touching a cat that is already on only greets; it never turns the cat off.
+    fireEvent.click(shown);
+    expect(onPetChange).toHaveBeenCalledTimes(1);
+  });
+
   it("opens without sidebar anchors, shows dots instead of a numeric counter, and keeps the same dialog between pages", () => {
     const props = callbacks();
     const { rerender } = render(<PostOnboardingSidebarGuide step="welcome" {...props} />);
@@ -15,7 +120,7 @@ describe("centered app introduction", () => {
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
-    expect(document.querySelectorAll(".post-onboarding-sidebar-guide__dots i")).toHaveLength(5);
+    expect(document.querySelectorAll(".post-onboarding-sidebar-guide__dots i")).toHaveLength(6);
     expect(document.querySelectorAll(".post-onboarding-sidebar-guide__dots i[data-active]")).toHaveLength(1);
     expect(screen.queryByText(/\d\s*\/\s*\d/)).toBeNull();
     expect(document.querySelector(".post-onboarding-sidebar-guide__brand")).toBeNull();
@@ -154,8 +259,9 @@ describe("centered app introduction", () => {
 
   it("dismisses on Escape and provides a clear final action", () => {
     const props = callbacks();
-    render(<PostOnboardingSidebarGuide step="tracking" {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: "Start using Drifty" }));
+    render(<PostOnboardingSidebarGuide step="handoff" {...props} />);
+    expect(screen.getByRole("dialog", { name: "Your day starts adding up today" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "See my day" }));
     fireEvent.keyDown(window, { key: "Escape" });
     expect(props.onAdvance).toHaveBeenCalledOnce();
     expect(props.onDismiss).toHaveBeenCalledOnce();
@@ -188,7 +294,7 @@ describe("centered app introduction", () => {
   });
 
   it("removes immediately when reduced motion is enabled", () => {
-    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList);
     const props = callbacks();
     const { rerender } = render(<PostOnboardingSidebarGuide step="day" {...props} />);
     rerender(<PostOnboardingSidebarGuide step={null} {...props} />);
@@ -240,7 +346,7 @@ describe("centered app introduction", () => {
   });
 
   it("switches pages directly without retaining an outgoing layer in reduced motion", () => {
-    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList);
     const props = callbacks();
     const { rerender } = render(<PostOnboardingSidebarGuide step="welcome" {...props} />);
     rerender(<PostOnboardingSidebarGuide step="day" {...props} />);
@@ -255,8 +361,8 @@ describe("centered app introduction", () => {
       const props = callbacks();
       const { rerender } = render(<PostOnboardingSidebarGuide step="account" {...props} />);
       expect(screen.getByRole("dialog", { name: "A cat that closes the drift" })).toBeTruthy();
-      expect(document.querySelectorAll(".post-onboarding-sidebar-guide__dots i")[3].hasAttribute("data-active")).toBe(true);
-      rerender(<PostOnboardingSidebarGuide step="tracking" {...props} />);
+      expect(document.querySelectorAll(".post-onboarding-sidebar-guide__dots i")[2].hasAttribute("data-active")).toBe(true);
+      rerender(<PostOnboardingSidebarGuide step="activity" {...props} />);
       const outgoing = document.querySelector(".post-onboarding-sidebar-guide__visual-page--previous [data-pet-motion]");
       expect(outgoing?.getAttribute("data-pet-motion")).toBe("closed");
       expect(outgoing?.classList.contains("sidebar-guide-narrative-host--settled")).toBe(true);

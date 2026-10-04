@@ -8,8 +8,11 @@ import {
   persistPostOnboardingSidebarGuideRecord,
   readPostOnboardingSidebarGuideRecord,
   resolvePostOnboardingSidebarGuideRecord,
+  postOnboardingGuideStepInSequence,
   restartPostOnboardingSidebarGuide,
   retreatPostOnboardingSidebarGuide,
+  POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
+  type PostOnboardingGuideSequence,
   type PostOnboardingSidebarGuideRecord,
 } from "./postOnboardingSidebarGuide";
 
@@ -18,7 +21,7 @@ type PostOnboardingSidebarGuideSnapshot = {
   readonly record: PostOnboardingSidebarGuideRecord | null;
 };
 
-export function usePostOnboardingSidebarGuide(userId: string) {
+export function usePostOnboardingSidebarGuide(userId: string, sequence: PostOnboardingGuideSequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS) {
   const [snapshot, setSnapshot] = useState<PostOnboardingSidebarGuideSnapshot>(() => ({
     userId,
     record: resolvePostOnboardingSidebarGuideRecord(readPostOnboardingSidebarGuideRecord(userId)),
@@ -76,11 +79,11 @@ export function usePostOnboardingSidebarGuide(userId: string) {
 
   return {
     isActive: record?.status === "active",
-    step: record?.status === "active" ? record.step : null,
+    step: record?.status === "active" ? postOnboardingGuideStepInSequence(record.step, sequence) : null,
     begin,
     restart,
-    advance: useCallback(() => update((current) => advancePostOnboardingSidebarGuide(current)), [update]),
-    retreat: useCallback(() => update((current) => retreatPostOnboardingSidebarGuide(current)), [update]),
+    advance: useCallback(() => update((current) => advancePostOnboardingSidebarGuide(current, new Date(), sequence)), [sequence, update]),
+    retreat: useCallback(() => update((current) => retreatPostOnboardingSidebarGuide(current, new Date(), sequence)), [sequence, update]),
     complete: useCallback(() => update((current) => completePostOnboardingSidebarGuide(current)), [update]),
     dismiss: useCallback(() => update((current) => dismissPostOnboardingSidebarGuide(current)), [update]),
   };

@@ -1,5 +1,8 @@
 import type {
   ACCOUNT_KINDS,
+  ONBOARDING_INTRO_ACTIONS,
+  ONBOARDING_INTRO_SEQUENCES,
+  ONBOARDING_INTRO_STEPS,
   APP_ACTIVE_TRIGGERS,
   AI_PROVIDER_KINDS,
   AI_SETUP_ACTIONS,
@@ -98,6 +101,15 @@ export type PostHogEventPropertiesByName = {
     readonly accessibility_granted?: boolean;
     readonly notifications_granted?: boolean;
     readonly account_connected?: boolean;
+  };
+  /**
+   * The post-setup introduction. The focus-support choices that onboarding_completed used to carry
+   * (drift alerts, Automatic close, desktop cat) are reported here, on completion or dismissal.
+   */
+  readonly onboarding_intro: {
+    readonly action: (typeof ONBOARDING_INTRO_ACTIONS)[number];
+    readonly step: (typeof ONBOARDING_INTRO_STEPS)[number];
+    readonly sequence: (typeof ONBOARDING_INTRO_SEQUENCES)[number];
     readonly drift_alarm_enabled?: boolean;
     readonly extreme_nudge_enabled?: boolean;
     readonly pet_enabled?: boolean;

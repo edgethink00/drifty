@@ -6,7 +6,8 @@ import type { HostPlatform } from "../../../lib/api/accessibilityClient";
 import { useLocalization } from "../../localization/LocalizationContext";
 import type { PostOnboardingSidebarGuideStep } from "../postOnboardingSidebarGuide";
 import "../styles/sidebar-guide-real-art.css";
-import { StoryScene, storyCatPlacement, type ArtCatPlacement } from "./introArt/StoryScene";
+import { StoryScene, storyCatPlacement, type ArtCatPlacement, type StoryDriftChoice } from "./introArt/StoryScene";
+import type { FirstDayRecap } from "../firstDayStory";
 import { VIEW } from "./introArt/artKit";
 import { ArtPlatform, type RealLabels } from "./introArt/realApp";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../lib/formatting";
@@ -77,7 +78,8 @@ function useSwatMotion(enabled: boolean, settled: boolean): { readonly motion: C
 }
 
 /** One pose of the cat. All beat poses stay mounted and crossfade; they share the current beat's position. */
-function ArtCat({ place, motion, dx, shown = true }: { readonly place: ArtCatPlacement; readonly motion?: CatMotion; readonly dx?: number; readonly shown?: boolean }) {
+/** asleep: the hidden desktop cat sleeps through the card, so the picture never shows it acting. */
+function ArtCat({ place, motion, dx, shown = true, asleep = false }: { readonly place: ArtCatPlacement; readonly motion?: CatMotion; readonly dx?: number; readonly shown?: boolean; readonly asleep?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState<{ readonly s: number; readonly ox: number; readonly oy: number } | null>(null);
   useLayoutEffect(() => {
@@ -101,7 +103,7 @@ function ArtCat({ place, motion, dx, shown = true }: { readonly place: ArtCatPla
   return <div ref={ref} className="sidebar-guide-narrative-art__cat" style={style} aria-hidden="true">
     <div style={CAT_STYLE}>{motion
       ? <PetModeCat phase={motion.phase} facing="left" pawFrame={motion.phase === "paw" ? motion.frame : 0} frameOverride={motion.phase === "run" ? motion.frame : undefined} fastRunEnabled publishHitRegion={false} decorative />
-      : <PetModeCat phase="idle" facing="left" pawFrame={0} publishHitRegion={false} decorative />}</div>
+      : <PetModeCat phase={asleep ? "sleep" : "idle"} facing="left" pawFrame={0} publishHitRegion={false} decorative />}</div>
   </div>;
 }
 
@@ -110,9 +112,15 @@ function ArtCat({ place, motion, dx, shown = true }: { readonly place: ArtCatPla
  * desktop pet). settled draws the card's final state without transitions, for the copy that fades out
  * during a page change.
  */
-export function NarrativeGuideIllustration({ step, hostPlatform = "macos", theme = "light", settled = false }: {
+export function NarrativeGuideIllustration({ step, hostPlatform = "macos", theme = "light", settled = false, recap = null, driftChoice, petEnabled = true }: {
   readonly step: PostOnboardingSidebarGuideStep; readonly settled?: boolean;
   readonly hostPlatform?: HostPlatform; readonly theme?: "light" | "dark";
+  /** The first day the story cards draw. */
+  readonly recap?: FirstDayRecap | null;
+  /** The drift decision card's current choice; without one the card is the Automatic close scene. */
+  readonly driftChoice?: StoryDriftChoice;
+  /** Whether the desktop cat is on. Off, the cat sleeps and Automatic close closes the window without it. */
+  readonly petEnabled?: boolean;
 }) {
   const { t, effectiveLanguage } = useLocalization();
   const clip = useId();
@@ -137,14 +145,19 @@ export function NarrativeGuideIllustration({ step, hostPlatform = "macos", theme
   // Windows, the menu bar and the taskbar bleed to the real panel edge, so when the panel is wider or
   // taller than the art the rounded panel (overflow: hidden) does the cropping.
   const frame = { x: -VIEW.w, y: -VIEW.h, w: VIEW.w * 3, h: VIEW.h * 3 };
-  const swat = useSwatMotion(step === "account", settled);
-  const motion = step === "account" ? swat.motion : undefined;
-  const beats = motion && swat.beat !== null ? BEATS : null;
-  const cat = storyCatPlacement(step);
+  const choice: StoryDriftChoice = driftChoice ?? "close";
+  const swatting = step === "account" && choice === "close";
+  const swat = useSwatMotion(swatting, settled);
+  const motion = swatting ? swat.motion : undefined;
+  // With the desktop cat off, Automatic close still closes the window, but the cat sleeps through it.
+  const beats = motion && swat.beat !== null && petEnabled ? BEATS : null;
+  const cat = storyCatPlacement(step, choice);
   return <div className={"sidebar-guide-narrative-host" + (settled ? " sidebar-guide-narrative-host--settled" : "")} data-pet-motion={motion?.stage}><svg className="sidebar-guide-narrative-art sidebar-guide-narrative-art--bleed" viewBox={"0 0 " + VIEW.w + " " + VIEW.h} preserveAspectRatio="xMidYMid meet" aria-hidden="true" data-art-scene={step} data-platform={hostPlatform} data-art-theme={theme}>
     <defs><clipPath id={clip}><rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} /></clipPath></defs>
     <g clipPath={"url(#" + clip + ")"}><ArtPlatform.Provider value={hostPlatform}>
-      <StoryScene {...props} driftClosed={motion?.closed ?? false} />
+      <StoryScene {...props} driftClosed={motion?.closed ?? false} recap={recap} driftChoice={choice} />
     </ArtPlatform.Provider></g>
-  </svg>{cat && (beats ? beats.map((b, i) => <ArtCat key={b.stage} place={cat} motion={b} dx={b.dx} shown={i === swat.beat} />) : <ArtCat place={cat} motion={motion} />)}</div>;
+  </svg>{cat && (beats
+    ? beats.map((b, i) => <ArtCat key={b.stage} place={cat} motion={b} dx={b.dx} shown={i === swat.beat} />)
+    : <ArtCat place={cat} motion={petEnabled ? motion : undefined} asleep={!petEnabled} />)}</div>;
 }

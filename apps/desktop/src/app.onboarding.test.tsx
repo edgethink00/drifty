@@ -15,7 +15,6 @@ import { DISPLAY_LANGUAGE_STORAGE_KEY } from "./features/localization/Localizati
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
 
-const NUDGES_DIALOG_NAME = /how should drifty support your focus/i;
 const FINAL_ONBOARDING_ACTION = /start tracking|continue with cloud|start 7-day free trial/i;
 const AVAILABLE_CLOUD_TRIAL = {
   plan: "individual" as const,
@@ -448,8 +447,6 @@ async function chooseSimpleSetup(options: { activity?: string; workDescription?:
   await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /set up permissions/i }, { timeout: 6_000 });
   await clickEnabledNext();
-  await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME }, { timeout: 6_000 });
-  await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /you're ready to go/i }, { timeout: 6_000 });
 }
 
@@ -704,14 +701,10 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Screen Recording")).toBeNull();
     expect(screen.queryByText("Browser Activity")).toBeNull();
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
-    expect(screen.queryByRole("radio")).toBeNull();
-    expect(screen.queryByText(/just record/i)).toBeNull();
-    expect(screen.queryByText(/alert me/i)).toBeNull();
-    expect(screen.getByRole("button", { name: /automatic close/i }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "Show desktop cat" }).getAttribute("aria-pressed")).toBe("false");
-    const closeRow = screen.getByRole("button", { name: /automatic close/i }).closest(".dc-onb-intervene__option");
-    expect(closeRow?.textContent).toContain("Beta");
+    // Permissions leads straight to Ready; the drift decision waits for the intro after the first day is shown.
+    expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /automatic close/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show desktop cat" })).toBeNull();
   }, 15_000);
 
   it("opens the provided welcome-first onboarding for a local unauthenticated user without local completion state", async () => {
@@ -1193,8 +1186,6 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     expect(billingMocks.startCloudTrial).not.toHaveBeenCalled();
     await clickEnabledNext();
-    await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME });
-    await clickEnabledAction(/^continue$/i);
 
     const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
     const grantButton = within(readyDialog).getByRole("button", { name: /^start 7-day free trial$/i });
@@ -1535,87 +1526,72 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     await screen.findByRole("dialog", { name: /set up permissions/i }, { timeout: 6_000 });
     await clickEnabledNext();
-    await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME }, { timeout: 6_000 });
-    await clickEnabledAction(/^continue$/i);
 
     const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i }, { timeout: 6_000 });
     expect(within(readyDialog).getByText(/pro pass is active through oct 26, 2026/i)).toBeTruthy();
   });
 
-  it("stores explicit automatic close and desktop cat preferences from onboarding", async () => {
-    render(<App />);
+  it("opens the intro on the sample cards when the day cannot be read", async () => {
+    const { trackerClient } = await import("./lib/api/trackerClient");
+    vi.mocked(trackerClient.getTimeline).mockRejectedValue(new Error("tracker unavailable"));
+    window.localStorage.setItem(getUserOnboardingStorageKey("user-1"), JSON.stringify({
+      version: 2, completed: true, displayName: "Alex", workType: "Design", workTypeOther: "", workDomain: "Tech",
+      workDomainOther: "", focusGoalHours: null, driftThresholdMinutes: null, purpose: null, completedAt: "2026-05-08T00:00:00.000Z",
+    }));
+    window.localStorage.setItem(postOnboardingSidebarGuideStorageKey("user-1"), JSON.stringify({
+      version: 1, status: "active", step: "welcome", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }));
 
-    await advanceToPermissionsStep();
-    await clickEnabledNext();
-    await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME });
-
-    const automaticCloseToggle = screen.getByRole("button", { name: /automatic close/i });
-    const petToggle = screen.getByRole("button", { name: "Show desktop cat" });
-    expect(screen.queryByRole("radio")).toBeNull();
-    expect(screen.queryByText(/alert me/i)).toBeNull();
-    expect(screen.queryByText(/just record/i)).toBeNull();
-    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
-    expect(petToggle.getAttribute("aria-pressed")).toBe("false");
-
-    automaticCloseToggle.focus();
-    fireEvent.click(automaticCloseToggle);
-    const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
-    const keepOffButton = within(confirmDialog).getByRole("button", { name: /keep off/i });
-    const allowClosingButton = within(confirmDialog).getByRole("button", { name: /allow closing/i });
-    expect(confirmDialog.textContent).toContain("close the distracting browser tab or quit the distracting app");
-    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
-    await waitFor(() => expect(document.activeElement).toBe(keepOffButton));
-    allowClosingButton.focus();
-    fireEvent.keyDown(confirmDialog, { key: "Tab" });
-    expect(document.activeElement).toBe(keepOffButton);
-    fireEvent.keyDown(confirmDialog, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(allowClosingButton);
-    fireEvent.keyDown(confirmDialog, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull());
-    expect(document.activeElement).toBe(automaticCloseToggle);
-    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
-
-    fireEvent.click(automaticCloseToggle);
-    fireEvent.click(await screen.findByRole("button", { name: /allow closing/i }));
-    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.queryByText(/the cat closes the distracting tab or app after repeated drift/i)).toBeNull();
-    fireEvent.click(petToggle);
-    expect(petToggle.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText(/the cat closes the distracting tab or app after repeated drift/i)).toBeTruthy();
-    await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
-
-    fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
-    });
-
-    const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
-    const storedRecord = JSON.parse(storedValue ?? "{}") as Record<string, unknown>;
-    expect(storedRecord.driftAlarmEnabled).toBe(true);
-    expect(storedRecord.extremeNudgeEnabled).toBe(true);
-    expect(storedRecord.petModeEnabled).toBe(true);
-    expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("1");
-    expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("1");
-    expect(window.localStorage.getItem("drifty.pet.enabled")).toBe("1");
+    try {
+      render(<App />);
+      expect(await screen.findByRole("dialog", { name: /welcome to drifty/i }, { timeout: 8_000 })).toBeTruthy();
+    } finally {
+      vi.mocked(trackerClient.getTimeline).mockResolvedValue([]);
+    }
   });
 
-  it("keeps automatic close off when confirmation is cancelled", async () => {
+  it("applies the intro's Automatic close and desktop cat choices and asks before closing", async () => {
+    window.localStorage.setItem(getUserOnboardingStorageKey("user-1"), JSON.stringify({
+      version: 2, completed: true, displayName: "Alex", workType: "Design", workTypeOther: "", workDomain: "Tech",
+      workDomainOther: "", focusGoalHours: null, driftThresholdMinutes: null, purpose: null, completedAt: "2026-05-08T00:00:00.000Z",
+    }));
+    window.localStorage.setItem(postOnboardingSidebarGuideStorageKey("user-1"), JSON.stringify({
+      version: 1, status: "active", step: "account", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }));
+
     render(<App />);
 
-    await advanceToPermissionsStep();
-    await clickEnabledNext();
-    await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME });
-
-    const automaticCloseToggle = screen.getByRole("button", { name: /automatic close/i });
-    fireEvent.click(automaticCloseToggle);
-    const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
-    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
-
-    fireEvent.click(within(confirmDialog).getByRole("button", { name: /keep off/i }));
+    const decision = await screen.findByRole("dialog", { name: /when drift runs long/i });
+    expect(within(decision).queryByText(/let me know/i)).toBeNull();
+    const autoClose = within(decision).getByRole("switch", { name: /automatic close/i });
+    fireEvent.click(autoClose);
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: /turn on automatic close/i })).getByRole("button", { name: /keep off/i }));
+    expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).not.toBe("1");
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(automaticCloseToggle.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(within(decision).getByRole("switch", { name: /automatic close/i }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: /turn on automatic close/i })).getByRole("button", { name: /^turn on$/i }));
+    await waitFor(() => expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("1"));
+    // Automatic close needs its Drift alert delivery path, as in Settings.
+    expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("1");
+
+    fireEvent.click(within(decision).getByRole("switch", { name: /show desktop cat/i }));
+    await waitFor(() => expect(window.localStorage.getItem("drifty.pet.enabled")).toBe("1"));
+
+    // Turning it back off leaves no Drift alerts the user never chose.
+    fireEvent.click(within(decision).getByRole("switch", { name: /automatic close/i }));
+    await waitFor(() => expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("0"));
+    expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("0");
+
+    // The intro reports the card it showed and, when it ends, the choices it settled.
+    expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({ action: "step_viewed", step: "account" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({
+      action: "dismissed",
+      step: "account",
+      drift_alarm_enabled: false,
+      extreme_nudge_enabled: false,
+      pet_enabled: true,
+    })));
   });
 
   it("enables login startup by default when onboarding completes in the Mac app", async () => {
@@ -2157,8 +2133,6 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
-    await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
     expect(screen.getByText(/local model downloading/i)).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
@@ -2515,8 +2489,6 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
-    await clickEnabledAction(/^continue$/i);
     fireEvent.click(await screen.findByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => {
@@ -2554,8 +2526,6 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Browser Activity")).toBeNull();
 
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
-    await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
     expect(screen.queryByText(/permissions enabled/i)).toBeNull();
     expect(screen.getByText(/tracking ready/i)).toBeTruthy();
@@ -2687,16 +2657,19 @@ describe("App onboarding", () => {
     expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
     fireEvent.click(screen.getByRole("button", { name: /^Show me around$/i }));
     expect(await screen.findByRole("dialog", { name: /where your day adds up/i })).toBeTruthy();
-    for (const title of [/make labels fit your work/i, /a cat that closes the drift/i, /still here in the menu bar/i]) {
+    for (const title of [/when drift runs long/i, /make labels fit your work/i, /still here in the menu bar/i, /your day starts adding up today/i]) {
       fireEvent.click(screen.getByRole("button", { name: /^Next$/i }));
       expect(await screen.findByRole("dialog", { name: title })).toBeTruthy();
     }
     expect(screen.queryByRole("menu")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /^Start using Drifty$/i }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: /still here in the menu bar/i })).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: /^See my day$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /your day starts adding up today/i })).toBeNull());
+    expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({ action: "completed", step: "handoff", sequence: "sample" }));
+    expect(capturePostHogEvent.mock.calls.filter(([event, properties]) => event === "onboarding_intro" && (properties as { action?: string }).action === "step_viewed")
+      .map(([, properties]) => (properties as { step: string }).step)).toEqual(["welcome", "day", "account", "activity", "tracking", "handoff"]);
     expect(parsePostOnboardingSidebarGuideRecord(
       window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
-    )).toMatchObject({ status: "completed", step: "tracking" });
+    )).toMatchObject({ status: "completed", step: "handoff" });
     expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
   });
 

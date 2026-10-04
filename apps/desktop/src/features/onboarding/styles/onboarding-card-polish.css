@@ -57,11 +57,7 @@
   margin: 0;
   text-wrap: pretty;
 }
-.onboarding-card.dc-onb-card[data-step="nudges"] .dc-onb-cat-card,
-.onboarding-card.dc-onb-card[data-step="nudges"] .dc-onb-intervene__option {
-  padding: 14px 16px;
-  border-radius: 14px;
-}
+
 .dc-onb-ready-seal {
   float: left;
   display: grid;

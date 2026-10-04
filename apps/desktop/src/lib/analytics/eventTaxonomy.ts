@@ -8,6 +8,7 @@ export const POSTHOG_EVENT_NAMES = [
   "onboarding_opened",
   "onboarding_step_viewed",
   "onboarding_completed",
+  "onboarding_intro",
   "first_day_preparation",
   "first_day_backlog",
   "permission_action",
@@ -55,6 +56,10 @@ export const ONBOARDING_STEPS = [
   "self_data_review",
 ] as const;
 export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] as const;
+/** The post-setup introduction: its cards, which sequence it opened on, and what happened to it. */
+export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
+export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
+export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed"] as const;
 export const PERMISSIONS = ["accessibility", "notifications"] as const;
 export const PERMISSION_ACTIONS = ["check", "request", "open_settings"] as const;
 // Only start/stop are ever sent. `refresh` and `status_check` were declared but
@@ -203,6 +208,11 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     accessibility_granted: "boolean",
     notifications_granted: "boolean",
     account_connected: "boolean",
+  },
+  onboarding_intro: {
+    action: ONBOARDING_INTRO_ACTIONS,
+    step: ONBOARDING_INTRO_STEPS,
+    sequence: ONBOARDING_INTRO_SEQUENCES,
     drift_alarm_enabled: "boolean",
     extreme_nudge_enabled: "boolean",
     pet_enabled: "boolean",

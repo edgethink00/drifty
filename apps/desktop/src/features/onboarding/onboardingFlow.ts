@@ -34,7 +34,6 @@ const BASE_STEPS: OnboardingStepDef[] = [
 
 const SIMPLE_SETUP_STEPS: OnboardingStepDef[] = [
   { id: "permissions", label: "Permissions" },
-  { id: "nudges", label: "Nudges" },
   { id: "ready", label: "Ready" },
 ];
 
@@ -42,7 +41,6 @@ const LOCAL_AI_STEPS: OnboardingStepDef[] = [
   { id: "connect_server", label: "Connect" },
   { id: "self_data_review", label: "Data" },
   { id: "permissions", label: "Permissions" },
-  { id: "nudges", label: "Nudges" },
   { id: "ready", label: "Ready" },
 ];
 
@@ -51,7 +49,6 @@ const BYOK_STEPS: OnboardingStepDef[] = [
   { id: "test_connection", label: "Test" },
   { id: "self_data_review", label: "Data" },
   { id: "permissions", label: "Permissions" },
-  { id: "nudges", label: "Nudges" },
   { id: "ready", label: "Ready" },
 ];
 
@@ -60,7 +57,6 @@ const CUSTOM_ENDPOINT_STEPS: OnboardingStepDef[] = [
   { id: "test_connection", label: "Test" },
   { id: "self_data_review", label: "Data" },
   { id: "permissions", label: "Permissions" },
-  { id: "nudges", label: "Nudges" },
   { id: "ready", label: "Ready" },
 ];
 

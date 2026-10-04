@@ -52,9 +52,12 @@ export function keepGuidePhrasesTogether(text: string, language: DisplayLanguage
  * Renders copy with each kept unit in a nowrap span. The text itself keeps ordinary spaces, so the
  * dialog's accessible name and screen-reader output match the translation exactly.
  */
+/** A site name such as github.com inside a word: WebKit would otherwise break the line at its dot. */
+const DOMAIN = /[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/;
+
 export function GuidePhrases({ text, language }: { readonly text: string; readonly language: DisplayLanguage }): ReactNode {
   const parts = keepGuidePhrasesTogether(text, language).split(/([ \n])/);
-  return createElement(Fragment, null, ...parts.map((part, index) => part.includes(NBSP)
+  return createElement(Fragment, null, ...parts.map((part, index) => part.includes(NBSP) || DOMAIN.test(part)
     ? createElement("span", { key: index, className: "guide-keep" }, part.split(NBSP).join(" "))
     : part));
 }

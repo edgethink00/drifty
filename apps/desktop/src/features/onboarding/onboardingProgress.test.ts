@@ -80,14 +80,22 @@ describe("onboardingProgress", () => {
     }).step).toBe("account");
   });
 
-  it("keeps an in-progress Nudges step on Nudges", () => {
+  it("resumes a run saved on the retired Nudges step at Ready", () => {
     expect(clampOnboardingProgressStep(progressSnapshot({
       step: "nudges",
       setupChoice: "simple",
     }), {
       accountConnected: true,
       skipAccountStep: false,
-    }).step).toBe("nudges");
+    }).step).toBe("ready");
+    // User-managed providers still re-verify their connection before Ready.
+    expect(clampOnboardingProgressStep(progressSnapshot({
+      step: "nudges",
+      setupChoice: "byok",
+    }), {
+      accountConnected: true,
+      skipAccountStep: false,
+    }).step).toBe("connect_server");
   });
 
   it("clears progress after completion", () => {

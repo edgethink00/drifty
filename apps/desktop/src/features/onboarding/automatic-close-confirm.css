@@ -1,0 +1,93 @@
+/* The Automatic close consent popup, opened over the intro card or Settings. */
+.guide-close-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--text) 22%, transparent);
+}
+/* The app's compact confirm: left-aligned title and body, right-aligned actions (History and model
+   deletion confirms). No icon tile or eyebrow (modal-chrome v3). */
+.guide-close-confirm__panel { display: grid; gap: 10px; width: min(26.5rem, 100%); border: 1px solid var(--line); background: var(--surface); text-align: left; }
+.guide-close-confirm__head { display: flex; align-items: center; gap: 8px; }
+.guide-close-confirm__panel h2 { margin: 0; color: var(--text); }
+.guide-close-confirm__panel p#guide-close-confirm-description { margin: 0; color: var(--text-muted); font-size: 0.875rem; line-height: 1.5; text-wrap: pretty; }
+:root[data-locale="ko"] .guide-close-confirm__panel { word-break: keep-all; overflow-wrap: break-word; }
+.guide-close-confirm__glyph { width: 15px; height: 15px; flex: none; }
+.guide-close-confirm__warn { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--text-soft); font-size: 0.8125rem; line-height: 1.4; }
+.guide-close-confirm__warn .guide-close-confirm__glyph { color: var(--warn); }
+.guide-close-confirm__actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-top: 8px; }
+.guide-close-confirm__actions .modal-btn { min-width: 92px; }
+
+/* The preview: what Automatic close does, played once in a stage like the intro card's picture. */
+.close-preview {
+  position: relative;
+  height: 140px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text) 2%, var(--canvas));
+  overflow: hidden;
+}
+:root[data-theme="dark"] .close-preview { background: color-mix(in srgb, var(--text) 9%, var(--canvas)); }
+.close-preview__window { position: absolute; left: 20px; right: 20px; top: 16px; bottom: -14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); box-shadow: 0 8px 18px rgb(20 24 12 / 12%); overflow: hidden; }
+.close-preview__bar { display: flex; align-items: flex-end; gap: 4px; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
+.close-preview__lights { display: flex; gap: 4px; align-self: center; margin-right: 6px; }
+.close-preview__lights i { width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--text) 16%, transparent); }
+.close-preview__tab { display: inline-flex; align-items: center; gap: 6px; height: 23px; padding: 0 9px; border-radius: 7px 7px 0 0; color: var(--text-soft); font-size: 0.6875rem; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.close-preview__tab svg { width: 12px; height: 12px; flex: none; }
+.close-preview__tab--work i { display: block; width: 40px; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--text) 18%, transparent); }
+.close-preview__tab--drift { max-width: 190px; background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+.close-preview__tab--drift > span { overflow: hidden; text-overflow: ellipsis; }
+.close-preview__tab em { display: grid; place-items: center; width: 14px; height: 14px; margin-right: -3px; border-radius: 4px; color: var(--text-soft); }
+.close-preview__tab em svg { width: 8px; height: 8px; }
+.close-preview__favicon { flex: none; border-radius: 3px; object-fit: cover; }
+.close-preview__dot { display: block; width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--productivity-drift); }
+.close-preview__page { position: relative; display: grid; align-content: start; gap: 8px; padding: 15px 16px; }
+.close-preview__line { display: block; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--text) 58%, transparent); }
+.close-preview__line--soft { background: color-mix(in srgb, var(--text) 16%, transparent); }
+.close-preview__video { position: absolute; inset: 8px 10px 0; display: grid; place-items: center; border-radius: 6px 6px 0 0; background: #24251f; color: #f4f3ee; }
+.close-preview__video svg { width: 22px; height: 22px; opacity: .9; }
+.close-preview__progress { position: absolute; left: 10px; right: 10px; bottom: 10px; height: 3px; border-radius: 2px; background: rgb(244 243 238 / 22%); }
+.close-preview__progress i { display: block; width: 34%; height: 100%; border-radius: inherit; background: var(--productivity-drift); }
+.close-preview__toast { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 9px; padding: 8px 12px 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 1px 2px rgb(28 28 25 / 6%), 0 10px 24px rgb(28 28 25 / 16%); }
+.close-preview__toast .close-preview__dot { width: 9px; height: 9px; }
+.close-preview__toast > span { display: grid; gap: 1px; }
+.close-preview__toast strong { color: var(--text); font-size: 0.75rem; font-weight: 650; }
+.close-preview__toast small { color: var(--text-soft); font-size: 0.6875rem; }
+.close-preview[data-cat] .close-preview__toast { right: auto; left: 12px; }
+.close-preview__cat { position: absolute; right: 24px; bottom: 6px; width: 144px; height: 99px; transform: scale(.52); transform-origin: 100% 100%; transition: transform 380ms cubic-bezier(.22,1,.36,1); }
+.close-preview__cat[data-beat="0"] { transform: translateX(34px) scale(.52); }
+.close-preview__cat .pet-mode-cat__toy, .close-preview__cat .pet-mode-cat__alert { display: none; }
+.close-preview__cat > * { filter: drop-shadow(0 0 0.7px rgb(23 25 22 / 55%)); }
+/* The timeline: play, press close, fold the tab, show the work, then the notice. */
+@keyframes cpProgress { from { width: 34%; } to { width: 58%; } }
+@keyframes cpPress { to { background: color-mix(in srgb, var(--productivity-drift) 16%, var(--surface)); color: var(--productivity-drift); } }
+@keyframes cpTabClose { to { max-width: 0; padding-inline: 0; opacity: 0; } }
+@keyframes cpVideoOut { to { opacity: 0; transform: translateY(6px); } }
+@keyframes cpWorkTab { to { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); } }
+@keyframes cpToastIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+.close-preview__progress i { animation: cpProgress 1100ms linear 120ms both; }
+.close-preview__tab em { animation: cpPress 140ms ease 980ms forwards; }
+.close-preview__tab--drift { animation: cpTabClose 340ms cubic-bezier(.4,0,.2,1) 1180ms forwards; }
+.close-preview__video { animation: cpVideoOut 300ms ease 1180ms forwards; }
+.close-preview__tab--work { animation: cpWorkTab 200ms ease 1420ms forwards; }
+.close-preview__toast { animation: cpToastIn 360ms cubic-bezier(.22,1,.36,1) 1620ms both; }
+/* The cat paws the tab shut, so the close button is not pressed on the cat look. */
+.close-preview[data-cat] .close-preview__tab em { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .close-preview__tab--drift, .close-preview__video { display: none; }
+  .close-preview__tab--work { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+  .close-preview * { animation: none !important; transition: none !important; }
+}
+
+/* Windows browser chrome in the preview: tabs from the left edge, window controls on the right. */
+.close-preview[data-platform="windows"] .close-preview__lights { display: none; }
+.close-preview__controls { display: none; align-self: center; gap: 12px; margin-left: auto; padding-right: 2px; color: var(--text-soft); }
+.close-preview[data-platform="windows"] .close-preview__controls { display: flex; }
+.close-preview__controls svg { width: 9px; height: 9px; }
+/* In Settings the popup is an app-level modal, at the same layer as the app's other dialogs. */
+.guide-close-confirm[data-layer="app"] { z-index: 1100; }

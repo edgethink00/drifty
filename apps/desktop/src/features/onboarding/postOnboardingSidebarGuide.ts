@@ -3,18 +3,38 @@ export const POST_ONBOARDING_SIDEBAR_GUIDE_REVIEW_QUERY_PARAM = "driftySidebarGu
 export const POST_ONBOARDING_SIDEBAR_GUIDE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
 
 /**
- * A centered introduction: welcome, where the day adds up, correcting it, the optional pet, and last
- * the menu bar ring, the one thing to remember before the window is closed. Step ids are unchanged,
- * so records saved under the previous order (tracking before account) stay valid.
+ * A centered introduction with two six-card sequences of the same shape. The story sequence opens on
+ * the user's own first day (its focus, then its largest drift) when the first-day preparation produced
+ * enough classified time; otherwise the sample sequence opens on the drawn welcome and Today cards.
+ * Both continue with the drift decision ("account", the former Automatic close card, so saved records
+ * stay valid), correcting the day, the menu bar ring, and last the handoff to the dashboard.
  */
-export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["welcome", "day", "activity", "account", "tracking"] as const;
+export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["welcome", "day", "account", "activity", "tracking", "handoff"] as const;
+export const POST_ONBOARDING_STORY_GUIDE_STEPS = ["recap", "drift", "account", "activity", "tracking", "handoff"] as const;
+const ALL_GUIDE_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
+export type PostOnboardingGuideSequence = readonly PostOnboardingSidebarGuideStep[];
 
 /** Keep existing records and completed/dismissed choices compatible. */
 const RETIRED_GUIDE_STEPS: Readonly<Record<string, PostOnboardingSidebarGuideStep>> = {
   dashboard: "day",
 };
 
-export type PostOnboardingSidebarGuideStep = typeof POST_ONBOARDING_SIDEBAR_GUIDE_STEPS[number];
+export type PostOnboardingSidebarGuideStep = typeof ALL_GUIDE_STEPS[number];
+
+/**
+ * The step to show for a saved step in the given sequence. The two sequences have the same length,
+ * so a step saved under the other one (the day's data arrived or went away) keeps its position.
+ */
+export function postOnboardingGuideStepInSequence(
+  step: PostOnboardingSidebarGuideStep,
+  sequence: PostOnboardingGuideSequence,
+): PostOnboardingSidebarGuideStep {
+  if (sequence.includes(step)) return step;
+  const sampleIndex = (POST_ONBOARDING_SIDEBAR_GUIDE_STEPS as readonly PostOnboardingSidebarGuideStep[]).indexOf(step);
+  const storyIndex = (POST_ONBOARDING_STORY_GUIDE_STEPS as readonly PostOnboardingSidebarGuideStep[]).indexOf(step);
+  const index = Math.max(sampleIndex, storyIndex, 0);
+  return sequence[Math.min(index, sequence.length - 1)] ?? sequence[0];
+}
 export type PostOnboardingSidebarGuideStatus = "active" | "completed" | "dismissed" | "expired";
 
 export type PostOnboardingSidebarGuideRecord = {
@@ -44,7 +64,7 @@ export function parsePostOnboardingSidebarGuideRecord(value: string | null): Pos
     const candidate = retiredStep ? { ...stored, step: retiredStep } : stored;
     if (
       candidate.version !== 1
-      || !POST_ONBOARDING_SIDEBAR_GUIDE_STEPS.includes(candidate.step as PostOnboardingSidebarGuideStep)
+      || !(ALL_GUIDE_STEPS as readonly string[]).includes(candidate.step as string)
       || (candidate.status !== "active"
         && candidate.status !== "completed"
         && candidate.status !== "dismissed"
@@ -115,10 +135,11 @@ export function restartPostOnboardingSidebarGuide(now = new Date()): PostOnboard
 export function advancePostOnboardingSidebarGuide(
   record: PostOnboardingSidebarGuideRecord,
   now = new Date(),
+  sequence: PostOnboardingGuideSequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
 ): PostOnboardingSidebarGuideRecord {
   if (record.status !== "active") return record;
-  const index = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS.indexOf(record.step);
-  const next = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS[index + 1];
+  const index = sequence.indexOf(postOnboardingGuideStepInSequence(record.step, sequence));
+  const next = sequence[index + 1];
   if (!next) return completePostOnboardingSidebarGuide(record, now);
   return { ...record, step: next, updatedAt: now.toISOString() };
 }
@@ -126,10 +147,11 @@ export function advancePostOnboardingSidebarGuide(
 export function retreatPostOnboardingSidebarGuide(
   record: PostOnboardingSidebarGuideRecord,
   now = new Date(),
+  sequence: PostOnboardingGuideSequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
 ): PostOnboardingSidebarGuideRecord {
   if (record.status !== "active") return record;
-  const index = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS.indexOf(record.step);
-  const previous = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS[index - 1];
+  const index = sequence.indexOf(postOnboardingGuideStepInSequence(record.step, sequence));
+  const previous = sequence[index - 1];
   return previous ? { ...record, step: previous, updatedAt: now.toISOString() } : record;
 }
 

@@ -13,7 +13,6 @@ describe("getOnboardingSteps", () => {
       "job",
       "choose_setup",
       "permissions",
-      "nudges",
       "ready",
     ]);
   });
@@ -27,7 +26,6 @@ describe("getOnboardingSteps", () => {
       "connect_server",
       "self_data_review",
       "permissions",
-      "nudges",
       "ready",
     ]);
     expect(stepIds("byok")).toEqual([
@@ -39,17 +37,17 @@ describe("getOnboardingSteps", () => {
       "test_connection",
       "self_data_review",
       "permissions",
-      "nudges",
       "ready",
     ]);
     expect(stepIds("custom_endpoint")).toEqual(stepIds("byok"));
   });
 
-  it("keeps Nudges after Permissions in every first-run path", () => {
+  it("goes from Permissions straight to Ready in every first-run path", () => {
     for (const setupChoice of ["simple", "local_ai", "byok", "custom_endpoint"] as const) {
       const steps = stepIds(setupChoice);
-      expect(steps.indexOf("nudges")).toBe(steps.indexOf("permissions") + 1);
-      expect(steps.indexOf("ready")).toBe(steps.indexOf("nudges") + 1);
+      // The drift decision moved to the intro after the first day is shown.
+      expect(steps).not.toContain("nudges");
+      expect(steps.indexOf("ready")).toBe(steps.indexOf("permissions") + 1);
     }
   });
 });

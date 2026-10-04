@@ -105,7 +105,7 @@
 .account-plan-modal.modal-shell,
 .cloud-device-confirm__panel.modal-shell,
 .history-confirm__panel.modal-shell,
-.dc-onb-confirm.modal-shell,
+.guide-close-confirm__panel.modal-shell,
 .cmd-box.modal-shell,
 .dashboard-ai-recovery__panel.modal-shell {
   border-radius: var(--modal-shell-radius);
@@ -115,7 +115,7 @@
 .account-plan-modal.modal-shell,
 .cloud-device-confirm__panel.modal-shell,
 .history-confirm__panel.modal-shell,
-.dc-onb-confirm.modal-shell,
+.guide-close-confirm__panel.modal-shell,
 .dashboard-ai-recovery__panel.modal-shell {
   padding: var(--modal-shell-inset);
 }
@@ -256,7 +256,8 @@
 .modal-shell.rank-embeds-modal .rank-embeds-modal__header h2,
 .account-plan-modal.modal-shell .account-plan-modal__heading h2,
 .cloud-device-confirm__panel.modal-shell h2,
-.history-confirm__panel.modal-shell h2 {
+.history-confirm__panel.modal-shell h2,
+.guide-close-confirm__panel.modal-shell h2 {
   font-family: var(--font-display);
   font-size: 1.2rem;
   font-weight: 600;

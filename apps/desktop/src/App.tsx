@@ -176,6 +176,8 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
+import { buildFirstDayRecap, type FirstDayRecap } from "./features/onboarding/firstDayStory";
+import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataMode } from "./features/onboarding/introStoryReview";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
 import { isFirstDayReviewEnabled } from "./features/onboarding/firstDayPreparationReviewData";
@@ -183,8 +185,8 @@ import { isInitialDailyFocusQuietPeriod } from "./features/onboarding/initialExp
 import { resolveFirstDayTargetDay, useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
-import { PostOnboardingSidebarGuide } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
-import { isPostOnboardingSidebarGuideReviewEnabled } from "./features/onboarding/postOnboardingSidebarGuide";
+import { PostOnboardingSidebarGuide, type GuideDecision } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
+import { isPostOnboardingSidebarGuideReviewEnabled, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./features/companion/watcherPeekTypes";
 import {
@@ -585,6 +587,9 @@ export default function App() {
     </LocalizationProvider>
   );
 }
+
+/** How long the intro waits for the prepared day to load before opening on the sample cards. */
+const INTRO_STORY_WAIT_MS = 6_000;
 
 function AppBody({ localization }: { readonly localization: LocalizationController }) {
   /* Companion cards and macOS notifications are built here as strings before
@@ -1676,6 +1681,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     window.location.search,
     import.meta.env.DEV,
   );
+  /* The intro opens on the user's own first day when the preparation left enough classified time.
+     The recap is read once, when the intro is first shown, so its facts do not shift while it is open. */
+  const [introStory, setIntroStory] = useState<{ readonly resolved: boolean; readonly recap: FirstDayRecap | null }>({ resolved: false, recap: null });
+  const introSequence = introStory.recap ? POST_ONBOARDING_STORY_GUIDE_STEPS : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
   const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
   const {
@@ -1688,6 +1697,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     dismiss: dismissPostOnboardingSidebarGuide,
   } = usePostOnboardingSidebarGuide(
     postOnboardingSidebarGuideReviewEnabled ? "review" : user?.id ?? "local",
+    introSequence,
   );
   const toggleAccountMenu = useCallback(() => {
     setAccountMenuOpen((open) => !open);
@@ -1938,6 +1948,83 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }),
     [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, segments, showAiClassificationImpact],
   );
+  useEffect(() => {
+    if (!postOnboardingSidebarGuideActive) {
+      if (introStory.resolved) setIntroStory({ resolved: false, recap: null });
+      return;
+    }
+    if (introStory.resolved || preparingFirstDay) return;
+    const today = logicalTodayIsoDate(startOfDayMinutes);
+    if (postOnboardingSidebarGuideReviewEnabled) {
+      const review = buildIntroReviewCase(introReviewDataMode(window.location.search), (offset) => shiftIsoDate(today, offset));
+      setIntroStory({ resolved: true, recap: buildFirstDayRecap({ segments: review.segments, day: review.day, today, startOfDayMinutes }) });
+      return;
+    }
+    if (segmentsLoadedDay !== selectedDay) {
+      // The day could not be read: open on the sample cards rather than holding the intro back.
+      if (error) setIntroStory({ resolved: true, recap: null });
+      return;
+    }
+    setIntroStory({
+      resolved: true,
+      recap: buildFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes }),
+    });
+  }, [error, introStory.resolved, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, preparingFirstDay, segments, segmentsLoadedDay, selectedDay, selectedDayClassificationOptions, startOfDayMinutes]);
+  // A day that is still loading after a few seconds does not hold the intro back either.
+  const introStoryPending = postOnboardingSidebarGuideActive && !introStory.resolved && !preparingFirstDay;
+  useEffect(() => {
+    if (!introStoryPending) return undefined;
+    const timer = window.setTimeout(() => {
+      setIntroStory((current) => (current.resolved ? current : { resolved: true, recap: null }));
+    }, INTRO_STORY_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [introStoryPending]);
+  /* The intro reports each card it shows and, when it ends, the focus-support choices it settled
+     (the same three booleans onboarding_completed carried while setup still asked about them). */
+  const introSequenceName = introStory.recap ? "story" as const : "sample" as const;
+  const introLastViewedRef = useRef<string | null>(null);
+  const introChoicesRef = useRef({ drift_alarm_enabled: false, extreme_nudge_enabled: false, pet_enabled: false });
+  introChoicesRef.current = { drift_alarm_enabled: driftAlertsEnabled, extreme_nudge_enabled: automaticCloseSavedEnabled, pet_enabled: petModeEnabled };
+  const reportIntroEnd = useCallback((action: "completed" | "dismissed") => {
+    if (!postOnboardingSidebarGuideStep || postOnboardingSidebarGuideReviewEnabled) return;
+    capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, ...introChoicesRef.current });
+  }, [introSequenceName, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
+  useEffect(() => {
+    const viewing = postOnboardingSidebarGuideActive && introStory.resolved && !preparingFirstDay && !onboardingOpen ? postOnboardingSidebarGuideStep : null;
+    if (!viewing || postOnboardingSidebarGuideReviewEnabled) {
+      if (!postOnboardingSidebarGuideActive) introLastViewedRef.current = null;
+      return;
+    }
+    if (introLastViewedRef.current === viewing) return;
+    introLastViewedRef.current = viewing;
+    capturePostHogEvent("onboarding_intro", { action: "step_viewed", step: viewing, sequence: introSequenceName });
+  }, [introSequenceName, introStory.resolved, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
+  const advanceIntro = useCallback(() => {
+    if (postOnboardingSidebarGuideStep === introSequence[introSequence.length - 1]) reportIntroEnd("completed");
+    advancePostOnboardingSidebarGuide();
+  }, [advancePostOnboardingSidebarGuide, introSequence, postOnboardingSidebarGuideStep, reportIntroEnd]);
+  const dismissIntro = useCallback(() => {
+    reportIntroEnd("dismissed");
+    dismissPostOnboardingSidebarGuide();
+  }, [dismissPostOnboardingSidebarGuide, reportIntroEnd]);
+  /* The intro's drift decision writes the same settings as Companion & Alerts. Turning Automatic close
+     on also turns on its Drift alert delivery path, as Settings does; turning it back off in the intro
+     restores Drift alerts to what they were when the intro opened, so the intro never leaves alerts on
+     that the user did not choose (first-run never offers alerts on their own). */
+  const introDriftAlertsBaselineRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!postOnboardingSidebarGuideActive) introDriftAlertsBaselineRef.current = null;
+    else if (introDriftAlertsBaselineRef.current === null) introDriftAlertsBaselineRef.current = driftAlertsEnabled;
+  }, [driftAlertsEnabled, postOnboardingSidebarGuideActive]);
+  const introDecision = useMemo<GuideDecision>(() => ({
+    autoCloseEnabled: automaticCloseSavedEnabled,
+    petEnabled: petModeEnabled,
+    onAutoCloseChange: (enabled) => {
+      handleAutomaticCloseSettingsChange(enabled);
+      if (!enabled && introDriftAlertsBaselineRef.current === false) setDriftAlertsEnabled(false);
+    },
+    onPetChange: (enabled) => requestPetModeEnabled(enabled),
+  }), [automaticCloseSavedEnabled, handleAutomaticCloseSettingsChange, petModeEnabled, requestPetModeEnabled, setDriftAlertsEnabled]);
   // The first-day preparation screen stacks up what the run has loaded for the day it is preparing.
   const firstDayPreparedDayLoaded = preparingFirstDay && firstDayPreparedDay !== null && segmentsLoadedDay === firstDayPreparedDay;
   const firstDayDiscoveries = useMemo(
@@ -9936,6 +10023,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   });
   const shouldShowPostOnboardingSidebarGuide = postOnboardingSidebarGuideActive
     && postOnboardingSidebarGuideStep !== null
+    && introStory.resolved
     && !onboardingOpen
     && !preparingFirstDay
     && !isSettingsTab
@@ -10375,15 +10463,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </aside>
       )}
 
+      {/* The development review's synthetic day uses public favicons; the app reads the native icon cache. */}
+      <SiteIconProvider value={postOnboardingSidebarGuideReviewEnabled ? { ...buildIntroReviewSiteIcons(), ...siteIcons } : siteIcons}>
       <PostOnboardingSidebarGuide
         step={shouldShowPostOnboardingSidebarGuide ? postOnboardingSidebarGuideStep : null}
         navigationRefreshEnabled={canUseNavigationRefresh}
         hostPlatform={introHostPlatform}
         theme={theme}
-        onAdvance={advancePostOnboardingSidebarGuide}
+        sequence={introSequence}
+        recap={introStory.recap}
+        decision={introDecision}
+        onAdvance={advanceIntro}
         onBack={retreatPostOnboardingSidebarGuide}
-        onDismiss={dismissPostOnboardingSidebarGuide}
+        onDismiss={dismissIntro}
       />
+      </SiteIconProvider>
 
       {/* ── Main content ── */}
       <MainContentShell activeTab={activeTab} loading={loading} hasLoadedOnce={hasLoadedOnce} error={error} contentRef={contentRef}>

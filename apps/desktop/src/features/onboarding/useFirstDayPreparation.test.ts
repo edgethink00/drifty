@@ -355,10 +355,11 @@ describe("useFirstDayPreparation", () => {
 
     // Opening load, one quiet reload for the saved batch, then the closing load. The empty batch
     // saved nothing and reloads nothing.
+    // Every day has enough activity, so first run prepares yesterday (a whole day).
     expect(vi.mocked(options.refresh).mock.calls).toEqual([
-      ["2026-07-04", { foreground: true }],
-      ["2026-07-04", { foreground: false }],
-      ["2026-07-04"],
+      ["2026-07-03", { foreground: true }],
+      ["2026-07-03", { foreground: false }],
+      ["2026-07-03"],
     ]);
     expect(options.onReveal).toHaveBeenCalledWith("complete");
   });
@@ -395,7 +396,7 @@ describe("useFirstDayPreparation", () => {
     // The first saved batch reloads at once; the others collapse behind the one-second gap, and the
     // closing reload supersedes the queued one.
     expect(background()).toBe(1);
-    expect(refresh).toHaveBeenLastCalledWith("2026-07-04");
+    expect(refresh).toHaveBeenLastCalledWith("2026-07-03");
 
     await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_LIVE_REFRESH_MIN_GAP_MS * 2);
     expect(background()).toBe(1);
@@ -1116,14 +1117,14 @@ describe("resolveFirstDayTargetDay", () => {
     );
   }
 
-  it("picks today when today has enough segments", async () => {
-    mockMetricsByDay({ "2026-07-04": 15, "2026-07-03": 40 });
-    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-04");
+  it("prefers yesterday, a whole day, even when today already has enough segments", async () => {
+    mockMetricsByDay({ "2026-07-04": 40, "2026-07-03": 15 });
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-03");
   });
 
-  it("falls back to yesterday when today is nearly empty", async () => {
-    mockMetricsByDay({ "2026-07-04": 3, "2026-07-03": 15 });
-    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-03");
+  it("uses today when yesterday is nearly empty", async () => {
+    mockMetricsByDay({ "2026-07-04": 15, "2026-07-03": 3 });
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-04");
   });
 
   it("falls back to the day before yesterday when needed", async () => {

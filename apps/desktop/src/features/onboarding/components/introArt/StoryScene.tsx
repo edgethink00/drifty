@@ -4,6 +4,10 @@ import type { HostPlatform } from "../../../../lib/api/accessibilityClient";
 import { AppIcon, Bar, DAY_SHARES, TrayMenu, TrayRing, trayMenuHeight, trayRowTop, type ArtTheme } from "./artKit";
 import { APP_W, AppShell, ClassificationPage, CorrectionEditor, Scaled, TodayPage, type NavActive, type RealLabels } from "./realApp";
 import { WIN_APP, WIN_OVERFLOW_TRAY, WIN_TASKBAR, WindowsTaskbar } from "./windowsShell";
+import type { FirstDayRecap, FirstDayRecapBlock, FirstDayVerdict } from "../../firstDayStory";
+import type { FirstDaySource } from "../../firstDayPreparationStory";
+import { useSiteIcon } from "../../../../components/SiteIconContext";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../../lib/formatting";
 
 /*
  * The post-onboarding introduction's illustrations, drawn from real Drifty surfaces. The menu bar and Dock
@@ -95,7 +99,9 @@ export type ArtCatPlacement = { readonly x: number; readonly y: number; readonly
 /** Where the cat stops on the Automatic close card. Its paw tip (about 12, 43 in the 144x99 cat box) lands just inside the drift window's right edge. */
 export const CAT_SWAT: ArtCatPlacement = { x: 226, y: 196, k: 1 };
 export const SWAT_POINT = { x: CAT_SWAT.x + 12, y: CAT_SWAT.y + 43 } as const;
-export function storyCatPlacement(step: PostOnboardingSidebarGuideStep): ArtCatPlacement | null {
+export type StoryDriftChoice = "watch" | "close";
+export function storyCatPlacement(step: PostOnboardingSidebarGuideStep, _choice: StoryDriftChoice = "close"): ArtCatPlacement | null {
+  // The cat sits by the drift window whether or not it is about to close it.
   return step === "account" ? CAT_SWAT : null;
 }
 
@@ -104,7 +110,7 @@ export function storyCatPlacement(step: PostOnboardingSidebarGuideStep): ArtCatP
  * window closes, leaving the work behind it. There is no button or arrow to explain; the window closes
  * from the point the paw lands (a slight shrink and fade), so the cause is the paw itself.
  */
-function SwatScene({ windows, closed, labels }: { windows: boolean; closed: boolean; labels: RealLabels }) {
+function SwatScene({ windows, closed, labels, driftTitle }: { windows: boolean; closed: boolean; labels: RealLabels; driftTitle?: string }) {
   const drift = "var(--productivity-drift)";
   const work = { x: 150, y: 40, w: 230, h: 176 }, win = { x: 22, y: 100, w: SWAT_POINT.x + 6 - 22, h: 160 };
   const chrome = (x: number, y: number, w: number) => windows
@@ -125,6 +131,7 @@ function SwatScene({ windows, closed, labels }: { windows: boolean; closed: bool
     <g style={{ opacity: closed ? 0 : 1, transform: closed ? "scale(.95)" : "none", transformOrigin: SWAT_POINT.x + "px " + SWAT_POINT.y + "px", transformBox: "view-box", transition: "opacity 420ms ease, transform 520ms cubic-bezier(.22,.8,.3,1)" } as CSSProperties}>
       <rect x={win.x} y={win.y} width={win.w} height={win.h} rx={10} className="real-art__window" />
       {chrome(win.x, win.y, win.w)}
+      {driftTitle ? <text x={win.x + (windows ? 12 : 50)} y={win.y + 16.6} fontSize="9" fontWeight="600" fill="var(--text-soft)">{driftTitle}</text> : null}
       <path d={"M" + win.x + " " + (win.y + 26) + "H" + (win.x + win.w)} stroke="var(--line)" />
       <rect x={win.x + 12} y={win.y + 32} width={44} height={14} rx={7} fill="color-mix(in srgb, var(--productivity-drift) 14%, var(--surface))" stroke="color-mix(in srgb, var(--productivity-drift) 40%, transparent)" />
       <circle cx={win.x + 20} cy={win.y + 39} r={2.8} fill={drift} />
@@ -141,8 +148,144 @@ const WIN = { x: 40, y: 58, w: 320 } as const;
 const WK = WIN.w / APP_W;
 const onWin = (ax: number, ay: number) => ({ x: WIN.x + ax * WK, y: WIN.y + ay * WK });
 
-export function StoryScene({ step, theme, ko, platform, labels, driftClosed = false }: SceneProps & { step: PostOnboardingSidebarGuideStep; driftClosed?: boolean }) {
-  if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftClosed} labels={labels} />;
+/* ---------- The user's own first day (story cards) ---------- */
+const VERDICT_FILL: Record<FirstDayVerdict, string> = {
+  focus: "var(--productivity-focus)", drift: "var(--productivity-drift)", neutral: "var(--productivity-neutral)", pending: "var(--line-strong)",
+};
+const minuteOf = (hourIndex: number, minute: number) => hourIndex * 60 + minute;
+function inLongestRun(block: FirstDayRecapBlock, recap: FirstDayRecap): boolean {
+  const run = recap.longestFocus;
+  if (!run || block[3] !== "focus") return false;
+  const from = minuteOf(run.from.hourIndex, run.from.minute) - 0.01, to = minuteOf(run.to.hourIndex, run.to.minute) + 0.01;
+  return minuteOf(block[0], block[1]) >= from && minuteOf(block[0], block[2]) <= to;
+}
+
+let measureContext: CanvasRenderingContext2D | null | undefined;
+/**
+ * Advance width of SVG text in the app font, so labels can be padded and aligned exactly. Falls back
+ * to an estimate where there is no canvas (tests).
+ */
+function textWidth(text: string, size: number, weight = 600): number {
+  if (measureContext === undefined) {
+    try { measureContext = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d"); } catch { measureContext = null; }
+  }
+  if (measureContext && typeof getComputedStyle === "function") {
+    measureContext.font = weight + " " + size + "px " + getComputedStyle(document.body).fontFamily;
+    const measured = measureContext.measureText(text).width;
+    if (measured > 0) return measured * 0.99;
+  }
+  let width = 0;
+  for (const ch of text) width += /[가-힣]/.test(ch) ? size * 0.98 : ch === " " ? size * 0.3 : /[.·]/.test(ch) ? size * 0.32 : size * 0.58;
+  return width;
+}
+
+/** The source's own icon from the native site-icon cache, or its initial on a soft tile. */
+function SourceGlyph({ x, y, size, source }: { x: number; y: number; size: number; source: FirstDaySource }) {
+  const icon = useSiteIcon(source.siteDomain);
+  const clip = useId();
+  if (icon) return <g>
+    <clipPath id={clip}><rect x={x} y={y} width={size} height={size} rx={size * 0.26} /></clipPath>
+    <image href={icon} x={x} y={y} width={size} height={size} clipPath={"url(#" + clip + ")"} preserveAspectRatio="xMidYMid slice" />
+  </g>;
+  return <g>
+    <rect x={x} y={y} width={size} height={size} rx={size * 0.26} fill="var(--line-strong)" />
+    <text x={x + size / 2} y={y + size * 0.74} fontSize={size * 0.62} fontWeight="700" textAnchor="middle" fill="var(--text-muted)">{source.label[0]?.toUpperCase() ?? ""}</text>
+  </g>;
+}
+
+/**
+ * The card's one fact on the chart, the way the app's chart answers a hover: the hours it describes are
+ * selected (a light tint with dashed edges) and a dark tooltip above them names the source and its time.
+ * The tooltip is centred over the hours and, near an edge, aligned with the chart's own edge.
+ */
+function FactMark({ source, duration, color, span, chart }: {
+  source: FirstDaySource | null; duration: string; color: string;
+  span: { x0: number; x1: number }; chart: { x: number; y: number; w: number; h: number };
+}) {
+  const name = source?.label ?? "";
+  const icon = 14, gap = 6, pad = 6, padEnd = 10, h = 26, sep = 6;
+  const nameW = textWidth(name, 10, 600), durW = textWidth(duration, 10, 700);
+  const width = pad + (source ? icon + gap : 0) + nameW + (name ? sep : 0) + durW + padEnd;
+  const cx = (span.x0 + span.x1) / 2;
+  const left = Math.max(chart.x, Math.min(chart.x + chart.w - width, cx - width / 2));
+  const top = chart.y - h - 8, mid = top + h / 2;
+  const caret = Math.max(left + 12, Math.min(left + width - 12, cx));
+  const textX = left + pad + (source ? icon + gap : 0);
+  return <g className="story-day__fact">
+    <rect x={span.x0} y={chart.y} width={span.x1 - span.x0} height={chart.h} fill={color} opacity=".1" />
+    <path d={"M" + (span.x0 + 0.5) + " " + chart.y + "V" + (chart.y + chart.h) + "M" + (span.x1 - 0.5) + " " + chart.y + "V" + (chart.y + chart.h)}
+      stroke={color} strokeWidth="1" strokeDasharray="3 3" opacity=".55" />
+    <rect x={left} y={top} width={width} height={h} rx={h / 2} fill="var(--text)" />
+    <path d={"M" + (caret - 5) + " " + (top + h - 1) + "L" + caret + " " + (top + h + 5) + "L" + (caret + 5) + " " + (top + h - 1) + "Z"} fill="var(--text)" />
+    {source ? <g>
+      <rect x={left + pad} y={mid - icon / 2} width={icon} height={icon} rx={icon / 2} fill="var(--surface)" />
+      <SourceGlyph x={left + pad + 2} y={mid - icon / 2 + 2} size={icon - 4} source={source} />
+    </g> : null}
+    <text x={textX} y={mid + 3.5} fontSize="10">
+      {name ? <tspan fontWeight="600" fill="var(--surface)">{name}</tspan> : null}
+      <tspan x={textX + nameW + (name ? sep : 0)} fontWeight="700" fill="var(--surface)" opacity=".7">{duration}</tspan>
+    </text>
+  </g>;
+}
+
+
+/**
+ * The first day as the Today canvas draws it: one column per hour, blocks by minute, coloured by
+ * productivity. "focus" lights the longest focus stretch, "drift" lights the drift; the rest steps back.
+ */
+function RecapDayScene({ recap, lit, ko, labels }: { recap: FirstDayRecap; lit: "focus" | "drift"; ko: boolean; labels: RealLabels }) {
+  const panel = { x: 14, y: 34, w: 372, h: 282 };
+  const chart = { x: panel.x + 16, y: panel.y + 66, w: panel.w - 32, h: 168 };
+  const cw = chart.w / recap.hourCount;
+  const language = ko ? "ko" : "en";
+  const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
+  // With almost no drift there is no source to point at: the drift card lights the day's focus and
+  // neutral time instead, a day that stayed mostly on track, and shows no label.
+  const clean = lit === "drift" && !recap.topDrift;
+  const isLit = (block: FirstDayRecapBlock) => lit === "focus" ? inLongestRun(block, recap)
+    : clean ? block[3] === "focus" || block[3] === "neutral" : block[3] === "drift";
+  const litColumns = recap.blocks.filter(isLit).map((block) => block[0]);
+  // Drift: point at the hour holding the most drift; focus: at the stretch's first hour.
+  const driftMinutes = new Map<number, number>();
+  for (const block of recap.blocks) if (block[3] === "drift") driftMinutes.set(block[0], (driftMinutes.get(block[0]) ?? 0) + block[2] - block[1]);
+  const pillColumn = lit === "focus"
+    ? (recap.longestFocus ? (recap.longestFocus.from.hourIndex + recap.longestFocus.to.hourIndex) / 2 : litColumns[0] ?? 0)
+    : Array.from(driftMinutes.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+  const factSource = lit === "focus" ? recap.longestFocus?.source ?? null : recap.topDrift?.source ?? null;
+  const factDuration = lit === "focus"
+    ? duration(recap.longestFocus ? recap.longestFocus.seconds : recap.focusSeconds)
+    : duration(recap.topDrift ? recap.topDrift.seconds : recap.driftSeconds);
+  const spanFrom = lit === "focus" && recap.longestFocus ? recap.longestFocus.from.hourIndex : pillColumn;
+  const spanTo = lit === "focus" && recap.longestFocus ? recap.longestFocus.to.hourIndex : pillColumn;
+  const color = lit === "focus" ? VERDICT_FILL.focus : VERDICT_FILL.drift;
+  const step = recap.hourCount > 12 ? 3 : 2;
+  const legend = [[VERDICT_FILL.focus, labels.focus], [VERDICT_FILL.neutral, labels.neutral], [VERDICT_FILL.drift, labels.drift]] as const;
+  return <g>
+    <rect x={panel.x} y={panel.y} width={panel.w} height={panel.h} rx={12} className="real-art__window" />
+    {legend.map(([fill, text], i) => {
+      const x = panel.x + 16 + i * (ko ? 52 : 64);
+      const on = clean ? i < 2 : (lit === "focus" && i === 0) || (lit === "drift" && i === 2);
+      return <g key={text} opacity={on ? 1 : 0.55}><circle cx={x + 4} cy={panel.y + 22} r={4} fill={fill} /><text x={x + 12} y={panel.y + 25.5} fontSize="10" fontWeight={on ? 700 : 500} fill="var(--text)">{text}</text></g>;
+    })}
+    <g transform={"translate(" + chart.x + " " + chart.y + ")"}>
+      {Array.from({ length: recap.hourCount }, (_, i) => <rect key={i} x={i * cw} width={cw} height={chart.h} fill="var(--line)" opacity={i % 2 ? 0.16 : 0.34} />)}
+      {recap.blocks.map((block, i) => <rect key={i} className="story-day__block" data-lit={isLit(block) || undefined} style={{ "--hour": block[0] } as CSSProperties}
+        x={block[0] * cw} y={(block[1] / 60) * chart.h} width={cw + 0.4} height={Math.max(1, ((block[2] - block[1]) / 60) * chart.h)}
+        fill={VERDICT_FILL[block[3]]} stroke="var(--surface)" strokeWidth=".7" opacity={isLit(block) ? 0.95 : 0.2} />)}
+      {Array.from({ length: Math.floor((recap.hourCount - 1) / step) + 1 }, (_, i) => i * step).map((i) =>
+        <text key={i} x={i * cw + cw / 2} y={chart.h + 16} fontSize="9.5" fill="var(--text-soft)" textAnchor="middle">{formatLocalizedCompactHourLabel((recap.firstHour + i) % 24, language)}</text>)}
+    </g>
+    {clean ? null : <FactMark source={factSource} duration={factDuration} color={color} chart={chart}
+      span={{ x0: chart.x + Math.floor(spanFrom) * cw, x1: chart.x + (Math.floor(spanTo) + 1) * cw }} />}
+  </g>;
+}
+
+export function StoryScene({ step, theme, ko, platform, labels, driftClosed = false, recap = null, driftChoice = "close" }: SceneProps & {
+  step: PostOnboardingSidebarGuideStep; driftClosed?: boolean; recap?: FirstDayRecap | null; driftChoice?: StoryDriftChoice;
+}) {
+  if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap} lit={step === "recap" ? "focus" : "drift"} ko={ko} labels={labels} />;
+  if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}
+    driftTitle={recap?.topDrift?.source.label} />;
   const windows = platform === "windows";
   const today = <TodayPage labels={labels} theme={theme} />;
   const clock = labels.menuClock ?? "";
@@ -162,7 +305,8 @@ export function StoryScene({ step, theme, ko, platform, labels, driftClosed = fa
     <Arc from={{ x: 272, y: 158 }} to={{ x: 201, y: 246 }} lift={30} />
   </g>;
 
-  if (step === "day") {
+  // The handoff card draws the dashboard the intro is about to reveal, the same art as the Today card.
+  if (step === "day" || step === "handoff") {
     // Deliberate bleed: the window sits at 0.56 (the smallest scale where app text stays text) and runs
     // off the art frame's right and bottom edges with a hard cut, like a product screenshot. The right
     // edge falls just after "now" (18:08) and before the 19:00 hour label, and the bottom edge falls

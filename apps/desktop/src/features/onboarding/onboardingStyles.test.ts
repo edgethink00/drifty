@@ -33,17 +33,6 @@ describe("onboarding setup choice styles", () => {
     expect(viewportRule).toContain("overflow: visible;");
     expect(viewportRule).not.toContain("overflow-y: hidden;");
   });
-
-  it("lets the nudges confirmation backdrop cover the viewport", () => {
-    // Given: the nudges step can open a fixed-position confirmation window.
-    const bodyRule = cssRule(".onboarding-card .onboarding-body--nudges");
-    const viewportRule = cssRule(".onboarding-card .onboarding-body--nudges .onboarding-viewport");
-
-    // Then: the fixed backdrop must not be constrained by the step body or viewport.
-    expect(bodyRule).toContain("contain: none;");
-    expect(bodyRule).toContain("overflow: visible;");
-    expect(viewportRule).toContain("overflow: visible;");
-  });
 });
 
 describe("onboarding design-code reference styles", () => {
@@ -88,4 +77,3 @@ describe("onboarding job-step contrast", () => {
     expect(textareaRule).toContain("color: var(--dc-onb-text);");
   });
 });
-	

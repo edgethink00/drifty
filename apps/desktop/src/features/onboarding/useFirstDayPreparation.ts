@@ -147,10 +147,11 @@ export type UseFirstDayPreparationOptions = {
   readonly selectedAiProviderKeyRef: MutableRefObject<string>;
 };
 
-// The most recent logical day (today, then yesterday, then the day before) that has
-// enough segments to be worth completing before reveal. Exported for unit tests.
+// The day first-run prepares and the intro tells: yesterday first, because a whole finished day
+// reads as "your day" while today is still partial at install time; then today, then the day
+// before. A day needs enough segments to be worth completing before reveal. Exported for unit tests.
 export async function resolveFirstDayTargetDay(logicalToday: string): Promise<string> {
-  for (const day of [logicalToday, shiftIsoDate(logicalToday, -1), shiftIsoDate(logicalToday, -2)]) {
+  for (const day of [shiftIsoDate(logicalToday, -1), logicalToday, shiftIsoDate(logicalToday, -2)]) {
     try {
       const metrics = await trackerClient.getClassificationMetrics(toClassificationQueryForDay(day));
       if (metrics.totalSegments >= FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS) return day;
@@ -677,8 +678,8 @@ export function useFirstDayPreparation({
             importFinishedAt = Date.now();
           }
         }
-        // Complete + reveal the most recent logical day that has data, and open the
-        // dashboard there — right after the day rolls over "today" is often empty.
+        // Complete + reveal yesterday when it has data (otherwise today, then the day before), and
+        // open the dashboard there.
         today = await resolveFirstDayTargetDay(today);
         updateCloudBacklog({ day: today });
         // Once the cap has revealed the dashboard, preserve any day the user

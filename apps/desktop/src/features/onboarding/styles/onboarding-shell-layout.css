@@ -99,15 +99,6 @@
   overflow: visible;
 }
 
-.onboarding-card .onboarding-body--nudges {
-  contain: none;
-  overflow: visible;
-}
-
-.onboarding-card .onboarding-body--nudges .onboarding-viewport {
-  overflow: visible;
-}
-
 .onboarding-card .onboarding-body--ready .onboarding-viewport {
   max-height: none;
   overflow-y: visible;

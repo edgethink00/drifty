@@ -14,3 +14,18 @@
 .real-art__halo { vector-effect: non-scaling-stroke; }
 @media (prefers-reduced-motion: reduce) { .sidebar-guide-narrative-art__cat { transition: none !important; } }
 .sidebar-guide-narrative-host--settled *, .sidebar-guide-narrative-host--settled .sidebar-guide-narrative-art__cat { transition: none !important; }
+
+/* Story cards: the lit stretch rises hour by hour, then its label settles above it. The outgoing page
+   (settled) shows the final frame without replaying. */
+@keyframes storyDayRise { from { transform: scaleY(0); } to { transform: none; } }
+@keyframes storyPillIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.story-day__block[data-lit] { transform-box: fill-box; transform-origin: 50% 100%; animation: storyDayRise 420ms cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(80ms + var(--hour, 0) * 45ms); }
+.story-day__fact { animation: storyPillIn 320ms cubic-bezier(0.22, 1, 0.36, 1) 520ms both; }
+.sidebar-guide-narrative-host--settled .story-day__block,
+.sidebar-guide-narrative-host--settled .story-day__fact { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .story-day__block, .story-day__fact { animation: none; }
+}
+
+/* The ivory cat keeps a fine ink edge so it reads on the light picture, awake or asleep. */
+.sidebar-guide-narrative-art__cat > div { filter: drop-shadow(0 0 0.7px rgb(23 25 22 / 55%)) drop-shadow(0 5px 7px rgb(20 24 12 / 14%)); }

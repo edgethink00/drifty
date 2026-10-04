@@ -14,7 +14,6 @@ describe("onboarding design-code accessibility styles", () => {
     expect(focusBlock).toContain(".dc-onb-input:not(.dc-onb-textarea)");
     expect(focusBlock).toContain(".dc-onb-setup-card");
     expect(focusBlock).toContain(".dc-onb-toggle");
-    expect(focusBlock).toContain(".dc-onb-confirm__primary");
     expect(focusBlock).toContain(":focus-visible");
     expect(focusBlock).toContain("outline: 2px solid var(--dc-onb-accent)");
     expect(focusBlock).toContain("outline-offset: 2px");
@@ -48,29 +47,5 @@ describe("onboarding design-code accessibility styles", () => {
     expect(textareaFocusBlock).toContain("box-shadow: none");
     expect(textareaFocusBlock).toContain("caret-color: var(--dc-onb-accent)");
     expect(textareaFocusBlock).not.toContain("outline:");
-  });
-
-  it("keeps the nudge spacing balance explicit", () => {
-    const nudgeCopyBlock = styles.match(/\.dc-onb-content--nudges \.dc-onb-copy \{[\s\S]*?\n\}/)?.[0] ?? "";
-    const interventionBlock = styles.match(/\.dc-onb-intervene \{[\s\S]*?\n\}/)?.[0] ?? "";
-
-    expect(nudgeCopyBlock).toContain("margin-bottom: 9px");
-    expect(interventionBlock).toContain("gap: 6px");
-    // The single automatic-close row has no visible group label, so the gap
-    // above it matches the space between the other onboarding cards.
-    expect(interventionBlock).toContain("margin: 12px 0 0");
-  });
-});
-
-describe("onboarding desktop cat preview", () => {
-  it("keeps a clipped stage large enough for the happy heart", () => {
-    expect(styles).toContain(".dc-onb-cat-preview {");
-    expect(styles).toContain("overflow: hidden;");
-    expect(styles).toContain("width: 92px;");
-    expect(styles).toContain("height: 80px;");
-    expect(styles).not.toContain("@keyframes dcOnbCatArrive");
-    expect(styles).toContain(".dc-onb-cat-preview:focus-visible");
-    expect(styles).toContain(".dc-onb-cat-preview:hover");
-    expect(styles).toContain("transform: none");
   });
 });

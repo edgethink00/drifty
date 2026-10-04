@@ -378,9 +378,8 @@ export function useOnboardingFlow({
           accessibility_granted: permissions.accessibilityGranted,
           notifications_granted: permissions.notificationPermission === "granted",
           account_connected: accountConnected,
-          drift_alarm_enabled: driftAlarmEnabled,
-          extreme_nudge_enabled: extremeNudgeEnabled,
-          pet_enabled: petModeEnabled,
+          // Setup no longer asks about drift alerts, Automatic close or the cat; the intro reports
+          // those choices on its onboarding_intro event.
         });
       } else {
         completionInFlightRef.current = false;

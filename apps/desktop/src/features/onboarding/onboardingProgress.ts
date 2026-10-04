@@ -83,7 +83,9 @@ export function clampOnboardingProgressStep(
 ): OnboardingProgressSnapshot {
   const steps = getOnboardingSteps(progress.setupChoice, { skipAccountStep: options.skipAccountStep });
   const stepIds = steps.map((step) => step.id);
-  const candidateStep = stepIds.includes(progress.step) ? progress.step : stepIds[0] ?? "welcome";
+  // Nudges left first-run setup for the intro's drift decision; a run saved there resumes at Ready.
+  const savedStep = progress.step === "nudges" ? "ready" : progress.step;
+  const candidateStep = stepIds.includes(savedStep) ? savedStep : stepIds[0] ?? "welcome";
   const accountIndex = stepIds.indexOf("account");
   const candidateIndex = stepIds.indexOf(candidateStep);
   if (!options.accountConnected && accountIndex >= 0 && candidateIndex > accountIndex) {
