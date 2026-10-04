@@ -2,6 +2,9 @@
 // tracker timeline (nothing leaves the device). Powers the Profile page's 30-day chart.
 import { useEffect, useState } from "react";
 import {
+  aggregateDeviceElapsedTime,
+  activitySecondsWithinInterval,
+  activityTimeBounds,
   classifyActivity,
   isBrowserHistoryImportSegment,
   isExcludedSegment,
@@ -35,16 +38,27 @@ export function buildDailyProductivitySeries(
 ): DailyProductivityPoint[] {
   const totals = new Map<string, { focus: number; drift: number; neutral: number }>();
 
-  for (const segment of segments) {
-    const { category, productivity } = classifyActivity(segment, options);
+  // Elapsed allocation changes durationSeconds. Classify the recorded samples
+  // first so duration-based feed rules keep their original evidence.
+  const classifications = segments.map(segment => classifyActivity(segment, options));
+  for (const [index, segment] of aggregateDeviceElapsedTime(segments).entries()) {
+    const { category, productivity } = classifications[index];
     if (category === "unknown") continue;
 
-    let cursor = new Date(segment.startedAt).getTime();
-    const end = new Date(segment.endedAt).getTime();
+    const { start, end } = activityTimeBounds(segment);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+    if (start === end) {
+      const dayKey = logicalDayIsoDateForDate(new Date(start), startOfDayMinutes);
+      const bucket = totals.get(dayKey) ?? { focus: 0, drift: 0, neutral: 0 };
+      if (Number.isFinite(segment.durationSeconds)) bucket[productivity] += Math.max(0, segment.durationSeconds);
+      totals.set(dayKey, bucket);
+      continue;
+    }
+    let cursor = start;
     while (cursor < end) {
       const dayKey = logicalDayIsoDateForDate(new Date(cursor), startOfDayMinutes);
       const overlapEnd = Math.min(end, logicalDayEndExclusiveMs(dayKey, startOfDayMinutes));
-      const overlapSeconds = Math.max(0, Math.round((overlapEnd - cursor) / 1000));
+      const overlapSeconds = activitySecondsWithinInterval(segment, cursor, overlapEnd);
 
       const bucket = totals.get(dayKey) ?? { focus: 0, drift: 0, neutral: 0 };
       bucket[productivity] += overlapSeconds;
