@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDefaultDriftAlarmCopy } from "../companion/driftAlarmCopy";
 import { DEFAULT_QUIET_HOURS } from "../companion/quietHours";
@@ -158,15 +158,44 @@ describe("NotificationsSettingsSection", () => {
     expect(enabledProps.onQuietHoursChange).toHaveBeenLastCalledWith({ enabled: true, startMinute: 22 * 60, endMinute: 22 * 60 + 30 });
   });
 
-  it("keeps pet appearance out of alerts and exposes one automatic-close control", () => {
+  it("keeps pet appearance out of alerts and exposes one automatic-close control that asks before turning on", async () => {
     const props = renderSettings({ driftAlertsEnabled: false, extremeNudgeEnabled: false });
     expect(screen.queryByRole("heading", { name: "Desktop pet" })).toBeNull();
     expect(screen.queryByRole("radiogroup", { name: "Pet coat" })).toBeNull();
     const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
     expect(toggles).toHaveLength(1);
     fireEvent.click(toggles[0]!);
+    // The same consent as the post-setup intro: nothing changes until Turn on.
+    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
+    expect(props.onExtremeNudgeChange).not.toHaveBeenCalled();
+    expect(props.onDriftAlertsChange).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(within(popup).getByRole("button", { name: "Keep off" })));
+    fireEvent.click(within(popup).getByRole("button", { name: "Keep off" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(props.onExtremeNudgeChange).not.toHaveBeenCalled();
+
+    fireEvent.click(toggles[0]!);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Turn on" }));
     expect(props.onDriftAlertsChange).toHaveBeenCalledWith(true);
     expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(true);
+  });
+
+  it("shows the desktop cat closing the tab in the consent preview only when the cat is on", async () => {
+    renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: false, petEnabled: true });
+    fireEvent.click(screen.getByRole("switch", { name: /automatic close/i }));
+    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
+    expect(popup.querySelector(".close-preview__cat")).toBeTruthy();
+    cleanup();
+    renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: false, petEnabled: false });
+    fireEvent.click(screen.getByRole("switch", { name: /automatic close/i }));
+    expect((await screen.findByRole("alertdialog")).querySelector(".close-preview__cat")).toBeNull();
+  });
+
+  it("turns Automatic close off without asking", () => {
+    const props = renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: true });
+    fireEvent.click(screen.getByRole("switch", { name: /automatic close/i }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(false);
   });
 
   it("turns Automatic close off silently when Drift alerts are turned off", () => {

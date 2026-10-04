@@ -8,6 +8,7 @@ import { PetSettings } from "./PetCoatPicker";
 import "./PetSettingsSection.css";
 import { PetSettingsPreview } from "./PetSettingsPreview";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
+import type { HostPlatform } from "../../lib/api/accessibilityClient";
 
 type PetSettingsSectionProps = {
   readonly enabled: boolean;
@@ -21,11 +22,12 @@ type PetSettingsSectionProps = {
   readonly onCoatChange: (coat: PetModeCoat) => void;
   readonly onSizeChange: (size: PetModeSize) => void;
   readonly onOpenAlerts: () => void;
+  readonly hostPlatform?: HostPlatform;
 };
 
 export function PetSettingsSection({
   enabled, coat, size, automaticCloseEnabled, driftAlertsEnabled, onAutomaticCloseChange, showNewBadge = false,
-  onEnabledChange, onCoatChange, onSizeChange, onOpenAlerts,
+  onEnabledChange, onCoatChange, onSizeChange, onOpenAlerts, hostPlatform,
 }: PetSettingsSectionProps) {
   const { t } = useLocalization();
   const [allowOutings, setAllowOutings] = usePetOutingPreference();
@@ -59,6 +61,8 @@ export function PetSettingsSection({
           checked={automaticCloseEnabled}
           prerequisiteMissing={!driftAlertsEnabled}
           onChange={onAutomaticCloseChange}
+          petEnabled={enabled}
+          hostPlatform={hostPlatform}
           toggleAriaLabel={t("settings.pet.toggleAutomaticClose")}
           availableDescription={t("settings.pet.closeSettingsDescription")}
           prerequisiteDescription={t("settings.pet.closePrerequisiteDescription")}

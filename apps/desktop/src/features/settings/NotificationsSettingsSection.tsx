@@ -26,6 +26,8 @@ type NotificationsSettingsSectionProps = {
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
   readonly driftAlarmCopyDefaults: DriftAlarmCopySettingsValue;
   readonly extremeNudgeEnabled: boolean;
+  /** The desktop cat is on: the Automatic close consent then shows the cat closing the tab. */
+  readonly petEnabled?: boolean;
   readonly hostPlatform?: HostPlatform;
   readonly macosNotificationEnabled: boolean;
   readonly celebrationsEnabled: boolean;
@@ -57,6 +59,7 @@ export function NotificationsSettingsSection({
   driftAlarmCopy,
   driftAlarmCopyDefaults,
   extremeNudgeEnabled,
+  petEnabled = false,
   hostPlatform = "macos",
   macosNotificationEnabled,
   celebrationsEnabled,
@@ -157,6 +160,8 @@ export function NotificationsSettingsSection({
           checked={extremeNudgeEnabled}
           prerequisiteMissing={!driftAlertsEnabled}
           onChange={handleAutomaticCloseChange}
+          petEnabled={petEnabled}
+          hostPlatform={hostPlatform}
           availableDescription={t("settings.notifications.extremeOnDescription")}
           prerequisiteDescription={t("settings.notifications.extremeOffDescription")}
           toggleAriaLabel={t("settings.notifications.toggleExtreme")}

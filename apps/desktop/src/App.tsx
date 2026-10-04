@@ -10964,6 +10964,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onCoatChange={setPetModeCoat}
                     onSizeChange={setPetModeSize}
                     onOpenAlerts={openCompanionNotificationSettings}
+                    hostPlatform={hostPlatform}
                   />
                 )}
                 {settingsSection === "notifications" && (
@@ -10974,6 +10975,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     driftAlarmCopy={driftAlarmCopy}
                     driftAlarmCopyDefaults={driftAlarmCopyDefaults}
                     extremeNudgeEnabled={automaticCloseEnabled}
+                    petEnabled={petModeEnabled}
                     macosNotificationEnabled={macosNotificationEnabled}
                     celebrationsEnabled={celebrationsEnabled}
                     dayReviewEnabled={dayReviewEnabled}
