@@ -1,3 +1,4 @@
+import { capturedActivityDurationSeconds } from "./capturedActivityDuration";
 import type { ActivityClassification, ActivitySegment } from "./activity";
 
 const YOUTUBE_MUSIC_PLAYLIST_PREFIXES = ["RD", "RDMM", "RDAMVM", "RDCLAK", "RDAMPL", "OLAK"] as const;
@@ -127,7 +128,7 @@ export function isYouTubeFeedPage(segment: ActivitySegment): boolean {
 }
 
 export function isSustainedYouTubeFeedPage(segment: ActivitySegment): boolean {
-  return isYouTubeFeedPage(segment) && segment.durationSeconds >= YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS;
+  return isYouTubeFeedPage(segment) && capturedActivityDurationSeconds(segment) >= YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS;
 }
 
 export function isYouTubeVideoSegment(segment: ActivitySegment): boolean {

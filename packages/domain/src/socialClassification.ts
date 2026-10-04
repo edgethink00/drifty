@@ -1,3 +1,4 @@
+import { capturedActivityDurationSeconds } from "./capturedActivityDuration";
 import type { ActivityClassification, ActivitySegment } from "./activity";
 
 /**
@@ -108,7 +109,7 @@ export function isSocialSite(siteDomain?: string | null): boolean {
 export function isSustainedSocialHomeFeed(segment: ActivitySegment): boolean {
   const surface = resolveSocialSurface(segment);
   return surface?.kind === "home_feed"
-    && segment.durationSeconds >= SOCIAL_FEED_DRIFT_MINIMUM_SECONDS;
+    && capturedActivityDurationSeconds(segment) >= SOCIAL_FEED_DRIFT_MINIMUM_SECONDS;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { clipDeviceElapsedTimeSegment } from "./deviceElapsedTime";
 import { isFailedForegroundCaptureSegment, type ActivitySegment } from "./activity";
+import { preserveCapturedActivityDuration } from "./capturedActivityDuration";
 import type {
   ProjectAssignmentRecord,
   ProjectWindowAssignmentRecord,
@@ -64,7 +65,9 @@ export function buildTeamProjectSliceProjection(
 function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceProjection {
   // Stored assignments from older Windows builds may still reference failed
   // foreground reads. Hide both those slices and unassigned legacy activity.
-  const segments = input.segments.filter((segment) => !isFailedForegroundCaptureSegment(segment));
+  const segments = input.segments
+    .filter((segment) => !isFailedForegroundCaptureSegment(segment))
+    .map((segment) => preserveCapturedActivityDuration(segment, segment));
   const sourceById = new Map(segments.map((segment) => [segment.id, segment]));
   const legacyBySegmentId = new Map(
     input.legacyAssignments

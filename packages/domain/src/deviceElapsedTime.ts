@@ -1,3 +1,4 @@
+import { preserveCapturedActivityDuration } from "./capturedActivityDuration";
 import { isExcludedSegment, isFailedForegroundCaptureSegment, type ActivitySegment } from "./activity";
 
 type WeightedInterval = { start: number; end: number; rate: number };
@@ -83,7 +84,7 @@ export function aggregateDeviceElapsedTime(segments: readonly ActivitySegment[])
       }
     }
   }
-  return records.map((record, index): ProjectedSegment => ({
+  return records.map((record, index): ProjectedSegment => preserveCapturedActivityDuration(record.segment, {
     ...record.segment,
     durationSeconds: intervals[index].reduce((total, interval) => total + (interval.end - interval.start) / 1000 * interval.rate, 0),
     [elapsedProjection]: { start: record.start, end: record.end, intervals: intervals[index] },
