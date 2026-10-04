@@ -7,7 +7,7 @@ import { POST_ONBOARDING_STORY_GUIDE_STEPS } from "./postOnboardingSidebarGuide"
 import { buildFirstDayRecap } from "./firstDayStory";
 import { buildFirstDayReviewSegments, buildIntroReviewCase } from "./introStoryReview";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const callbacks = () => ({ onAdvance: vi.fn(), onBack: vi.fn(), onDismiss: vi.fn() });
 
 describe("centered app introduction", () => {
@@ -294,7 +294,7 @@ describe("centered app introduction", () => {
   });
 
   it("removes immediately when reduced motion is enabled", () => {
-    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList);
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList));
     const props = callbacks();
     const { rerender } = render(<PostOnboardingSidebarGuide step="day" {...props} />);
     rerender(<PostOnboardingSidebarGuide step={null} {...props} />);
@@ -346,7 +346,7 @@ describe("centered app introduction", () => {
   });
 
   it("switches pages directly without retaining an outgoing layer in reduced motion", () => {
-    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList);
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList));
     const props = callbacks();
     const { rerender } = render(<PostOnboardingSidebarGuide step="welcome" {...props} />);
     rerender(<PostOnboardingSidebarGuide step="day" {...props} />);

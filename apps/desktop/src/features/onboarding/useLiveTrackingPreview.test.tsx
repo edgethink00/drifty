@@ -39,6 +39,8 @@ async function renderActivePreview() {
     initialProps: { active: true },
   });
   await waitFor(() => expect(getCurrentSnapshot).toHaveBeenCalled());
+  // A call proves polling started; flush the resolved snapshot and React update.
+  await act(async () => { await Promise.resolve(); });
   return view;
 }
 

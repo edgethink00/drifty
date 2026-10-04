@@ -14,6 +14,7 @@ describe("CloudTrialStartedNotice", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("dismisses itself after the 5-second timer finishes", () => {
@@ -174,7 +175,7 @@ describe("CloudTrialStartedNotice", () => {
 
   it("dismisses immediately under reduced motion instead of waiting on an exit", () => {
     vi.useFakeTimers();
-    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+    vi.stubGlobal("matchMedia", (query: string) => ({
       matches: query.includes("prefers-reduced-motion"),
       media: query,
       onchange: null,

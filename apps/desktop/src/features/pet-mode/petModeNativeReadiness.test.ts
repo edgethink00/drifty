@@ -17,7 +17,7 @@ function deferred<T>() {
 describe("native pet startup readiness", () => {
   const unavailable = new Error("Pet Mode window is not available");
   let notify: (event: { payload: unknown }) => void;
-  let unlisten: ReturnType<typeof vi.fn>;
+  let unlisten: ReturnType<typeof vi.fn<() => void>>;
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();

@@ -1,5 +1,5 @@
 import { loadShareCardRank, peekShareCardRank, setShareCardRankAccountScope } from "../share/shareCardRankCache";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { LeaderboardRow } from "./leaderboardService";
 
@@ -23,19 +23,19 @@ type UpsertPayload = {
 };
 
 type LeaderboardTableQuery = {
-  upsert: ReturnType<typeof vi.fn>;
-  select: ReturnType<typeof vi.fn>;
+  upsert: Mock;
+  select: Mock;
 };
 
 type MockLeaderboardClient = {
-  auth: { getUser: ReturnType<typeof vi.fn> };
-  from: ReturnType<typeof vi.fn>;
-  rpc: ReturnType<typeof vi.fn>;
+  auth: { getUser: Mock };
+  from: Mock;
+  rpc: Mock;
   __mocks: {
-    upsert: ReturnType<typeof vi.fn>;
-    select: ReturnType<typeof vi.fn>;
-    eq: ReturnType<typeof vi.fn>;
-    maybeSingle: ReturnType<typeof vi.fn>;
+    upsert: Mock;
+    select: Mock;
+    eq: Mock;
+    maybeSingle: Mock;
   };
 };
 
