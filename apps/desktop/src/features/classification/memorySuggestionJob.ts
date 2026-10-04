@@ -1,6 +1,7 @@
 import type { ActivitySegment } from "@drifty/domain";
 
 import { trackerClient } from "../../lib/api/trackerClient";
+import { capturePostHogDailyEvent, toCountBucket, toDailyDedupKey } from "../../lib/analytics/posthogClient";
 import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { readLivingSoulForUser, type LivingSoulDocument } from "./livingSoul";
 import type { LocalAiProviderConfig } from "./localAiProviderRequest";
@@ -151,9 +152,26 @@ async function runJob(input: RunMemorySuggestionJobInput, now: Date): Promise<Me
       ? recordFailedSuggestionRun(store, now)
       : recordSuggestionRun(store, result.suggestions.map((suggestion) => toStoredSuggestion(suggestion, { since, until }, until,
         { includeTitles: suggestionShowsTitles(privacy) })), existing, now));
+    reportSuggestionRun(input.provider, allFailed ? "error" : clusters.length === 0 ? "skipped" : "success", clusters.length, result.suggestions.length);
     return allFailed ? "failed" : "ran";
   } catch {
     // Not recorded, so the next check tries again.
     return "failed";
   }
+}
+
+/**
+ * Counts only: how often a run finds candidates and keeps a suggestion. No
+ * sentence, place or title is sent. Runs are machine-driven, so at most one
+ * event per combination per day.
+ */
+function reportSuggestionRun(provider: MemorySuggestionProvider, result: "success" | "skipped" | "error", candidates: number, added: number): void {
+  const local = provider.kind === "local" ? provider.provider.provider : null;
+  const properties = {
+    provider_kind: provider.kind === "cloud" ? "cloud" as const : local === "managed_local" ? "local" as const : "custom" as const,
+    result,
+    candidate_count_bucket: toCountBucket(candidates),
+    added_count_bucket: toCountBucket(added),
+  };
+  capturePostHogDailyEvent("memory_suggestion_run", toDailyDedupKey(properties), properties);
 }

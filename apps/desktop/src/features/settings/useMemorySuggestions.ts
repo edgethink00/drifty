@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import {
   adoptLivingSoulSuggestion,
   type LivingSoulDocument,
@@ -85,16 +86,31 @@ export function useMemorySuggestions({ ownerId, provider, language, document }: 
       });
       writeSuggestionStore(ownerId, removeSuggestion(readSuggestionStore(ownerId), id));
       notifyMemorySuggestionsChanged(ownerId);
+      reportSuggestionAction("accepted", suggestion, "success");
       return { ok: true, document: result.document };
     } catch (error) {
+      reportSuggestionAction("accepted", suggestion, "error");
       return { ok: false, code: error instanceof Error ? error.message : "memory_failed" };
     }
   }, [ownerId]);
 
   const decline = useCallback((id: string) => {
+    const suggestion = readSuggestionStore(ownerId).suggestions.find((entry) => entry.id === id);
     writeSuggestionStore(ownerId, declineSuggestion(readSuggestionStore(ownerId), id));
     notifyMemorySuggestionsChanged(ownerId);
+    if (suggestion) reportSuggestionAction("dismissed", suggestion, "success");
   }, [ownerId]);
 
   return { suggestions, running, accept, decline };
+}
+
+/** Counts only: what people do with a suggestion. The sentence, place and examples never leave the device. */
+export function reportSuggestionAction(
+  action: "accepted" | "dismissed" | "details_opened",
+  suggestion: Pick<StoredSuggestion, "kind" | "examples">,
+  result: "success" | "error",
+): void {
+  capturePostHogEvent("memory_suggestion_action", {
+    action, kind: suggestion.kind, result, has_examples: (suggestion.examples?.length ?? 0) > 0,
+  });
 }

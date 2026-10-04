@@ -10,6 +10,11 @@ import { readSuggestionStore, writeSuggestionStore } from "./memorySuggestionSto
 
 const { completeMock } = vi.hoisted(() => ({ completeMock: vi.fn() }));
 vi.mock("./memorySuggestionProvider", () => ({ createLocalSuggestionCompleter: () => completeMock }));
+const { dailyEventMock } = vi.hoisted(() => ({ dailyEventMock: vi.fn() }));
+vi.mock("../../lib/analytics/posthogClient", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../lib/analytics/posthogClient")>(),
+  capturePostHogDailyEvent: dailyEventMock,
+}));
 
 const NOW = new Date("2026-10-04T09:00:00.000Z");
 const provider = { kind: "local", provider: { provider: "self_hosted", baseUrl: "http://127.0.0.1:1", model: "m" } } as never;
@@ -37,6 +42,7 @@ function answerRule() {
 beforeEach(() => {
   window.localStorage.clear();
   completeMock.mockReset();
+  dailyEventMock.mockReset();
 });
 
 describe("runMemorySuggestionJobIfDue", () => {
@@ -56,6 +62,10 @@ describe("runMemorySuggestionJobIfDue", () => {
     expect(store.suggestions.map((entry) => [entry.id, entry.summary])).toEqual([["ambiguous:Aside|overleaf.com", RULE]]);
     expect(store.lastRunAt).toBe(NOW.toISOString());
     expect(events).toEqual(["local", "local"]);
+    // The run is counted once per day, without the sentence or the place.
+    expect(dailyEventMock).toHaveBeenCalledWith("memory_suggestion_run", expect.any(String),
+      { provider_kind: "custom", result: "success", candidate_count_bucket: "1", added_count_bucket: "1" });
+    expect(JSON.stringify(dailyEventMock.mock.calls)).not.toMatch(/overleaf|Paper drafts/);
   });
 
   it("waits for enough newly tracked activity since the previous run", async () => {
@@ -131,6 +141,8 @@ describe("runMemorySuggestionJobIfDue", () => {
     await expect(runMemorySuggestionJobIfDue({ ownerId: "local", provider, language: "en", now: NOW, loadSegments: async () => mixedSegments() }))
       .resolves.toBe("failed");
     expect(readSuggestionStore("local").lastRunAt).toBeNull();
+    expect(dailyEventMock).toHaveBeenLastCalledWith("memory_suggestion_run", expect.any(String),
+      { provider_kind: "custom", result: "error", candidate_count_bucket: "1", added_count_bucket: "none" });
     await expect(runMemorySuggestionJobIfDue({ ownerId: "local", provider, language: "en", now: new Date(NOW.getTime() + 59 * 60_000), loadSegments: async () => mixedSegments() }))
       .resolves.toBe("not_due");
     expect(completeMock).toHaveBeenCalledTimes(1);

@@ -12,6 +12,11 @@ import { isMemorySuggestionJobRunning } from "../classification/memorySuggestion
 import { invokeMock, renderPanel, resetManagedStatusMock } from "./AiSetupPanel.testHarness";
 
 const { getTimelineMock, completeMock, cloudCompleteMock } = vi.hoisted(() => ({ getTimelineMock: vi.fn(), completeMock: vi.fn(), cloudCompleteMock: vi.fn() }));
+const { captureMock } = vi.hoisted(() => ({ captureMock: vi.fn() }));
+vi.mock("../../lib/analytics/posthogClient", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../lib/analytics/posthogClient")>(),
+  capturePostHogEvent: captureMock,
+}));
 
 vi.mock("../../lib/api/trackerClient", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../lib/api/trackerClient")>();
@@ -66,6 +71,7 @@ describe("suggested Memory", () => {
     getTimelineMock.mockReset();
     completeMock.mockReset();
     cloudCompleteMock.mockReset();
+    captureMock.mockReset();
     await synchronizeLivingSoulDeclaredContextForUser("local");
   });
 
@@ -110,6 +116,15 @@ describe("suggested Memory", () => {
     fireEvent.click(within(learned).getByRole("button", { name: "Details" }));
     expect(within(learned).getByText("Aside / producthunt.com")).toBeTruthy();
     expect(within(learned).queryByText("Filed as")).toBeNull();
+    // Counted without the sentence, place or example titles.
+    expect(captureMock.mock.calls.filter(([event]) => event === "memory_suggestion_action").map(([, properties]) => properties)).toEqual([
+      { action: "details_opened", kind: "ambiguous", result: "success", has_examples: true },
+      { action: "accepted", kind: "ambiguous", result: "success", has_examples: true },
+    ]);
+    expect(JSON.stringify(captureMock.mock.calls)).not.toMatch(/Product pages|producthunt|Notifications|launch page/);
+    fireEvent.click(within(learned).getByRole("button", { name: "Not right" }));
+    await waitFor(() => expect(captureMock).toHaveBeenCalledWith("memory_pattern_feedback",
+      { action: "reject", kind: "ambiguities", origin: "suggestion", result: "success" }));
   });
 
   it("dismisses a suggestion for good with Not right", async () => {
@@ -121,6 +136,7 @@ describe("suggested Memory", () => {
     await waitFor(() => expect(screen.queryByRole("article", { name: pending().summary })).toBeNull());
     expect(screen.getByRole("article", { name: "영상 시청은 방해로 분류합니다." })).toBeTruthy();
     expect(readSuggestionStore("local").declined).toEqual([pending().id]);
+    expect(captureMock).toHaveBeenCalledWith("memory_suggestion_action", { action: "dismissed", kind: "work", result: "success", has_examples: false });
     const saved = await readLivingSoulForUser("local");
     expect(saved.state === "ready" && saved.context.document.learned.workSupport).toEqual([]);
   });

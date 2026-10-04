@@ -3,6 +3,7 @@ import type { StoredSuggestion } from "../classification/memorySuggestionStore";
 import { localizedProductivityLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 import { MemoryIcon } from "./memoryIcons";
+import { reportSuggestionAction } from "./useMemorySuggestions";
 
 type Props = {
   readonly suggestions: readonly StoredSuggestion[];
@@ -34,7 +35,10 @@ export function MemorySuggestionList({ suggestions, busy, onAccept, onDecline }:
             <span>{place}</span>
             <span>{t("settings.ai.memorySuggestionStats", { minutes: suggestion.minutes, days: suggestion.days })}</span>
             <button className="memory-row__toggle" type="button" aria-expanded={open} aria-controls={detailId}
-              onClick={() => setExpanded((current) => ({ ...current, [suggestion.id]: !current[suggestion.id] }))}>
+              onClick={() => {
+                if (!open) reportSuggestionAction("details_opened", suggestion, "success");
+                setExpanded((current) => ({ ...current, [suggestion.id]: !current[suggestion.id] }));
+              }}>
               {t("settings.ai.memoryDetails")}<MemoryIcon name="chevronDown" size={13} />
             </button>
           </div>

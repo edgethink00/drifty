@@ -3,6 +3,11 @@ import type {
   ONBOARDING_INTRO_ACTIONS,
   ONBOARDING_INTRO_SEQUENCES,
   ONBOARDING_INTRO_STEPS,
+  MEMORY_PATTERN_FEEDBACK_ACTIONS,
+  MEMORY_PATTERN_KINDS,
+  MEMORY_PATTERN_ORIGINS,
+  MEMORY_SUGGESTION_ACTIONS,
+  MEMORY_SUGGESTION_KINDS,
   APP_ACTIVE_TRIGGERS,
   AI_PROVIDER_KINDS,
   AI_SETUP_ACTIONS,
@@ -205,6 +210,24 @@ export type PostHogEventPropertiesByName = {
     readonly assignment_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly correction_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly memory_suggestion_run: {
+    readonly provider_kind: (typeof AI_PROVIDER_KINDS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly candidate_count_bucket?: (typeof COUNT_BUCKETS)[number];
+    readonly added_count_bucket?: (typeof COUNT_BUCKETS)[number];
+  };
+  readonly memory_suggestion_action: {
+    readonly action: (typeof MEMORY_SUGGESTION_ACTIONS)[number];
+    readonly kind: (typeof MEMORY_SUGGESTION_KINDS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly has_examples?: boolean;
+  };
+  readonly memory_pattern_feedback: {
+    readonly action: (typeof MEMORY_PATTERN_FEEDBACK_ACTIONS)[number];
+    readonly kind: (typeof MEMORY_PATTERN_KINDS)[number];
+    readonly origin: (typeof MEMORY_PATTERN_ORIGINS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
   };
   readonly app_error: {
     readonly surface?: (typeof APP_SURFACES)[number];

@@ -21,6 +21,9 @@ export const POSTHOG_EVENT_NAMES = [
   "ai_setup_action",
   "ai_classification_run",
   "project_classification_run",
+  "memory_suggestion_run",
+  "memory_suggestion_action",
+  "memory_pattern_feedback",
   "app_error",
 ] as const;
 
@@ -60,6 +63,12 @@ export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] a
 export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
 export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
 export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed"] as const;
+/** Memory: background suggestion runs, what people do with a suggestion, and feedback on kept patterns. No sentence or title is sent. */
+export const MEMORY_SUGGESTION_KINDS = ["work", "drift", "ambiguous"] as const;
+export const MEMORY_SUGGESTION_ACTIONS = ["accepted", "dismissed", "details_opened"] as const;
+export const MEMORY_PATTERN_FEEDBACK_ACTIONS = ["confirm", "unconfirm", "reject", "restore"] as const;
+export const MEMORY_PATTERN_KINDS = ["workSupport", "drift", "ambiguities"] as const;
+export const MEMORY_PATTERN_ORIGINS = ["suggestion", "correction", "user", "legacy"] as const;
 export const PERMISSIONS = ["accessibility", "notifications"] as const;
 export const PERMISSION_ACTIONS = ["check", "request", "open_settings"] as const;
 // Only start/stop are ever sent. `refresh` and `status_check` were declared but
@@ -312,6 +321,24 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     assignment_count_bucket: COUNT_BUCKETS,
     correction_count_bucket: COUNT_BUCKETS,
     error_kind: ERROR_KINDS,
+  },
+  memory_suggestion_run: {
+    provider_kind: AI_PROVIDER_KINDS,
+    result: RESULT_VALUES,
+    candidate_count_bucket: COUNT_BUCKETS,
+    added_count_bucket: COUNT_BUCKETS,
+  },
+  memory_suggestion_action: {
+    action: MEMORY_SUGGESTION_ACTIONS,
+    kind: MEMORY_SUGGESTION_KINDS,
+    result: RESULT_VALUES,
+    has_examples: "boolean",
+  },
+  memory_pattern_feedback: {
+    action: MEMORY_PATTERN_FEEDBACK_ACTIONS,
+    kind: MEMORY_PATTERN_KINDS,
+    origin: MEMORY_PATTERN_ORIGINS,
+    result: RESULT_VALUES,
   },
   app_error: {
     surface: APP_SURFACES,

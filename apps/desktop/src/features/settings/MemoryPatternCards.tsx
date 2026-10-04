@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import {
   changeLivingSoulPattern, livingSoulPatternHash, reviewLivingSoulPattern,
   type LivingSoulResolvedContext,
@@ -60,20 +61,21 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
     year: "numeric", month: "short", day: "numeric",
   }).format(new Date(timestamp));
 
-  async function mutate(operation: () => Promise<LivingSoulResolvedContext>, message: string, undo?: string) {
-    if (saving.current) return;
+  async function mutate(operation: () => Promise<LivingSoulResolvedContext>, message: string, undo?: string): Promise<boolean | null> {
+    if (saving.current) return null;
     saving.current = true;
     setBusy(true);
     setNotice(null);
     setUndoHash(null);
     try {
       const result = await operation();
-      if (!mounted.current) return;
+      if (!mounted.current) return true;
       onChange(result.document);
       setEditing(null);
       setForgetting(null);
       setNotice(message);
       setUndoHash(undo ?? null);
+      return true;
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       // The stored revision moved on (another window or the tracker wrote Memory):
@@ -86,6 +88,7 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
             : code === "memory_duplicate" ? "settings.ai.memoryDuplicate"
               : code === "memory_changed" ? "settings.ai.memoryChangedElsewhere" : "settings.ai.memoryChangeFailed"));
       }
+      return false;
     } finally {
       saving.current = false;
       if (mounted.current) setBusy(false);
@@ -101,8 +104,17 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
   function review(kind: LivingSoulPatternKind, summary: string, action: "confirm" | "unconfirm" | "reject" | "restore" | "forgetRejected") {
     const messages = { confirm: "settings.ai.memoryConfirmedNotice", unconfirm: "settings.ai.memoryUnconfirmedNotice",
       reject: "settings.ai.memoryRejectedNotice", restore: "settings.ai.memoryRestoredNotice", forgetRejected: "settings.ai.memoryForgotten" } as const;
+    // Counts only, for whether kept memories (especially adopted suggestions) are later confirmed or rejected.
+    const origin = action === "restore"
+      ? Object.values(rejected).find((entry) => entry.pattern.summary === summary)?.origin
+      : origins[summary];
     return mutate(() => reviewLivingSoulPattern({ ownerId, expectedRevision: document.revision, kind, summary, action }),
-      t(messages[action]), action === "reject" ? hashes[summary] : undefined);
+      t(messages[action]), action === "reject" ? hashes[summary] : undefined).then((saved) => {
+      if (saved === null || action === "forgetRejected") return;
+      capturePostHogEvent("memory_pattern_feedback", {
+        action, kind, origin: origin?.source ?? "legacy", result: saved ? "success" : "error",
+      });
+    });
   }
   function toggleDetail(key: string) {
     setExpanded((current) => ({ ...current, [key]: !current[key] }));
