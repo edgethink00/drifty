@@ -207,10 +207,11 @@ fn close_impl(request: &TargetRequest, deadline: Instant) -> Result<String, Stri
     if Instant::now() >= deadline {
         return Err("windows_uia_timeout".to_string());
     }
-    verify_foreground_snapshot(request, &snapshot)?;
-    if !resolved.selection.is_selected().unwrap_or(false) {
-        return Err("windows_uia_stale_target".to_string());
-    }
+    verify_invoke_target(
+        deadline,
+        || resolved.selection.is_selected().unwrap_or(false),
+        || verify_foreground_snapshot(request, &snapshot),
+    )?;
     let invoke_result = resolved.close_invoke.invoke();
     if invoke_result.is_err() && !resolved.last_tab_window_close {
         return Err("windows_uia_invoke_failed".to_string());
@@ -257,6 +258,21 @@ fn close_impl(request: &TargetRequest, deadline: Instant) -> Result<String, Stri
     // in-process implementation change. Foreground binding is a safety
     // invariant above, not a new product outcome category.
     Ok(close_success_diagnostic(resolved.match_kind))
+}
+
+// Selection reads can synchronously block in the browser's UIA provider.
+// Recheck window/process identity and the action budget after that final read,
+// immediately before Invoke, so a late provider cannot close a background tab.
+fn verify_invoke_target(
+    deadline: Instant,
+    is_selected: impl FnOnce() -> bool,
+    verify_foreground: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    if !is_selected() {
+        return Err("windows_uia_stale_target".to_string());
+    }
+    verify_foreground()?;
+    ensure_deadline(deadline)
 }
 
 fn close_success_diagnostic(match_kind: &str) -> String {
@@ -770,6 +786,47 @@ fn ensure_deadline(deadline: Instant) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delayed_selection_read_cannot_extend_the_action_budget() {
+        let deadline = Instant::now() + Duration::from_millis(10);
+        let result = verify_invoke_target(
+            deadline,
+            || {
+                thread::sleep(Duration::from_millis(20));
+                true
+            },
+            || Ok(()),
+        );
+        assert_eq!(result, Err("windows_uia_timeout".to_string()));
+    }
+
+    #[test]
+    fn foreground_is_verified_after_the_final_selection_read() {
+        let selected_read_finished = std::cell::Cell::new(false);
+        let result = verify_invoke_target(
+            Instant::now() + UIA_ACTION_TIMEOUT,
+            || {
+                selected_read_finished.set(true);
+                true
+            },
+            || {
+                assert!(selected_read_finished.get());
+                Err("windows_uia_stale_target".to_string())
+            },
+        );
+        assert_eq!(result, Err("windows_uia_stale_target".to_string()));
+    }
+
+    #[test]
+    fn current_selected_target_is_allowed_and_deselected_target_is_refused() {
+        let deadline = Instant::now() + UIA_ACTION_TIMEOUT;
+        assert_eq!(verify_invoke_target(deadline, || true, || Ok(())), Ok(()));
+        assert_eq!(
+            verify_invoke_target(deadline, || false, || panic!("deselected target")),
+            Err("windows_uia_stale_target".to_string())
+        );
+    }
 
     #[test]
     fn close_completion_budget_does_not_extend_the_pre_invoke_action_budget() {
