@@ -38,7 +38,9 @@ export function useGoogleCalendarWeek({
   startOfDayMinutes,
 }: UseGoogleCalendarWeekOptions): GoogleCalendarWeekState {
   const [revision, setRevision] = useState(0);
-  const [state, setState] = useState<GoogleCalendarWeekState>({ status: "disabled", events: emptyEvents() });
+  const [state, setState] = useState<GoogleCalendarWeekState & { readonly userId: string | null }>({
+    userId: null, status: "disabled", events: emptyEvents(),
+  });
 
   useEffect(() => {
     const refresh = () => setRevision((current) => current + 1);
@@ -49,28 +51,32 @@ export function useGoogleCalendarWeek({
   useEffect(() => {
     let active = true;
     if (!enabled || !userId || !isGoogleCalendarOnboardingEnabled()) {
-      setState({ status: "disabled", events: emptyEvents() });
+      setState({ userId, status: "disabled", events: emptyEvents() });
       return () => {
         active = false;
       };
     }
     if (!hasLocalGoogleCalendarConnectionMarker(userId)) {
-      setState({ status: "disconnected", events: emptyEvents() });
+      setState({ userId, status: "disconnected", events: emptyEvents() });
       return () => {
         active = false;
       };
     }
 
-    setState((current) => ({ status: "loading", events: current.events }));
+    setState((current) => ({
+      userId, status: "loading", events: current.userId === userId ? current.events : emptyEvents(),
+    }));
     void (async () => {
       const capability = await getGoogleCalendarCapability();
+      if (!active) return;
       if (!capability.configured) {
-        if (active) setState({ status: "disabled", events: emptyEvents() });
+        if (active) setState({ userId, status: "disabled", events: emptyEvents() });
         return;
       }
       const connection = await getGoogleCalendarStatus(userId);
+      if (!active) return;
       if (!connection.connected) {
-        if (active) setState({ status: "disconnected", events: emptyEvents() });
+        if (active) setState({ userId, status: "disconnected", events: emptyEvents() });
         return;
       }
       const start = new Date(logicalDayStartMs(startDay, startOfDayMinutes)).toISOString();
@@ -78,12 +84,13 @@ export function useGoogleCalendarWeek({
       const events = await getGoogleCalendarEvents(userId, start, end);
       if (active) {
         setState({
+          userId,
           status: "ready",
           events: buildGoogleCalendarWeekEvents(events, startDay, endDay, startOfDayMinutes),
         });
       }
     })().catch(() => {
-      if (active) setState({ status: "error", events: emptyEvents() });
+      if (active) setState({ userId, status: "error", events: emptyEvents() });
     });
 
     return () => {
@@ -91,5 +98,11 @@ export function useGoogleCalendarWeek({
     };
   }, [enabled, endDay, revision, startDay, startOfDayMinutes, userId]);
 
-  return state;
+  // Effects run after rendering. Scope the returned cache as well so even the
+  // first render after an account change cannot show the previous owner's data.
+  if (!enabled || !userId || !isGoogleCalendarOnboardingEnabled()) {
+    return { status: "disabled", events: emptyEvents() };
+  }
+  if (state.userId !== userId) return { status: "loading", events: emptyEvents() };
+  return { status: state.status, events: state.events };
 }

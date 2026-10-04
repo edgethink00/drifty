@@ -64,6 +64,88 @@ describe("useGoogleCalendarWeek", () => {
     await waitFor(() => expect(mocks.events).toHaveBeenCalledTimes(2));
   });
 
+  it("never exposes the previous owner's events in a render for a new account", async () => {
+    const renders: Array<{ userId: string; titles: string[] }> = [];
+    const { result, rerender } = renderHook(({ userId }) => {
+      const state = useGoogleCalendarWeek({ ...baseOptions, userId });
+      renders.push({ userId, titles: Array.from(state.events.values()).flat().map((event) => event.title) });
+      return state;
+    }, { initialProps: { userId: "account-a" } });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    let resolveEvents!: (events: []) => void;
+    mocks.events.mockImplementationOnce(() => new Promise<[]>((resolve) => { resolveEvents = resolve; }));
+    rerender({ userId: "account-b" });
+    await waitFor(() => expect(mocks.events).toHaveBeenCalledWith("account-b", expect.any(String), expect.any(String)));
+    try {
+      expect(result.current.status).toBe("loading");
+      expect(result.current.events.size).toBe(0);
+      expect(renders.filter((render) => render.userId === "account-b").every((render) => render.titles.length === 0)).toBe(true);
+    } finally {
+      await act(async () => { resolveEvents([]); });
+    }
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(Array.from(result.current.events.values()).flat()).toHaveLength(0);
+  });
+
+  it("returns no account events on the first signed-out render", async () => {
+    const signedOutTitles: string[][] = [];
+    const { result, rerender } = renderHook(({ userId }: { userId: string | null }) => {
+      const state = useGoogleCalendarWeek({ ...baseOptions, userId });
+      if (!userId) signedOutTitles.push(Array.from(state.events.values()).flat().map((event) => event.title));
+      return state;
+    }, { initialProps: { userId: "account-a" as string | null } });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    rerender({ userId: null });
+    expect(result.current.status).toBe("disabled");
+    expect(signedOutTitles.every((titles) => titles.length === 0)).toBe(true);
+  });
+
+  it("keeps the same owner's events during a connection refresh", async () => {
+    const { result } = renderHook(() => useGoogleCalendarWeek(baseOptions));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    const events = result.current.events;
+    let resolveEvents!: (events: []) => void;
+    mocks.events.mockImplementationOnce(() => new Promise<[]>((resolve) => { resolveEvents = resolve; }));
+
+    await act(async () => { window.dispatchEvent(new Event("drifty:google-calendar-connection-changed")); });
+    await waitFor(() => expect(mocks.events).toHaveBeenCalledTimes(2));
+    try {
+      expect(result.current.status).toBe("loading");
+      expect(result.current.events).toBe(events);
+    } finally {
+      await act(async () => { resolveEvents([]); });
+    }
+  });
+
+  it("ignores the previous owner's response when it arrives after the new owner's", async () => {
+    let resolveOld!: (events: Array<{ id: string; title: string; start: string; end: string; allDay: boolean }>) => void;
+    mocks.events.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
+    const { result, rerender } = renderHook(({ userId }) => useGoogleCalendarWeek({ ...baseOptions, userId }),
+      { initialProps: { userId: "account-a" } });
+    await waitFor(() => expect(mocks.events).toHaveBeenCalledTimes(1));
+    rerender({ userId: "account-b" });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await act(async () => { resolveOld([{
+      id: "old", title: "Previous account", start: "2026-09-02T09:00:00+09:00", end: "2026-09-02T10:00:00+09:00", allDay: false,
+    }]); });
+    expect(result.current.events.get("2026-09-02")?.[0]?.title).toBe("Planning");
+  });
+
+  it("does not read the old account's credentials after a delayed capability response", async () => {
+    let resolveCapability!: (value: { configured: boolean }) => void;
+    mocks.capability.mockImplementationOnce(() => new Promise((resolve) => { resolveCapability = resolve; }));
+    const { result, rerender } = renderHook(({ userId }) => useGoogleCalendarWeek({ ...baseOptions, userId }),
+      { initialProps: { userId: "account-a" } });
+    rerender({ userId: "account-b" });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => { resolveCapability({ configured: true }); });
+    expect(mocks.status).not.toHaveBeenCalledWith("account-a");
+    expect(mocks.events).not.toHaveBeenCalledWith("account-a", expect.any(String), expect.any(String));
+  });
+
   it("does not call the Calendar API for disconnected or disabled surfaces", async () => {
     mocks.status.mockResolvedValue({
       configured: true,
