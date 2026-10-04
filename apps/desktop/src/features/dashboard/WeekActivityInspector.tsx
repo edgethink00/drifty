@@ -84,6 +84,8 @@ export type ActivityInspectorEvent = {
     readonly siteDomain: string | null;
     readonly seconds?: number;
     readonly exclusionSource?: ExclusionSource | null;
+    readonly sourceSegmentIds?: readonly string[];
+    readonly devices?: readonly ActivityDeviceSource[];
   }[];
   readonly hiddenIdentityCount?: number;
   readonly hasMixedProject?: boolean;
@@ -461,6 +463,25 @@ function InspectorIdentityIcon({ event, appIcons }: { readonly event: ActivityIn
     : <AppGlyph appName={glyphName} iconSrc={iconSrc} size="sm" />;
 }
 
+function ActivityDeviceSources({ devices }: { readonly devices: readonly ActivityDeviceSource[] }) {
+  const { t } = useLocalization();
+  return (
+    <>
+      {devices.map((device) => {
+        const platformLabel = device.platform === "macos" ? "macOS" : device.platform === "windows" ? "Windows" : null;
+        const label = platformLabel ? `${device.label} · ${platformLabel}` : device.label;
+        return (
+          <span className="week-activity-inspector__device-source" key={device.id ?? "local"}
+            title={label} data-platform={device.platform}>
+            <DeviceSourceIcon label={platformLabel ?? t("settings.cloudDevices.device")} />
+            <span>{device.label}</span>
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 function ActivityInspectorHeader({
   event,
   appIcons,
@@ -527,17 +548,7 @@ function ActivityInspectorHeader({
       )}
       {devices.length > 0 ? (
         <div className="week-activity-inspector__devices">
-          {devices.map((device) => {
-            const platformLabel = device.platform === "macos" ? "macOS" : device.platform === "windows" ? "Windows" : null;
-            const label = platformLabel ? `${device.label} · ${platformLabel}` : device.label;
-            return (
-              <span className="week-activity-inspector__device-source" key={device.id ?? "local"}
-                title={label} data-platform={device.platform}>
-                <DeviceSourceIcon label={platformLabel ?? t("settings.cloudDevices.device")} />
-                <span>{device.label}</span>
-              </span>
-            );
-          })}
+          <ActivityDeviceSources devices={devices} />
         </div>
       ) : null}
     </header>
@@ -732,13 +743,22 @@ function formatActivityShareDuration(totalSeconds: number, language: DisplayLang
   return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
 }
 
-function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspectorEvent; readonly appIcons: AppIconMap }) {
+function ActivityBreakdown({ event, appIcons, segments, deviceLabelById }: {
+  readonly event: ActivityInspectorEvent;
+  readonly appIcons: AppIconMap;
+  readonly segments: readonly ActivitySegment[];
+  readonly deviceLabelById?: ReadonlyMap<string, string>;
+}) {
   const { effectiveLanguage, t } = useLocalization();
   if (event.identities.length === 0) return null;
   // A flow cell paints one winner; only list its composition when something else shared it.
   const isFlowComposition = event.surface === "flow";
   if (isFlowComposition && event.identities.length < 2) return null;
   if (!isFlowComposition && event.surface !== "week") return null;
+  const segmentsById = new Map(segments.map((segment) => [segment.id, segment]));
+  const includeLocalDevice = (deviceLabelById?.size ?? 0) > 0
+    || Boolean(event.devices?.some((device) => device.id))
+    || segments.some((segment) => segment.deviceId);
   const visibleIdentities = event.identities.slice(0, MAX_VISIBLE_ACTIVITY_ROWS);
   const additionalIdentityCount = Math.max(0, event.identities.length - visibleIdentities.length)
     + Math.max(0, event.hiddenIdentityCount ?? 0);
@@ -751,6 +771,14 @@ function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspec
     >
       {visibleIdentities.map((identity, index) => {
         const iconSrc = appIcons[identity.bundleId ?? identity.appName] ?? appIcons[identity.appName] ?? null;
+        const devices = identity.devices ?? buildActivityDevices(
+          (identity.sourceSegmentIds ?? []).flatMap((id) => {
+            const segment = segmentsById.get(id);
+            return segment ? [segment] : [];
+          }),
+          deviceLabelById, t("dashboard.week.inspector.thisMac"), t("dashboard.week.inspector.syncedMac"),
+          includeLocalDevice,
+        );
         const isDominant = isFlowComposition && index === 0;
         const identityLabel = localizedExcludedIdentityLabel(identity, t);
         const rowLabel = isDominant
@@ -769,7 +797,12 @@ function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspec
                 ? <SiteFavicon domain={identity.siteDomain} size={18} fallbackIconSrc={iconSrc} />
                 : <AppGlyph appName={identity.appName || identityLabel} iconSrc={iconSrc} size="sm" />}
             </span>
-            <span title={rowLabel}>{rowLabel}</span>
+            <span className="week-activity-inspector__activity-identity">
+              <span title={rowLabel}>{rowLabel}</span>
+              {devices.length > 0 ? (
+                <span className="week-activity-inspector__activity-devices"><ActivityDeviceSources devices={devices} /></span>
+              ) : null}
+            </span>
             {identity.seconds !== undefined
               ? <strong>{formatActivityShareDuration(identity.seconds, effectiveLanguage)}</strong>
               : null}
@@ -791,6 +824,7 @@ function ActivityInspectorBody({
   values,
   segments,
   appIcons,
+  deviceLabelById,
   projectOptions,
   actionsDisabledReason,
   classificationOptions,
@@ -813,6 +847,7 @@ function ActivityInspectorBody({
   readonly values: InspectorValues;
   readonly segments: readonly ActivitySegment[];
   readonly appIcons: AppIconMap;
+  readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly projectOptions: readonly ActivityInspectorProjectOption[];
   readonly actionsDisabledReason: string | null;
   readonly classificationOptions?: ClassificationOptions;
@@ -936,7 +971,7 @@ function ActivityInspectorBody({
         </div>
       ) : null}
 
-      <ActivityBreakdown event={event} appIcons={appIcons} />
+      <ActivityBreakdown event={event} appIcons={appIcons} segments={segments} deviceLabelById={deviceLabelById} />
 
       {actionsDisabledReason ? (
         <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p>
@@ -1098,6 +1133,7 @@ export function ActivityInspectorPreview({
           values={values}
           segments={segments}
           appIcons={appIcons}
+          deviceLabelById={deviceLabelById}
           projectOptions={projectOptions}
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}
@@ -1504,6 +1540,7 @@ export function WeekActivityInspector({
           values={values}
           segments={targetSegments}
           appIcons={appIcons}
+          deviceLabelById={deviceLabelById}
           projectOptions={projectOptions}
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}

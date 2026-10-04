@@ -3468,6 +3468,25 @@
   white-space: nowrap;
 }
 
+.week-activity-inspector__activity-row > .week-activity-inspector__activity-identity {
+  display: grid;
+  gap: 2px;
+  white-space: normal;
+}
+
+.week-activity-inspector__activity-identity > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-activity-inspector__activity-devices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
 .week-activity-inspector__activity-row > strong {
   color: var(--text);
   font-size: 0.71875rem;

@@ -15,6 +15,7 @@ export type FlowHoverGroupContribution = {
   readonly productivity: FlowBlockContribution["productivity"];
   readonly durationSeconds: number;
   readonly isWinner: boolean;
+  readonly sourceSegmentIds: readonly string[];
 };
 
 export type FlowBlockHoverGroup = {
@@ -76,7 +77,11 @@ export function buildFlowHoverGroupContributions(group: FlowBlockHoverGroup): Fl
       const id = activityIdentityKey(entry);
       const existing = totals.get(id);
       if (existing) {
-        existing.contribution = { ...existing.contribution, durationSeconds: existing.contribution.durationSeconds + entry.durationSeconds };
+        existing.contribution = {
+          ...existing.contribution,
+          durationSeconds: existing.contribution.durationSeconds + entry.durationSeconds,
+          sourceSegmentIds: [...new Set([...existing.contribution.sourceSegmentIds, ...entry.sourceSegmentIds])],
+        };
         continue;
       }
       totals.set(id, {
@@ -93,6 +98,7 @@ export function buildFlowHoverGroupContributions(group: FlowBlockHoverGroup): Fl
           productivity: entry.productivity,
           durationSeconds: entry.durationSeconds,
           isWinner: id === winnerKey,
+          sourceSegmentIds: [...new Set(entry.sourceSegmentIds)],
         },
       });
     }

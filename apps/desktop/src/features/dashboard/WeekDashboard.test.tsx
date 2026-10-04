@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivityCategory, ActivitySegment, CategoryDuration, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
 import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } from "./WeekActivityInspector";
-import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
+import { buildWeekCalendarEvents, type WeekCalendarEvent, type WeekDayRow } from "./weekCalendar";
 import { readAppStyles } from "../../test/readStyles";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -136,6 +136,7 @@ type WeekDashboardRenderOverrides = {
   readonly productivityEntries?: ProductivityDuration[];
   readonly rows?: WeekDayRow[];
   readonly segments?: ActivitySegment[];
+  readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly sideOpen?: boolean;
   readonly totalSeconds?: number;
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
@@ -1525,6 +1526,31 @@ describe("WeekDashboard activity inspector", () => {
     expect(screen.queryByRole("button", { name: "More actions for Design review" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
     expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+  });
+
+  it("carries each app's source records through calendar merging into preview and pinned device rows", () => {
+    const records: ActivitySegment[] = [
+      { id: "local-editor", appName: "Editor", startedAt: "2024-01-03T09:00:00", endedAt: "2024-01-03T09:30:00", durationSeconds: 1800, platform: "macos", source: "manual", classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 } },
+      { id: "remote-video", appName: "Video", startedAt: "2024-01-03T09:00:00", endedAt: "2024-01-03T09:30:00", durationSeconds: 1800, platform: "windows", deviceId: "pc", source: "manual", classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 } },
+    ];
+    const calendarEvents = buildWeekCalendarEvents(records, "2024-01-01", "2024-01-07", 0, 24);
+    const event = calendarEvents.get("2024-01-03")![0];
+    expect(event.identities.map((identity) => identity.sourceSegmentIds)).toEqual([["local-editor"], ["remote-video"]]);
+    renderWeekDashboard({ calendarEvents, segments: records, deviceLabelById: new Map([["pc", "Windows PC"]]) });
+    const trigger = screen.getByRole("button", { name: /Open activity details/ });
+    const assertSources = (container: HTMLElement) => {
+      const rows = within(container).getAllByRole("listitem");
+      expect(rows[0].textContent).toContain("Editor");
+      expect(within(rows[0]).getByText("This device")).toBeTruthy();
+      expect(within(rows[0]).queryByText("Windows PC")).toBeNull();
+      expect(rows[1].textContent).toContain("Video");
+      expect(within(rows[1]).getByText("Windows PC")).toBeTruthy();
+      expect(within(rows[1]).queryByText("This device")).toBeNull();
+    };
+    fireEvent.focus(trigger);
+    assertSources(screen.getByRole("tooltip"));
+    fireEvent.click(trigger);
+    assertSources(screen.getByRole("dialog"));
   });
 
   it("allows inspection but disables mutation for synced activity", () => {

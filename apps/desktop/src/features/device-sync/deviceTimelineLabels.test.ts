@@ -40,6 +40,15 @@ describe("activity device provenance", () => {
     expect(buildActivityDevices([{}, { deviceId: null }], undefined, "This device", "Synced device")).toEqual([]);
   });
 
+  it("shows local provenance when another device is known but unused in this activity", () => {
+    const labels = new Map([["pc", "Windows PC"]]);
+    expect(buildActivityDevices([{ platform: "macos" }], labels, "This device", "Synced device"))
+      .toEqual([{ id: null, label: "This device", platform: "macos" }]);
+    expect(buildActivityDevices([], labels, "This device", "Synced device")).toEqual([]);
+    expect([...buildRemoteDeviceLabels(labels, "local", [[], [{ deviceId: null }]], fallback)])
+      .toEqual([["pc", "Windows PC"]]);
+  });
+
   it("includes both sources when local and remote activity share a range", () => {
     expect(buildActivityDevices([{ platform: "macos" }, { deviceId: "pc", platform: "windows" }, { deviceId: "pc", platform: "windows" }],
       new Map([["pc", "Windows PC"]]), "This device", "Synced device"))

@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { buildFlowBlocks, type ActivitySegment, type FlowBlock } from "@drifty/domain";
+import { buildFlowActivityInspectorEvent } from "./FlowHoverLayer";
 import { FlowChartView } from "./FlowChartView";
 import { buildFlowBlockHoverGroups, buildFlowHoverGroupContributions } from "./flowHoverGroups";
 
@@ -31,7 +32,7 @@ function fireNativePointerMove(target: Element, clientX: number, clientY: number
 }
 
 describe("flow hover groups", () => {
-  it("shows elapsed time and both devices on hover while keeping edits bound to the painted winner", () => {
+  it("attributes each app to its actual device on hover and click while preserving elapsed time and winner edits", () => {
     const records: ActivitySegment[] = [
       { id: "local-editor", appName: "Editor", startedAt: "2026-04-06T09:00:00", endedAt: "2026-04-06T09:30:00", durationSeconds: 1800, platform: "macos", source: "manual", classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 } },
       { id: "remote-video", appName: "Video", startedAt: "2026-04-06T09:00:00", endedAt: "2026-04-06T09:30:00", durationSeconds: 1800, deviceId: "pc", platform: "windows", source: "manual", classification: { category: "entertainment", productivity: "drift", source: "manual", confidence: 1 } },
@@ -50,21 +51,49 @@ describe("flow hover groups", () => {
     const preview = screen.getByRole("tooltip");
     const header = preview.querySelector("header")!;
     expect(within(header).getByText("This device")).toBeTruthy();
-    expect(within(header).getByText("Windows PC")).toBeTruthy();
+    expect(within(header).queryByText("Windows PC")).toBeNull();
     expect(within(header).getByRole("img", { name: "macOS" })).toBeTruthy();
-    expect(within(header).getByRole("img", { name: "Windows" })).toBeTruthy();
+    expect(within(header).queryByRole("img", { name: "Windows" })).toBeNull();
     expect(header.querySelector('[data-platform="macos"]')).toBeTruthy();
-    expect(header.querySelector('[data-platform="windows"]')).toBeTruthy();
+    expect(header.querySelector('[data-platform="windows"]')).toBeNull();
     expect(header.compareDocumentPosition(preview.querySelector(".week-activity-inspector__attributes")!)
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(preview.textContent).toContain("09:00–09:30 · 30m");
     expect(within(preview).getAllByText("15m")).toHaveLength(2);
 
+    const assertSources = (container: HTMLElement) => {
+      const rows = within(container).getAllByRole("listitem");
+      expect(rows).toHaveLength(2);
+      expect(rows[0].textContent).toContain("Editor · dominant");
+      expect(within(rows[0]).getByText("This device")).toBeTruthy();
+      expect(within(rows[0]).queryByText("Windows PC")).toBeNull();
+      expect(rows[1].textContent).toContain("Video");
+      expect(within(rows[1]).getByText("Windows PC")).toBeTruthy();
+      expect(within(rows[1]).queryByText("This device")).toBeNull();
+    };
+    assertSources(preview);
     fireEvent.click(cell);
     const inspector = screen.getByRole("dialog", { name: "Editor" });
     expect(within(inspector).getByText("Windows PC")).toBeTruthy();
     expect(inspector.textContent).toContain("09:00–09:30 · 30m");
+    assertSources(inspector);
   });
+  it("keeps both devices when the same app actually ran on both, and shows local provenance with known other devices", () => {
+    const local: ActivitySegment = { id: "local", appName: "Editor", startedAt: "2026-04-06T09:00:00", endedAt: "2026-04-06T09:30:00", durationSeconds: 1800, platform: "macos", source: "manual" };
+    const remote: ActivitySegment = { ...local, id: "remote", deviceId: "pc", platform: "windows" };
+    const labels = new Map([["pc", "Windows PC"]]);
+    const eventFor = (records: ActivitySegment[]) => {
+      const byId = new Map(records.map((record) => [record.id, record]));
+      const group = buildFlowBlockHoverGroups(buildFlowBlocks(records, "2026-04-06", 3), 3, 0, byId).get(540)!;
+      return buildFlowActivityInspectorEvent(group, { segmentsById: byId, deviceLabelById: labels, thisDeviceLabel: "This device", syncedDeviceLabel: "Synced device" });
+    };
+    const mixed = eventFor([local, remote]);
+    expect(mixed.identities).toHaveLength(1);
+    expect(mixed.identities[0].sourceSegmentIds).toEqual(["local", "remote"]);
+    expect(mixed.devices?.map((device) => device.label)).toEqual(["This device", "Windows PC"]);
+    expect(eventFor([local]).devices?.map((device) => device.label)).toEqual(["This device"]);
+  });
+
   it("unions source segment ids across adjacent cells", () => {
     const blocks = [
       makeFlowBlock({ id: "cmux-a", minuteOfDay: 60, sourceSegmentIds: ["seg-a"] }),

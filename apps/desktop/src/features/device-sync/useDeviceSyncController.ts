@@ -16,6 +16,7 @@ import {
 import { IDLE_DEVICE_SYNC_STATUS, type DeviceSyncCycleReason, type DeviceSyncStatus } from "./deviceSyncTypes";
 
 export const DEVICE_SYNC_CYCLE_INTERVAL_MS = 3 * 60 * 1000;
+const EMPTY_DEVICE_LABELS: ReadonlyMap<string, string> = new Map();
 
 export type UseDeviceSyncControllerOptions = {
   /** Full gate: opt-in toggle AND cloud online AND signed in AND canUseApp. */
@@ -46,7 +47,13 @@ export function useDeviceSyncController({
   onAccountSyncPaused,
 }: UseDeviceSyncControllerOptions): DeviceSyncController {
   const [status, setStatus] = useState<DeviceSyncStatus>(IDLE_DEVICE_SYNC_STATUS);
-  const [deviceLabelById, setDeviceLabelById] = useState<ReadonlyMap<string, string>>(new Map());
+  const [deviceLabelsState, setDeviceLabelsState] = useState<{
+    accountId: string | null;
+    labels: ReadonlyMap<string, string>;
+  }>({ accountId: null, labels: EMPTY_DEVICE_LABELS });
+  // Retain labels while paused, but never expose another account's device names.
+  const deviceLabelById = syncAccountId && deviceLabelsState.accountId === syncAccountId
+    ? deviceLabelsState.labels : EMPTY_DEVICE_LABELS;
   const inFlightPromiseRef = useRef<Promise<void> | null>(null);
   const quiescedRef = useRef(false);
   const syncActiveRef = useRef(syncActive);
@@ -75,9 +82,9 @@ export function useDeviceSyncController({
     if (!syncActiveRef.current || syncAccountIdRef.current !== syncAccountId) return null;
     const labels = new Map<string, string>();
     for (const device of response.devices) {
-      labels.set(device.id, device.label);
+      if (device.id !== response.deviceId) labels.set(device.id, device.label);
     }
-    setDeviceLabelById(labels);
+    setDeviceLabelsState({ accountId: syncAccountId, labels });
     if (response.syncStatus === "paused") {
       onAccountSyncPausedRef.current?.(response.syncGeneration);
     }

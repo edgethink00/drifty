@@ -44,6 +44,7 @@ export type WeekCalendarIdentity = {
 export type WeekCalendarEventIdentity = WeekCalendarIdentity & {
   seconds: number;
   firstStartMinute: number;
+  sourceSegmentIds?: readonly string[];
 };
 
 export type WeekCalendarEvent = {
@@ -293,11 +294,13 @@ export function buildWeekCalendarEvents(
     if (currentIdentity) {
       currentIdentity.seconds += interval.seconds;
       currentIdentity.firstStartMinute = Math.min(currentIdentity.firstStartMinute, interval.startMinute);
+      currentIdentity.sourceSegmentIds = [...new Set([...(currentIdentity.sourceSegmentIds ?? []), interval.segmentId])];
     } else {
       identityTotals.set(interval.identity.id, {
         ...interval.identity,
         seconds: interval.seconds,
         firstStartMinute: interval.startMinute,
+        sourceSegmentIds: [interval.segmentId],
       });
     }
     sourceTotals.set(interval.classificationSource, (sourceTotals.get(interval.classificationSource) ?? 0) + interval.seconds);
@@ -444,6 +447,7 @@ export function buildWeekCalendarEvents(
           if (currentIdentity) {
             currentIdentity.seconds += identityEntry.seconds;
             currentIdentity.firstStartMinute = Math.min(currentIdentity.firstStartMinute, identityEntry.firstStartMinute);
+            currentIdentity.sourceSegmentIds = [...new Set([...(currentIdentity.sourceSegmentIds ?? []), ...(identityEntry.sourceSegmentIds ?? [])])];
           } else {
             identityTotals.set(id, { ...identityEntry });
           }

@@ -54,6 +54,16 @@ export function buildFlowActivityInspectorEvent(
   // only shows the winner's color, so the inspector lists the rest to explain what
   // else filled the range and what surfaces if the winner's records are removed.
   const contributions = buildFlowHoverGroupContributions(group);
+  const sourceSegments = (ids: readonly string[]) => ids.flatMap((id) => {
+    const segment = options.segmentsById?.get(id);
+    return segment ? [segment] : [];
+  });
+  const includeLocalDevice = (options.deviceLabelById?.size ?? 0) > 0
+    || sourceSegments(group.displaySegmentIds ?? group.segmentIds).some((segment) => segment.deviceId);
+  const activityDevices = (ids: readonly string[]) => buildActivityDevices(
+    sourceSegments(ids), options.deviceLabelById,
+    options.thisDeviceLabel ?? "", options.syncedDeviceLabel ?? "", includeLocalDevice,
+  );
   const projectWeights = new Map<string, { readonly projectId: string | null; seconds: number; order: number }>();
   const projectBySegmentId = new Map<string, string | null>();
   for (const [order, groupedBlock] of group.blocks.entries()) {
@@ -99,6 +109,8 @@ export function buildFlowActivityInspectorEvent(
       bundleId: contribution.bundleId,
       siteDomain: contribution.siteDomain,
       seconds: contribution.durationSeconds,
+      sourceSegmentIds: contribution.sourceSegmentIds,
+      devices: activityDevices(contribution.sourceSegmentIds),
     })),
     // Category/productivity edits and delete only target the painted winner's records
     // (segmentIds), so the chips stay winner-only instead of flagging runner-ups as mixed.
@@ -107,15 +119,7 @@ export function buildFlowActivityInspectorEvent(
     hasMixedProject: projectWeights.size > 1,
     detailLabel: blockDetailLabel(block),
     durationSeconds: group.durationSeconds,
-    devices: buildActivityDevices(
-      (group.displaySegmentIds ?? group.segmentIds).flatMap((id) => {
-        const segment = options.segmentsById?.get(id);
-        return segment ? [segment] : [];
-      }),
-      options.deviceLabelById,
-      options.thisDeviceLabel ?? "",
-      options.syncedDeviceLabel ?? "",
-    ),
+    devices: activityDevices(contributions[0]?.sourceSegmentIds ?? group.segmentIds),
   };
 }
 

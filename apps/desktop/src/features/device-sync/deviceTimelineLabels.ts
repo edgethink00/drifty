@@ -6,14 +6,15 @@ export type ActivityDeviceSource = {
   readonly platform: "macos" | "windows" | "unknown";
 };
 
-/** Include the local source only when synced records make provenance relevant. */
+/** Known other devices make provenance relevant even on a local-only day. */
 export function buildActivityDevices(
   segments: readonly (Pick<ActivitySegment, "deviceId"> & Partial<Pick<ActivitySegment, "platform">>)[],
   knownLabels: ReadonlyMap<string, string> | undefined,
   thisDeviceLabel: string,
   syncedDeviceLabel: string,
+  includeLocal = (knownLabels?.size ?? 0) > 0,
 ): ActivityDeviceSource[] {
-  if (!segments.some((segment) => segment.deviceId)) return [];
+  if (!includeLocal && !segments.some((segment) => segment.deviceId)) return [];
   const devices = new Map<string | null, { label: string; platforms: Set<"macos" | "windows"> }>();
   for (const segment of segments) {
     const id = segment.deviceId || null;
