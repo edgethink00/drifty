@@ -5717,6 +5717,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     const { alertKey, episodeKey } = latestDrift;
     let deliveryCandidate = latestDrift;
+    let confirmedCurrentSnapshot: CurrentActivitySnapshot | null = null;
     let { category, segment } = deliveryCandidate;
     let deliveryDriftDurationSeconds = deliveryCandidate.driftDurationSeconds;
     let deliverySourceSegmentId = deliveryCandidate.sourceSegmentId;
@@ -6017,7 +6018,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             browserName: segment.browserName,
             browserIdentity: segment.bundleId,
             siteDomain: segment.siteDomain,
-            siteUrl: segment.siteUrl,
+            siteUrl: buildExtremeNudgeTarget(segment, { confirmedCurrentSnapshot }).siteUrl,
           }));
           petWasIntercepted = intervention.outcome === "user_intercepted";
           // A pause can arrive while the cat approaches. A sleeping renderer's
@@ -6090,6 +6091,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         nativeExtremeNudgeInFlightRef.current = true;
         try {
           return await applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
+            confirmedCurrentSnapshot,
             forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
           }));
         } finally {
@@ -6274,6 +6276,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         if (!freshReentry.ready) return "current-snapshot-unavailable";
       }
       if (freshCandidate) {
+        confirmedCurrentSnapshot = freshSnapshot;
         deliveryCandidate = freshCandidate;
         ({ category, segment } = deliveryCandidate);
         deliveryDriftDurationSeconds = deliveryCandidate.driftDurationSeconds;

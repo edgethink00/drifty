@@ -1,4 +1,5 @@
-import type { ActivitySegment } from "@drifty/domain";
+import { isYouTubeSite } from "@drifty/domain";
+import type { ActivitySegment, CurrentActivitySnapshot } from "@drifty/domain";
 import type { DriftAlarmCorrectionStatus, DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import type { ExtremeNudgeTarget } from "./driftAlarmBridge";
 import { buildDefaultDriftAlarmCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
@@ -22,6 +23,7 @@ export const EXTREME_NUDGE_STORAGE_KEY = "drifty.notifications.extremeNudge";
 
 export type ExtremeNudgeTargetOptions = {
   readonly forceChromiumAxTabClose?: boolean;
+  readonly confirmedCurrentSnapshot?: CurrentActivitySnapshot | null;
 };
 
 export function buildExtremeNudgeTarget(segment: ActivitySegment, options: ExtremeNudgeTargetOptions = {}): ExtremeNudgeTarget {
@@ -30,9 +32,31 @@ export function buildExtremeNudgeTarget(segment: ActivitySegment, options: Extre
     bundleId: segment.bundleId?.trim() || null,
     browserName: segment.browserName?.trim() || null,
     siteDomain: segment.siteDomain?.trim() || null,
-    siteUrl: segment.siteUrl?.trim() || null,
+    siteUrl: currentYouTubeTargetUrl(segment, options.confirmedCurrentSnapshot),
     forceChromiumAxTabClose: options.forceChromiumAxTabClose ?? false,
   };
+}
+
+// Classification intentionally keeps the captured YouTube URL (including
+// playlist evidence). Refresh only the native action address, after the caller
+// has confirmed the candidate, and only for the same app and video.
+function currentYouTubeTargetUrl(segment: ActivitySegment, current?: CurrentActivitySnapshot | null): string | null {
+  const capturedUrl = segment.siteUrl?.trim() || null;
+  const videoId = segment.youtubeVideoId?.trim();
+  if (!current || !capturedUrl || !current.siteUrl || !videoId || videoId !== current.youtubeVideoId?.trim()
+    || current.appName !== segment.appName || current.bundleId !== segment.bundleId
+    || current.browserName !== segment.browserName || current.siteDomain !== segment.siteDomain) return capturedUrl;
+  try {
+    const before = new URL(capturedUrl);
+    const after = new URL(current.siteUrl);
+    if (isYouTubeSite(after.hostname) && before.origin === after.origin && before.pathname === after.pathname
+      && ["v", "list", "start_radio"].every(key => before.searchParams.get(key) === after.searchParams.get(key))) {
+      return current.siteUrl.trim();
+    }
+  } catch {
+    // An unparseable address cannot prove that only query/hash changed.
+  }
+  return capturedUrl;
 }
 
 export function buildExtremeNudgeToastEvent(
