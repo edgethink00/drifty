@@ -482,6 +482,8 @@ import { useDeferredTabBodyReady } from "./app/useDeferredTabBodyReady";
 import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, classificationCorrectionScopeForRow, persistClassificationCorrection, persistUnidentifiedRecordsCorrection, type ClassificationCorrectionDraft, type ClassificationCorrectionNotice, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
 import { captureCorrectionEvidence } from "./features/classification/correctionEvidence";
 import { learnLivingSoulFromFeedback, type SoulLearningProvider } from "./features/classification/soulLearning";
+import type { MemorySuggestionProvider } from "./features/classification/memorySuggestionJob";
+import { useMemorySuggestionScheduler } from "./features/settings/useMemorySuggestionScheduler";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
 import { compactHistoryRangeContains, compactHistoryRangeKey, findDisplayableCompactHistoryLoad, findFreshCompactHistoryLoad, pruneCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
 import { getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
@@ -1845,6 +1847,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const hasSelectedAiClassificationProvider = Boolean(
     selectedLocalAiClassificationOptions || canUseSelectedCloudAiClassification,
   );
+  const memorySuggestionProvider = useMemo<MemorySuggestionProvider | null>(() => (
+    selectedLocalAiClassificationOptions
+      ? { kind: "local", provider: selectedLocalAiClassificationOptions.localProvider }
+      : canUseSelectedCloudAiClassification ? { kind: "cloud" } : null
+  ), [selectedLocalAiClassificationOptions, canUseSelectedCloudAiClassification]);
+  useMemorySuggestionScheduler({
+    ownerId: user?.id ?? "local",
+    provider: memorySuggestionProvider,
+    language: localization.effectiveLanguage === "ko" ? "ko" : "en",
+    enabled: !onboardingOpen && !preparingFirstDay,
+  });
   const cloudRateLimitBackoff = selectedClassificationRoute === "cloud" && user?.id
     ? cloudAiRequestBackoffs.current(user.id)
     : null;
@@ -10953,6 +10966,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     localAiSetup={localAiSetup}
                     shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
                     workProfileUserId={user?.id ?? "local"}
+                    memorySuggestionProvider={memorySuggestionProvider}
                     analysisSetup={analysisModel.analysisSetup}
                     analysisOpenRouterConnected={analysisModel.openRouterConnected}
                     showIntelligenceTab={projectClassificationFeatureEnabled}

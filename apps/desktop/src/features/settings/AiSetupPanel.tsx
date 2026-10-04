@@ -1,3 +1,4 @@
+import type { MemorySuggestionProvider } from "./useMemorySuggestions";
 import { useSettingsSearch } from "./SettingsSearchContext";
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
@@ -56,6 +57,8 @@ export type AiSetupPanelProps = {
   readonly connectionTest: UseAiConnectionTestRunnerResult;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly workProfileUserId: string;
+  /** Provider that writes Memory suggestions (local, bring-your-own or Drifty Cloud); null when none is selected. */
+  readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
   readonly analysisSetup: AnalysisAiSetupState;
   readonly analysisOpenRouterConnected: boolean;
   /** Show the Intelligence tab (project-classification preview). Dev-gated. */
@@ -85,6 +88,7 @@ export function AiSetupPanel({
   connectionTest,
   shouldShowCloudCheckoutPlans,
   workProfileUserId,
+  memorySuggestionProvider,
   analysisSetup,
   analysisOpenRouterConnected,
   showIntelligenceTab,
@@ -368,6 +372,7 @@ export function AiSetupPanel({
           <div className="ai-setup-support-zone" aria-label={t("settings.ai.promptSettings")}>
             <AiSetupSupportSections
               workProfileUserId={workProfileUserId}
+              memorySuggestionProvider={memorySuggestionProvider ?? null}
               savedWorkProfile={workProfileSettings.savedWorkProfile}
               workProfileDraft={workProfileSettings.workProfileDraft}
               workProfileMessage={workProfileSettings.workProfileMessage}

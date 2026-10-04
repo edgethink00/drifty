@@ -1,3 +1,4 @@
+import type { MemorySuggestionProvider } from "./useMemorySuggestions";
 import { render } from "@testing-library/react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { vi } from "vitest";
@@ -153,6 +154,7 @@ export function renderPanel({
   onLocalAiSetupChange,
   onAnalysisChange = vi.fn(),
   initialAnalysisSetup = DEFAULT_ANALYSIS_AI_SETUP,
+  memorySuggestionProvider = null,
 }: {
   readonly connectionStatus?: AiConnectionStatus;
   readonly currentBillingPlan?: "free" | "individual";
@@ -164,6 +166,7 @@ export function renderPanel({
   readonly onLocalAiSetupChange?: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onAnalysisChange?: (next: AnalysisAiSetupState) => void;
   readonly initialAnalysisSetup?: AnalysisAiSetupState;
+  readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
 } = {}) {
   const onStartCloudSetup = vi.fn();
   const onManageCloudBilling = vi.fn();
@@ -196,6 +199,7 @@ export function renderPanel({
         localAiSetup={localAiSetup}
         shouldShowCloudCheckoutPlans={false}
         workProfileUserId={workProfileUserId}
+        memorySuggestionProvider={memorySuggestionProvider}
         analysisSetup={initialAnalysisSetup}
         analysisOpenRouterConnected={false}
         showIntelligenceTab

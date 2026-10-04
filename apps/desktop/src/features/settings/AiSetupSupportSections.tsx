@@ -10,6 +10,8 @@ import type { WorkProfileSettings } from "../onboarding/onboardingState";
 import { onboardingActivityLabel } from "../onboarding/onboardingOptionLabels";
 import { AiSetupWorkProfileSection } from "./AiSetupWorkProfileSection";
 import { MemoryPatternCards } from "./MemoryPatternCards";
+import { MemorySuggestionList } from "./MemorySuggestionList";
+import { useMemorySuggestions, type MemorySuggestionProvider } from "./useMemorySuggestions";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 
 type AiSetupSupportSectionsProps = {
@@ -19,6 +21,7 @@ type AiSetupSupportSectionsProps = {
   readonly workProfileMessage: string | null;
   readonly workProfileSaving: boolean;
   readonly memorySnapshotVersion: number;
+  readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
   readonly onSaveWorkProfile: () => void | Promise<void>;
   readonly onWorkProfileDraftChange: (value: WorkProfileSettings) => void;
 };
@@ -35,6 +38,7 @@ export function AiSetupSupportSections({
   workProfileMessage,
   workProfileSaving,
   memorySnapshotVersion,
+  memorySuggestionProvider = null,
   onSaveWorkProfile,
   onWorkProfileDraftChange,
 }: AiSetupSupportSectionsProps) {
@@ -86,6 +90,26 @@ export function AiSetupSupportSections({
     ? document.learned.workSupport.length + document.learned.drift.length + document.learned.ambiguities.length
     : 0;
   const contextualPatternCount = document?.contextualPriors.filter((prior) => prior.observedDays.length >= 3).length ?? 0;
+  const suggestionsState = useMemorySuggestions({
+    ownerId: workProfileUserId, provider: memorySuggestionProvider,
+    language: effectiveLanguage === "ko" ? "ko" : "en", document,
+  });
+  const [suggestionBusy, setSuggestionBusy] = useState(false);
+  const [suggestionNotice, setSuggestionNotice] = useState<string | null>(null);
+  async function handleAcceptSuggestion(id: string) {
+    setSuggestionBusy(true);
+    setSuggestionNotice(null);
+    const result = await suggestionsState.accept(id);
+    if (result.ok) setMemory({ status: "ready", document: result.document });
+    else {
+      if (result.code === "memory_changed") reloadMemory();
+      setSuggestionNotice(t(result.code === "memory_duplicate" ? "settings.ai.memorySuggestionDuplicate"
+        : result.code === "memory_group_full" ? "settings.ai.memorySuggestionGroupFull"
+          : result.code === "memory_limit" ? "settings.ai.memoryLimitReached"
+            : result.code === "memory_changed" ? "settings.ai.memoryChangedElsewhere" : "settings.ai.memoryChangeFailed"));
+    }
+    setSuggestionBusy(false);
+  }
   const editorPanelId = "ai-setup-memory-work-profile-editor";
   const editorButtonId = "ai-setup-memory-work-profile-edit";
   return (
@@ -142,6 +166,34 @@ export function AiSetupSupportSections({
           </CollapsiblePanel>
         </div>
       </section>
+
+      {suggestionsState.suggestions.length > 0 || suggestionsState.running ? (
+        <section className="memory-section" aria-labelledby="ai-memory-suggested-title">
+          <div className="memory-section__head">
+            <h4 id="ai-memory-suggested-title" className="ai-setup-provider-heading">{t("settings.ai.memorySuggestionsLabel")}</h4>
+            <div className="memory-section__aside">
+              <span className="memory-section__count">
+                {suggestionsState.running && suggestionsState.suggestions.length === 0
+                  ? t("settings.ai.memorySuggestionsRunningShort")
+                  : t("settings.ai.memorySuggestionCount", { count: suggestionsState.suggestions.length })}
+              </span>
+            </div>
+          </div>
+          {suggestionNotice ? <div className="memory-notice" role="status"><p>{suggestionNotice}</p></div> : null}
+          {suggestionsState.suggestions.length > 0 ? (
+            <MemorySuggestionList
+              suggestions={suggestionsState.suggestions}
+              busy={suggestionBusy}
+              onAccept={(id) => void handleAcceptSuggestion(id)}
+              onDecline={suggestionsState.decline}
+            />
+          ) : (
+            <div className="memory-card memory-card--empty">
+              <p className="memory-card__text">{t("settings.ai.memorySuggestionsRunning")}</p>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       <section className="memory-section" aria-labelledby="ai-memory-learned-title">
         <div className="memory-section__head">

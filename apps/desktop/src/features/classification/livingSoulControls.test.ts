@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  changeLivingSoulPattern, livingSoulPatternHash, livingSoulPromptContext, reviewLivingSoulPattern,
+  adoptLivingSoulSuggestion, changeLivingSoulPattern, livingSoulPatternHash, livingSoulPromptContext, reviewLivingSoulPattern,
   parseLivingSoulMarkdown, readLivingSoulForUser, renderLivingSoulMarkdown,
   synchronizeLivingSoulDeclaredContextForUser, updateLivingSoulLearnedState,
 } from "./livingSoul";
@@ -62,20 +62,23 @@ describe("user control of learned memory", () => {
 });
 
 describe("feedback on saved memory", () => {
-  it("confirms without inflating evidence, persists locally and pins the original group across refinement", async () => {
+  it("raises a confirmed pattern to high confidence without inflating evidence, pins its group, and restores it on unconfirm", async () => {
     const original = await seed();
     const confirmed = await reviewLivingSoulPattern({ ownerId: "local", expectedRevision: original.document.revision,
       kind: "workSupport", summary: pattern.summary, action: "confirm" });
-    expect(confirmed.document.learned).toEqual(original.document.learned);
+    expect(confirmed.document.learned.workSupport).toEqual([{ ...pattern, confidence: "high" }]);
+    expect(confirmed.promptContext.learnedWorkSupport[0]).toMatchObject({ confidence: "high", evidenceCount: 1 });
     expect(confirmed.document.lastFeedbackAt).toBe(original.document.lastFeedbackAt);
     expect(parseLivingSoulMarkdown(renderLivingSoulMarkdown(confirmed.document))).toEqual(confirmed.document);
     const refined = await updateLivingSoulLearnedState({ ownerId: "local", expectedRevision: confirmed.document.revision,
       learned: { workSupport: [], drift: [{ ...pattern, evidenceCount: 99 }], ambiguities: [] }, feedbackAt: pattern.lastObservedAt });
-    expect(refined.document.learned.workSupport).toEqual([pattern]);
+    expect(refined.document.learned.workSupport).toEqual([{ ...pattern, confidence: "high" }]);
     expect(refined.document.learned.drift).toEqual([]);
     expect(refined.promptContext).not.toHaveProperty("memoryControls");
     const unconfirmed = await reviewLivingSoulPattern({ ownerId: "local", expectedRevision: refined.document.revision,
       kind: "workSupport", summary: pattern.summary, action: "unconfirm" });
+    expect(unconfirmed.document.learned.workSupport).toEqual([pattern]);
+    expect(unconfirmed.document.memoryControls?.confirmedPriorConfidence).toBeUndefined();
     const after = await updateLivingSoulLearnedState({ ownerId: "local", expectedRevision: unconfirmed.document.revision,
       learned: { workSupport: [], drift: [], ambiguities: [] }, feedbackAt: pattern.lastObservedAt });
     expect(after.document.learned.workSupport).toEqual([]);
@@ -98,9 +101,13 @@ describe("feedback on saved memory", () => {
       learned: original.document.learned, feedbackAt: pattern.lastObservedAt, feedbackKind: "manual_correction" });
     expect(refined.document.learned.workSupport).toEqual([]);
     expect(refined.document.memoryControls?.rejectedPatterns).toEqual(rejected.document.memoryControls?.rejectedPatterns);
+    expect(rejected.document.memoryControls?.rejectedPatterns?.[hash].pattern.confidence).toBe("low");
     const restored = await reviewLivingSoulPattern({ ownerId: "local", expectedRevision: refined.document.revision,
       kind: "workSupport", summary: pattern.summary, action: "restore" });
-    expect(restored.document.learned).toEqual(original.document.learned);
+    expect(restored.document.learned.workSupport).toEqual([{ ...pattern, confidence: "high" }]);
+    const unconfirmed = await reviewLivingSoulPattern({ ownerId: "local", expectedRevision: restored.document.revision,
+      kind: "workSupport", summary: pattern.summary, action: "unconfirm" });
+    expect(unconfirmed.document.learned).toEqual(original.document.learned);
     expect(restored.document.memoryControls?.origins).toEqual(original.document.memoryControls?.origins);
     expect(restored.document.memoryControls?.confirmedHashes).toEqual([hash]);
     expect(restored.document.memoryControls?.dismissedHashes).not.toContain(hash);
@@ -167,3 +174,69 @@ it("excludes identical wording in other groups as well", async () => {
   expect(rejected.promptContext.learnedWorkSupport).toEqual([]);
   expect(rejected.promptContext.learnedDrift).toEqual([]);
 });
+
+describe("adopting a suggested memory", () => {
+  const suggestion = { ownerId: "local", kind: "workSupport" as const, summary: "Editing papers online counts as work.",
+    evidenceDays: 3, observedAt: "2026-10-04T00:00:00.000Z", activity: "Aside / overleaf.com", productivity: "focus" as const };
+
+  async function start() {
+    return synchronizeLivingSoulDeclaredContextForUser("local");
+  }
+
+  it("adds a pinned, confirmed pattern with suggestion provenance and survives reload and refinement", async () => {
+    const initial = await start();
+    const adopted = await adoptLivingSoulSuggestion({ ...suggestion, expectedRevision: initial.document.revision });
+    const hash = await livingSoulPatternHash(suggestion.summary);
+    expect(adopted.document.learned.workSupport).toEqual([{ summary: suggestion.summary, confidence: "high", evidenceCount: 3, lastObservedAt: suggestion.observedAt }]);
+    expect(adopted.document.memoryControls?.confirmedHashes).toContain(hash);
+    expect(adopted.document.memoryControls?.origins[hash]).toMatchObject({ source: "suggestion", activity: "Aside / overleaf.com", productivity: "focus" });
+    expect(parseLivingSoulMarkdown(renderLivingSoulMarkdown(adopted.document))).toEqual(adopted.document);
+    expect(livingSoulPromptContext(adopted.document)).not.toHaveProperty("memoryControls");
+    const refined = await updateLivingSoulLearnedState({ ownerId: "local", expectedRevision: adopted.document.revision,
+      learned: { workSupport: [], drift: [], ambiguities: [] }, feedbackAt: suggestion.observedAt, feedbackKind: "manual_correction" });
+    expect(refined.document.learned.workSupport.map((p) => p.summary)).toEqual([suggestion.summary]);
+  });
+
+  it("refuses a stale revision, a duplicate, blocked wording and a full group without evicting anything", async () => {
+    const initial = await start();
+    const adopted = await adoptLivingSoulSuggestion({ ...suggestion, expectedRevision: initial.document.revision });
+    await expect(adoptLivingSoulSuggestion({ ...suggestion, summary: "Other sentence for the same group.", expectedRevision: initial.document.revision }))
+      .rejects.toThrow("memory_changed");
+    await expect(adoptLivingSoulSuggestion({ ...suggestion, expectedRevision: adopted.document.revision })).rejects.toThrow("memory_duplicate");
+
+    const rejected = await reviewLivingSoulPattern({ ownerId: "local", expectedRevision: adopted.document.revision, kind: "workSupport", summary: suggestion.summary, action: "reject" });
+    await expect(adoptLivingSoulSuggestion({ ...suggestion, expectedRevision: rejected.document.revision })).rejects.toThrow("memory_duplicate");
+
+    let revision = rejected.document.revision;
+    for (let index = 0; index < 4; index += 1) {
+      const filled = await adoptLivingSoulSuggestion({ ...suggestion, kind: "drift", summary: "Drift sentence number " + index + " for the group.", expectedRevision: revision });
+      revision = filled.document.revision;
+    }
+    await expect(adoptLivingSoulSuggestion({ ...suggestion, kind: "drift", summary: "One drift sentence too many for the group.", expectedRevision: revision }))
+      .rejects.toThrow("memory_group_full");
+    const result = await readLivingSoulForUser("local");
+    expect(result.state === "ready" && result.context.document.learned.drift).toHaveLength(4);
+  });
+
+  it("does not create a Soul for a missing owner", async () => {
+    await expect(adoptLivingSoulSuggestion({ ...suggestion, ownerId: "nobody", expectedRevision: 1 })).rejects.toThrow("memory_changed");
+  });
+});
+
+
+describe("confirmed patterns in the classifier context", () => {
+  it("lists confirmed patterns first in their group and rejects malformed prior confidence", async () => {
+    const initial = await synchronizeLivingSoulDeclaredContextForUser("local");
+    const second = { ...pattern, summary: "Release notes drafting supports a work task." };
+    const seeded = await updateLivingSoulLearnedState({ ownerId: "local", expectedRevision: initial.document.revision,
+      learned: { workSupport: [pattern, second], drift: [], ambiguities: [] }, feedbackAt: pattern.lastObservedAt, feedbackKind: "manual_correction" });
+    const confirmed = await reviewLivingSoulPattern({ ownerId: "local", expectedRevision: seeded.document.revision,
+      kind: "workSupport", summary: second.summary, action: "confirm" });
+    expect(confirmed.promptContext.learnedWorkSupport.map((entry) => entry.summary)).toEqual([second.summary, pattern.summary]);
+    const markdown = renderLivingSoulMarkdown(confirmed.document);
+    expect(parseLivingSoulMarkdown(markdown)).toEqual(confirmed.document);
+    const hash = await livingSoulPatternHash(second.summary);
+    expect(parseLivingSoulMarkdown(markdown.replace('"' + hash + '":"low"', '"' + hash + '":"extreme"'))).toBeNull();
+  });
+});
+

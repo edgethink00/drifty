@@ -117,13 +117,14 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
       const confirmed = Boolean(hash && document.memoryControls?.confirmedHashes?.includes(hash));
       const open = Boolean(expanded[key]);
       const detailId = "memory-detail-" + (hash ?? key).slice(0, 16).replace(/[^a-z0-9]/gi, "");
-      const sourceKey = origin?.source === "user" ? "user" : origin?.source === "correction" ? "correction" : "legacy";
+      const sourceKey = origin?.source === "user" ? "user" : origin?.source === "correction" ? "correction" : origin?.source === "suggestion" ? "suggestion" : "legacy";
       return <article className="memory-row" key={key} aria-label={pattern.summary}>
         <p className="memory-row__summary">{pattern.summary}</p>
         <div className="memory-row__meta">
           <span className={"memory-row__kind memory-row__kind--" + kind}>{kindLabels[kind]}</span>
           <span>{t(sourceKey === "user" ? "settings.ai.memorySourceUser"
-            : sourceKey === "correction" ? "settings.ai.memorySourceCorrection" : "settings.ai.memorySourceLegacy")}</span>
+            : sourceKey === "correction" ? "settings.ai.memorySourceCorrection"
+              : sourceKey === "suggestion" ? "settings.ai.memorySourceSuggestion" : "settings.ai.memorySourceLegacy")}</span>
           {confirmed ? <span className="memory-row__confirmed"><MemoryIcon name="check" size={12} />&nbsp;{t("settings.ai.memoryConfirmedBadge")}</span> : null}
           <span>{t("settings.ai.memoryObserved", { date: formatDate(pattern.lastObservedAt) })}</span>
           <button className="memory-row__toggle" type="button" aria-expanded={open} aria-controls={detailId} onClick={() => toggleDetail(key)}>
@@ -164,17 +165,17 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
           </> : <>
             <p className="memory-detail__title">{t("settings.ai.memoryEvidence")}</p>
             <p className="memory-detail__lead">{t(sourceKey === "user" ? "settings.ai.memoryUserEvidence"
-              : sourceKey === "correction" ? "settings.ai.memoryCorrectionEvidence" : "settings.ai.memoryLegacyEvidence")}</p>
+              : sourceKey === "correction" ? "settings.ai.memoryCorrectionEvidence"
+                : sourceKey === "suggestion" ? "settings.ai.memorySuggestionEvidence" : "settings.ai.memoryLegacyEvidence")}</p>
             <dl className="memory-facts">
               {origin ? <><dt>{t("settings.ai.memoryFactRecorded")}</dt><dd>{formatDate(origin.recordedAt)}</dd></> : null}
               {origin?.feedbackKind ? <><dt>{t("settings.ai.memoryFactFeedback")}</dt>
                 <dd>{t(origin.feedbackKind === "not_drift" ? "settings.ai.memoryFeedbackNotDrift" : "settings.ai.memoryFeedbackManual")}</dd></> : null}
-              {origin?.activity ? <><dt>{t("settings.ai.memoryFactActivity")}</dt><dd>{origin.activity}</dd></> : null}
-              {origin?.productivity ? <><dt>{t("settings.ai.memoryFactProductivity")}</dt><dd>{localizedProductivityLabel(origin.productivity, t)}</dd></> : null}
-              <dt>{t("settings.ai.memoryFactCount")}</dt><dd>{pattern.evidenceCount}</dd>
+              {origin?.activity ? <><dt>{t(sourceKey === "suggestion" ? "settings.ai.memoryFactPlace" : "settings.ai.memoryFactActivity")}</dt><dd>{origin.activity}</dd></> : null}
+              {origin?.productivity ? <><dt>{t(sourceKey === "suggestion" ? "settings.ai.memoryFactFiledAs" : "settings.ai.memoryFactProductivity")}</dt><dd>{localizedProductivityLabel(origin.productivity, t)}</dd></> : null}
+              <dt>{t(sourceKey === "suggestion" ? "settings.ai.memoryFactDays" : "settings.ai.memoryFactCount")}</dt><dd>{pattern.evidenceCount}</dd>
             </dl>
             <p className="memory-detail__note">{t("settings.ai.memoryEvidenceLimit")}</p>
-            {confirmed ? <p className="memory-detail__note">{t("settings.ai.memoryConfirmedHint")}</p> : null}
             <div className="memory-detail__actions">
               <button className="settings-btn" type="button" disabled={busy} onClick={() => { setEditing(key); setDraft(pattern.summary); setForgetting(null); setNotice(null); }}>{t("common.edit")}</button>
               <button className="settings-btn" type="button" disabled={busy} onClick={() => { setForgetting(key); setEditing(null); setNotice(null); }}>{t("settings.ai.memoryForget")}</button>
@@ -230,4 +231,3 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
     </div> : null}
   </div>;
 }
-

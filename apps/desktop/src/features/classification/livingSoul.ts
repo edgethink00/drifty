@@ -105,7 +105,7 @@ export type LivingSoulDocument = {
 
 export type LivingSoulPatternKind = keyof LivingSoulLearnedState;
 export type LivingSoulPatternOrigin = {
-  readonly source: "correction" | "user";
+  readonly source: "correction" | "user" | "suggestion";
   readonly recordedAt: string;
   readonly feedbackKind?: "not_drift" | "manual_correction";
   readonly activity?: string;
@@ -123,7 +123,12 @@ export type LivingSoulMemoryControls = {
   readonly origins: Readonly<Record<string, LivingSoulPatternOrigin>>;
   readonly confirmedHashes?: readonly string[];
   readonly rejectedPatterns?: Readonly<Record<string, LivingSoulRejectedPattern>>;
+  /** Confidence a pattern had before the user confirmed it; restored when the confirmation is removed. */
+  readonly confirmedPriorConfidence?: Readonly<Record<string, LivingSoulPatternConfidenceLevel>>;
 };
+type LivingSoulPatternConfidenceLevel = LivingSoulPattern["confidence"];
+/** A user confirmation is the strongest signal Memory has, so a confirmed pattern is sent as high confidence. */
+const CONFIRMED_CONFIDENCE: LivingSoulPatternConfidenceLevel = "high";
 
 export async function livingSoulPatternHash(summary: string): Promise<string> {
   const bytes = new TextEncoder().encode(normalizedPatternText(summary));
@@ -337,6 +342,7 @@ export async function reviewLivingSoulPattern(input: {
     const dismissed = new Set(controls?.dismissedHashes ?? []);
     const origins = { ...controls?.origins };
     const rejected = { ...controls?.rejectedPatterns };
+    const priors: Record<string, LivingSoulPatternConfidenceLevel> = { ...controls?.confirmedPriorConfidence };
     const learned = { workSupport: [...current.learned.workSupport], drift: [...current.learned.drift], ambiguities: [...current.learned.ambiguities] };
     const patterns = learned[input.kind];
     const index = patterns.findIndex((p) => p.summary === input.summary);
@@ -348,19 +354,33 @@ export async function reviewLivingSoulPattern(input: {
         if (Object.values(learned).flat().some((p) => normalizedPatternText(p.summary) === normalizedPatternText(input.summary))) throw new Error("memory_duplicate");
         const limit = { workSupport: 6, drift: 4, ambiguities: 4 }[input.kind];
         if (patterns.length >= limit) throw new Error("memory_restore_limit");
-        patterns.push(saved.pattern);
         dismissed.delete(hash);
         if (saved.origin) origins[hash] = saved.origin;
-        if (saved.confirmed) confirmed.add(hash);
+        if (saved.confirmed) {
+          // The stored copy keeps its pre-confirmation confidence; re-apply the confirmation.
+          confirmed.add(hash);
+          priors[hash] = saved.pattern.confidence;
+          patterns.push({ ...saved.pattern, confidence: CONFIRMED_CONFIDENCE });
+        } else {
+          patterns.push(saved.pattern);
+        }
       }
       delete rejected[hash];
     } else {
       if (index < 0) throw new Error("memory_changed");
-      if (input.action === "confirm") confirmed.add(hash);
-      else if (input.action === "unconfirm") confirmed.delete(hash);
-      else {
+      if (input.action === "confirm") {
+        if (!confirmed.has(hash)) priors[hash] = patterns[index].confidence;
+        confirmed.add(hash);
+        patterns[index] = { ...patterns[index], confidence: CONFIRMED_CONFIDENCE };
+      } else if (input.action === "unconfirm") {
+        if (confirmed.has(hash)) patterns[index] = { ...patterns[index], confidence: priors[hash] ?? "low" };
+        confirmed.delete(hash);
+        delete priors[hash];
+      } else {
         if (Object.keys(rejected).length >= 14 && !rejected[hash]) throw new Error("memory_limit");
-        rejected[hash] = { kind: input.kind, pattern: patterns[index], rejectedAt: now,
+        const stashed = confirmed.has(hash) ? { ...patterns[index], confidence: priors[hash] ?? "low" } : patterns[index];
+        delete priors[hash];
+        rejected[hash] = { kind: input.kind, pattern: stashed, rejectedAt: now,
           ...(origins[hash] ? { origin: origins[hash] } : {}), ...(confirmed.has(hash) ? { confirmed: true } : {}) };
         for (const kind of ["workSupport", "drift", "ambiguities"] as const) {
           learned[kind] = learned[kind].filter((p) => normalizedPatternText(p.summary) !== normalizedPatternText(input.summary));
@@ -372,7 +392,61 @@ export async function reviewLivingSoulPattern(input: {
     }
     if (dismissed.size > 64) throw new Error("memory_limit");
     const next: LivingSoulDocument = { ...current, revision: current.revision + 1, updatedAt: now, learned,
-      memoryControls: { dismissedHashes: [...dismissed], origins, confirmedHashes: [...confirmed], rejectedPatterns: rejected } };
+      memoryControls: { dismissedHashes: [...dismissed], origins, confirmedHashes: [...confirmed], rejectedPatterns: rejected,
+        ...(Object.keys(priors).length > 0 ? { confirmedPriorConfidence: priors } : {}) } };
+    let output: string;
+    try { output = renderLivingSoulMarkdown(next); } catch { throw new Error("memory_limit"); }
+    await writeSoulMarkdown(scope, output);
+    return resolvedContext(input.ownerId, scope, next);
+  });
+}
+
+/**
+ * Adds a confirmed memory that the user accepted from a suggestion. The sentence
+ * is pinned like any confirmed memory; its only evidence is the number of days
+ * the activity recurred. Refuses blocked wording, duplicates and full groups
+ * instead of evicting another memory.
+ */
+export async function adoptLivingSoulSuggestion(input: {
+  readonly ownerId: string;
+  readonly expectedRevision: number;
+  readonly kind: LivingSoulPatternKind;
+  readonly summary: string;
+  readonly evidenceDays: number;
+  readonly observedAt: string;
+  readonly activity: string;
+  /** How the place was filed. Omitted for a place filed both ways, which has no single label. */
+  readonly productivity?: "focus" | "neutral" | "drift";
+}): Promise<LivingSoulResolvedContext> {
+  const scope = await livingSoulScopeForOwner(input.ownerId);
+  return queueSoulWrite(input.ownerId, async () => {
+    const markdown = await readSoulMarkdown(scope);
+    const current = markdown ? parseLivingSoulMarkdown(markdown) : null;
+    if (!current || current.revision !== input.expectedRevision) throw new Error("memory_changed");
+    const pattern = normalizeLivingSoulPattern({
+      summary: input.summary, confidence: CONFIRMED_CONFIDENCE, evidenceCount: input.evidenceDays, lastObservedAt: input.observedAt,
+    });
+    if (!pattern) throw new Error("memory_invalid");
+    const hash = await livingSoulPatternHash(pattern.summary);
+    const controls = current.memoryControls;
+    const dismissed = new Set(controls?.dismissedHashes ?? []);
+    const confirmed = new Set(controls?.confirmedHashes ?? []);
+    const origins = { ...controls?.origins };
+    if (dismissed.has(hash)
+      || Object.values(current.learned).flat().some((p) => normalizedPatternText(p.summary) === normalizedPatternText(pattern.summary))) {
+      throw new Error("memory_duplicate");
+    }
+    const limit = { workSupport: MAX_WORK_SUPPORT_PATTERNS, drift: MAX_DRIFT_PATTERNS, ambiguities: MAX_AMBIGUITY_PATTERNS }[input.kind];
+    if (current.learned[input.kind].length >= limit) throw new Error("memory_group_full");
+    const now = new Date().toISOString();
+    origins[hash] = { source: "suggestion", recordedAt: now,
+      activity: cleanText(redactRawIdentifiers(input.activity), 120) ?? "Unknown",
+      ...(input.productivity ? { productivity: input.productivity } : {}) };
+    confirmed.add(hash);
+    const learned = { ...current.learned, [input.kind]: [...current.learned[input.kind], pattern] };
+    const next: LivingSoulDocument = { ...current, revision: current.revision + 1, updatedAt: now, learned,
+      memoryControls: { ...controls, dismissedHashes: [...dismissed], origins, confirmedHashes: [...confirmed],
+        confirmedPriorConfidence: { ...controls?.confirmedPriorConfidence, [hash]: "low" } } };
     let output: string;
     try { output = renderLivingSoulMarkdown(next); } catch { throw new Error("memory_limit"); }
     await writeSoulMarkdown(scope, output);
@@ -487,7 +561,7 @@ export function parseLivingSoulMarkdown(
 }
 
 function parseMemoryOrigin(origin: LivingSoulPatternOrigin): LivingSoulPatternOrigin | null {
-  if (!origin || (origin.source !== "user" && origin.source !== "correction") || !validIsoTimestamp(origin.recordedAt)
+  if (!origin || (origin.source !== "user" && origin.source !== "correction" && origin.source !== "suggestion") || !validIsoTimestamp(origin.recordedAt)
     || (origin.feedbackKind !== undefined && origin.feedbackKind !== "not_drift" && origin.feedbackKind !== "manual_correction")
     || (origin.activity !== undefined && (typeof origin.activity !== "string" || origin.activity.length > 120))
     || (origin.productivity !== undefined && !["focus", "neutral", "drift"].includes(origin.productivity))) return null;
@@ -528,9 +602,20 @@ function parseMemoryControls(text: string): LivingSoulMemoryControls | null {
           ...(origin ? { origin } : {}), ...(entry.confirmed ? { confirmed: true } : {}) };
       }
     }
+    let priors: Record<string, LivingSoulPatternConfidenceLevel> | undefined;
+    if (value.confirmedPriorConfidence !== undefined) {
+      const raw = value.confirmedPriorConfidence;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length > 14) return null;
+      priors = {};
+      for (const [hash, level] of Object.entries(raw)) {
+        if (!SHA_256.test(hash) || !value.confirmedHashes?.includes(hash) || !["low", "medium", "high"].includes(level)) return null;
+        priors[hash] = level;
+      }
+    }
     return { dismissedHashes: [...new Set(value.dismissedHashes)], origins,
       ...(value.confirmedHashes !== undefined ? { confirmedHashes: [...new Set(value.confirmedHashes)] } : {}),
-      ...(value.rejectedPatterns !== undefined ? { rejectedPatterns: rejected } : {}) };
+      ...(value.rejectedPatterns !== undefined ? { rejectedPatterns: rejected } : {}),
+      ...(priors ? { confirmedPriorConfidence: priors } : {}) };
   } catch { return null; }
 }
 
@@ -538,9 +623,9 @@ export function livingSoulPromptContext(document: LivingSoulDocument): LivingSou
   return {
     revision: document.revision,
     declared: document.declared,
-    learnedWorkSupport: document.learned.workSupport.map(promptPattern),
-    learnedDrift: document.learned.drift.map(promptPattern),
-    ambiguities: document.learned.ambiguities.map(promptPattern),
+    learnedWorkSupport: byConfidence(document.learned.workSupport).map(promptPattern),
+    learnedDrift: byConfidence(document.learned.drift).map(promptPattern),
+    ambiguities: byConfidence(document.learned.ambiguities).map(promptPattern),
   };
 }
 
@@ -783,6 +868,13 @@ function parseFrontmatter(markdown: string): Record<string, string> | null {
     metadata[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
   }
   return metadata;
+}
+
+const CONFIDENCE_RANK: Record<LivingSoulPatternConfidenceLevel, number> = { high: 0, medium: 1, low: 2 };
+
+/** Confirmed (high) patterns lead their group; ties keep the stored order. */
+function byConfidence(patterns: readonly LivingSoulPattern[]): LivingSoulPattern[] {
+  return [...patterns].sort((a, b) => CONFIDENCE_RANK[a.confidence] - CONFIDENCE_RANK[b.confidence]);
 }
 
 function promptPattern(pattern: LivingSoulPattern): LivingSoulPromptPattern {
