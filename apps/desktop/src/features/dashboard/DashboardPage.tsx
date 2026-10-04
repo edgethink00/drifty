@@ -340,7 +340,7 @@ export function DashboardPage({
       <DashboardDemoReplayBanner replay={dashboardReplay} />
 
       {onDeviceTimelineFilterChange && deviceLabelById && deviceLabelById.size > 0 ? (
-        <div className="dashboard-device-filter" role="group" aria-label={t("dashboard.deviceFilter")}>
+        <div className="dashboard-device-filter" role="group" aria-label={t("dashboard.deviceFilter")} title={deviceTimelineFilter === "all" ? t("dashboard.deviceElapsedTime") : undefined}>
           <button
             type="button"
             className={`dashboard-device-filter__option${deviceTimelineFilter === "all" ? " dashboard-device-filter__option--active" : ""}`}

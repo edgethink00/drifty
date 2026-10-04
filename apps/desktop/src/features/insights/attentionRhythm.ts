@@ -1,4 +1,4 @@
-import { classifyActivity } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, activityTimeBounds, classifyActivity } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { localDateKey, weekdayOrderIndex } from "../../lib/formatting";
 
@@ -110,8 +110,7 @@ function nextHourBoundaryMs(valueMs: number): number {
 }
 
 function segmentHourOverlaps(segment: ActivitySegment, visibleThrough: string | null): HourOverlap[] {
-  const segmentStartMs = new Date(segment.startedAt).getTime();
-  const segmentEndMs = new Date(segment.endedAt).getTime();
+  const { start: segmentStartMs, end: segmentEndMs } = activityTimeBounds(segment);
   if (!Number.isFinite(segmentStartMs) || !Number.isFinite(segmentEndMs) || segmentEndMs <= segmentStartMs) return [];
 
   const overlaps: HourOverlap[] = [];
@@ -122,7 +121,7 @@ function segmentHourOverlaps(segment: ActivitySegment, visibleThrough: string | 
     if (visibleThrough !== null && overlapDay > visibleThrough) break;
 
     const overlapEndMs = Math.min(segmentEndMs, nextHourBoundaryMs(cursorMs));
-    const seconds = Math.max(0, Math.round((overlapEndMs - cursorMs) / 1000));
+    const seconds = activitySecondsWithinInterval(segment, cursorMs, overlapEndMs);
     if (seconds > 0) {
       overlaps.push({
         weekdayIndex: weekdayOrderIndex(started),
@@ -182,7 +181,7 @@ export function buildAttentionRhythm(
   const totals = buildRhythmTotals();
   const cutoffDay = visibleThroughDay(visibility);
 
-  for (const segment of segments) {
+  for (const segment of aggregateDeviceElapsedTime(segments)) {
     const { category, productivity } = classifyActivity(segment, options);
     if (category === "unknown") continue;
     const grid = totals[productivity];

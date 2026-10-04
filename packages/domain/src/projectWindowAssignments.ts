@@ -1,3 +1,4 @@
+import { clipDeviceElapsedTimeSegment } from "./deviceElapsedTime";
 import { isFailedForegroundCaptureSegment, type ActivitySegment } from "./activity";
 import type {
   ProjectAssignmentRecord,
@@ -86,10 +87,6 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
     for (const overlap of assignment.segmentOverlaps) {
       const source = sourceById.get(overlap.segmentId);
       if (!source || !(overlap.durationSeconds > 0)) continue;
-      coveredSecondsBySourceId.set(
-        source.id,
-        (coveredSecondsBySourceId.get(source.id) ?? 0) + overlap.durationSeconds,
-      );
       const projectId = manualBySegmentId.has(source.id)
         ? manualBySegmentId.get(source.id) ?? null
         : input.projectIdForWindow(assignment);
@@ -102,13 +99,15 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
         intervals.push({ startMs: boundsStartMs, endMs: boundsEndMs });
         coveredIntervalsBySourceId.set(source.id, intervals);
       }
-      projectedSegments.push({
+      const slice = clipDeviceElapsedTimeSegment({
         ...source,
         id: sliceId,
         startedAt: bounds.startedAt,
         endedAt: bounds.endedAt,
         durationSeconds: overlap.durationSeconds,
       });
+      coveredSecondsBySourceId.set(source.id, (coveredSecondsBySourceId.get(source.id) ?? 0) + slice.durationSeconds);
+      projectedSegments.push(slice);
       if (projectId) projectBySegmentId.set(sliceId, projectId);
     }
   }
@@ -133,13 +132,13 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
     }
     for (const [index, gap] of weightedGaps.entries()) {
       const sliceId = `project-window:${input.scope}:legacy:${source.id}:${index}`;
-      projectedSegments.push({
+      projectedSegments.push(clipDeviceElapsedTimeSegment({
         ...source,
         id: sliceId,
         startedAt: new Date(gap.startMs).toISOString(),
         endedAt: new Date(gap.endMs).toISOString(),
         durationSeconds: gap.durationSeconds,
-      });
+      }));
       if (projectId) projectBySegmentId.set(sliceId, projectId);
     }
   }

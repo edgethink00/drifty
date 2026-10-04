@@ -681,6 +681,49 @@ describe("AccountSettingsSection organization seat", () => {
     openUrlMock.mockResolvedValue(undefined);
   });
 
+  it("keeps eligible device sync off until the user explicitly opts in", () => {
+    const onDeviceSyncEnabledChange = vi.fn();
+    render(<AccountSettingsSection {...accountProps({
+      deviceSyncCanEnable: true, onDeviceSyncEnabledChange,
+    })} />);
+
+    const toggle = screen.getByRole("switch", { name: "Toggle device sync" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(onDeviceSyncEnabledChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/Projects, classification rules and other settings/)).toBeTruthy();
+    expect(screen.getByText(/every 3 minutes while Drifty is running/)).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(onDeviceSyncEnabledChange).toHaveBeenCalledWith(true);
+  });
+
+  it("blocks new opt-in without access while keeping owner cloud deletion available", () => {
+    const onDeviceSyncEnabledChange = vi.fn();
+    const onPurgeDeviceSyncData = vi.fn();
+    render(<AccountSettingsSection {...accountProps({
+      deviceSyncCanEnable: false, onDeviceSyncEnabledChange, onPurgeDeviceSyncData,
+      billingEntitlementStatus: "locked", billingEntitlementLockedReason: "billing_missing",
+    })} />);
+
+    const toggle = screen.getByRole("switch", { name: "Toggle device sync" });
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(toggle);
+    expect(onDeviceSyncEnabledChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Delete cloud copy$/i }));
+    expect(onPurgeDeviceSyncData).toHaveBeenCalledOnce();
+  });
+
+  it("lets an opted-in user switch sync off after access is lost", () => {
+    const onDeviceSyncEnabledChange = vi.fn();
+    render(<AccountSettingsSection {...accountProps({
+      deviceSyncEnabled: true, deviceSyncCanEnable: false, onDeviceSyncEnabledChange,
+    })} />);
+
+    const toggle = screen.getByRole("switch", { name: "Toggle device sync" });
+    expect((toggle as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(toggle);
+    expect(onDeviceSyncEnabledChange).toHaveBeenCalledWith(false);
+  });
+
   it.each([0, 1])("reports upload work from the outbox rather than sequence gaps (pending %s)", (pendingPushCount) => {
     render(<AccountSettingsSection {...accountProps({
       deviceSyncEnabled: true,

@@ -1,3 +1,4 @@
+import { aggregateDeviceElapsedTime, activitySecondsWithinInterval } from "@drifty/domain";
 import { classifyActivityDetailed, logicalDayStartMs, logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { getInsightSurfaceIdentity } from "../insights/insightData";
@@ -202,6 +203,7 @@ export function applyFocusDriftReplayReveal(input: FocusDriftReplayRevealInput):
 }
 
 export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
+  segments = aggregateDeviceElapsedTime(segments);
   const dayStartMs = logicalDayStartMs(day, startOfDayMinutes);
   const buckets = Array.from({ length: FOCUS_DRIFT_BUCKET_COUNT }, (_, index) => ({
     focusSeconds: 0,
@@ -231,13 +233,11 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     const productivity = classification.productivity;
     const isUnclassified = classification.category === "unknown";
     const sourceIdentity = productivity === "focus" || productivity === "drift" ? getInsightSurfaceIdentity(segment) : null;
-    const segmentStartMs = new Date(segment.startedAt).getTime();
-    const segmentEndMs = new Date(segment.endedAt).getTime();
 
     for (const bucket of buckets) {
       const bucketStartMs = dayStartMs + bucket.bucketStartMinute * 60 * 1000;
       const bucketEndMs = bucketStartMs + FOCUS_DRIFT_BUCKET_MINUTES * 60 * 1000;
-      const overlapSeconds = Math.max(0, Math.round((Math.min(segmentEndMs, bucketEndMs) - Math.max(segmentStartMs, bucketStartMs)) / 1000));
+      const overlapSeconds = activitySecondsWithinInterval(segment, bucketStartMs, bucketEndMs);
       if (overlapSeconds <= 0) continue;
 
       bucket.trackedSeconds += overlapSeconds;

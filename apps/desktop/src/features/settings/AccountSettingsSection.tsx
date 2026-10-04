@@ -58,6 +58,7 @@ export type AccountSettingsSectionProps = {
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
   readonly deviceSyncEnabled?: boolean;
+  readonly deviceSyncCanEnable?: boolean;
   readonly deviceSyncGateActive?: boolean;
   readonly deviceSyncStatus?: DeviceSyncStatus;
   readonly deviceSyncPurging?: boolean;
@@ -106,6 +107,7 @@ export function AccountSettingsSection({
   publicProfileStatus,
   userEmail,
   deviceSyncEnabled = false,
+  deviceSyncCanEnable = false,
   deviceSyncGateActive = false,
   deviceSyncStatus,
   deviceSyncPurging = false,
@@ -531,6 +533,8 @@ export function AccountSettingsSection({
             <div>
               <div className="lbl">{t("settings.account.syncMacs")}</div>
               <div className="desc">{t("settings.account.syncDescription")}</div>
+              <p className="desc">{t("settings.account.syncScope")}</p>
+              <p className="desc">{t("settings.account.syncTiming")}</p>
               {!deviceSyncGateActive && deviceSyncEnabled ? (
                 <p className="capture-recency capture-recency--error" role="status">
                   {t("settings.account.syncPaused")}
@@ -543,6 +547,7 @@ export function AccountSettingsSection({
             <div className="ctrl">
               <Toggle
                 checked={deviceSyncEnabled}
+                disabled={!deviceSyncEnabled && !deviceSyncCanEnable}
                 onChange={onDeviceSyncEnabledChange}
                 ariaLabel={t("settings.account.toggleSync")}
               />

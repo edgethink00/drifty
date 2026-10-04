@@ -14,6 +14,7 @@ import type {
   SiteDuration,
 } from "./activity";
 import { isExcludedSegment, isFailedForegroundCaptureSegment } from "./activity";
+import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, activityTimeBounds } from "./deviceElapsedTime";
 import { canonicalizeClassificationRuleSiteUrl } from "./classificationRuleUrl";
 import {
   DRIFTY_PRODUCTIVITY_RUBRIC_V1,
@@ -168,10 +169,12 @@ export interface ProductivityPersonaReport {
 }
 
 export function totalDurationSeconds(segments: ActivitySegment[]): number {
+  segments = aggregateDeviceElapsedTime(segments);
   return segments.reduce((total, segment) => total + segment.durationSeconds, 0);
 }
 
 export function groupSegmentsByApp(segments: ActivitySegment[]): AppDuration[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const totals = new Map<string, AppDuration>();
 
   for (const segment of segments) {
@@ -196,6 +199,7 @@ export function buildAppUsageSummaries(
   segments: ActivitySegment[],
   options: { limit?: number; groupBy?: "app" | "activity" } = {},
 ): AppUsageSummary[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const groupBy = options.groupBy ?? "activity";
   let unavailableCaptureSeconds = 0;
   const totals = new Map<
@@ -258,8 +262,9 @@ export function buildAppUsageSummaries(
       existing.lastEndedAt = segment.endedAt;
     }
 
-    let cursor = new Date(segment.startedAt).getTime();
-    const end = new Date(segment.endedAt).getTime();
+    const bounds = activityTimeBounds(segment);
+    let cursor = bounds.start;
+    const end = bounds.end;
 
     while (cursor < end) {
       const current = new Date(cursor);
@@ -300,6 +305,7 @@ export function buildAppUsageSummaries(
 }
 
 export function buildHourlyBuckets(segments: ActivitySegment[]): HourlyBucket[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const buckets = new Map<number, number>();
 
   for (const segment of segments) {
@@ -314,6 +320,7 @@ export function buildHourlyBuckets(segments: ActivitySegment[]): HourlyBucket[] 
 }
 
 export function buildHourlySummary(segments: ActivitySegment[]): HourBucket[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const buckets = new Map<string, HourBucket>();
 
   for (const segment of segments) {
@@ -364,6 +371,7 @@ function normalizedSiteTitle(segment: ActivitySegment): string | null {
 }
 
 export function topSites(segments: ActivitySegment[], limit = 5): SiteDuration[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const totals = new Map<string, SiteDuration>();
 
   for (const segment of segments) {
@@ -469,10 +477,12 @@ function forEachFlowBucketContribution(
   visit: (contribution: FlowBucketContribution) => void,
 ): void {
   const intervalMs = intervalMinutes * 60 * 1000;
+  segments = aggregateDeviceElapsedTime(segments);
 
   for (const segment of segments) {
-    const start = new Date(segment.startedAt);
-    const end = new Date(segment.endedAt);
+    const bounds = activityTimeBounds(segment);
+    const start = new Date(bounds.start);
+    const end = new Date(bounds.end);
     let cursor = new Date(start);
 
     while (cursor < end) {
@@ -490,10 +500,7 @@ function forEachFlowBucketContribution(
       const minuteOfDay = hour * 60 + bucketMinute;
       const quarter = Math.floor(bucketMinute / 15);
       const colorKey = segment.siteDomain || segment.appName;
-      const overlapSeconds = Math.max(
-        0,
-        Math.round((Math.min(end.getTime(), blockEnd.getTime()) - Math.max(start.getTime(), blockStart.getTime())) / 1000),
-      );
+      const overlapSeconds = activitySecondsWithinInterval(segment, blockStart.getTime(), blockEnd.getTime());
 
       if (overlapSeconds <= 0) {
         cursor = blockEnd;
@@ -602,6 +609,7 @@ export function buildFlowBlocksForIntervals<TInterval extends FlowIntervalMinute
   projectIdBySegment?: ReadonlyMap<string, string>,
   projectSegments?: readonly ActivitySegment[],
 ): ReadonlyMap<TInterval, FlowBlock[]> {
+  segments = aggregateDeviceElapsedTime(segments);
   const blocksByInterval = new Map<TInterval, FlowBlock[]>();
   if (intervalMinutes.length === 0) return blocksByInterval;
 
@@ -788,6 +796,7 @@ export function selectFlowVisibleSegmentIds(
   options?: ClassificationOptions,
   startOfDayMinutes = 0,
 ): Set<string> {
+  segments = aggregateDeviceElapsedTime(segments);
   void options;
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const candidates = new Map<string, FlowVisibleCandidate>();
@@ -820,18 +829,20 @@ export function selectFlowVisibleSegmentIds(
 }
 
 export function buildDailyTotals(segments: ActivitySegment[], startDay: string, endDay: string, startOfDayMinutes = 0): DailyTotal[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const totals = new Map<string, number>();
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
 
   for (const segment of segments) {
-    let cursor = new Date(segment.startedAt).getTime();
-    const end = new Date(segment.endedAt).getTime();
+    const bounds = activityTimeBounds(segment);
+    let cursor = bounds.start;
+    const end = bounds.end;
 
     while (cursor < end) {
       const current = new Date(cursor);
       const dayKey = logicalDayIsoDateForDate(current, boundaryMinutes);
       const overlapEnd = Math.min(end, logicalDayEndExclusiveMs(dayKey, boundaryMinutes));
-      const overlapSeconds = Math.max(0, Math.round((overlapEnd - cursor) / 1000));
+      const overlapSeconds = activitySecondsWithinInterval(segment, cursor, overlapEnd);
 
       totals.set(dayKey, (totals.get(dayKey) ?? 0) + overlapSeconds);
       cursor = overlapEnd;
@@ -850,6 +861,7 @@ export function buildDailyTotals(segments: ActivitySegment[], startDay: string, 
 }
 
 export function buildRollingFocusSeconds(segments: ActivitySegment[], startDay: string, endDay: string, options?: ClassificationOptions, startOfDayMinutes = 0): number {
+  segments = aggregateDeviceElapsedTime(segments);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const windowStart = logicalDayStartMs(startDay, boundaryMinutes);
   const windowEnd = logicalDayEndExclusiveMs(endDay, boundaryMinutes);
@@ -863,8 +875,7 @@ export function buildRollingFocusSeconds(segments: ActivitySegment[], startDay: 
     const { productivity } = classifyActivity(segment, options);
     if (productivity !== "focus") continue;
 
-    const segmentStart = new Date(segment.startedAt).getTime();
-    const segmentEnd = new Date(segment.endedAt).getTime();
+    const { start: segmentStart, end: segmentEnd } = activityTimeBounds(segment);
 
     // A newly captured context is stored as a point segment until a later
     // matching sample extends it, while durationSeconds already contains the
@@ -882,7 +893,7 @@ export function buildRollingFocusSeconds(segments: ActivitySegment[], startDay: 
 
     if (clippedEnd <= clippedStart) continue;
 
-    totalSeconds += Math.round((clippedEnd - clippedStart) / 1000);
+    totalSeconds += activitySecondsWithinInterval(segment, clippedStart, clippedEnd);
   }
 
   return totalSeconds;
@@ -1149,6 +1160,7 @@ export function computePreservedFocusStrikeSeconds(
 }
 
 export function buildCategoryDurations(segments: ActivitySegment[], options?: ClassificationOptions): CategoryDuration[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const totals = CATEGORY_ORDER.map((category) => ({
     category,
     totalSeconds: 0,
@@ -1179,6 +1191,7 @@ export function buildCategoryDurations(segments: ActivitySegment[], options?: Cl
  * for timeline coloring, not this number.
  */
 export function buildProductivityDurations(segments: ActivitySegment[], options?: ClassificationOptions): ProductivityDuration[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const totals = PRODUCTIVITY_ORDER.map((productivity) => ({
     productivity,
     totalSeconds: 0,
@@ -1206,6 +1219,7 @@ export function buildProductivityDurations(segments: ActivitySegment[], options?
 }
 
 export function buildEffectiveProductivityDurations(segments: ActivitySegment[], options?: ClassificationOptions): ProductivityDuration[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const totals = PRODUCTIVITY_ORDER.map((productivity) => ({
     productivity,
     totalSeconds: 0,
@@ -1320,6 +1334,7 @@ const PRODUCTIVITY_PERSONAS: Record<ProductivityPersonaId, { id: ProductivityPer
 };
 
 export function buildProductivityPersona(segments: ActivitySegment[], options?: ClassificationOptions): ProductivityPersonaReport {
+  segments = aggregateDeviceElapsedTime(segments);
   const orderedSegments = segments.slice().sort((left, right) => {
     const startedAtOrder = left.startedAt.localeCompare(right.startedAt);
     if (startedAtOrder !== 0) return startedAtOrder;
@@ -1366,8 +1381,9 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
 
     surfaceTotals.set(surfaceKey, (surfaceTotals.get(surfaceKey) ?? 0) + durationSeconds);
 
-    let cursor = new Date(segment.startedAt).getTime();
-    const end = new Date(segment.endedAt).getTime();
+    const bounds = activityTimeBounds(segment);
+    let cursor = bounds.start;
+    const end = bounds.end;
     while (cursor < end) {
       const current = new Date(cursor);
       const dayKey = logicalDayIsoDateForDate(current);
@@ -1378,7 +1394,7 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
       const overlapStart = Math.max(cursor, nightStart);
       const overlapEnd = Math.min(end, nightEnd);
       if (overlapEnd > overlapStart) {
-        nightSeconds += Math.round((overlapEnd - overlapStart) / 1000);
+        nightSeconds += activitySecondsWithinInterval(segment, overlapStart, overlapEnd);
       }
       cursor = Math.min(end, logicalDayEndExclusiveMs(dayKey));
     }
@@ -1939,7 +1955,7 @@ function contextWindowStats(
 function clippedOverlapSeconds(item: ClassifiedSegment, windowStartMs: number, windowEndMs: number): number {
   const overlapStartMs = Math.max(item.startMs, windowStartMs);
   const overlapEndMs = Math.min(item.endMs, windowEndMs);
-  return overlapEndMs > overlapStartMs ? Math.round((overlapEndMs - overlapStartMs) / 1000) : 0;
+  return activitySecondsWithinInterval(item.segment, overlapStartMs, overlapEndMs);
 }
 
 function contextualProductivity(

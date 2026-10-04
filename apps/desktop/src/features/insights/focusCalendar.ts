@@ -1,5 +1,5 @@
 import {
-  classifyActivity, logicalDayEndExclusiveMs, logicalDayIsoDateForDate,
+  aggregateDeviceElapsedTime, activitySecondsWithinInterval, activityTimeBounds, classifyActivity, logicalDayEndExclusiveMs, logicalDayIsoDateForDate,
   logicalDayStartMs, shiftIsoDate,
   type ActivitySegment, type ClassificationOptions,
 } from "@drifty/domain";
@@ -59,9 +59,8 @@ export function buildFocusCalendar(
   const totals = new Map<string, { trackedSeconds: number; focusSeconds: number }>();
   const rangeStart = logicalDayStartMs(startDay, startOfDayMinutes);
   const rangeEnd = logicalDayEndExclusiveMs(endDay, startOfDayMinutes);
-  for (const segment of segments) {
-    const start = new Date(segment.startedAt).getTime();
-    const end = new Date(segment.endedAt).getTime();
+  for (const segment of aggregateDeviceElapsedTime(segments)) {
+    const { start, end } = activityTimeBounds(segment);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
     const focus = classifyActivity(segment, options).productivity === "focus";
     const add = (day: string, seconds: number) => {
@@ -82,7 +81,7 @@ export function buildFocusCalendar(
     while (cursor < clippedEnd) {
       const day = logicalDayIsoDateForDate(new Date(cursor), startOfDayMinutes);
       const next = Math.min(clippedEnd, logicalDayEndExclusiveMs(day, startOfDayMinutes));
-      add(day, (next - cursor) / 1000);
+      add(day, activitySecondsWithinInterval(segment, cursor, next));
       cursor = next;
     }
   }

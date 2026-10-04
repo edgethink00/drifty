@@ -19,7 +19,6 @@ import type { DemoDashboardReplaySettings } from "./settingsStorage";
 import type { PreReleaseUpdateStatus } from "../updates/useDeveloperPreReleaseUpdateController";
 import { PreReleaseUpdatesSettingsRow } from "./PreReleaseUpdatesSettingsRow";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
-import { DevSettingsDeviceSyncBlock } from "./DevSettingsDeviceSyncBlock";
 import { DevSettingsCompanionPillBlock } from "./DevSettingsCompanionPillBlock";
 import { DevSettingsAxFallbackCard, DevSettingsDebugLogsBlock, DevSettingsInterventionLedgerBlock } from "./DevSettingsDiagnosticsBlock";
 import { readInterventionLedger, summarizeInterventionLedger } from "../companion/interventionLedger";
@@ -93,7 +92,6 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxCaptureEnabled: boolean;
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
-  readonly deviceSyncPreviewEnabled: boolean;
   readonly aiAvailabilityGateDevDisabled: boolean;
   readonly webAccountPreviewEnabled: boolean;
   readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
@@ -127,7 +125,6 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
-  readonly onDeviceSyncPreviewEnabledChange: (enabled: boolean) => void;
   readonly onAiAvailabilityGateDevDisabledChange: (disabled: boolean) => void;
   readonly onWebAccountPreviewEnabledChange: (enabled: boolean) => void;
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
@@ -183,7 +180,6 @@ export function DevSettingsSection({
   forceChromiumAxCaptureEnabled,
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
-  deviceSyncPreviewEnabled,
   aiAvailabilityGateDevDisabled,
   webAccountPreviewEnabled,
   projectClassificationAiReviewEvents,
@@ -217,7 +213,6 @@ export function DevSettingsSection({
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
-  onDeviceSyncPreviewEnabledChange,
   onAiAvailabilityGateDevDisabledChange,
   onWebAccountPreviewEnabledChange,
   onRevertProjectClassificationCorrection,
@@ -747,10 +742,6 @@ export function DevSettingsSection({
               onEnabledChange={onWindowsBlurPreviewEnabledChange}
             />
           ) : null}
-          <DevSettingsDeviceSyncBlock
-            deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
-            onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}
-          />
           <DevSettingsWebAccountBlock
             webAccountPreviewEnabled={webAccountPreviewEnabled}
             onWebAccountPreviewEnabledChange={onWebAccountPreviewEnabledChange}

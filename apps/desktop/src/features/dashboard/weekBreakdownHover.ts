@@ -1,4 +1,4 @@
-import { classifyActivity } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, clipDeviceElapsedTimeSegment, classifyActivity } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { buildCompactActivityBreakdown } from "./compactChartBreakdown";
 import type { CompactClassificationBreakdownRow } from "./HoverCards";
@@ -38,7 +38,7 @@ export function buildWeekBreakdownHoverRows({
   const clippedSegments: ActivitySegment[] = [];
   const keys = typeof key === "string" ? [key] : key;
 
-  for (const segment of segments) {
+  for (const segment of aggregateDeviceElapsedTime(segments)) {
     const classification = classifyActivity(segment, classificationOptions);
     const matches = mode === "productivity"
       ? keys.includes(classification.productivity)
@@ -46,12 +46,12 @@ export function buildWeekBreakdownHoverRows({
     if (!matches) continue;
 
     for (const overlap of splitSegmentIntoDayOverlaps(segment, rangeStartDay, rangeEndDay, startOfDayMinutes)) {
-      clippedSegments.push({
+      clippedSegments.push(clipDeviceElapsedTimeSegment({
         ...segment,
         startedAt: overlap.startedAt.toISOString(),
         endedAt: overlap.endedAt.toISOString(),
         durationSeconds: overlap.durationSeconds,
-      });
+      }));
     }
   }
 

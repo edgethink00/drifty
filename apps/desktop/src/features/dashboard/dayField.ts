@@ -1,4 +1,4 @@
-import { logicalDayStartMs } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, logicalDayStartMs } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 
 export type DayFieldSlot = {
@@ -11,6 +11,7 @@ export type DayFieldSlot = {
 };
 
 export function buildQuarterHourDayField(segments: ActivitySegment[], day: string, startOfDayMinutes = 0): DayFieldSlot[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const slotDur = 15 * 60;
   const dayStartMs = logicalDayStartMs(day, startOfDayMinutes);
   const slots = Array.from({ length: 96 }, (_, index) => {
@@ -18,8 +19,7 @@ export function buildQuarterHourDayField(segments: ActivitySegment[], day: strin
     const slotEndMs = slotStartMs + slotDur * 1000;
     let totalSeconds = 0;
     for (const seg of segments) {
-      const overlapMs = Math.min(new Date(seg.endedAt).getTime(), slotEndMs) - Math.max(new Date(seg.startedAt).getTime(), slotStartMs);
-      if (overlapMs > 0) totalSeconds += Math.round(overlapMs / 1000);
+      totalSeconds += activitySecondsWithinInterval(seg, slotStartMs, slotEndMs);
     }
     const minuteOfDay = (startOfDayMinutes + index * 15) % (24 * 60);
     return { index, minuteOfDay, hour: Math.floor(minuteOfDay / 60), quarter: Math.floor((minuteOfDay % 60) / 15), totalSeconds, ratio: 0 };

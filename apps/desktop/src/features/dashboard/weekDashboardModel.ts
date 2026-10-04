@@ -1,4 +1,4 @@
-import { classifyActivityDetailed } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, classifyActivityDetailed } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { buildIsoDayList, filterSegmentsForRange, getLogicalDayRange } from "../../lib/formatting";
 import { buildWeekCalendarEvents, buildWeekDayRows } from "./weekCalendar";
@@ -91,6 +91,7 @@ function buildWeekDashboardDayModelForSegments(
   classificationOptions: ClassificationOptions | undefined,
   startOfDayMinutes: number,
 ): WeekDashboardDayModel {
+  daySegments = aggregateDeviceElapsedTime(daySegments);
   const classificationBySegmentId = buildClassificationBySegmentId(daySegments, classificationOptions);
   const rows = buildWeekDayRows(daySegments, day, day, classificationOptions, startOfDayMinutes, classificationBySegmentId);
   const calendarEventsByDay = buildWeekCalendarEvents(

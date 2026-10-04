@@ -1,4 +1,4 @@
-import { isFailedForegroundCaptureSegment, type ActivitySegment } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, clipDeviceElapsedTimeSegment, isFailedForegroundCaptureSegment, type ActivitySegment } from "@drifty/domain";
 import { mergeActivitySegments } from "../../lib/activitySegments";
 import { filterSegmentsForRange } from "../../lib/formatting";
 
@@ -20,6 +20,7 @@ export function selectInsightSegments(input: InsightSegmentSelectionInput): Acti
   const selectedDaySegments = filterSegmentsForRange(input.selectedDaySegments, input.range.start, input.range.end);
   // Trends reads history directly, outside the dashboard's filtered arrays, so
   // failed Windows foreground captures have to be dropped here as well.
-  return mergeActivitySegments(mergeActivitySegments(historySegments, supplementalSegments), selectedDaySegments)
-    .filter((segment) => !isFailedForegroundCaptureSegment(segment));
+  return aggregateDeviceElapsedTime(mergeActivitySegments(mergeActivitySegments(historySegments, supplementalSegments), selectedDaySegments)
+    .filter((segment) => !isFailedForegroundCaptureSegment(segment)))
+    .map(segment => clipDeviceElapsedTimeSegment(segment, { start: Date.parse(input.range.start), end: Date.parse(input.range.end) }));
 }

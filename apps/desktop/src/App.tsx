@@ -7,6 +7,9 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeveloperDiagnosticsSettings, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
 import {
+  aggregateDeviceElapsedTime,
+  clipDeviceElapsedTimeSegment,
+  logicalDayStartMs,
   buildAppUsageSummaries,
   buildFlowBlocksForIntervals,
   filterSegmentsByDevice,
@@ -429,7 +432,7 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, persistLeaderboardPreviewEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialLeaderboardPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, persistLeaderboardPreviewEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialLeaderboardPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "./features/leaderboard/leaderboardGraphStyle";
@@ -888,7 +891,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const recoverPendingDeviceSyncAccountResetOnLaunchRef = useRef(deviceSyncAccountResetPending);
   const [deviceSyncPreferenceOwnerId, setDeviceSyncPreferenceOwnerId] = useState<string | null>(null);
   const deviceSyncToggleGenerationRef = useRef(0);
-  const [devDeviceSyncPreviewEnabled, setDevDeviceSyncPreviewEnabled] = useState(resolveInitialDeviceSyncPreviewEnabled);
   const [aiAvailabilityGateDevDisabled, setAiAvailabilityGateDevDisabled] = useState(resolveInitialAiAvailabilityGateDevDisabled);
   const [deviceTimelineFilter, setDeviceTimelineFilter] = useState<DeviceTimelineFilter>("all");
   // Dev-only gate for the web account preview: embed detail-share toggles on the Profile
@@ -2017,17 +2019,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
   // Paid device sync: same entitlement gate as cloud AI, plus the per-device
   // explicit opt-in toggle (raw activity leaves the device only when both hold).
-  // While the feature is in preview it is additionally gated behind a dedicated
-  // Dev-settings toggle (project-classification pattern), so a mistake cannot
-  // upload raw activity for regular users. Turning the toggle (or Dev mode) off
-  // pauses a previously enabled sync rather than just hiding the section.
-  const deviceSyncFeatureVisible = isDevModeActive && devDeviceSyncPreviewEnabled;
-  const deviceSyncActive =
-    deviceSyncFeatureVisible &&
+  // Account settings exposes the default-off Pro feature independently of Dev mode.
+  const deviceSyncFeatureVisible = true;
+  const deviceSyncCanEnable =
     deviceSyncAccountId !== null &&
     deviceSyncPreferenceOwnerId === deviceSyncAccountId &&
-    deviceSyncEnabled && !deviceSyncAccountResetPending
+    !deviceSyncAccountResetPending
     && isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  const deviceSyncActive = deviceSyncFeatureVisible && deviceSyncCanEnable && deviceSyncEnabled;
   const deviceSyncUserScopeKey = user?.id ?? "anonymous";
   // `refresh` is re-created every render (function declaration below); the ref
   // keeps the sync controller's callback pointed at the current one instead of
@@ -4905,10 +4904,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [deviceSyncAccountId, deviceSyncEnabled, deviceSyncPreferenceOwnerId]);
 
   useEffect(() => {
-    window.localStorage.setItem(DEVICE_SYNC_PREVIEW_STORAGE_KEY, devDeviceSyncPreviewEnabled ? "1" : "0");
-  }, [devDeviceSyncPreviewEnabled]);
-
-  useEffect(() => {
     window.localStorage.setItem(AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, aiAvailabilityGateDevDisabled ? "1" : "0");
   }, [aiAvailabilityGateDevDisabled]);
 
@@ -6814,14 +6809,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Device filter choke point: every dashboard view model (day flow, week,
   // stats) derives from these two arrays, so filtering here covers them all.
   const effectiveSelectedDaySegments = useMemo(
-    () => filterSegmentsByDevice(unfilteredEffectiveSelectedDaySegments, deviceTimelineFilter)
-      .filter((segment) => !isFailedForegroundCaptureSegment(segment)),
-    [deviceTimelineFilter, unfilteredEffectiveSelectedDaySegments],
+    () => aggregateDeviceElapsedTime(filterSegmentsByDevice(unfilteredEffectiveSelectedDaySegments, deviceTimelineFilter)
+      .filter((segment) => !isFailedForegroundCaptureSegment(segment)))
+      .map(segment => clipDeviceElapsedTimeSegment(segment, { start: logicalDayStartMs(selectedDay, startOfDayMinutes), end: logicalDayEndExclusiveMs(selectedDay, startOfDayMinutes) })),
+    [deviceTimelineFilter, selectedDay, startOfDayMinutes, unfilteredEffectiveSelectedDaySegments],
   );
   const effectiveDashboardSegments = useMemo(
-    () => filterSegmentsByDevice(unfilteredEffectiveDashboardSegments, deviceTimelineFilter)
-      .filter((segment) => !isFailedForegroundCaptureSegment(segment)),
-    [deviceTimelineFilter, unfilteredEffectiveDashboardSegments],
+    () => aggregateDeviceElapsedTime(filterSegmentsByDevice(unfilteredEffectiveDashboardSegments, deviceTimelineFilter)
+      .filter((segment) => !isFailedForegroundCaptureSegment(segment)))
+      .map(segment => clipDeviceElapsedTimeSegment(segment, { start: Date.parse(effectiveDashboardRange.start), end: Date.parse(effectiveDashboardRange.end) })),
+    [deviceTimelineFilter, effectiveDashboardRange.end, effectiveDashboardRange.start, unfilteredEffectiveDashboardSegments],
   );
   const handleStartDashboardDemoReplay = useCallback((replayKind: DemoDashboardReplayKind) => {
     switch (replayKind) {
@@ -7661,11 +7658,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const selectedDayContext = describeRelativeDay(selectedDay, startOfDayMinutes);
   const classificationWeekRange = useMemo(() => getDashboardPeriodRange(selectedDay, "Week", startOfDayMinutes, startOfWeek), [selectedDay, startOfDayMinutes, startOfWeek]);
   const shouldBuildClassificationModels = activeTab === "classification";
-  const classificationSegments = useMemo(() => (
+  const classificationSegments = useMemo(() => aggregateDeviceElapsedTime((
     shouldBuildClassificationModels && classificationRange === "Week"
       ? filterSegmentsForRange(historySegments, classificationWeekRange.start, classificationWeekRange.end)
       : shouldBuildClassificationModels ? segments : EMPTY_ACTIVITY_SEGMENTS
-  ).filter((segment) => !isFailedForegroundCaptureSegment(segment)), [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments, shouldBuildClassificationModels]);
+  ).filter((segment) => !isFailedForegroundCaptureSegment(segment)))
+    .map(segment => clipDeviceElapsedTimeSegment(segment, classificationRange === "Week"
+      ? { start: Date.parse(classificationWeekRange.start), end: Date.parse(classificationWeekRange.end) }
+      : { start: logicalDayStartMs(selectedDay, startOfDayMinutes), end: logicalDayEndExclusiveMs(selectedDay, startOfDayMinutes) })),
+  [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments, selectedDay, startOfDayMinutes, shouldBuildClassificationModels]);
   const classificationRuleSegments = useMemo(() => {
     if (classificationSegments.length === 0) return recordedDaySegments;
     if (recordedDaySegments.length === 0) return classificationSegments;
@@ -9780,7 +9781,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devDeviceSyncPreviewEnabled, devModeEnabled, deviceSyncAccountId, deviceSyncAccountResetPending, deviceSyncActive, deviceSyncEnabled, deviceSyncFeatureVisible, deviceSyncPreferenceOwnerId, deviceSyncStatus, deviceSyncUserScopeKey, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, historySegments, isCloudOnline, isPolicySignedIn, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedClassificationRoute, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, deviceSyncAccountId, deviceSyncAccountResetPending, deviceSyncActive, deviceSyncEnabled, deviceSyncFeatureVisible, deviceSyncPreferenceOwnerId, deviceSyncStatus, deviceSyncUserScopeKey, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, historySegments, isCloudOnline, isPolicySignedIn, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedClassificationRoute, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -10903,6 +10904,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 	                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
 	                    userEmail={user?.email ?? null}
 	                    deviceSyncEnabled={deviceSyncEnabled}
+	                    deviceSyncCanEnable={deviceSyncCanEnable}
 	                    deviceSyncGateActive={deviceSyncActive}
 	                    deviceSyncStatus={deviceSyncStatus}
 	                    deviceSyncPurging={deviceSyncPurging}
@@ -11061,7 +11063,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
-                    deviceSyncPreviewEnabled={devDeviceSyncPreviewEnabled}
                     aiAvailabilityGateDevDisabled={aiAvailabilityGateDevDisabled}
                     webAccountPreviewEnabled={devWebAccountPreviewEnabled}
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
@@ -11094,7 +11095,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
-                    onDeviceSyncPreviewEnabledChange={setDevDeviceSyncPreviewEnabled}
                     onAiAvailabilityGateDevDisabledChange={setAiAvailabilityGateDevDisabled}
                     onWebAccountPreviewEnabledChange={setDevWebAccountPreviewEnabled}
                     onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}

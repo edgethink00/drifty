@@ -25,7 +25,6 @@ export const BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY = "drifty.classif
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
 export const LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY = "drifty.deviceSync.enabled";
 const DEVICE_SYNC_ENABLED_STORAGE_PREFIX = "drifty.deviceSync.enabled.v2";
-export const DEVICE_SYNC_PREVIEW_STORAGE_KEY = "drifty.dev.deviceSyncPreview";
 export const WEB_ACCOUNT_PREVIEW_STORAGE_KEY = "drifty.dev.webAccountPreview";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
@@ -483,11 +482,8 @@ export function resolveInitialDevModeEnabled(): boolean {
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
 }
 
-// Off by default (opt-in): the Dev-settings toggle is the sole gate for the
-// project-classification preview, so the Projects/Intelligence surfaces stay hidden
-// in every build until a developer explicitly enables them in Dev mode.
 // Off by default (explicit opt-in): device sync uploads raw activity segments to the
-// user's private cloud space, so each Mac must be enabled deliberately — never by a
+// user's private cloud space, so each device must be enabled deliberately — never by a
 // build default or a remote flag.
 export function getDeviceSyncEnabledStorageKey(userId: string): string {
   const normalizedUserId = userId.trim();
@@ -509,14 +505,6 @@ export function persistDeviceSyncEnabled(userId: string, enabled: boolean): void
 export function retireLegacyDeviceSyncEnabledPreference(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY);
-}
-
-// Off by default (opt-in): the Dev-settings toggle is the sole gate for the device-sync
-// preview surface — without it the Account-settings section is hidden and sync stays
-// inert even if a per-Mac opt-in was flipped earlier.
-export function resolveInitialDeviceSyncPreviewEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(DEVICE_SYNC_PREVIEW_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialAiAvailabilityGateDevDisabled(): boolean {

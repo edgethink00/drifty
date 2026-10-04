@@ -1,4 +1,4 @@
-import { classifyActivityDetailed, isExcludedSegment, logicalDayEndExclusiveMs, logicalDayStartMs, shiftIsoDate } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, activityTimeBounds, classifyActivityDetailed, isExcludedSegment, logicalDayEndExclusiveMs, logicalDayStartMs, shiftIsoDate } from "@drifty/domain";
 import type { ExclusionSource } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, ClassificationSource, ProductivityLabel } from "@drifty/domain";
 import { DEFAULT_START_OF_WEEK } from "../settings/settingsStorage";
@@ -100,7 +100,7 @@ export function buildWeekDayRows(
     rows.set(day, { totalSeconds: 0, focusSeconds: 0, categories: new Map(), productivity: new Map() });
   }
 
-  for (const segment of segments) {
+  for (const segment of aggregateDeviceElapsedTime(segments)) {
     const classification = classificationBySegmentId?.get(segment.id) ?? classifyActivityDetailed(segment, classificationOptions);
     for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay, startOfDayMinutes)) {
       const row = rows.get(overlap.day);
@@ -145,8 +145,7 @@ export type SegmentDayOverlap = {
 };
 
 export function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: string, endDay: string, startOfDayMinutes = 0): SegmentDayOverlap[] {
-  const segmentStartMs = new Date(segment.startedAt).getTime();
-  const segmentEndMs = new Date(segment.endedAt).getTime();
+  const { start: segmentStartMs, end: segmentEndMs } = activityTimeBounds(segment);
   if (!Number.isFinite(segmentStartMs) || !Number.isFinite(segmentEndMs) || segmentEndMs <= segmentStartMs) return [];
 
   return buildIsoDayList(startDay, endDay).flatMap((day) => {
@@ -159,7 +158,7 @@ export function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: 
       day,
       startedAt: new Date(overlapStartMs),
       endedAt: new Date(overlapEndMs),
-      durationSeconds: Math.round((overlapEndMs - overlapStartMs) / 1000),
+      durationSeconds: activitySecondsWithinInterval(segment, overlapStartMs, overlapEndMs),
     }];
   });
 }
@@ -372,7 +371,7 @@ export function buildWeekCalendarEvents(
     return components;
   }
 
-  for (const segment of segments) {
+  for (const segment of aggregateDeviceElapsedTime(segments)) {
     const classification = classificationBySegmentId?.get(segment.id) ?? classifyActivityDetailed(segment, classificationOptions);
     const identity = weekCalendarSegmentIdentity(segment);
     for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay, startOfDayMinutes)) {
@@ -391,7 +390,8 @@ export function buildWeekCalendarEvents(
         const overlapEndMs = Math.min(overlap.endedAt.getTime(), bucketEndMs);
         const overlapMs = overlapEndMs - overlapStartMs;
         if (overlapMs <= 0) continue;
-        const overlapSeconds = Math.round(overlapMs / 1000);
+        const overlapSeconds = activitySecondsWithinInterval(segment, overlapStartMs, overlapEndMs);
+        if (overlapSeconds <= 0) continue;
         let intervalStartMinute = Math.max(bucket.startMinute, Math.round((overlapStartMs - dayStartMs) / 60000));
         let intervalEndMinute = Math.min(bucket.endMinute, Math.round((overlapEndMs - dayStartMs) / 60000));
         if (intervalEndMinute <= intervalStartMinute) {
