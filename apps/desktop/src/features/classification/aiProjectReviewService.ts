@@ -289,7 +289,7 @@ interface ProjectPassChunkResult {
 
 let inFlight: Promise<ProjectPassSummary> | null = null;
 let inFlightRangeKey: string | null = null;
-let queuedTail: Promise<unknown> = Promise.resolve();
+let queuedTail: Promise<unknown> | null = null;
 
 function projectPassRangeKey(range: { readonly start: string; readonly end: string }): string {
   return `${range.start}..${range.end}`;
@@ -316,12 +316,16 @@ export function runProjectPass(options: RunProjectPassOptions): Promise<ProjectP
     return inFlight;
   };
 
-  if (!inFlight) return start();
-
-  // A pass for a different range waits its turn; settled either way so one
-  // failure cannot wedge the queue.
-  const queued = queuedTail.then(start, start);
-  queuedTail = queued.catch(() => undefined);
+  // Include the first pass in the queue tail. A resolved initial tail lets
+  // the next range start while that first pass is still doing inference or
+  // persistence. Keep the tail until the entire queue drains, including the
+  // brief gap between a completed pass and the next one starting.
+  const queued = queuedTail ? queuedTail.then(start, start) : start();
+  const settled = queued.then(() => undefined, () => undefined);
+  queuedTail = settled;
+  void settled.then(() => {
+    if (queuedTail === settled) queuedTail = null;
+  });
   return queued;
 }
 
@@ -521,19 +525,31 @@ async function runProjectPassChunks(
   const results = new Map<number, ProjectPassChunkResult>();
   let nextIndex = 0;
   let completed = 0;
+  let failed = false;
+  let failure: unknown;
   const workerCount = Math.min(PROJECT_PASS_MAX_PARALLEL_CHUNKS, chunks.length);
   const runWorker = async () => {
     for (;;) {
+      if (failed) return;
       const index = nextIndex;
       nextIndex += 1;
       const chunk = chunks[index];
       if (!chunk) return;
-      results.set(index, await runChunk(chunk));
+      try {
+        results.set(index, await runChunk(chunk));
+      } catch (error) {
+        if (!failed) failure = error;
+        failed = true;
+        return;
+      }
       completed += 1;
       onChunkComplete(completed);
     }
   };
+  // A rejected chunk must not release the pass queue while sibling provider
+  // requests are still active. Stop new chunks and drain those already started.
   await Promise.all(Array.from({ length: workerCount }, runWorker));
+  if (failed) throw failure;
   return chunks.flatMap((_, index) => {
     const result = results.get(index);
     return result ? [result] : [];

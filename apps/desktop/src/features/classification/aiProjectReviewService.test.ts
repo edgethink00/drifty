@@ -289,13 +289,117 @@ describe("runProjectPass orchestration", () => {
     const todayRange = { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" };
     const weekRange = { start: "2026-03-30T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" };
     const todayPass = runProjectPass({ ...common, range: todayRange });
+    await vi.waitFor(() => expect(inference).toHaveBeenCalledTimes(1));
     const weekPass = runProjectPass({ ...common, range: weekRange, trigger: "backfill" });
-    expect(weekPass).not.toBe(todayPass);
-
-    releaseFirst();
-    await Promise.all([todayPass, weekPass]);
+    try {
+      expect(weekPass).not.toBe(todayPass);
+      // Give a wrongly started pass time to reach the provider while today's
+      // request is still held open. The wider pass must wait for persistence too.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(inference).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseFirst();
+      await Promise.all([todayPass, weekPass]);
+    }
     // The 7-day caller must have actually run rather than reusing the today run.
     expect(inference).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits for the previous pass to persist its assignments before reading the next range", async () => {
+    let releaseWrite!: () => void;
+    const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    const save = vi.fn(async () => {
+      if (save.mock.calls.length === 1) await writeGate;
+      return { saved: 1, skippedManual: 0 };
+    });
+    const { tracker, spies } = mockTracker({ saveProjectWindowAssignments: save });
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] },
+      usage: {},
+    }));
+    const common = { trigger: "schedule" as const, tracker, inference, now: () => "2026-04-06T23:00:00+00:00", contextPolicy: CONTEXT_POLICY };
+    const first = runProjectPass({ ...common, range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" } });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const next = runProjectPass({ ...common, range: { start: "2026-03-30T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" } });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(spies.getTimeline).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseWrite();
+      await Promise.all([first, next]);
+    }
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it("drains queued ranges in order after a failed pass and accepts a later retry", async () => {
+    let rejectRead!: (error: Error) => void;
+    const readGate = new Promise<ActivitySegment[]>((_, reject) => { rejectRead = reject; });
+    const { tracker, spies } = mockTracker();
+    spies.getTimeline.mockImplementationOnce(() => readGate);
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [], corrections: [] },
+      usage: {},
+    }));
+    const common = { trigger: "schedule" as const, tracker, inference, now: () => "2026-04-06T23:00:00+00:00", contextPolicy: CONTEXT_POLICY };
+    const ranges = [6, 5, 4].map((day) => ({ start: `2026-04-0${day}T00:00:00+00:00`, end: "2026-04-06T23:59:59+00:00" }));
+    const failed = runProjectPass({ ...common, range: ranges[0] }).catch((error: unknown) => error);
+    const second = runProjectPass({ ...common, range: ranges[1] });
+    const third = runProjectPass({ ...common, range: ranges[2] });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(spies.getTimeline).toHaveBeenCalledTimes(1);
+    } finally {
+      rejectRead(new Error("tracker unavailable"));
+      expect(await failed).toEqual(new Error("tracker unavailable"));
+      await Promise.all([second, third]);
+    }
+    expect(spies.getTimeline.mock.calls.map(([range]) => range)).toEqual(ranges);
+    await runProjectPass({ ...common, range: ranges[0] });
+    expect(spies.getTimeline).toHaveBeenCalledTimes(4);
+    expect(inference).toHaveBeenCalledTimes(3);
+  });
+
+  it("drains active chunk requests after an error before starting a queued pass", async () => {
+    const manySegments = Array.from({ length: PROJECT_PASS_MAX_CHUNK_WINDOWS * 3 + 1 }, (_, index) => {
+      const start = new Date(Date.parse("2026-04-06T00:00:00Z") + index * 180_000).toISOString();
+      const end = new Date(Date.parse(start) + 180_000).toISOString();
+      return classified(String(index), start, end, `App${index}`, "social_media", "drift");
+    });
+    const timeline = vi.fn(async () => manySegments);
+    const { tracker, spies } = mockTracker({
+      getTimeline: timeline as TrackerApi["getTimeline"],
+    });
+    let rejectChunk!: (error: Error) => void;
+    const errorGate = new Promise<void>((_, reject) => { rejectChunk = reject; });
+    let releaseChunks!: () => void;
+    const slowGate = new Promise<void>((resolve) => { releaseChunks = resolve; });
+    let calls = 0;
+    const inference: ProjectPassInference = vi.fn(async () => {
+      const index = calls++;
+      if (index === 0) await errorGate;
+      else if (index < EXPECTED_MAX_PARALLEL_CHUNKS) await slowGate;
+      return { output: { assignments: [], corrections: [] }, usage: {} };
+    });
+    const common = { trigger: "schedule" as const, tracker, inference, now: () => "2026-04-06T23:00:00+00:00", contextPolicy: CONTEXT_POLICY };
+    let rejected = false;
+    const failed = runProjectPass({ ...common, range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" } })
+      .catch((error: unknown) => { rejected = true; return error; });
+    await vi.waitFor(() => expect(inference).toHaveBeenCalledTimes(EXPECTED_MAX_PARALLEL_CHUNKS));
+    const next = runProjectPass({ ...common, range: { start: "2026-04-05T00:00:00Z", end: "2026-04-07T00:00:00Z" } });
+    rejectChunk(new Error("provider transport failed"));
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(rejected).toBe(false);
+      expect(timeline).toHaveBeenCalledTimes(1);
+      expect(inference).toHaveBeenCalledTimes(EXPECTED_MAX_PARALLEL_CHUNKS);
+    } finally {
+      releaseChunks();
+      expect(await failed).toEqual(new Error("provider transport failed"));
+      await next;
+    }
+    // The failed pass starts no remaining chunk and persists no partial result.
+    expect(spies.recordProjectPass).toHaveBeenCalledTimes(1);
+    expect(inference).toHaveBeenCalledTimes(EXPECTED_MAX_PARALLEL_CHUNKS + 4);
   });
 
   it("still coalesces concurrent callers asking for the same range", async () => {
