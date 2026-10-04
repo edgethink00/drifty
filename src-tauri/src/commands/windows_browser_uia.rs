@@ -19,7 +19,7 @@ use windows_sys::Win32::{
     },
     UI::{
         HiDpi::GetDpiForWindow,
-        WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
+        WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId, IsWindow},
     },
 };
 
@@ -32,6 +32,9 @@ const UIA_CLOSE_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
 // Match the previously live-proven PowerShell verifier's settle window before
 // checking that the closed runtime ID vanished and a survivor became selected.
 const POST_CLOSE_SETTLE: Duration = Duration::from_millis(500);
+// The last Chrome tab destroys its window instead of selecting a survivor.
+// Observe only the original HWND after Invoke; do not act on the new foreground.
+const LAST_TAB_WINDOW_CLOSE_WAIT: Duration = Duration::from_secs(2);
 static UIA_OPERATION_ACTIVE: AtomicBool = AtomicBool::new(false);
 // Firefox's native UI Automation provider exposes DOM ids as AutomationId and
 // DOM classes as ClassName, independent of the UI language (measured on
@@ -208,12 +211,25 @@ fn close_impl(request: &TargetRequest, deadline: Instant) -> Result<String, Stri
     if !resolved.selection.is_selected().unwrap_or(false) {
         return Err("windows_uia_stale_target".to_string());
     }
-    resolved
-        .close_invoke
-        .invoke()
-        .map_err(|_| "windows_uia_invoke_failed".to_string())?;
+    let invoke_result = resolved.close_invoke.invoke();
+    if invoke_result.is_err() && !resolved.last_tab_window_close {
+        return Err("windows_uia_invoke_failed".to_string());
+    }
     thread::sleep(POST_CLOSE_SETTLE);
 
+    if resolved.last_tab_window_close {
+        // The provider may disconnect while the last-tab Invoke returns. Its
+        // error alone cannot disprove a close, but only destruction of the
+        // exact pre-invoke window can prove this outcome. A focus switch, an
+        // empty UIA tree or a before-unload prompt is not sufficient.
+        if wait_for_original_window_close(
+            snapshot.hwnd,
+            Instant::now() + LAST_TAB_WINDOW_CLOSE_WAIT,
+        ) {
+            return Ok(close_success_diagnostic(resolved.match_kind));
+        }
+    }
+    invoke_result.map_err(|_| "windows_uia_invoke_failed".to_string())?;
     verify_foreground_snapshot(request, &snapshot)?;
     let remaining = browser_tabs(
         &resolved.automation,
@@ -247,6 +263,18 @@ fn close_success_diagnostic(match_kind: &str) -> String {
     format!("windows_uia_{match_kind}")
 }
 
+fn wait_for_original_window_close(hwnd: HWND, deadline: Instant) -> bool {
+    loop {
+        if unsafe { IsWindow(hwnd) } == 0 {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
 fn post_close_runtime_ids_verify(remaining: &[Vec<i32>], closed: &[i32]) -> bool {
     !remaining.is_empty() && remaining.iter().all(|runtime_id| runtime_id != closed)
 }
@@ -260,6 +288,7 @@ struct ResolvedSelectedTab {
     close_rect: uiautomation::types::Rect,
     runtime_id: Vec<i32>,
     match_kind: &'static str,
+    last_tab_window_close: bool,
 }
 
 fn resolve_selected_tab(
@@ -288,7 +317,8 @@ fn resolve_selected_tab(
     }
 
     let tabs = browser_tabs(&automation, &walker, &window, &request.process_name)?;
-    if tabs.len() < 2 {
+    let last_tab_window_close = request.process_name == "chrome" && tabs.len() == 1;
+    if tabs.len() < 2 && !last_tab_window_close {
         return Err("windows_uia_last_tab_refused".to_string());
     }
     let mut selected = Vec::new();
@@ -365,6 +395,7 @@ fn resolve_selected_tab(
             .get_runtime_id()
             .map_err(|_| "windows_uia_stale_target".to_string())?,
         match_kind,
+        last_tab_window_close,
     })
 }
 
@@ -745,6 +776,10 @@ mod tests {
         assert_eq!(UIA_ACTION_TIMEOUT, Duration::from_secs(5));
         assert!(UIA_CLOSE_COMPLETION_TIMEOUT > UIA_ACTION_TIMEOUT);
         assert!(UIA_CLOSE_COMPLETION_TIMEOUT >= UIA_ACTION_TIMEOUT + POST_CLOSE_SETTLE);
+        assert!(
+            UIA_CLOSE_COMPLETION_TIMEOUT
+                >= UIA_ACTION_TIMEOUT + POST_CLOSE_SETTLE + LAST_TAB_WINDOW_CLOSE_WAIT
+        );
     }
 
     #[test]
@@ -811,6 +846,58 @@ mod tests {
             &[vec![4, 5, 6], closed.clone()],
             &closed,
         ));
+    }
+
+    struct TestWindow(HWND);
+
+    impl TestWindow {
+        fn new() -> Self {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{CreateWindowExW, WS_POPUP};
+            let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+            let hwnd = unsafe {
+                CreateWindowExW(
+                    0,
+                    class.as_ptr(),
+                    class.as_ptr(),
+                    WS_POPUP,
+                    0,
+                    0,
+                    1,
+                    1,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                )
+            };
+            assert!(!hwnd.is_null(), "create an invisible test-owned window");
+            Self(hwnd)
+        }
+    }
+
+    impl Drop for TestWindow {
+        fn drop(&mut self) {
+            unsafe { windows_sys::Win32::UI::WindowsAndMessaging::DestroyWindow(self.0) };
+        }
+    }
+
+    #[test]
+    fn last_tab_confirmation_observes_only_the_original_window() {
+        let target = TestWindow::new();
+        let sentinel = TestWindow::new();
+        assert_ne!(
+            unsafe { windows_sys::Win32::UI::WindowsAndMessaging::DestroyWindow(target.0) },
+            0
+        );
+        assert!(wait_for_original_window_close(target.0, Instant::now()));
+        assert_ne!(unsafe { IsWindow(sentinel.0) }, 0);
+    }
+
+    #[test]
+    fn last_tab_confirmation_refuses_a_live_window_without_closing_it() {
+        let target = TestWindow::new();
+        assert!(!wait_for_original_window_close(target.0, Instant::now()));
+        assert_ne!(unsafe { IsWindow(target.0) }, 0);
     }
 
     fn rect(left: i32, right: i32) -> uiautomation::types::Rect {
