@@ -1,6 +1,63 @@
 import ApplicationServices
+import AppKit
 import CoreGraphics
 import Foundation
+
+// Safari's AX address field omits http://. System Events cannot coerce the
+// web area's CFURL, so read only that native attribute (never page contents).
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--safari-url" {
+    func snapshot() -> [String: Any]? {
+        guard let pid = Int32(CommandLine.arguments[2]), pid > 0,
+              let running = NSWorkspace.shared.frontmostApplication,
+              running.processIdentifier == pid,
+              let bundle = running.bundleIdentifier,
+              ["com.apple.Safari", "com.apple.SafariTechnologyPreview"].contains(bundle) else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        let deadline = ProcessInfo.processInfo.systemUptime + 0.25
+        func value(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
+            guard ProcessInfo.processInfo.systemUptime < deadline else { return nil }
+            AXUIElementSetMessagingTimeout(element, 0.05)
+            var result: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, name as CFString, &result) == .success else { return nil }
+            return result
+        }
+        guard let windowRef = value(app, kAXFocusedWindowAttribute),
+              CFGetTypeID(windowRef) == AXUIElementGetTypeID() else { return nil }
+        let window = windowRef as! AXUIElement
+        guard let title = value(window, kAXTitleAttribute) as? String, !title.isEmpty else { return nil }
+        var visited = 0
+        var areas: [AXUIElement] = []
+        var incomplete = false
+        func walkURL(_ element: AXUIElement, _ depth: Int) {
+            guard depth <= 8, visited < 64, ProcessInfo.processInfo.systemUptime < deadline else {
+                incomplete = true
+                return
+            }
+            visited += 1
+            guard let role = value(element, kAXRoleAttribute) as? String else { incomplete = true; return }
+            if role == "AXWebArea" { areas.append(element); return }
+            guard ["AXWindow", "AXSplitGroup", "AXTabGroup", "AXGroup", "AXScrollArea"].contains(role) else { return }
+            guard let kids = value(element, kAXChildrenAttribute) as? [AXUIElement] else { incomplete = true; return }
+            guard kids.count <= 24 else { incomplete = true; return }
+            for child in kids { walkURL(child, depth + 1) }
+        }
+        walkURL(window, 0)
+        guard !incomplete, areas.count == 1,
+              let url = value(areas[0], "AXURL") as? URL,
+              ["http", "https"].contains(url.scheme ?? ""),
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+              let finalWindow = value(app, kAXFocusedWindowAttribute), CFEqual(window, finalWindow),
+              value(window, kAXTitleAttribute) as? String == title,
+              (value(areas[0], "AXURL") as? URL)?.absoluteString == url.absoluteString else { return nil }
+        return ["schemaVersion": 1, "pid": pid, "bundleId": bundle, "windowTitle": title, "url": url.absoluteString]
+    }
+    if let result = snapshot(), let data = try? JSONSerialization.data(withJSONObject: result) {
+        print(String(data: data, encoding: .utf8) ?? "null")
+    } else {
+        print("null")
+    }
+    exit(0)
+}
 
 if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--onscreen-windows" {
     let rawRows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
@@ -22,7 +79,7 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--onscreen-win
 }
 
 guard CommandLine.arguments.count >= 2, let pid = Int32(CommandLine.arguments[1]) else {
-    fputs("usage: chatgpt_ax_helper <pid>|--onscreen-windows\n", stderr)
+    fputs("usage: chatgpt_ax_helper <pid>|--onscreen-windows|--safari-url <pid>\n", stderr)
     exit(2)
 }
 let app = AXUIElementCreateApplication(pid)

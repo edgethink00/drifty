@@ -46,6 +46,7 @@ from app.tracker.macos_system_activity import (
     system_transient_activity_from_rows,
 )
 from app.tracker.youtube_video_recovery import YouTubeVideoIdMemory
+from app.tracker.safari_url import refine_safari_url
 
 # Recovers a video id for the occasional YouTube capture that lands mid SPA-navigation with
 # the video title but a bare base URL (see youtube_video_recovery). Capture runs on a single
@@ -217,6 +218,7 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         browser_history = browser
     else:
         browser = _browser_metadata(app_name)
+        browser = refine_safari_url(browser, bundle_id, pid, _run_command)
         browser_history = None
 
     # Prefer the AX title captured in the same osascript pass as the tab read,

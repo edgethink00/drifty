@@ -396,6 +396,16 @@ function assertMacosNativeHelperSmokeTest(path, target) {
   if (!Array.isArray(parsed) || !parsed.every(validRow)) {
     fail(`native helper smoke test did not return a window array: ${result.stdout}`);
   }
+  // An invalid PID must serialize an unavailable Safari URL without querying
+  // Accessibility or requiring a GUI permission grant on the build host.
+  try {
+    result = run(path, ["--safari-url", "0"], { capture: true, timeoutMs: 5_000 });
+  } catch (error) {
+    fail(`native Safari URL smoke test could not run: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (result.status !== 0 || result.stdout.trim() !== "null") {
+    fail(`native Safari URL smoke test did not return null (exit ${result.status}): ${result.stdout}`);
+  }
 }
 
 function assertSmokeTest(path) {
