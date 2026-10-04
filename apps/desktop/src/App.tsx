@@ -5992,14 +5992,18 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       });
       const closeStillAuthorized = () => automaticCloseEnabledRef.current
         && !trackerPauseIntentRef.current
+        // Quiet hours can begin while the native approach or fresh read waits.
+        && !isQuietHoursActiveAt(new Date(), quietHoursRef.current)
         && pendingExtremeNudgeRef.current === pendingClose
         && (driftAlarmSnoozeRef.current === null || Date.now() >= driftAlarmSnoozeRef.current.untilMs);
       const cancelledCloseResult = () => ({
         applied: false as const,
         diagnostic: !automaticCloseEnabledRef.current || trackerPauseIntentRef.current || driftAlarmSnoozeRef.current || driftAlarmSessionProtectionRef.current
+          || isQuietHoursActiveAt(new Date(), quietHoursRef.current)
           ? "automatic_close_paused" : "pet_target_changed",
       });
       let targetConfirmedAfterApproach = false;
+      let petWasIntercepted = false;
       let petInterventionId: string | null = null;
       const runExtremeNudge = async () => {
         if (!closeStillAuthorized()) {
@@ -6015,6 +6019,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             siteDomain: segment.siteDomain,
             siteUrl: segment.siteUrl,
           }));
+          petWasIntercepted = intervention.outcome === "user_intercepted";
           // A pause can arrive while the cat approaches. A sleeping renderer's
           // cancellation is user intent, not a reason to close without the cat.
           if (!closeStillAuthorized()) return cancelledCloseResult();
@@ -6098,7 +6103,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         }
 
         if (petInterventionId) await completeNativePetFullscreenClose(petInterventionId).catch(() => undefined);
-        const result = !nativeResult.applied && !automaticCloseEnabledRef.current
+        const result = !nativeResult.applied && (!automaticCloseEnabledRef.current
+          || isQuietHoursActiveAt(new Date(), quietHoursRef.current))
           ? { applied: false, diagnostic: "automatic_close_paused" } as const
           : nativeResult;
         recordDriftAlarmDebugEvent({
@@ -6123,7 +6129,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               || result.diagnostic === "pet_target_changed";
             if (targetChanged || result.diagnostic === "automatic_close_paused") {
               lastDriftAlertSegmentRef.current = null;
-              petInterceptionGraceRef.current = null;
+              // Quiet hours silence delivery without erasing a real catch.
+              petInterceptionGraceRef.current = petWasIntercepted && automaticCloseEnabledRef.current
+                ? buildPetInterceptionGrace(episodeKey) : null;
               publishEvaluationDriftAlarmTrayStatus({
                 kind: "suppressed",
                 reason: result.diagnostic,
@@ -6192,7 +6200,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         });
         if (pendingExtremeNudgeRef.current !== pendingClose) return;
         if (lastDriftAlertSegmentRef.current === alertKey) {
-          if (!automaticCloseEnabledRef.current) {
+          if (!automaticCloseEnabledRef.current || isQuietHoursActiveAt(new Date(), quietHoursRef.current)) {
             lastDriftAlertSegmentRef.current = null;
             petInterceptionGraceRef.current = null;
             publishEvaluationDriftAlarmTrayStatus({

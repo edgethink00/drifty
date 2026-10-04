@@ -603,11 +603,17 @@ describe("catching the cat cancels the close", () => {
     expect(terminalReport).toContain("reportNativePetContact(target.id, false, reason)");
   });
 
-  it("drops a context-changed or paused target without closing it or spending a catch reprieve", () => {
+  it("drops a context-changed or paused target without inventing catch grace, preserving a real catch", () => {
     const branch = app.slice(app.indexOf('if (targetChanged || result.diagnostic === "automatic_close_paused") {'));
     const body = branch.slice(0, branch.indexOf("if (intercepted) {"));
     expect(body).toContain("lastDriftAlertSegmentRef.current = null");
-    expect(body).toContain("petInterceptionGraceRef.current = null");
+    // Cancellation alone earns no grace. Quiet hours can also silence a real
+    // catch, whose existing reprieve must survive when the window ends early.
+    expect(app).toContain("let petWasIntercepted = false;");
+    expect(app).toContain('petWasIntercepted = intervention.outcome === "user_intercepted";');
+    expect(body).toMatch(
+      /petInterceptionGraceRef\.current = petWasIntercepted && automaticCloseEnabledRef\.current\s*\? buildPetInterceptionGrace\(episodeKey\) : null;/,
+    );
     expect(body).toContain("reason: result.diagnostic");
     expect(body).toContain("return;");
     expect(body).not.toContain("showFallbackDriftAlarm");
