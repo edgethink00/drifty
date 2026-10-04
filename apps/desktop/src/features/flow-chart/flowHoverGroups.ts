@@ -1,4 +1,4 @@
-import { logicalMinuteOfDay, type FlowBlock, type FlowBlockContribution, type FlowIntervalMinutes } from "@drifty/domain";
+import { logicalMinuteOfDay, type ActivitySegment, type FlowBlock, type FlowBlockContribution, type FlowIntervalMinutes } from "@drifty/domain";
 
 const MINUTES_PER_DAY = 24 * 60;
 
@@ -21,6 +21,8 @@ export type FlowBlockHoverGroup = {
   readonly block: FlowBlock;
   readonly blocks: readonly FlowBlock[];
   readonly segmentIds: readonly string[];
+  /** All displayed contributions; editing still targets segmentIds only. */
+  readonly displaySegmentIds?: readonly string[];
   readonly startMinuteOfDay: number;
   readonly endMinuteOfDay: number;
   readonly durationSeconds: number;
@@ -125,19 +127,28 @@ function startGroup(block: FlowBlock, intervalMinutes: FlowIntervalMinutes): Mut
   };
 }
 
-function finishGroup(group: MutableFlowBlockHoverGroup, target: Map<number, FlowBlockHoverGroup>): void {
+function finishGroup(group: MutableFlowBlockHoverGroup, target: Map<number, FlowBlockHoverGroup>, segmentsById?: ReadonlyMap<string, ActivitySegment>): void {
+  const displaySegmentIds = [...new Set(group.blocks.flatMap((block) =>
+    block.composition?.flatMap((entry) => entry.sourceSegmentIds) ?? block.sourceSegmentIds ?? []))];
+  const hasRemoteContribution = displaySegmentIds.some((id) => segmentsById?.get(id)?.deviceId)
+    || group.blocks.some((block) => block.deviceId);
   const hoverGroup: FlowBlockHoverGroup = {
     block: group.block,
     blocks: [...group.blocks],
     segmentIds: [...group.segmentIds],
+    displaySegmentIds,
     startMinuteOfDay: group.startMinuteOfDay,
     endMinuteOfDay: group.endMinuteOfDay,
-    durationSeconds: group.durationSeconds,
+    durationSeconds: hasRemoteContribution
+      ? group.blocks.reduce((total, block) => total + (block.composition
+        ? block.composition.reduce((sum, entry) => sum + entry.durationSeconds, 0)
+        : block.durationSeconds), 0)
+      : group.durationSeconds,
   };
   for (const block of group.blocks) target.set(block.minuteOfDay, hoverGroup);
 }
 
-export function buildFlowBlockHoverGroups(blocks: readonly FlowBlock[], intervalMinutes: FlowIntervalMinutes, startOfDayMinutes: number): Map<number, FlowBlockHoverGroup> {
+export function buildFlowBlockHoverGroups(blocks: readonly FlowBlock[], intervalMinutes: FlowIntervalMinutes, startOfDayMinutes: number, segmentsById?: ReadonlyMap<string, ActivitySegment>): Map<number, FlowBlockHoverGroup> {
   const groupsByMinute = new Map<number, FlowBlockHoverGroup>();
   const sortedBlocks = [...blocks].sort((left, right) => logicalMinuteOfDay(left.minuteOfDay, startOfDayMinutes) - logicalMinuteOfDay(right.minuteOfDay, startOfDayMinutes));
   let currentGroup: MutableFlowBlockHoverGroup | null = null;
@@ -148,7 +159,7 @@ export function buildFlowBlockHoverGroups(blocks: readonly FlowBlock[], interval
       currentGroup.identityKey !== blockIdentityKey(block) ||
       !isAdjacentFlowBlock(currentGroup.blocks[currentGroup.blocks.length - 1], block, intervalMinutes, startOfDayMinutes)
     ) {
-      if (currentGroup !== null) finishGroup(currentGroup, groupsByMinute);
+      if (currentGroup !== null) finishGroup(currentGroup, groupsByMinute, segmentsById);
       currentGroup = startGroup(block, intervalMinutes);
       continue;
     }
@@ -159,7 +170,7 @@ export function buildFlowBlockHoverGroups(blocks: readonly FlowBlock[], interval
     currentGroup.durationSeconds += block.durationSeconds;
   }
 
-  if (currentGroup !== null) finishGroup(currentGroup, groupsByMinute);
+  if (currentGroup !== null) finishGroup(currentGroup, groupsByMinute, segmentsById);
 
   return groupsByMinute;
 }

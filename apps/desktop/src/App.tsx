@@ -272,6 +272,7 @@ import {
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
+import { buildRemoteDeviceLabels } from "./features/device-sync/deviceTimelineLabels";
 import { fetchSyncDevices, purgeCloudSyncData, resumeCloudSyncData } from "./features/device-sync/deviceSyncApi";
 import { resetAccountSyncIdentity } from "./features/device-sync/accountDeletionSyncReset";
 import { useSshAgentSourceSyncController } from "./features/dev-signals/useSshAgentSourceSyncController";
@@ -2146,13 +2147,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     onRemoteSegmentsApplied: handleRemoteSegmentsApplied,
     onAccountSyncPaused: handleDeviceSyncAccountPaused,
   });
-  // The filter row lists other devices only (the current device is implicit).
+  // Keep received history filterable before the live device list loads or while sync is off.
   const remoteDeviceLabelById = useMemo(() => {
-    if (syncDeviceLabelById.size === 0) return syncDeviceLabelById;
-    const next = new Map(syncDeviceLabelById);
-    if (deviceSyncStatus.deviceId) next.delete(deviceSyncStatus.deviceId);
-    return next;
-  }, [deviceSyncStatus.deviceId, syncDeviceLabelById]);
+    return buildRemoteDeviceLabels(syncDeviceLabelById, deviceSyncStatus.deviceId,
+      [segments, historySegments], (number) => localization.t("dashboard.syncedDevice", { number }));
+  }, [deviceSyncStatus.deviceId, historySegments, localization, segments, syncDeviceLabelById]);
   useEffect(() => {
     // Leaving sync (or losing the gate) drops any device-scoped filter so the
     // timeline never silently hides local history.

@@ -744,6 +744,12 @@
   transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast);
 }
 
+.settings-select-control__header-trigger {
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+}
+
 .settings-select-control__trigger:hover,
 .settings-select-control[data-open="true"] .settings-select-control__trigger {
   border-color: color-mix(in srgb, var(--text) 18%, var(--line));

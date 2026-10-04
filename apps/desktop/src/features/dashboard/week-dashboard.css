@@ -2864,6 +2864,7 @@
   grid-template-columns: var(--inspector-rail-icon-size) minmax(0, 1fr) var(--inspector-rail-icon-size);
   align-items: center;
   gap: var(--inspector-rail-gap);
+  row-gap: 4px;
   min-height: 40px;
   /* Right inset is 4px narrower so the 28px close button's glyph sits on the
      same trailing centerline as the 20px chevron cells below it. */
@@ -3387,36 +3388,42 @@
 }
 
 .week-activity-inspector__devices {
+  grid-column: 2 / -1;
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  padding: 0 7px 9px;
+  gap: 4px 12px;
+  min-width: 0;
 }
 
-.week-activity-inspector__device-chip {
+.week-activity-inspector__device-source {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
-  width: fit-content;
+  gap: 4px;
+  min-width: 0;
   max-width: 100%;
-  padding: 0.23rem 0.5rem;
-  border: 1px dashed color-mix(in srgb, var(--line-strong) 72%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface-strong) 48%, transparent);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
+  color: var(--text-soft);
   font-size: 0.6875rem;
-  font-weight: 650;
-  line-height: 1;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
-.week-activity-inspector__device-chip::before {
-  content: "";
-  flex: 0 0 auto;
-  width: 0.4rem;
-  height: 0.4rem;
-  border: 1px solid currentColor;
-  border-radius: 2px;
+.week-activity-inspector__device-source > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-activity-inspector__device-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.week-activity-inspector__device-icon > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .week-activity-inspector__activity-list {

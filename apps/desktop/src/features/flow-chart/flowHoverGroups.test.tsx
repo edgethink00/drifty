@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { FlowBlock } from "@drifty/domain";
+import { buildFlowBlocks, type ActivitySegment, type FlowBlock } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
 import { buildFlowBlockHoverGroups, buildFlowHoverGroupContributions } from "./flowHoverGroups";
 
@@ -31,6 +31,40 @@ function fireNativePointerMove(target: Element, clientX: number, clientY: number
 }
 
 describe("flow hover groups", () => {
+  it("shows elapsed time and both devices on hover while keeping edits bound to the painted winner", () => {
+    const records: ActivitySegment[] = [
+      { id: "local-editor", appName: "Editor", startedAt: "2026-04-06T09:00:00", endedAt: "2026-04-06T09:30:00", durationSeconds: 1800, platform: "macos", source: "manual", classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 } },
+      { id: "remote-video", appName: "Video", startedAt: "2026-04-06T09:00:00", endedAt: "2026-04-06T09:30:00", durationSeconds: 1800, deviceId: "pc", platform: "windows", source: "manual", classification: { category: "entertainment", productivity: "drift", source: "manual", confidence: 1 } },
+    ];
+    const blocks = buildFlowBlocks(records, "2026-04-06", 3);
+    const group = buildFlowBlockHoverGroups(blocks, 3, 0, new Map(records.map(record => [record.id, record]))).get(540)!;
+    expect(group.durationSeconds).toBe(1800);
+    expect(group.segmentIds).toEqual(["local-editor"]);
+    expect(new Set(group.displaySegmentIds)).toEqual(new Set(["local-editor", "remote-video"]));
+
+    render(<FlowChartView blocks={blocks} segments={records} appIcons={{}} intervalMinutes={3}
+      deviceLabelById={new Map([["pc", "Windows PC"]])} />);
+    const cell = screen.getAllByRole("button", { name: /time block: 09:00–09:30/i })[0];
+    expect(cell.getAttribute("aria-label")).toContain("30m");
+    fireNativePointerMove(cell, 120, 80);
+    const preview = screen.getByRole("tooltip");
+    const header = preview.querySelector("header")!;
+    expect(within(header).getByText("This device")).toBeTruthy();
+    expect(within(header).getByText("Windows PC")).toBeTruthy();
+    expect(within(header).getByRole("img", { name: "macOS" })).toBeTruthy();
+    expect(within(header).getByRole("img", { name: "Windows" })).toBeTruthy();
+    expect(header.querySelector('[data-platform="macos"]')).toBeTruthy();
+    expect(header.querySelector('[data-platform="windows"]')).toBeTruthy();
+    expect(header.compareDocumentPosition(preview.querySelector(".week-activity-inspector__attributes")!)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(preview.textContent).toContain("09:00–09:30 · 30m");
+    expect(within(preview).getAllByText("15m")).toHaveLength(2);
+
+    fireEvent.click(cell);
+    const inspector = screen.getByRole("dialog", { name: "Editor" });
+    expect(within(inspector).getByText("Windows PC")).toBeTruthy();
+    expect(inspector.textContent).toContain("09:00–09:30 · 30m");
+  });
   it("unions source segment ids across adjacent cells", () => {
     const blocks = [
       makeFlowBlock({ id: "cmux-a", minuteOfDay: 60, sourceSegmentIds: ["seg-a"] }),

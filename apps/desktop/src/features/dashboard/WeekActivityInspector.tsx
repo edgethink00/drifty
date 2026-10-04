@@ -31,6 +31,8 @@ import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting"
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { DisplayLanguage } from "../localization/languagePreference";
+import { buildActivityDevices, type ActivityDeviceSource } from "../device-sync/deviceTimelineLabels";
+import { DeviceSourceIcon } from "../device-sync/DeviceSourceIcon";
 
 const INSPECTOR_WIDTH_PX = 304;
 const MAX_VISIBLE_ACTIVITY_ROWS = 4;
@@ -89,7 +91,7 @@ export type ActivityInspectorEvent = {
   readonly hasMixedProductivity: boolean;
   readonly detailLabel?: string | null;
   readonly durationSeconds?: number;
-  readonly deviceLabels?: readonly string[];
+  readonly devices?: readonly ActivityDeviceSource[];
 };
 
 type WeekActivityInspectorProps = {
@@ -463,6 +465,8 @@ function ActivityInspectorHeader({
   event,
   appIcons,
   titleId,
+  segments,
+  deviceLabelById,
   closeDisabled = false,
   readOnly = false,
   onClose,
@@ -470,11 +474,16 @@ function ActivityInspectorHeader({
   readonly event: ActivityInspectorEvent;
   readonly appIcons: AppIconMap;
   readonly titleId: string;
+  readonly segments: readonly ActivitySegment[];
+  readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly closeDisabled?: boolean;
   readonly readOnly?: boolean;
   readonly onClose: () => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
+  const devices = event.devices?.length ? event.devices : buildActivityDevices(
+    segments, deviceLabelById, t("dashboard.week.inspector.thisMac"), t("dashboard.week.inspector.syncedMac"),
+  );
   const identityCount = event.identities.length + (event.hiddenIdentityCount ?? 0);
   const primaryIdentity = event.identities[0] ?? null;
   const primaryLabel = primaryIdentity
@@ -516,6 +525,21 @@ function ActivityInspectorHeader({
           <CloseIcon />
         </button>
       )}
+      {devices.length > 0 ? (
+        <div className="week-activity-inspector__devices">
+          {devices.map((device) => {
+            const platformLabel = device.platform === "macos" ? "macOS" : device.platform === "windows" ? "Windows" : null;
+            const label = platformLabel ? `${device.label} · ${platformLabel}` : device.label;
+            return (
+              <span className="week-activity-inspector__device-source" key={device.id ?? "local"}
+                title={label} data-platform={device.platform}>
+                <DeviceSourceIcon label={platformLabel ?? t("settings.cloudDevices.device")} />
+                <span>{device.label}</span>
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
     </header>
   );
 }
@@ -761,26 +785,12 @@ function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspec
   );
 }
 
-function remoteDeviceLabels(
-  event: ActivityInspectorEvent,
-  segments: readonly ActivitySegment[],
-  deviceLabelById?: ReadonlyMap<string, string>,
-): string[] {
-  const labels = new Set(event.deviceLabels ?? []);
-  for (const segment of segments) {
-    if (!isRemoteDeviceSegment(segment)) continue;
-    labels.add(deviceLabelById?.get(segment.deviceId ?? "") ?? "Synced device");
-  }
-  return [...labels];
-}
-
 function ActivityInspectorBody({
   readOnly = false,
   event,
   values,
   segments,
   appIcons,
-  deviceLabelById,
   projectOptions,
   actionsDisabledReason,
   classificationOptions,
@@ -803,7 +813,6 @@ function ActivityInspectorBody({
   readonly values: InspectorValues;
   readonly segments: readonly ActivitySegment[];
   readonly appIcons: AppIconMap;
-  readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly projectOptions: readonly ActivityInspectorProjectOption[];
   readonly actionsDisabledReason: string | null;
   readonly classificationOptions?: ClassificationOptions;
@@ -836,7 +845,6 @@ function ActivityInspectorBody({
   const projectColor = values.projectId === null
     ? PRODUCTIVITY_COLORS.neutral
     : currentProject?.color ?? event.projectColor ?? PRODUCTIVITY_COLORS.neutral;
-  const devices = remoteDeviceLabels(event, segments, deviceLabelById);
   const showProjectAttribute = shouldShowProjectAttribute(
     projectOptions,
     values.projectId,
@@ -925,16 +933,6 @@ function ActivityInspectorBody({
           >
             {t("dashboard.week.inspector.undo")}
           </button>
-        </div>
-      ) : null}
-
-      {devices.length > 0 ? (
-        <div className="week-activity-inspector__devices">
-          {devices.map((device) => (
-            <span className="week-activity-inspector__device-chip" key={device}>
-              {device === "Synced device" ? t("dashboard.week.inspector.syncedMac") : device}
-            </span>
-          ))}
         </div>
       ) : null}
 
@@ -1092,14 +1090,14 @@ export function ActivityInspectorPreview({
         data-mode="peek"
         data-side={layout.side}
       >
-        <ActivityInspectorHeader readOnly event={event} appIcons={appIcons} titleId={titleId} onClose={dismissWithFocusRestore} />
+        <ActivityInspectorHeader readOnly event={event} appIcons={appIcons} titleId={titleId}
+          segments={segments} deviceLabelById={deviceLabelById} onClose={dismissWithFocusRestore} />
         <ActivityInspectorBody
           readOnly
           event={event}
           values={values}
           segments={segments}
           appIcons={appIcons}
-          deviceLabelById={deviceLabelById}
           projectOptions={projectOptions}
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}
@@ -1471,6 +1469,8 @@ export function WeekActivityInspector({
           event={displayedEvent}
           appIcons={appIcons}
           titleId="week-activity-inspector-title"
+          segments={segments}
+          deviceLabelById={deviceLabelById}
           closeDisabled={busy}
           onClose={close}
         />
@@ -1504,7 +1504,6 @@ export function WeekActivityInspector({
           values={values}
           segments={targetSegments}
           appIcons={appIcons}
-          deviceLabelById={deviceLabelById}
           projectOptions={projectOptions}
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}

@@ -29,6 +29,7 @@ import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState"
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
 import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel } from "./BrowserHistoryBootstrapPrompt";
+import { SettingsSelect } from "../settings/SettingsSelect";
 import { DashboardPageHeader } from "./DashboardPageHeader";
 import { DayWeekToggle, type DayWeekPeriod } from "../../components/DayWeekToggle";
 import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } from "./WeekActivityInspector";
@@ -292,6 +293,18 @@ export function DashboardPage({
       dashPeriod={dashPeriod}
       initialDataLoading={initialDataLoading}
       dateNavigator={dashboardDateNavigator}
+      deviceSelect={onDeviceTimelineFilterChange && deviceLabelById && deviceLabelById.size > 0 ? (
+        <div title={deviceTimelineFilter === "all" ? t("dashboard.deviceElapsedTime") : undefined}>
+          <SettingsSelect<DeviceTimelineFilter> ariaLabel={t("dashboard.deviceFilter")}
+            className="dashboard-device-select" triggerVariant="header-action" value={deviceTimelineFilter}
+            options={[
+              { value: "all", label: t("dashboard.allDevices") },
+              { value: "local", label: t("dashboard.thisMac") },
+              ...[...deviceLabelById].map(([value, label]) => ({ value, label })),
+            ]}
+            onChange={onDeviceTimelineFilterChange} placement="below" />
+        </div>
+      ) : null}
       periodToggle={navigationRefreshEnabled && dashPeriod !== "Month" ? (
         <DayWeekToggle
           ariaLabel={t("dashboard.range.aria")}
@@ -338,35 +351,6 @@ export function DashboardPage({
       {headInsideBlock ? null : pageHead}
 
       <DashboardDemoReplayBanner replay={dashboardReplay} />
-
-      {onDeviceTimelineFilterChange && deviceLabelById && deviceLabelById.size > 0 ? (
-        <div className="dashboard-device-filter" role="group" aria-label={t("dashboard.deviceFilter")} title={deviceTimelineFilter === "all" ? t("dashboard.deviceElapsedTime") : undefined}>
-          <button
-            type="button"
-            className={`dashboard-device-filter__option${deviceTimelineFilter === "all" ? " dashboard-device-filter__option--active" : ""}`}
-            onClick={() => onDeviceTimelineFilterChange("all")}
-          >
-            {t("dashboard.allDevices")}
-          </button>
-          <button
-            type="button"
-            className={`dashboard-device-filter__option${deviceTimelineFilter === "local" ? " dashboard-device-filter__option--active" : ""}`}
-            onClick={() => onDeviceTimelineFilterChange("local")}
-          >
-            {t("dashboard.thisMac")}
-          </button>
-          {[...deviceLabelById.entries()].map(([deviceId, label]) => (
-            <button
-              key={deviceId}
-              type="button"
-              className={`dashboard-device-filter__option${deviceTimelineFilter === deviceId ? " dashboard-device-filter__option--active" : ""}`}
-              onClick={() => onDeviceTimelineFilterChange(deviceId)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : null}
 
       {dashPeriod === "Week" ? (
         <WeekDashboard

@@ -32,6 +32,7 @@ const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
 const FLOW_CELL_BASE_MIN_HEIGHT_REM = 0.5;
 const FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM = 0.76;
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
+const EMPTY_ACTIVITY_SEGMENTS: readonly ActivitySegment[] = [];
 
 export function FlowChartView({
   classifiedResultIds,
@@ -48,7 +49,7 @@ export function FlowChartView({
   colorMode: controlledColorMode,
   onColorModeChange,
   deviceLabelById,
-  segments = [],
+  segments = EMPTY_ACTIVITY_SEGMENTS,
   activityActionsEnabled = false,
   onSaveActivityValues,
   onAssignProject,
@@ -129,13 +130,13 @@ export function FlowChartView({
     for (const block of blocks) next.set(`${block.minuteOfDay}`, block);
     return next;
   }, [blocks]);
-  const hoverGroupsByCell = useMemo(
-    () => buildFlowBlockHoverGroups(blocks, intervalMinutes, boundaryMinutes),
-    [blocks, boundaryMinutes, intervalMinutes],
-  );
   const segmentsById = useMemo(
     () => new Map(segments.map((segment) => [segment.id, segment])),
     [segments],
+  );
+  const hoverGroupsByCell = useMemo(
+    () => buildFlowBlockHoverGroups(blocks, intervalMinutes, boundaryMinutes, segmentsById),
+    [blocks, boundaryMinutes, intervalMinutes, segmentsById],
   );
   const inspectedSegments = useMemo(() => (
     activityInspector?.event.segmentIds.flatMap((segmentId) => {
@@ -171,14 +172,18 @@ export function FlowChartView({
     setActivityInspector({
       sessionId: activityInspectorSessionIdRef.current,
       group,
-      event: buildFlowActivityInspectorEvent(group, { projectsById }),
+      event: buildFlowActivityInspectorEvent(group, {
+        projectsById, segmentsById, deviceLabelById,
+        thisDeviceLabel: t("dashboard.week.inspector.thisMac"),
+        syncedDeviceLabel: t("dashboard.week.inspector.syncedMac"),
+      }),
       sourceSegmentIds: [...new Set(group.segmentIds)],
       regroupedBlockCount: 1,
       anchorElement: preview?.group === group && preview.anchorElement.isConnected ? preview.anchorElement : target,
       restoreFocusTarget: target,
       initialView,
     });
-  }, [projectsById]);
+  }, [projectsById, segmentsById, deviceLabelById, t]);
   // Keep a pinned Inspector bound to the exact source records selected when it
   // opened. A refresh may split or merge the rendered Flow group, so only move
   // the visual anchor/highlight to the group with the greatest source overlap;

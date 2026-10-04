@@ -69,6 +69,8 @@ type SettingsSelectProps<TValue extends string> = {
   readonly options: readonly SettingsSelectOption<TValue>[];
   readonly onChange: (value: TValue) => void;
   readonly className?: string;
+  /** Reuse the app's page-header button treatment outside Settings. */
+  readonly triggerVariant?: "default" | "header-action";
   /** Greys the whole control and blocks opening (e.g. a prerequisite is off). */
   readonly disabled?: boolean;
   /** Optional compact visual for icon-only triggers. The accessible name still comes from `ariaLabel`. */
@@ -95,10 +97,11 @@ export function SettingsSelect<TValue extends string>({
   options,
   onChange,
   className,
+  triggerVariant = "default",
   disabled = false,
   triggerVisual,
   placeholder,
-  placement = triggerVisual ? "below" : "selected",
+  placement = triggerVisual || triggerVariant === "header-action" ? "below" : "selected",
   menuSize = "bounded",
 }: SettingsSelectProps<TValue>) {
   const controlId = useId();
@@ -379,7 +382,9 @@ export function SettingsSelect<TValue extends string>({
       <button
         ref={triggerRef}
         type="button"
-        className="settings-select-control__trigger"
+        className={triggerVariant === "header-action"
+          ? "settings-select-control__header-trigger app-btn app-btn--secondary app-btn--header-action"
+          : "settings-select-control__trigger"}
         role="combobox"
         aria-label={triggerLabel}
         title={triggerVisual ? triggerLabel : undefined}

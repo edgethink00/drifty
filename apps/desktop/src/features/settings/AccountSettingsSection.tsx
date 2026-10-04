@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { canOfferPromoCode, canStartCloudTrial } from "../billing/billingEligibility";
 import { AccountPlanModal } from "./AccountPlanModal";
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
+import { DeviceSyncSetupModal } from "../device-sync/DeviceSyncSetupModal";
 import { Toggle } from "../../components/Toggle";
 import { IndividualPlanCards, type BillingPlanId } from "../billing/IndividualPlanCards";
 import { formatOrganizationSeatAccessCopy } from "../billing/billingAccessCopy";
@@ -129,6 +130,7 @@ export function AccountSettingsSection({
 }: AccountSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [syncSetupMode, setSyncSetupMode] = useState<"info" | "enable" | null>(null);
   const [localActionPending, setLocalActionPending] = useState(false);
   const [localActionError, setLocalActionError] = useState<string | null>(null);
   const actionInFlight = useRef(false);
@@ -490,6 +492,82 @@ export function AccountSettingsSection({
           ) : null}
         </div>
         <GoogleCalendarSettings />
+        {onDeviceSyncEnabledChange ? (
+          <>
+            <div data-setting-id="settings.account.syncMacs" className="settings-row account-device-sync-row">
+              <div>
+                <div className="lbl settings-label-with-badge">
+                  {t("settings.account.deviceSync")}
+                  <span className="status-badge">Pro</span>
+                </div>
+                <div className="desc">
+                  {t("settings.account.syncDescription")}{" "}
+                  <button type="button" className="account-device-sync-help" aria-haspopup="dialog"
+                    onClick={() => setSyncSetupMode("info")}>
+                    {t("settings.account.syncLearnMore")}
+                  </button>
+                </div>
+                {!deviceSyncGateActive && deviceSyncEnabled ? (
+                  <p className="capture-recency capture-recency--error" role="status">
+                    {t("settings.account.syncPaused")}
+                  </p>
+                ) : null}
+                {deviceSyncStatus?.lastError ? (
+                  <p className="capture-recency capture-recency--error" role="status">{localizeSettingsError(deviceSyncStatus.lastError, effectiveLanguage, t)}</p>
+                ) : null}
+              </div>
+              <div className="ctrl">
+                <Toggle
+                  checked={deviceSyncEnabled}
+                  disabled={!deviceSyncEnabled && !deviceSyncCanEnable}
+                  onChange={(enabled) => {
+                    if (enabled) setSyncSetupMode("enable");
+                    else onDeviceSyncEnabledChange(false);
+                  }}
+                  ariaLabel={t("settings.account.toggleSync")}
+                />
+              </div>
+            </div>
+            {deviceSyncEnabled ? (
+              <div className="settings-row settings-row--stacked-action">
+                <div>
+                  <div className="lbl">{t("settings.account.syncStatus")}</div>
+                  <div className="desc">{describeDeviceSyncStatus(deviceSyncStatus, t)}</div>
+                </div>
+                <div className="ctrl account-public-profile-actions">
+                  <button type="button" className="settings-btn" onClick={() => void onDeviceSyncNow?.()} disabled={!onDeviceSyncNow || !deviceSyncGateActive}>
+                    {t("settings.account.syncNow")}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-btn danger"
+                    onClick={() => void onPurgeDeviceSyncData?.()}
+                    disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
+                  >
+                    {deviceSyncPurging ? t("settings.account.deleting") : t("settings.account.deleteCloud")}
+                  </button>
+                </div>
+              </div>
+            ) : isSignedIn ? (
+              <div className="settings-row settings-row--stacked-action">
+                <div>
+                  <div className="lbl">{t("settings.account.cloudCopy")}</div>
+                  <div className="desc">{t("settings.account.deleteCloudDescription")}</div>
+                </div>
+                <div className="ctrl">
+                  <button
+                    type="button"
+                    className="settings-btn danger"
+                    onClick={() => void onPurgeDeviceSyncData?.()}
+                    disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
+                  >
+                    {deviceSyncPurging ? t("settings.account.deleting") : t("settings.account.deleteCloud")}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
         {shouldShowDeviceManagement ? (
           <div className="settings-row settings-row--cloud-devices">
             <CloudDeviceManagementPanel
@@ -526,73 +604,13 @@ export function AccountSettingsSection({
         </div>
       </div>
 
-      {onDeviceSyncEnabledChange ? (
-        <div className="settings-block">
-          <h3>{t("settings.account.deviceSync")}</h3>
-          <div data-setting-id="settings.account.syncMacs" className="settings-row">
-            <div>
-              <div className="lbl">{t("settings.account.syncMacs")}</div>
-              <div className="desc">{t("settings.account.syncDescription")}</div>
-              <p className="desc">{t("settings.account.syncScope")}</p>
-              <p className="desc">{t("settings.account.syncTiming")}</p>
-              {!deviceSyncGateActive && deviceSyncEnabled ? (
-                <p className="capture-recency capture-recency--error" role="status">
-                  {t("settings.account.syncPaused")}
-                </p>
-              ) : null}
-              {deviceSyncStatus?.lastError ? (
-                <p className="capture-recency capture-recency--error" role="status">{localizeSettingsError(deviceSyncStatus.lastError, effectiveLanguage, t)}</p>
-              ) : null}
-            </div>
-            <div className="ctrl">
-              <Toggle
-                checked={deviceSyncEnabled}
-                disabled={!deviceSyncEnabled && !deviceSyncCanEnable}
-                onChange={onDeviceSyncEnabledChange}
-                ariaLabel={t("settings.account.toggleSync")}
-              />
-            </div>
-          </div>
-          {deviceSyncEnabled ? (
-            <div className="settings-row settings-row--stacked-action">
-              <div>
-                <div className="lbl">{t("settings.account.syncStatus")}</div>
-                <div className="desc">{describeDeviceSyncStatus(deviceSyncStatus, t)}</div>
-              </div>
-              <div className="ctrl account-public-profile-actions">
-                <button type="button" className="settings-btn" onClick={() => void onDeviceSyncNow?.()} disabled={!onDeviceSyncNow || !deviceSyncGateActive}>
-                  {t("settings.account.syncNow")}
-                </button>
-                <button
-                  type="button"
-                  className="settings-btn danger"
-                  onClick={() => void onPurgeDeviceSyncData?.()}
-                  disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
-                >
-                  {deviceSyncPurging ? t("settings.account.deleting") : t("settings.account.deleteCloud")}
-                </button>
-              </div>
-            </div>
-          ) : isSignedIn ? (
-            <div className="settings-row settings-row--stacked-action">
-              <div>
-                <div className="lbl">{t("settings.account.cloudCopy")}</div>
-                <div className="desc">{t("settings.account.deleteCloudDescription")}</div>
-              </div>
-              <div className="ctrl">
-                <button
-                  type="button"
-                  className="settings-btn danger"
-                  onClick={() => void onPurgeDeviceSyncData?.()}
-                  disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
-                >
-                  {deviceSyncPurging ? t("settings.account.deleting") : t("settings.account.deleteCloud")}
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+
+      <DeviceSyncSetupModal mode={syncSetupMode} canEnable={deviceSyncCanEnable}
+        onClose={() => setSyncSetupMode(null)} onEnable={() => {
+          if (!deviceSyncCanEnable) return;
+          setSyncSetupMode(null);
+          onDeviceSyncEnabledChange?.(true);
+        }} />
 
       {canDeleteAccount && onDeleteAccount ? (
         <div className="settings-block settings-block--danger-zone">

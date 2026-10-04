@@ -13,6 +13,7 @@ import type { ProjectLegendEntry } from "./projectFlowView";
 import { blockDetailLabel, blockDisplayName, formatGroupTimeRange } from "./flowChartFormat";
 import { useFlowChartHoverDelegation, type AnchoredFlowHoverState } from "./useFlowChartHoverDelegation";
 import { useLocalization } from "../localization/LocalizationContext";
+import { buildActivityDevices } from "../device-sync/deviceTimelineLabels";
 
 const EMPTY_ACTIVITY_SEGMENTS_BY_ID = new Map<string, ActivitySegment>();
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
@@ -38,6 +39,10 @@ export function buildFlowActivityInspectorEvent(
   group: FlowBlockHoverGroup,
   options: {
     readonly projectsById?: ReadonlyMap<string, ProjectLegendEntry>;
+    readonly segmentsById?: ReadonlyMap<string, ActivitySegment>;
+    readonly deviceLabelById?: ReadonlyMap<string, string>;
+    readonly thisDeviceLabel?: string;
+    readonly syncedDeviceLabel?: string;
   } = {},
 ): ActivityInspectorEvent {
   const { block } = group;
@@ -102,6 +107,15 @@ export function buildFlowActivityInspectorEvent(
     hasMixedProject: projectWeights.size > 1,
     detailLabel: blockDetailLabel(block),
     durationSeconds: group.durationSeconds,
+    devices: buildActivityDevices(
+      (group.displaySegmentIds ?? group.segmentIds).flatMap((id) => {
+        const segment = options.segmentsById?.get(id);
+        return segment ? [segment] : [];
+      }),
+      options.deviceLabelById,
+      options.thisDeviceLabel ?? "",
+      options.syncedDeviceLabel ?? "",
+    ),
   };
 }
 
@@ -134,7 +148,11 @@ export function FlowHoverLayer({
   });
   const highlightedGroup = disabled ? pinnedGroup : hoveredBlock?.group ?? null;
   const previewEvent = hoveredBlock
-    ? buildFlowActivityInspectorEvent(hoveredBlock.group, { projectsById })
+    ? buildFlowActivityInspectorEvent(hoveredBlock.group, {
+        projectsById, segmentsById, deviceLabelById,
+        thisDeviceLabel: t("dashboard.week.inspector.thisMac"),
+        syncedDeviceLabel: t("dashboard.week.inspector.syncedMac"),
+      })
     : null;
   const previewSegments = previewEvent?.segmentIds.flatMap((segmentId) => {
     const segment = segmentsById.get(segmentId);

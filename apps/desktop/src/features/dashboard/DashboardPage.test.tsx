@@ -26,6 +26,9 @@ vi.mock("../share/useShareCardCommunityModels", () => ({
 const noop = vi.fn();
 
 type DashboardPageFixtureOptions = {
+  readonly deviceLabelById?: ComponentProps<typeof DashboardPage>["deviceLabelById"];
+  readonly deviceTimelineFilter?: ComponentProps<typeof DashboardPage>["deviceTimelineFilter"];
+  readonly onDeviceTimelineFilterChange?: ComponentProps<typeof DashboardPage>["onDeviceTimelineFilterChange"];
   readonly funnelEnabled?: boolean;
   readonly funnelResultEnabled?: boolean;
   readonly dashboardSegments?: readonly ActivitySegment[];
@@ -57,6 +60,9 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
     <DashboardPage
       funnelEnabled={options.funnelEnabled}
       funnelResultEnabled={options.funnelResultEnabled}
+      deviceLabelById={options.deviceLabelById}
+      deviceTimelineFilter={options.deviceTimelineFilter}
+      onDeviceTimelineFilterChange={options.onDeviceTimelineFilterChange}
       appIcons={{}}
       appTheme="light"
       billingCheckoutLoadingInterval={null}
@@ -601,5 +607,23 @@ describe("DashboardPage funnel integration", () => {
   ])("does not enable result exposure for excluded state %j", (state) => {
     renderDashboardWithNoData({ ...eligible, ...state });
     expect(useProFunnelExposure).toHaveBeenLastCalledWith(true, null);
+  });
+});
+
+
+describe("dashboard device selection", () => {
+  it.each(["Today", "Week"] as const)("hides the %s device selector without another device", (dashPeriod) => {
+    renderDashboardWithNoData({ dashPeriod, deviceLabelById: new Map(), onDeviceTimelineFilterChange: vi.fn() });
+    expect(screen.queryByRole("combobox", { name: "Device filter" })).toBeNull();
+  });
+  it.each(["Today", "Week"] as const)("selects devices from the %s header without a separate button strip", (dashPeriod) => {
+    const onChange = vi.fn();
+    renderDashboardWithNoData({ dashPeriod, deviceLabelById: new Map([["windows-pc", "Windows PC"]]), onDeviceTimelineFilterChange: onChange });
+    const select = screen.getByRole("combobox", { name: "Device filter" });
+    expect(select.closest(".dashboard-page-head__side")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "All devices" })).toBeNull();
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole("option", { name: "Windows PC" }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("windows-pc");
   });
 });

@@ -834,41 +834,34 @@ span.flow-hover-card__identity-pill {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 78%, transparent);
 }
 
-.dashboard-device-filter {
-  display: inline-flex;
+.dashboard-device-select {
+  min-width: 0;
+  width: 7.5rem;
+}
+
+.dashboard-device-select .settings-select-control__dot {
+  display: none;
+}
+
+.dashboard-device-select .settings-select-control__menu {
+  min-width: 11rem;
+  right: 0;
+  left: auto;
+}
+
+.dashboard-page-head__side--device-select {
+  display: flex;
   align-items: center;
-  gap: 0.25rem;
-  margin-bottom: 0.6rem;
-  padding: 0.2rem;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 52%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-strong) 62%, transparent);
-  width: fit-content;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
-.dashboard-device-filter__option {
-  appearance: none;
-  border: none;
-  border-radius: 999px;
-  padding: 0.3rem 0.72rem;
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 650;
-  line-height: 1;
-  cursor: pointer;
+.dashboard-page-head--today:has(.dashboard-device-select) .dashboard-page-head__row {
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
 }
 
-.dashboard-device-filter__option:hover {
-  color: var(--text);
-}
-
-.dashboard-device-filter__option--active {
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  color: var(--text);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--line-strong) 62%, transparent);
-}
 
 .flow-hover-card__device-pill {
   display: inline-flex;

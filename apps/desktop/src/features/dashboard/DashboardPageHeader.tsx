@@ -7,6 +7,7 @@ type DashboardPageHeaderProps = {
   readonly initialDataLoading: boolean;
   readonly dateNavigator: ReactNode;
   readonly periodToggle?: ReactNode;
+  readonly deviceSelect?: ReactNode;
   readonly headerAction?: ReactNode;
   readonly focusDuration: string | null;
 };
@@ -16,6 +17,7 @@ export function DashboardPageHeader({
   initialDataLoading,
   dateNavigator,
   periodToggle,
+  deviceSelect,
   headerAction,
   focusDuration,
 }: DashboardPageHeaderProps) {
@@ -46,8 +48,9 @@ export function DashboardPageHeader({
           </div>
           {headerAction}
         </div>
-        <div className={periodToggle ? "dashboard-page-head__side dashboard-page-head__side--period-toggle" : "dashboard-page-head__side"}>
+        <div className={`dashboard-page-head__side${periodToggle ? " dashboard-page-head__side--period-toggle" : ""}${deviceSelect ? " dashboard-page-head__side--device-select" : ""}`}>
           {periodToggle}
+          {deviceSelect}
           {dateNavigator}
         </div>
       </div>

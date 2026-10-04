@@ -134,3 +134,41 @@
   overflow-wrap: anywhere;
 }
 .account-plan-modal { overscroll-behavior: contain; }
+
+.account-device-sync-help {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.account-device-sync-help:hover { color: var(--text); }
+.account-device-sync-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.content--settings .account-device-sync-row {
+  align-items: flex-start;
+}
+.content--settings .account-device-sync-row > .ctrl {
+  flex: 0 0 auto;
+  padding-top: 0.1rem;
+}
+
+.device-sync-setup-modal { display: grid; gap: var(--space-4); }
+.device-sync-setup-modal__details {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+}
+.device-sync-setup-modal__details summary { cursor: pointer; }
+.device-sync-setup-modal__details p { margin: var(--space-2) 0 0; }
+
+.device-sync-setup-modal .auth-modal__header { margin-bottom: 0; }
+.device-sync-setup-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

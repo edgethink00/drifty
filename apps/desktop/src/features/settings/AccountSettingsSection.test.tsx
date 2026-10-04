@@ -681,7 +681,7 @@ describe("AccountSettingsSection organization seat", () => {
     openUrlMock.mockResolvedValue(undefined);
   });
 
-  it("keeps eligible device sync off until the user explicitly opts in", () => {
+  it("explains uploads when enabling and keeps sync off until confirmed", () => {
     const onDeviceSyncEnabledChange = vi.fn();
     render(<AccountSettingsSection {...accountProps({
       deviceSyncCanEnable: true, onDeviceSyncEnabledChange,
@@ -689,11 +689,39 @@ describe("AccountSettingsSection organization seat", () => {
 
     const toggle = screen.getByRole("switch", { name: "Toggle device sync" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(onDeviceSyncEnabledChange).not.toHaveBeenCalled();
-    expect(screen.getByText(/Projects, classification rules and other settings/)).toBeTruthy();
-    expect(screen.getByText(/every 3 minutes while Drifty is running/)).toBeTruthy();
+    expect(screen.queryByText(/Projects, classification rules/)).toBeNull();
     fireEvent.click(toggle);
-    expect(onDeviceSyncEnabledChange).toHaveBeenCalledWith(true);
+    const dialog = screen.getByRole("dialog", { name: "Turn on device sync?" });
+    expect(within(dialog).getByText(/apps, window titles and sites/)).toBeTruthy();
+    expect(onDeviceSyncEnabledChange).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Turn on sync" }));
+    expect(onDeviceSyncEnabledChange).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  it("cancels enablement and lets users read details without opting in", async () => {
+    const onDeviceSyncEnabledChange = vi.fn();
+    render(<AccountSettingsSection {...accountProps({ deviceSyncCanEnable: true, onDeviceSyncEnabledChange })} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle device sync" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Learn more" }));
+    const dialog = screen.getByRole("dialog", { name: "Device sync" });
+    expect(within(dialog).queryByRole("button", { name: "Turn on sync" })).toBeNull();
+    expect(within(dialog).getByText(/every 3 minutes while Drifty is running/)).toBeTruthy();
+    expect(onDeviceSyncEnabledChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("cannot confirm enablement if access expires while the dialog is open", () => {
+    const onDeviceSyncEnabledChange = vi.fn();
+    const { rerender } = render(<AccountSettingsSection {...accountProps({ deviceSyncCanEnable: true, onDeviceSyncEnabledChange })} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle device sync" }));
+    rerender(<AccountSettingsSection {...accountProps({ deviceSyncCanEnable: false, onDeviceSyncEnabledChange })} />);
+    const confirm = screen.getByRole("button", { name: "Turn on sync" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(onDeviceSyncEnabledChange).not.toHaveBeenCalled();
   });
 
   it("blocks new opt-in without access while keeping owner cloud deletion available", () => {
@@ -753,7 +781,9 @@ describe("AccountSettingsSection organization seat", () => {
       />,
     );
 
-    expect(screen.getByText(/cloud copy is kept for 60 days/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Learn more" }));
+    expect(screen.getByText(/cloud copy is deleted after 60 days unless access returns/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.getByText(/Activity saved on your devices stays there/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Delete cloud copy$/i }));
     expect(onPurgeDeviceSyncData).toHaveBeenCalledTimes(1);
