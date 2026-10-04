@@ -46,12 +46,20 @@
 }
 
 .history-view__toolbar {
+  /* One height for the search field and the buttons beside it. 2.3125rem is
+     37px at the base size, which reads as a search bar rather than a thin strip
+     next to the 32px app controls. It is rem-based so the row keeps pace with
+     the type that scales up on wide windows, and the pill shape is shared so
+     the row looks like one group. */
+  --history-toolbar-height: 2.3125rem;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .history-view__toolbar .app-btn {
+  --btn-h: var(--history-toolbar-height);
+  border-radius: var(--radius-pill);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -61,12 +69,12 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  min-height: 32px;
-  height: 32px;
+  min-height: var(--history-toolbar-height, 2.3125rem);
+  height: var(--history-toolbar-height, 2.3125rem);
   width: auto;
   max-width: none;
   flex: 1 1 auto;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-2) 76%, var(--surface));
@@ -75,8 +83,8 @@
 
 .history-search svg {
   flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -94,8 +102,26 @@
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
   outline: none;
+}
+
+/* The browser's stock clear button is a saturated blue that clashes with the
+   warm palette; draw the same glyph in the muted text color instead. */
+.history-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  background-color: var(--text-soft);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 6l12 12M18 6L6 18'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 6l12 12M18 6L6 18'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.history-search input::-webkit-search-cancel-button:hover {
+  background-color: var(--text);
 }
 
 .history-search input::placeholder {

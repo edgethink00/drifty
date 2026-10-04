@@ -219,6 +219,12 @@ describe("HistoryView", () => {
     expect(cssRule(".history-groups")).toMatch(/min-height:\s*0;[\s\S]*overflow-y:\s*auto;/);
   });
 
+  it("sizes the search field and its toolbar buttons from one height and one pill shape", () => {
+    expect(cssRule(".history-view__toolbar")).toContain("--history-toolbar-height: 2.3125rem;");
+    expect(cssRule(".history-view__toolbar .app-btn")).toMatch(/--btn-h:\s*var\(--history-toolbar-height\);[\s\S]*border-radius:\s*var\(--radius-pill\);/);
+    expect(cssRule(".history-search")).toMatch(/height:\s*var\(--history-toolbar-height, 2.3125rem\);[\s\S]*border-radius:\s*999px;/);
+  });
+
   it("keeps history identity text styles off the icon slot", () => {
     expect(cssRule(".history-row__identity-copy")).toMatch(/display:\s*grid;[\s\S]*min-width:\s*0;/);
     expect(styles).toContain(".history-row__identity-copy span {\n  color: var(--text-soft);");
