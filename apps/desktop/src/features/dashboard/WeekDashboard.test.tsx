@@ -1553,7 +1553,15 @@ describe("WeekDashboard activity inspector", () => {
     assertSources(screen.getByRole("dialog"));
   });
 
-  it("allows inspection but disables mutation for synced activity", () => {
+  it("retains the missing-record notice even when the available record is synced", () => {
+    const remoteSegment: ActivitySegment = { ...weekSegments[0], id: "remote", deviceId: "pc" };
+    renderWeekDashboard({ calendarEvents: new Map([["2024-01-03", [makeWeekCalendarEvent({ segmentIds: ["remote", "missing"] })]]]), segments: [remoteSegment], activityActionsEnabled: true });
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    expect(screen.getByRole("dialog").querySelector(".week-activity-inspector__notice")).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Delete activity/ }).disabled).toBe(true);
+  });
+
+  it("shows synced activity without a warning while keeping preview and detail mutations disabled", () => {
     const remoteSegment: ActivitySegment = {
       ...weekSegments[0],
       id: "remote-segment",
@@ -1568,9 +1576,15 @@ describe("WeekDashboard activity inspector", () => {
       onDeleteActivity: vi.fn().mockResolvedValue(undefined),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
-
-    expect(screen.getByText(/must be edited on the device that recorded it/i)).toBeTruthy();
+    const trigger = screen.getByRole("button", { name: /Open activity details/ });
+    fireEvent.focus(trigger);
+    const preview = screen.getByRole("tooltip");
+    expect(within(preview).queryByText(/must be edited on the device that recorded it/i)).toBeNull();
+    expect(preview.querySelector(".week-activity-inspector__notice")).toBeNull();
+    fireEvent.click(trigger);
+    const inspector = screen.getByRole("dialog");
+    expect(within(inspector).queryByText(/must be edited on the device that recorded it/i)).toBeNull();
+    expect(inspector.querySelector(".week-activity-inspector__notice")).toBeNull();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Change Category/ }).disabled).toBe(true);
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Delete activity/ }).disabled).toBe(true);
   });

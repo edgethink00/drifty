@@ -973,7 +973,7 @@ function ActivityInspectorBody({
 
       <ActivityBreakdown event={event} appIcons={appIcons} segments={segments} deviceLabelById={deviceLabelById} />
 
-      {actionsDisabledReason ? (
+      {actionsDisabledReason && actionsDisabledReason !== t("dashboard.week.remoteEditBlocked") ? (
         <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p>
       ) : null}
       {error ? <p className="week-activity-inspector__error" role="alert">{error}</p> : null}
@@ -1592,7 +1592,7 @@ export function WeekActivityInspector({
               ? t("dashboard.week.inspector.activities", { count })
               : t("dashboard.week.inspector.oneActivity"),
           })}</p>
-          {actionsDisabledReason ? <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p> : null}
+          {actionsDisabledReason && actionsDisabledReason !== t("dashboard.week.remoteEditBlocked") ? <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p> : null}
           {error ? <p className="week-activity-inspector__error" role="alert">{error}</p> : null}
           <footer className="week-activity-inspector__footer">
             <button type="button" className="app-btn app-btn--secondary" onClick={() => setView("overview")} disabled={busy}>{t("common.cancel")}</button>

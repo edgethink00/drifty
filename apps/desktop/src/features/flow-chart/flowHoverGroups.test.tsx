@@ -94,6 +94,32 @@ describe("flow hover groups", () => {
     expect(eventFor([local]).devices?.map((device) => device.label)).toEqual(["This device"]);
   });
 
+  it("keeps same-app local and remote records read-only without a warning in Day hover and detail", () => {
+    const local: ActivitySegment = { id: "local", appName: "Editor", startedAt: "2026-04-06T09:00:00", endedAt: "2026-04-06T09:30:00", durationSeconds: 1800, platform: "macos", source: "manual" };
+    const remote: ActivitySegment = { ...local, id: "remote", deviceId: "pc", platform: "windows" };
+    const records = [local, remote];
+    const onClassify = vi.fn();
+    const onDelete = vi.fn();
+    render(<FlowChartView blocks={buildFlowBlocks(records, "2026-04-06", 3)} segments={records} appIcons={{}} intervalMinutes={3}
+      deviceLabelById={new Map([["pc", "Windows PC"]])} activityActionsEnabled onClassifyActivity={onClassify} onDeleteActivity={onDelete} />);
+    const cell = screen.getAllByRole("button", { name: /time block: 09:00–09:30/i })[0];
+    fireNativePointerMove(cell, 120, 80);
+    expect(screen.getByRole("tooltip").querySelector(".week-activity-inspector__notice")).toBeNull();
+    fireEvent.click(cell);
+    const inspector = screen.getByRole("dialog", { name: "Editor" });
+    expect(inspector.querySelector(".week-activity-inspector__notice")).toBeNull();
+    expect(within(inspector).getByText("This device")).toBeTruthy();
+    expect(within(inspector).getByText("Windows PC")).toBeTruthy();
+    const category = within(inspector).getByRole<HTMLButtonElement>("button", { name: /Change Category/ });
+    const productivity = within(inspector).getByRole<HTMLButtonElement>("button", { name: /Change Productivity/ });
+    const deletion = within(inspector).getByRole<HTMLButtonElement>("button", { name: /Delete/ });
+    expect(category.disabled).toBe(true);
+    expect(productivity.disabled).toBe(true);
+    expect(deletion.disabled).toBe(true);
+    fireEvent.click(category);fireEvent.click(deletion);
+    expect(onClassify).not.toHaveBeenCalled();expect(onDelete).not.toHaveBeenCalled();
+  });
+
   it("unions source segment ids across adjacent cells", () => {
     const blocks = [
       makeFlowBlock({ id: "cmux-a", minuteOfDay: 60, sourceSegmentIds: ["seg-a"] }),
