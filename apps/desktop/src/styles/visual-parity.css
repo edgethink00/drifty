@@ -1,10 +1,6 @@
 /* Visual parity pass: mock-visible shell and non-settings surfaces */
 .content > .theme-toggle { display: none; }
 
-.content--classification .clf-stat--with-icon {
-  gap: 6px;
-}
-
 .content--classification .clf-stat__row {
   display: flex;
   align-items: center;
@@ -63,13 +59,29 @@
 .content--classification .clf-stat {
   min-width: 0;
   min-height: 0;
-  padding: 6px 16px;
-  gap: 3px;
-  justify-content: space-between;
+  padding: 7px 16px;
+  gap: 8px;
+  justify-content: flex-start;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+/* The 28px app icon used to set the strip height, and space-between then
+   dropped the spare space between the label and the value. Pack the pair
+   and size this strip's icon to the value instead. */
+.content--classification .clf-stat .eyebrow {
+  margin-bottom: 0;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+}
+
+.content--classification .clf-stat .app-icon--sm,
+.content--classification .clf-stat .app-glyph--sm {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
 }
 
 .content--classification .clf-stat strong {
@@ -78,6 +90,11 @@
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.content--classification .clf-stat > strong {
+  min-height: 22px;
+  line-height: 22px;
 }
 
 .content--classification .clf-stat__row {

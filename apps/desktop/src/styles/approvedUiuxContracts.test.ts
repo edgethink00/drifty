@@ -78,6 +78,27 @@ describe("approved UI polish contracts", () => {
     ).toContain("background: transparent;");
   });
 
+  it("packs the Classification stat label against its value instead of stretching them apart", () => {
+    // A 28px icon made the strip taller than the two text lines, and
+    // space-between put that spare height between the label and the number.
+    for (const [label, source] of [["settings-polish", polish], ["visual-parity", parity]] as const) {
+      const tile = ruleBody(source, ".content--classification .clf-stat {");
+      expect(tile, label).toContain("justify-content: flex-start;");
+      expect(tile, label).toContain("gap: 8px;");
+      expect(tile, label).toContain("padding: 7px 16px;");
+      expect(tile, label).not.toContain("space-between");
+    }
+
+    const label = ruleBody(parity, ".content--classification .clf-stat .eyebrow {");
+    expect(label).toContain("line-height: 1.3;");
+    expect(label).toContain("letter-spacing: 0.04em;");
+    expect(label).toContain("margin-bottom: 0;");
+
+    expect(ruleBody(parity, ".content--classification .clf-stat > strong {")).toContain("min-height: 22px;");
+    expect(ruleBody(parity, ".content--classification .clf-stat .app-icon--sm,")).toContain("width: 22px;");
+    expect(ruleBody(parity, ".content--classification .clf-stat .app-icon--sm,")).toContain("height: 22px;");
+  });
+
   it("keeps the Classification stat strip out of the panel's shrink pool", () => {
     // The strip clips to its own rounded corners, and that overflow waives the
     // flex automatic minimum size: the page's flex column then handed it a
