@@ -114,17 +114,36 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
   }, [currentDay, period, startOfDayMinutes, windowOffset]);
 
   const active = enabled && Boolean(organizationId);
+  const scopeKey = JSON.stringify([active, organizationId, userEmail ?? null,
+    window.start_date, window.end_date, startOfDayMinutes]);
+  const scopeRef = useRef({ key: scopeKey });
+  if (scopeRef.current.key !== scopeKey) {
+    scopeRef.current = { key: scopeKey };
+    requestRef.current += 1;
+  }
+  const scope = scopeRef.current;
+  const [stateScope, setStateScope] = useState(scope);
+  const hasCurrentState = stateScope === scope;
+  const isCurrentScope = useCallback(() => active && scopeRef.current === scope, [active, scope]);
+  // Mask old data during render, then clear it before the new request settles.
+  // A failed request must never leave another team's totals under this header.
+  useEffect(() => {
+    if (stateScope === scope) return;
+    setStateScope(scope);
+    setProjects(EMPTY_PROJECTS);
+    setMix(EMPTY_MIX);
+    setMembers(EMPTY_MEMBERS);
+    setLoading(false);
+    setError(null);
+    setActionError(null);
+    setActionLoading(false);
+    setPublishing(false);
+    setPublishNote(null);
+  }, [scope, stateScope]);
+
 
   const refresh = useCallback(async () => {
-    if (!active || !organizationId) {
-      // Bump the request id so any in-flight fetch for a previous team can't resolve
-      // and repopulate the just-cleared state.
-      requestRef.current += 1;
-      setProjects(EMPTY_PROJECTS);
-      setMix(EMPTY_MIX);
-      setMembers(EMPTY_MEMBERS);
-      return;
-    }
+    if (!isCurrentScope() || !organizationId) return;
     const requestId = ++requestRef.current;
     setLoading(true);
     setError(null);
@@ -134,7 +153,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         fetchTeamProjectMix({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }),
         fetchTeamProjectMemberBreakdown({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }),
       ]);
-      if (requestRef.current !== requestId) return;
+      if (!isCurrentScope() || requestRef.current !== requestId) return;
 
       if (!projectsResult.success) {
         setError(projectsResult.error ?? "Unable to load team projects.");
@@ -142,9 +161,15 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       }
       const loadedProjects = [...(projectsResult.data ?? [])];
       setProjects(loadedProjects);
-      setMix(mixResult.success ? [...(mixResult.data ?? [])] : EMPTY_MIX);
-      setMembers(membersResult.success ? [...(membersResult.data ?? [])] : EMPTY_MEMBERS);
-      setError(null);
+      // A partial read failure must not erase this scope's last known totals.
+      // A changed scope has already reset/masked its previous owner's data.
+      if (mixResult.success) setMix([...(mixResult.data ?? [])]);
+      if (membersResult.success) setMembers([...(membersResult.data ?? [])]);
+      setError(!mixResult.success
+        ? (mixResult.error ?? "Unable to load team project totals.")
+        : !membersResult.success
+          ? (membersResult.error ?? "Unable to load team project members.")
+          : null);
       // Keep the local mirror in sync so the next AI pass sees current team defs.
       // Only mirror a non-empty set — a bulk upsert of [] would wipe every local
       // team project + its stored assignments, so we never let a (possibly transient)
@@ -153,27 +178,28 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         void trackerClient.upsertTeamProjects(organizationId, toLocalTeamProjectInputs(loadedProjects)).catch(() => undefined);
       }
     } catch (caught) {
-      if (requestRef.current !== requestId) return;
+      if (!isCurrentScope() || requestRef.current !== requestId) return;
       if (caught instanceof Error || isTeamErrorMessage(caught)) {
         setError(messageFromTeamError(caught, "Unable to load team projects."));
         return;
       }
       throw caught;
     } finally {
-      if (requestRef.current === requestId) setLoading(false);
+      if (isCurrentScope() && requestRef.current === requestId) setLoading(false);
     }
-  }, [active, organizationId, window.start_date, window.end_date]);
+  }, [isCurrentScope, organizationId, window.start_date, window.end_date]);
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [isCurrentScope, refresh]);
 
   const createProject = useCallback(async (fields: CreateTeamProjectFields): Promise<boolean> => {
-    if (!organizationId) return false;
+    if (!isCurrentScope() || !organizationId) return false;
     setActionLoading(true);
     setActionError(null);
     try {
       const result = await createTeamProject({ organization_id: organizationId, ...fields });
+      if (!isCurrentScope()) return false;
       if (!result.success) {
         setActionError(result.error ?? "Unable to create the project.");
         return false;
@@ -181,15 +207,17 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       await refresh();
       return true;
     } finally {
-      setActionLoading(false);
+      if (isCurrentScope()) setActionLoading(false);
     }
-  }, [organizationId, refresh]);
+  }, [isCurrentScope, organizationId, refresh]);
 
   const updateProject = useCallback(async (updateInput: UpdateTeamProjectInput): Promise<boolean> => {
+    if (!isCurrentScope()) return false;
     setActionLoading(true);
     setActionError(null);
     try {
       const result = await updateTeamProject(updateInput);
+      if (!isCurrentScope()) return false;
       if (!result.success) {
         setActionError(result.error ?? "Unable to update the project.");
         return false;
@@ -197,15 +225,17 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       await refresh();
       return true;
     } finally {
-      setActionLoading(false);
+      if (isCurrentScope()) setActionLoading(false);
     }
-  }, [refresh]);
+  }, [isCurrentScope, refresh]);
 
   const archiveProject = useCallback(async (projectId: string, archived: boolean): Promise<boolean> => {
+    if (!isCurrentScope()) return false;
     setActionLoading(true);
     setActionError(null);
     try {
       const result = await archiveTeamProject({ project_id: projectId, archived });
+      if (!isCurrentScope()) return false;
       if (!result.success) {
         setActionError(result.error ?? "Unable to archive the project.");
         return false;
@@ -213,12 +243,12 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       await refresh();
       return true;
     } finally {
-      setActionLoading(false);
+      if (isCurrentScope()) setActionLoading(false);
     }
-  }, [refresh]);
+  }, [isCurrentScope, refresh]);
 
   const publishMyTime = useCallback(async () => {
-    if (!organizationId) return;
+    if (!isCurrentScope() || !organizationId) return;
     setPublishing(true);
     setActionError(null);
     setPublishNote(null);
@@ -229,6 +259,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         trackerClient.getTeamProjectAssignments(range),
         trackerClient.getProjectWindowAssignments(range),
       ]);
+      if (!isCurrentScope()) return;
       const entries = aggregateTeamProjectDayTotals(assignments, localActivity, startOfDayMinutes, windowAssignments);
       if (entries.length === 0) {
         // Never publish an empty set — the RPC replaces the whole window, so an empty
@@ -244,6 +275,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         window_end_date: window.end_date,
         entries,
       });
+      if (!isCurrentScope()) return;
       if (!result.success) {
         setActionError(result.error ?? "Unable to share your project time.");
         return;
@@ -253,23 +285,25 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         : `Shared ${result.data?.published_row_count ?? entries.length} day totals.`);
       await refresh();
     } catch (caught) {
+      if (!isCurrentScope()) return;
       if (caught instanceof Error || isTeamErrorMessage(caught)) {
         setActionError(messageFromTeamError(caught, "Unable to share your project time."));
         return;
       }
       throw caught;
     } finally {
-      setPublishing(false);
+      if (isCurrentScope()) setPublishing(false);
     }
-  }, [organizationId, window.start_date, window.end_date, startOfDayMinutes, memberDisplayName, userEmail, refresh]);
+  }, [isCurrentScope, organizationId, window.start_date, window.end_date, startOfDayMinutes, memberDisplayName, userEmail, refresh]);
 
   const stopSharing = useCallback(async () => {
-    if (!organizationId) return;
+    if (!isCurrentScope() || !organizationId) return;
     setActionLoading(true);
     setActionError(null);
     setPublishNote(null);
     try {
       const result = await stopTeamProjectSharing({ organization_id: organizationId });
+      if (!isCurrentScope()) return;
       if (!result.success) {
         setActionError(result.error ?? "Unable to stop sharing.");
         return;
@@ -277,21 +311,21 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       setPublishNote("Stopped sharing your project time.");
       await refresh();
     } finally {
-      setActionLoading(false);
+      if (isCurrentScope()) setActionLoading(false);
     }
-  }, [organizationId, refresh]);
+  }, [isCurrentScope, organizationId, refresh]);
 
   return {
-    projects,
-    mix,
-    members,
+    projects: hasCurrentState ? projects : EMPTY_PROJECTS,
+    mix: hasCurrentState ? mix : EMPTY_MIX,
+    members: hasCurrentState ? members : EMPTY_MEMBERS,
     window,
-    loading,
-    error,
-    actionError,
-    actionLoading,
-    publishing,
-    publishNote,
+    loading: hasCurrentState ? loading : active,
+    error: hasCurrentState ? error : null,
+    actionError: hasCurrentState ? actionError : null,
+    actionLoading: hasCurrentState ? actionLoading : false,
+    publishing: hasCurrentState ? publishing : false,
+    publishNote: hasCurrentState ? publishNote : null,
     refresh,
     createProject,
     updateProject,
