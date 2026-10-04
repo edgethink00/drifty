@@ -2181,6 +2181,14 @@ class TrackerDatabase:
                             window_query += " AND datetime(window_started_at) <= datetime(?)"
                             window_params.append(self._normalize_range_bound(end_bound))
                         conn.execute(window_query, window_params)
+                        # Range deletion removes whole overlapping segments. Their
+                        # project windows can lie outside the requested range, so
+                        # invalidate those references in this same write transaction.
+                        deleted_segment_ids = {
+                            str(row["id"])
+                            for row in conn.execute(segment_subquery, tuple(segment_params))
+                        }
+                        self._delete_project_windows_for_segment_ids(conn, deleted_segment_ids)
                     else:
                         conn.execute("DELETE FROM project_window_assignments")
                     conn.execute(

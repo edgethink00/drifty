@@ -3100,6 +3100,52 @@ class TrackerDatabaseTests(unittest.TestCase):
             **fields,
         }
 
+    def test_history_range_deletion_removes_windows_outside_range_referencing_deleted_segments(self) -> None:
+        removed = self._insert_history_segment("2026-04-06T09:00:00+00:00", "2026-04-06T10:00:00+00:00")
+        kept = self._insert_history_segment("2026-04-06T08:00:00+00:00", "2026-04-06T08:03:00+00:00")
+        windows = [
+            self._project_window_input([removed], windowId="before"),
+            self._project_window_input([removed], windowId="after",
+                                       windowStartedAt="2026-04-06T09:57:00+00:00",
+                                       windowEndedAt="2026-04-06T10:00:00+00:00"),
+            self._project_window_input([kept], windowId="kept",
+                                       windowStartedAt="2026-04-06T08:00:00+00:00",
+                                       windowEndedAt="2026-04-06T08:03:00+00:00"),
+        ]
+        self.assertEqual(self.database.save_project_window_assignments(windows)["saved"], 3)
+        preserved_window = self.database.get_project_window_assignments()[0]
+        self.database.save_project_assignments([{"segmentId": kept, "projectId": None, "source": "manual"}])
+        preserved_assignment = self.database.get_project_assignments()[0]
+        self.assertEqual(preserved_assignment["source"], "manual")
+        bounds = {"start": "2026-04-06T09:30:00+00:00", "end": "2026-04-06T09:33:00+00:00",
+                  "scopes": {"activity": True}}
+        dry = self.database.delete_history_range(**bounds, dry_run=True)
+        self.assertEqual(dry["activitySegments"], 1)
+        self.assertEqual(len(self.database.get_project_window_assignments()), 3)
+
+        deleted = self.database.delete_history_range(**bounds)
+        self.assertEqual(deleted["activitySegments"], 1)
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            self.assertEqual(conn.execute("SELECT id FROM activity_segments").fetchall(), [(kept,)])
+        remaining = self.database.get_project_window_assignments()
+        self.assertEqual([window["windowId"] for window in remaining], ["kept"])
+        self.assertEqual(remaining[0], preserved_window)
+        self.assertEqual(self.database.get_project_assignments(), [preserved_assignment])
+        # A late result may not recreate either invalidated window.
+        self.assertEqual(self.database.save_project_window_assignments(windows[:2])["saved"], 0)
+
+    def test_history_range_project_window_cleanup_rolls_back_with_activity_deletion(self) -> None:
+        removed = self._insert_history_segment("2026-04-06T09:00:00+00:00", "2026-04-06T10:00:00+00:00")
+        self.database.save_project_window_assignments([self._project_window_input([removed])])
+        with self.database.connect() as conn:
+            conn.execute("CREATE TRIGGER qa_abort_range_delete BEFORE DELETE ON activity_segments "
+                         "BEGIN SELECT RAISE(ABORT, 'qa range failure'); END")
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "qa range failure"):
+            self.database.delete_history_range(start="2026-04-06T09:30:00+00:00",
+                                               end="2026-04-06T09:33:00+00:00", scopes={"activity": True})
+        self.assertEqual(self._count_rows("activity_segments"), 1)
+        self.assertEqual(len(self.database.get_project_window_assignments()), 1)
+
     def test_project_window_late_result_does_not_recreate_deleted_activity_references(self) -> None:
         deleted = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
         kept = self._insert_segment_returning_id("2026-04-06T09:03:00+00:00")
