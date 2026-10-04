@@ -1,120 +1,121 @@
 /* Teams · shared projects surface (design: claude.ai/design "Drifty Team").
-   Everything page-level is scoped under .content--team; the sidebar team-nav
-   pieces live at the top since they render inside the app shell's sidebar. */
+   Everything is scoped under .content--team or the team modals. The sidebar
+   entry is a plain shared nav item, so nothing here styles the app shell:
+   this file loads only with the lazy Teams surface. */
 
-/* ── Sidebar: "Your teams" label + collapsible team item ── */
+/* ── Page scaffolding ── */
 
-.nav-label--teams {
+/* Full-width like every other tab (.page has max-width: none); empty/onboard
+   state blocks carry their own readable max-widths below. */
+.content--team .team-panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.content--team .pg-head.team-page-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.4rem;
+  gap: var(--space-3);
+  flex-wrap: nowrap;
 }
 
-.nav-label__add {
-  width: 1.25rem;
-  height: 1.25rem;
-  display: grid;
-  place-items: center;
-  padding: 0;
+/* ── Title: Teams / team name ⌄ ──
+   "Teams" keeps the shared page-title size; the team name sits a hair smaller
+   in the muted ink, so the pair reads as one title whose subject is the
+   current team (owner decision 2026-10-04: 23.5px against 24px). The parts
+   share a baseline so Hangul and Latin names line up. */
+.content--team .team-title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.content--team .team-title h1 {
+  flex: 0 0 auto;
+}
+
+.content--team .team-title__separator {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-family: var(--font-display);
+  font-size: 1.46875rem;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  opacity: 0.5;
+}
+
+.content--team .team-switcher {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+/* The negative margin keeps the resting text on the title baseline while the
+   hover/open fill extends around it. No max-width: with the negative margin it
+   would clip the name by the fill width; flex shrinking handles long names. */
+.content--team .team-switcher__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  margin: -0.15rem -0.4rem;
+  padding: 0.15rem 0.4rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 1.46875rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.14s ease, background 0.14s ease, color 0.14s ease;
+  transition: background 0.14s ease;
 }
 
-.nav-label--teams:hover .nav-label__add,
-.nav-label__add:focus-visible {
-  opacity: 1;
+.content--team .team-switcher__trigger:hover,
+.content--team .team-switcher__trigger[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--line) 70%, transparent);
 }
 
-.nav-label__add:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--line) 46%, transparent);
+.content--team .team-switcher__trigger:focus-visible {
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline-offset: 2px;
 }
 
-.nav-label__add svg {
-  width: 12px;
-  height: 12px;
-}
-
-.sidebar-nav--teams {
-  position: relative;
-  /* Pin the implicit grid track to the rail width — otherwise the team row's
-     max-content (name + caret + more button) widens the track past the other
-     nav pills. */
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.nav-item--team {
-  cursor: pointer;
-}
-
-.nav-item--team__name {
-  flex: 1 1 auto;
+.content--team .team-switcher__name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
 }
 
-.team-nav-caret {
+.content--team .team-switcher__trigger svg {
   flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-  opacity: 0.55;
-  transition: transform 0.15s ease;
+  width: 16px;
+  height: 16px;
+  color: var(--text-soft);
 }
 
-.team-nav-caret--open {
-  transform: rotate(90deg);
-}
-
-.team-nav-more {
-  flex: 0 0 auto;
-  width: 1.4rem;
-  height: 1.4rem;
-  display: grid;
-  place-items: center;
-  margin: -0.2rem -0.2rem -0.2rem 0;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.14s ease, background 0.14s ease, color 0.14s ease;
-}
-
-.nav-item--team:hover .team-nav-more {
-  opacity: 1;
-}
-
-.team-nav-more:hover,
-.team-nav-more[aria-expanded="true"] {
-  opacity: 1;
-  color: var(--text);
-  background: color-mix(in srgb, var(--line) 46%, transparent);
-}
-
-.team-nav-more svg {
-  width: 14px;
-  height: 14px;
-}
-
-.team-nav-menu {
-  /* Fixed popover to the right of the rail (anchored inline from the ⋯ button):
-     stays above the pinned foot and never adds height to the sidebar scroll. */
-  position: fixed;
+/* Team menu: anchored under the team name, in the app popover chrome. It only
+   switches teams, so rows carry the name and the current-team check. */
+.content--team .team-switcher-menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: -0.5rem;
   z-index: 60;
-  width: 13rem;
   display: grid;
   gap: 2px;
+  width: 17.5rem;
+  max-width: calc(100vw - 2rem);
+  /* Many teams scroll inside the menu instead of running past the window. */
+  max-height: min(22rem, calc(100vh - 9rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.3rem;
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
@@ -122,7 +123,14 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
 }
 
-.team-nav-menu button {
+.content--team .team-switcher-menu__label {
+  padding: 0.35rem 0.55rem 0.25rem;
+  color: var(--text-soft);
+  font-size: var(--type-overline-size);
+  font-weight: 600;
+}
+
+.content--team .team-switcher-menu__item {
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -138,174 +146,66 @@
   cursor: pointer;
 }
 
-.team-nav-menu button:hover {
+.content--team .team-switcher-menu__item:hover,
+.content--team .team-switcher-menu__item:focus-visible {
   background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+  outline: none;
 }
 
-.team-nav-menu svg {
+.content--team .team-switcher-menu__item.is-current {
+  font-weight: 600;
+}
+
+.content--team .team-switcher-menu__check {
+  display: grid;
+  flex: 0 0 14px;
+  place-items: center;
   width: 14px;
   height: 14px;
-  flex: 0 0 auto;
-  opacity: 0.8;
 }
 
-.sidebar-subnav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 2px 0 2px 0.85rem;
-  padding-left: 0.7rem;
-  border-left: 1.5px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
+.content--team .team-switcher-menu__check svg {
+  width: 14px;
+  height: 14px;
 }
 
-.nav-item--sub {
-  font-size: 0.85em;
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
-  opacity: 0.82;
-}
-
-.nav-item--sub.active {
-  opacity: 1;
-}
-
-.nav-item--sub svg {
-  width: 17px;
-  height: 17px;
-}
-
-/* Teams workspace surface. Global navigation uses the shared app-shell rules. */
-
-/* ── Page scaffolding ── */
-
-/* Full-width like every other tab (.page has max-width: none); empty/onboard
-   state blocks carry their own readable max-widths below. */
-.content--team .team-panel {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.content--team .team-page-head h1 {
-  letter-spacing: -0.01em;
-}
-
-.content--team .pg-head.team-page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.content--team .team-page-title {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
+.content--team .team-switcher-menu__name {
+  flex: 1 1 auto;
   min-width: 0;
-}
-
-.content--team .team-switcher {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.content--team .team-switcher select {
-  min-width: 0;
-  max-width: 15rem;
-  height: 1.9rem;
-  padding: 0 1.75rem 0 0.65rem;
-  appearance: none;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text-soft);
-  font: 500 0.75rem/1 var(--font-sans);
+  overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
+  white-space: nowrap;
 }
 
-.content--team .team-switcher svg {
-  position: absolute;
-  right: 0.55rem;
-  width: 11px;
-  height: 11px;
-  color: var(--text-muted);
-  pointer-events: none;
+.content--team .team-switcher-menu__divider {
+  height: 1px;
+  margin: 0.25rem 0.3rem;
+  background: var(--line);
 }
 
-.content--team .team-workspace-nav {
+/* ── Header actions: invite + settings at one height ── */
+
+.content--team .team-header-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: -0.15rem 0 var(--space-4);
-  border-bottom: 1px solid var(--line);
+  gap: 0.4rem;
 }
 
-.content--team .team-view-tabs,
-.content--team .team-workspace-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.2rem;
-}
-
-.content--team .team-view-tabs button {
-  position: relative;
-  min-height: 2.4rem;
-  padding: 0 0.72rem;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font: 600 0.79rem/1 var(--font-sans);
-  cursor: pointer;
-}
-
-.content--team .team-view-tabs button::after {
-  content: "";
-  position: absolute;
-  right: 0.45rem;
-  bottom: -1px;
-  left: 0.45rem;
-  height: 2px;
-  border-radius: 999px 999px 0 0;
-  background: transparent;
-}
-
-.content--team .team-view-tabs button:hover {
-  color: var(--text-soft);
-}
-
-.content--team .team-view-tabs button.is-active {
-  color: var(--text);
-}
-
-.content--team .team-view-tabs button.is-active::after {
-  background: var(--accent);
-}
-
-.content--team .team-workspace-actions {
-  padding-bottom: 0.28rem;
-}
-
-.content--team .team-workspace-actions .app-btn {
-  min-height: 1.9rem;
-  padding: 0 0.58rem;
-  font-size: 0.74rem;
-}
-
-.content--team .team-workspace-actions .team-workspace-add {
-  width: 1.9rem;
+.content--team .team-header-actions .team-header-actions__icon {
+  aspect-ratio: 1;
   padding: 0;
-  font-size: 1.05rem;
 }
 
-@media (max-width: 760px) {
-  .content--team .team-workspace-nav {
-    align-items: flex-end;
-    flex-wrap: wrap;
-  }
+.content--team .team-header-actions .team-header-actions__icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Toolbar: the shared page tabs + window controls (styles/page-tabs.css) ── */
+
+.content--team .team-toolbar {
+  margin-bottom: var(--space-4);
 }
 
 /* ── Buttons ──

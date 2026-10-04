@@ -42,6 +42,17 @@ const MOCK_TEAM: OwnTeam = {
   updated_at: "2026-07-10T09:00:00.000Z",
 };
 
+const MOCK_MEMBER_ORG_ID = "qa-org-seoul-studio";
+
+const MOCK_MEMBER_TEAM: OwnTeam = {
+  organization_id: MOCK_MEMBER_ORG_ID,
+  organization_name: "Seoul Product Studio",
+  member_display_name: "Minseok Park",
+  role_label: "Member",
+  member_count: 3,
+  updated_at: "2026-07-10T09:00:00.000Z",
+};
+
 function makeInvite(code: string): TeamInvite {
   return {
     invite_id: `qa-invite-${code}`,
@@ -77,6 +88,7 @@ const ALLOC_PRESETS: readonly Readonly<Record<string, number>>[] = [
 // Pre-seeded shared projects so the dashboards/table are populated the moment
 // the mock loads; QA can still create/edit/archive on top of these.
 function seedProject(
+  organizationId: string,
   id: string,
   name: string,
   description: string,
@@ -86,7 +98,7 @@ function seedProject(
 ): TeamProject {
   return {
     id,
-    organization_id: MOCK_ORG_ID,
+    organization_id: organizationId,
     name,
     description,
     color,
@@ -100,6 +112,7 @@ function seedProject(
 
 const SEED_PROJECTS: readonly TeamProject[] = [
   seedProject(
+    MOCK_ORG_ID,
     "qa-seed-drifty",
     "Drifty",
     "The Drifty desktop app — Tauri shell, tracker, dashboards, and releases.",
@@ -112,6 +125,7 @@ const SEED_PROJECTS: readonly TeamProject[] = [
     ],
   ),
   seedProject(
+    MOCK_ORG_ID,
     "qa-seed-acme",
     "Client — Acme",
     "Acme dashboard contract: Figma mockups, the Next.js repo, and weekly demo prep.",
@@ -123,6 +137,7 @@ const SEED_PROJECTS: readonly TeamProject[] = [
     ],
   ),
   seedProject(
+    MOCK_ORG_ID,
     "qa-seed-korean",
     "Korean study",
     "Korean listening practice and Anki reviews, weekday mornings.",
@@ -131,6 +146,7 @@ const SEED_PROJECTS: readonly TeamProject[] = [
     [{ kind: "app", value: "Anki" }],
   ),
   seedProject(
+    MOCK_ORG_ID,
     "qa-seed-blog",
     "Blog relaunch",
     "Astro rewrite of the personal blog.",
@@ -146,10 +162,48 @@ const SEED_HOURS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
   "qa-seed-korean": { "Minseok Park": 1.1, "Priya Nair": 4.8 },
 };
 
+const MEMBER_TEAM_SEED_PROJECTS: readonly TeamProject[] = [
+  seedProject(
+    MOCK_MEMBER_ORG_ID,
+    "qa-seed-studio-research",
+    "User research",
+    "Interview synthesis and the usability study backlog.",
+    "#2f7f78",
+    "active",
+    [{ kind: "app", value: "Dovetail" }],
+  ),
+  seedProject(
+    MOCK_MEMBER_ORG_ID,
+    "qa-seed-studio-design",
+    "Design system",
+    "Component library and Figma tokens.",
+    "#a1792f",
+    "active",
+    [{ kind: "app", value: "Figma" }],
+  ),
+];
+
+const MEMBER_TEAM_SEED_HOURS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  "qa-seed-studio-research": { "Minseok Park": 4.2, "Hana Lee": 11.5 },
+  "qa-seed-studio-design": { "Hana Lee": 3.1, "Joon Kim": 13.4 },
+};
+
+type ProjectHours = Readonly<Record<string, Readonly<Record<string, number>>>>;
+
+const SEEDED_PROJECTS_BY_TEAM: Readonly<Record<string, readonly TeamProject[]>> = {
+  [MOCK_ORG_ID]: SEED_PROJECTS,
+  [MOCK_MEMBER_ORG_ID]: MEMBER_TEAM_SEED_PROJECTS,
+};
+
+const SEEDED_HOURS_BY_TEAM: Readonly<Record<string, ProjectHours>> = {
+  [MOCK_ORG_ID]: SEED_HOURS,
+  [MOCK_MEMBER_ORG_ID]: MEMBER_TEAM_SEED_HOURS,
+};
+
 const DAY_WEIGHTS = [1, 1.08, 0.92, 1.05, 0.72, 0.16, 0.08, 0.98, 1.12, 0.9, 1.02, 0.78, 0.2, 0.12] as const;
 
 export function useTeamQaMockController(): UseTeamControllerResult {
-  const [teams, setTeams] = useState<readonly OwnTeam[]>([MOCK_TEAM]);
+  const [teams, setTeams] = useState<readonly OwnTeam[]>([MOCK_TEAM, MOCK_MEMBER_TEAM]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>(MOCK_ORG_ID);
   const [invites, setInvites] = useState<readonly TeamInvite[]>([makeInvite("DRFT-K4M2-9QXZ")]);
   const nextTeamIdRef = useRef(1);
@@ -205,18 +259,27 @@ export function useTeamQaMockController(): UseTeamControllerResult {
 }
 
 export type UseTeamQaMockProjectsInput = {
+  readonly organizationId: string | null;
   readonly period: TeamPeriod;
   readonly windowOffset: number;
   readonly startOfDayMinutes: number;
 };
 
 export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTeamProjectsResult {
-  const { period, windowOffset, startOfDayMinutes } = input;
-  // Seeded with a populated team so dashboards/table render data immediately;
-  // created projects pick up a rotating allocation preset on top.
-  const [projects, setProjects] = useState<readonly TeamProject[]>(SEED_PROJECTS);
-  const [hoursByProject, setHoursByProject] = useState<Readonly<Record<string, Readonly<Record<string, number>>>>>(SEED_HOURS);
-  const [sharing, setSharing] = useState(true);
+  const { organizationId, period, windowOffset, startOfDayMinutes } = input;
+  const teamId = organizationId ?? MOCK_ORG_ID;
+  // Each team keeps its own projects and hours, so switching teams shows that
+  // team's data. The two seeded teams render immediately; a created or joined
+  // team starts empty. Created projects pick up a rotating allocation preset.
+  const [projectsByTeam, setProjectsByTeam] = useState<Readonly<Record<string, readonly TeamProject[]>>>(SEEDED_PROJECTS_BY_TEAM);
+  const [hoursByTeam, setHoursByTeam] = useState<Readonly<Record<string, ProjectHours>>>(SEEDED_HOURS_BY_TEAM);
+  const [stoppedTeams, setStoppedTeams] = useState<ReadonlySet<string>>(() => new Set());
+  const projects = useMemo(() => projectsByTeam[teamId] ?? [], [projectsByTeam, teamId]);
+  const hoursByProject = useMemo(() => hoursByTeam[teamId] ?? {}, [hoursByTeam, teamId]);
+  const sharing = !stoppedTeams.has(teamId);
+  const setProjects = useCallback((update: (current: readonly TeamProject[]) => readonly TeamProject[]) => {
+    setProjectsByTeam((current) => ({ ...current, [teamId]: update(current[teamId] ?? []) }));
+  }, [teamId]);
   const [publishing, setPublishing] = useState(false);
   const [publishNote, setPublishNote] = useState<string | null>(null);
   const nextProjectIdRef = useRef(1);
@@ -249,7 +312,7 @@ export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTea
         const seconds = Math.round(hours * 3600 * scale);
         if (seconds <= 0) continue;
         memberRows.push({
-          organization_id: MOCK_ORG_ID,
+          organization_id: teamId,
           organization_project_id: projectId,
           project_name: project.name,
           member_display_name: memberName,
@@ -270,7 +333,7 @@ export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTea
         const seconds = Math.round((totalSeconds * weights[dayIdx]!) / weightSum);
         if (seconds <= 0) return;
         mixRows.push({
-          organization_id: MOCK_ORG_ID,
+          organization_id: teamId,
           organization_project_id: projectId,
           project_name: project.name,
           project_color: project.color,
@@ -283,7 +346,7 @@ export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTea
     }
 
     return { mix: mixRows, members: memberRows };
-  }, [hoursByProject, projects, sharing, window.end_date, window.start_date]);
+  }, [hoursByProject, projects, sharing, teamId, window.end_date, window.start_date]);
 
   const createProject = useCallback(async (fields: CreateTeamProjectFields) => {
     const creationIndex = nextProjectIdRef.current++;
@@ -292,7 +355,7 @@ export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTea
       ...current,
       {
         id,
-        organization_id: MOCK_ORG_ID,
+        organization_id: teamId,
         name: fields.name,
         description: fields.description ?? "",
         color: fields.color || "#5366a3",
@@ -303,12 +366,12 @@ export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTea
         updated_at: "2026-07-11T09:00:00.000Z",
       },
     ]);
-    setHoursByProject((current) => ({
+    setHoursByTeam((current) => ({
       ...current,
-      [id]: ALLOC_PRESETS[(creationIndex - 1) % ALLOC_PRESETS.length]!,
+      [teamId]: { ...(current[teamId] ?? {}), [id]: ALLOC_PRESETS[(creationIndex - 1) % ALLOC_PRESETS.length]! },
     }));
     return true;
-  }, []);
+  }, [setProjects, teamId]);
 
   const updateProject = useCallback(async (updateInput: UpdateTeamProjectInput) => {
     setProjects((current) => current.map((project) => (
@@ -323,27 +386,31 @@ export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTea
         : project
     )));
     return true;
-  }, []);
+  }, [setProjects]);
 
   const archiveProject = useCallback(async (projectId: string, archived: boolean) => {
     setProjects((current) => current.map((project) => (
       project.id === projectId ? { ...project, status: archived ? "archived" as const : "active" as const } : project
     )));
     return true;
-  }, []);
+  }, [setProjects]);
 
   const publishMyTime = useCallback(async () => {
     setPublishing(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
     setPublishing(false);
-    setSharing(true);
+    setStoppedTeams((current) => {
+      const next = new Set(current);
+      next.delete(teamId);
+      return next;
+    });
     setPublishNote("Shared 20h 42m across 3 projects for this window.");
-  }, []);
+  }, [teamId]);
 
   const stopSharing = useCallback(async () => {
-    setSharing(false);
+    setStoppedTeams((current) => new Set(current).add(teamId));
     setPublishNote("Stopped sharing — your published totals were removed from this team.");
-  }, []);
+  }, [teamId]);
 
   return {
     projects,

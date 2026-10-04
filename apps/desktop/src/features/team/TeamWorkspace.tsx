@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
+import { AnchoredPresence } from "../../components/AnchoredPresence";
+import { PageTabs, pageTabId } from "../../components/PageTabs";
+
 import type { AuthState } from "../auth/AuthContext";
 import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import TeamDashboardsView from "./TeamDashboardsView";
@@ -18,10 +21,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import type { DisplayLanguage } from "../localization/languagePreference";
 import "./team.css";
 
-export type TeamWorkspaceAction = "invite" | "settings" | "add";
-
 export type TeamWorkspaceProps = {
-  readonly navigationRefreshEnabled: boolean;
   readonly isSupabaseEnabled: boolean;
   readonly hasRequiredAccountAuth: boolean;
   readonly isSignedIn: boolean;
@@ -31,8 +31,6 @@ export type TeamWorkspaceProps = {
   readonly subView: TeamProjectsSubView;
   readonly onSubViewChange: (subView: TeamProjectsSubView) => void;
   readonly pendingInvite?: PendingTeamInvite | null;
-  readonly pendingAction?: TeamWorkspaceAction | null;
-  readonly onPendingActionConsumed?: () => void;
   readonly onSignIn: () => void;
   readonly onCopyInvite: (text: string) => void | Promise<unknown>;
   readonly onAcceptPendingInvite: (input: AcceptTeamInviteInput) => Promise<void>;
@@ -86,7 +84,6 @@ function TeamBadgeIcon(): JSX.Element {
 }
 
 export function TeamWorkspace({
-  navigationRefreshEnabled,
   isSupabaseEnabled,
   hasRequiredAccountAuth,
   isSignedIn,
@@ -96,8 +93,6 @@ export function TeamWorkspace({
   subView,
   onSubViewChange,
   pendingInvite = null,
-  pendingAction = null,
-  onPendingActionConsumed,
   onSignIn,
   onCopyInvite,
   onAcceptPendingInvite,
@@ -111,6 +106,9 @@ export function TeamWorkspace({
   const [addOpen, setAddOpen] = useState(false);
   const [addTab, setAddTab] = useState<"create" | "join">("create");
   const [teamName, setTeamName] = useState("");
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const switcherTriggerRef = useRef<HTMLButtonElement>(null);
+  const switcherMenuRef = useRef<HTMLDivElement>(null);
   const [inviteKey, setInviteKey] = useState("");
   const { copiedKey, showCopied } = useCopyFeedback<"link" | "code">();
   const addSubmittedRef = useRef(false);
@@ -144,7 +142,12 @@ export function TeamWorkspace({
     period,
     windowOffset,
   });
-  const qaProjects = useTeamQaMockProjects({ period, windowOffset, startOfDayMinutes });
+  const qaProjects = useTeamQaMockProjects({
+    organizationId: selectedTeam?.organization_id ?? null,
+    period,
+    windowOffset,
+    startOfDayMinutes,
+  });
   const projects = qaMock ? qaProjects : realProjects;
   const displayTeamError = localizedTeamError(teamError, effectiveLanguage, t);
   const displayTeamActionError = localizedTeamError(teamActionError, effectiveLanguage, t);
@@ -155,18 +158,29 @@ export function TeamWorkspace({
   const activeInvite = useMemo(() => invites.find((invite) => invite.status === "pending") ?? null, [invites]);
   const hasTeam = teams.length > 0 && Boolean(selectedTeam);
 
+  // The switcher closes on an outside press or Escape, and opens on the current team.
   useEffect(() => {
-    if (!pendingAction) return;
-    if (pendingAction === "add") {
-      setAddTab("create");
-      setAddOpen(true);
-    } else if (pendingAction === "invite" && hasTeam) {
-      setInviteOpen(true);
-    } else if (pendingAction === "settings" && hasTeam) {
-      setSettingsOpen(true);
-    }
-    onPendingActionConsumed?.();
-  }, [hasTeam, onPendingActionConsumed, pendingAction]);
+    if (!switcherOpen) return;
+    switcherMenuRef.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]')?.focus();
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (switcherTriggerRef.current?.contains(target) || switcherMenuRef.current?.contains(target)) return;
+      setSwitcherOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setSwitcherOpen(false);
+      switcherTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [switcherOpen]);
 
   // Opening the invite modal with no live invite mints one (once per open).
   useEffect(() => {
@@ -230,50 +244,145 @@ export function TeamWorkspace({
   };
 
   const isPopulated = canUse && hasTeam && !pendingInvite;
-  const pageTitle = navigationRefreshEnabled
-    ? t("team.page.teams")
-    : !isPopulated
-      ? t("team.page.teams")
-      : subView === "projects"
-        ? t("team.page.projects")
-        : t("team.page.dashboards");
+  useEffect(() => {
+    if (!isPopulated) setSwitcherOpen(false);
+  }, [isPopulated]);
   const windowLabel = formatLocalizedDateRangeLabel(projects.window.start_date, projects.window.end_date, effectiveLanguage);
   const atLatestWindow = windowOffset === 0;
-  const moveTeamViewTab = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const viewTabs = [
+    { id: "dashboards" as const, label: t("team.tab.overview") },
+    { id: "projects" as const, label: t("team.tab.projects") },
+  ];
+
+  const closeSwitcher = (restoreFocus: boolean) => {
+    setSwitcherOpen(false);
+    if (restoreFocus) switcherTriggerRef.current?.focus();
+  };
+
+  const chooseTeam = (organizationId: string) => {
+    if (organizationId !== selectedTeam?.organization_id) selectTeam(organizationId);
+    closeSwitcher(true);
+  };
+
+  const handleSwitcherMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Tab") {
+      closeSwitcher(false);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const items = Array.from(switcherMenuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"]') ?? []);
+    if (items.length === 0) return;
     event.preventDefault();
-    const nextSubView = event.key === "Home"
-      ? "dashboards"
+    const activeIndex = items.indexOf(document.activeElement as HTMLElement);
+    const nextIndex = event.key === "Home"
+      ? 0
       : event.key === "End"
-        ? "projects"
-        : subView === "dashboards" ? "projects" : "dashboards";
-    onSubViewChange(nextSubView);
-    document.getElementById(`team-view-${nextSubView}`)?.focus();
+        ? items.length - 1
+        : event.key === "ArrowDown"
+          ? (activeIndex + 1 + items.length) % items.length
+          : (activeIndex - 1 + items.length) % items.length;
+    items[nextIndex]?.focus();
   };
 
   return (
     <>
       <div className="pg-head team-page-head">
-        <div className={navigationRefreshEnabled ? "team-page-title" : undefined}>
-          <h1>{pageTitle}</h1>
-          {navigationRefreshEnabled && isPopulated && selectedTeam ? (
-            <label className="team-switcher">
-              <span className="sr-only">{t("team.nav.yourTeams")}</span>
-              <select
-                aria-label={t("team.nav.yourTeams")}
-                value={selectedTeam.organization_id}
-                onChange={(event) => selectTeam(event.currentTarget.value)}
-              >
-                {teams.map((team) => (
-                  <option key={team.organization_id} value={team.organization_id}>{team.organization_name}</option>
-                ))}
-              </select>
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
-            </label>
+        <div className="team-title">
+          <h1>{t("team.page.teams")}</h1>
+          {isPopulated && selectedTeam ? (
+            <>
+              <span className="team-title__separator" aria-hidden="true">/</span>
+              <div className="team-switcher">
+                <button
+                  ref={switcherTriggerRef}
+                  type="button"
+                  className="team-switcher__trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={switcherOpen}
+                  aria-label={t("team.switcher.aria", { team: selectedTeam.organization_name })}
+                  onClick={() => setSwitcherOpen((open) => !open)}
+                >
+                  <span className="team-switcher__name" title={selectedTeam.organization_name}>{selectedTeam.organization_name}</span>
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+                </button>
+                <AnchoredPresence>{switcherOpen ? (
+                  <div
+                    ref={switcherMenuRef}
+                    className="team-switcher-menu"
+                    role="menu"
+                    aria-label={t("team.nav.yourTeams")}
+                    onKeyDown={handleSwitcherMenuKeyDown}
+                  >
+                    <div className="team-switcher-menu__label" aria-hidden="true">{t("team.nav.yourTeams")}</div>
+                    {teams.map((team) => {
+                      const isCurrent = team.organization_id === selectedTeam.organization_id;
+                      return (
+                        <button
+                          key={team.organization_id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={isCurrent}
+                          className={isCurrent ? "team-switcher-menu__item is-current" : "team-switcher-menu__item"}
+                          onClick={() => chooseTeam(team.organization_id)}
+                        >
+                          <span className="team-switcher-menu__check" aria-hidden="true">
+                            {isCurrent ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m3.5 8.5 3 3 6-7" /></svg> : null}
+                          </span>
+                          <span className="team-switcher-menu__name" title={team.organization_name}>{team.organization_name}</span>
+                        </button>
+                      );
+                    })}
+                    <div className="team-switcher-menu__divider" role="separator" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="team-switcher-menu__item"
+                      onClick={() => {
+                        closeSwitcher(false);
+                        openAdd("create");
+                      }}
+                    >
+                      <span className="team-switcher-menu__check" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                      </span>
+                      <span className="team-switcher-menu__name">{t("team.nav.createOrJoin")}</span>
+                    </button>
+                  </div>
+                ) : null}</AnchoredPresence>
+              </div>
+            </>
           ) : null}
         </div>
-        {/* Both sub-views read the same window (chart + the table's Team time column). */}
         {isPopulated ? (
+          <div className="team-header-actions">
+            <button type="button" className="app-btn app-btn--secondary" onClick={() => setInviteOpen(true)}>
+              {t("team.nav.inviteTeammate")}
+            </button>
+            <button
+              type="button"
+              className="app-btn app-btn--secondary team-header-actions__icon"
+              aria-label={t("team.nav.settings")}
+              title={t("team.nav.settings")}
+              onClick={() => setSettingsOpen(true)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Both views read the same window (chart + the table's Team time column),
+          so the range sits on the tab rule like Insights. */}
+      {isPopulated ? (
+        <div className="page-toolbar team-toolbar">
+          <PageTabs
+            tabs={viewTabs}
+            activeTab={subView}
+            onChange={onSubViewChange}
+            ariaLabel={t("team.tabs.aria")}
+            idPrefix="team-view"
+            panelId="team-workspace-panel"
+          />
           <div className="classification-range-controls trends-range-controls">
             <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("team.range.aria")}>
               {([
@@ -301,7 +410,7 @@ export function TeamWorkspace({
             <DateNavigator
               ariaLabel={t("team.range.windowAria")}
               label={windowLabel}
-              todayLabel={t("common.latest")}
+              todayLabel={t("team.range.latest")}
               isTodayDisabled={atLatestWindow}
               isNextDisabled={atLatestWindow}
               onPrevious={() => setWindowOffset((offset) => offset + 1)}
@@ -311,44 +420,6 @@ export function TeamWorkspace({
               nextLabel={t("team.range.next")}
             />
           </div>
-        ) : null}
-      </div>
-
-      {navigationRefreshEnabled && isPopulated ? (
-        <div className="team-workspace-nav">
-          <div className="team-view-tabs" role="tablist" aria-label={t("team.page.teams")}>
-            <button
-              id="team-view-dashboards"
-              type="button"
-              role="tab"
-              aria-selected={subView === "dashboards"}
-              aria-controls="team-workspace-panel"
-              tabIndex={subView === "dashboards" ? 0 : -1}
-              className={subView === "dashboards" ? "is-active" : undefined}
-              onClick={() => onSubViewChange("dashboards")}
-              onKeyDown={moveTeamViewTab}
-            >
-              {t("team.nav.dashboards")}
-            </button>
-            <button
-              id="team-view-projects"
-              type="button"
-              role="tab"
-              aria-selected={subView === "projects"}
-              aria-controls="team-workspace-panel"
-              tabIndex={subView === "projects" ? 0 : -1}
-              className={subView === "projects" ? "is-active" : undefined}
-              onClick={() => onSubViewChange("projects")}
-              onKeyDown={moveTeamViewTab}
-            >
-              {t("team.nav.projects")}
-            </button>
-          </div>
-          <div className="team-workspace-actions">
-            <button type="button" className="app-btn app-btn--quiet" onClick={() => setInviteOpen(true)}>{t("team.nav.inviteTeammate")}</button>
-            <button type="button" className="app-btn app-btn--quiet" onClick={() => setSettingsOpen(true)}>{t("team.nav.settings")}</button>
-            <button type="button" className="app-btn app-btn--quiet team-workspace-add" aria-label={t("team.nav.createOrJoin")} title={t("team.nav.createOrJoin")} onClick={() => openAdd("create")}>+</button>
-          </div>
         </div>
       ) : null}
 
@@ -356,9 +427,9 @@ export function TeamWorkspace({
         <section
           id="team-workspace-panel"
           className="team-panel"
-          role={navigationRefreshEnabled && isPopulated ? "tabpanel" : undefined}
-          aria-labelledby={navigationRefreshEnabled && isPopulated ? (subView === "projects" ? "team-view-projects" : "team-view-dashboards") : undefined}
-          aria-label={navigationRefreshEnabled && isPopulated ? undefined : t("team.panel.sharedProjects")}
+          role={isPopulated ? "tabpanel" : undefined}
+          aria-labelledby={isPopulated ? pageTabId("team-view", subView) : undefined}
+          aria-label={isPopulated ? undefined : t("team.panel.sharedProjects")}
         >
           {renderBody()}
         </section>

@@ -54,7 +54,6 @@ import { useDailyProductivitySeries, type DailyProductivityPoint } from "./featu
 import { isTeamQaMockEnabled, useTeamQaMockController } from "./features/team/teamQaMock";
 import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
-import type { TeamWorkspaceAction } from "./features/team/TeamWorkspace";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
@@ -792,10 +791,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   );
   const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
-  const [pendingTeamAction, setPendingTeamAction] = useState<TeamWorkspaceAction | null>(null);
-  const [teamNavMenuOpen, setTeamNavMenuOpen] = useState(false);
-  const [teamNavMenuPos, setTeamNavMenuPos] = useState<{ readonly left: number; readonly top: number } | null>(null);
-  const [teamNavExpandedId, setTeamNavExpandedId] = useState<string | null | undefined>(undefined);
   useAutomaticUpdateScheduler({
     enabled: isTauriRuntime() && !windowsBetaAutomaticChecksEnabled,
     checkForUpdates: () => handleCheckForUpdates("automatic"),
@@ -2395,36 +2390,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Dev-server-only QA fixtures; both hooks always run to keep hook order stable.
   const teamQaMockController = useTeamQaMockController();
   const teamController = isTeamQaMockEnabled() ? teamQaMockController : realTeamController;
-  const openTeamAction = useCallback((action: TeamWorkspaceAction) => {
-    setPendingTeamAction(action);
-    setTeamNavMenuOpen(false);
-    navigateToTab("team");
-  }, [navigateToTab]);
-  useEffect(() => {
-    if (!teamNavMenuOpen) return;
-    const closeMenu = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest(".team-nav-more, .team-nav-menu")) return;
-      setTeamNavMenuOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setTeamNavMenuOpen(false);
-    };
-    const closeOnScroll = () => setTeamNavMenuOpen(false);
-    document.addEventListener("pointerdown", closeMenu);
-    document.addEventListener("keydown", closeOnEscape);
-    document.addEventListener("scroll", closeOnScroll, true);
-    return () => {
-      document.removeEventListener("pointerdown", closeMenu);
-      document.removeEventListener("keydown", closeOnEscape);
-      document.removeEventListener("scroll", closeOnScroll, true);
-    };
-  }, [teamNavMenuOpen]);
-  useEffect(() => {
-    if (!canUseNavigationRefresh) return;
-    setTeamNavMenuOpen(false);
-    setTeamNavMenuPos(null);
-    setPendingTeamAction(null);
-  }, [canUseNavigationRefresh]);
   const {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
@@ -10309,22 +10274,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             isCollapsed={isSidebarVisuallyCollapsed}
             navigationRefreshEnabled={canUseNavigationRefresh}
             projectClassificationFeatureEnabled={projectClassificationFeatureEnabled}
-            selectedTeam={teamController.selectedTeam}
             socialSection={socialSection}
-            teamNavExpandedId={teamNavExpandedId}
-            teamNavMenuOpen={teamNavMenuOpen}
-            teamNavMenuPos={teamNavMenuPos}
             teamReviewVariant={sidebarTeamReviewVariant}
-            teams={teamController.teams}
-            teamSubView={teamSubView}
             t={localization.t}
             onNavigate={navigateToTab}
-            onOpenTeamAction={openTeamAction}
-            onSelectTeam={teamController.selectTeam}
-            onTeamNavExpandedIdChange={setTeamNavExpandedId}
-            onTeamNavMenuOpenChange={setTeamNavMenuOpen}
-            onTeamNavMenuPosChange={setTeamNavMenuPos}
-            onTeamSubViewChange={setTeamSubView}
           />
         </div>
 
@@ -10798,7 +10751,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
         {activeTab === "team" && canOpenTeamsBeta ? (
           <LazyTeamsBetaSurface
-            navigationRefreshEnabled={canUseNavigationRefresh}
             hasRequiredAccountAuth={hasRequiredAccountAuth}
             isPolicySignedIn={isPolicySignedIn}
             isSupabaseConfigured={isSupabaseConfigured}
@@ -10808,8 +10760,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             teamSubView={teamSubView}
             onTeamSubViewChange={setTeamSubView}
             pendingInvite={pendingTeamInvite}
-            pendingAction={canUseNavigationRefresh ? null : pendingTeamAction}
-            onPendingActionConsumed={() => setPendingTeamAction(null)}
             onAuthRequired={requestTeamAuth}
             onPendingInviteClear={() => setPendingTeamInvite(null)}
           />

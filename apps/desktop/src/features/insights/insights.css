@@ -40,71 +40,8 @@
   margin-bottom: calc(var(--page-header-gap) - var(--block-gap));
 }
 
-/* ── Insights control strip ──
-   One rule carries the section tabs and the window controls, so the range
-   filter reads as belonging to the data below it rather than to the page
-   title above it. */
-.insights-toolbar {
-  align-items: flex-end;
-  border-bottom: 1px solid var(--line);
-  column-gap: var(--space-4);
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  min-width: 0;
-  row-gap: 0.4rem;
-}
-
-.insights-toolbar > .trends-range-controls {
-  flex: 0 1 auto;
-  margin-bottom: 0.4rem;
-}
-
-/* ── Insights section tabs ──
-   Underlined text tabs, deliberately not the segmented pill used for the range
-   control in the same header: one switches the page section, the other filters
-   the window, and stacking two identical segmented controls read as one. */
-.insights-tabs {
-  align-items: flex-end;
-  display: flex;
-  flex: 1 1 auto;
-  gap: 1.4rem;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.insights-tabs::-webkit-scrollbar { display: none; }
-
-.insights-tab {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: var(--text-soft);
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin-bottom: -1px;
-  padding: 0 0 0.5rem;
-  transition: color 140ms ease, border-color 140ms ease;
-  white-space: nowrap;
-}
-
-.insights-tab:hover { color: var(--text); }
-
-.insights-tab.is-active {
-  border-bottom-color: var(--text);
-  color: var(--text);
-}
-
-.insights-tab:focus-visible {
-  border-radius: 2px;
-  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
-  outline-offset: 3px;
-}
+/* The section tabs and window controls use the shared page toolbar
+   (styles/page-tabs.css). */
 
 .insights-tabpanel {
   display: grid;

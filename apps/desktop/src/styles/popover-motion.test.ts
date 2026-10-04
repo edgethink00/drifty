@@ -12,7 +12,7 @@ const boundaryOwnedPopups = [
   "settings-select-control__menu",
   "settings-search__results",
   "pt-menu",
-  "team-nav-menu",
+  "team-switcher-menu",
   "developer-skill-picker__menu",
 ] as const;
 

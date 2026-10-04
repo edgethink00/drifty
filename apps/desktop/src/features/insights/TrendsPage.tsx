@@ -101,7 +101,7 @@ export function TrendsPage({
           filters the usage tab, so it belongs beside that tab rather than
           floating in the page title row. The read tab, when restored, picks
           its own comparable window, so the control leaves the row on that tab. */}
-      <div className="insights-toolbar">
+      <div className="page-toolbar insights-toolbar">
         <InsightsTabs activeTab={visibleTab} onChange={setActiveTab} />
         {visibleTab === "usage" ? (
           <div className="classification-range-controls trends-range-controls">
