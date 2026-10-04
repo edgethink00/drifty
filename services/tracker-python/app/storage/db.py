@@ -2114,6 +2114,10 @@ class TrackerDatabase:
         def inspect_and_delete(invalidate_recovery_copies: Callable[[], None]) -> None:
             nonlocal activity_segments, classifications, youtube_metadata
             with self.connect() as conn:
+                if not dry_run and not conn.in_transaction:
+                    # Counts, recovery invalidation, deletes and the sync tombstone
+                    # must describe one snapshot while daemon/provider writers wait.
+                    conn.execute("BEGIN IMMEDIATE")
                 if delete_activity:
                     activity_segments = int(
                         conn.execute(
