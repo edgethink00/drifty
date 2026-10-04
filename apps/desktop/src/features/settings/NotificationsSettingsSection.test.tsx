@@ -86,7 +86,8 @@ describe("NotificationsSettingsSection", () => {
 
   it("asks macOS for permission when the notification switch is turned on and reports a denial", async () => {
     const requestNotificationPermission = vi.fn(async () => "denied" as const);
-    const props = renderSettings({ driftAlertsEnabled: true, requestNotificationPermission });
+    const openNotificationSettings = vi.fn(async () => true);
+    const props = renderSettings({ driftAlertsEnabled: true, requestNotificationPermission, openNotificationSettings });
 
     const toggle = screen.getByRole("switch", { name: "Toggle macOS notifications" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
@@ -95,7 +96,27 @@ describe("NotificationsSettingsSection", () => {
     expect(props.onMacosNotificationChange).toHaveBeenCalledWith(true);
     expect(requestNotificationPermission).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole("alert")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("Allow them under Permissions");
+    expect(screen.getByRole("alert").textContent).toBe("Notifications are turned off for Drifty in macOS.");
+
+    // The fix is one click away instead of a trip to another settings page.
+    fireEvent.click(screen.getByRole("button", { name: /Open System Settings/ }));
+    expect(openNotificationSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("names Windows Settings in the denial shortcut on Windows", async () => {
+    const openNotificationSettings = vi.fn(async () => true);
+    renderSettings({
+      driftAlertsEnabled: true,
+      hostPlatform: "windows",
+      requestNotificationPermission: vi.fn(async () => "denied" as const),
+      openNotificationSettings,
+    }, "ko");
+
+    fireEvent.click(screen.getByRole("switch", { name: /Windows/ }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Windows에서 Drifty 알림이 꺼져 있습니다.");
+    fireEvent.click(screen.getByRole("button", { name: /Windows 설정 열기/ }));
+    expect(openNotificationSettings).toHaveBeenCalledTimes(1);
   });
 
   it("locks the macOS notification switch while Drift alerts are off", () => {

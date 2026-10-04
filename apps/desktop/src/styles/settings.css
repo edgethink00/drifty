@@ -168,6 +168,39 @@
   line-height: 1;
 }
 
+/* A required item inside the section (for example a missing Accessibility
+   grant in General) needs the user. The dot stays visible in every state,
+   including the active row, so the warning does not disappear on arrival. */
+.settings-nav-item__attention {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+/* A quiet text action inside a row description, such as the OS settings
+   shortcut under a denied-permission notice. */
+.settings-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-block-start: 4px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--type-setting-desc-size);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.settings-inline-link:hover { color: var(--text); }
+.settings-inline-link:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+
 .settings-nav-item:hover {
   background: var(--bg-2);
   color: var(--text);

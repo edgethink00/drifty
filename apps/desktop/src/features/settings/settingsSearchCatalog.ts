@@ -22,7 +22,6 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, TranslationKey> = 
   "appearance": "settings.section.appearance",
   "pet": "settings.pet.title",
   "notifications": "settings.section.notifications",
-  "permissions": "settings.section.permissions",
   "account": "settings.section.account",
   "privacy": "settings.section.privacy",
   "aiSetup": "settings.section.aiSetup",
@@ -207,13 +206,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "settings.permissions.title",
-    section: "permissions",
+    section: "general",
     titleKey: "settings.permissions.title",
     keywords: "권한 전체 디스크 접근 Safari history full disk access permission",
   },
   {
     id: "settings.permissions.accessibility",
-    section: "permissions",
+    section: "general",
     titleKey: "settings.permissions.accessibility",
     keywords: "손쉬운 사용 접근성 창 제목 accessibility window title",
     descriptionKey: "settings.permissions.accessibilityDescription",
@@ -221,7 +220,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "settings.permissions.notifications",
-    section: "permissions",
+    section: "general",
     titleKey: "settings.permissions.notifications",
     keywords: "시스템 알림 권한 허용 notification permission",
     descriptionKey: "settings.permissions.notificationsDescription",

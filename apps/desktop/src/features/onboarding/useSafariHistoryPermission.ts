@@ -26,16 +26,53 @@ export type SafariHistoryPermission = {
   readonly onEnable: () => void;
 };
 
+export type SafariHistoryPermissionOptions = {
+  /**
+   * Settings shows this row inside General, which opens on every Settings
+   * visit. There the supported-browser history preview runs once per app
+   * session, and the Full Disk Access poll waits until the user asks to enable
+   * Safari history. Onboarding probes and polls on every mount as before.
+   */
+  readonly context?: "onboarding" | "settings";
+};
+
+// One preview per app session for Settings; cleared on failure so a later
+// visit can retry.
+let settingsPreviewSegmentCount: Promise<number> | null = null;
+
+function previewSegmentCount(context: "onboarding" | "settings"): Promise<number> {
+  const request = () => trackerClient
+    .previewBrowserHistoryImport({ lookbackDays: SAFARI_PREVIEW_LOOKBACK_DAYS })
+    .then((preview) => preview.segmentCount);
+  if (context !== "settings") return request();
+  if (!settingsPreviewSegmentCount) {
+    settingsPreviewSegmentCount = request().catch((error: unknown) => {
+      settingsPreviewSegmentCount = null;
+      throw error;
+    });
+  }
+  return settingsPreviewSegmentCount;
+}
+
+/** Forget the Settings preview so each test starts from a fresh app session. */
+export function resetSafariHistorySettingsPreview() {
+  settingsPreviewSegmentCount = null;
+}
+
 /**
  * Drives the optional Safari history / Full Disk Access onboarding row. Full Disk
  * Access can only be granted by a manual toggle in System Settings (no OS prompt
  * API), so this hook opens the pane, registers Drifty in the FDA list by attempting
  * one Safari history read, and polls until the read succeeds. It never gates Continue.
  */
-export function useSafariHistoryPermission(step: OnboardingStep): SafariHistoryPermission {
+export function useSafariHistoryPermission(
+  step: OnboardingStep,
+  { context = "onboarding" }: SafariHistoryPermissionOptions = {},
+): SafariHistoryPermission {
   const [show, setShow] = useState(false);
   const [readable, setReadable] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [enableRequested, setEnableRequested] = useState(false);
 
   // Safari history and Full Disk Access are macOS-only. The low-history
   // fallback must not turn this row on in a fresh Windows profile where the
@@ -52,15 +89,15 @@ export function useSafariHistoryPermission(step: OnboardingStep): SafariHistoryP
       try {
         // The environment probe failing (e.g. an older sidecar without the command)
         // must not hide the row when the history preview alone qualifies the user.
-        const [environment, preview] = await Promise.all([
+        const [environment, segmentCount] = await Promise.all([
           trackerClient
             .getBrowserHistoryEnvironment()
             .catch((): BrowserHistoryEnvironment => ({ safariHistoryReadable: false, defaultBrowserIsSafari: false })),
-          trackerClient.previewBrowserHistoryImport({ lookbackDays: SAFARI_PREVIEW_LOOKBACK_DAYS }),
+          previewSegmentCount(context),
         ]);
         if (cancelled) return;
         setReadable(environment.safariHistoryReadable);
-        setShow(environment.defaultBrowserIsSafari || preview.segmentCount < SAFARI_ROW_SEGMENT_THRESHOLD);
+        setShow(environment.defaultBrowserIsSafari || segmentCount < SAFARI_ROW_SEGMENT_THRESHOLD);
       } catch {
         // Soft feature: without a preview we cannot judge, so leave the row hidden.
       }
@@ -68,9 +105,9 @@ export function useSafariHistoryPermission(step: OnboardingStep): SafariHistoryP
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, context]);
 
-  const shouldPoll = active && show && !readable;
+  const shouldPoll = active && show && !readable && (context !== "settings" || enableRequested);
   const shouldPollRef = useRef(shouldPoll);
   shouldPollRef.current = shouldPoll;
 
@@ -101,6 +138,7 @@ export function useSafariHistoryPermission(step: OnboardingStep): SafariHistoryP
   }, [shouldPoll]);
 
   const onEnable = useCallback(() => {
+    setEnableRequested(true);
     setOpening(true);
     void (async () => {
       try {

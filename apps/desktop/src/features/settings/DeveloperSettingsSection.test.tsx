@@ -51,9 +51,15 @@ describe("DeveloperSettingsSection", () => {
     });
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it("shows command examples and install actions without shell setup before CLI installation", async () => {
+    // Only Date is faked so the async status load still settles normally.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 4, 15, 30));
     render(<DeveloperSettingsSection client={mockClient(status())} />);
 
     expect(await screen.findByRole("button", { name: /Install CLI: Command line tools/i })).toBeTruthy();
@@ -62,7 +68,9 @@ describe("DeveloperSettingsSection", () => {
     expect(screen.getByText("Command line tools")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "CLI" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Add Drifty to your agent" })).toBeTruthy();
-    expect(screen.getAllByText("drifty summary --day 2026-08-04").length).toBe(1);
+    // Examples carry today's local date, so a copied command shows the current day.
+    expect(screen.getAllByText("drifty summary --day 2026-10-04").length).toBe(1);
+    expect(screen.getByText("drifty timeline --day 2026-10-04")).toBeTruthy();
     expect(screen.getByText("drifty search --query \"CLI\"")).toBeTruthy();
     expect(screen.getByText("~/.codex/skills/drifty")).toBeTruthy();
     expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();

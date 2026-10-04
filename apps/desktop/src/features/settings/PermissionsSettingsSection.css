@@ -1,12 +1,3 @@
-.settings-permissions-intro {
-  max-width: 68ch;
-  margin: 0 0 var(--space-3);
-  padding: 0 0.5rem;
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.55;
-}
-
 .settings-permission-title-line {
   display: flex;
   flex-wrap: wrap;

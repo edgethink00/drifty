@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OnboardingStep } from "./onboardingFlow";
-import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
+import { resetSafariHistorySettingsPreview, useSafariHistoryPermission } from "./useSafariHistoryPermission";
 
 const {
   detectHostPlatform,
@@ -35,8 +35,8 @@ function safariRow(): HTMLElement {
 
 // Minimal render harness for the hook: mirrors the Safari row semantics of the
 // onboarding permissions step (row shown when `show`, button label tracks state).
-function Harness({ step }: { readonly step: OnboardingStep }) {
-  const safari = useSafariHistoryPermission(step);
+function Harness({ step, context }: { readonly step: OnboardingStep; readonly context?: "onboarding" | "settings" }) {
+  const safari = useSafariHistoryPermission(step, { context });
   if (!safari.show) return null;
   return (
     <ul>
@@ -53,6 +53,7 @@ function Harness({ step }: { readonly step: OnboardingStep }) {
 describe("useSafariHistoryPermission (Safari onboarding row)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetSafariHistorySettingsPreview();
     detectHostPlatform.mockReturnValue("macos");
     openFullDiskAccessSettingsPane.mockResolvedValue(true);
     Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
@@ -135,6 +136,42 @@ describe("useSafariHistoryPermission (Safari onboarding row)", () => {
     expect(within(safariRow()).getByRole("button", { name: "Enable" })).toBeTruthy();
 
     // Advance one poll tick; the environment now reports readable.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(within(safariRow()).getByRole("button", { name: "Enabled" })).toBeTruthy();
+  });
+
+  it("in Settings, reuses one history preview per session and polls only after Enable", async () => {
+    // Settings > General opens on every Settings visit, so it must not rescan
+    // browser history or poll Full Disk Access just because the page is open.
+    vi.useFakeTimers();
+    getBrowserHistoryEnvironment.mockResolvedValue({ safariHistoryReadable: false, defaultBrowserIsSafari: true });
+    previewBrowserHistoryImport.mockResolvedValue({ segmentCount: 20 });
+
+    const first = render(<Harness step="permissions" context="settings" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText("Safari history")).toBeTruthy();
+    const probesAfterMount = getBrowserHistoryEnvironment.mock.calls.length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    expect(getBrowserHistoryEnvironment).toHaveBeenCalledTimes(probesAfterMount);
+
+    // Leaving and reopening General does not run a second preview.
+    first.unmount();
+    render(<Harness step="permissions" context="settings" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(previewBrowserHistoryImport).toHaveBeenCalledTimes(1);
+
+    // Once the user asks to enable it, polling picks up the new grant.
+    getBrowserHistoryEnvironment.mockResolvedValue({ safariHistoryReadable: true, defaultBrowserIsSafari: true });
+    fireEvent.click(within(safariRow()).getByRole("button", { name: "Enable" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });

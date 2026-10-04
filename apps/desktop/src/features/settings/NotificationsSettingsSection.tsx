@@ -13,6 +13,7 @@ import {
   type QuietHoursSettings,
 } from "../companion/quietHours";
 import { requestDriftNotificationPermission } from "../companion/watcherData";
+import { openSystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { SettingsSelect } from "./SettingsSelect";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
@@ -42,7 +43,13 @@ type NotificationsSettingsSectionProps = {
   readonly onQuietHoursChange: (settings: QuietHoursSettings) => void;
   /** Injectable for tests; production asks the host OS. */
   readonly requestNotificationPermission?: () => Promise<"granted" | "denied" | "unavailable">;
+  /** Injectable for tests; production opens the host's notification settings. */
+  readonly openNotificationSettings?: () => Promise<unknown>;
 };
+
+function openNotificationSettingsPane() {
+  return openSystemSettingsPane("notifications").catch(() => false);
+}
 
 export function NotificationsSettingsSection({
   driftAlertDelaySeconds,
@@ -66,9 +73,13 @@ export function NotificationsSettingsSection({
   onDayReviewTimeChange,
   onQuietHoursChange,
   requestNotificationPermission = requestDriftNotificationPermission,
+  openNotificationSettings = openNotificationSettingsPane,
 }: NotificationsSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const locale = effectiveLanguage === "ko" ? "ko-KR" : "en-US";
+  // Only a host that reports a denial reaches this notice. The desktop
+  // notification plugin (2.3.x) reports "granted" on macOS and Windows, so a
+  // real OS-level block needs a native permission read before it can show.
   const [notificationPermissionDenied, setNotificationPermissionDenied] = useState(false);
 
   const driftAlertDelayOptions = DRIFT_ALERT_DELAY_OPTIONS.map((option) => ({
@@ -176,9 +187,16 @@ export function NotificationsSettingsSection({
               ? "settings.notifications.windowsNotificationDescription"
               : "settings.notifications.macosNotificationDescription")}</div>
             {notificationPermissionDenied ? (
-              <p className="capture-recency capture-recency--error" role="alert">{t(hostPlatform === "windows"
-                ? "settings.notifications.windowsNotificationDenied"
-                : "settings.notifications.macosNotificationDenied")}</p>
+              <>
+                <p className="capture-recency capture-recency--error" role="alert">{t(hostPlatform === "windows"
+                  ? "settings.notifications.windowsNotificationDenied"
+                  : "settings.notifications.macosNotificationDenied")}</p>
+                <button type="button" className="settings-inline-link" onClick={() => void openNotificationSettings()}>
+                  {t(hostPlatform === "windows"
+                    ? "settings.permissions.openSystemSettingsWindows"
+                    : "settings.permissions.openSystemSettings")} <span aria-hidden="true">→</span>
+                </button>
+              </>
             ) : null}
           </div>
           <div className="ctrl">

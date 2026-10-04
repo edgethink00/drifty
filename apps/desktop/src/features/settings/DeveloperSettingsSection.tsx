@@ -10,6 +10,7 @@ import {
   type DeveloperToolsStatus,
 } from "../../lib/api/developerToolsClient";
 import { useCopyFeedback } from "../../lib/useCopyFeedback";
+import { localDateKey } from "../../lib/formatting";
 import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import type { TranslationKey } from "../localization/translations";
@@ -22,11 +23,15 @@ type DeveloperSettingsSectionProps = {
   readonly client?: DeveloperToolsClient;
 };
 
-const CLI_EXAMPLES = [
-  { command: "drifty summary --day 2026-08-04", descriptionKey: "settings.developer.commandSummary" },
-  { command: "drifty search --query \"CLI\"", descriptionKey: "settings.developer.commandSearch" },
-  { command: "drifty timeline --day 2026-08-04", descriptionKey: "settings.developer.commandTimeline" },
-] as const satisfies ReadonlyArray<{ command: string; descriptionKey: TranslationKey }>;
+// Examples use today's date so a copied command returns the user's current
+// day instead of a fixed day from when the screen was written.
+function cliExamples(day: string): ReadonlyArray<{ command: string; descriptionKey: TranslationKey }> {
+  return [
+    { command: `drifty summary --day ${day}`, descriptionKey: "settings.developer.commandSummary" },
+    { command: "drifty search --query \"CLI\"", descriptionKey: "settings.developer.commandSearch" },
+    { command: `drifty timeline --day ${day}`, descriptionKey: "settings.developer.commandTimeline" },
+  ];
+}
 
 const SHELL_STARTUP_LINE = 'export PATH="$HOME/.local/bin:$PATH"';
 
@@ -94,6 +99,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
   const [selectedSkillTarget, setSelectedSkillTarget] = useState<DeveloperSkillTarget>("codex");
   const [error, setError] = useState<string | null>(null);
   const { copiedKey: copiedValue, showCopied } = useCopyFeedback<string>();
+  const [examples] = useState(() => cliExamples(localDateKey(new Date())));
 
   const refresh = useCallback(async () => {
     if (!client.isAvailable()) {
@@ -197,7 +203,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
 
       {/* Separate block, but pulled close to the CLI card above it. */}
       <div className="settings-block developer-commands-block">
-        {CLI_EXAMPLES.map(({ command, descriptionKey }) => (
+        {examples.map(({ command, descriptionKey }) => (
           <div className="settings-row" key={command}>
             <div>
               <div className="lbl"><code className="developer-code">{command}</code></div>

@@ -6,7 +6,7 @@ import type { DevSettingsSubsection } from "./devSettingsNavigation";
 
 export const DRIFTY_DISCORD_INVITE_URL = "https://discord.gg/NxcubTe2KD";
 
-export type SettingsSection = "account" | "general" | "permissions" | "appearance" | "pet" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
+export type SettingsSection = "account" | "general" | "appearance" | "pet" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
 
 const SETTINGS_NAV_GROUPS = [
   {
@@ -17,7 +17,6 @@ const SETTINGS_NAV_GROUPS = [
       { id: "appearance", labelKey: "settings.section.appearance" },
       { id: "pet", labelKey: "settings.pet.title" },
       { id: "notifications", labelKey: "settings.section.notifications" },
-      { id: "permissions", labelKey: "settings.section.permissions" },
       { id: "account", labelKey: "settings.section.account" },
       { id: "privacy", labelKey: "settings.section.privacy" },
     ],
@@ -50,8 +49,6 @@ function SettingsSectionIcon({ section }: { section: SettingsSection }) {
       return (<svg {...props}><path d="M4 8h4M14 8h6" /><circle cx="11" cy="8" r="2" /><path d="M4 16h6M16 16h4" /><circle cx="13" cy="16" r="2" /></svg>);
     case "pet":
       return <PetIcon />;
-    case "permissions":
-      return (<svg {...props}><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><circle cx="12" cy="15" r="1.2" /></svg>);
     case "account":
       return (<svg {...props}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>);
     case "appearance":
@@ -60,7 +57,8 @@ function SettingsSectionIcon({ section }: { section: SettingsSection }) {
     case "aiSetup":
       return (<svg {...props}><path d="M12 3.2l1.7 4.6 4.6 1.7-4.6 1.7L12 15.8l-1.7-4.6-4.6-1.7 4.6-1.7z" /><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></svg>);
     case "classification":
-      return (<svg {...props}><path d="M4 7h7M15 7h5M4 17h5M13 17h7" /><circle cx="13" cy="7" r="2" /><circle cx="11" cy="17" r="2" /></svg>);
+      // Lucide tag: https://lucide.dev/icons/tag. General keeps the slider glyph.
+      return (<svg {...props}><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></svg>);
     case "notifications":
       return (<svg {...props}><path d="M6 9a6 6 0 0 1 12 0c0 4.5 1.5 5.5 2 6H4c.5-.5 2-1.5 2-6" /><path d="M10.2 19a1.9 1.9 0 0 0 3.6 0" /></svg>);
     case "privacy":
@@ -76,6 +74,8 @@ type SettingsSidebarProps = {
   readonly activeSection: SettingsSection;
   readonly activeDevSubsection?: DevSettingsSubsection;
   readonly isCollapsed: boolean;
+  /** Sections holding a required item the user must act on, such as a missing OS permission. */
+  readonly sectionsNeedingAttention?: ReadonlyArray<SettingsSection>;
   readonly showDevSection: boolean;
   readonly onBack: () => void;
   readonly onDevSubsectionChange?: (section: DevSettingsSubsection) => void;
@@ -115,6 +115,7 @@ function ExternalLinkIcon() {
 export function SettingsSidebar({
   activeSection,
   isCollapsed,
+  sectionsNeedingAttention = [],
   showDevSection,
   onBack,
   onSectionChange,
@@ -167,16 +168,25 @@ export function SettingsSidebar({
               {group.items.map((item) => {
                 const label = t(item.labelKey);
                 const isActive = activeSection === item.id;
+                const needsAttention = sectionsNeedingAttention.includes(item.id);
+                const attentionId = `settings-nav-attention-${item.id}`;
                 return (
                     <button key={item.id}
                       type="button"
                       aria-current={isActive ? "page" : undefined}
+                      aria-describedby={needsAttention ? attentionId : undefined}
                       className={`settings-nav-item${isActive ? " on" : ""}`}
                       data-rail-label={label.slice(0, 1)}
                       onClick={() => onSectionChange(item.id)}
                     >
                       <span className="settings-nav-item__icon" aria-hidden="true"><SettingsSectionIcon section={item.id} /></span>
                       <span className="settings-nav-item__label">{label}</span>
+                      {needsAttention ? (
+                        <>
+                          <span className="settings-nav-item__attention" aria-hidden="true" />
+                          <span id={attentionId} hidden>{t("settings.sidebar.needsAttention")}</span>
+                        </>
+                      ) : null}
                       {isCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{label}</span> : null}
                     </button>
                 );

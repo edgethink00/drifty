@@ -36,7 +36,7 @@ export function PermissionsSettingsSection({
 }: PermissionsSettingsSectionProps) {
   const { t } = useLocalization();
   const desktopRuntime = isDesktopRuntime();
-  const safariHistory = useSafariHistoryPermission("permissions");
+  const safariHistory = useSafariHistoryPermission("permissions", { context: "settings" });
   const onCheckAccessibilityRef = useRef(onCheckAccessibility);
   const onRequestAccessibilityRef = useRef(onRequestAccessibility);
   const [accessibilityChecking, setAccessibilityChecking] = useState(desktopRuntime);
@@ -203,105 +203,104 @@ export function PermissionsSettingsSection({
         ? "unavailable"
         : "neutral";
 
+  // Rendered as the last block of Settings > General, not as its own page:
+  // two or three status rows (one on Windows) did not justify a sidebar tab.
   return (
-    <div data-setting-id="settings.permissions.title" className="settings-section settings-section--permissions">
-      <div className="settings-block">
-        <h3>{t("settings.permissions.title")}</h3>
-        <p className="settings-permissions-intro">{t("settings.permissions.intro")}</p>
+    <div data-setting-id="settings.permissions.title" className="settings-block settings-block--permissions">
+      <h3>{t("settings.permissions.title")}</h3>
 
-        {accessibilityRequired ? (
-          <div data-setting-id="settings.permissions.accessibility" className="settings-row settings-row--group-start settings-permission-row">
-            <div>
-              <div className="settings-permission-title-line">
-                <div className="lbl">{t("settings.permissions.accessibility")}</div>
-                <span className="ui-badge ui-badge--warn settings-permission-requirement">{t("common.required")}</span>
-              </div>
-              <div className="desc">{t("settings.permissions.accessibilityDescription")}</div>
-              {accessibilityError ? (
-                <div className="settings-permission-error" role="alert">{t("settings.permissions.checkFailed")}</div>
-              ) : null}
-            </div>
-            <div className="ctrl settings-permission-control">
-              <span className="settings-permission-status" data-tone={accessibilityTone} aria-live="polite">
-                {accessibilityStatus()}
-              </span>
-              <button
-                type="button"
-                className="settings-btn"
-                disabled={!desktopRuntime || accessibilityChecking}
-                onClick={() => void handleAccessibilityAction()}
-              >
-                {accessibilityActionLabel()}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        <div data-setting-id="settings.permissions.notifications" className={`settings-row settings-permission-row${accessibilityRequired ? "" : " settings-row--group-start"}${safariHistory.show ? "" : " settings-row--group-end"}`}>
+      {accessibilityRequired ? (
+        <div data-setting-id="settings.permissions.accessibility" className="settings-row settings-row--group-start settings-permission-row">
           <div>
             <div className="settings-permission-title-line">
-              <div className="lbl">{t("settings.permissions.notifications")}</div>
-              <span className="ui-badge settings-permission-requirement">{t("common.recommended")}</span>
+              <div className="lbl">{t("settings.permissions.accessibility")}</div>
+              <span className="ui-badge ui-badge--warn settings-permission-requirement">{t("common.required")}</span>
             </div>
-            <div className="desc">{t("settings.permissions.notificationsDescription")}</div>
-            {notificationError ? (
+            <div className="desc">{t("settings.permissions.accessibilityDescription")}</div>
+            {accessibilityError ? (
               <div className="settings-permission-error" role="alert">{t("settings.permissions.checkFailed")}</div>
             ) : null}
           </div>
           <div className="ctrl settings-permission-control">
-            <span className="settings-permission-status" data-tone={notificationTone} aria-live="polite">
-              {notificationStatus()}
+            <span className="settings-permission-status" data-tone={accessibilityTone} aria-live="polite">
+              {accessibilityStatus()}
             </span>
             <button
               type="button"
               className="settings-btn"
-              disabled={notificationPermission === "unavailable" || notificationPermission === "checking"}
-              onClick={() => void handleNotificationAction()}
+              disabled={!desktopRuntime || accessibilityChecking}
+              onClick={() => void handleAccessibilityAction()}
             >
-              {notificationActionLabel()}
+              {accessibilityActionLabel()}
             </button>
           </div>
         </div>
+      ) : null}
 
-        {safariHistory.show ? (
-          <div className="settings-row settings-row--group-end settings-permission-row">
-            <div>
-              <div className="settings-permission-title-line">
-                <div className="lbl">{t("settings.permissions.safariHistory")}</div>
-                <span className="ui-badge ui-badge--quiet settings-permission-requirement">{t("common.optional")}</span>
-              </div>
-              <div className="desc">{t("settings.permissions.safariHistoryDescription")}</div>
-            </div>
-            <div className="ctrl settings-permission-control">
-              <span
-                className="settings-permission-status"
-                data-tone={safariHistory.readable ? "success" : "neutral"}
-                aria-live="polite"
-              >
-                {safariHistory.readable ? t("common.enabled") : t("settings.permissions.notEnabled")}
-              </span>
-              <button
-                type="button"
-                className="settings-btn"
-                disabled={safariHistory.opening}
-                onClick={() => {
-                  if (safariHistory.readable) {
-                    void openFullDiskAccessSettingsPane();
-                  } else {
-                    safariHistory.onEnable();
-                  }
-                }}
-              >
-                {safariHistory.opening
-                  ? t("settings.permissions.opening")
-                  : safariHistory.readable
-                    ? t("settings.permissions.openSystemSettings")
-                    : t("settings.permissions.allowSafariHistory")}
-              </button>
-            </div>
+      <div data-setting-id="settings.permissions.notifications" className={`settings-row settings-permission-row${accessibilityRequired ? "" : " settings-row--group-start"}${safariHistory.show ? "" : " settings-row--group-end"}`}>
+        <div>
+          <div className="settings-permission-title-line">
+            <div className="lbl">{t("settings.permissions.notifications")}</div>
+            <span className="ui-badge settings-permission-requirement">{t("common.recommended")}</span>
           </div>
-        ) : null}
+          <div className="desc">{t("settings.permissions.notificationsDescription")}</div>
+          {notificationError ? (
+            <div className="settings-permission-error" role="alert">{t("settings.permissions.checkFailed")}</div>
+          ) : null}
+        </div>
+        <div className="ctrl settings-permission-control">
+          <span className="settings-permission-status" data-tone={notificationTone} aria-live="polite">
+            {notificationStatus()}
+          </span>
+          <button
+            type="button"
+            className="settings-btn"
+            disabled={notificationPermission === "unavailable" || notificationPermission === "checking"}
+            onClick={() => void handleNotificationAction()}
+          >
+            {notificationActionLabel()}
+          </button>
+        </div>
       </div>
+
+      {safariHistory.show ? (
+        <div className="settings-row settings-row--group-end settings-permission-row">
+          <div>
+            <div className="settings-permission-title-line">
+              <div className="lbl">{t("settings.permissions.safariHistory")}</div>
+              <span className="ui-badge ui-badge--quiet settings-permission-requirement">{t("common.optional")}</span>
+            </div>
+            <div className="desc">{t("settings.permissions.safariHistoryDescription")}</div>
+          </div>
+          <div className="ctrl settings-permission-control">
+            <span
+              className="settings-permission-status"
+              data-tone={safariHistory.readable ? "success" : "neutral"}
+              aria-live="polite"
+            >
+              {safariHistory.readable ? t("common.enabled") : t("settings.permissions.notEnabled")}
+            </span>
+            <button
+              type="button"
+              className="settings-btn"
+              disabled={safariHistory.opening}
+              onClick={() => {
+                if (safariHistory.readable) {
+                  void openFullDiskAccessSettingsPane();
+                } else {
+                  safariHistory.onEnable();
+                }
+              }}
+            >
+              {safariHistory.opening
+                ? t("settings.permissions.opening")
+                : safariHistory.readable
+                  ? t("settings.permissions.openSystemSettings")
+                  : t("settings.permissions.allowSafariHistory")}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

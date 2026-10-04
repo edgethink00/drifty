@@ -137,6 +137,7 @@ import { PetSettingsSection } from "./features/settings/PetSettingsSection";
 import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
 import { PermissionsSettingsSection } from "./features/settings/PermissionsSettingsSection";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
+import { settingsSectionsNeedingAttention } from "./features/settings/settingsAttention";
 import {
   DEV_SETTINGS_SUBSECTION_STORAGE_KEY,
   resolveDevSettingsReviewSubsection,
@@ -9925,6 +9926,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const displayedHistoryLoadMoreError = isHistorySearchActive ? historySearchError : historyLoadMoreError;
   const displayedHistoryLoadMore = isHistorySearchActive ? loadMoreHistorySearchSegments : loadMoreHistorySegments;
   const historyInitialLoading = isHistorySearchActive && historySearchLoading && historySearchSegments.length === 0;
+  // Permissions no longer have their own Settings page, so a missing required
+  // Accessibility grant marks General in the settings rail.
+  const settingsAttentionSections = settingsSectionsNeedingAttention({
+    desktopRuntime: isTauriRuntime(),
+    accessibilityRequired,
+    accessibilityGranted,
+    trackerMode: status ? status.trackerMode ?? "unknown" : null,
+  });
   const shouldShowPostOnboardingSidebarGuide = postOnboardingSidebarGuideActive
     && postOnboardingSidebarGuideStep !== null
     && !onboardingOpen
@@ -10174,6 +10183,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           activeSection={settingsSection}
           activeDevSubsection={devSettingsSubsection}
           isCollapsed={isSidebarVisuallyCollapsed}
+          sectionsNeedingAttention={settingsAttentionSections}
           showDevSection={DEV_SETTINGS_ENABLED && devModeEnabled}
           onBack={handleSettingsBack}
           onDevSubsectionChange={handleDevSettingsSubsectionChange}
@@ -10831,6 +10841,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
                     devModeEnabled={isDevModeActive}
                     hostPlatform={hostPlatform}
+                    permissions={(
+                      <PermissionsSettingsSection
+                        accessibilityGranted={accessibilityGranted}
+                        accessibilityRequired={accessibilityRequired}
+                        onCheckAccessibility={handleCheckAccessibility}
+                        onRequestAccessibility={handleRequestAccessibility}
+                      />
+                    )}
                     showDevMode={DEV_SETTINGS_ENABLED && hostPlatform === "windows"}
                     startOfDayValue={startOfDayValue}
                     startOfWeek={startOfWeek}
@@ -10843,14 +10861,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onDevModeChange={handleDevModeEnabledChange}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
-                  />
-                )}
-                {settingsSection === "permissions" && (
-                  <PermissionsSettingsSection
-                    accessibilityGranted={accessibilityGranted}
-                    accessibilityRequired={accessibilityRequired}
-                    onCheckAccessibility={handleCheckAccessibility}
-                    onRequestAccessibility={handleRequestAccessibility}
                   />
                 )}
                 {settingsSection === "appearance" && (

@@ -24,23 +24,22 @@ describe("SettingsSidebar", () => {
     const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
     expect(within(settingsNav).queryByRole("button", { name: /^Dev$/ })).toBeNull();
     expect(within(settingsNav).getByRole("button", { name: /^Agents & CLI$/ })).toBeTruthy();
-    expect(within(settingsNav).getByRole("button", { name: /^Permissions$/ })).toBeTruthy();
     expect(within(settingsNav).getByRole("button", { name: /^Companion & Alerts$/ })).toBeTruthy();
   });
 
   it("groups sections, marks the current page, and labels the exit action", () => {
     const onBack = vi.fn();
 
-    render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="permissions" isCollapsed={false} showDevSection={false} onBack={onBack} onSectionChange={vi.fn()} />);
+    render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="privacy" isCollapsed={false} showDevSection={false} onBack={onBack} onSectionChange={vi.fn()} />);
 
     const aiGroup = screen.getByRole("group", { name: /^AI$/ });
     const personalGroup = screen.getByRole("group", { name: /^Personal$/ });
+    // Permissions live at the end of General, so they no longer take a rail row.
     expect(within(personalGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "General",
       "Appearance",
       "Desktop pet",
       "Companion & Alerts",
-      "Permissions",
       "Account",
       "Privacy & Data",
     ]);
@@ -62,10 +61,26 @@ describe("SettingsSidebar", () => {
     expect(within(personalGroup).getByText(/^Personal$/).className).toBe("nav-label");
     expect(within(aiGroup).getByText(/^AI$/).className).toBe("nav-label");
     expect(within(advancedGroup).getByText(/^Advanced$/).className).toBe("nav-label");
-    expect(screen.getByRole("button", { name: /^Permissions$/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("button", { name: /^Privacy & Data$/ }).getAttribute("aria-current")).toBe("page");
 
     fireEvent.click(screen.getByRole("button", { name: /^Back$/ }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a section that needs attention without changing its name", () => {
+    const { rerender } = render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="appearance" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+
+    const general = screen.getByRole("button", { name: /^General$/ });
+    expect(general.querySelector(".settings-nav-item__attention")).toBeNull();
+    expect(general.getAttribute("aria-describedby")).toBeNull();
+
+    rerender(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="appearance" isCollapsed={false} sectionsNeedingAttention={["general"]} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+
+    const flagged = screen.getByRole("button", { name: /^General$/ });
+    expect(flagged.querySelector(".settings-nav-item__attention")).toBeTruthy();
+    const descriptionId = flagged.getAttribute("aria-describedby");
+    expect(descriptionId ? document.getElementById(descriptionId)?.textContent : null).toBe("A required permission is turned off");
+    expect(screen.getByRole("button", { name: /^Appearance$/ }).querySelector(".settings-nav-item__attention")).toBeNull();
   });
 
   it("keeps Discord and feedback as rail exits instead of settings pages", () => {
@@ -183,5 +198,14 @@ describe("SettingsSidebar", () => {
 
     expect(appearanceIcon?.innerHTML).toContain('d="M12 22a1 1 0 0 1 0-20');
     expect(appearanceIcon?.innerHTML).not.toContain("M12 3.5a8.5 8.5 0 0 1 0 17z");
+  });
+
+  it("draws My classifications with its own glyph instead of the General sliders", () => {
+    render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="general" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+
+    const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
+    const iconMarkup = (name: RegExp) => within(settingsNav).getByRole("button", { name }).querySelector(".settings-nav-item__icon svg")?.innerHTML;
+
+    expect(iconMarkup(/^My classifications$/)).not.toBe(iconMarkup(/^General$/));
   });
 });
