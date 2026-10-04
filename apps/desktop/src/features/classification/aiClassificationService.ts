@@ -152,6 +152,12 @@ export type AiClassificationRunOptions = {
   bypassCloudRequestBackoff?: boolean;
   /** Bounded first-day diagnostics; never receives activity, request bodies, or provider text. */
   onCloudRequestTiming?: (phase: "started" | "settled", elapsedMs: number) => void;
+  /**
+   * Local UI signal: the ids of the segments this batch is about to send to the AI provider, so the
+   * first-day screen can name what is being read. It runs on this device only and is never forwarded
+   * to analytics or the provider.
+   */
+  onProviderBatchStart?: (segmentIds: readonly string[]) => void;
 };
 
 type CloudAiClassificationAccess =
@@ -369,6 +375,16 @@ export function diffAiClassificationUsageSummary(
   };
 }
 
+// A display hint must never be able to fail the batch it describes.
+function notifyProviderBatchStart(options: AiClassificationRunOptions, representatives: readonly MinimizedActivityPayload[]): void {
+  if (!options.onProviderBatchStart || representatives.length === 0) return;
+  try {
+    options.onProviderBatchStart(representatives.map((item) => item.segmentId));
+  } catch {
+    // ignored: the batch continues regardless of the screen
+  }
+}
+
 export async function runAiClassification(query: UnclassifiedSegmentsQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   return withClassificationActivity(
     () => runAiClassificationImpl(query, batchSize, options),
@@ -450,6 +466,7 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
   const { representatives, membersByRepSegmentId } = clusterPayloadsByLevel(reusableResult.misses, options.level ?? "fine");
 
   if (options.localProvider) {
+    notifyProviderBatchStart(options, representatives);
     return await runLocalAiClassification(query, payload.length, [...localRecords, ...reusableResult.records], representatives, membersByRepSegmentId, options.localProvider, promptWorkProfile, memoryContextForItems(memoryContext, representatives.map((item) => item.segmentId)), adaptiveContextBySegmentId(segments), options.persistenceAllowed);
   }
 
@@ -462,6 +479,7 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
     return { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
   }
 
+  notifyProviderBatchStart(options, representatives);
   const aiRecords = expandClusterRecords(
     await classifyCloudPayloadBatches(cloudClient, representatives, workProfile, memoryContext, {
       requestKey: cloudAccess.requestKey,

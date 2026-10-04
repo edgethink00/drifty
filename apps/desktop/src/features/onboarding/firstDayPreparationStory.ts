@@ -2,6 +2,7 @@ import {
   classifyActivityDetailed,
   isExcludedSegment,
   isFailedForegroundCaptureSegment,
+  shiftIsoDate,
   type ActivitySegment,
   type ClassificationOptions,
   type ProductivityLabel,
@@ -23,6 +24,8 @@ export type FirstDaySource = {
 export type FirstDayDiscoveryItem = FirstDaySource & {
   readonly seconds: number;
   readonly verdict: FirstDayVerdict;
+  /** Classified seconds per verdict, so a source sorted by context (part work, part drift) can say so. */
+  readonly verdictSeconds: Readonly<Record<ProductivityLabel, number>>;
 };
 
 export type FirstDayDiscoveries = {
@@ -49,7 +52,7 @@ function isCountable(segment: ActivitySegment): boolean {
     && !isDriftyItself(segment);
 }
 
-export function firstDaySourceOf(segment: ActivitySegment): FirstDaySource {
+export function firstDaySourceOf(segment: Pick<ActivitySegment, "appName" | "bundleId" | "siteDomain">): FirstDaySource {
   const domain = segment.siteDomain?.trim().toLowerCase();
   if (domain) {
     return { key: "site:" + domain, label: domain.replace(/^www\./u, ""), kind: "site", bundleId: null, siteDomain: domain };
@@ -95,7 +98,12 @@ export function buildFirstDayDiscoveries(
   }
   const ranked = Array.from(groups.values()).sort((left, right) => right.seconds - left.seconds || left.source.label.localeCompare(right.source.label));
   return {
-    items: ranked.slice(0, Math.max(0, limit)).map(({ source, seconds, verdicts }) => ({ ...source, seconds, verdict: dominantVerdict(verdicts) })),
+    items: ranked.slice(0, Math.max(0, limit)).map(({ source, seconds, verdicts }) => ({
+      ...source,
+      seconds,
+      verdict: dominantVerdict(verdicts),
+      verdictSeconds: { focus: verdicts.focus, neutral: verdicts.neutral, drift: verdicts.drift },
+    })),
     appCount: ranked.filter((group) => group.source.kind === "app").length,
     siteCount: ranked.filter((group) => group.source.kind === "site").length,
     totalSeconds: totals.focus + totals.neutral + totals.drift + totals.pending,
@@ -104,6 +112,47 @@ export function buildFirstDayDiscoveries(
     driftSeconds: totals.drift,
     neutralSeconds: totals.neutral,
   };
+}
+
+/** A source's time split by verdict when context sorted it more than one way; null when one verdict holds it. */
+export type FirstDayVerdictShare = { readonly verdict: ProductivityLabel; readonly seconds: number };
+
+/** How the screen names the prepared day relative to the logical today. */
+export function firstDayDayRelation(day: string, today: string): "today" | "yesterday" | "earlier" {
+  if (day === today) return "today";
+  return day === shiftIsoDate(today, -1) ? "yesterday" : "earlier";
+}
+
+const SPLIT_MIN_SHARE = 0.15;
+const SPLIT_MIN_SECONDS = 120;
+
+export function firstDayVerdictSplit(item: Pick<FirstDayDiscoveryItem, "verdictSeconds">): readonly FirstDayVerdictShare[] | null {
+  const classified = item.verdictSeconds.focus + item.verdictSeconds.neutral + item.verdictSeconds.drift;
+  if (classified <= 0) return null;
+  const shares = (["focus", "neutral", "drift"] as const)
+    .map((verdict) => ({ verdict, seconds: item.verdictSeconds[verdict] }))
+    .filter((share) => share.seconds >= SPLIT_MIN_SECONDS && share.seconds / classified >= SPLIT_MIN_SHARE)
+    .sort((left, right) => right.seconds - left.seconds);
+  return shares.length >= 2 ? shares : null;
+}
+
+/**
+ * The sources behind the segment ids a batch sent to the AI provider, largest day total first. A
+ * batch sends one representative per title, so ranking by the source's whole day keeps the name
+ * the screen leads with the one the user spent the most time in.
+ */
+export function buildFirstDayReadingSources(segments: readonly ActivitySegment[], segmentIds: readonly string[]): readonly FirstDaySource[] {
+  if (segmentIds.length === 0) return [];
+  const wanted = new Set(segmentIds);
+  const daySeconds = new Map<string, number>();
+  const reading = new Map<string, FirstDaySource>();
+  for (const segment of segments) {
+    if (!isCountable(segment)) continue;
+    const source = firstDaySourceOf(segment);
+    daySeconds.set(source.key, (daySeconds.get(source.key) ?? 0) + segment.durationSeconds);
+    if (wanted.has(segment.id) && !reading.has(source.key)) reading.set(source.key, source);
+  }
+  return Array.from(reading.values()).sort((left, right) => (daySeconds.get(right.key) ?? 0) - (daySeconds.get(left.key) ?? 0) || left.label.localeCompare(right.label));
 }
 
 /** One drawn block: hour column (0 = the chart's first hour), minute range inside it, and its verdict. */

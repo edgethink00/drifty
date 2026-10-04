@@ -9,6 +9,7 @@ import { readFirstDayCloudBacklog } from "./firstDayCloudBacklog";
 import {
   FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS,
   FIRST_DAY_PREPARATION_CLOUD_MAX_MS,
+  FIRST_DAY_PREPARATION_LIVE_REFRESH_MIN_GAP_MS,
   FIRST_DAY_PREPARATION_MAX_MS,
   FIRST_DAY_PREPARATION_RETRY_BASE_MS,
   FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT,
@@ -339,6 +340,96 @@ describe("useFirstDayPreparation", () => {
     const firstQuery = runAiClassification.mock.calls[0]?.[0] as { segmentIds?: string[] } | undefined;
     expect(firstQuery?.segmentIds).toBeUndefined();
     expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads the prepared day in the background after each saved batch so its icons settle during the wait", async () => {
+    trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(20, 3));
+    const runAiClassification = vi
+      .fn<(...args: unknown[]) => Promise<AiClassificationSummary>>()
+      .mockResolvedValueOnce(savedSummary)
+      .mockResolvedValueOnce(emptySummary);
+    const options = makeOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"] });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(30);
+
+    // Opening load, one quiet reload for the saved batch, then the closing load. The empty batch
+    // saved nothing and reloads nothing.
+    expect(vi.mocked(options.refresh).mock.calls).toEqual([
+      ["2026-07-04", { foreground: true }],
+      ["2026-07-04", { foreground: false }],
+      ["2026-07-04"],
+    ]);
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
+  });
+
+  it("reports the day it prepares before selecting it, so the screen narrates that day and not the one on screen", async () => {
+    // Today has too little activity; yesterday is the day worth preparing.
+    trackerMocks.getClassificationMetrics.mockImplementation(async (query: { day?: string }) => (
+      query?.day === "2026-07-04" ? metrics(3, 0) : metrics(20, 3)
+    ));
+    const setPreparedDay = vi.fn();
+    const options = makeOptions({ setPreparedDay, runAiClassification: vi.fn().mockResolvedValue(emptySummary) });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(30);
+
+    expect(setPreparedDay.mock.calls[0]).toEqual([null]);
+    expect(setPreparedDay).toHaveBeenLastCalledWith("2026-07-03");
+    const preparedOrder = setPreparedDay.mock.invocationCallOrder;
+    expect(preparedOrder[preparedOrder.length - 1]).toBeLessThan(vi.mocked(options.selectDay).mock.invocationCallOrder[0]);
+    expect(options.selectDay).toHaveBeenCalledWith("2026-07-03", { userSelected: false });
+  });
+
+  it("spaces background reloads at least a second apart when batches finish faster than that", async () => {
+    trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(40, 3));
+    let calls = 0;
+    // Four near-instant saved batches, then an empty one.
+    const runAiClassification = vi.fn(async () => (++calls <= 4 ? savedSummary : emptySummary));
+    const refresh = vi.fn().mockResolvedValue(true);
+    const options = makeOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"], refresh });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(40);
+    const background = () => refresh.mock.calls.filter(([, opts]) => (opts as { foreground?: boolean } | undefined)?.foreground === false).length;
+    // The first saved batch reloads at once; the others collapse behind the one-second gap, and the
+    // closing reload supersedes the queued one.
+    expect(background()).toBe(1);
+    expect(refresh).toHaveBeenLastCalledWith("2026-07-04");
+
+    await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_LIVE_REFRESH_MIN_GAP_MS * 2);
+    expect(background()).toBe(1);
+  });
+
+  it("names the batch in flight for the screen and clears it once the batch settles", async () => {
+    trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(20, 3));
+    const firstBatch = deferred<AiClassificationSummary>();
+    let calls = 0;
+    const runAiClassification = vi.fn(async (_query: unknown, _size?: number, runOptions?: AiClassificationRunOptions) => {
+      calls += 1;
+      if (calls > 1) return emptySummary;
+      runOptions?.onProviderBatchStart?.(["segment-a", "segment-b"]);
+      return firstBatch.promise;
+    });
+    const setReadingSegmentIds = vi.fn();
+    const options = makeOptions({
+      runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"],
+      setReadingSegmentIds,
+    });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    expect(setReadingSegmentIds).toHaveBeenLastCalledWith(["segment-a", "segment-b"]);
+
+    firstBatch.resolve(savedSummary);
+    await flushAsync(30);
+    expect(setReadingSegmentIds).toHaveBeenLastCalledWith([]);
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
+
+    // A provider callback arriving after the gate settled cannot bring the reading line back.
+    const late = (runAiClassification.mock.calls[0]?.[2] as AiClassificationRunOptions | undefined)?.onProviderBatchStart;
+    late?.(["segment-c"]);
+    expect(setReadingSegmentIds).toHaveBeenLastCalledWith([]);
   });
 
   it("waits for a managed model download before classifying, then uses the attached options", async () => {

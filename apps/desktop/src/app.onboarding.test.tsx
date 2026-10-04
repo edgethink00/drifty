@@ -5,6 +5,7 @@ import { StrictMode, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 import { beginFirstDayCloudBacklog, readFirstDayCloudBacklog, releaseFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
+import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
 import { getOnboardingProgressStorageKey } from "./features/onboarding/onboardingProgress";
 import {
   parsePostOnboardingSidebarGuideRecord,
@@ -1772,7 +1773,8 @@ describe("App onboarding", () => {
     fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 
     await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(document.querySelector(".first-day-prep")).toBeNull());
+    // The finished gate holds its closing line before the dashboard takes over.
+    await waitFor(() => expect(document.querySelector(".first-day-prep")).toBeNull(), { timeout: FIRST_DAY_PREPARATION_READY_HOLD_MS + 1_000 });
     await waitFor(() => expect(trackerPreviewBrowserHistoryImport).toHaveBeenCalledTimes(1));
     expect(warnSpy).toHaveBeenCalledWith("First-day browser history import unavailable", expect.any(Error));
   }, 15_000);

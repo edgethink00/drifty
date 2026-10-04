@@ -620,6 +620,7 @@ describe("runAiClassification cloud contract", () => {
     const saveClassifications = vi.fn().mockResolvedValue({ saved: 1 });
     const getClassificationMetrics = vi.fn().mockResolvedValue(baseMetrics);
     const onCloudRequestTiming = vi.fn();
+    const onProviderBatchStart = vi.fn();
 
     vi.doMock("../../lib/supabase/client", () => ({
       supabase: {
@@ -638,7 +639,7 @@ describe("runAiClassification cloud contract", () => {
 
     try {
       const { runAiClassification } = await import("./aiClassificationService");
-      const result = await runAiClassification({ day: "2026-05-22" }, undefined, { onCloudRequestTiming });
+      const result = await runAiClassification({ day: "2026-05-22" }, undefined, { onCloudRequestTiming, onProviderBatchStart });
 
       expect(result.status).toBe("saved");
       expect(invoke).toHaveBeenCalledWith("classify-activity", {
@@ -652,6 +653,9 @@ describe("runAiClassification cloud contract", () => {
       expect(saveClassifications).toHaveBeenCalledTimes(1);
       expect(onCloudRequestTiming).toHaveBeenNthCalledWith(1, "started", 0);
       expect(onCloudRequestTiming).toHaveBeenNthCalledWith(2, "settled", expect.any(Number));
+      // The first-day screen learns what is being read before the request leaves, from local ids only.
+      expect(onProviderBatchStart).toHaveBeenCalledExactlyOnceWith(["segment-1"]);
+      expect(onProviderBatchStart.mock.invocationCallOrder[0]).toBeLessThan(invoke.mock.invocationCallOrder[0]);
     } finally {
       vi.doUnmock("../../lib/supabase/client");
       vi.doUnmock("../../lib/api/trackerClient");

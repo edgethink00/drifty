@@ -18,10 +18,12 @@ function SourceIcon({ item, appIcons }: { readonly item: FirstDayDiscoveryItem; 
 /**
  * The found apps and sites, always moving while they wait for a verdict: around the Drifty hourglass.
  * A token whose verdict arrives is sent off by useVerdictFlights; without motion its face simply fades.
+ * Tokens the in-flight batch is reading are marked, so the ring shows which ones are being worked on.
  */
-export function FirstDayTokenStage({ discoveries, appIcons = {} }: {
+export function FirstDayTokenStage({ discoveries, appIcons = {}, readingKeys }: {
   readonly discoveries: FirstDayDiscoveries | null;
   readonly appIcons?: AppIconMap;
+  readonly readingKeys?: ReadonlySet<string>;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   useTokenMotion(stageRef);
@@ -36,6 +38,7 @@ export function FirstDayTokenStage({ discoveries, appIcons = {} }: {
             data-token=""
             data-find-key={item.key}
             data-verdict={item.verdict}
+            data-reading={item.verdict === "pending" && readingKeys?.has(item.key) ? "true" : undefined}
             data-seed={index * 1.618}
             style={{ "--token-index": index } as CSSProperties}
             title={item.label}

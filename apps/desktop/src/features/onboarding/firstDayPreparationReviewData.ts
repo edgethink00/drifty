@@ -6,7 +6,8 @@ export const FIRST_DAY_REVIEW_QUERY_PARAM = "driftyFirstDayReview";
 type Entry = readonly [startHour: number, startMinute: number, minutes: number, domain: string, title: string, category: ActivityCategory, productivity: ProductivityLabel];
 
 // A designer-developer's Wednesday as Chrome history: a morning of docs and code review, a long
-// afternoon stretch on GitHub, and YouTube in the gaps and the evening.
+// afternoon stretch on GitHub, and YouTube in the gaps and the evening (one of them a work tutorial,
+// so the review shows a source that context sorts two ways).
 const ENTRIES: readonly Entry[] = [
   [9, 12, 14, "mail.google.com", "Inbox", "communication", "neutral"],
   [9, 26, 22, "docs.google.com", "Q4 planning", "workspace", "focus"],
@@ -16,7 +17,7 @@ const ENTRIES: readonly Entry[] = [
   [10, 36, 41, "github.com", "Pull requests", "workspace", "focus"],
   [11, 17, 18, "linear.app", "Sprint board", "workspace", "focus"],
   [11, 35, 12, "slack.com", "Slack", "communication", "neutral"],
-  [11, 47, 16, "youtube.com", "YouTube", "entertainment", "drift"],
+  [11, 47, 16, "youtube.com", "Figma auto layout tutorial", "learning", "focus"],
   [13, 20, 11, "news.ycombinator.com", "Hacker News", "social_media", "drift"],
   [13, 31, 25, "notion.so", "Design notes", "workspace", "focus"],
   [13, 56, 6, "slack.com", "Slack", "communication", "neutral"],
@@ -35,18 +36,19 @@ const ENTRIES: readonly Entry[] = [
 ];
 
 /**
- * classifiedCount: how many entries (in a fixed scattered order) already carry a classification, so
- * the review can play classification arriving. The rest are stored as unknown, which reads as pending.
+ * classified: how many entries (in a fixed scattered order), or exactly which entry indices, already
+ * carry a classification, so the review can play classification arriving. The rest are stored as
+ * unknown, which reads as pending.
  */
-export function buildFirstDayReviewSegments(day: string, classifiedCount = ENTRIES.length, sources: "sites" | "mixed" = "sites"): ActivitySegment[] {
+export function buildFirstDayReviewSegments(day: string, classifiedCount: number | ReadonlySet<number> = ENTRIES.length, sources: "sites" | "mixed" = "sites"): ActivitySegment[] {
   const order = ENTRIES.map((_, index) => index).sort((left, right) => ((left * 7) % ENTRIES.length) - ((right * 7) % ENTRIES.length));
-  const classified = new Set(order.slice(0, Math.max(0, classifiedCount)));
+  const classified = typeof classifiedCount === "number" ? new Set(order.slice(0, Math.max(0, classifiedCount))) : classifiedCount;
   return ENTRIES.map(([hour, minute, minutes, domain, title, category, productivity], index) => {
     const startedAt = new Date(day + "T" + String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0") + ":00");
     const endedAt = new Date(startedAt.getTime() + minutes * 60_000);
     const app = sources === "mixed" ? REVIEW_APP_ENTRIES[index] : undefined;
     return {
-      id: "first-day-review-" + index,
+      id: firstDayReviewSegmentId(index),
       startedAt: startedAt.toISOString(),
       endedAt: endedAt.toISOString(),
       durationSeconds: minutes * 60,
@@ -68,6 +70,27 @@ export function buildFirstDayReviewSegments(day: string, classifiedCount = ENTRI
 }
 
 export const FIRST_DAY_REVIEW_ENTRY_COUNT = ENTRIES.length;
+
+export function firstDayReviewSegmentId(index: number): string {
+  return "first-day-review-" + index;
+}
+
+/**
+ * The review's classification batches as entry indices, in the order a run would send them: the
+ * largest sources first, a few at a time, the way the gate's ten-segment batches arrive.
+ */
+export const FIRST_DAY_REVIEW_BATCHES: readonly (readonly number[])[] = [
+  [5, 12, 14, 20, 3, 16, 1, 18],
+  [2, 8, 15, 22, 4, 19, 23],
+  [10, 6, 7, 11, 0, 17],
+  [9, 13, 21],
+];
+
+/** The same day in the order the tracker hands out unclassified activity: by start time, three at a time. */
+export const FIRST_DAY_REVIEW_TIME_ORDER_BATCHES: readonly (readonly number[])[] = Array.from(
+  { length: Math.ceil(FIRST_DAY_REVIEW_ENTRY_COUNT / 3) },
+  (_, batch) => Array.from({ length: Math.min(3, FIRST_DAY_REVIEW_ENTRY_COUNT - batch * 3) }, (__, offset) => batch * 3 + offset),
+);
 
 // Development fixture only. These replace a few site entries with native-app activity; they never
 // imply that a first browser-history import can recover native-app history.

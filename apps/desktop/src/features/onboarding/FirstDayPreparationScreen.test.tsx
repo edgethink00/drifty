@@ -2,9 +2,10 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
-import { FirstDayPreparationScreen } from "./FirstDayPreparationScreen";
-import { buildFirstDayChart, buildFirstDayDiscoveries } from "./firstDayPreparationStory";
-import { buildFirstDayReviewSegments } from "./firstDayPreparationReviewData";
+import { FirstDayPreparationScreen, firstDaySourceLabel } from "./FirstDayPreparationScreen";
+import { FIRST_DAY_FACT_HOLD_MS } from "./firstDayNarration";
+import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources } from "./firstDayPreparationStory";
+import { buildFirstDayReviewSegments, FIRST_DAY_REVIEW_BATCHES, firstDayReviewSegmentId } from "./firstDayPreparationReviewData";
 
 afterEach(() => {
   cleanup();
@@ -251,5 +252,113 @@ describe("FirstDayPreparationScreen classification motion", () => {
     expect(token?.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,cached");
     expect(token?.querySelector(".first-day-prep__token-letter")).toBeNull();
     expect(document.querySelector('[data-find-key="site:youtube.com"]')).toBeTruthy();
+  });
+});
+
+describe("FirstDayPreparationScreen names the work it is doing", () => {
+  const day = "2026-09-30";
+  const segmentsWith = (classified: ReadonlySet<number>) => buildFirstDayReviewSegments(day, classified);
+  const segmentsAfter = (batches: number) => segmentsWith(new Set(FIRST_DAY_REVIEW_BATCHES.slice(0, batches).flat()));
+  const stateAfter = (batches: number) => {
+    const segments = segmentsAfter(batches);
+    return { discoveries: buildFirstDayDiscoveries(segments), chart: buildFirstDayChart(segments) };
+  };
+  const readingOf = (batchesDone: number, batch: number) =>
+    buildFirstDayReadingSources(segmentsAfter(batchesDone), FIRST_DAY_REVIEW_BATCHES[batch].map(firstDayReviewSegmentId));
+  const line = () => document.querySelector(".first-day-prep__line") as HTMLElement;
+
+  it("names the sources the batch in flight is reading and marks their icons on the ring", () => {
+    render(<FirstDayPreparationScreen phase="classifying" progress={0.32} {...stateAfter(0)} reading={readingOf(0, 0)} />);
+
+    expect(line().textContent).toBe("Reading github.com and 2 more in context…");
+    expect(document.querySelector('[data-find-key="site:github.com"]')?.getAttribute("data-reading")).toBe("true");
+    expect(document.querySelector('[data-find-key="site:youtube.com"]')?.hasAttribute("data-reading")).toBe(false);
+  });
+
+  it("gives a longest focus that appears a moment of the line, then returns to the batch being read", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<FirstDayPreparationScreen phase="classifying" progress={0.32} {...stateAfter(0)} reading={readingOf(0, 0)} />);
+    rerender(<FirstDayPreparationScreen phase="classifying" progress={0.5} {...stateAfter(1)} reading={readingOf(1, 1)} />);
+
+    // The first batch joins two GitHub stretches into an hour; no per-source verdict is spoken.
+    expect(line().textContent).toMatch(/^Longest focus so far: 1h from /u);
+
+    act(() => {
+      vi.advanceTimersByTime(FIRST_DAY_FACT_HOLD_MS);
+    });
+    expect(line().textContent).toBe("Reading youtube.com and 2 more in context…");
+  });
+
+  it("says when context sorted one source two ways, without dividing its time (the dashboard does that next)", () => {
+    const { rerender } = render(<FirstDayPreparationScreen phase="classifying" progress={0.5} {...stateAfter(1)} />);
+    rerender(<FirstDayPreparationScreen phase="classifying" progress={0.7} {...stateAfter(2)} />);
+
+    expect(line().textContent).toBe("youtube.com · sorted by what you were doing there, not by name");
+    expect(line().textContent).not.toMatch(/\d+m|Focus|Drift/u);
+  });
+
+  it("notices a split that only forms once a later batch adds the rest of a source", () => {
+    const youtubeDrift = [2, 15, 22];
+    const firstPass = new Set([...FIRST_DAY_REVIEW_BATCHES[0], ...youtubeDrift]);
+    const { rerender } = render(<FirstDayPreparationScreen phase="classifying" progress={0.5} discoveries={buildFirstDayDiscoveries(segmentsWith(firstPass))} />);
+    // The work tutorial (entry 8) arrives in a later batch and only then makes YouTube a split.
+    rerender(<FirstDayPreparationScreen phase="classifying" progress={0.6} discoveries={buildFirstDayDiscoveries(segmentsWith(new Set([...firstPass, 8])))} />);
+
+    expect(line().textContent).toBe("youtube.com · sorted by what you were doing there, not by name");
+  });
+
+  it("treats what was already known when the screen opened as background, not news", () => {
+    const { rerender } = render(<FirstDayPreparationScreen phase="classifying" progress={0.5} {...stateAfter(1)} reading={readingOf(1, 1)} />);
+    expect(line().textContent).toBe("Reading youtube.com and 2 more in context…");
+
+    // Between batches the line keeps the latest fact instead of going back to generic copy.
+    rerender(<FirstDayPreparationScreen phase="classifying" progress={0.5} {...stateAfter(1)} />);
+    expect(line().textContent).toMatch(/^Longest focus so far: 1h from /u);
+  });
+
+  it("writes the Korean lines without a particle that depends on the source's name", () => {
+    const { rerender } = render(
+      <LocalizationTestProvider language="ko">
+        <FirstDayPreparationScreen phase="classifying" progress={0.32} {...stateAfter(0)} reading={readingOf(0, 0)} />
+      </LocalizationTestProvider>,
+    );
+    expect(line().textContent).toBe("github.com 외 2개의 맥락을 읽고 있습니다…");
+
+    rerender(
+      <LocalizationTestProvider language="ko">
+        <FirstDayPreparationScreen phase="classifying" progress={0.5} {...stateAfter(1)} reading={readingOf(1, 1)} />
+      </LocalizationTestProvider>,
+    );
+    expect(line().textContent).toMatch(/^지금까지 가장 긴 집중: .+부터 1시간$/u);
+  });
+
+  it("closes on what it went through before the longest focus", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <FirstDayPreparationScreen phase="ready" progress={1} {...stateAfter(FIRST_DAY_REVIEW_BATCHES.length)} dayRelation="yesterday" />
+      </LocalizationTestProvider>,
+    );
+
+    expect(line().textContent).toBe("사이트 13곳, 어제 7시간 21분의 기록을 모두 살펴봤습니다.");
+    expect(screen.getByText(/^가장 긴 집중: /u)).toBeTruthy();
+  });
+
+  it("keeps the fast-changing lines out of the announcements while the receipt is still announced", () => {
+    const { rerender } = render(<FirstDayPreparationScreen phase="classifying" progress={0.32} {...stateAfter(0)} reading={readingOf(0, 0)} />);
+    expect(line().getAttribute("aria-live")).toBe("off");
+
+    rerender(<FirstDayPreparationScreen phase="ready" progress={1} discoveries={stateAfter(FIRST_DAY_REVIEW_BATCHES.length).discoveries} />);
+    expect(line().textContent).toBe("Went through today's 7h 21m across 13 sites.");
+    expect(line().hasAttribute("aria-live")).toBe(false);
+  });
+});
+
+describe("firstDaySourceLabel", () => {
+  it("keeps ordinary names and shortens a long app name so the line stays on one row", () => {
+    expect(firstDaySourceLabel("github.com")).toBe("github.com");
+    const long = firstDaySourceLabel("Microsoft Visual Studio Code - Insiders Edition");
+    expect(Array.from(long)).toHaveLength(28);
+    expect(long.endsWith("…")).toBe(true);
+    expect(firstDaySourceLabel("한글로 된 아주 긴 업무용 앱 이름이 여기에 있습니다 정말로")).toMatch(/…$/u);
   });
 });

@@ -176,7 +176,7 @@ import {
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
-import { buildFirstDayChart, buildFirstDayDiscoveries } from "./features/onboarding/firstDayPreparationStory";
+import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
 import { isFirstDayReviewEnabled } from "./features/onboarding/firstDayPreparationReviewData";
 import { isInitialDailyFocusQuietPeriod, isInstallDayReviewEligible } from "./features/onboarding/initialExperiencePolicy";
 import { resolveFirstDayTargetDay, useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
@@ -468,7 +468,7 @@ import type {
 import { useStickyDuringLoad } from "./features/dashboard/useStickyDuringLoad";
 import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
-import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveAppRefreshTickAction, resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
+import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveAppRefreshTickAction, resolveDashboardRefreshMode, shouldRefreshHistoryData, shouldRollSelectedDayToToday, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
 import { DeferredTabBodyFallback } from "./features/loading/DeferredTabBodyFallback";
 import { DeferredPageImportFallback } from "./features/loading/DeferredPageImportFallback";
 import { TrendsPage } from "./features/insights/TrendsPage";
@@ -1579,6 +1579,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [preparingFirstDay, setPreparingFirstDay] = useState(false);
   const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
   const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
+  const [firstDayReadingSegmentIds, setFirstDayReadingSegmentIds] = useState<readonly string[]>([]);
+  // The day the first-day gate is preparing. The screen narrates only once that day's activity is loaded,
+  // so it never describes whatever day happened to be on screen before the gate selected it.
+  const [firstDayPreparedDay, setFirstDayPreparedDay] = useState<string | null>(null);
   // Phases this run expects, so the gate can spend one bar across all of them
   // instead of restarting it at every handoff.
   const [firstDayPreparationPlan, setFirstDayPreparationPlan] = useState<FirstDayPreparationPlan>(["classifying"]);
@@ -1940,13 +1944,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, segments, showAiClassificationImpact],
   );
   // The first-day preparation screen stacks up what the run has loaded for the day it is preparing.
+  const firstDayPreparedDayLoaded = preparingFirstDay && firstDayPreparedDay !== null && segmentsLoadedDay === firstDayPreparedDay;
   const firstDayDiscoveries = useMemo(
-    () => (preparingFirstDay ? buildFirstDayDiscoveries(segments, selectedDayClassificationOptions) : null),
-    [preparingFirstDay, segments, selectedDayClassificationOptions],
+    () => (firstDayPreparedDayLoaded ? buildFirstDayDiscoveries(segments, selectedDayClassificationOptions) : null),
+    [firstDayPreparedDayLoaded, segments, selectedDayClassificationOptions],
   );
   const firstDayChart = useMemo(
-    () => (preparingFirstDay ? buildFirstDayChart(segments, selectedDayClassificationOptions) : null),
-    [preparingFirstDay, segments, selectedDayClassificationOptions],
+    () => (firstDayPreparedDayLoaded ? buildFirstDayChart(segments, selectedDayClassificationOptions) : null),
+    [firstDayPreparedDayLoaded, segments, selectedDayClassificationOptions],
+  );
+  // What the in-flight batch is reading, named from the loaded day so the screen can say it.
+  const firstDayReading = useMemo(
+    () => (firstDayPreparedDayLoaded ? buildFirstDayReadingSources(segments, firstDayReadingSegmentIds) : []),
+    [firstDayPreparedDayLoaded, firstDayReadingSegmentIds, segments],
   );
   const companionFocusRecordClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
@@ -2597,6 +2607,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const compactHistoryCacheGenerationRef = useRef(0);
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
+  // The logical today when the current day was picked automatically (the first-day gate's prepared day).
+  const automaticDayChoiceTodayRef = useRef<string | null>(null);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
   const pendingExtremeNudgeRef = useRef<{ readonly alertKey: string; readonly candidate: DriftAlarmCandidate } | null>(null);
   const nativeExtremeNudgeInFlightRef = useRef(false);
@@ -3050,17 +3062,26 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     autoSelectedLatestDayRef.current = true;
     setSelectedDay((currentDay) => {
       const nextDay = typeof day === "function" ? day(currentDay) : day;
-      userSelectedDayRef.current = (options?.userSelected ?? true) && nextDay !== logicalTodayIsoDate(startOfDayMinutes);
+      const today = logicalTodayIsoDate(startOfDayMinutes);
+      const userSelected = options?.userSelected ?? true;
+      userSelectedDayRef.current = userSelected && nextDay !== today;
+      automaticDayChoiceTodayRef.current = !userSelected && nextDay !== today ? today : null;
       return nextDay;
     });
   }
 
   const selectTodayAfterDateRollover = useCallback(() => {
     const currentDay = logicalTodayIsoDate(startOfDayMinutes);
-    if (selectedDay === currentDay) return false;
-    if (activeTab !== "dashboard" || dashPeriod !== "Today") return false;
-    if (userSelectedDayRef.current) return false;
+    if (!shouldRollSelectedDayToToday({
+      activeTab,
+      automaticChoiceToday: automaticDayChoiceTodayRef.current,
+      dashPeriod,
+      selectedDay,
+      today: currentDay,
+      userSelected: userSelectedDayRef.current,
+    })) return false;
 
+    automaticDayChoiceTodayRef.current = null;
     autoSelectedLatestDayRef.current = true;
     setSelectedDay(currentDay);
     return true;
@@ -4323,6 +4344,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     selectedDayRef,
     setPhase: setFirstDayPreparationPhase,
     setProgress: setFirstDayPreparationProgress,
+    setReadingSegmentIds: setFirstDayReadingSegmentIds,
+    setPreparedDay: setFirstDayPreparedDay,
     shouldBlockLocalTrackerAccess,
     startOfDayMinutes,
   });
@@ -10179,8 +10202,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             workActivityLabel={firstDayWorkLabel}
             discoveries={firstDayDiscoveries}
             chart={firstDayChart}
-            dayRelation={selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "today" : selectedDay === shiftIsoDate(logicalTodayIsoDate(startOfDayMinutes), -1) ? "yesterday" : "earlier"}
+            dayRelation={firstDayDayRelation(firstDayPreparedDay ?? selectedDay, logicalTodayIsoDate(startOfDayMinutes))}
             appIcons={appIcons}
+            reading={firstDayReading}
           />
           <ModalPresence>{promoHandoffAccountDialog}</ModalPresence>
           {latestBuildPrompt}

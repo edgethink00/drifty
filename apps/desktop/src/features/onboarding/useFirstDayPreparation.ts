@@ -38,6 +38,9 @@ const FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES = 80;
 const FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE = 10; // small batches so each call finishes fast on slow local models
 const FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS = 75 * 1000; // per-batch hang cutoff — generous so a slow-but-working local model (4B) isn't killed mid-batch
 const FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT = 4; // give up only after this many consecutive no-save batches
+// Background reloads that let classified icons land during the wait start at least this far apart, so a
+// run of near-instant batches (cached or deterministic results) cannot hammer the tracker with reloads.
+export const FIRST_DAY_PREPARATION_LIVE_REFRESH_MIN_GAP_MS = 1_000;
 export const FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT = 3;
 export const FIRST_DAY_PREPARATION_RETRY_BASE_MS = 1_000;
 // Wait from the server denial instead of guessing its fixed-minute boundary
@@ -132,6 +135,13 @@ export type UseFirstDayPreparationOptions = {
   readonly selectDay: (day: string, options?: { readonly userSelected?: boolean }) => void;
   readonly setPhase: (phase: FirstDayPreparationPhase) => void;
   readonly setProgress: (progress: number | null) => void;
+  /**
+   * Segment ids the in-flight foreground batch sent to the AI provider, so the screen can name what
+   * is being read; an empty list once the batch settles. Local display only.
+   */
+  readonly setReadingSegmentIds?: (segmentIds: readonly string[]) => void;
+  /** The logical day this run prepares, once chosen; null while it is still being chosen. */
+  readonly setPreparedDay?: (day: string | null) => void;
   readonly runAiClassification: RunAiClassificationBatch;
   readonly runAiClassificationUntilEmpty: RunAiClassificationBatch;
   readonly selectedAiProviderKeyRef: MutableRefObject<string>;
@@ -173,6 +183,8 @@ export function useFirstDayPreparation({
   selectedDayRef,
   setPhase,
   setProgress,
+  setReadingSegmentIds,
+  setPreparedDay,
   shouldBlockLocalTrackerAccess,
   startOfDayMinutes,
 }: UseFirstDayPreparationOptions): {
@@ -223,6 +235,7 @@ export function useFirstDayPreparation({
     let revealed = false;
     let partialCloudReveal = false;
     const attemptStartedAt = Date.now();
+    setPreparedDay?.(null);
     let lastQuotaWindow: AiClassificationQuotaWindow | null = null;
     let quotaWaitCount = 0;
     let lastForegroundFailure: "quota" | "transient" | "content" | null = null;
@@ -283,6 +296,51 @@ export function useFirstDayPreparation({
     };
     const selectedProviderUnchanged = () => runGenerationRef.current === runGenerationAtStart
       && selectedAiProviderKeyRef.current === selectedProviderKeyAtStart;
+    // What the screen says is being read. Cleared whenever the batch it describes is over.
+    const showReading = (segmentIds: readonly string[]) => {
+      if (settled || cancelled) return;
+      setReadingSegmentIds?.(segmentIds);
+    };
+    const clearReading = () => setReadingSegmentIds?.([]);
+    // Each saved batch reloads the day in the background, so the screen's icons settle as their
+    // classifications are stored instead of all at once when the run ends. At most one reload is
+    // in flight, reloads start at least FIRST_DAY_PREPARATION_LIVE_REFRESH_MIN_GAP_MS apart, and
+    // batches that land meanwhile collapse into one more reload.
+    let liveRefreshInFlight = false;
+    let liveRefreshQueued = false;
+    let liveRefreshStartedAt = Number.NEGATIVE_INFINITY;
+    let liveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const refreshClassifiedDay = (day: string) => {
+      if (settled || cancelled) return;
+      if (liveRefreshInFlight || liveRefreshTimer !== null) {
+        liveRefreshQueued = true;
+        return;
+      }
+      const wait = liveRefreshStartedAt + FIRST_DAY_PREPARATION_LIVE_REFRESH_MIN_GAP_MS - Date.now();
+      if (wait > 0) {
+        liveRefreshTimer = setTimeout(() => {
+          liveRefreshTimer = null;
+          refreshClassifiedDay(day);
+        }, wait);
+        return;
+      }
+      liveRefreshInFlight = true;
+      liveRefreshQueued = false;
+      liveRefreshStartedAt = Date.now();
+      void refresh(day, { foreground: false })
+        .catch(() => false)
+        .finally(() => {
+          liveRefreshInFlight = false;
+          if (!liveRefreshQueued) return;
+          liveRefreshQueued = false;
+          refreshClassifiedDay(day);
+        });
+    };
+    const stopLiveRefresh = () => {
+      if (liveRefreshTimer !== null) clearTimeout(liveRefreshTimer);
+      liveRefreshTimer = null;
+      liveRefreshQueued = false;
+    };
     const providerKind = () => {
       const localProvider = localAiClassificationOptionsRef.current?.localProvider.provider;
       if (localProvider === "managed_local") return "local" as const;
@@ -334,6 +392,7 @@ export function useFirstDayPreparation({
       if (settled || cancelled) return;
       settled = true;
       revealed = true;
+      clearReading();
       setFailure(null);
       onReveal("complete");
       captureOutcome("success", "dashboard_complete");
@@ -343,6 +402,7 @@ export function useFirstDayPreparation({
       settled = true;
       revealed = true;
       partialCloudReveal = true;
+      clearReading();
       setFailure(null);
       onReveal("continue");
       captureOutcome(reason, "dashboard_partial", lastForegroundErrorKind);
@@ -350,6 +410,7 @@ export function useFirstDayPreparation({
     const fail = (reason: FirstDayPreparationFailureReason, detail?: unknown) => {
       if (settled || cancelled) return;
       settled = true;
+      clearReading();
       if (detail) console.warn("First-day preparation paused", detail);
       setFailure(reason);
       captureOutcome(reason, "retry_screen", detail ? toAnalyticsErrorKind(detail) : lastForegroundErrorKind);
@@ -478,10 +539,15 @@ export function useFirstDayPreparation({
         if (!pendingBatch) {
           classificationBatchCount += 1;
           const nextBatch = classifyOptions
-            ? runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...classifyOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
+            ? runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, {
+              ...classifyOptions,
+              level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL,
+              onProviderBatchStart: showReading,
+            })
             : runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, {
               level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL,
               onCloudRequestTiming,
+              onProviderBatchStart: showReading,
             });
           const entry = { day, localProvider, promise: nextBatch };
           foregroundBatchRef.current = entry;
@@ -512,7 +578,11 @@ export function useFirstDayPreparation({
         const timedOut = summary === batchTimeoutSummary;
         // Only a real settle frees the single-flight slot; the next iteration then
         // processes its real summary and may launch a fresh batch.
-        if (!timedOut) pendingBatch = null;
+        if (!timedOut) {
+          pendingBatch = null;
+          clearReading();
+          if (summary.savedRecords > 0) refreshClassifiedDay(day);
+        }
         // Metrics include synced segments from other devices, while this device's
         // candidate selector intentionally excludes them. Only local candidates
         // can keep this device's first-day preparation open.
@@ -569,6 +639,7 @@ export function useFirstDayPreparation({
       // save is harmless because the background mop-up re-covers this day, and the
       // no-op catch keeps a late rejection from surfacing as unhandled.
       if (pendingBatch) void pendingBatch.catch(() => undefined);
+      clearReading();
       await reportProgress();
       return false;
     };
@@ -613,6 +684,9 @@ export function useFirstDayPreparation({
         // Once the cap has revealed the dashboard, preserve any day the user
         // selected while the import was still finishing.
         if (!settled) {
+          // The screen narrates this day only once its activity has loaded. The automatic selection
+          // holds until the date actually rolls over, so the dashboard opens on the prepared day.
+          setPreparedDay?.(today);
           selectDay(today, { userSelected: false });
           await refresh(today, { foreground: true });
         }
@@ -670,6 +744,8 @@ export function useFirstDayPreparation({
               else fail("classification_incomplete");
               return;
             }
+            // The closing reload covers anything a pending background reload would have shown.
+            stopLiveRefresh();
             if (!settled) await refresh(today);
           } else if (!settled) {
             fail("classification_incomplete", "The selected AI route is unavailable.");
@@ -680,6 +756,7 @@ export function useFirstDayPreparation({
         fail("classification_incomplete", error);
       } finally {
         clearTimeout(safetyTimeout);
+        stopLiveRefresh();
         if (!settled) reveal();
         if (!revealed && cloudBacklog) releaseFirstDayCloudBacklog(cloudBacklog.runId);
 
@@ -784,6 +861,7 @@ export function useFirstDayPreparation({
       if (!revealed) cancelled = true;
       if (!revealed && cloudBacklog) releaseFirstDayCloudBacklog(cloudBacklog.runId);
       clearTimeout(safetyTimeout);
+      stopLiveRefresh();
     };
     // Retrying is the only dependency besides the gate itself that starts a new
     // attempt; live readiness is read through refs to avoid cancelling mid-run.

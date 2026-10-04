@@ -116,7 +116,9 @@ export const FIRST_DAY_PREPARATION_TRACK_FLOOR = 0.035;
 
 /**
  * How long the finished gate holds on "ready" before the dashboard takes over.
- * Long enough to register a filled bar and an answer, short enough that nobody
- * experiences it as more waiting.
+ * Long enough to catch the answer it lands on (the check, and the numbers of
+ * what was gone through), short enough that nobody experiences it as more
+ * waiting; the longest focus is repeated on the first intro card. Owner
+ * choice, 2026-10-04. No work is held back for it.
  */
-export const FIRST_DAY_PREPARATION_READY_HOLD_MS = 950;
+export const FIRST_DAY_PREPARATION_READY_HOLD_MS = 1100;

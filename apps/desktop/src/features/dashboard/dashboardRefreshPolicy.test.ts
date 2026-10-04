@@ -4,6 +4,7 @@ import {
   resolveAppRefreshTickAction,
   resolveDashboardRefreshMode,
   shouldRefreshHistoryData,
+  shouldRollSelectedDayToToday,
   type DashboardRefreshInputs,
 } from "./dashboardRefreshPolicy";
 
@@ -96,5 +97,22 @@ describe("resolveAppRefreshTickAction", () => {
       nowMs,
       lastFullDayRefreshAtMs: 0,
     })).toBe("reconcile");
+  });
+});
+
+describe("shouldRollSelectedDayToToday", () => {
+  const base = { activeTab: "dashboard", dashPeriod: "Today", selectedDay: "2026-10-03", today: "2026-10-04", userSelected: false, automaticChoiceToday: null } as const;
+
+  it("keeps the day the first-day preparation picked until the date actually rolls over", () => {
+    expect(shouldRollSelectedDayToToday({ ...base, automaticChoiceToday: "2026-10-04" })).toBe(false);
+    expect(shouldRollSelectedDayToToday({ ...base, automaticChoiceToday: "2026-10-04", today: "2026-10-05" })).toBe(true);
+  });
+
+  it("still brings a stale, unpicked day forward to today and never moves a day the user picked", () => {
+    expect(shouldRollSelectedDayToToday(base)).toBe(true);
+    expect(shouldRollSelectedDayToToday({ ...base, userSelected: true })).toBe(false);
+    expect(shouldRollSelectedDayToToday({ ...base, selectedDay: "2026-10-04" })).toBe(false);
+    expect(shouldRollSelectedDayToToday({ ...base, dashPeriod: "Week" })).toBe(false);
+    expect(shouldRollSelectedDayToToday({ ...base, activeTab: "history" })).toBe(false);
   });
 });
