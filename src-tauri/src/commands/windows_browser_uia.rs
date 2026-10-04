@@ -368,9 +368,9 @@ fn resolve_selected_tab(
     })
 }
 
-/// The selected tab's close control. Chromium tabs expose one close button
-/// at their trailing edge. Firefox is identified only by its close button's
-/// class: exactly one, or no close at all.
+/// Identify the selected tab's close control by its browser-owned class,
+/// independently of UI language or layout direction. The audio indicator can
+/// also expose Invoke and be the rightmost button in RTL.
 fn select_close_button<T>(
     process_name: &str,
     mut candidates: Vec<(uiautomation::types::Rect, T, String)>,
@@ -384,7 +384,15 @@ fn select_close_button<T>(
         }
         return candidates.pop().map(|(rect, invoke, _)| (rect, invoke));
     }
-    candidates.sort_by_key(|(rect, _, _)| rect.get_right());
+    let close_class = match process_name {
+        "chrome" | "brave" => "TabCloseButton",
+        "msedge" => "EdgeTabCloseButton",
+        _ => return None,
+    };
+    candidates.retain(|(_, _, class_name)| class_name == close_class);
+    if candidates.len() != 1 {
+        return None;
+    }
     candidates.pop().map(|(rect, invoke, _)| (rect, invoke))
 }
 
@@ -825,15 +833,46 @@ mod tests {
             select_close_button("firefox", rtl).map(|(_, id)| id),
             Some("close")
         );
-        // Chromium keeps its trailing-edge rule.
-        let chromium = vec![
-            (rect(10, 30), "alert", String::new()),
-            (rect(250, 270), "close", String::new()),
-        ];
-        assert_eq!(
-            select_close_button("chrome", chromium).map(|(_, id)| id),
-            Some("close")
-        );
+    }
+
+    #[test]
+    fn chromium_rtl_audio_does_not_override_the_actual_close_button() {
+        // Measured Arabic Chrome/Edge: the invokable audio indicator is to
+        // the right of the tab close button. Its label is localized.
+        for (browser, close_class) in [
+            ("chrome", "TabCloseButton"),
+            ("msedge", "EdgeTabCloseButton"),
+            ("brave", "TabCloseButton"),
+        ] {
+            let rtl = vec![
+                (rect(1395, 1415), "mute", "AlertIndicatorButton".into()),
+                (rect(1165, 1185), "close", close_class.into()),
+            ];
+            assert_eq!(
+                select_close_button(browser, rtl).map(|(_, id)| id),
+                Some("close"),
+                "{browser}",
+            );
+        }
+    }
+
+    #[test]
+    fn chromium_requires_one_recognized_close_control() {
+        for (browser, close_class) in [
+            ("chrome", "TabCloseButton"),
+            ("msedge", "EdgeTabCloseButton"),
+            ("brave", "TabCloseButton"),
+        ] {
+            let audio_only = vec![(rect(1395, 1415), "mute", "AlertIndicatorButton".into())];
+            assert!(select_close_button(browser, audio_only).is_none());
+            let unknown = vec![(rect(1165, 1185), "unknown", format!("{close_class}Extra"))];
+            assert!(select_close_button(browser, unknown).is_none());
+            let ambiguous = vec![
+                (rect(1165, 1185), "close-a", close_class.into()),
+                (rect(1195, 1215), "close-b", close_class.into()),
+            ];
+            assert!(select_close_button(browser, ambiguous).is_none());
+        }
     }
 
     #[test]
