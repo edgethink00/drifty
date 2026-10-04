@@ -43,7 +43,7 @@ const WINDOWS_RELEASE_PACKAGES = Object.freeze({
   "sentry-sdk": "2.68.0",
   "setuptools": "84.0.0",
   "tzdata": "2026.3",
-  "urllib3": "2.7.0",
+  "urllib3": "2.8.0",
 });
 const WINDOWS_RELEASE_PTH_FILES = Object.freeze({
   "distutils-precedence.pth": "2638ce9e2500e572a5e0de7faed6661eb569d1b696fcba07b0dd223da5f5d224",

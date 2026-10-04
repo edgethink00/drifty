@@ -868,7 +868,8 @@ class TrackerMainTests(unittest.TestCase):
         self.assertIn("could not initialize", result["error"])
 
     def test_sentry_sdk_check_fails_when_the_sdk_is_missing(self) -> None:
-        with patch.dict(sys.modules, {"sentry_sdk": None}):
+        # SDK-enabled test discovery can already cache the imported child module.
+        with patch.dict(sys.modules, {"sentry_sdk": None, "sentry_sdk.consts": None}):
             result = tracker_main.sentry_sdk_check()
 
         self.assertFalse(result["ok"])
