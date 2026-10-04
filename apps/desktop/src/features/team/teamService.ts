@@ -4,6 +4,7 @@ import {
   normalizePublishedTeamProjectTotals,
   normalizeStoppedTeamProjectSharing,
   normalizeTeamInvite,
+  normalizeTeamMemberInvitesSetting,
   normalizeTeamProject,
   normalizeTeamProjectMemberRow,
   normalizeTeamProjectMixRow,
@@ -23,11 +24,13 @@ import type {
   PublishedTeamProjectTotals,
   PublishTeamProjectTotalsInput,
   RevokeTeamInviteInput,
+  SetTeamMemberInvitesInput,
   StopTeamProjectSharingInput,
   StoppedTeamProjectSharing,
   TeamClient,
   TeamInvite,
   TeamInviteActionResponse,
+  TeamMemberInvitesSetting,
   TeamPeriod,
   TeamProject,
   TeamProjectMemberRow,
@@ -45,14 +48,17 @@ export type {
   FetchTeamInvitesInput,
   OwnTeam,
   RevokeTeamInviteInput,
+  SetTeamMemberInvitesInput,
   TeamClient,
   TeamFailureReason,
   TeamInvite,
   TeamInviteActionResponse,
   TeamInviteStatus,
+  TeamMemberInvitesSetting,
   TeamPeriod,
   TeamResult,
 } from "./teamTypes";
+export { canInviteToTeam, isTeamOwner } from "./teamTypes";
 
 export async function fetchOwnTeams(
   periodOrClient: TeamPeriod | TeamClient | null = DEFAULT_TEAM_PERIOD,
@@ -119,6 +125,21 @@ export async function revokeTeamInvite(
   const inviteId = requiredText(input.invite_id, "Invite id is required.", 120);
   if (!inviteId.ok) return fail("invalid_input", inviteId.error);
   return invokeTeamInvite({ action: "revoke", inviteId: inviteId.value }, client);
+}
+
+/** Owner-only: lets non-owner members create invite links, or stops them. */
+export async function setTeamMemberInvites(
+  input: SetTeamMemberInvitesInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<TeamMemberInvitesSetting | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callFirstRow(auth.data.client, "set_organization_member_invites", {
+    input_organization_id: organizationId.value,
+    input_enabled: input.enabled,
+  }, normalizeTeamMemberInvitesSetting);
 }
 
 // ---------------------------------------------------------------------------

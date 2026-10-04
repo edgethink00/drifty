@@ -108,7 +108,7 @@ describe("teamService invite functions", () => {
       data: null,
       error: {
         message: "Edge Function returned a non-2xx status code",
-        context: Response.json({ error: "Only organization owners can manage team invites." }, { status: 403 }),
+        context: Response.json({ error: "You do not have permission to manage invites for this team." }, { status: 403 }),
       },
     });
     client.setRpcResponse("create_organization_team", {
@@ -128,7 +128,7 @@ describe("teamService invite functions", () => {
     } satisfies TeamResult<unknown>);
     expect(functionFailure).toEqual({
       success: false,
-      error: "Only organization owners can manage team invites.",
+      error: "You do not have permission to manage invites for this team.",
       reason: "forbidden",
     } satisfies TeamResult<unknown>);
   });

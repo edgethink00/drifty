@@ -10,10 +10,11 @@ import TeamProjectsView, { type TeamProjectDraft } from "./TeamProjectsView";
 import type { PendingTeamInvite } from "./teamInviteDeepLinks";
 import { isTeamQaMockEnabled, useTeamQaMockProjects } from "./teamQaMock";
 import type { AcceptTeamInviteInput } from "./teamService";
-import type { TeamPeriod } from "./teamTypes";
+import { canInviteToTeam, isTeamOwner, type TeamPeriod } from "./teamTypes";
 import { useTeamProjects, type TeamProjectsSubView } from "./useTeamProjects";
 import type { UseTeamControllerResult } from "./useTeamController";
 import { ModalPresence } from "../../components/ModalPresence";
+import { Toggle } from "../../components/Toggle";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { DateNavigator } from "../../components/DateNavigator";
 import { formatLocalizedDateRangeLabel } from "../../lib/formatting";
@@ -126,6 +127,7 @@ export function TeamWorkspace({
     handleAcceptInvite,
     handleCreateInvite,
     handleRevokeInvite,
+    handleSetMemberInvites,
     selectTeam,
   } = controller;
 
@@ -157,6 +159,8 @@ export function TeamWorkspace({
 
   const activeInvite = useMemo(() => invites.find((invite) => invite.status === "pending") ?? null, [invites]);
   const hasTeam = teams.length > 0 && Boolean(selectedTeam);
+  const isOwner = isTeamOwner(selectedTeam);
+  const canInvite = canInviteToTeam(selectedTeam);
 
   // The switcher closes on an outside press or Escape, and opens on the current team.
   useEffect(() => {
@@ -188,10 +192,10 @@ export function TeamWorkspace({
       inviteRequestedRef.current = false;
       return;
     }
-    if (activeInvite || inviteRequestedRef.current || teamActionLoading || !selectedTeam) return;
+    if (activeInvite || inviteRequestedRef.current || teamActionLoading || !selectedTeam || !canInvite) return;
     inviteRequestedRef.current = true;
     void handleCreateInvite({ organization_id: selectedTeam.organization_id });
-  }, [activeInvite, handleCreateInvite, inviteOpen, selectedTeam, teamActionLoading]);
+  }, [activeInvite, canInvite, handleCreateInvite, inviteOpen, selectedTeam, teamActionLoading]);
 
   // Close the add-team modal once its create/join round-trip succeeds. `teams`
   // is a dependency so a roster change also closes it (covers flows where the
@@ -355,9 +359,11 @@ export function TeamWorkspace({
         </div>
         {isPopulated ? (
           <div className="team-header-actions">
-            <button type="button" className="app-btn app-btn--secondary" onClick={() => setInviteOpen(true)}>
-              {t("team.nav.inviteTeammate")}
-            </button>
+            {canInvite ? (
+              <button type="button" className="app-btn app-btn--secondary" onClick={() => setInviteOpen(true)}>
+                {t("team.nav.inviteTeammate")}
+              </button>
+            ) : null}
             <button
               type="button"
               className="app-btn app-btn--secondary team-header-actions__icon"
@@ -603,22 +609,25 @@ export function TeamWorkspace({
                   <div className="team-code">
                     <strong>{inviteCode}</strong>
                     <div className="team-code__actions">
-                      <button
-                        type="button"
-                        className="team-iconbtn"
-                        aria-label={t("team.invite.newCode")}
-                        title={t("team.invite.newCode")}
-                        disabled={teamActionLoading}
-                        onClick={() => void regenerateInvite()}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.2 12a7.8 7.8 0 0 1 13.2-5.6L20 8.6" /><path d="M19.8 12a7.8 7.8 0 0 1-13.2 5.6L4 15.4" /><path d="M20 4v4.6h-4.6M4 20v-4.6h4.6" /></svg>
-                      </button>
+                      {/* Replacing a live code cuts off links already shared, so it stays with the owner. */}
+                      {isOwner ? (
+                        <button
+                          type="button"
+                          className="team-iconbtn"
+                          aria-label={t("team.invite.newCode")}
+                          title={t("team.invite.newCode")}
+                          disabled={teamActionLoading}
+                          onClick={() => void regenerateInvite()}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.2 12a7.8 7.8 0 0 1 13.2-5.6L20 8.6" /><path d="M19.8 12a7.8 7.8 0 0 1-13.2 5.6L4 15.4" /><path d="M20 4v4.6h-4.6M4 20v-4.6h4.6" /></svg>
+                        </button>
+                      ) : null}
                       <button type="button" className="modal-btn modal-btn--ghost" onClick={() => copyValue("code", inviteCode)}>
                         {copiedKey === "code" ? t("team.invite.copied") : t("team.invite.copy")}
                       </button>
                     </div>
                   </div>
-                  <p className="team-modal__hint">{t("team.invite.refreshHint")}</p>
+                  {isOwner ? <p className="team-modal__hint">{t("team.invite.refreshHint")}</p> : null}
                 </div>
               </>
             ) : (
@@ -655,31 +664,59 @@ export function TeamWorkspace({
               <div className="team-set-member">
                 <span className="team-set-member__name">{selectedTeam?.organization_name}</span>
                 <span className="team-set-role">{t("team.settings.memberCount", { count: selectedTeam?.member_count ?? 0 })}</span>
-                <span className="team-set-role--admin">{localizedTeamRole(selectedTeam?.role_label ?? "", t)}</span>
+                {/* The server role, not the invite label, decides the badge: a label is display text. */}
+                <span className={isOwner ? "team-set-role--admin" : "team-set-role"}>
+                  {localizedTeamRole(selectedTeam?.membership_role ?? "member", t)}
+                </span>
               </div>
             </div>
 
-            <div className="team-set-section">
-              <div className="team-set-memhead">
-                <span className="label-mono">{t("team.settings.invites")}</span>
-                <button
-                  type="button"
-                  className="modal-btn modal-btn--secondary team-set-invite"
-                  onClick={() => {
-                    setSettingsOpen(false);
-                    setInviteOpen(true);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 19.5v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.1a3.6 3.6 0 0 0-3.6 3.6v1.4" /><circle cx="8.8" cy="7.6" r="3.3" /><path d="M18.5 8v6M15.5 11h6" /></svg>
-                  {t("team.settings.invite")}
-                </button>
+            {canInvite ? (
+              <div className="team-set-section">
+                <div className="team-set-memhead">
+                  <span className="label-mono">{t("team.settings.invites")}</span>
+                  <button
+                    type="button"
+                    className="modal-btn modal-btn--secondary team-set-invite"
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      setInviteOpen(true);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 19.5v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.1a3.6 3.6 0 0 0-3.6 3.6v1.4" /><circle cx="8.8" cy="7.6" r="3.3" /><path d="M18.5 8v6M15.5 11h6" /></svg>
+                    {t("team.settings.invite")}
+                  </button>
+                </div>
+                {activeInvite ? (
+                  <p className="team-modal__hint">{t("team.settings.liveInvite", { code: activeInvite.invite_code })}</p>
+                ) : (
+                  <p className="team-modal__hint">{t("team.settings.noInvite")}</p>
+                )}
               </div>
-              {activeInvite ? (
-                <p className="team-modal__hint">{t("team.settings.liveInvite", { code: activeInvite.invite_code })}</p>
-              ) : (
-                <p className="team-modal__hint">{t("team.settings.noInvite")}</p>
-              )}
-            </div>
+            ) : null}
+
+            {/* Owner-only. Hidden while the server cannot report the setting yet. */}
+            {isOwner && selectedTeam && selectedTeam.members_can_invite !== null ? (
+              <div className="team-set-section">
+                <span className="label-mono">{t("team.settings.invitePermission")}</span>
+                <div className="team-set-permission">
+                  <div className="team-set-permission__copy">
+                    <span id="team-member-invites-label" className="team-set-permission__title">{t("team.settings.membersCanInvite")}</span>
+                    <p id="team-member-invites-hint" className="team-modal__hint">
+                      {selectedTeam.members_can_invite ? t("team.settings.membersCanInviteOn") : t("team.settings.membersCanInviteOff")}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={selectedTeam.members_can_invite}
+                    disabled={teamActionLoading}
+                    ariaLabel={t("team.settings.membersCanInvite")}
+                    ariaDescribedBy="team-member-invites-hint"
+                    onChange={(enabled) => void handleSetMemberInvites({ organization_id: selectedTeam.organization_id, enabled })}
+                  />
+                </div>
+                {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
+              </div>
+            ) : null}
 
             <div className="team-set-section">
               <span className="label-mono">{t("team.settings.yourSharing")}</span>

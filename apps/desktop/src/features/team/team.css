@@ -1271,6 +1271,31 @@
   flex-wrap: wrap;
 }
 
+/* Owner-only invite permission: label and hint on the left, switch on the right. */
+.team-set-permission {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.team-set-permission__copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.team-set-permission__title {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+}
+
+.team-set-permission .toggle {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
 /* ── Project editor modal ── */
 
 .team-editor-modal,

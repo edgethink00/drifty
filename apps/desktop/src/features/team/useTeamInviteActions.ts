@@ -9,10 +9,12 @@ import {
   isTeamErrorMessage,
   messageFromTeamError,
   revokeTeamInvite,
+  setTeamMemberInvites,
   type AcceptTeamInviteInput,
   type CreateTeamInput,
   type CreateTeamInviteInput,
   type RevokeTeamInviteInput,
+  type SetTeamMemberInvitesInput,
   type TeamInvite,
 } from "./teamService";
 
@@ -20,6 +22,8 @@ type UseTeamInviteActionsInput = {
   readonly activeTab: string;
   readonly canUseTeamServices: boolean;
   readonly selectedTeamId: string | null;
+  /** Whether the signed-in member may read and create invites for a team. */
+  readonly canViewInvites: (organizationId: string) => boolean;
   readonly requireTeamActionAccess: () => boolean;
   readonly refreshTeamDataCore: (preferredTeamId?: string | null) => Promise<string | null>;
   readonly setTeamActionError: Dispatch<SetStateAction<string | null>>;
@@ -33,12 +37,14 @@ export type UseTeamInviteActionsResult = {
   readonly handleAcceptInvite: (input: AcceptTeamInviteInput) => Promise<void>;
   readonly handleCreateInvite: (input: CreateTeamInviteInput) => Promise<void>;
   readonly handleRevokeInvite: (input: RevokeTeamInviteInput) => Promise<void>;
+  readonly handleSetMemberInvites: (input: SetTeamMemberInvitesInput) => Promise<void>;
 };
 
 export function useTeamInviteActions({
   activeTab,
   canUseTeamServices,
   selectedTeamId,
+  canViewInvites,
   requireTeamActionAccess,
   refreshTeamDataCore,
   setTeamActionError,
@@ -53,7 +59,9 @@ export function useTeamInviteActions({
 
   const refreshInvites = useCallback(async (organizationId?: string | null) => {
     const targetOrganizationId = organizationId === undefined ? selectedTeamIdRef.current : organizationId;
-    if (!canUseTeamServices || activeTab !== "team" || !targetOrganizationId) {
+    // Members without invite permission cannot read invites; asking would only
+    // surface a permission error in the team modals.
+    if (!canUseTeamServices || activeTab !== "team" || !targetOrganizationId || !canViewInvites(targetOrganizationId)) {
       setInvites([]);
       return;
     }
@@ -65,7 +73,7 @@ export function useTeamInviteActions({
       return;
     }
     setInvites([...(result.data ?? [])]);
-  }, [activeTab, canUseTeamServices, setTeamActionError]);
+  }, [activeTab, canUseTeamServices, canViewInvites, setTeamActionError]);
 
   const runTeamAction = useCallback(async (action: () => Promise<void>) => {
     setTeamActionLoading(true);
@@ -114,6 +122,8 @@ export function useTeamInviteActions({
     await runTeamAction(async () => {
       const result = await createTeamInvite(input);
       if (!result.success) {
+        // A member is refused when a link is already live; show that link with the message.
+        await refreshInvites(input.organization_id);
         setTeamActionError(result.error ?? "Unable to create invite.");
         return;
       }
@@ -132,5 +142,17 @@ export function useTeamInviteActions({
     });
   }, [refreshInvites, runTeamAction, setTeamActionError]);
 
-  return { invites, refreshInvites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite };
+  const handleSetMemberInvites = useCallback(async (input: SetTeamMemberInvitesInput) => {
+    await runTeamAction(async () => {
+      const result = await setTeamMemberInvites(input);
+      if (!result.success) {
+        setTeamActionError(result.error ?? "Unable to change who can invite.");
+        return;
+      }
+      const refreshedTeamId = await refreshTeamDataCore(input.organization_id);
+      await refreshInvites(refreshedTeamId);
+    });
+  }, [refreshInvites, refreshTeamDataCore, runTeamAction, setTeamActionError]);
+
+  return { invites, refreshInvites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites };
 }

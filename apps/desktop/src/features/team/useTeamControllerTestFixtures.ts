@@ -34,7 +34,7 @@ export function fail(error: string): TeamResult<never> {
 export function makeTeam(overrides: Partial<OwnTeam> = {}): OwnTeam {
   return {
     organization_id: "team-1", organization_name: "Deep Work Crew", member_display_name: "Alex", role_label: "Owner",
-    member_count: 2, updated_at: "2026-07-02T08:00:00.000Z",
+    member_count: 2, updated_at: "2026-07-02T08:00:00.000Z", membership_role: "owner", members_can_invite: true,
     ...overrides,
   };
 }

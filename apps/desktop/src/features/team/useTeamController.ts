@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import type { AuthState } from "../auth/AuthContext";
 import { fetchOwnTeams, isTeamErrorMessage, messageFromTeamError, type OwnTeam } from "./teamService";
+import { canInviteToTeam } from "./teamTypes";
 import { useTeamInviteActions } from "./useTeamInviteActions";
 
 type TeamInviteActions = ReturnType<typeof useTeamInviteActions>;
@@ -20,6 +21,7 @@ export type UseTeamControllerResult = {
   readonly refreshTeamData: () => Promise<void>;
   readonly handleCreateTeam: TeamInviteActions["handleCreateTeam"]; readonly handleAcceptInvite: TeamInviteActions["handleAcceptInvite"];
   readonly handleCreateInvite: TeamInviteActions["handleCreateInvite"]; readonly handleRevokeInvite: TeamInviteActions["handleRevokeInvite"];
+  readonly handleSetMemberInvites: TeamInviteActions["handleSetMemberInvites"];
   readonly selectTeam: (organizationId: string) => void;
 };
 
@@ -36,6 +38,9 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   const refreshRequestRef = useRef(0); const hasResolvedOnceRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
   const selectedTeamIdRef = useRef<string | null>(null);
+  // Read synchronously by the invite refresh that follows a team refresh,
+  // before React has committed the new team list.
+  const teamsRef = useRef<readonly OwnTeam[]>([]);
   const userId = user?.id ?? null;
   const teamAccessKey = JSON.stringify([isSupabaseConfigured, hasRequiredAccountAuth, userId]);
   const currentTeamAccessKeyRef = useRef(teamAccessKey);
@@ -56,7 +61,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   const selectedTeam = useMemo(() => teams.find((team) => team.organization_id === selectedTeamId) ?? null, [selectedTeamId, teams]);
 
   const clearTeamState = useCallback(() => {
-    setTeams([]); setSelectedTeamId(null);
+    setTeams([]); teamsRef.current = []; setSelectedTeamId(null);
     selectedTeamIdRef.current = null;
     setTeamRefreshing(false); setTeamError(null);
     hasResolvedOnceRef.current = false;
@@ -89,7 +94,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
       if (!teamsResult.success) {
         if (!shouldPreserveState) {
-          setTeams([]); setSelectedTeamId(null);
+          setTeams([]); teamsRef.current = []; setSelectedTeamId(null);
           selectedTeamIdRef.current = null;
         }
         hasResolvedOnceRef.current = true;
@@ -102,6 +107,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
       const nextSelectedTeamId = chooseSelectedTeamId(nextTeams, preferredTeamId);
 
       setTeams(nextTeams);
+      teamsRef.current = nextTeams;
       setSelectedTeamId(nextSelectedTeamId);
       selectedTeamIdRef.current = nextSelectedTeamId;
       hasResolvedOnceRef.current = true;
@@ -113,7 +119,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     } catch (error) {
       if (!isCurrentRequest()) return null;
       if (!shouldPreserveState) {
-        setTeams([]); setSelectedTeamId(null);
+        setTeams([]); teamsRef.current = []; setSelectedTeamId(null);
         selectedTeamIdRef.current = null;
       }
       hasResolvedOnceRef.current = true;
@@ -142,7 +148,11 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     return true;
   }, [activeTab, authRequiredMessage, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, user]);
 
-  const { invites, refreshInvites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite } = useTeamInviteActions({ activeTab, canUseTeamServices, selectedTeamId, requireTeamActionAccess, refreshTeamDataCore, setTeamActionError, setTeamActionLoading });
+  const canViewInvites = useCallback((organizationId: string) => (
+    canInviteToTeam(teamsRef.current.find((team) => team.organization_id === organizationId))
+  ), []);
+
+  const { invites, refreshInvites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites } = useTeamInviteActions({ activeTab, canUseTeamServices, selectedTeamId, canViewInvites, requireTeamActionAccess, refreshTeamDataCore, setTeamActionError, setTeamActionLoading });
 
   const refreshTeamData = useCallback(async (preferredTeamId = selectedTeamIdRef.current) => {
     const refreshedTeamId = await refreshTeamDataCore(preferredTeamId);
@@ -181,7 +191,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
   return {
     selectedTeam, teamActionError, teamActionLoading, teamError: teamBlockingError,
-    teamLoading: teamBlockingLoading, teamStatusMessage, teamStatusTone, teams, invites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite,
+    teamLoading: teamBlockingLoading, teamStatusMessage, teamStatusTone, teams, invites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites,
     refreshTeamData, selectTeam,
   };
 }

@@ -13,6 +13,7 @@ const teamServiceMocks = vi.hoisted(() => ({
   acceptTeamInvite: vi.fn(),
   createTeamInvite: vi.fn(),
   revokeTeamInvite: vi.fn(),
+  setTeamMemberInvites: vi.fn(),
 }));
 
 vi.mock("./teamService", () => ({
@@ -24,6 +25,7 @@ vi.mock("./teamService", () => ({
   acceptTeamInvite: teamServiceMocks.acceptTeamInvite,
   createTeamInvite: teamServiceMocks.createTeamInvite,
   revokeTeamInvite: teamServiceMocks.revokeTeamInvite,
+  setTeamMemberInvites: teamServiceMocks.setTeamMemberInvites,
   isTeamErrorMessage: (value: unknown): value is { readonly message: string } => (
     typeof value === "object" && value !== null && "message" in value && typeof (value as { message: unknown }).message === "string"
   ),
@@ -46,7 +48,80 @@ describe("useTeamController", () => {
     teamServiceMocks.acceptTeamInvite.mockReset();
     teamServiceMocks.createTeamInvite.mockReset();
     teamServiceMocks.revokeTeamInvite.mockReset();
+    teamServiceMocks.setTeamMemberInvites.mockReset();
     teamServiceMocks.fetchTeamInvites.mockResolvedValue(ok([]));
+  });
+
+  it("does not read invites for a member whose team keeps invites owner-only, and does once the owner allows it", async () => {
+    const blockedTeam = makeTeam({ role_label: "Member", membership_role: "member", members_can_invite: false });
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([blockedTeam]));
+
+    const { hook } = renderController();
+
+    await waitFor(() => expect(hook.result.current.teams).toEqual([blockedTeam]));
+    expect(teamServiceMocks.fetchTeamInvites).not.toHaveBeenCalled();
+    expect(hook.result.current.invites).toEqual([]);
+    expect(hook.result.current.teamActionError).toBeNull();
+
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([{ ...blockedTeam, members_can_invite: true }]));
+    teamServiceMocks.fetchTeamInvites.mockResolvedValue(ok([pendingInvite]));
+    await act(async () => {
+      await hook.result.current.refreshTeamData();
+    });
+
+    expect(teamServiceMocks.fetchTeamInvites).toHaveBeenCalledWith({ organization_id: "team-1" });
+    expect(hook.result.current.invites).toEqual([pendingInvite]);
+  });
+
+  it("changes the member invite setting, then reloads the team and its invites", async () => {
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([privateTeam]));
+    teamServiceMocks.fetchOwnTeams.mockClear();
+    teamServiceMocks.fetchTeamInvites.mockClear();
+
+    const updatedTeam = { ...privateTeam, members_can_invite: false };
+    teamServiceMocks.setTeamMemberInvites.mockResolvedValue(ok({ organization_id: "team-1", members_can_invite: false }));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([updatedTeam]));
+    await act(async () => {
+      await hook.result.current.handleSetMemberInvites({ organization_id: "team-1", enabled: false });
+    });
+
+    expect(teamServiceMocks.setTeamMemberInvites).toHaveBeenCalledWith({ organization_id: "team-1", enabled: false });
+    expect(teamServiceMocks.fetchOwnTeams).toHaveBeenCalledTimes(1);
+    expect(teamServiceMocks.fetchTeamInvites).toHaveBeenCalledWith({ organization_id: "team-1" });
+    expect(hook.result.current.selectedTeam).toEqual(updatedTeam);
+  });
+
+  it("shows the live link alongside the error when a member's invite request is refused", async () => {
+    const memberTeam = makeTeam({ role_label: "Member", membership_role: "member", members_can_invite: true });
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([memberTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([memberTeam]));
+
+    teamServiceMocks.createTeamInvite.mockResolvedValue(fail("This team already has an active invite link."));
+    teamServiceMocks.fetchTeamInvites.mockResolvedValue(ok([pendingInvite]));
+    await act(async () => {
+      await hook.result.current.handleCreateInvite({ organization_id: "team-1" });
+    });
+
+    expect(hook.result.current.invites).toEqual([pendingInvite]);
+    expect(hook.result.current.teamActionError).toBe("This team already has an active invite link.");
+  });
+
+  it("reports a refused member invite setting without reloading", async () => {
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([privateTeam]));
+    teamServiceMocks.fetchOwnTeams.mockClear();
+
+    teamServiceMocks.setTeamMemberInvites.mockResolvedValue(fail("Only the team owner can change who can invite."));
+    await act(async () => {
+      await hook.result.current.handleSetMemberInvites({ organization_id: "team-1", enabled: false });
+    });
+
+    expect(hook.result.current.teamActionError).toBe("Only the team owner can change who can invite.");
+    expect(teamServiceMocks.fetchOwnTeams).not.toHaveBeenCalled();
   });
 
   it("Given a non-team tab When the hook renders Then it does not call team services until the team tab is active", async () => {

@@ -12,6 +12,7 @@ import type {
   TeamProjectMemberRow,
   TeamProjectMixRow,
 } from "./teamTypes";
+import { canInviteToTeam } from "./teamTypes";
 import type { UseTeamControllerResult } from "./useTeamController";
 import type {
   CreateTeamProjectFields,
@@ -40,6 +41,8 @@ const MOCK_TEAM: OwnTeam = {
   role_label: "Owner",
   member_count: 6,
   updated_at: "2026-07-10T09:00:00.000Z",
+  membership_role: "owner",
+  members_can_invite: true,
 };
 
 const MOCK_MEMBER_ORG_ID = "qa-org-seoul-studio";
@@ -51,13 +54,30 @@ const MOCK_MEMBER_TEAM: OwnTeam = {
   role_label: "Member",
   member_count: 3,
   updated_at: "2026-07-10T09:00:00.000Z",
+  membership_role: "member",
+  // The owner keeps invites to themself here, so QA sees the member view
+  // without an invite button.
+  members_can_invite: false,
 };
 
-function makeInvite(code: string): TeamInvite {
+// A member team that allows member invites and has no live link yet, so QA
+// can mint one as a member.
+const MOCK_INVITING_MEMBER_TEAM: OwnTeam = {
+  organization_id: "qa-org-drifty-core",
+  organization_name: "드리프티 코어팀",
+  member_display_name: "Minseok Park",
+  role_label: "Member",
+  member_count: 4,
+  updated_at: "2026-07-10T09:00:00.000Z",
+  membership_role: "member",
+  members_can_invite: true,
+};
+
+function makeInvite(code: string, team: OwnTeam = MOCK_TEAM): TeamInvite {
   return {
     invite_id: `qa-invite-${code}`,
-    organization_id: MOCK_ORG_ID,
-    organization_name: MOCK_TEAM.organization_name,
+    organization_id: team.organization_id,
+    organization_name: team.organization_name,
     invite_code: code,
     invite_url: `https://drifty.so/team-invite?code=${code}`,
     role_label: "Member",
@@ -203,14 +223,22 @@ const SEEDED_HOURS_BY_TEAM: Readonly<Record<string, ProjectHours>> = {
 const DAY_WEIGHTS = [1, 1.08, 0.92, 1.05, 0.72, 0.16, 0.08, 0.98, 1.12, 0.9, 1.02, 0.78, 0.2, 0.12] as const;
 
 export function useTeamQaMockController(): UseTeamControllerResult {
-  const [teams, setTeams] = useState<readonly OwnTeam[]>([MOCK_TEAM, MOCK_MEMBER_TEAM]);
+  const [teams, setTeams] = useState<readonly OwnTeam[]>([MOCK_TEAM, MOCK_MEMBER_TEAM, MOCK_INVITING_MEMBER_TEAM]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>(MOCK_ORG_ID);
-  const [invites, setInvites] = useState<readonly TeamInvite[]>([makeInvite("DRFT-K4M2-9QXZ")]);
+  const [invitesByTeam, setInvitesByTeam] = useState<Readonly<Record<string, readonly TeamInvite[]>>>({
+    [MOCK_ORG_ID]: [makeInvite("DRFT-K4M2-9QXZ")],
+    [MOCK_MEMBER_ORG_ID]: [makeInvite("DRFT-SEOU-7PRD", MOCK_MEMBER_TEAM)],
+  });
   const nextTeamIdRef = useRef(1);
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.organization_id === selectedTeamId) ?? teams[0] ?? null,
     [selectedTeamId, teams],
+  );
+  // Members without invite permission cannot read invites, as on the server.
+  const invites = useMemo(
+    () => (selectedTeam && canInviteToTeam(selectedTeam) ? invitesByTeam[selectedTeam.organization_id] ?? [] : []),
+    [invitesByTeam, selectedTeam],
   );
 
   const handleCreateTeam = useCallback(async (input: { readonly organizationName: string }) => {
@@ -226,17 +254,26 @@ export function useTeamQaMockController(): UseTeamControllerResult {
     const id = `qa-org-joined-${nextTeamIdRef.current++}`;
     setTeams((current) => [
       ...current,
-      { ...MOCK_TEAM, organization_id: id, organization_name: "Joined Crew", role_label: "Member", member_count: 3 },
+      { ...MOCK_TEAM, organization_id: id, organization_name: "Joined Crew", role_label: "Member", member_count: 3, membership_role: "member" },
     ]);
     setSelectedTeamId(id);
   }, []);
 
-  const handleCreateInvite = useCallback(async (_input: { readonly organization_id: string }) => {
-    setInvites([makeInvite(randomInviteCode())]);
-  }, []);
+  const handleCreateInvite = useCallback(async (input: { readonly organization_id: string }) => {
+    const team = teams.find((candidate) => candidate.organization_id === input.organization_id) ?? MOCK_TEAM;
+    setInvitesByTeam((current) => ({ ...current, [team.organization_id]: [makeInvite(randomInviteCode(), team)] }));
+  }, [teams]);
 
   const handleRevokeInvite = useCallback(async (input: { readonly invite_id: string }) => {
-    setInvites((current) => current.filter((invite) => invite.invite_id !== input.invite_id));
+    setInvitesByTeam((current) => Object.fromEntries(
+      Object.entries(current).map(([teamId, teamInvites]) => [teamId, teamInvites.filter((invite) => invite.invite_id !== input.invite_id)]),
+    ));
+  }, []);
+
+  const handleSetMemberInvites = useCallback(async (input: { readonly organization_id: string; readonly enabled: boolean }) => {
+    setTeams((current) => current.map((team) => (
+      team.organization_id === input.organization_id ? { ...team, members_can_invite: input.enabled } : team
+    )));
   }, []);
 
   return {
@@ -254,6 +291,7 @@ export function useTeamQaMockController(): UseTeamControllerResult {
     handleAcceptInvite,
     handleCreateInvite,
     handleRevokeInvite,
+    handleSetMemberInvites,
     selectTeam: setSelectedTeamId,
   };
 }

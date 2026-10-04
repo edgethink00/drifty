@@ -18,6 +18,8 @@ export type TeamResult<T = undefined> =
 
 export type TeamInviteStatus = "pending" | "accepted" | "revoked" | "expired";
 
+export type TeamMembershipRole = "owner" | "admin" | "member";
+
 export type OwnTeam = {
   readonly organization_id: string;
   readonly organization_name: string;
@@ -25,7 +27,25 @@ export type OwnTeam = {
   readonly role_label: string;
   readonly member_count: number;
   readonly updated_at: string;
+  /** Server-assigned membership role; role_label is only a display label. */
+  readonly membership_role: TeamMembershipRole;
+  /** Whether non-owner members may create invite links. Null when the server
+   *  predates the setting, so the owner control stays hidden. */
+  readonly members_can_invite: boolean | null;
 };
+
+export function isTeamOwner(team: OwnTeam | null | undefined): boolean {
+  return team?.membership_role === "owner";
+}
+
+/** Mirrors the server's can_create_organization_invite rule. */
+export function canInviteToTeam(team: OwnTeam | null | undefined): boolean {
+  return Boolean(team) && (isTeamOwner(team) || team?.members_can_invite === true);
+}
+
+export type SetTeamMemberInvitesInput = { readonly organization_id: string; readonly enabled: boolean };
+
+export type TeamMemberInvitesSetting = { readonly organization_id: string; readonly members_can_invite: boolean };
 
 export type TeamInvite = {
   readonly invite_id: string;
@@ -164,6 +184,7 @@ export type RpcProcedure =
   | "get_own_organization_teams"
   | "create_organization_team"
   | "get_organization_invites"
+  | "set_organization_member_invites"
   | "create_organization_project"
   | "update_organization_project"
   | "archive_organization_project"
