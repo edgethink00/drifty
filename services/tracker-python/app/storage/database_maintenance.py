@@ -137,7 +137,7 @@ def _is_regular_file(path: Path) -> bool:
 
 
 def quick_check_database(path: Path, *, immutable: bool = False) -> bool:
-    """Return whether SQLite confirms that ``path`` is internally consistent.
+    """Return whether ``path`` contains an internally consistent SQLite database.
 
     Lock, permission, and I/O failures are deliberately re-raised. Only a
     positive quick_check finding or an explicit SQLite corruption error should
@@ -159,6 +159,10 @@ def quick_check_database(path: Path, *, immutable: bool = False) -> bool:
         connection = sqlite3.connect(uri, uri=True, timeout=5)
         connection.execute("PRAGMA busy_timeout = 5000")
         rows = connection.execute("PRAGMA quick_check").fetchall()
+        # SQLite calls a zero-page file "ok" because it can initialize it as a
+        # new database. It is not a usable tracker recovery copy. Ask SQLite
+        # rather than checking file size so committed live WAL pages count.
+        page_count = connection.execute("PRAGMA page_count").fetchone()[0]
     except sqlite3.DatabaseError as error:
         if _is_confirmed_corruption_error(error):
             return False
@@ -166,7 +170,7 @@ def quick_check_database(path: Path, *, immutable: bool = False) -> bool:
     finally:
         if connection is not None:
             connection.close()
-    return bool(rows) and all(str(row[0]).strip().lower() == "ok" for row in rows)
+    return page_count > 0 and bool(rows) and all(str(row[0]).strip().lower() == "ok" for row in rows)
 
 
 def _timestamp_slug(now: datetime) -> str:

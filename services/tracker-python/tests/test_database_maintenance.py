@@ -44,6 +44,59 @@ class DatabaseMaintenanceTests(unittest.TestCase):
                 (value,),
             )
 
+    def test_zero_page_database_is_not_a_valid_recovery_copy(self) -> None:
+        self.db_path.write_bytes(b"")
+        for immutable in (False, True):
+            with self.subTest(immutable=immutable):
+                self.assertFalse(quick_check_database(self.db_path, immutable=immutable))
+        self.assertEqual(self.db_path.read_bytes(), b"")
+
+    def test_truncated_empty_source_recovers_the_existing_backup(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        self._insert_marker(database, "recover-empty-source")
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        database.close()
+        self.db_path.write_bytes(b"")
+        recovered = TrackerDatabase(self.db_path)
+        try:
+            self.assertEqual(recovered.get_meta("maintenance-test"), "recover-empty-source")
+            self.assertEqual(recovered.maintenance_result.restored_backup_path, backup)
+            self.assertEqual(recovered.maintenance_result.quarantined_path.read_bytes(), b"")
+        finally:
+            recovered.close()
+
+    def test_newer_empty_backup_does_not_hide_the_valid_older_snapshot(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        self._insert_marker(database, "valid-older")
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        database.close()
+        empty = backup.parent / "tracker-20990101T000000000000Z.sqlite3"
+        empty.write_bytes(b"")
+        self.db_path.write_bytes(b"confirmed corrupt source")
+        recovered = TrackerDatabase(self.db_path)
+        try:
+            self.assertEqual(recovered.get_meta("maintenance-test"), "valid-older")
+            self.assertEqual(recovered.maintenance_result.restored_backup_path, backup)
+            self.assertEqual(empty.read_bytes(), b"")
+        finally:
+            recovered.close()
+
+    def test_initialized_empty_sqlite_database_remains_valid(self) -> None:
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute("PRAGMA user_version = 1")
+        self.assertTrue(quick_check_database(self.db_path))
+        self.assertTrue(quick_check_database(self.db_path, immutable=True))
+
+    def test_fresh_zero_page_source_without_backup_can_still_initialize(self) -> None:
+        self.db_path.write_bytes(b"")
+        database = TrackerDatabase(self.db_path)
+        try:
+            self._insert_marker(database, "new-database")
+            self.assertEqual(database.get_meta("maintenance-test"), "new-database")
+            self.assertTrue(quick_check_database(self.db_path))
+        finally:
+            database.close()
+
     def test_existing_database_creates_a_verified_backup_on_reopen(self) -> None:
         database = TrackerDatabase(self.db_path)
         self._insert_marker(database, "preserved")
