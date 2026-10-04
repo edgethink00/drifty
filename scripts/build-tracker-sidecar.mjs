@@ -396,6 +396,22 @@ function assertMacosNativeHelperSmokeTest(path, target) {
   if (!Array.isArray(parsed) || !parsed.every(validRow)) {
     fail(`native helper smoke test did not return a window array: ${result.stdout}`);
   }
+  // Verify the identity-only mode in the exact binary that will be packaged.
+  // A logged-out build host may have no frontmost app; it must still return
+  // the versioned nullable contract without taking an Accessibility path.
+  const identity = run(path, ["--frontmost-app"], { capture: true, timeoutMs: 5_000 });
+  let app;
+  try {
+    app = JSON.parse(identity.stdout.trim());
+  } catch {
+    fail("native helper frontmost-app smoke test produced non-JSON output");
+  }
+  if (identity.status !== 0 || app?.version !== 1
+      || !(app.app_name == null || typeof app.app_name === "string")
+      || !(app.bundle_id == null || typeof app.bundle_id === "string")
+      || !(app.pid == null || (Number.isInteger(app.pid) && app.pid > 0))) {
+    fail("native helper frontmost-app smoke test returned an invalid identity");
+  }
   // An invalid PID must serialize an unavailable Safari URL without querying
   // Accessibility or requiring a GUI permission grant on the build host.
   try {

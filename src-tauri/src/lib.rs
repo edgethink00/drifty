@@ -1,6 +1,7 @@
 mod app_icons;
 mod app_menu;
 mod auth_session_store;
+mod bounded_process;
 mod cloud_device_store;
 mod commands;
 mod correction_evidence_store;

@@ -1,7 +1,6 @@
 use std::{
-    process::{Command, Output, Stdio},
-    thread,
-    time::{Duration, Instant},
+    process::{Command, Output},
+    time::Duration,
 };
 
 use super::ExtremeNudgeError;
@@ -186,35 +185,20 @@ fn parse_tab_close_output(output: &str) -> BrowserTabCloseOutput<'_> {
 }
 
 fn run_osascript(script: &str) -> Result<Output, ExtremeNudgeError> {
-    let mut child = Command::new("osascript")
-        .args(["-e", script])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| ExtremeNudgeError::AppleScriptFailed(error.to_string()))?;
-
-    let deadline = Instant::now() + APPLESCRIPT_TIMEOUT;
-    loop {
-        if let Some(_status) = child
-            .try_wait()
-            .map_err(|error| ExtremeNudgeError::AppleScriptFailed(error.to_string()))?
-        {
-            return child
-                .wait_with_output()
-                .map_err(|error| ExtremeNudgeError::AppleScriptFailed(error.to_string()));
-        }
-
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(ExtremeNudgeError::AppleScriptFailed(format!(
+    crate::bounded_process::output(
+        Command::new("osascript").args(["-e", script]),
+        APPLESCRIPT_TIMEOUT,
+    )
+    .map_err(|error| {
+        if error.kind() == std::io::ErrorKind::TimedOut {
+            ExtremeNudgeError::AppleScriptFailed(format!(
                 "osascript timed out after {} seconds",
                 APPLESCRIPT_TIMEOUT.as_secs()
-            )));
+            ))
+        } else {
+            ExtremeNudgeError::AppleScriptFailed(error.to_string())
         }
-
-        thread::sleep(Duration::from_millis(50));
-    }
+    })
 }
 
 fn browser_tab_script_kind(app_name: &str) -> Option<BrowserTabScriptKind> {

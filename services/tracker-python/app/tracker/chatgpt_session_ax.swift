@@ -3,6 +3,29 @@ import AppKit
 import CoreGraphics
 import Foundation
 
+// App identity does not need Accessibility, window enumeration, or Apple
+// Events. Keep this command ahead of every AX path so optional metadata cannot
+// prevent app-only tracking. JSON preserves names containing line breaks.
+if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--frontmost-app" {
+    var identity: [String: Any] = ["version": 1, "app_name": NSNull(), "bundle_id": NSNull(), "pid": NSNull()]
+    if let app = NSWorkspace.shared.frontmostApplication {
+        // System Events historically identifies the application process by
+        // its executable name. Avoid splitting history by localized labels;
+        // Python keeps the existing bundle-based browser canonicalization.
+        identity["app_name"] = app.executableURL?.lastPathComponent ?? app.localizedName
+        identity["bundle_id"] = app.bundleIdentifier
+        identity["pid"] = Int(app.processIdentifier)
+    }
+    do {
+        let data = try JSONSerialization.data(withJSONObject: identity)
+        print(String(decoding: data, as: UTF8.self))
+        exit(0)
+    } catch {
+        fputs("could not serialize frontmost app\n", stderr)
+        exit(1)
+    }
+}
+
 // Safari's AX address field omits http://. System Events cannot coerce the
 // web area's CFURL, so read only that native attribute (never page contents).
 if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--safari-url" {
@@ -79,7 +102,7 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--onscreen-win
 }
 
 guard CommandLine.arguments.count >= 2, let pid = Int32(CommandLine.arguments[1]) else {
-    fputs("usage: chatgpt_ax_helper <pid>|--onscreen-windows|--safari-url <pid>\n", stderr)
+    fputs("usage: chatgpt_ax_helper <pid>|--onscreen-windows|--frontmost-app|--safari-url <pid>\n", stderr)
     exit(2)
 }
 let app = AXUIElementCreateApplication(pid)

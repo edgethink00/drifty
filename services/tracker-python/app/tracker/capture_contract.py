@@ -40,6 +40,7 @@ FrontmostCaptureSource = Literal[
     # macOS mechanisms
     "system-events",
     "lsappinfo",
+    "nsworkspace",
     # Windows mechanisms
     "win32-foreground",
     "uwp-frame-host",

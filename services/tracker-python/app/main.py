@@ -549,12 +549,23 @@ def _process_exists(pid: int) -> bool:
     return True
 
 
+def _unix_process_query_timeout(deadline: float | None) -> float:
+    # Reuse the existing exit-inspection allowance for standalone ps queries.
+    # A caller's remaining budget can only shorten it, never start a fresh wait.
+    if deadline is None:
+        return TRACKER_EXIT_TIMEOUT_SECONDS
+    return max(0.0, min(TRACKER_EXIT_TIMEOUT_SECONDS, deadline - time.monotonic()))
+
+
 def _process_command(pid: int, *, deadline: float | None = None) -> str | None:
     if sys.platform == "win32":
         from app.windows_process_table import windows_process_command
 
         return windows_process_command(pid, **({"deadline": deadline} if deadline is not None else {}))
 
+    timeout = _unix_process_query_timeout(deadline)
+    if timeout <= 0:
+        return None
     try:
         result = subprocess.run(
             ["ps", "-p", str(pid), "-o", "command="],
@@ -563,6 +574,7 @@ def _process_command(pid: int, *, deadline: float | None = None) -> str | None:
             encoding="utf-8",
             errors="replace",
             check=False,
+            timeout=timeout,
         )
     except Exception:
         return None
@@ -582,6 +594,9 @@ def _process_table(*, deadline: float | None = None) -> dict[int, str] | None:
 
         return windows_process_table(**({"deadline": deadline} if deadline is not None else {}))
 
+    timeout = _unix_process_query_timeout(deadline)
+    if timeout <= 0:
+        return None
     try:
         result = subprocess.run(
             ["ps", "-axww", "-o", "pid=", "-o", "command="],
@@ -590,6 +605,7 @@ def _process_table(*, deadline: float | None = None) -> dict[int, str] | None:
             encoding="utf-8",
             errors="replace",
             check=False,
+            timeout=timeout,
         )
     except Exception:
         return None
@@ -865,7 +881,7 @@ def _reconcile_pid_record(daemon_pids: list[int]) -> None:
         _write_tracker_pid(daemon_pids[0])
 
 
-def _process_has_exited(pid: int) -> bool:
+def _process_has_exited(pid: int, *, deadline: float | None = None) -> bool:
     # Windows has no wait/zombie model: os.waitpid and os.WNOHANG do not exist,
     # and a terminated process is simply gone from the table rather than
     # lingering until reaped. Liveness alone is the whole answer there, and
@@ -880,6 +896,9 @@ def _process_has_exited(pid: int) -> bool:
         waited_pid = 0
     if waited_pid == pid or not _process_exists(pid):
         return True
+    timeout = _unix_process_query_timeout(deadline)
+    if timeout <= 0:
+        return False
     try:
         result = subprocess.run(
             ["ps", "-p", str(pid), "-o", "state="],
@@ -888,6 +907,7 @@ def _process_has_exited(pid: int) -> bool:
             encoding="utf-8",
             errors="replace",
             check=False,
+            timeout=timeout,
         )
     except Exception:
         return False
@@ -897,7 +917,7 @@ def _process_has_exited(pid: int) -> bool:
 def _wait_for_process_exit(pid: int, timeout_seconds: float = TRACKER_EXIT_TIMEOUT_SECONDS) -> bool:
     deadline = time.monotonic() + timeout_seconds
     while True:
-        if _process_has_exited(pid):
+        if _process_has_exited(pid, deadline=deadline):
             return True
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -2398,6 +2418,12 @@ def _close_loaded_windows_capture() -> None:
             uia._close_host()
 
 
+def _close_loaded_macos_capture() -> None:
+    capture = sys.modules.get("app.tracker.macos_capture")
+    if capture is not None:
+        capture.context_worker.close()
+
+
 def daemon():
     from app.windows_process_liveness import tracker_app_owner
 
@@ -2547,6 +2573,7 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
                 break
     finally:
         try:
+            _close_loaded_macos_capture()
             _close_loaded_windows_capture()
         finally:
             try:

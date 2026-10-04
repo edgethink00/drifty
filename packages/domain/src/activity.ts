@@ -5,7 +5,7 @@ export type SiteSource = "applescript" | "applescript-front-window" | "accessibi
 export type BrowserAutomationStatus = "granted" | "denied" | "unavailable" | "stale" | "empty_result" | "not_applicable";
 export type BrowserHistoryStatus = "unsupported" | "no_profile_root" | "no_readable_database" | "no_match" | "matched";
 export type SystemTransientActivity = "mission_control" | "app_switcher" | "launchpad" | "spotlight" | "system_overlay" | null;
-export type FrontmostCaptureSource = "system-events" | "lsappinfo" | "win32-foreground" | "uwp-frame-host" | "unavailable";
+export type FrontmostCaptureSource = "system-events" | "lsappinfo" | "nsworkspace" | "win32-foreground" | "uwp-frame-host" | "unavailable";
 // Which mechanism produced windowTitle: the frontmost System Events pass, or
 // the browser automation pass that reads the tab and its window title
 // together. Absent when the capture never got a title.

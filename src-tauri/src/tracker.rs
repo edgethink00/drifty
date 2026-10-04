@@ -1071,17 +1071,7 @@ fn invoke_one_shot(
     db: &Path,
     request: &Value,
 ) -> Result<Vec<u8>, TrackerError> {
-    let output = command_from_argv(runtime.argv_for_one_shot(db, request))?
-        .output()
-        .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
-
-    if !output.status.success() {
-        return Err(TrackerError::CommandFailed(
-            String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        ));
-    }
-
-    Ok(output.stdout)
+    invoke_one_shot_with_timeout(runtime, db, request, serve_round_trip_timeout())
 }
 
 fn invoke_one_shot_with_timeout(
@@ -1090,36 +1080,20 @@ fn invoke_one_shot_with_timeout(
     request: &Value,
     timeout: Duration,
 ) -> Result<Vec<u8>, TrackerError> {
-    let mut child = command_from_argv(runtime.argv_for_one_shot(db, request))?
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| TrackerError::CommandFailed(error.to_string()))?;
-    let started_at = Instant::now();
-    loop {
-        match child
-            .try_wait()
-            .map_err(|error| TrackerError::CommandFailed(error.to_string()))?
-        {
-            Some(_) => {
-                let output = child
-                    .wait_with_output()
-                    .map_err(|error| TrackerError::CommandFailed(error.to_string()))?;
-                if !output.status.success() {
-                    return Err(TrackerError::CommandFailed(
-                        String::from_utf8_lossy(&output.stderr).trim().to_string(),
-                    ));
-                }
-                return Ok(output.stdout);
-            }
-            None if started_at.elapsed() >= timeout => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(TrackerError::ServeTimedOut(timeout));
-            }
-            None => thread::sleep(Duration::from_millis(20)),
+    let mut command = command_from_argv(runtime.argv_for_one_shot(db, request))?;
+    let output = crate::bounded_process::output(&mut command, timeout).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::TimedOut {
+            TrackerError::ServeTimedOut(timeout)
+        } else {
+            TrackerError::CommandFailed(error.to_string())
         }
+    })?;
+    if !output.status.success() {
+        return Err(TrackerError::CommandFailed(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
     }
+    Ok(output.stdout)
 }
 
 /// A long-lived tracker `serve` process. Requests and responses are
@@ -2778,6 +2752,44 @@ mod tests {
             &runtime,
             db,
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ordinary_one_shot_bounds_hung_children_and_inherited_output() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize timeout override");
+        let dir = tempfile::tempdir().expect("create fixture directory");
+        let timeout = Duration::from_millis(150);
+        for (name, action) in [
+            ("hung", "exec sleep 2"),
+            ("inherited", "sleep 2 &\nprintf '{}\\n'\nexit 0"),
+        ] {
+            let script = dir.path().join(name);
+            std::fs::write(
+                &script,
+                format!("#!/bin/sh\nif [ \"$1\" = \"warmup\" ]; then exit 0; fi\n{action}\n"),
+            )
+            .unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            assert!(Command::new(&script).arg("warmup").status().unwrap().success());
+            let runtime = TrackerRuntime::packaged_sidecar(script);
+            let previous_timeout = std::env::var_os("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS");
+            std::env::set_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS", "150");
+            let started = Instant::now();
+            let result = invoke_one_shot(
+                &runtime,
+                &dir.path().join("tracker.sqlite3"),
+                &json!({ "command": "get_status", "payload": {} }),
+            );
+            let elapsed = started.elapsed();
+            match previous_timeout {
+                Some(value) => std::env::set_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS", value),
+                None => std::env::remove_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS"),
+            }
+            assert!(matches!(result, Err(TrackerError::ServeTimedOut(value)) if value == timeout), "{name}: {result:?}");
+            assert!(elapsed < Duration::from_secs(1), "{name}: {elapsed:?}");
+        }
     }
 
     #[cfg(unix)]

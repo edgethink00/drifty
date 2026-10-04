@@ -35,6 +35,59 @@ from tests.support_cleanup import temp_dir_closing_databases
 
 
 class TrackerMainTests(unittest.TestCase):
+    @unittest.skipIf(sys.platform == "win32", "Unix process inspection")
+    def test_unix_process_queries_bound_a_real_stalled_helper(self) -> None:
+        run = subprocess.run
+
+        def stalled_ps(command, **kwargs):
+            self.assertEqual(command[0], "ps")
+            return run([sys.executable, "-c", "import time; time.sleep(2)"], **kwargs)
+
+        for query in (
+            lambda deadline: tracker_main._process_table(deadline=deadline),
+            lambda deadline: tracker_main._process_command(12345, deadline=deadline),
+        ):
+            with self.subTest(query=query), patch.object(
+                tracker_main.subprocess, "run", side_effect=stalled_ps
+            ):
+                started = time.monotonic()
+                self.assertIsNone(query(started + 0.1))
+                self.assertLess(time.monotonic() - started, 1.0)
+
+    @unittest.skipIf(sys.platform == "win32", "Unix process inspection")
+    def test_unix_exit_wait_bounds_a_stalled_state_query_without_confirming_exit(self) -> None:
+        run = subprocess.run
+
+        def stalled_ps(command, **kwargs):
+            self.assertEqual(command[-1], "state=")
+            return run([sys.executable, "-c", "import time; time.sleep(2)"], **kwargs)
+
+        with patch.object(tracker_main.os, "waitpid", side_effect=ChildProcessError), patch.object(
+            tracker_main, "_process_exists", return_value=True
+        ), patch.object(tracker_main.subprocess, "run", side_effect=stalled_ps):
+            started = time.monotonic()
+            self.assertFalse(tracker_main._wait_for_process_exit(12345, timeout_seconds=0.1))
+            self.assertLess(time.monotonic() - started, 1.0)
+
+    @unittest.skipIf(sys.platform == "win32", "Unix process inspection")
+    def test_unix_expired_process_queries_do_not_spawn_or_confirm_exit(self) -> None:
+        with patch.object(tracker_main.subprocess, "run") as run, patch.object(
+            tracker_main.os, "waitpid", side_effect=ChildProcessError
+        ), patch.object(tracker_main, "_process_exists", return_value=True):
+            deadline = time.monotonic() - 1
+            self.assertIsNone(tracker_main._process_table(deadline=deadline))
+            self.assertIsNone(tracker_main._process_command(12345, deadline=deadline))
+            self.assertFalse(tracker_main._process_has_exited(12345, deadline=deadline))
+        run.assert_not_called()
+
+    @unittest.skipIf(sys.platform == "win32", "Unix process inspection")
+    def test_unix_default_process_query_timeout_preserves_unknown_ownership(self) -> None:
+        with patch.object(
+            tracker_main.subprocess, "run", side_effect=subprocess.TimeoutExpired("ps", 3)
+        ) as run:
+            self.assertEqual(tracker_main._tracker_process_ownership(12345), "unknown")
+        self.assertEqual(run.call_args.kwargs["timeout"], tracker_main.TRACKER_EXIT_TIMEOUT_SECONDS)
+
     def test_status_reads_committed_metadata_under_a_real_writer_lock(self) -> None:
         for platform in ("darwin", "win32"):
             for mode in ("tracking", "idle", "suppressed"):

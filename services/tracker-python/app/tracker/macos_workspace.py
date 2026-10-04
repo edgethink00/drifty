@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Final, Literal
@@ -37,6 +39,10 @@ from app.tracker.chatgpt_session import apply_native_chatgpt_session_title
 from app.tracker.macos_frontmost import (
     frontmost_via_lsappinfo,
     frontmost_via_system_events,
+)
+from app.tracker.macos_capture import (
+    CAPTURE_TIMEOUT_SECONDS, IDENTITY_TIMEOUT_SECONDS,
+    CommandScope, FrontmostApplication, context_worker, read_frontmost_application,
 )
 from app.tracker.macos_app_names import canonical_macos_app_name
 from app.tracker.macos_system_activity import (
@@ -102,8 +108,8 @@ def _error_text(error: RuntimeError) -> str:
     return str(error).strip() or type(error).__name__
 
 
-def _onscreen_window_rows() -> list[OnScreenWindowRow]:
-    return onscreen_window_rows(_run_command)
+def _onscreen_window_rows(run_command=None) -> list[OnScreenWindowRow]:
+    return onscreen_window_rows(run_command or _run_command)
 
 
 def _system_transient_activity_from_rows(rows: Sequence[OnScreenWindowRow]) -> SystemTransientActivity | None:
@@ -117,8 +123,8 @@ _is_browser_history_supported_app = is_browser_history_supported_app
 _youtube_ids = youtube_ids
 
 
-def _browser_metadata(app_name: str | None) -> BrowserMetadata:
-    return browser_metadata(app_name, _run_osascript)
+def _browser_metadata(app_name: str | None, run_osascript=None) -> BrowserMetadata:
+    return browser_metadata(app_name, run_osascript or _run_osascript)
 
 
 def _browser_history_metadata(app_name: str | None, window_title: str | None, observed_at: str | None) -> BrowserMetadata:
@@ -133,8 +139,8 @@ def _should_try_browser_history_url_fallback(app_name: str | None, browser: Brow
     )
 
 
-def _frontmost_via_system_events() -> tuple[str | None, str | None, str | None, int | None]:
-    return frontmost_via_system_events(_run_osascript)
+def _frontmost_via_system_events(run_osascript=None) -> tuple[str | None, str | None, str | None, int | None]:
+    return frontmost_via_system_events(run_osascript or _run_osascript)
 
 
 def _frontmost_via_lsappinfo() -> tuple[str | None, str | None, str | None, int | None]:
@@ -152,17 +158,106 @@ def _frontmost_via_fallback_capture() -> tuple[str | None, str | None, str | Non
 
 def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     observed_at = utc_now_iso()
+    deadline = time.monotonic() + CAPTURE_TIMEOUT_SECONDS
+    native = (None if os.environ.get(FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV) == "1"
+              else read_frontmost_application())
+    if native is None:
+        return _capture_snapshot(include_system_transient=include_system_transient, observed_at=observed_at)
+
+    # Copy the small video-title memory: a timed-out job must not teach later
+    # samples a URL or mutate any state used by the recording thread.
+    video_memory = copy.deepcopy(_youtube_video_id_memory)
+    command_scope = CommandScope(deadline)
+
+    def capture(allowed: Callable[[], bool]) -> Snapshot | None:
+        snapshot = _capture_snapshot(
+            include_system_transient=include_system_transient, observed_at=observed_at,
+            native=native, capture_allowed=allowed, video_memory=video_memory, command_scope=command_scope,
+        )
+        if not allowed():
+            return None
+        final_app = read_frontmost_application(
+            timeout=min(IDENTITY_TIMEOUT_SECONDS, deadline - time.monotonic()), run_command=command_scope.run,
+        )
+        if final_app != native or not allowed():
+            return None
+        return snapshot
+
+    snapshot = context_worker.read(capture, deadline=deadline, cancel=command_scope.close)
+    if snapshot is not None:
+        _youtube_video_id_memory.observe(
+            snapshot.window_title, snapshot.site_domain, snapshot.site_url,
+            snapshot.youtube_video_id, learn=snapshot.capture_confidence >= 1.0,
+        )
+        return snapshot
+    app_name = _canonical_macos_app_name(native.app_name, native.bundle_id) or native.app_name
+    browser = _is_supported_browser_app(app_name)
+    return Snapshot(
+        observed_at=observed_at, app_name=app_name, bundle_id=native.bundle_id,
+        window_title=None, source="nsworkspace", frontmost_capture_source="nsworkspace",
+        browser_name=app_name if browser else None,
+        browser_automation_status="unavailable" if browser else "not_applicable",
+        browser_automation_error="Optional Mac context was unavailable for this sample." if browser else None,
+    )
+
+
+def _capture_snapshot(
+    include_system_transient: bool = True, *, observed_at: str | None = None,
+    native: FrontmostApplication | None = None,
+    capture_allowed: Callable[[], bool] = lambda: True,
+    video_memory: YouTubeVideoIdMemory | None = None,
+    command_scope: CommandScope | None = None,
+) -> Snapshot:
+    observed_at = observed_at or utc_now_iso()
+
+    def check_current() -> None:
+        if not capture_allowed():
+            raise RuntimeError("Optional Mac context sample expired.")
+
+    def checked_osascript(script: str) -> str:
+        check_current()
+        if command_scope is not None:
+            return command_scope.run(["osascript", "-e", script], timeout=OSASCRIPT_TIMEOUT_SECONDS)
+        return _run_osascript(script)
+
+    def checked_command(command: list[str], timeout: float = COMMAND_TIMEOUT_SECONDS) -> str:
+        check_current()
+        if command_scope is not None:
+            return command_scope.run(command, timeout=timeout)
+        return _run_command(command, timeout=timeout)
+
+    check_current()
     frontmost_capture_source: FrontmostCaptureSource = "system-events"
     frontmost_capture_error = None
     frontmost_fallback_error = None
     pid = None
-    if os.environ.get(FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV) == "1":
+    raw_window_title = None
+    window_read_succeeded = False
+    if native is not None:
+        app_name, bundle_id, pid = native.app_name, native.bundle_id, native.pid
+        frontmost_capture_source = "nsworkspace"
+        window_title = None
+        try:
+            _, title_bundle, raw_window_title, title_pid = _frontmost_via_system_events(checked_osascript)
+        except RuntimeError:
+            # AX/Apple Events may fail while NSWorkspace identity stays valid.
+            pass
+        else:
+            if title_pid != pid or title_bundle != bundle_id:
+                raise RuntimeError("Foreground changed before optional context capture.")
+            window_read_succeeded = True
+            window_title = raw_window_title
+    elif os.environ.get(FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV) == "1":
         frontmost_capture_error = "System Events frontmost capture skipped by developer diagnostics."
         app_name, bundle_id, window_title, frontmost_fallback_error, pid = _frontmost_via_fallback_capture()
         frontmost_capture_source = "lsappinfo" if app_name else "unavailable"
     else:
         try:
             app_name, bundle_id, window_title, pid = _frontmost_via_system_events()
+            if not _canonical_macos_app_name(app_name, bundle_id):
+                # An empty successful AppleScript read is still a capture failure.
+                # Try the same app-only fallback used for permission/automation errors.
+                raise RuntimeError("System Events returned no frontmost app name.")
         except RuntimeError as error:
             frontmost_capture_error = _error_text(error)
             app_name, bundle_id, window_title, frontmost_fallback_error, pid = _frontmost_via_fallback_capture()
@@ -170,8 +265,9 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
 
     app_name = _canonical_macos_app_name(app_name, bundle_id)
 
+    check_current()
     system_transient_activity = (
-        _system_transient_activity_from_rows(_onscreen_window_rows())
+        _system_transient_activity_from_rows(_onscreen_window_rows(checked_command) if native else _onscreen_window_rows())
         if include_system_transient
         else None
     )
@@ -193,14 +289,16 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     # result and records which mechanism produced it.
     window_title_source: WindowTitleSource | None = "system-events" if window_title else None
 
+    check_current()
     window_title = apply_native_chatgpt_session_title(
         app_name,
         bundle_id,
         window_title,
         pid,
-        _run_command,
+        checked_command if native else _run_command,
     )
 
+    check_current()
     force_browser_history_url_fallback = os.environ.get(FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV) == "1"
     if force_browser_history_url_fallback:
         if _is_browser_history_supported_app(app_name):
@@ -217,10 +315,11 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
             browser = BrowserMetadata()
         browser_history = browser
     else:
-        browser = _browser_metadata(app_name)
-        browser = refine_safari_url(browser, bundle_id, pid, _run_command)
+        browser = _browser_metadata(app_name, checked_osascript) if native else _browser_metadata(app_name)
+        browser = refine_safari_url(browser, bundle_id, pid, checked_command if native else _run_command)
         browser_history = None
 
+    check_current()
     # Prefer the AX title captured in the same osascript pass as the tab read,
     # so window_title and site_* cannot describe two different moments.
     if browser.ax_window_title:
@@ -256,7 +355,8 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     if browser_automation_status is None and not _is_supported_browser_app(app_name):
         browser_automation_status = "not_applicable"
 
-    youtube_video_id, site_url = _youtube_video_id_memory.observe(
+    check_current()
+    youtube_video_id, site_url = (video_memory or _youtube_video_id_memory).observe(
         window_title,
         browser.site_domain,
         browser.site_url,
@@ -279,6 +379,17 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         )
     )
 
+    check_current()
+    if native is not None and window_read_succeeded:
+        # Revalidate the raw focused title, before native ChatGPT enrichment.
+        # Browser AX metadata must agree with that same window as well. A
+        # switch during optional reads returns only the original app identity.
+        _, final_bundle, final_title, final_pid = _frontmost_via_system_events(checked_osascript)
+        expected_title = browser.ax_window_title or raw_window_title
+        if (final_pid != native.pid or final_bundle != native.bundle_id
+                or final_title != raw_window_title or (browser.ax_window_title and final_title != expected_title)):
+            raise RuntimeError("Foreground window changed during optional context capture.")
+    check_current()
     return Snapshot(
         observed_at=observed_at,
         app_name=app_name,

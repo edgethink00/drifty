@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -10,6 +11,8 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app import main as tracker_main
+from app.storage.db import TrackerDatabase
+from app.tracker.power_state import PowerStateSample
 from app.tracker.macos_workspace import (
     BrowserMetadata,
     Snapshot,
@@ -565,6 +568,74 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertIsNone(snapshot.frontmost_fallback_error)
         mock_run.assert_called_once()
         mock_lsappinfo.assert_called_once()
+
+    def test_current_snapshot_falls_back_when_system_events_returns_no_app(self) -> None:
+        for result in ('', 'missing value\n\n\n', '\n\n\n'):
+            with self.subTest(result=result), \
+                 patch('app.tracker.macos_workspace._run_osascript', return_value=result), \
+                 patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes', None, None)) as fallback, \
+                 patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
+                 patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+                snapshot = current_snapshot(include_system_transient=False)
+
+                self.assertEqual(snapshot.app_name, 'Notes')
+                self.assertEqual(snapshot.bundle_id, 'com.apple.Notes')
+                self.assertEqual(snapshot.frontmost_capture_source, 'lsappinfo')
+                self.assertEqual(snapshot.frontmost_capture_error, 'System Events returned no frontmost app name.')
+                self.assertIsNone(snapshot.frontmost_fallback_error)
+                self.assertIsNone(snapshot.window_title)
+                fallback.assert_called_once()
+
+    def test_current_snapshot_keeps_a_gap_when_empty_primary_and_fallback_both_fail(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript', return_value=''), \
+             patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=(None, None, 'lsappinfo front returned NULL.', None)) as fallback, \
+             patch('app.tracker.macos_workspace.read_front_window_title') as title, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.app_name, 'Unavailable')
+        self.assertEqual(snapshot.frontmost_capture_source, 'unavailable')
+        self.assertEqual(snapshot.frontmost_capture_error, 'System Events returned no frontmost app name.')
+        self.assertEqual(snapshot.frontmost_fallback_error, 'lsappinfo front returned NULL.')
+        fallback.assert_called_once()
+        title.assert_not_called()
+
+    def test_current_snapshot_does_not_replace_a_valid_primary_with_fallback(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript', return_value='Notes\ncom.apple.Notes\n\n123'), \
+             patch('app.tracker.macos_workspace._frontmost_via_lsappinfo') as fallback, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.app_name, 'Notes')
+        self.assertEqual(snapshot.frontmost_capture_source, 'system-events')
+        self.assertIsNone(snapshot.frontmost_capture_error)
+        fallback.assert_not_called()
+
+    def test_daemon_records_app_time_after_an_empty_primary_read(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = TrackerDatabase(Path(tmp) / 'tracker.sqlite3', perform_maintenance=False)
+            self.addCleanup(db.close)
+            power = PowerStateSample(
+                observed_at=datetime.now(timezone.utc), should_capture=True, reason='ok',
+            )
+            with patch('app.tracker.macos_workspace._run_osascript', return_value=''), \
+                 patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes', None, None)), \
+                 patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
+                 patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()), \
+                 patch.object(tracker_main, 'current_power_state', return_value=power), \
+                 patch.object(tracker_main, 'seconds_since_last_input', return_value=0.0), \
+                 patch.object(tracker_main, '_apply_developer_diagnostics_env'), \
+                 patch.object(tracker_main, 'enqueue_youtube_metadata_fetch'), \
+                 patch.object(tracker_main, 'backfill_browser_history_context'):
+                self.assertIsNotNone(tracker_main._daemon_tick(db, None))
+
+            row = db.connect().execute(
+                'SELECT app_name, duration_seconds FROM activity_segments',
+            ).fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row['app_name'], 'Notes')
+            self.assertEqual(row['duration_seconds'], tracker_main.SAMPLE_SECONDS)
+            db.close()
 
     def test_current_snapshot_recovers_app_name_from_real_lsappinfo_shape(self) -> None:
         info = '"Google Chrome" ASN:0x0-0x1c01c: (in front)\n    bundleID="com.google.Chrome"\n'

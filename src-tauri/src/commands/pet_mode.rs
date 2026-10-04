@@ -4489,31 +4489,15 @@ fn elided_label_prefix(label: &str) -> Option<&str> {
 /// cross-check into an 8-second silence.
 #[cfg(target_os = "macos")]
 fn run_osascript_with_timeout(script: &str, timeout: Duration) -> Option<String> {
-    use std::process::Stdio;
-    let mut child = Command::new("osascript")
-        .args(["-e", script])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let deadline = Instant::now() + timeout;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let output = child.wait_with_output().ok()?;
-                if !status.success() {
-                    return None;
-                }
-                return Some(String::from_utf8_lossy(&output.stdout).into_owned());
-            }
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
-            }
-        }
-    }
+    let output = crate::bounded_process::output(
+        Command::new("osascript").args(["-e", script]),
+        timeout,
+    )
+    .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 #[cfg(target_os = "macos")]
@@ -6709,6 +6693,17 @@ return "closed_browser_tab""#
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn pet_osascript_helper_returns_output_and_bounds_a_stalled_script() {
+        let value = run_osascript_with_timeout("return \"drifty-helper\"", Duration::from_secs(5))
+            .expect("plain AppleScript needs no app permissions");
+        assert_eq!(value.trim(), "drifty-helper");
+        let started = Instant::now();
+        assert!(run_osascript_with_timeout("delay 2", Duration::from_millis(150)).is_none());
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
 
     fn fresh_drag_session() -> PetDragSessionState {
         PetDragSessionState {

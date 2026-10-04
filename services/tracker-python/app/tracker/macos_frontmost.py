@@ -74,38 +74,45 @@ def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | N
           set appName to name of frontApp
           set bundleId to bundle identifier of frontApp
           if bundleId is missing value then set bundleId to ""
+          set unixId to unix id of frontApp
           set windowTitle to ""
-          tell frontApp
-            if exists front window then
-              set windowTitle to name of front window
-              if windowTitle is missing value then set windowTitle to ""
-              -- Aside exposes an empty AXUnknown shadow window as its front
-              -- window. Recover the title from the real main window only when
-              -- that exact synthetic shape is present.
-              if appName is "Aside" and windowTitle is "" then
-                set frontSubrole to ""
-                set frontChildCount to -1
-                try
-                  set frontSubrole to subrole of front window as text
-                end try
-                try
-                  set frontChildCount to count of UI elements of front window
-                end try
-                if frontSubrole is "AXUnknown" and frontChildCount is 0 then
+          -- Window metadata is optional. An AX error must not discard a
+          -- successfully captured app identity or retry the same AX read
+          -- through the app-only fallback.
+          try
+            tell frontApp
+              if exists front window then
+                set windowTitle to name of front window
+                if windowTitle is missing value then set windowTitle to ""
+                -- Aside exposes an empty AXUnknown shadow window as its front
+                -- window. Recover the title from the real main window only when
+                -- that exact synthetic shape is present.
+                if appName is "Aside" and windowTitle is "" then
+                  set frontSubrole to ""
+                  set frontChildCount to -1
                   try
-                    set targetWindow to first window whose value of attribute "AXMain" is true
-                    set windowTitle to name of targetWindow as text
-                  on error
-                    try
-                      set targetWindow to first window whose subrole is "AXStandardWindow"
-                      set windowTitle to name of targetWindow as text
-                    end try
+                    set frontSubrole to subrole of front window as text
                   end try
+                  try
+                    set frontChildCount to count of UI elements of front window
+                  end try
+                  if frontSubrole is "AXUnknown" and frontChildCount is 0 then
+                    try
+                      set targetWindow to first window whose value of attribute "AXMain" is true
+                      set windowTitle to name of targetWindow as text
+                    on error
+                      try
+                        set targetWindow to first window whose subrole is "AXStandardWindow"
+                        set windowTitle to name of targetWindow as text
+                      end try
+                    end try
+                  end if
                 end if
               end if
-            end if
-          end tell
-          set unixId to unix id of frontApp
+            end tell
+          on error
+            set windowTitle to ""
+          end try
           return appName & linefeed & bundleId & linefeed & windowTitle & linefeed & unixId
         end tell
         '''
@@ -113,8 +120,10 @@ def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | N
     parts = result.splitlines()
     app_name = optional_text(parts[0] if len(parts) > 0 else None)
     bundle_id = optional_text(parts[1] if len(parts) > 1 else None)
-    window_title = optional_text(parts[2] if len(parts) > 2 else None)
-    pid_text = optional_text(parts[3] if len(parts) > 3 else None)
+    # The script always ends with the PID. Window titles can contain line
+    # breaks, so treating the fourth line as the PID loses process identity.
+    window_title = optional_text("\n".join(parts[2:-1]) if len(parts) >= 4 else parts[2] if len(parts) > 2 else None)
+    pid_text = optional_text(parts[-1] if len(parts) >= 4 else None)
     pid = int(pid_text) if pid_text and pid_text.isdigit() else None
     return app_name, bundle_id, window_title, pid
 
