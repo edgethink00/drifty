@@ -72,7 +72,7 @@ describe("NotificationsSettingsSection", () => {
     expect((screen.getByRole("button", { name: "Edit alert wording" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("keeps timing and wording active while Drift alerts are on and explains each delay", () => {
+  it("keeps timing and wording active while Drift alerts are on and lists each delay once", () => {
     renderSettings({ driftAlertsEnabled: true });
 
     const timingRow = document.querySelector('[data-setting-id="settings.notifications.timing"]');
@@ -80,8 +80,9 @@ describe("NotificationsSettingsSection", () => {
     const trigger = screen.getByRole("combobox", { name: "Drift alert timing" }) as HTMLButtonElement;
     expect(trigger.disabled).toBe(false);
     fireEvent.click(trigger);
-    expect(screen.getByText("After 1 minute of drift")).toBeTruthy();
-    expect(screen.getByText("As soon as drift is detected")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "1m" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Instant" })).toBeTruthy();
+    expect(screen.queryByText("After 1 minute of drift")).toBeNull();
   });
 
   it("asks macOS for permission when the notification switch is turned on and reports a denial", async () => {

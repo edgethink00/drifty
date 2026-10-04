@@ -85,7 +85,6 @@ export function NotificationsSettingsSection({
   const driftAlertDelayOptions = DRIFT_ALERT_DELAY_OPTIONS.map((option) => ({
     value: option.value,
     label: localizedDriftAlertDelayLabel(option.value, t),
-    description: localizedDriftAlertDelayDetail(option.value, t),
   }));
   const dayReviewTimeOptions = END_OF_DAY_REVIEW_MINUTE_OPTIONS.map((option) => ({
     value: option.value,
@@ -174,7 +173,6 @@ export function NotificationsSettingsSection({
               options={driftAlertDelayOptions}
               disabled={!driftAlertsEnabled}
               onChange={(value) => onDriftAlertDelaySecondsChange(driftAlertDelaySecondsFromValue(value))}
-              className="settings-select-control--timing"
             />
           </div>
         </div>
@@ -323,19 +321,5 @@ function localizedDriftAlertDelayLabel(value: string, t: LocalizationController[
     case "900": return t("settings.notifications.delay900");
     case "1800": return t("settings.notifications.delay1800");
     default: return value;
-  }
-}
-
-function localizedDriftAlertDelayDetail(value: string, t: LocalizationController["t"]): string | undefined {
-  switch (value) {
-    case "0": return t("settings.notifications.delay0Detail");
-    case "30": return t("settings.notifications.delay30Detail");
-    case "60": return t("settings.notifications.delay60Detail");
-    case "120": return t("settings.notifications.delay120Detail");
-    case "300": return t("settings.notifications.delay300Detail");
-    case "600": return t("settings.notifications.delay600Detail");
-    case "900": return t("settings.notifications.delay900Detail");
-    case "1800": return t("settings.notifications.delay1800Detail");
-    default: return undefined;
   }
 }
