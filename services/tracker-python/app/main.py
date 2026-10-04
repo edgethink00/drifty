@@ -9,6 +9,7 @@ import re
 import secrets
 import shlex
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -274,6 +275,31 @@ def database() -> TrackerDatabase:
     if _DATABASE_CACHE is None or _DATABASE_CACHE.db_path != DB_PATH:
         _DATABASE_CACHE = TrackerDatabase(DB_PATH)
     return _DATABASE_CACHE
+
+
+@contextmanager
+def _status_database():
+    """Read existing status without schema writes or a cached read-only handle."""
+    if not DB_PATH.exists():
+        # Preserve first-use bootstrap; an established DB needs no migrations
+        # or backup work merely to report daemon liveness and stored metadata.
+        yield database()
+        return
+    db = TrackerDatabase(DB_PATH, read_only=True)
+    try:
+        has_metadata = db.connect().execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tracker_meta'"
+        ).fetchone()
+        if has_metadata:
+            yield db
+        else:
+            # A new database file can exist before its first schema is ready.
+            # Only that missing schema follows the existing initialization path;
+            # actual open/read/corruption errors must still reach the caller.
+            db.close()
+            yield database()
+    finally:
+        db.close()
 
 
 def accessibility_granted() -> bool:
@@ -1116,10 +1142,19 @@ def _stop_tracking_locked():
 
 
 def get_status(payload: dict | None = None, *, process_deadline: float | None = None):
+    with _status_database() as db:
+        return _status_from_database(db, payload, process_deadline=process_deadline)
+
+
+def _status_from_database(
+    db: TrackerDatabase,
+    payload: dict | None = None,
+    *,
+    process_deadline: float | None = None,
+):
     # The Mac bridge replaces this field with a fresh native trust result.
     # CLI/default calls and other platforms still perform the normal probe.
     native_accessibility_supplied = sys.platform == "darwin" and (payload or {}).get("skipAccessibilityProbe") is True
-    db = database()
     last_event_at = db.get_meta("last_event_at")
     query_kwargs = {"deadline": process_deadline} if process_deadline is not None else {}
     if sys.platform == "win32":
@@ -2372,6 +2407,18 @@ def daemon():
         _daemon_with_owner(owner)
 
 
+def _is_sqlite_lock_error(error: sqlite3.OperationalError) -> bool:
+    code = getattr(error, "sqlite_errorcode", None)
+    if code is not None:
+        # Primary SQLITE_BUSY / SQLITE_LOCKED, including extended result codes.
+        return (code & 0xFF) in (5, 6)
+    # System Python 3.9 does not expose sqlite_errorcode.
+    message = str(error).lower()
+    return message in (
+        "database is locked", "database table is locked", "database schema is locked"
+    ) or message.startswith(("database table is locked:", "database schema is locked:"))
+
+
 def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
     daemon_pid = os.getpid()
     lock_file = _acquire_tracker_daemon_lock()
@@ -2391,24 +2438,62 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
         if owner is not None and not owner.is_alive():
             return
         _write_tracker_pid(daemon_pid)
-        db = database()
-        if isinstance(db.capture_timeline, CaptureTimeline):
-            db.capture_timeline = CaptureTimeline()
-        db.set_meta("tracker_script_path", _current_script_path())
-        db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
-        # A grace window is meaningful only inside one uninterrupted daemon
-        # run. Restarts and manual stop/start cycles begin fail-closed.
-        db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
-        reset_foreground_audio_diagnostics(db, "daemon_started")
-        last_capture_tick: float | None = None
-        last_backup_check = time.time()
-        # One wall-clock read per loop feeds both maintenance windows.
-        last_dev_signals_ingest = last_backup_check
 
         def capture_allowed() -> bool:
             return (owner is None or owner.is_alive()) and (
                 stop_event is None or not stop_event.requested()
             )
+
+        def wait_for_next_tick() -> bool:
+            if stop_event is not None:
+                # One native wait wakes for either cancellation source. Waiting
+                # only on the app handle would delay an ordinary Stop by a tick.
+                return (
+                    stop_event.wait(SAMPLE_SECONDS)
+                    if owner is None
+                    else stop_event.wait(SAMPLE_SECONDS, owner=owner)
+                )
+            if owner is not None:
+                return owner.wait_until_exit(SAMPLE_SECONDS)
+            time.sleep(SAMPLE_SECONDS)
+            return False
+
+        startup_lock_reported = False
+        while True:
+            try:
+                db = database()
+                if isinstance(db.capture_timeline, CaptureTimeline):
+                    db.capture_timeline = CaptureTimeline()
+                db.set_meta("tracker_script_path", _current_script_path())
+                db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
+                # A grace window is meaningful only inside one uninterrupted daemon
+                # run. Restarts and manual stop/start cycles begin fail-closed.
+                db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+                reset_foreground_audio_diagnostics(db, "daemon_started")
+                break
+            except sqlite3.OperationalError as exc:
+                if not _is_sqlite_lock_error(exc):
+                    raise
+                # Initialization can contend with another local writer just
+                # like a sampling tick. Keep the sole daemon alive and retry
+                # on its existing cadence, without capturing before all startup
+                # state is ready or crediting the wait as tracked activity.
+                if not capture_allowed():
+                    return
+                if not startup_lock_reported:
+                    # One uninterrupted startup-lock episode needs one remote
+                    # report/flush; retain local evidence of every later retry.
+                    startup_lock_reported = True
+                    capture_tracker_exception(exc, {"phase": "daemon_database_startup"})
+                print("tracker database startup locked; retrying:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                if wait_for_next_tick() or not capture_allowed():
+                    return
+
+        last_capture_tick: float | None = None
+        last_backup_check = time.time()
+        # One wall-clock read per loop feeds both maintenance windows.
+        last_dev_signals_ingest = last_backup_check
 
         while capture_allowed():
             backup_check_started_at = time.time()
@@ -2458,19 +2543,7 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
                 # A failed tick means a capture gap, so the next successful
                 # capture starts from the default sample length again.
                 last_capture_tick = None
-            if stop_event is not None:
-                # One native wait wakes for either cancellation source. Waiting
-                # only on the app handle would delay an ordinary Stop by a tick.
-                stopped = (
-                    stop_event.wait(SAMPLE_SECONDS)
-                    if owner is None
-                    else stop_event.wait(SAMPLE_SECONDS, owner=owner)
-                )
-                if stopped:
-                    break
-            elif owner is None:
-                time.sleep(SAMPLE_SECONDS)
-            elif owner.wait_until_exit(SAMPLE_SECONDS):
+            if wait_for_next_tick():
                 break
     finally:
         try:
