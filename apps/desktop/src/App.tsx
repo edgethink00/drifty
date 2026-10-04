@@ -309,6 +309,7 @@ import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents,
 import { buildInterventionLedgerDebugInput } from "./features/companion/interventionLedger";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult, type DriftAlarmTrayState } from "./features/companion/driftAlarmTrayStatus";
 import { getUnconfirmedDriftAlarmReason, resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
+import { confirmPetTargetWithRecovery } from "./features/companion/petTargetConfirmation";
 import { resolveLiveDriftAlarmAiCandidate } from "./features/companion/liveDriftAlarmAiCandidate";
 import {
   resolveDriftAlarmTransientDefer,
@@ -2620,7 +2621,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // A real catch is an explicit veto of this close attempt. Keep its short
   // grace on the stable drift episode so tracker segment rollover or an extra
   // refresh cannot make the cat return before the grace deadline.
-  const petInterceptionGraceRef = useRef<PetInterceptionGrace | null>(null);
+  const petInterceptionGraceRef = useRef<(PetInterceptionGrace & {
+    readonly candidate: DriftAlarmCandidate;
+  }) | null>(null);
   const automaticCloseReentryRef = useRef<AutomaticCloseReentry | null>(null);
   const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const pendingDriftAlarmGateGenerationRef = useRef(0);
@@ -5708,6 +5711,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         && automaticCloseEnabledRef.current
         && lastDriftAlertSegmentRef.current === pendingClose.alertKey
         && getUnconfirmedDriftAlarmReason(pendingClose.candidate, alarmSnapshot) === "current-snapshot-unavailable";
+      const caughtPetGrace = petInterceptionGraceRef.current;
+      const preserveCaughtPetGrace = caughtPetGrace !== null
+        && automaticCloseEnabledRef.current
+        && isPetInterceptionGraceActive(caughtPetGrace, caughtPetGrace.episodeKey)
+        && getUnconfirmedDriftAlarmReason(caughtPetGrace.candidate, alarmSnapshot) === "current-snapshot-unavailable";
       pendingDriftAlarmGateRef.current = null;
       pendingDriftAlarmGateGenerationRef.current += 1;
       lastEligibleDriftCandidateRef.current = null;
@@ -5720,7 +5728,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         pendingExtremeNudgeRef.current = null;
       }
       driftAlarmReminderRef.current = null;
-      petInterceptionGraceRef.current = null;
+      // A missing address cannot revoke a real catch. Keep its own target
+      // through consecutive capture gaps without extending the deadline or
+      // retaining a stale candidate for other delivery paths.
+      if (!preserveCaughtPetGrace) petInterceptionGraceRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
         driftAlarmSnoozeRef.current = null;
         setDriftAlarmSnooze(null);
@@ -6086,8 +6097,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           // receive the exact local activity identity. Re-check after every
           // approach (including an 8s timeout) so a tab/app that was current
           // before the animation can never be closed after the user moved on.
-          const postInterventionGateResult = await confirmFreshDriftAlarmCandidate();
-          if (!closeStillAuthorized()) return cancelledCloseResult();
+          const postInterventionGateResult = await confirmPetTargetWithRecovery({
+            confirm: confirmFreshDriftAlarmCandidate,
+            isAuthorized: closeStillAuthorized,
+            retryUnavailable: Boolean(segment.browserName),
+          });
+          if (!closeStillAuthorized() || postInterventionGateResult === "cancelled") return cancelledCloseResult();
           if (postInterventionGateResult === "current-snapshot-unavailable") {
             // Fail closed when the tracker cannot prove the target is still
             // current, but keep the ordinary fallback alarm visible. Treating
@@ -6156,7 +6171,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               lastDriftAlertSegmentRef.current = null;
               // Quiet hours silence delivery without erasing a real catch.
               petInterceptionGraceRef.current = petWasIntercepted && automaticCloseEnabledRef.current
-                ? buildPetInterceptionGrace(episodeKey) : null;
+                ? { ...buildPetInterceptionGrace(episodeKey), candidate: deliveryCandidate } : null;
               publishEvaluationDriftAlarmTrayStatus({
                 kind: "suppressed",
                 reason: result.diagnostic,
@@ -6165,7 +6180,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               return;
             }
             if (intercepted) {
-              petInterceptionGraceRef.current = buildPetInterceptionGrace(episodeKey);
+              petInterceptionGraceRef.current = { ...buildPetInterceptionGrace(episodeKey), candidate: deliveryCandidate };
               lastDriftAlertSegmentRef.current = null;
             }
             // A caught cat is a deliberate user signal, not a delivery failure.

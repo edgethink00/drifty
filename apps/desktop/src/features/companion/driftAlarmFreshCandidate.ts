@@ -31,7 +31,7 @@ export function getUnconfirmedDriftAlarmReason(
   current: CurrentActivitySnapshot | null,
 ): "current-window-changed" | "current-snapshot-unavailable" {
   const appName = current?.appName.trim();
-  if (!current || !appName || appName === "Unavailable") {
+  if (!current || !appName || (appName === "Unavailable" && !current.bundleId?.trim())) {
     return "current-snapshot-unavailable";
   }
 

@@ -573,7 +573,7 @@ describe("catching the cat cancels the close", () => {
   });
 
   it("keys a caught pet's grace to the continuous drift episode", () => {
-    expect(app).toContain("petInterceptionGraceRef.current = buildPetInterceptionGrace(episodeKey)");
+    expect(app).toContain("petInterceptionGraceRef.current = { ...buildPetInterceptionGrace(episodeKey), candidate: deliveryCandidate }");
     expect(app).toContain("isPetInterceptionGraceActive(currentGrace, episodeKey)");
     expect(app).toContain("pet_intercept_grace");
   });
@@ -612,7 +612,7 @@ describe("catching the cat cancels the close", () => {
     expect(app).toContain("let petWasIntercepted = false;");
     expect(app).toContain('petWasIntercepted = intervention.outcome === "user_intercepted";');
     expect(body).toMatch(
-      /petInterceptionGraceRef\.current = petWasIntercepted && automaticCloseEnabledRef\.current\s*\? buildPetInterceptionGrace\(episodeKey\) : null;/,
+      /petInterceptionGraceRef\.current = petWasIntercepted && automaticCloseEnabledRef\.current\s*\? \{ \.\.\.buildPetInterceptionGrace\(episodeKey\), candidate: deliveryCandidate \} : null;/,
     );
     expect(body).toContain("reason: result.diagnostic");
     expect(body).toContain("return;");

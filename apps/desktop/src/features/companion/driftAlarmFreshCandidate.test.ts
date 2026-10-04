@@ -138,11 +138,18 @@ describe("getUnconfirmedDriftAlarmReason", () => {
     source: "nsworkspace",
   };
 
-  it.each([null, { ...addressLost, appName: "Unavailable", bundleId: null }, { ...addressLost, appName: " Unavailable " }, { ...addressLost, appName: " " }])(
+  it.each([null, { ...addressLost, appName: "Unavailable", bundleId: null }, { ...addressLost, appName: " Unavailable ", bundleId: null }, { ...addressLost, appName: " " }])(
     "keeps an unreadable app unverified: %j", (snapshot) => {
       expect(getUnconfirmedDriftAlarmReason(candidate, snapshot)).toBe("current-snapshot-unavailable");
     },
   );
+
+  it("treats an identified app named Unavailable as a verified context change", () => {
+    expect(getUnconfirmedDriftAlarmReason(candidate, {
+      ...addressLost, appName: "Unavailable", bundleId: "com.example.Unavailable",
+      browserName: null, source: "nsworkspace",
+    })).toBe("current-window-changed");
+  });
 
   it.each(["denied", "unavailable", "stale", "empty_result"] as const)(
     "keeps an address read failure unverified with status %s", (browserAutomationStatus) => {
