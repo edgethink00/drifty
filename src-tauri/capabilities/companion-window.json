@@ -14,6 +14,7 @@
     "allow-watcher-peek-cursor-inside",
     "allow-watcher-peek-end-of-day-review-action",
     "allow-watcher-peek-end-of-day-review-displayed",
+    "allow-watcher-peek-end-of-day-review-dropped",
     "allow-companion-informational-moments-suppressed",
     "allow-watcher-peek-extreme-nudge-action",
     "allow-watcher-companion-set-state",

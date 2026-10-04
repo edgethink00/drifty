@@ -21,7 +21,6 @@ import {
   buildHourlySummary,
   buildPersonalProjectSliceProjection,
   logicalDayEndExclusiveMs,
-  logicalDayIsoDateForDate,
   shiftIsoDate,
   todayIsoDate,
   totalDurationSeconds,
@@ -178,7 +177,7 @@ import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/first
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
 import { isFirstDayReviewEnabled } from "./features/onboarding/firstDayPreparationReviewData";
-import { isInitialDailyFocusQuietPeriod, isInstallDayReviewEligible } from "./features/onboarding/initialExperiencePolicy";
+import { isInitialDailyFocusQuietPeriod } from "./features/onboarding/initialExperiencePolicy";
 import { resolveFirstDayTargetDay, useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
@@ -225,6 +224,7 @@ import {
   listenToNativeCompanionVisibilityAction,
   listenToNativeEndOfDayReviewAction,
   listenToNativeEndOfDayReviewDisplayed,
+  listenToNativeEndOfDayReviewDropped,
   listenToNativeWatcherDismissed,
   listenToNativeWatcherResponse,
   setNativeCompanionSurfacePolicy,
@@ -372,26 +372,25 @@ import { toLeaderboardCelebration, type LeaderboardCelebration } from "./feature
 import { buildBreakRecoveryAttempt, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import { buildAlarmFollowThrough } from "./features/insights/alarmFollowThrough";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
-import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS, END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS, END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, sumEndOfDayReviewTrackedSeconds } from "./features/companion/endOfDayReviewData";
+import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import {
   END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY,
-  endOfDayReviewDeadlineForDay,
-  endOfDayReviewDeliveryDeadline,
-  END_OF_DAY_REVIEW_CATCH_UP_EARLIEST_MINUTE,
   endOfDayReviewMinuteToValue,
   endOfDayReviewValueToMinute,
-  hasExhaustedEndOfDayReviewPresentations,
-  isEndOfDayReviewDue,
-  persistEndOfDayReviewAcknowledgement,
-  persistEndOfDayReviewCatchUpHandledDay,
-  persistEndOfDayReviewLastPresentationDay,
-  readEndOfDayReviewCatchUpHandledDay,
-  readEndOfDayReviewLastPresentationDay,
-  recordEndOfDayReviewPresentation,
-  resolveEndOfDayReviewCatchUp,
   resolveInitialEndOfDayReviewMinute,
 } from "./features/companion/endOfDayReviewSchedule";
+import {
+  acknowledgeDayReview,
+  isDayReviewUserActive,
+  readDayReviewDiagnostics,
+  recordDayReviewUnseen,
+} from "./features/companion/dayReviewScheduler";
+import {
+  useDayReviewScheduler,
+  type DayReviewDeliveryResult,
+  type DayReviewPresentationRequest,
+} from "./features/companion/useDayReviewScheduler";
 import { LIVE_CAPTURE_GAP_GRACE_MS, WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildCaptureGapWatcherSnapshot, buildLiveWatcherSnapshot, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, shouldReplacePetModeLiveSnapshot, showDueDriftWatcherPeek, snapshotObservedAtMs } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
 import {
@@ -938,16 +937,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController({ language: localization.effectiveLanguage });
-  const endOfDayReviewDeliveryPolicyRef = useRef({
-    enabled: dayReviewEnabled,
-    reviewMinute: endOfDayReviewMinute,
-    startOfDayMinutes,
-  });
-  endOfDayReviewDeliveryPolicyRef.current = {
-    enabled: dayReviewEnabled,
-    reviewMinute: endOfDayReviewMinute,
-    startOfDayMinutes,
-  };
   /* Quiet hours pause interventions and celebrations. Delivery reads the
      clock at evaluation time through the ref; render-time gates (milestones)
      read the boundary-aware hook so they flip without a poll. */
@@ -2653,8 +2642,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const watcherRequestInFlightRef = useRef(false);
   const watcherRecoveryTimeoutRef = useRef(0);
   const endOfDayReviewQueryPreviewShownRef = useRef(false);
-  const endOfDayReviewAutomaticInFlightRef = useRef(false);
-  const endOfDayReviewLastPresentedAtRef = useRef<number | null>(null);
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastExtremeNudgeToastEventRef = useRef<ExtremeNudgeToastEvent | null>(null);
@@ -3172,17 +3159,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     });
   }, [allowBuiltInHeuristics, armWatcherRecoveryTimer, builtInHeuristicsUnavailableSince, classificationRules, clearWatcherEvent, showAiClassificationImpact, status?.running]);
 
-  const showEndOfDayReview = useCallback(async (event: EndOfDayReviewEvent): Promise<boolean> => {
+  const showEndOfDayReview = useCallback(async (event: EndOfDayReviewEvent): Promise<DayReviewDeliveryResult> => {
     if (!event.isMock) presentedEndOfDayReviewDayRef.current = event.day;
     if (!isTauriRuntime()) {
       setEndOfDayReviewEvent(event);
-      return true;
+      /* The browser fallback renders into the visible main window, so a
+         successful show is already the display. */
+      return "displayed";
     }
 
     try {
-      return await showNativeEndOfDayReview(event);
+      return (await showNativeEndOfDayReview(event)) ?? "failed";
     } catch {
-      return false;
+      return "failed";
     }
   }, []);
 
@@ -5283,13 +5272,23 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       unlisteners.push(unlisten);
     });
 
-    void listenToNativeEndOfDayReviewDisplayed((day, presentationDay) => {
-      persistEndOfDayReviewAcknowledgement(
-        day,
-        presentationDay && /^\d{4}-\d{2}-\d{2}$/.test(presentationDay)
-          ? presentationDay
-          : logicalTodayIsoDate(endOfDayReviewDeliveryPolicyRef.current.startOfDayMinutes),
-      );
+    /* The Companion already wrote the acknowledgement into the shared webview
+       storage; this mirror covers surfaces with their own storage. */
+    void listenToNativeEndOfDayReviewDisplayed((day) => {
+      acknowledgeDayReview(day, new Date().toISOString());
+    }).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        cleanupTauriEventListener(unlisten);
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
+    /* An unseen card leaves the day waiting for an acknowledgement that will
+       never come; the scheduler's next tick rebuilds it once. */
+    void listenToNativeEndOfDayReviewDropped((day) => {
+      recordDayReviewUnseen(day);
     }).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
@@ -7873,262 +7872,105 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }).then(showEndOfDayReview);
   }, [buildEndOfDayReviewEvent, endOfDayReviewQueryPreviewMode, hasLoadedOnce, isDevModeActive, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
 
+  /* The leaderboard checkpoint keeps its fixed evening slot so every
+     participant's daily score lands at the same time. It is independent of
+     the Day Review, which has its own scheduler below. */
+  const leaderboardCheckpointInFlightRef = useRef(false);
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
-    // Product captures should stay deterministic. Preview/demo surfaces can
-    // still opt into the explicit Day Review preview above, but must not
-    // inherit time-based automatic moments from the live app.
+    // Product captures should stay deterministic. Preview/demo surfaces must
+    // not inherit time-based automatic moments from the live app.
     if (isPreviewSurface) return;
     if (!hasLoadedOnce) return;
     if (selectedDay !== todayDay || segmentsLoadedDay !== todayDay) return;
     if (!status?.running) return;
     if (currentMinuteOfDay === null) return;
-    /* Two clocks: the leaderboard checkpoint keeps its fixed evening slot so
-       every participant's daily score lands at the same time, while the
-       review itself fires at the user's own time. */
-    const checkpointDue = currentMinuteOfDay >= END_OF_DAY_REVIEW_TRIGGER_MINUTE;
-    const reviewTimeDue = isEndOfDayReviewDue(currentMinuteOfDay, endOfDayReviewMinute, startOfDayMinutes);
-    if (!checkpointDue && !reviewTimeDue) return;
+    if (currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
     if (classificationAvailabilityGateEnabled
       && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
-    if (endOfDayReviewAutomaticInFlightRef.current) return;
-
-    /* A day is finished either because a surface acknowledged the card or
-       because it already spent its bounded presentation allowance without
-       one. Without the second clause an acknowledgement that never arrives
-       re-presents the same review on every cooldown window until the logical
-       day rolls over. */
-    const reviewShown = window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay
-      || hasExhaustedEndOfDayReviewPresentations(todayDay)
-      || readEndOfDayReviewLastPresentationDay() === todayDay;
-    const leaderboardCheckpointDone =
-      !checkpointDue || window.localStorage.getItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY) === todayDay;
-    if (reviewShown && leaderboardCheckpointDone) return;
+    if (!classificationAssessmentReady) return;
+    if (window.localStorage.getItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY) === todayDay) return;
     if (segments.length === 0) return;
+    if (leaderboardCheckpointInFlightRef.current) return;
 
-    /* The review waits until the day has enough tracked time to say anything
-       honest about; from the evening trigger until midnight, the first
-       evaluation that finds the bar crossed fires. Thin days
-       are skipped silently. The leaderboard checkpoint keeps its own once-a-
-       day marker so a skipped review never suppresses the publish. */
-    const trackedSeconds = sumEndOfDayReviewTrackedSeconds(segments);
-    const reviewDue = reviewTimeDue
-      && dayReviewEnabled
-      && !reviewShown
-      && isInstallDayReviewEligible(onboardingCompletedAt, todayDay, startOfDayMinutes)
-      && trackedSeconds >= END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS;
-    if (!reviewDue && (leaderboardCheckpointDone || !classificationAssessmentReady)) return;
-
-    if (reviewDue) {
-      const lastPresentedAt = endOfDayReviewLastPresentedAtRef.current;
-      if (lastPresentedAt !== null && Date.now() - lastPresentedAt < END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS) return;
-    }
-
-    endOfDayReviewAutomaticInFlightRef.current = true;
+    leaderboardCheckpointInFlightRef.current = true;
     void (async () => {
-      if (!leaderboardCheckpointDone && classificationAssessmentReady) {
-        try {
-          if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
-            // Keep the current public board fresh, then materialize the exact
-            // local aggregate separately. The checkpoint write bypasses
-            // unchanged-score suppression without temporarily replacing the
-            // public board row.
-            await syncLeaderboardPublication("slot");
-            await publishLeaderboardCheckpoint("daily", todayDay);
-          }
-        } finally {
-          window.localStorage.setItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, todayDay);
-        }
-      }
-
-      if (!reviewDue) return;
-
-      let leaderboardCelebration: LeaderboardCelebration | undefined;
       try {
-        if (classificationAssessmentReady && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
-          const checkpoint = await fetchOwnLeaderboardCheckpoint("daily", todayDay);
-          if (checkpoint?.success) {
-            leaderboardCelebration = toLeaderboardCelebration(
-              checkpoint.data ?? null,
-              "daily",
-              todayDay,
-            ) ?? undefined;
-          }
+        if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
+          // Keep the current public board fresh, then materialize the exact
+          // local aggregate separately. The checkpoint write bypasses
+          // unchanged-score suppression without temporarily replacing the
+          // public board row.
+          await syncLeaderboardPublication("slot");
+          await publishLeaderboardCheckpoint("daily", todayDay);
         }
-      } catch {
-        leaderboardCelebration = undefined;
-      }
-
-      const event = await buildEndOfDayReviewEvent({
-        day: todayDay,
-        generatedAt: new Date().toISOString(),
-        segments,
-        leaderboardCelebration,
-      });
-      /* Leaderboard/icon work can outlive the arbitration that admitted this
-         review. Re-check at the commit boundary so a catch-up acknowledged in
-         the meantime, a preference change, a clock rollback, or a logical-day
-         rollover cannot send a stale second card to the native queue. */
-      const deliveryPolicy = endOfDayReviewDeliveryPolicyRef.current;
-      const deliveryTime = new Date();
-      const deliveryMinuteOfDay = deliveryTime.getHours() * 60 + deliveryTime.getMinutes();
-      if (!deliveryPolicy.enabled
-        /* The loaded segments belong to the boundary captured by this effect.
-           A boundary change can retain the same ISO day while changing which
-           hours belong to it, so let the next evaluation rebuild the review. */
-        || deliveryPolicy.startOfDayMinutes !== startOfDayMinutes
-        || logicalDayIsoDateForDate(deliveryTime, deliveryPolicy.startOfDayMinutes) !== todayDay
-        || !isEndOfDayReviewDue(
-          deliveryMinuteOfDay,
-          deliveryPolicy.reviewMinute,
-          deliveryPolicy.startOfDayMinutes,
-        )
-        || window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay
-        || readEndOfDayReviewLastPresentationDay() === todayDay
-        || hasExhaustedEndOfDayReviewPresentations(todayDay)) return;
-      endOfDayReviewLastPresentedAtRef.current = Date.now();
-      const shown = await showEndOfDayReview({
-        ...event,
-        presentationDay: todayDay,
-        expiresAt: endOfDayReviewDeliveryDeadline(new Date(logicalDayEndExclusiveMs(
-          todayDay,
-          deliveryPolicy.startOfDayMinutes,
-        )).toISOString(), deliveryTime),
-      });
-      if (shown) recordEndOfDayReviewPresentation(todayDay);
-      /* The day is marked shown only when a surface confirms an actual
-         visible display: in Tauri the pill/watcher overlay reports it (see
-         useEndOfDayReviewDisplayedReporter), while the browser fallback
-         renders the overlay into the visible main window, so a successful
-         show is the confirmation. A presentation nobody saw leaves the day
-         open for a fresh retry, bounded by the presentation ledger above. */
-      if (shown && !isTauriRuntime()) {
-        window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
-        persistEndOfDayReviewLastPresentationDay(todayDay);
-      }
-    })().finally(() => {
-      endOfDayReviewAutomaticInFlightRef.current = false;
-    });
-  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, dayReviewEnabled, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
-
-  /* Yesterday's review, once and only before today's review time, if it never
-     got shown: the machine was closed before the review time, or Drifty was
-     not running. It loads its own timeline so the dashboard's selected day is
-     untouched, and it runs at most once per launch. Thin days close the slot
-     without a card. */
-  const endOfDayReviewCatchUpAttemptedRef = useRef(false);
-  useEffect(() => {
-    if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
-    if (isPreviewSurface) return;
-    if (!hasLoadedOnce || shouldBlockLocalTrackerAccess) return;
-    if (!status?.running) return;
-    if (currentMinuteOfDay === null) return;
-    if (classificationAvailabilityGateEnabled
-      && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
-    if (endOfDayReviewCatchUpAttemptedRef.current) return;
-    if (!dayReviewEnabled) return;
-    if (!isInstallDayReviewEligible(onboardingCompletedAt, shiftIsoDate(todayDay, -1), startOfDayMinutes)) return;
-    if (onboardingCompletedAt && logicalDayIsoDateForDate(new Date(onboardingCompletedAt), startOfDayMinutes) === todayDay) return;
-
-    const catchUp = resolveEndOfDayReviewCatchUp({
-      todayDay,
-      lastShownDay: window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY),
-      catchUpHandledDay: readEndOfDayReviewCatchUpHandledDay(),
-      lastPresentationDay: readEndOfDayReviewLastPresentationDay(),
-      currentReviewDue: isEndOfDayReviewDue(currentMinuteOfDay, endOfDayReviewMinute, startOfDayMinutes),
-      currentMinuteOfDay,
-    });
-    if (!catchUp) return;
-    /* The same bounded allowance today's review uses. A payload the native
-       layer drops, or one the surface defers behind a fullscreen app until it
-       goes stale, resolves as a successful show without ever reaching the
-       screen, so the attempt alone must not close yesterday for good. */
-    if (hasExhaustedEndOfDayReviewPresentations(catchUp.day)) return;
-    endOfDayReviewCatchUpAttemptedRef.current = true;
-
-    void (async () => {
-      const range = getLogicalDayRange(catchUp.day, catchUp.day, startOfDayMinutes);
-      let daySegments: ActivitySegment[] = [];
-      try {
-        daySegments = materializeBuiltInHeuristicTimeline(await trackerClient.getTimeline(range)).segments;
-      } catch {
-        /* No timeline means nothing to review; leave the slot open so the
-           next launch can try again. */
-        endOfDayReviewCatchUpAttemptedRef.current = false;
-        return;
-      }
-      if (sumEndOfDayReviewTrackedSeconds(daySegments) < END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS) {
-        persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
-        return;
-      }
-
-      let leaderboardCelebration: LeaderboardCelebration | undefined;
-      try {
-        if (classificationAssessmentReady && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
-          const checkpoint = await fetchOwnLeaderboardCheckpoint("daily", catchUp.day);
-          if (checkpoint?.success) {
-            leaderboardCelebration = toLeaderboardCelebration(checkpoint.data ?? null, "daily", catchUp.day) ?? undefined;
-          }
-        }
-      } catch {
-        leaderboardCelebration = undefined;
-      }
-
-      /* Loading yesterday can overlap the minute today's review becomes due.
-         Re-check the wall clock immediately before delivery so the stale
-         catch-up cannot race today's higher-priority card into the queue. */
-      const resolveCatchUpDeliveryPolicy = () => {
-        const deliveryPolicy = endOfDayReviewDeliveryPolicyRef.current;
-        const deliveryTime = new Date();
-        const deliveryMinuteOfDay = deliveryTime.getHours() * 60 + deliveryTime.getMinutes();
-        if (!deliveryPolicy.enabled
-          || deliveryMinuteOfDay < END_OF_DAY_REVIEW_CATCH_UP_EARLIEST_MINUTE
-          || deliveryPolicy.startOfDayMinutes !== startOfDayMinutes
-          || logicalDayIsoDateForDate(deliveryTime, deliveryPolicy.startOfDayMinutes) !== todayDay
-          || isEndOfDayReviewDue(
-            deliveryMinuteOfDay,
-            deliveryPolicy.reviewMinute,
-            deliveryPolicy.startOfDayMinutes,
-          )
-          || window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === catchUp.day
-          || readEndOfDayReviewCatchUpHandledDay() === catchUp.day
-          || readEndOfDayReviewLastPresentationDay() === todayDay
-          || hasExhaustedEndOfDayReviewPresentations(catchUp.day)) return null;
-        return { deliveryPolicy, deliveryTime };
-      };
-      if (!resolveCatchUpDeliveryPolicy()) return;
-
-      const event = await buildEndOfDayReviewEvent({
-        day: catchUp.day,
-        generatedAt: new Date().toISOString(),
-        segments: daySegments,
-        leaderboardCelebration,
-      });
-      /* Icon lookup is another async boundary. Today's review time or another
-         acknowledged review may win while it is in flight. */
-      const delivery = resolveCatchUpDeliveryPolicy();
-      if (!delivery) return;
-      const shown = await showEndOfDayReview({
-        ...event,
-        presentationDay: todayDay,
-        expiresAt: endOfDayReviewDeliveryDeadline(endOfDayReviewDeadlineForDay(
-          todayDay,
-          delivery.deliveryPolicy.reviewMinute,
-          delivery.deliveryPolicy.startOfDayMinutes,
-        ), delivery.deliveryTime),
-      });
-      if (shown) recordEndOfDayReviewPresentation(catchUp.day);
-      /* The native overlay acknowledges a real display and closes the slot from
-         there; the browser fallback renders into the visible main window, so a
-         successful show is already the display. Without the ledger above, an
-         acknowledgement that never arrives re-offered this card on every single
-         launch. */
-      if (shown && !isTauriRuntime()) {
-        persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
-        persistEndOfDayReviewLastPresentationDay(todayDay);
+      } finally {
+        window.localStorage.setItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, todayDay);
+        leaderboardCheckpointInFlightRef.current = false;
       }
     })();
-  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, dayReviewEnabled, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);
+  }, [classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, status?.running, syncLeaderboardPublication, todayDay]);
+
+  /* Day Review scheduling lives in one place (features/companion/dayReviewScheduler.ts).
+     The app only supplies the day's timeline, the user-presence probe, and the
+     card builder; the hook owns the clock, the window, and the per-day record. */
+  const loadDayReviewSegments = useCallback(async (day: string): Promise<ActivitySegment[]> => {
+    const range = getLogicalDayRange(day, day, startOfDayMinutes);
+    return materializeBuiltInHeuristicTimeline(await trackerClient.getTimeline(range)).segments;
+  }, [materializeBuiltInHeuristicTimeline, startOfDayMinutes]);
+
+  const readDayReviewUserActive = useCallback(async (): Promise<boolean> => {
+    try {
+      const current = await trackerClient.getStatus();
+      if (!current.running) return false;
+      if (current.trackerMode === "idle") return false;
+      return isDayReviewUserActive({
+        idleSeconds: current.idleSeconds,
+        idleDetectionAvailable: current.idleDetectionAvailable,
+      });
+    } catch {
+      /* An unreachable tracker is not evidence of absence; the card still
+         needs its display acknowledgement before the day closes. */
+      return true;
+    }
+  }, []);
+
+  const presentScheduledDayReview = useCallback(async (request: DayReviewPresentationRequest): Promise<DayReviewDeliveryResult> => {
+    let leaderboardCelebration: LeaderboardCelebration | undefined;
+    try {
+      if (classificationAssessmentReadyRef.current && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
+        const checkpoint = await fetchOwnLeaderboardCheckpoint("daily", request.day);
+        if (checkpoint?.success) {
+          leaderboardCelebration = toLeaderboardCelebration(checkpoint.data ?? null, "daily", request.day) ?? undefined;
+        }
+      }
+    } catch {
+      leaderboardCelebration = undefined;
+    }
+    const event = await buildEndOfDayReviewEvent({
+      day: request.day,
+      generatedAt: new Date().toISOString(),
+      segments: request.segments,
+      leaderboardCelebration,
+    });
+    return showEndOfDayReview({ ...event, presentationDay: request.day, expiresAt: request.expiresAt });
+  }, [buildEndOfDayReviewEvent, isPolicySignedIn, isSupabaseConfigured, showEndOfDayReview]);
+
+  useDayReviewScheduler({
+    active: END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED
+      && hasLoadedOnce
+      && !shouldBlockLocalTrackerAccess
+      && status?.running === true,
+    previewSurface: isPreviewSurface,
+    dayReviewEnabled,
+    reviewMinute: endOfDayReviewMinute,
+    startOfDayMinutes,
+    quietHours,
+    onboardingCompletedAt,
+    loadDaySegments: loadDayReviewSegments,
+    readUserActive: readDayReviewUserActive,
+    present: presentScheduledDayReview,
+  });
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
@@ -9784,6 +9626,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       driftAlarmDebugEvents: readRecentDriftAlarmDebugEvents(),
       interventionLedger: buildInterventionLedgerDebugInput(),
       contextualGuardAuditEvents: readContextualGuardAuditEvents(),
+      dayReview: readDayReviewDiagnostics({
+        now: new Date(),
+        reviewMinute: endOfDayReviewMinute,
+        startOfDayMinutes,
+      }),
       segments,
       historySegments,
       leaderboardSegments,
@@ -9830,7 +9677,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, deviceSyncAccountId, deviceSyncAccountResetPending, deviceSyncActive, deviceSyncEnabled, deviceSyncFeatureVisible, deviceSyncPreferenceOwnerId, deviceSyncStatus, deviceSyncUserScopeKey, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, historySegments, isCloudOnline, isPolicySignedIn, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedClassificationRoute, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, deviceSyncAccountId, deviceSyncAccountResetPending, deviceSyncActive, deviceSyncEnabled, deviceSyncFeatureVisible, deviceSyncPreferenceOwnerId, deviceSyncStatus, deviceSyncUserScopeKey, driftAlarmTrayStatus, effectiveEnhancedContextSettings, endOfDayReviewMinute, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, historySegments, isCloudOnline, isPolicySignedIn, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedClassificationRoute, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });

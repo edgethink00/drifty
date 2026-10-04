@@ -150,6 +150,7 @@ fn main() {
             "watcher_peek_cursor_inside",
             "watcher_peek_respond",
             "watcher_peek_end_of_day_review_action",
+            "watcher_peek_end_of_day_review_dropped",
             "watcher_peek_extreme_nudge_action",
             "watcher_companion_set_enabled",
             "watcher_companion_set_state",

@@ -44,6 +44,7 @@ vi.mock("./watcherBridge", () => ({
   setNativeWatcherInteractive: bridge.setNativeWatcherInteractive,
   triggerNativeEndOfDayReviewAction: bridge.triggerNativeEndOfDayReviewAction,
   notifyNativeEndOfDayReviewDisplayed: vi.fn().mockResolvedValue(undefined),
+  notifyNativeEndOfDayReviewDropped: vi.fn().mockResolvedValue(undefined),
   triggerNativeExtremeNudgeAction: bridge.triggerNativeExtremeNudgeAction,
 }));
 

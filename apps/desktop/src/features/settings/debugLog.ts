@@ -5,6 +5,7 @@ import type { BillingEntitlement } from "../billing/billingService";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "../classification/aiClassificationService";
 import type { ContentContextDropReason } from "../classification/contentContextEgressPolicy";
 import type { ContextualGuardAuditEvent } from "../classification/contextualGuardAuditLog";
+import type { DayReviewDiagnostics } from "../companion/dayReviewScheduler";
 import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
 import type { InterventionLedgerEntry, InterventionLedgerSummary } from "../companion/interventionLedger";
 import { getDeviceSyncNextAutomaticAttemptAt, type DeviceSyncCycleRecord } from "../device-sync/deviceSyncState";
@@ -252,6 +253,7 @@ type BuildDebugLogPayloadInput = {
   readonly leaderboardSegments: readonly ActivitySegment[];
   readonly ai: AiDebugLogInput;
   readonly deviceSync?: DeviceSyncDebugInput;
+  readonly dayReview?: DayReviewDiagnostics | null;
   readonly error: string | null;
 };
 
@@ -401,6 +403,7 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
     },
     enhancedContext,
     deviceSync: buildDeviceSyncDebugSummary(input.deviceSync),
+    dayReview: input.dayReview ?? null,
     ai: buildAiDebugSummary(input.ai),
     counts: {
       todaySegments: input.segments.length,

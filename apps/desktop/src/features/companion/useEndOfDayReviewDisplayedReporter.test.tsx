@@ -5,18 +5,16 @@ import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import {
   END_OF_DAY_REVIEW_DISPLAY_DWELL_MS,
   reportEndOfDayReviewInteraction,
+  reportEndOfDayReviewUnseen,
   useEndOfDayReviewDisplayedReporter,
 } from "./useEndOfDayReviewDisplayedReporter";
-import { notifyNativeEndOfDayReviewDisplayed } from "./watcherBridge";
-import { END_OF_DAY_REVIEW_STORAGE_KEY } from "./endOfDayReviewData";
-import {
-  END_OF_DAY_REVIEW_CATCH_UP_STORAGE_KEY,
-  END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY,
-} from "./endOfDayReviewSchedule";
+import { notifyNativeEndOfDayReviewDisplayed, notifyNativeEndOfDayReviewDropped } from "./watcherBridge";
+import { readDayReviewRecord } from "./dayReviewScheduler";
 
 vi.mock("./watcherBridge", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./watcherBridge")>()),
   notifyNativeEndOfDayReviewDisplayed: vi.fn().mockResolvedValue(undefined),
+  notifyNativeEndOfDayReviewDropped: vi.fn().mockResolvedValue(undefined),
 }));
 
 function buildReviewEvent(overrides: Partial<EndOfDayReviewEvent> = {}): EndOfDayReviewEvent {
@@ -159,9 +157,7 @@ describe("useEndOfDayReviewDisplayedReporter", () => {
     });
 
     expect(notifyNativeEndOfDayReviewDisplayed).toHaveBeenCalledWith("2026-08-18", "2026-08-19");
-    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY)).toBe("2026-08-18");
-    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY))
-      .toBe("2026-08-19");
+    expect(readDayReviewRecord("2026-08-18")).toMatchObject({ status: "acknowledged" });
   });
 });
 
@@ -198,12 +194,25 @@ describe("reportEndOfDayReviewInteraction", () => {
       presentationDay: "2026-08-20",
     }));
 
-    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY)).toBe("2026-08-19");
-    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_CATCH_UP_STORAGE_KEY)).toBe("2026-08-19");
-    expect(window.localStorage.getItem(END_OF_DAY_REVIEW_LAST_PRESENTATION_DAY_STORAGE_KEY)).toBe("2026-08-20");
+    expect(readDayReviewRecord("2026-08-19")).toMatchObject({ status: "acknowledged" });
 
     resolveNative?.();
     await reporting;
     vi.useRealTimers();
+  });
+});
+
+describe("reportEndOfDayReviewUnseen", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reports a real review the surface consumed unseen, and nothing else", () => {
+    reportEndOfDayReviewUnseen(buildReviewEvent());
+    expect(notifyNativeEndOfDayReviewDropped).toHaveBeenCalledWith("2026-08-18", "expired_unseen");
+    reportEndOfDayReviewUnseen(buildReviewEvent({ isMock: true }));
+    reportEndOfDayReviewUnseen({ kind: "milestone" } as never);
+    reportEndOfDayReviewUnseen(null);
+    expect(notifyNativeEndOfDayReviewDropped).toHaveBeenCalledTimes(1);
   });
 });

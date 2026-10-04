@@ -144,6 +144,31 @@ pub struct CompanionSetStateResult {
     menu_anchor_x: Option<f64>,
 }
 
+/// What became of a `watcher_peek_show` payload. The scheduler that produced
+/// a Day Review needs to know whether the card reached a surface at all; a
+/// bare `Ok(())` for a dropped payload used to read as a successful show.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WatcherPeekDelivery {
+    Delivered,
+    DroppedExpired,
+    DroppedSurfaceDisabled,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatcherPeekShowResult {
+    delivery: WatcherPeekDelivery,
+}
+
+impl WatcherPeekShowResult {
+    fn delivered() -> Self {
+        Self {
+            delivery: WatcherPeekDelivery::Delivered,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct MenuBarCompanionPlacement {
     window_position: LogicalPosition<f64>,
@@ -313,9 +338,11 @@ pub fn setup_companion_pill_window(app: &tauri::App) -> tauri::Result<()> {
 }
 
 #[tauri::command]
-pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), String> {
+pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<WatcherPeekShowResult, String> {
     if payload_expired(&payload, chrono::Utc::now().timestamp_millis()) {
-        return Ok(());
+        return Ok(WatcherPeekShowResult {
+            delivery: WatcherPeekDelivery::DroppedExpired,
+        });
     }
     let companion_enabled = companion_pill_enabled();
     /* Day Review has one product renderer. The public UI's "off" preference
@@ -324,7 +351,9 @@ pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), Strin
     if is_end_of_day_review_payload(&payload)
         && !should_route_day_review_to_companion(&payload, companion_enabled)
     {
-        return Ok(());
+        return Ok(WatcherPeekShowResult {
+            delivery: WatcherPeekDelivery::DroppedSurfaceDisabled,
+        });
     }
     if companion_enabled {
         if is_companion_moment_payload(&payload) {
@@ -344,7 +373,7 @@ pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), Strin
         window
             .emit("watcher-peek-show", payload)
             .map_err(|error| error.to_string())?;
-        return Ok(());
+        return Ok(WatcherPeekShowResult::delivered());
     }
     MOMENT_LIFECYCLE
         .lock()
@@ -367,10 +396,16 @@ pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), Strin
         .emit("watcher-peek-show", payload)
         .map_err(|error| error.to_string())?;
     #[cfg(target_os = "windows")]
-    return show_windows_overlay(&window);
+    {
+        show_windows_overlay(&window)?;
+        return Ok(WatcherPeekShowResult::delivered());
+    }
 
     #[cfg(not(target_os = "windows"))]
-    window.show().map_err(|error| error.to_string())
+    {
+        window.show().map_err(|error| error.to_string())?;
+        Ok(WatcherPeekShowResult::delivered())
+    }
 }
 
 #[tauri::command]
@@ -943,20 +978,10 @@ pub fn watcher_peek_end_of_day_review_displayed(
     day: String,
     presentation_day: String,
 ) -> Result<(), String> {
-    let valid_day = |value: &str| {
-        value.len() == 10
-            && value.chars().enumerate().all(|(index, ch)| {
-                if index == 4 || index == 7 {
-                    ch == '-'
-                } else {
-                    ch.is_ascii_digit()
-                }
-            })
-    };
-    if !valid_day(&day) {
+    if !is_iso_day(&day) {
         return Err(format!("invalid day format: {day}"));
     }
-    if !valid_day(&presentation_day) {
+    if !is_iso_day(&presentation_day) {
         return Err(format!(
             "invalid presentation day format: {presentation_day}"
         ));
@@ -969,6 +994,43 @@ pub fn watcher_peek_end_of_day_review_displayed(
         .map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+/// The Companion consumed a Day Review without showing it (it expired in a
+/// queue, behind a fullscreen app, or across a sleep). The scheduler in the
+/// main window rebuilds that day's card once; without this report the day
+/// would wait for a display acknowledgement that can never arrive.
+#[tauri::command]
+pub fn watcher_peek_end_of_day_review_dropped(
+    app: AppHandle,
+    day: String,
+    reason: String,
+) -> Result<(), String> {
+    if !is_iso_day(&day) {
+        return Err(format!("invalid day format: {day}"));
+    }
+    if reason != "expired_unseen" {
+        return Err(format!("unsupported drop reason: {reason}"));
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        main.emit(
+            "end-of-day-review-dropped",
+            serde_json::json!({ "day": day, "reason": reason }),
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn is_iso_day(value: &str) -> bool {
+    value.len() == 10
+        && value.chars().enumerate().all(|(index, ch)| {
+            if index == 4 || index == 7 {
+                ch == '-'
+            } else {
+                ch.is_ascii_digit()
+            }
+        })
 }
 
 fn position_watcher_window(app: &AppHandle, payload: &Value) -> Result<(), String> {

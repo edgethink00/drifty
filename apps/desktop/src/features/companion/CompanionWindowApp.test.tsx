@@ -25,6 +25,7 @@ const bridge = vi.hoisted(() => ({
   setNativeCompanionPillState: vi.fn().mockResolvedValue({ prepared: false, menuAnchorX: null }),
   presentPreparedNativeCompanionMoment: vi.fn().mockResolvedValue(undefined),
   notifyNativeEndOfDayReviewDisplayed: vi.fn().mockResolvedValue(undefined),
+  notifyNativeEndOfDayReviewDropped: vi.fn().mockResolvedValue(undefined),
   setNativeCompanionClickThrough: vi.fn().mockResolvedValue(undefined),
   triggerNativeEndOfDayReviewAction: vi.fn().mockResolvedValue(undefined),
   triggerNativeCompanionVisibilityAction: vi.fn().mockResolvedValue(undefined),
@@ -104,6 +105,7 @@ vi.mock("./watcherBridge", () => ({
   setNativeCompanionClickThrough: bridge.setNativeCompanionClickThrough,
   triggerNativeEndOfDayReviewAction: bridge.triggerNativeEndOfDayReviewAction,
   notifyNativeEndOfDayReviewDisplayed: bridge.notifyNativeEndOfDayReviewDisplayed,
+  notifyNativeEndOfDayReviewDropped: bridge.notifyNativeEndOfDayReviewDropped,
   triggerNativeCompanionVisibilityAction: bridge.triggerNativeCompanionVisibilityAction,
   triggerNativeExtremeNudgeAction: bridge.triggerNativeExtremeNudgeAction,
 }));
@@ -1032,7 +1034,7 @@ describe("CompanionWindowApp", () => {
     expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("collapsed");
   });
 
-  it("expires a fullscreen-deferred catch-up at today's review deadline", async () => {
+  it("expires a fullscreen-deferred Day Review at its producer deadline and reports it unseen", async () => {
     vi.useFakeTimers();
     const generatedAt = Date.now();
     informationalSuppression.suppressed = true;
@@ -1052,6 +1054,7 @@ describe("CompanionWindowApp", () => {
 
     expect(container.textContent).not.toContain("Day review");
     expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("collapsed");
+    expect(bridge.notifyNativeEndOfDayReviewDropped).toHaveBeenCalledWith("2026-08-03", "expired_unseen");
   });
 
   it("waits for the day-review display acknowledgement before an explicit close", async () => {

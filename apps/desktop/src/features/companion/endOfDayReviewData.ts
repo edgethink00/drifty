@@ -16,6 +16,7 @@ export type EndOfDayReviewSummaryInput = {
   isMock?: boolean;
 };
 
+/** v1 acknowledgement key; `dayReviewScheduler.ts` migrates it into the v2 record. */
 export const END_OF_DAY_REVIEW_STORAGE_KEY = "drifty.endOfDayReview.lastShownDate";
 
 export const END_OF_DAY_REVIEW_TRIGGER_MINUTE = DAILY_LEADERBOARD_CHECKPOINT_MINUTE;
@@ -28,18 +29,11 @@ export const END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY =
  * telling the user their day was empty, with a ring, top apps and signals
  * that are all noise. The automatic card waits until the day has enough
  * tracked time to say anything honest about, then fires at the moment the
- * day crosses the bar (from the evening trigger minute until midnight).
- * Days that never cross it are skipped silently — the
- * dashboard remains the place to look at them.
+ * day crosses the bar inside the review window (see dayReviewScheduler.ts).
+ * Days that never cross it are skipped silently — the dashboard remains the
+ * place to look at them.
  */
 export const END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS = 3 * 60 * 60;
-
-/**
- * When a presentation went out but no display was ever confirmed (the
- * machine slept through it), wait before building another one so a sleeping
- * machine does not churn a fresh event every minute.
- */
-export const END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS = 15 * 60 * 1000;
 
 export function sumEndOfDayReviewTrackedSeconds(segments: readonly ActivitySegment[]): number {
   // Imported history reconstructs the dashboard, but it was not observed by

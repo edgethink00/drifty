@@ -30,7 +30,7 @@ import {
   buildCompanionExtremeNudgePreview,
   buildCompanionMilestonePreview,
 } from "./companionPillPreview";
-import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
+import { reportEndOfDayReviewInteraction, reportEndOfDayReviewUnseen, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
 import { companionMomentDeadlineMs, isCompanionMomentStale } from "./companionMomentFreshness";
 import { companionEventIdentity as companionMomentIdentity } from "./companionEventIdentity";
 import { recordCompanionLifecycle } from "./companionLifecycleLog";
@@ -104,6 +104,7 @@ export function CompanionWindowApp() {
   const activateMoment = useCallback((nextMoment: CompanionPillMomentEvent | null) => {
     if (nextMoment && isCompanionMomentStale(nextMoment)) {
       recordCompanionLifecycle("expired_before_activation", companionMomentIdentity(nextMoment));
+      reportEndOfDayReviewUnseen(nextMoment);
       return;
     }
     if (nextMoment && companionMomentIdentity(nextMoment) !== (momentEventRef.current && companionMomentIdentity(momentEventRef.current))) {
@@ -191,7 +192,11 @@ export function CompanionWindowApp() {
       const suppressed = isInformationalMomentSuppressedNow();
       const remaining: CompanionPillMomentEvent[] = [];
       for (const event of deferredInformationalRef.current) {
-        if (isCompanionMomentStale(event)) continue;
+        if (isCompanionMomentStale(event)) {
+          recordCompanionLifecycle("expired_while_deferred", companionMomentIdentity(event));
+          reportEndOfDayReviewUnseen(event);
+          continue;
+        }
         if (suppressed) {
           remaining.push(event);
           continue;
@@ -215,6 +220,7 @@ export function CompanionWindowApp() {
   const enqueueMoment = useCallback((nextMoment: CompanionPillMomentEvent) => {
     if (isCompanionMomentStale(nextMoment)) {
       recordCompanionLifecycle("expired_on_receipt", companionMomentIdentity(nextMoment));
+      reportEndOfDayReviewUnseen(nextMoment);
       return;
     }
     /* The Day Review slot spans every place a card can wait. In particular, a
@@ -232,7 +238,10 @@ export function CompanionWindowApp() {
     }
     /* Never queue what is already stale; it would flash for a frame before
        the pill's own freshness check consumed it. */
-    if (isCompanionMomentStale(nextMoment)) return;
+    if (isCompanionMomentStale(nextMoment)) {
+      reportEndOfDayReviewUnseen(nextMoment);
+      return;
+    }
     /* Keep the cache honest for the next read, then decide on the last known
        state so the show path stays synchronous. */
     void refreshInformationalMomentSuppression();
@@ -266,6 +275,7 @@ export function CompanionWindowApp() {
       let next = momentQueueRef.current.shift();
       while (next && isCompanionMomentStale(next)) {
         recordCompanionLifecycle("expired_in_queue", companionMomentIdentity(next));
+        reportEndOfDayReviewUnseen(next);
         next = momentQueueRef.current.shift();
       }
       activateMoment(next ?? null);
@@ -492,6 +502,7 @@ export function CompanionWindowApp() {
     const expiresAtMs = requested ? companionMomentDeadlineMs(requested) : null;
     const requestId = ++stateRequestRef.current;
     if (requested && isCompanionMomentStale(requested)) {
+      reportEndOfDayReviewUnseen(requested);
       finishCurrentMoment(requestedKey);
       return;
     }
@@ -505,6 +516,7 @@ export function CompanionWindowApp() {
         || companionMomentIdentity(current) !== requestedKey || companionMomentState(current) !== state) return;
       if (isCompanionMomentStale(current)) {
         recordCompanionLifecycle("expired_after_prepare", requestedKey);
+        reportEndOfDayReviewUnseen(current);
         finishCurrentMoment(requestedKey);
         return;
       }
@@ -558,6 +570,7 @@ export function CompanionWindowApp() {
       if (!current || companionMomentIdentity(current) !== preparedKey) return;
       if (isCompanionMomentStale(current)) {
         recordCompanionLifecycle("expired_before_present", preparedKey);
+        reportEndOfDayReviewUnseen(current);
         finishCurrentMoment(preparedKey);
         return;
       }
@@ -565,6 +578,7 @@ export function CompanionWindowApp() {
         if (cancelled || !preparedKey) return;
         if (shown === false) {
           recordCompanionLifecycle("presentation_rejected", preparedKey);
+          reportEndOfDayReviewUnseen(current);
           finishCurrentMoment(preparedKey);
           return;
         }

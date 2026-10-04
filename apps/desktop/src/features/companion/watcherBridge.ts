@@ -33,6 +33,8 @@ export type EndOfDayReviewAction =
   | "openLeaderboard"
   | "openTrends";
 export type CompanionVisibilityAction = "hideOneHour" | "turnOff";
+export type NativeWatcherPeekDelivery = "delivered" | "dropped_expired" | "dropped_surface_disabled";
+export type NativeEndOfDayReviewDropReason = "expired_unseen";
 export type CompanionPillDriftAlarmPayload = {
   kind: "companionDriftAlarm";
   alarm: DriftAlarmEvent;
@@ -67,10 +69,17 @@ export async function showNativeWatcherPeek(event: WatcherPeekEvent): Promise<bo
   return true;
 }
 
-export async function showNativeEndOfDayReview(event: EndOfDayReviewEvent): Promise<boolean> {
-  if (!isTauriRuntime()) return false;
-  await invoke("watcher_peek_show", { payload: event });
-  return true;
+/**
+ * Hands a Day Review to the native surface and reports what became of it. An
+ * older native build answers with no body; that is treated as delivered, the
+ * only outcome it could report.
+ */
+export async function showNativeEndOfDayReview(event: EndOfDayReviewEvent): Promise<NativeWatcherPeekDelivery | null> {
+  if (!isTauriRuntime()) return null;
+  const result = await invoke<{ delivery?: unknown } | null | undefined>("watcher_peek_show", { payload: event });
+  const delivery = result?.delivery;
+  if (delivery === "dropped_expired" || delivery === "dropped_surface_disabled") return delivery;
+  return "delivered";
 }
 
 export async function showNativeExtremeNudgeToast(event: ExtremeNudgeToastEvent): Promise<boolean> {
@@ -224,6 +233,15 @@ export async function notifyNativeEndOfDayReviewDisplayed(
   await invoke("watcher_peek_end_of_day_review_displayed", { day, presentationDay });
 }
 
+/** The Companion consumed a deferred Day Review unseen; the scheduler may rebuild it once. */
+export async function notifyNativeEndOfDayReviewDropped(
+  day: string,
+  reason: NativeEndOfDayReviewDropReason,
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("watcher_peek_end_of_day_review_dropped", { day, reason });
+}
+
 export async function triggerNativeCompanionVisibilityAction(
   action: CompanionVisibilityAction,
 ): Promise<void> {
@@ -322,6 +340,17 @@ export async function listenToNativeEndOfDayReviewDisplayed(
         payload.day,
         typeof payload.presentationDay === "string" ? payload.presentationDay : undefined,
       );
+    }
+  });
+}
+
+export async function listenToNativeEndOfDayReviewDropped(
+  onDropped: (day: string, reason: NativeEndOfDayReviewDropReason) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<{ day?: unknown; reason?: unknown }>("end-of-day-review-dropped", ({ payload }) => {
+    if (typeof payload?.day === "string" && payload.reason === "expired_unseen") {
+      onDropped(payload.day, payload.reason);
     }
   });
 }

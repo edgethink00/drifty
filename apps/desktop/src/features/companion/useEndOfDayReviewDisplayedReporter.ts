@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
+import type { CompanionPillMomentEvent } from "./CompanionPillMoment";
 import { isCompanionMomentAgedOut, isCompanionMomentStale } from "./companionMomentFreshness";
-import { persistEndOfDayReviewAcknowledgement } from "./endOfDayReviewSchedule";
-import { notifyNativeEndOfDayReviewDisplayed } from "./watcherBridge";
+import { acknowledgeDayReview } from "./dayReviewScheduler";
+import { notifyNativeEndOfDayReviewDisplayed, notifyNativeEndOfDayReviewDropped } from "./watcherBridge";
 
 /**
  * The once-a-day review slot must be earned by an actual display, not by the
@@ -33,7 +34,7 @@ function reviewPresentationDay(event: EndOfDayReviewEvent): string {
 }
 
 function persistDisplayedReview(event: EndOfDayReviewEvent): void {
-  persistEndOfDayReviewAcknowledgement(event.day, reviewPresentationDay(event));
+  acknowledgeDayReview(event.day, new Date().toISOString());
 }
 
 /**
@@ -114,4 +115,15 @@ export async function reportEndOfDayReviewInteraction(
     // Closing the surface must remain available even if the native bridge is
     // shutting down; the bounded presentation ledger remains the fallback.
   }
+}
+
+/**
+ * The surface consumed a Day Review without ever showing it (it expired in a
+ * queue, behind a fullscreen app, or across a sleep). The scheduler in the
+ * main window may rebuild that day's card once; a card that was already
+ * acknowledged is unaffected because the record no longer waits for it.
+ */
+export function reportEndOfDayReviewUnseen(event: CompanionPillMomentEvent | null | undefined): void {
+  if (!event || event.kind !== "endOfDayReview" || event.isMock) return;
+  void notifyNativeEndOfDayReviewDropped(event.day, "expired_unseen").catch(() => undefined);
 }
