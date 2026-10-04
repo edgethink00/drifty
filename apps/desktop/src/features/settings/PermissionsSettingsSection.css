@@ -22,6 +22,12 @@
   min-width: 18rem;
 }
 
+/* A row with only an action (Notifications) keeps its button in the action
+   column so it lines up with the status rows above it. */
+.settings-permission-control--action-only > .settings-btn {
+  grid-column: 2;
+}
+
 .settings-permission-status {
   color: var(--text-soft);
   font-family: var(--font-mono);

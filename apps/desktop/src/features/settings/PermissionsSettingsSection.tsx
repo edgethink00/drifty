@@ -2,24 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useLocalization } from "../localization/LocalizationContext";
 import { useSafariHistoryPermission } from "../onboarding/useSafariHistoryPermission";
-import { accessibilityClient } from "../../lib/api/accessibilityClient";
+import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import {
   openFullDiskAccessSettingsPane,
   openSystemSettingsPane,
 } from "../../lib/api/systemSettingsClient";
 import "./PermissionsSettingsSection.css";
 
-type NotificationPermissionState =
-  | "checking"
-  | "granted"
-  | "denied"
-  | "notDetermined"
-  | "unavailable"
-  | "error";
-
 type PermissionsSettingsSectionProps = {
   readonly accessibilityGranted: boolean;
   readonly accessibilityRequired: boolean;
+  /** The app's host platform, corrected by the native permission response. */
+  readonly hostPlatform?: HostPlatform;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
 };
@@ -31,6 +25,7 @@ function isDesktopRuntime() {
 export function PermissionsSettingsSection({
   accessibilityGranted,
   accessibilityRequired,
+  hostPlatform = "macos",
   onCheckAccessibility,
   onRequestAccessibility,
 }: PermissionsSettingsSectionProps) {
@@ -41,10 +36,8 @@ export function PermissionsSettingsSection({
   const onRequestAccessibilityRef = useRef(onRequestAccessibility);
   const [accessibilityChecking, setAccessibilityChecking] = useState(desktopRuntime);
   const [accessibilityError, setAccessibilityError] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>(
-    desktopRuntime ? "checking" : "unavailable",
-  );
-  const [notificationError, setNotificationError] = useState(false);
+  const [notificationSettingsError, setNotificationSettingsError] = useState(false);
+  const windowsHost = hostPlatform === "windows";
 
   useEffect(() => {
     onCheckAccessibilityRef.current = onCheckAccessibility;
@@ -70,39 +63,14 @@ export function PermissionsSettingsSection({
     }
   }, []);
 
-  const refreshNotificationPermission = useCallback(async () => {
-    if (!isDesktopRuntime()) {
-      setNotificationPermission("unavailable");
-      return;
-    }
-    setNotificationPermission((current) => current === "denied" ? current : "checking");
-    setNotificationError(false);
-    try {
-      const { isPermissionGranted } = await import("@tauri-apps/plugin-notification");
-      if (await isPermissionGranted()) {
-        setNotificationPermission("granted");
-        return;
-      }
-      const browserPermission = typeof Notification === "undefined" ? "default" : Notification.permission;
-      setNotificationPermission((current) => (
-        browserPermission === "denied" || current === "denied" ? "denied" : "notDetermined"
-      ));
-    } catch {
-      setNotificationPermission("error");
-      setNotificationError(true);
-    }
-  }, []);
-
   useEffect(() => {
     void refreshAccessibility();
-    void refreshNotificationPermission();
     function handleFocus() {
       void refreshAccessibility();
-      void refreshNotificationPermission();
     }
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [refreshAccessibility, refreshNotificationPermission]);
+  }, [refreshAccessibility]);
 
   async function handleAccessibilityAction() {
     if (!desktopRuntime) return;
@@ -121,29 +89,17 @@ export function PermissionsSettingsSection({
     }
   }
 
-  async function handleNotificationAction() {
+  // macOS and Windows deliver Drifty notifications without a permission prompt,
+  // and the desktop notification plugin (2.3.x) answers "granted" without asking
+  // the OS. A status here could not reflect a user who turned notifications off,
+  // so the row explains the default and opens the OS notification settings.
+  async function openNotificationSettings() {
     if (!desktopRuntime) return;
-    setNotificationError(false);
-    if (notificationPermission === "error") {
-      await refreshNotificationPermission();
-      return;
-    }
-    if (notificationPermission === "granted" || notificationPermission === "denied") {
-      try {
-        await openSystemSettingsPane("notifications");
-      } catch {
-        setNotificationError(true);
-      }
-      return;
-    }
-    setNotificationPermission("checking");
+    setNotificationSettingsError(false);
     try {
-      const { requestPermission } = await import("@tauri-apps/plugin-notification");
-      const permission = await requestPermission();
-      setNotificationPermission(permission === "granted" ? "granted" : "denied");
+      await openSystemSettingsPane("notifications");
     } catch {
-      setNotificationPermission("error");
-      setNotificationError(true);
+      setNotificationSettingsError(true);
     }
   }
 
@@ -152,15 +108,6 @@ export function PermissionsSettingsSection({
     if (accessibilityChecking) return t("settings.permissions.checking");
     if (accessibilityError) return t("settings.permissions.checkFailedStatus");
     return accessibilityGranted ? t("common.enabled") : t("settings.permissions.notEnabled");
-  }
-
-  function notificationStatus() {
-    if (notificationPermission === "checking") return t("settings.permissions.checking");
-    if (notificationPermission === "granted") return t("common.enabled");
-    if (notificationPermission === "denied") return t("settings.permissions.notEnabled");
-    if (notificationPermission === "notDetermined") return t("settings.permissions.notEnabled");
-    if (notificationPermission === "error") return t("settings.permissions.checkFailedStatus");
-    return t("settings.permissions.macAppOnly");
   }
 
   function accessibilityActionLabel() {
@@ -173,19 +120,9 @@ export function PermissionsSettingsSection({
 
   // The button opens the host's own settings app, so name the one it opens.
   function openSettingsLabelKey() {
-    return accessibilityClient.detectHostPlatform() === "windows"
+    return windowsHost
       ? "settings.permissions.openSystemSettingsWindows"
       : "settings.permissions.openSystemSettings";
-  }
-
-  function notificationActionLabel() {
-    if (notificationPermission === "unavailable") return t("settings.permissions.unavailableAction");
-    if (notificationPermission === "checking") return t("settings.permissions.checking");
-    if (notificationPermission === "granted" || notificationPermission === "denied") {
-      return t(openSettingsLabelKey());
-    }
-    if (notificationPermission === "error") return t("settings.permissions.checkAgain");
-    return t("settings.permissions.allowNotifications");
   }
 
   const accessibilityTone = !desktopRuntime
@@ -195,13 +132,6 @@ export function PermissionsSettingsSection({
       : accessibilityError
         ? "error"
         : "required";
-  const notificationTone = notificationPermission === "granted"
-    ? "success"
-    : notificationPermission === "error"
-      ? "error"
-      : notificationPermission === "unavailable"
-        ? "unavailable"
-        : "neutral";
 
   // Rendered as the last block of Settings > General, not as its own page:
   // two or three status rows (one on Windows) did not justify a sidebar tab.
@@ -243,22 +173,28 @@ export function PermissionsSettingsSection({
             <div className="lbl">{t("settings.permissions.notifications")}</div>
             <span className="ui-badge settings-permission-requirement">{t("common.recommended")}</span>
           </div>
-          <div className="desc">{t("settings.permissions.notificationsDescription")}</div>
-          {notificationError ? (
-            <div className="settings-permission-error" role="alert">{t("settings.permissions.checkFailed")}</div>
+          <div className="desc">{t(windowsHost
+            ? "settings.permissions.notificationsDescriptionWindows"
+            : "settings.permissions.notificationsDescription")}</div>
+          {notificationSettingsError ? (
+            <div className="settings-permission-error" role="alert">{t("settings.permissions.openFailed")}</div>
           ) : null}
         </div>
-        <div className="ctrl settings-permission-control">
-          <span className="settings-permission-status" data-tone={notificationTone} aria-live="polite">
-            {notificationStatus()}
-          </span>
+        {/* No status column on desktop: there is no OS permission to report.
+            The button stays in the action column so it lines up with the rows above. */}
+        <div className={`ctrl settings-permission-control${desktopRuntime ? " settings-permission-control--action-only" : ""}`}>
+          {desktopRuntime ? null : (
+            <span className="settings-permission-status" data-tone="unavailable">
+              {t("settings.permissions.macAppOnly")}
+            </span>
+          )}
           <button
             type="button"
             className="settings-btn"
-            disabled={notificationPermission === "unavailable" || notificationPermission === "checking"}
-            onClick={() => void handleNotificationAction()}
+            disabled={!desktopRuntime}
+            onClick={() => void openNotificationSettings()}
           >
-            {notificationActionLabel()}
+            {desktopRuntime ? t(openSettingsLabelKey()) : t("settings.permissions.unavailableAction")}
           </button>
         </div>
       </div>

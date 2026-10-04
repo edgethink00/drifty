@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PermissionsSettingsSection } from "./PermissionsSettingsSection";
@@ -62,27 +62,27 @@ describe("PermissionsSettingsSection", () => {
     vi.unstubAllEnvs();
   });
 
-  it("names Windows Settings for a denied notification permission on Windows", async () => {
+  it("offers Windows Settings as the notification shortcut on Windows", async () => {
     vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "windows");
-    requestPermission.mockResolvedValueOnce("denied");
 
     render(
       <PermissionsSettingsSection
         accessibilityGranted
         accessibilityRequired={false}
+        hostPlatform="windows"
         onCheckAccessibility={vi.fn().mockResolvedValue(true)}
         onRequestAccessibility={vi.fn().mockResolvedValue(true)}
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /^Allow notifications$/ }));
     const settingsButton = await screen.findByRole("button", { name: /^Open Windows Settings$/ });
     expect(screen.queryByRole("button", { name: /^Open System Settings$/ })).toBeNull();
+    expect(screen.getByText(/Windows allows Drifty notifications by default/)).toBeTruthy();
     fireEvent.click(settingsButton);
     await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
   });
 
-  it("requests OS permissions without changing notification feature preferences", async () => {
+  it("requests Accessibility but never reports a notification status it cannot read", async () => {
     const onCheckAccessibility = vi.fn().mockResolvedValue(false);
     const onRequestAccessibility = vi.fn().mockResolvedValue(false);
 
@@ -99,10 +99,14 @@ describe("PermissionsSettingsSection", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^Allow Accessibility$/ }));
     await waitFor(() => expect(onRequestAccessibility).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(await screen.findByRole("button", { name: /^Allow notifications$/ }));
-    await waitFor(() => expect(requestPermission).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(/^Enabled$/)).toBeTruthy();
-    expect(openSystemSettingsPane).not.toHaveBeenCalledWith("notifications");
+    // The desktop notification plugin answers "granted" without asking the OS,
+    // so the row neither asks it nor shows Enabled/Not enabled.
+    const notificationRow = screen.getByText("Notifications").closest(".settings-permission-row");
+    expect(notificationRow?.querySelector(".settings-permission-status")).toBeNull();
+    expect(notificationRow?.textContent).toContain("macOS allows Drifty notifications by default");
+    expect(isPermissionGranted).not.toHaveBeenCalled();
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /^Allow notifications$/ })).toBeNull();
   });
 
   it("opens System Settings for an already granted permission and refreshes on focus", async () => {
@@ -117,8 +121,9 @@ describe("PermissionsSettingsSection", () => {
       />,
     );
 
-    const accessibilitySettingsButtons = await screen.findAllByRole("button", { name: /^Open System Settings$/ });
-    fireEvent.click(accessibilitySettingsButtons[0]);
+    const accessibilityRow = screen.getByText("Accessibility").closest(".settings-permission-row");
+    if (!(accessibilityRow instanceof HTMLElement)) throw new Error("accessibility row missing");
+    fireEvent.click(await within(accessibilityRow).findByRole("button", { name: /^Open System Settings$/ }));
     await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("accessibility"));
 
     onCheckAccessibility.mockClear();
@@ -126,25 +131,23 @@ describe("PermissionsSettingsSection", () => {
     await waitFor(() => expect(onCheckAccessibility).toHaveBeenCalledTimes(1));
   });
 
-  it("keeps a denied notification permission routed to System Settings after focus refresh", async () => {
-    requestPermission.mockResolvedValueOnce("denied");
+  it("opens notification settings directly and reports when the settings app cannot open", async () => {
+    openSystemSettingsPane.mockRejectedValueOnce(new Error("pane unavailable"));
 
     render(
       <PermissionsSettingsSection
-        accessibilityGranted={false}
+        accessibilityGranted
         accessibilityRequired
-        onCheckAccessibility={vi.fn().mockResolvedValue(false)}
-        onRequestAccessibility={vi.fn().mockResolvedValue(false)}
+        onCheckAccessibility={vi.fn().mockResolvedValue(true)}
+        onRequestAccessibility={vi.fn().mockResolvedValue(true)}
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /^Allow notifications$/ }));
-    expect(await screen.findByRole("button", { name: /^Open System Settings$/ })).toBeTruthy();
-
-    fireEvent.focus(window);
-    const notificationSettingsButton = await screen.findByRole("button", { name: /^Open System Settings$/ });
-    fireEvent.click(notificationSettingsButton);
+    const notificationRow = screen.getByText("Notifications").closest(".settings-permission-row");
+    if (!(notificationRow instanceof HTMLElement)) throw new Error("notification row missing");
+    fireEvent.click(within(notificationRow).getByRole("button", { name: /^Open System Settings$/ }));
     await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
+    expect((await within(notificationRow).findByRole("alert")).textContent).toContain("couldn't open the settings app");
   });
 
   it("shows Safari history only when the environment probe qualifies it", async () => {

@@ -10845,6 +10845,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                       <PermissionsSettingsSection
                         accessibilityGranted={accessibilityGranted}
                         accessibilityRequired={accessibilityRequired}
+                        hostPlatform={hostPlatform}
                         onCheckAccessibility={handleCheckAccessibility}
                         onRequestAccessibility={handleRequestAccessibility}
                       />
