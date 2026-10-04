@@ -2641,6 +2641,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const trackerStopInFlightRef = useRef(false);
   const lastFullDayRefreshAtRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
+  const historyLoadMoreRequestRef = useRef(0);
   const historySearchRequestRef = useRef(0);
   const dashboardRefreshInputsRef = useRef<DashboardRefreshInputs | null>(null);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
@@ -4405,6 +4406,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (historyLoadingMore || !historyHasMoreSegments || historyNextCursor === null || historySegmentsLoadedRange === null) return;
 
     const requestId = historyRefreshRequestRef.current;
+    const loadMoreRequestId = ++historyLoadMoreRequestRef.current;
     setHistoryLoadingMore(true);
     setHistoryLoadMoreError(null);
 
@@ -4435,7 +4437,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (historyRefreshRequestRef.current !== requestId) return;
       setHistoryLoadMoreError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
     } finally {
-      if (historyRefreshRequestRef.current === requestId) {
+      if (historyLoadMoreRequestRef.current === loadMoreRequestId) {
         setHistoryLoadingMore(false);
       }
     }
