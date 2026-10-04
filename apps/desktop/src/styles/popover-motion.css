@@ -43,6 +43,7 @@
 /* Menus pinned to the trailing edge of their trigger grow from that corner. */
 [data-anchored-presence] > .settings-select-control__menu,
 [data-anchored-presence] > .pt-menu,
+[data-anchored-presence] > .classification-rule-card__menu,
 [data-anchored-presence] > .developer-skill-picker__menu {
   transform-origin: top right;
 }
