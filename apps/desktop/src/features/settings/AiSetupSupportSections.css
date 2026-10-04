@@ -6,185 +6,112 @@
   padding-top: 0;
 }
 
+/* Memory follows the sibling AI tabs: the shared settings column, gray section
+   headings above flat cards, and the same card surface as the provider rows.
+   Every section is head (heading + action), one-line description, card. */
 .ai-memory {
   display: grid;
-  gap: var(--space-3);
-  max-width: 46rem;
+  gap: var(--space-5);
+  max-width: none;
   min-width: 0;
   width: 100%;
 }
 
-.ai-memory__intro {
+.memory-section {
   display: grid;
   gap: var(--space-2);
   min-width: 0;
 }
 
-.ai-memory__intro h4 {
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 0.94rem;
-  font-weight: 650;
-  letter-spacing: 0;
-  line-height: 1.15;
-  margin: 0;
-}
-
-.ai-memory__intro > p {
-  color: var(--text-muted);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.45;
-  margin: 0;
-  max-width: 34rem;
-}
-
-.ai-memory-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-  min-width: 0;
-}
-
-.ai-memory-status__item {
+.memory-section__head {
   align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+/* Same head height as the sibling tabs (ai-setup-model-zone__head), with or
+   without an action, so headings sit on the same baseline across tabs. */
+.memory-section__head { min-height: var(--settings-action-height); }
+
+.memory-section__head h4 {
+  margin: 0;
+}
+
+/* Mirrors the heading's left indent so the count lines up with the card's right edge. */
+.memory-section__aside {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+  margin-right: 0.5rem;
+}
+
+.memory-section__count {
   color: var(--text-soft);
-  display: inline-flex;
   font-size: var(--type-caption-size);
-  gap: 0.3rem;
-  letter-spacing: 0.02em;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
-.ai-memory-status__item + .ai-memory-status__item::before {
-  background: var(--line-strong);
-  border-radius: 999px;
-  content: "";
-  height: 0.55rem;
-  margin-right: 0.2rem;
-  width: 1px;
-}
-
-.ai-memory-status__item > span {
-  border-radius: 999px;
-  height: 0.38rem;
-  width: 0.38rem;
-}
-
-.ai-memory-status__item--active {
-  color: var(--productivity-focus);
-}
-
-.ai-memory-status__item--active > span {
-  background: var(--productivity-focus);
-}
-
-.ai-memory-status__item--error {
-  color: var(--warn);
-}
-
-.ai-memory-status__item--error > span {
-  background: var(--warn);
-}
-
-.ai-memory-status__item--idle > span {
-  background: var(--text-soft);
-}
-
-.ai-memory-status__item--file {
-  font-family: var(--font-mono);
-  font-size: var(--type-control-size);
-}
-
-/* The row carries the plain surface so the inset value block below can step
-   down in tone. Two identical fills would need a divider again. */
-.ai-memory-row {
-  background: var(--surface);
+/* Card: the provider-row surface. Rows inside are separated by one hairline. */
+.memory-card {
+  background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  /* Settings cards use 14px (provider rows, Privacy, collapsible cards); the
+     app-wide --radius-md is 10px since the 2026-07 dashboard redesign. */
+  border-radius: 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.memory-card--padded {
   display: grid;
   gap: var(--space-2);
-  min-width: 0;
   padding: var(--space-3);
 }
 
-.ai-memory-row.is-expanded {
-  border-color: var(--line-strong);
-}
-
-.ai-memory-row__head {
-  align-items: center;
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-}
-
-.ai-memory-row__title {
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
-.ai-memory-row__title h5 {
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: var(--type-setting-label-size);
-  font-weight: 650;
-  letter-spacing: 0;
-  line-height: 1.2;
-  margin: 0;
-}
-
-.ai-memory-row__title p {
+.memory-card--empty {
   color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+}
+
+.memory-card__title {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 560;
   line-height: 1.4;
   margin: 0;
-  overflow-wrap: anywhere;
 }
 
-.content--settings .settings-btn.ai-memory-row__action {
-  min-width: 5.5rem;
-  padding-inline: var(--space-3);
-}
-
-.ai-memory-row__count {
-  color: var(--text-muted);
-  font-size: var(--type-caption-size);
-  letter-spacing: 0.02em;
-  min-height: 1rem;
-  white-space: nowrap;
-}
-
-/* An inset block instead of a divider: the tonal step separates saved values
-   from the row's own label without stacking a second line inside one card.
-   The recess is expressed against the canvas so it reads as inset in both
-   themes; --bg-2 is darker than --surface in light mode but lighter in dark. */
-.ai-memory-row__body {
-  background: color-mix(in srgb, var(--canvas) 62%, var(--surface));
-  border-radius: var(--radius-sm);
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-  padding: var(--space-3);
-}
-
-.ai-memory-row__value {
-  color: var(--text);
+.memory-card__text {
+  color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
   line-height: 1.5;
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-.ai-memory-row__body--empty .ai-memory-row__value {
-  color: var(--text-muted);
+.memory-profile__bar {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
 }
 
-.ai-memory-row__hint {
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.45;
+.memory-profile__body {
+  display: grid;
+  flex: 1;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.memory-profile__text {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  line-height: 1.55;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -197,90 +124,367 @@
 }
 
 .ai-memory-tags > span {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--type-setting-value-size);
-  font-weight: 520;
+  font-size: var(--type-caption-size);
+  font-weight: 560;
   line-height: 1.2;
-  padding: 0.28rem 0.5rem;
-}
-
-.ai-memory-patterns {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  min-width: 0;
-}
-
-.ai-memory-patterns > div {
-  display: grid;
-  gap: 0.15rem var(--space-3);
-  grid-template-columns: 6.5rem minmax(0, 1fr);
-  min-width: 0;
-}
-
-.ai-memory-patterns dt {
-  color: var(--text-soft);
-  font-size: var(--type-caption-size);
-  letter-spacing: 0.02em;
-  line-height: 1.5;
-}
-
-.ai-memory-patterns dd {
-  color: var(--text);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.5;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.ai-memory-breakdown {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  margin: 0;
-}
-
-/* The counts summarize the list above them, so they need a clear step down
-   rather than sitting in the same rhythm as the pattern rows. */
-.ai-memory-patterns + .ai-memory-breakdown {
-  margin-top: var(--space-1);
-}
-
-.ai-memory-breakdown > span {
-  color: var(--text-soft);
-  font-size: var(--type-caption-size);
-  letter-spacing: 0.02em;
-  line-height: 1.3;
+  padding: 0.3rem 0.5rem;
 }
 
 .ai-memory-editor {
   padding-top: var(--space-1);
 }
 
-/* The shared work profile editor still separates its description field with a
-   rule. Inside Memory that reintroduces the divider this layout removed, so
-   the recess is expressed with the same inset block used above. */
-.ai-memory-editor .ai-setup-work-description {
+/* Slim status banner above a card (saved, undo). */
+.memory-notice {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 14px;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+}
+
+.memory-notice p {
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Pattern rows */
+.memory-list {
+  display: grid;
+  min-width: 0;
+}
+
+.memory-row {
+  align-items: center;
+  column-gap: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: var(--space-3);
+  row-gap: 0.25rem;
+}
+
+.memory-list > * + *,
+.memory-card:not(.memory-card--padded) > * + * {
+  border-top: 1px solid var(--line);
+}
+
+.memory-row__summary {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 500;
+  grid-column: 1;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.memory-row__meta {
+  align-items: center;
+  color: var(--text-soft);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-caption-size);
+  gap: 0 var(--space-2);
+  grid-column: 1;
+  line-height: 1.6;
+  margin: 0;
+  min-width: 0;
+}
+
+.memory-row__meta > * + *::before {
+  color: var(--text-soft);
+  opacity: 0.6;
+  content: "·";
+  margin-right: var(--space-2);
+}
+
+.memory-row__kind {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-weight: 560;
+  gap: 0.375rem;
+}
+
+.memory-row__kind::before {
+  background: var(--productivity-neutral);
+  border-radius: var(--radius-pill);
+  content: "";
+  height: 0.4rem;
+  width: 0.4rem;
+}
+
+.memory-row__kind--workSupport::before { background: var(--productivity-focus); }
+.memory-row__kind--drift::before { background: var(--productivity-drift); }
+
+.memory-row__confirmed {
+  align-items: center;
+  color: var(--productivity-focus);
+  display: inline-flex;
+  font-weight: 560;
+}
+
+.memory-row__toggle {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+}
+
+.memory-row__toggle:hover { color: var(--text); }
+.memory-row__toggle svg { height: 0.8rem; transition: transform var(--transition-fast); width: 0.8rem; }
+.memory-row__toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+.memory-row__actions {
+  align-items: center;
+  align-self: center;
+  display: flex;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+/* Feedback: one joined two-button control, icons only, named for assistive
+   tech and by tooltip. Matches the settings segmented-control shape. */
+.memory-feedback {
+  background: var(--settings-control-bg);
+  border: 1px solid var(--settings-control-border);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.memory-feedback__btn {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  height: calc(var(--settings-action-height) - 2px);
+  justify-content: center;
+  padding: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  width: 2.25rem;
+}
+
+.memory-feedback__btn + .memory-feedback__btn { border-left: 1px solid var(--line); }
+.memory-feedback__btn svg { height: 1rem; width: 1rem; }
+.memory-feedback__btn:hover:not(:disabled) { background: var(--settings-control-bg-hover); color: var(--text); }
+.memory-feedback__btn--up[aria-pressed="true"],
+.memory-feedback__btn--up[aria-pressed="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--productivity-focus) 14%, var(--surface));
+  color: var(--productivity-focus);
+}
+.memory-feedback__btn--down:hover:not(:disabled) { color: var(--warn); }
+.memory-feedback__btn:disabled { cursor: not-allowed; opacity: 0.5; }
+.memory-feedback__btn:focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: -2px; }
+
+/* Expanded detail: an inset block under the row text. */
+.memory-detail {
   background: color-mix(in srgb, var(--canvas) 62%, var(--surface));
   border-radius: var(--radius-sm);
-  border-top: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-column: 1 / -1;
+  margin-top: var(--space-2);
   padding: var(--space-3);
 }
 
-@media (max-width: 760px) {
-  .ai-memory-row__head {
-    align-items: start;
-    gap: var(--space-2);
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .content--settings .settings-btn.ai-memory-row__action {
-    justify-self: start;
-  }
-
-  .ai-memory-patterns > div {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.memory-detail__title {
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  font-weight: 620;
+  margin: 0;
 }
+
+.memory-detail__lead,
+.memory-detail__note {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.memory-detail__note { color: var(--text-soft); }
+
+.memory-facts {
+  display: grid;
+  gap: 0.375rem var(--space-4);
+  align-items: baseline;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0;
+}
+
+.memory-facts dt { color: var(--text-soft); font-size: var(--type-caption-size); line-height: 1.6; }
+.memory-facts dd { color: var(--text); font-size: var(--type-setting-desc-size); line-height: 1.6; margin: 0; overflow-wrap: anywhere; }
+
+.memory-detail__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.memory-detail__actions--split { justify-content: space-between; }
+
+.memory-editor { display: grid; gap: var(--space-2); }
+.memory-editor label { color: var(--text-muted); display: grid; font-size: var(--type-setting-desc-size); gap: var(--space-2); }
+.memory-editor textarea.settings-input { box-sizing: border-box; font-family: inherit; font-size: var(--type-setting-label-size); line-height: 1.55; min-height: 5.5rem; resize: vertical; width: 100%; }
+
+.content--settings .memory-card .settings-btn,
+.content--settings .memory-notice .settings-btn {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  padding-inline: var(--space-3);
+  width: auto;
+}
+
+.memory-row :is(button, textarea):focus-visible,
+.memory-card :is(button, textarea):focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: 2px; }
+
+/* Footer row inside the card (show all, excluded toggle). */
+.memory-card__foot {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: var(--type-setting-desc-size);
+  gap: var(--space-2);
+  justify-content: center;
+  padding: var(--space-3);
+  width: 100%;
+}
+
+.memory-card__foot:hover:not(:disabled) { background: color-mix(in srgb, var(--bg-2) 40%, transparent); color: var(--text); }
+.memory-card__foot:focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: -3px; }
+.memory-card__foot svg { height: 0.85rem; transition: transform var(--transition-fast); width: 0.85rem; }
+.memory-card__foot[aria-expanded="true"] svg { transform: rotate(180deg); }
+.memory-card__foot--spread { justify-content: space-between; }
+
+.memory-card__note {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  margin: 0;
+  padding: var(--space-3);
+}
+
+.memory-patterns { display: grid; gap: var(--space-2); min-width: 0; }
+
+/* Excluded rows reuse the pattern row; only their trailing actions differ. */
+.memory-row--excluded .memory-row__summary { color: var(--text-muted); font-weight: 450; }
+.memory-row__buttons { align-items: center; display: flex; gap: var(--space-2); grid-column: 2; grid-row: 1 / span 2; }
+.memory-row--excluded .memory-detail { margin-top: var(--space-2); }
+
+/* Rows beyond the first four fold open instead of jumping: the wrapper animates
+   its grid row from 0fr to 1fr, and hidden rows leave the tab order. */
+.memory-more {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.memory-more[data-open="true"] { grid-template-rows: 1fr; }
+
+.memory-list > .memory-more { border-top: 0; }
+
+.memory-more__inner {
+  min-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: opacity 0.2s ease, visibility 0s linear 0.28s;
+  visibility: hidden;
+}
+
+.memory-more[data-open="true"] > .memory-more__inner {
+  opacity: 1;
+  transition: opacity 0.24s ease 0.06s, visibility 0s;
+  visibility: visible;
+}
+
+.memory-more__inner > .memory-row { border-top: 1px solid var(--line); }
+
+/* Under the card: a centered plain-text "show all" link above the breakdown caption. */
+.memory-toolbar {
+  display: grid;
+  gap: var(--space-1);
+  min-height: var(--settings-action-height);
+}
+
+.memory-more-btn {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: var(--type-setting-desc-size);
+  font-weight: 400;
+  gap: 0.375rem;
+  justify-self: center;
+  order: -1;
+  padding: var(--space-2) var(--space-3);
+  transition: color var(--transition-fast);
+}
+
+.memory-more-btn svg { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.memory-more-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.memory-more-btn:hover:not(:disabled) { color: var(--text); }
+.memory-more-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+.memory-more-btn:focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: 2px; }
+
+/* Interaction polish: rows respond to the pointer and details ease in. */
+.memory-row { transition: background var(--transition-fast); }
+.memory-row:hover { background: color-mix(in srgb, var(--text) 2.5%, transparent); }
+.memory-feedback__btn:active:not(:disabled) { transform: scale(0.9); }
+.memory-feedback__btn svg { transition: transform var(--transition-fast); }
+
+@keyframes memory-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.memory-detail { animation: memory-reveal 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-more,
+  .memory-more__inner,
+  .memory-more-btn svg { transition: none; }
+  .memory-detail { animation: none; }
+}
+
+@media (max-width: 760px) {
+  .memory-row { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-2); }
+  .memory-row__actions,
+  .memory-row__buttons { grid-column: 1; grid-row: auto; justify-content: flex-start; }
+  .memory-section__head { align-items: flex-start; }
+  .memory-facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .memory-facts dd { margin-bottom: var(--space-2); }
+}
+

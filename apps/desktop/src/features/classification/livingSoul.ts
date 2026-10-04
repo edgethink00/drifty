@@ -99,7 +99,41 @@ export type LivingSoulDocument = {
   readonly declared: LivingSoulDeclaredContext;
   readonly learned: LivingSoulLearnedState;
   readonly contextualPriors: readonly LivingSoulContextualPrior[];
+  /** Local controls and provenance never enter the provider prompt. */
+  readonly memoryControls?: LivingSoulMemoryControls;
 };
+
+export type LivingSoulPatternKind = keyof LivingSoulLearnedState;
+export type LivingSoulPatternOrigin = {
+  readonly source: "correction" | "user";
+  readonly recordedAt: string;
+  readonly feedbackKind?: "not_drift" | "manual_correction";
+  readonly activity?: string;
+  readonly productivity?: "focus" | "neutral" | "drift";
+};
+export type LivingSoulRejectedPattern = {
+  readonly kind: LivingSoulPatternKind;
+  readonly pattern: LivingSoulPattern;
+  readonly rejectedAt: string;
+  readonly origin?: LivingSoulPatternOrigin;
+  readonly confirmed?: boolean;
+};
+export type LivingSoulMemoryControls = {
+  readonly dismissedHashes: readonly string[];
+  readonly origins: Readonly<Record<string, LivingSoulPatternOrigin>>;
+  readonly confirmedHashes?: readonly string[];
+  readonly rejectedPatterns?: Readonly<Record<string, LivingSoulRejectedPattern>>;
+};
+
+export async function livingSoulPatternHash(summary: string): Promise<string> {
+  const bytes = new TextEncoder().encode(normalizedPatternText(summary));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizedPatternText(summary: string): string {
+  return summary.trim().toLowerCase().replace(/\s+/g, " ");
+}
 
 export type LivingSoulResolvedContext = {
   readonly ownerId: string;
@@ -166,22 +200,183 @@ export async function updateLivingSoulLearnedState(input: {
   readonly ownerId: string;
   readonly learned: LivingSoulLearnedState;
   readonly feedbackAt: string;
+  readonly expectedRevision?: number;
+  readonly feedbackKind?: "not_drift" | "manual_correction";
+  readonly feedbackActivity?: string;
+  readonly feedbackProductivity?: "focus" | "neutral" | "drift";
 }): Promise<LivingSoulResolvedContext> {
   const feedbackAt = validIsoTimestamp(input.feedbackAt);
   if (!feedbackAt) throw new Error("Living Soul feedback timestamp must be valid ISO-8601.");
   return queueSoulWrite(input.ownerId, async () => {
     const state = readUserOnboardingState(input.ownerId);
     const current = await loadOrCreateLivingSoulUnqueued(input.ownerId, state);
+    // A response based on an older file must not undo an edit or forgotten
+    // memory. Do not retry against fresh user intent with the stale response.
+    if (input.expectedRevision !== undefined && current.document.revision !== input.expectedRevision) return current;
+    const controls = current.document.memoryControls;
+    const dismissed = new Set(controls?.dismissedHashes ?? []);
+    const origins = { ...controls?.origins };
+    const normalized = normalizeLearnedState(input.learned);
+    const learned = { workSupport: [...normalized.workSupport], drift: [...normalized.drift], ambiguities: [...normalized.ambiguities] };
+    for (const kind of ["workSupport", "drift", "ambiguities"] as const) {
+      const kept: LivingSoulPattern[] = [];
+      for (const pattern of learned[kind]) {
+        const hash = await livingSoulPatternHash(pattern.summary);
+        if (dismissed.has(hash) || origins[hash]?.source === "user" || controls?.confirmedHashes?.includes(hash)) continue;
+        kept.push(pattern);
+        if (input.feedbackKind && !origins[hash]
+          && !Object.values(current.document.learned).flat().some((previous) => previous.summary === pattern.summary)) origins[hash] = {
+          source: "correction", recordedAt: feedbackAt, feedbackKind: input.feedbackKind,
+          ...(input.feedbackActivity ? { activity: cleanText(redactRawIdentifiers(input.feedbackActivity), 120) ?? "Unknown" } : {}),
+          ...(input.feedbackProductivity ? { productivity: input.feedbackProductivity } : {}),
+        };
+      }
+      const pinned: LivingSoulPattern[] = [];
+      for (const previous of current.document.learned[kind]) {
+        const hash = await livingSoulPatternHash(previous.summary);
+        if (origins[hash]?.source === "user" || controls?.confirmedHashes?.includes(hash)) pinned.push(previous);
+      }
+      const limits = { workSupport: 6, drift: 4, ambiguities: 4 };
+      learned[kind] = [...pinned, ...kept.filter((p) => !pinned.some((saved) => saved.summary === p.summary))].slice(0, limits[kind]);
+    }
+    const activeHashes = new Set(await Promise.all(Object.values(learned).flat().map((p) => livingSoulPatternHash(p.summary))));
     const now = new Date().toISOString();
     const next: LivingSoulDocument = {
       ...current.document,
       revision: current.document.revision + 1,
       updatedAt: now,
       lastFeedbackAt: feedbackAt,
-      learned: normalizeLearnedState(input.learned),
+      learned,
+      ...((controls || input.feedbackKind) ? { memoryControls: {
+        ...controls,
+        dismissedHashes: [...dismissed],
+        ...(controls?.confirmedHashes ? { confirmedHashes: controls.confirmedHashes.filter((hash) => activeHashes.has(hash)) } : {}),
+        origins: Object.fromEntries(Object.entries(origins).filter(([hash]) => activeHashes.has(hash))),
+      } } : {}),
     };
     await writeSoulMarkdown(current.scope, renderLivingSoulMarkdown(next));
     return resolvedContext(input.ownerId, current.scope, next);
+  });
+}
+
+/** Changes an existing memory only; opening or editing never creates a Soul. */
+export async function changeLivingSoulPattern(input: {
+  readonly ownerId: string;
+  readonly expectedRevision: number;
+  readonly kind: LivingSoulPatternKind;
+  readonly summary: string;
+  readonly replacement?: string;
+}): Promise<LivingSoulResolvedContext> {
+  const scope = await livingSoulScopeForOwner(input.ownerId);
+  return queueSoulWrite(input.ownerId, async () => {
+    const markdown = await readSoulMarkdown(scope);
+    const current = markdown ? parseLivingSoulMarkdown(markdown) : null;
+    if (!current || current.revision !== input.expectedRevision) throw new Error("memory_changed");
+    const index = current.learned[input.kind].findIndex((p) => p.summary === input.summary);
+    if (index < 0) throw new Error("memory_changed");
+    const hash = await livingSoulPatternHash(input.summary);
+    const dismissed = new Set(current.memoryControls?.dismissedHashes ?? []);
+    const origins = { ...current.memoryControls?.origins };
+    const patterns = [...current.learned[input.kind]];
+    const now = new Date().toISOString();
+    if (input.replacement !== undefined) {
+      const replacement = normalizeLivingSoulPattern({ ...patterns[index], summary: input.replacement });
+      if (!replacement) throw new Error("memory_invalid");
+      const nextHash = await livingSoulPatternHash(replacement.summary);
+      if (nextHash !== hash) {
+        if (Object.values(current.learned).flat().some((p) => normalizedPatternText(p.summary) === normalizedPatternText(replacement.summary))) throw new Error("memory_duplicate");
+        dismissed.add(hash);
+        delete origins[hash];
+      }
+      dismissed.delete(nextHash);
+      origins[nextHash] = { source: "user", recordedAt: now };
+      patterns[index] = replacement;
+    } else {
+      dismissed.add(hash);
+      patterns.splice(index, 1);
+      delete origins[hash];
+    }
+    // Never silently evict a user's rejection to make room.
+    if (dismissed.size > 64) throw new Error("memory_limit");
+    const next: LivingSoulDocument = {
+      ...current, revision: current.revision + 1, updatedAt: now,
+      learned: {
+        workSupport: current.learned.workSupport.filter((p) => normalizedPatternText(p.summary) !== normalizedPatternText(input.summary)),
+        drift: current.learned.drift.filter((p) => normalizedPatternText(p.summary) !== normalizedPatternText(input.summary)),
+        ambiguities: current.learned.ambiguities.filter((p) => normalizedPatternText(p.summary) !== normalizedPatternText(input.summary)),
+        [input.kind]: patterns,
+      },
+      memoryControls: {
+        ...current.memoryControls, dismissedHashes: [...dismissed], origins,
+        confirmedHashes: (current.memoryControls?.confirmedHashes ?? []).filter((value) => value !== hash),
+        rejectedPatterns: Object.fromEntries(Object.entries(current.memoryControls?.rejectedPatterns ?? {})
+          .filter(([value]) => value !== hash && !Object.keys(origins).includes(value))),
+      },
+    };
+    await writeSoulMarkdown(scope, renderLivingSoulMarkdown(next));
+    return resolvedContext(input.ownerId, scope, next);
+  });
+}
+
+/** Sentence-level feedback is local control, not a new activity observation. */
+export async function reviewLivingSoulPattern(input: {
+  readonly ownerId: string;
+  readonly expectedRevision: number;
+  readonly kind: LivingSoulPatternKind;
+  readonly summary: string;
+  readonly action: "confirm" | "unconfirm" | "reject" | "restore" | "forgetRejected";
+}): Promise<LivingSoulResolvedContext> {
+  const scope = await livingSoulScopeForOwner(input.ownerId);
+  return queueSoulWrite(input.ownerId, async () => {
+    const markdown = await readSoulMarkdown(scope);
+    const current = markdown ? parseLivingSoulMarkdown(markdown) : null;
+    if (!current || current.revision !== input.expectedRevision) throw new Error("memory_changed");
+    const hash = await livingSoulPatternHash(input.summary);
+    const controls = current.memoryControls;
+    const confirmed = new Set(controls?.confirmedHashes ?? []);
+    const dismissed = new Set(controls?.dismissedHashes ?? []);
+    const origins = { ...controls?.origins };
+    const rejected = { ...controls?.rejectedPatterns };
+    const learned = { workSupport: [...current.learned.workSupport], drift: [...current.learned.drift], ambiguities: [...current.learned.ambiguities] };
+    const patterns = learned[input.kind];
+    const index = patterns.findIndex((p) => p.summary === input.summary);
+    const now = new Date().toISOString();
+    if (input.action === "restore" || input.action === "forgetRejected") {
+      const saved = rejected[hash];
+      if (!saved || saved.kind !== input.kind || saved.pattern.summary !== input.summary) throw new Error("memory_changed");
+      if (input.action === "restore") {
+        if (Object.values(learned).flat().some((p) => normalizedPatternText(p.summary) === normalizedPatternText(input.summary))) throw new Error("memory_duplicate");
+        const limit = { workSupport: 6, drift: 4, ambiguities: 4 }[input.kind];
+        if (patterns.length >= limit) throw new Error("memory_restore_limit");
+        patterns.push(saved.pattern);
+        dismissed.delete(hash);
+        if (saved.origin) origins[hash] = saved.origin;
+        if (saved.confirmed) confirmed.add(hash);
+      }
+      delete rejected[hash];
+    } else {
+      if (index < 0) throw new Error("memory_changed");
+      if (input.action === "confirm") confirmed.add(hash);
+      else if (input.action === "unconfirm") confirmed.delete(hash);
+      else {
+        if (Object.keys(rejected).length >= 14 && !rejected[hash]) throw new Error("memory_limit");
+        rejected[hash] = { kind: input.kind, pattern: patterns[index], rejectedAt: now,
+          ...(origins[hash] ? { origin: origins[hash] } : {}), ...(confirmed.has(hash) ? { confirmed: true } : {}) };
+        for (const kind of ["workSupport", "drift", "ambiguities"] as const) {
+          learned[kind] = learned[kind].filter((p) => normalizedPatternText(p.summary) !== normalizedPatternText(input.summary));
+        }
+        dismissed.add(hash);
+        confirmed.delete(hash);
+        delete origins[hash];
+      }
+    }
+    if (dismissed.size > 64) throw new Error("memory_limit");
+    const next: LivingSoulDocument = { ...current, revision: current.revision + 1, updatedAt: now, learned,
+      memoryControls: { dismissedHashes: [...dismissed], origins, confirmedHashes: [...confirmed], rejectedPatterns: rejected } };
+    let output: string;
+    try { output = renderLivingSoulMarkdown(next); } catch { throw new Error("memory_limit"); }
+    await writeSoulMarkdown(scope, output);
+    return resolvedContext(input.ownerId, scope, next);
   });
 }
 
@@ -242,6 +437,7 @@ export function renderLivingSoulMarkdown(document: LivingSoulDocument): string {
     "",
     "## Passive contextual priors",
     ...renderContextualPriorList(document.contextualPriors),
+    ...(document.memoryControls ? ["", "## Memory controls", JSON.stringify(document.memoryControls)] : []),
     "",
   ].join("\n");
 
@@ -272,6 +468,10 @@ export function parseLivingSoulMarkdown(
   const ambiguities = parsePatternSection(markdown, "Ambiguities", MAX_AMBIGUITY_PATTERNS);
   const contextualPriors = parseContextualPriorSection(markdown);
   if (!declared || !workSupport || !drift || !ambiguities || !contextualPriors) return null;
+  const controlsSection = markdown.match(/^## Memory controls\n([^\n]+)(?:\n|$)/m)?.[1];
+  const memoryControls = controlsSection ? parseMemoryControls(controlsSection) : undefined;
+  if (markdown.includes("## Memory controls")
+    && (!memoryControls || markdown.split("## Memory controls").length !== 2)) return null;
 
   return {
     schema: LIVING_SOUL_SCHEMA,
@@ -282,7 +482,56 @@ export function parseLivingSoulMarkdown(
     declared,
     learned: { workSupport, drift, ambiguities },
     contextualPriors,
+    ...(memoryControls ? { memoryControls } : {}),
   };
+}
+
+function parseMemoryOrigin(origin: LivingSoulPatternOrigin): LivingSoulPatternOrigin | null {
+  if (!origin || (origin.source !== "user" && origin.source !== "correction") || !validIsoTimestamp(origin.recordedAt)
+    || (origin.feedbackKind !== undefined && origin.feedbackKind !== "not_drift" && origin.feedbackKind !== "manual_correction")
+    || (origin.activity !== undefined && (typeof origin.activity !== "string" || origin.activity.length > 120))
+    || (origin.productivity !== undefined && !["focus", "neutral", "drift"].includes(origin.productivity))) return null;
+  return { source: origin.source, recordedAt: new Date(origin.recordedAt).toISOString(),
+    ...(origin.feedbackKind ? { feedbackKind: origin.feedbackKind } : {}),
+    ...(origin.activity ? { activity: cleanText(redactRawIdentifiers(origin.activity), 120) ?? "Unknown" } : {}),
+    ...(origin.productivity ? { productivity: origin.productivity } : {}) };
+}
+
+function parseMemoryControls(text: string): LivingSoulMemoryControls | null {
+  try {
+    const value = JSON.parse(text) as LivingSoulMemoryControls;
+    if (!Array.isArray(value.dismissedHashes) || value.dismissedHashes.length > 64
+      || !value.dismissedHashes.every((hash) => typeof hash === "string" && SHA_256.test(hash))
+      || !value.origins || typeof value.origins !== "object" || Array.isArray(value.origins)
+      || Object.keys(value.origins).length > 14) return null;
+    const origins: Record<string, LivingSoulPatternOrigin> = {};
+    for (const [hash, origin] of Object.entries(value.origins)) {
+      const parsed = parseMemoryOrigin(origin);
+      if (!SHA_256.test(hash) || !parsed) return null;
+      origins[hash] = parsed;
+    }
+    if (value.confirmedHashes !== undefined && (!Array.isArray(value.confirmedHashes) || value.confirmedHashes.length > 14
+      || !value.confirmedHashes.every((hash) => typeof hash === "string" && SHA_256.test(hash) && !value.dismissedHashes.includes(hash)))) return null;
+    const rejected: Record<string, LivingSoulRejectedPattern> = {};
+    if (value.rejectedPatterns !== undefined) {
+      if (!value.rejectedPatterns || typeof value.rejectedPatterns !== "object" || Array.isArray(value.rejectedPatterns)
+        || Object.keys(value.rejectedPatterns).length > 14) return null;
+      for (const [hash, entry] of Object.entries(value.rejectedPatterns)) {
+        if (!SHA_256.test(hash) || !value.dismissedHashes.includes(hash) || !entry
+          || !["workSupport", "drift", "ambiguities"].includes(entry.kind) || !validIsoTimestamp(entry.rejectedAt)
+          || !entry.pattern || typeof entry.pattern.summary !== "string" || entry.pattern.summary.length > 240
+          || !Number.isFinite(entry.pattern.evidenceCount) || (entry.confirmed !== undefined && typeof entry.confirmed !== "boolean")) return null;
+        const pattern = normalizeLivingSoulPattern(entry.pattern);
+        const origin = entry.origin ? parseMemoryOrigin(entry.origin) : undefined;
+        if (!pattern || (entry.origin !== undefined && !origin)) return null;
+        rejected[hash] = { kind: entry.kind, pattern, rejectedAt: new Date(entry.rejectedAt).toISOString(),
+          ...(origin ? { origin } : {}), ...(entry.confirmed ? { confirmed: true } : {}) };
+      }
+    }
+    return { dismissedHashes: [...new Set(value.dismissedHashes)], origins,
+      ...(value.confirmedHashes !== undefined ? { confirmedHashes: [...new Set(value.confirmedHashes)] } : {}),
+      ...(value.rejectedPatterns !== undefined ? { rejectedPatterns: rejected } : {}) };
+  } catch { return null; }
 }
 
 export function livingSoulPromptContext(document: LivingSoulDocument): LivingSoulPromptContext {

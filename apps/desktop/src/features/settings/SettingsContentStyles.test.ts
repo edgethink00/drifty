@@ -340,52 +340,39 @@ describe("Settings content styles", () => {
     expect(cloudActionRule).toContain("box-shadow: none;");
   });
 
-  it("keeps Memory in the compact settings row language", () => {
+  it("keeps Memory in the same column and card language as the sibling AI tabs", () => {
+    const memoryStyles = readFileSync("src/features/settings/AiSetupSupportSections.css", "utf8");
     const aiSetupStyles = readAiSetupStyles();
     const supportZoneRule = cssRule(aiSetupStyles, ".ai-setup-support-zone");
-    const memoryRule = cssRule(aiSetupStyles, ".ai-memory");
-    const introTitleRule = cssRule(aiSetupStyles, ".ai-memory__intro h4");
-    const introCopyRule = cssRule(aiSetupStyles, ".ai-memory__intro > p");
-    const rowRule = cssRule(aiSetupStyles, ".ai-memory-row");
-    const rowHeadRule = cssRule(aiSetupStyles, ".ai-memory-row__head");
-    const rowBodyRule = cssRule(aiSetupStyles, ".ai-memory-row__body");
-    const editorRule = cssRule(aiSetupStyles, ".ai-memory-editor");
+    const cardRule = cssRule(aiSetupStyles, ".memory-card");
+    const rowRule = cssRule(aiSetupStyles, ".memory-row");
+    const feedbackRule = cssRule(aiSetupStyles, ".memory-feedback");
 
     expect(supportZoneRule).toContain("border-top: 0;");
     expect(supportZoneRule).toContain("margin-top: 0;");
     expect(supportZoneRule).toContain("padding-top: 0;");
 
-    // Settings content stays a readable single column instead of a wide
-    // marketing canvas. The exact value may be tuned; an unbounded or
-    // very wide column is the regression this guards.
-    const memoryMaxWidth = Number(/max-width:\s*([\d.]+)rem;/.exec(memoryRule)?.[1]);
-    expect(memoryMaxWidth).toBeGreaterThan(0);
-    expect(memoryMaxWidth).toBeLessThanOrEqual(52);
+    // Memory uses the shared Settings column. Widening only this tab moved the
+    // page title and tab bar when switching between AI tabs.
+    expect(memoryStyles).not.toMatch(/\.page:has\(\.ai-memory\)/);
+    expect(memoryStyles).not.toMatch(/\.ai-memory\s*\{[^}]*max-width:\s*[\d.]+(rem|px)/);
 
-    // Panel headings stay near the settings section scale, never hero scale.
-    // DESIGN.md forbids hero-scale text inside settings panels.
-    const introTitleSize = Number(/font-size:\s*([\d.]+)rem;/.exec(introTitleRule)?.[1]);
-    expect(introTitleSize).toBeGreaterThan(0);
-    expect(introTitleSize).toBeLessThanOrEqual(1.05);
-    expect(introCopyRule).toContain("color: var(--text-muted);");
+    // Cards reuse the provider-row surface: one border, the standard card radius.
+    expect(cardRule).toContain("border: 1px solid var(--line);");
+    // Settings cards are 14px; the provider rows hard-code the same value.
+    expect(cardRule).toContain("border-radius: 14px;");
+    expect(cssRule(aiSetupStyles, ".ai-setup-choice")).toContain("border-radius: 14px;");
+    expect(cardRule).toContain("--settings-row-card-bg");
+    expect(rowRule).toContain("grid-template-columns: minmax(0, 1fr) auto;");
 
-    // Rows reuse the existing settings row card shape and one border for elevation.
-    expect(rowRule).toContain("border-radius: var(--radius-md);");
-    expect(rowRule).toContain("border: 1px solid var(--line);");
-    expect(rowHeadRule).toContain("grid-template-columns: minmax(0, 1fr) auto;");
+    // Feedback is a joined icon control on the Settings control tokens.
+    expect(feedbackRule).toContain("border: 1px solid var(--settings-control-border);");
+    expect(feedbackRule).toContain("border-radius: var(--radius-sm);");
 
-    // Saved values sit in an inset tonal block. Reintroducing divider lines
-    // inside a bordered card stacks a second rule the card already implies.
-    expect(rowBodyRule).toContain("border-radius: var(--radius-sm);");
-    expect(rowBodyRule).toContain("background:");
-    expect(rowBodyRule).not.toContain("border-top:");
-    expect(cssRule(aiSetupStyles, ".ai-memory-breakdown")).not.toContain("border-top:");
-    expect(editorRule).not.toContain("border-top:");
-
-    // Memory radii come from the shared scale. The first implementation used
-    // one-off 20px / 17px radii, which DESIGN.md's radius tokens replace.
-    const memoryStyles = readFileSync("src/features/settings/AiSetupSupportSections.css", "utf8");
-    expect(/border-radius:\s*\d+px;/.test(memoryStyles.replace(/border-radius:\s*999px;/g, ""))).toBe(false);
+    // Radii and font sizes come from the shared scales.
+    // The only literal radius is the 14px settings card family (cards and the banner above them).
+    expect(new Set(memoryStyles.match(/border-radius:\s*\d+px;/g))).toEqual(new Set(["border-radius: 14px;"]));
+    expect(/font-size:\s*[\d.]+(rem|px);/.test(memoryStyles)).toBe(false);
 
     // The redesign must not reintroduce the marketing hero, card grid, or numbered loop.
     expect(aiSetupStyles).not.toContain(".ai-memory-hero");

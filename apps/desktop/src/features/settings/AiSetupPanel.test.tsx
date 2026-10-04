@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { synchronizeLivingSoulDeclaredContextForUser, updateLivingSoulLearnedState, readLivingSoulForUser } from "../classification/livingSoul";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
 import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
@@ -184,9 +185,8 @@ describe("AiSetupPanel", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
     const memoryOverview = screen.getByLabelText(/Drifty Memory overview/i);
-    expect(within(memoryOverview).getByRole("heading", { name: /What Drifty remembers about your work/i })).toBeTruthy();
-    expect(within(memoryOverview).getByText("Stored on this device")).toBeTruthy();
-    expect(await within(memoryOverview).findByText("Ready to learn")).toBeTruthy();
+    expect(within(memoryOverview).getByRole("heading", { name: "Work profile" })).toBeTruthy();
+    expect(await within(memoryOverview).findByText("Coding")).toBeTruthy();
     expect(within(memoryOverview).getByText("Coding")).toBeTruthy();
     expect(within(memoryOverview).getByText("Writing")).toBeTruthy();
     expect(within(memoryOverview).getByRole("heading", { name: "Learned patterns" })).toBeTruthy();
@@ -233,7 +233,6 @@ describe("AiSetupPanel", () => {
     const savedActivities = within(memoryOverview).getByLabelText("Selected work activities");
     expect(within(savedActivities).getByText("Data Analysis")).toBeTruthy();
     expect(within(savedActivities).getByText("Designing")).toBeTruthy();
-    expect(await screen.findByText("Soul.md · rev. 1")).toBeTruthy();
     expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
     expect(screen.queryByText(/User work profile:/i)).toBeNull();
   });
@@ -272,13 +271,78 @@ describe("AiSetupPanel", () => {
     renderPanel();
     fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
 
-    expect(await screen.findByText("Soul.md · rev. 7")).toBeTruthy();
-    expect(screen.getByText("Used in classification")).toBeTruthy();
+    expect(await screen.findByText("Product research before implementation is usually work support.")).toBeTruthy();
     expect(screen.getByText("Product research before implementation is usually work support.")).toBeTruthy();
     expect(screen.getByText("Long entertainment browsing is usually drift.")).toBeTruthy();
     expect(screen.getByText("2 learned patterns")).toBeTruthy();
-    expect(screen.getByText("Work 1")).toBeTruthy();
-    expect(screen.getByText("Drift 1")).toBeTruthy();
+    const research = screen.getByRole("article", { name: "Product research before implementation is usually work support." });
+    fireEvent.click(within(research).getByRole("button", { name: "Details" }));
+    expect(within(research).getByText("What this is based on")).toBeTruthy();
+    expect(within(research).getByText(/older pattern has no linked correction record/)).toBeTruthy();
+    fireEvent.click(within(research).getByRole("button", { name: "Edit" }));
+    fireEvent.change(within(research).getByRole("textbox"), { target: { value: "Specific product research supports my work." } });
+    fireEvent.click(within(research).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Specific product research supports my work.")).toBeTruthy();
+    expect(await screen.findByText("Edited by you")).toBeTruthy();
+    const edited = screen.getByRole("article", { name: "Specific product research supports my work." });
+    fireEvent.click(within(edited).getByRole("button", { name: "Details" }));
+    fireEvent.click(within(edited).getByRole("button", { name: "Forget" }));
+    fireEvent.click(within(edited).getByRole("button", { name: "Forget" }));
+    await waitFor(() => expect(screen.queryByText("Specific product research supports my work.")).toBeNull());
+    expect(screen.getByText("1 learned patterns")).toBeTruthy();
+
+  });
+
+  it("keeps feedback and restoration reachable after rejecting the last active memory and reopening Settings", async () => {
+    const initial = await synchronizeLivingSoulDeclaredContextForUser("local");
+    const summary = "Product research supports this work task.";
+    await updateLivingSoulLearnedState({ ownerId: "local", expectedRevision: initial.document.revision,
+      learned: { workSupport: [{ summary, confidence: "low", evidenceCount: 1, lastObservedAt: "2026-10-04T00:00:00.000Z" }], drift: [], ambiguities: [] },
+      feedbackAt: "2026-10-04T00:00:00.000Z" });
+    const panel = renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
+    const card = await screen.findByRole("article", { name: summary });
+    await waitFor(() => expect(within(card).getByRole("button", { name: "Right" })).not.toHaveProperty("disabled", true));
+    fireEvent.click(within(card).getByRole("button", { name: "Right" }));
+    expect(await within(card).findByText("Confirmed by you")).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "Confirmed" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(card).getByRole("button", { name: "Not right" }));
+    expect(await screen.findByText(/No active learned patterns/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+    panel.unmount();
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
+    const excluded = await screen.findByText("Excluded patterns · 1");
+    fireEvent.click(excluded);
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    const restored = await screen.findByRole("button", { name: "Confirmed" });
+    expect(restored.getAttribute("aria-pressed")).toBe("true");
+    const saved = await readLivingSoulForUser("local");
+    expect(saved.state === "ready" && saved.context.document.learned.workSupport[0].evidenceCount).toBe(1);
+  });
+
+  it("loads the latest Memory in place when another writer changed it first", async () => {
+    const initial = await synchronizeLivingSoulDeclaredContextForUser("local");
+    const first = "Product research supports this work task.";
+    const second = "Release notes writing counts as work.";
+    const pattern = (summary: string) => ({ summary, confidence: "low" as const, evidenceCount: 1, lastObservedAt: "2026-10-04T00:00:00.000Z" });
+    await updateLivingSoulLearnedState({ ownerId: "local", expectedRevision: initial.document.revision,
+      learned: { workSupport: [pattern(first)], drift: [], ambiguities: [] }, feedbackAt: "2026-10-04T00:00:00.000Z" });
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
+    const card = await screen.findByRole("article", { name: first });
+    await waitFor(() => expect(within(card).getByRole("button", { name: "Right" })).not.toHaveProperty("disabled", true));
+
+    // Another writer adds a pattern after this view loaded, so its revision is stale.
+    const latest = await readLivingSoulForUser("local");
+    if (latest.state !== "ready") throw new Error("Expected readable Memory");
+    await updateLivingSoulLearnedState({ ownerId: "local", expectedRevision: latest.context.document.revision,
+      learned: { workSupport: [pattern(first), pattern(second)], drift: [], ambiguities: [] }, feedbackAt: "2026-10-04T00:00:01.000Z" });
+
+    fireEvent.click(within(card).getByRole("button", { name: "Right" }));
+    expect(await screen.findByText(/Memory changed elsewhere/)).toBeTruthy();
+    expect(await screen.findByRole("article", { name: second })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Refresh$/ })).toBeNull();
   });
 
   it("exposes Memory regions to assistive technology", async () => {
@@ -340,8 +404,6 @@ describe("AiSetupPanel", () => {
     const overview = await screen.findByRole("region", { name: /Drifty Memory overview/i });
     // Wait for the Soul read to resolve before asserting the loaded regions.
     await within(overview).findByText("Research before building is usually work.");
-    expect(within(overview).getByRole("group", { name: /Memory status/i })).toBeTruthy();
-    expect(within(overview).getByRole("group", { name: /Learned pattern breakdown/i })).toBeTruthy();
     expect(within(overview).getByRole("list", { name: /Selected work activities/i })).toBeTruthy();
   });
 
@@ -361,7 +423,7 @@ describe("AiSetupPanel", () => {
 
     // Claiming "Ready to learn" here would tell the user nothing is stored yet,
     // while saved learning actually exists on disk and cannot be read.
-    expect(await screen.findByText("Details unavailable")).toBeTruthy();
+    expect(await screen.findByText("Saved learning cannot be read")).toBeTruthy();
     expect(screen.queryByText("Ready to learn")).toBeNull();
     // The learned row must explain the failure rather than claim emptiness,
     // and must not advertise a pattern count it cannot back up.
@@ -469,7 +531,7 @@ describe("AiSetupPanel", () => {
     fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
     expect(screen.queryByRole("button", { name: /Privacy review/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /AI privacy review/i })).toBeNull();
-    expect(screen.getByRole("heading", { name: /What Drifty remembers about your work/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Work profile" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
   });
 });

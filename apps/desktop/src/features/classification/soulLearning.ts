@@ -92,6 +92,10 @@ async function learnLivingSoulFromFeedbackNow(input: {
     ownerId: current.ownerId,
     learned: learned ?? deterministicFallbackLearning(current.document.learned, input.feedback, episode),
     feedbackAt: input.feedback.occurredAt,
+    expectedRevision: current.document.revision,
+    feedbackKind: input.feedback.kind,
+    feedbackActivity: input.feedback.segment.appName,
+    feedbackProductivity: input.feedback.correctedProductivity,
   });
 }
 
