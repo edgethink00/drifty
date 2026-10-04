@@ -373,7 +373,10 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         // silently returning to the button so the user isn't left guessing.
         if (!options.quiet && !summary.ran && summary.skippedReason !== "already analyzed") {
           setRunError(summary.skippedReason ? `Nothing to analyze — ${summary.skippedReason}.` : "Nothing to analyze in this range.");
-        } else if (summary.assignments === 0 && summary.corrections === 0) {
+        } else if (
+          summary.assignments === 0 && summary.corrections === 0
+          && ((summary.skippedCorrections ?? 0) === 0 || summary.failedChunks > 0)
+        ) {
           if (!options.quiet && summary.ran) {
             setRunError("The analysis model returned no results. Check that your Intelligence model is set up (API key + model) under Configure in AI setup, then try again.");
           }

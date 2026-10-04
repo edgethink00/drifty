@@ -266,6 +266,8 @@ export interface ProjectPassSummary {
   readonly chunks: number;
   readonly assignments: number;
   readonly corrections: number;
+  /** Corrections rejected by current user choices or disappeared local data. */
+  readonly skippedCorrections?: number;
   readonly tokensIn: number;
   readonly tokensOut: number;
   /**
@@ -396,7 +398,6 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
   options.onProgress?.(0, chunks.length);
   const bufferedWindowAssignments: ProjectWindowAssignmentRecord[] = [];
   const bufferedClassifications: ActivityClassificationRecord[] = [];
-  const bufferedEvents: Array<Omit<AiReviewEventInput, "passId">> = [];
   let tokensIn = 0;
   let tokensOut = 0;
   let model: string | null = null;
@@ -449,7 +450,6 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     provider = result.usage.provider ?? provider;
     bufferedWindowAssignments.push(...result.windowAssignments);
     bufferedClassifications.push(...result.correctionClassifications);
-    bufferedEvents.push(...result.correctionEvents);
   }
   const failedChunks = results.reduce((count, result) => (result.failed ? count + 1 : count), 0);
 
@@ -476,7 +476,8 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     tokensIn,
     tokensOut,
     assignmentsCount: bufferedWindowAssignments.length,
-    correctionsCount: bufferedClassifications.length,
+    // Accepted corrections increment this atomically when they are persisted.
+    correctionsCount: 0,
     promptVersion: PROJECT_PASS_PROMPT_VERSION,
   });
 
@@ -492,16 +493,20 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     } satisfies ProjectWindowAssignmentRecord;
   });
   if (persistedWindowAssignments.length) await tracker.saveProjectWindowAssignments(persistedWindowAssignments);
+  let persistedCorrections = 0;
   if (bufferedClassifications.length) {
-    await tracker.saveClassifications(bufferedClassifications);
-    await tracker.saveAiReviewEvents(bufferedEvents.map((event) => ({ ...event, passId: passRecord.id })));
+    const result = await tracker.saveClassifications(bufferedClassifications.map((record) => ({
+      ...record, reviewPassId: passRecord.id,
+    })));
+    persistedCorrections = result.saved;
   }
 
   return {
     ran: true,
     chunks: chunks.length,
     assignments: bufferedWindowAssignments.length,
-    corrections: bufferedClassifications.length,
+    corrections: persistedCorrections,
+    skippedCorrections: bufferedClassifications.length - persistedCorrections,
     tokensIn,
     tokensOut,
     failedChunks,

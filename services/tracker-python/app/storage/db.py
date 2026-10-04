@@ -3841,48 +3841,54 @@ class TrackerDatabase:
         }
 
     def save_ai_review_events(self, events: list[dict[str, Any]]) -> int:
-        saved = 0
         timestamp = datetime.now(timezone.utc).isoformat()
         with self.connect() as conn:
-            for event in events:
-                raw_segment_id = event.get("segmentId", event.get("segment_id"))
-                pass_id = event.get("passId", event.get("pass_id"))
-                if raw_segment_id is None or pass_id is None:
-                    continue
-                try:
-                    segment_id = int(raw_segment_id)
-                except (TypeError, ValueError):
-                    continue
-                confidence = event.get("confidence")
-                # pass_id references project_pass_runs; an event whose segment is gone
-                # can never be shown or reverted. Skip either case per row (#1492).
-                cursor = conn.execute(
-                    """
-                    INSERT INTO ai_review_events (
-                        segment_id, pass_id, prev_category, prev_productivity, prev_source,
-                        new_category, new_productivity, confidence, reason, created_at, reverted_at
-                    )
-                    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
-                    WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
-                      AND EXISTS (SELECT 1 FROM project_pass_runs WHERE id = ?)
-                    """,
-                    (
-                        segment_id,
-                        pass_id,
-                        event.get("prevCategory", event.get("prev_category")),
-                        event.get("prevProductivity", event.get("prev_productivity")),
-                        event.get("prevSource", event.get("prev_source")),
-                        event.get("newCategory", event.get("new_category")),
-                        event.get("newProductivity", event.get("new_productivity")),
-                        float(confidence) if confidence is not None else None,
-                        event.get("reason"),
-                        event.get("createdAt") or event.get("created_at") or timestamp,
-                        segment_id,
-                        pass_id,
-                    ),
+            return self._save_ai_review_events(conn, events, timestamp)
+
+    @staticmethod
+    def _save_ai_review_events(
+        conn: sqlite3.Connection, events: list[dict[str, Any]], timestamp: str
+    ) -> int:
+        saved = 0
+        for event in events:
+            raw_segment_id = event.get("segmentId", event.get("segment_id"))
+            pass_id = event.get("passId", event.get("pass_id"))
+            if raw_segment_id is None or pass_id is None:
+                continue
+            try:
+                segment_id = int(raw_segment_id)
+            except (TypeError, ValueError):
+                continue
+            confidence = event.get("confidence")
+            # pass_id references project_pass_runs; an event whose segment is gone
+            # can never be shown or reverted. Skip either case per row (#1492).
+            cursor = conn.execute(
+                """
+                INSERT INTO ai_review_events (
+                    segment_id, pass_id, prev_category, prev_productivity, prev_source,
+                    new_category, new_productivity, confidence, reason, created_at, reverted_at
                 )
-                if cursor.rowcount > 0:
-                    saved += 1
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+                WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
+                  AND EXISTS (SELECT 1 FROM project_pass_runs WHERE id = ?)
+                """,
+                (
+                    segment_id,
+                    pass_id,
+                    event.get("prevCategory", event.get("prev_category")),
+                    event.get("prevProductivity", event.get("prev_productivity")),
+                    event.get("prevSource", event.get("prev_source")),
+                    event.get("newCategory", event.get("new_category")),
+                    event.get("newProductivity", event.get("new_productivity")),
+                    float(confidence) if confidence is not None else None,
+                    event.get("reason"),
+                    event.get("createdAt") or event.get("created_at") or timestamp,
+                    segment_id,
+                    pass_id,
+                ),
+            )
+            if cursor.rowcount > 0:
+                saved += 1
         return saved
 
     def get_ai_review_events(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
@@ -3981,6 +3987,34 @@ class TrackerDatabase:
                 stale = 1 if item.get("stale") else 0
                 classification_rule_id = item.get("classificationRuleId", item.get("classification_rule_id")) if source == "rule" else None
 
+                # A project review opts into one atomic correction + audit write.
+                # Read the actual previous row under the same writer reservation.
+                review_pass_id = item.get("reviewPassId", item.get("review_pass_id"))
+                review_previous = None
+                if source == "ai_review" and review_pass_id is not None:
+                    try:
+                        review_pass_id = int(review_pass_id)
+                    except (TypeError, ValueError):
+                        continue
+                    if not conn.in_transaction:
+                        conn.execute("BEGIN IMMEDIATE")
+                    if conn.execute("SELECT 1 FROM project_pass_runs WHERE id = ?", (review_pass_id,)).fetchone() is None:
+                        continue
+                    if conn.execute(
+                        "SELECT 1 FROM ai_review_events WHERE segment_id = ? AND reverted_at IS NOT NULL LIMIT 1",
+                        (segment_id,),
+                    ).fetchone() is not None:
+                        continue
+                    review_previous = conn.execute(
+                        "SELECT category, productivity, source FROM activity_classifications WHERE segment_id = ?",
+                        (segment_id,),
+                    ).fetchone()
+                    if review_previous is None:
+                        continue
+                    if (review_previous["category"] == item["category"]
+                            and review_previous["productivity"] == item["productivity"]):
+                        continue
+
                 # A classifier can select an unclassified segment, then finish after the
                 # user has corrected it. Resolve that race atomically at the write.
                 # The segment (or its rule) can also disappear before the result lands:
@@ -4012,7 +4046,7 @@ class TrackerDatabase:
                     WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
                       AND (
                         ? IS NULL
-                        OR EXISTS (SELECT 1 FROM classification_rules WHERE id = ?)
+                        OR EXISTS (SELECT 1 FROM classification_rules WHERE id = ? AND enabled = 1)
                       )
                     ON CONFLICT(segment_id) DO UPDATE SET
                         input_fingerprint = excluded.input_fingerprint,
@@ -4032,7 +4066,14 @@ class TrackerDatabase:
                         stale = excluded.stale,
                         classification_rule_id = excluded.classification_rule_id
                     WHERE excluded.source = 'manual'
-                       OR activity_classifications.source != 'manual'
+                       OR (
+                         activity_classifications.source != 'manual'
+                         AND (
+                           activity_classifications.source != 'rule'
+                           OR activity_classifications.classification_rule_id IS NULL
+                           OR excluded.classification_rule_id IS NOT NULL
+                         )
+                       )
                     """,
                     (
                         segment_id,
@@ -4059,6 +4100,24 @@ class TrackerDatabase:
                 )
                 if cursor.rowcount > 0:
                     saved += cursor.rowcount
+                    if source == "ai_review" and review_pass_id is not None:
+                        event_saved = self._save_ai_review_events(conn, [{
+                            "segmentId": segment_id,
+                            "passId": review_pass_id,
+                            "prevCategory": review_previous["category"],
+                            "prevProductivity": review_previous["productivity"],
+                            "prevSource": review_previous["source"],
+                            "newCategory": item["category"],
+                            "newProductivity": item["productivity"],
+                            "confidence": item.get("confidence"),
+                            "reason": item.get("reason"),
+                        }], timestamp)
+                        if event_saved != 1:
+                            raise sqlite3.IntegrityError("Unable to record the applied AI review correction")
+                        conn.execute(
+                            "UPDATE project_pass_runs SET corrections_count = COALESCE(corrections_count, 0) + 1 WHERE id = ?",
+                            (review_pass_id,),
+                        )
         return saved
 
     def get_reusable_ai_classifications(self, input_fingerprints: list[str]) -> dict[str, dict[str, Any]]:

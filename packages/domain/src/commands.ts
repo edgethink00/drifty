@@ -516,6 +516,8 @@ export interface ActivityClassificationRecord {
   aiResult?: boolean | null;
   stale?: boolean | null;
   classifiedAt?: string | null;
+  /** Project review: atomically record accepted correction history and pass count. */
+  reviewPassId?: number | null;
 }
 
 export interface ClassificationMetrics {

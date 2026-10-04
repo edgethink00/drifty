@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildProjectPassAnalysisWindows, type ActivityCategory, type ActivitySegment, type Project, type ProductivityLabel, type StoredClassificationSource, type TrackerApi } from "@drifty/domain";
+import { buildProjectPassAnalysisWindows, type ActivityCategory, type ActivityClassificationRecord, type ActivitySegment, type Project, type ProductivityLabel, type StoredClassificationSource, type TrackerApi } from "@drifty/domain";
 import {
   chunkProjectPassWindows,
   parseProjectPassOutput,
@@ -194,7 +194,7 @@ function mockTracker(overrides: Partial<TrackerApi> = {}): { tracker: TrackerApi
     getAiReviewEvents: vi.fn(async () => []),
     recordProjectPass: vi.fn(async () => ({ id: 7, ranAt: "2026-04-06T23:00:00+00:00" })),
     saveProjectWindowAssignments: vi.fn(async () => ({ saved: 0, skippedManual: 0 })),
-    saveClassifications: vi.fn(async () => ({ saved: 0 })),
+    saveClassifications: vi.fn(async (records: ActivityClassificationRecord[]) => ({ saved: records.length })),
     saveAiReviewEvents: vi.fn(async () => ({ saved: 0 })),
     getTeamProjects: vi.fn(async () => []),
     getTeamProjectAssignments: vi.fn(async () => []),
@@ -370,9 +370,29 @@ describe("runProjectPass orchestration", () => {
     expect(summary.assignments).toBe(1);
     expect(summary.corrections).toBe(1);
     expect(spies.recordProjectPass).toHaveBeenCalledTimes(1);
-    expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ model: "test-model", assignmentsCount: 1, correctionsCount: 1 }));
+    expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ model: "test-model", assignmentsCount: 1, correctionsCount: 0 }));
     expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: "w0", projectId: "p1", teamProjectId: null, passId: 7, assignedAt: "2026-04-06T23:00:00+00:00" })]);
-    expect(spies.saveAiReviewEvents).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", passId: 7, newProductivity: "focus" })]);
+    expect(spies.saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+      segmentId: "1", source: "ai_review", productivity: "focus", reviewPassId: 7,
+    })]);
+    expect(spies.saveAiReviewEvents).not.toHaveBeenCalled();
+  });
+
+  it("reports only persisted corrections when a user choice wins during inference", async () => {
+    const save = vi.fn(async () => ({ saved: 0 }));
+    const { tracker, spies } = mockTracker({ saveClassifications: save });
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [], corrections: [{ id: "w0", category: "workspace", productivity: "focus", confidence: 0.95 }] },
+      usage: {},
+    }));
+    const summary = await runProjectPass({
+      range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" },
+      trigger: "manual", tracker, inference,
+      now: () => "2026-04-06T23:00:00Z", contextPolicy: CONTEXT_POLICY,
+    });
+    expect(save).toHaveBeenCalledWith([expect.objectContaining({ source: "ai_review", reviewPassId: 7 })]);
+    expect(summary.corrections).toBe(0);
+    expect(spies.saveAiReviewEvents).not.toHaveBeenCalled();
   });
 
   it("routes team-project assignments to the local team mirror, not the personal table", async () => {

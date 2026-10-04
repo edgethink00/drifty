@@ -285,6 +285,25 @@ describe("useProjectClassification manual passes", () => {
     expect(hook.result.current.runError).toBeNull();
   });
 
+  it("does not call rejected user-choice corrections an empty model response", async () => {
+    const tracker = {
+      getProjects: vi.fn(async () => []),
+      getProjectAssignments: vi.fn(async () => []),
+      getProjectWindowAssignments: vi.fn(async () => []),
+      getAiReviewEvents: vi.fn(async () => []),
+      getProjectPassRuns: vi.fn(async () => []),
+    } as unknown as TrackerApi;
+    const summary: ProjectPassSummary = {
+      ran: true, chunks: 1, assignments: 0, corrections: 0, skippedCorrections: 1,
+      tokensIn: 0, tokensOut: 0, failedChunks: 0,
+    };
+    scheduledProjectPass.mockResolvedValueOnce(summary);
+    const { hook } = renderClassification(tracker, { analysisConnected: true, selectedDayRange: rangeA });
+    await act(async () => { await hook.result.current.runPassNow(); });
+    expect(hook.result.current.runError).toBeNull();
+    expect(hook.result.current.lastRunSummary).toEqual(summary);
+  });
+
   it("keeps an automatic pass failure out of the run-error banner", async () => {
     const tracker = {
       getProjects: vi.fn(async () => []),
