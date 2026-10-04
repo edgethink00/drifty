@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchOwnLeaderboardEntry,
   type LeaderboardResult,
   type OwnLeaderboardEntry,
 } from "../leaderboard/leaderboardService";
 import type { ShareCardLiveRank, ShareCardLiveRanks } from "./shareCardUnifiedSvg";
+
+import { invalidateShareCardRanks, loadShareCardRank, peekShareCardRank } from "./shareCardRankCache";
 
 export type ShareCardRankAvailability = "loading" | "ready" | "not_joined" | "unavailable";
 
@@ -68,52 +70,53 @@ export function toShareCardLiveRanks(state: ShareCardLiveRanksState): ShareCardL
  * Loads only the member's own aggregate leaderboard facts when the share sheet
  * opens. This deliberately does not read or transmit any local activity rows.
  */
-export function useShareCardLiveRanks(enabled: boolean) {
-  const [state, setState] = useState<ShareCardLiveRanksState>(INITIAL_STATE);
+export function useShareCardLiveRanks(enabled: boolean, accountScope: string | null = null, windowKey = "") {
+  const loadRevision = useRef(0);
+  const lifetime = useRef({ accountScope, windowKey, active: true });
+  lifetime.current.accountScope = accountScope;
+  lifetime.current.windowKey = windowKey;
+  const initialState = useCallback((): ShareCardLiveRanksState => {
+    if (!enabled || !accountScope) return INITIAL_STATE;
+    const periodState = (period: "daily" | "weekly") => {
+      const cached = peekShareCardRank(accountScope, windowKey, period);
+      return cached ? resolveShareCardRankState(cached) : LOADING_RANK;
+    };
+    return { daily: periodState("daily"), weekly: periodState("weekly") };
+  }, [enabled, accountScope, windowKey]);
+  const [snapshot, setSnapshot] = useState(() => ({ accountScope, windowKey, state: initialState() }));
+  const state = snapshot.accountScope === accountScope && snapshot.windowKey === windowKey ? snapshot.state : initialState();
+
+  const load = useCallback(async (disposed: () => boolean) => {
+    if (!enabled || !accountScope) return;
+    await Promise.all((["daily", "weekly"] as const).map(async period => {
+      const result = await loadShareCardRank(accountScope, windowKey, period, () => fetchOwnLeaderboardEntry(period, undefined, accountScope));
+      if (disposed()) return;
+      setSnapshot(previous => ({ accountScope, windowKey, state: {
+        ...(previous.accountScope === accountScope && previous.windowKey === windowKey ? previous.state : initialState()),
+        [period]: resolveShareCardRankState(result),
+      } }));
+    }));
+  }, [enabled, accountScope, windowKey, initialState]);
 
   const refresh = useCallback(async () => {
-    if (!enabled) {
-      setState(INITIAL_STATE);
-      return;
-    }
-    setState({ daily: LOADING_RANK, weekly: LOADING_RANK });
-    const [daily, weekly] = await Promise.all([
-      fetchOwnLeaderboardEntry("daily"),
-      fetchOwnLeaderboardEntry("weekly"),
-    ]);
-    setState({
-      daily: resolveShareCardRankState(daily),
-      weekly: resolveShareCardRankState(weekly),
-    });
-  }, [enabled]);
+    const inactive = () => !lifetime.current.active || lifetime.current.accountScope !== accountScope || lifetime.current.windowKey !== windowKey;
+    if (!enabled || !accountScope || inactive()) return;
+    const revision = ++loadRevision.current;
+    const obsolete = () => inactive() || revision !== loadRevision.current;
+    invalidateShareCardRanks(accountScope);
+    setSnapshot({ accountScope, windowKey, state: { daily: LOADING_RANK, weekly: LOADING_RANK } });
+    await load(obsolete);
+  }, [enabled, accountScope, windowKey, load]);
 
   useEffect(() => {
     let disposed = false;
-    if (!enabled) {
-      setState(INITIAL_STATE);
-      return undefined;
-    }
-    setState({ daily: LOADING_RANK, weekly: LOADING_RANK });
-    void Promise.all([
-      fetchOwnLeaderboardEntry("daily"),
-      fetchOwnLeaderboardEntry("weekly"),
-    ]).then(([daily, weekly]) => {
-      if (disposed) return;
-      setState({
-        daily: resolveShareCardRankState(daily),
-        weekly: resolveShareCardRankState(weekly),
-      });
-    }).catch(() => {
-      if (disposed) return;
-      setState({
-        daily: { availability: "unavailable", rank: null },
-        weekly: { availability: "unavailable", rank: null },
-      });
-    });
-    return () => {
-      disposed = true;
-    };
-  }, [enabled]);
+    const revision = ++loadRevision.current;
+    const currentLifetime = lifetime.current;
+    currentLifetime.active = true;
+    setSnapshot({ accountScope, windowKey, state: initialState() });
+    void load(() => disposed || revision !== loadRevision.current);
+    return () => { disposed = true; currentLifetime.active = false; };
+  }, [accountScope, windowKey, initialState, load]);
 
   return { state, liveRanks: toShareCardLiveRanks(state), refresh };
 }

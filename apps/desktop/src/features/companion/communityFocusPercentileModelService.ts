@@ -22,6 +22,11 @@ let memoryCache: {
 } | null = null;
 let inFlight: Promise<CommunityFocusPercentileModels> | null = null;
 
+/** Synchronous fresh-cache access for the share sheet's first render. */
+export function peekCommunityFocusPercentileModels(): CommunityFocusPercentileModels | undefined {
+  return memoryCache && Date.now() - memoryCache.loadedAtMs < MEMORY_CACHE_MS ? memoryCache.models : undefined;
+}
+
 /** Load aggregate-only models without requiring account or leaderboard membership. */
 export async function loadCommunityFocusPercentileModels({
   forceRefresh = false,

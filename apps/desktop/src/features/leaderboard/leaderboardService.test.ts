@@ -1,3 +1,4 @@
+import { loadShareCardRank, peekShareCardRank, setShareCardRankAccountScope } from "../share/shareCardRankCache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LeaderboardRow } from "./leaderboardService";
@@ -93,6 +94,27 @@ beforeEach(() => {
 });
 
 describe("leaderboardService", () => {
+  it("rejects a share preparation request if auth has changed before the RPC", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({ data: { user: { id: "b" } }, error: null });
+    expect((await fetchOwnLeaderboardEntry("daily", client, "a")).success).toBe(false);
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("invalidates prepared share ranks after a successful opt-out but preserves them after failure", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({ data: { user: { id: "a" } }, error: null });
+    setShareCardRankAccountScope("a");
+    await loadShareCardRank("a", "day", "daily", async () => ({ success: true, error: null, data: null }));
+    client.rpc.mockResolvedValue({ data: null, error: { message: "offline" } });
+    await optOutLeaderboard("daily", client);
+    expect(peekShareCardRank("a", "day", "daily")).toBeDefined();
+    client.rpc.mockResolvedValue({ data: [], error: null });
+    await optOutLeaderboard("daily", client);
+    expect(peekShareCardRank("a", "day", "daily")).toBeUndefined();
+    setShareCardRankAccountScope(null);
+  });
+
   it("returns disabled when Supabase is not configured", async () => {
     const result = await fetchGlobalLeaderboard();
 

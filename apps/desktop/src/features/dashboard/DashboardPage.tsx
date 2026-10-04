@@ -23,6 +23,7 @@ import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
 import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type ThemeMode } from "../settings/settingsStorage";
 import { ShareCardModal, type ShareCardModalCard } from "../share/ShareCardModal";
+import { useShareCardPreparation } from "../share/useShareCardPreparation";
 import { buildShareCardData, buildShareWeekCardData } from "../share/shareCard";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
@@ -103,6 +104,7 @@ type DashboardPageProps = {
   readonly onDismissDashboardAiRecovery: () => void;
   readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onOpenDashboardAiSetup: () => void;
+  readonly shareAccountScope?: string | null;
   readonly onJoinLeaderboard?: () => Promise<void>;
   readonly onManageCloudBilling?: () => void;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
@@ -179,6 +181,7 @@ export function DashboardPage({
   onDismissDashboardAiRecovery,
   onFlowIntervalChange,
   onOpenDashboardAiSetup,
+  shareAccountScope = null,
   onJoinLeaderboard,
   onManageCloudBilling,
   onSelectBillingPlan,
@@ -250,6 +253,8 @@ export function DashboardPage({
     (dashPeriod === "Today" && hasMeasuredActivity)
     || (dashPeriod === "Week" && totalSeconds > 0)
   );
+  const shareComparisonWindowKey = `${logicalToday}:${startOfDayMinutes}`;
+  const prepareShareCard = useShareCardPreparation(showShareButton, shareAccountScope, shareComparisonWindowKey);
   // Share cards are assembled only after the modal opens. The shape is aggregate-only:
   // category/productivity totals and derived hourly/daily rhythm, never raw activity rows.
   // Exported card content stays English even when the surrounding app chrome is Korean.
@@ -320,7 +325,9 @@ export function DashboardPage({
           type="button"
           className="app-btn app-btn--secondary app-btn--header-action dashboard-share-button"
           aria-haspopup="dialog"
-          onClick={() => setShareCardOpen(true)}
+          onPointerEnter={prepareShareCard}
+          onFocus={prepareShareCard}
+          onClick={() => { prepareShareCard(); setShareCardOpen(true); }}
         >
           <ShareIcon />
           <span>{dashPeriod === "Today" ? t("dashboard.today.share") : t("dashboard.week.share")}</span>
@@ -529,6 +536,9 @@ export function DashboardPage({
 
       <ModalPresence>{shareCardOpen && shareCard ? (
         <ShareCardModal
+          key={shareAccountScope ?? "signed-out"}
+          accountScope={shareAccountScope}
+          comparisonWindowKey={shareComparisonWindowKey}
           card={shareCard}
           defaultTheme={appTheme}
           onJoinLeaderboard={onJoinLeaderboard}

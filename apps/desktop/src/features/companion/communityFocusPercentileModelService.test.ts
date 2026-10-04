@@ -34,9 +34,11 @@ describe("community focus percentile model service", () => {
       error: null,
       data: aggregate(period),
     }));
-    const { loadCommunityFocusPercentileModels } = await import("./communityFocusPercentileModelService");
+    const { loadCommunityFocusPercentileModels, peekCommunityFocusPercentileModels } = await import("./communityFocusPercentileModelService");
 
+    expect(peekCommunityFocusPercentileModels()).toBeUndefined();
     const models = await loadCommunityFocusPercentileModels();
+    expect(peekCommunityFocusPercentileModels()).toBe(models);
 
     expect(mocks.fetchCommunityFocusPercentileModel).toHaveBeenCalledWith("daily");
     expect(mocks.fetchCommunityFocusPercentileModel).toHaveBeenCalledWith("weekly");

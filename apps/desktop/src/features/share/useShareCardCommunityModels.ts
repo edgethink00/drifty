@@ -1,21 +1,21 @@
 import { useEffect, useState } from "react";
 import type { CommunityFocusPercentileModels } from "../companion/communityFocusPercentile";
-import { loadCommunityFocusPercentileModels } from "../companion/communityFocusPercentileModelService";
+import { loadCommunityFocusPercentileModels, peekCommunityFocusPercentileModels } from "../companion/communityFocusPercentileModelService";
+import { shareCardRequestDeadline } from "./shareCardRequestDeadline";
 
-/** Reuse the achievement model cache; no activity or membership is submitted. */
+/** Use a prepared model on the first render and keep this sheet's snapshot stable. */
 export function useShareCardCommunityModels() {
-  const [models, setModels] = useState<CommunityFocusPercentileModels>();
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState(() => {
+    const models = peekCommunityFocusPercentileModels();
+    return { models, loading: models === undefined };
+  });
   useEffect(() => {
+    if (!state.loading) return;
     let disposed = false;
-    void loadCommunityFocusPercentileModels().then((loaded) => {
-      if (!disposed) setModels(loaded);
-    }).catch(() => {
-      // Focus-time cards remain available when comparison data cannot load.
-    }).finally(() => {
-      if (!disposed) setLoading(false);
+    void shareCardRequestDeadline<CommunityFocusPercentileModels | undefined>(loadCommunityFocusPercentileModels(), undefined).then(models => {
+      if (!disposed) setState({ models, loading: false });
     });
     return () => { disposed = true; };
-  }, []);
-  return { models, loading };
+  }, [state.loading]);
+  return state;
 }

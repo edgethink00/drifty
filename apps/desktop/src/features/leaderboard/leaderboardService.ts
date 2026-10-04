@@ -1,3 +1,4 @@
+import { invalidateShareCardRanks } from "../share/shareCardRankCache";
 import { isSupabaseEnabled, supabase } from "../../lib/supabase/client";
 import { shouldUseLeaderboardPreview, shouldUsePreviewData } from "../../lib/api/previewData";
 import { localDateKey } from "../../lib/formatting";
@@ -400,6 +401,7 @@ export async function fetchCommunityFocusPercentileModel(
 export async function fetchOwnLeaderboardEntry(
   periodOrClient: LeaderboardPeriod | LeaderboardClient | null = DEFAULT_LEADERBOARD_PERIOD,
   maybeClient?: LeaderboardClient | null,
+  expectedUserId?: string,
 ): Promise<LeaderboardResult<OwnLeaderboardEntry | null>> {
   const period = typeof periodOrClient === "string" ? periodOrClient : DEFAULT_LEADERBOARD_PERIOD;
   const client = typeof periodOrClient === "string" ? maybeClient : periodOrClient;
@@ -412,6 +414,10 @@ export async function fetchOwnLeaderboardEntry(
   const { user } = await getCurrentUser(resolvedClient);
   if (!user) {
     return { success: false, error: "Not authenticated" };
+  }
+
+  if (expectedUserId !== undefined && user.id !== expectedUserId) {
+    return { success: false, error: "Share comparison account changed" };
   }
 
   try {
@@ -510,6 +516,7 @@ export async function publishOwnLeaderboardCheckpoint(
     });
     if (error) return { success: false, error: toLeaderboardErrorMessage(error) };
 
+    invalidateShareCardRanks(user.id);
     const row = data?.[0] as { published?: boolean | string } | undefined;
     return {
       success: true,
@@ -567,6 +574,7 @@ export async function publishOwnFocusTotal(
       return { success: false, error: error.message };
     }
 
+    invalidateShareCardRanks(user.id);
     return { success: true, error: null };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -599,6 +607,7 @@ export async function optOutLeaderboard(
     const currentRow = data?.[0] as OwnLeaderboardRpcRow | undefined;
 
     if (!currentRow) {
+      invalidateShareCardRanks(user.id);
       return { success: true, error: null };
     }
 
@@ -623,6 +632,7 @@ export async function optOutLeaderboard(
       return { success: false, error: error.message };
     }
 
+    invalidateShareCardRanks(user.id);
     return { success: true, error: null };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };

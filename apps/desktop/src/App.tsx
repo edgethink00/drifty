@@ -1,3 +1,4 @@
+import { setShareCardRankAccountScope } from "./features/share/shareCardRankCache";
 import { canOfferPromoCode, canStartCloudTrial } from "./features/billing/billingEligibility";
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
 import { SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
@@ -1718,6 +1719,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const shouldCheckBillingEntitlement = isCloudOnline && isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
   const shouldBlockLocalTrackerAccess = isEffectiveAuthRequired && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
+  const shareAccountScope = isPolicySignedIn ? user?.id ?? null : null;
+  useEffect(() => { setShareCardRankAccountScope(shareAccountScope); }, [shareAccountScope]);
   const requestCloudBillingAuth = openDefaultAuthModal;
   const {
     billingActionError,
@@ -10435,6 +10438,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={handleFlowIntervalChange}
             onOpenDashboardAiSetup={openDashboardAiSetup}
+            shareAccountScope={shareAccountScope}
             onJoinLeaderboard={handleLeaderboardOptIn}
             onManageCloudBilling={() => {
               // Same preview guard as checkout: the overlay is synthetic and must

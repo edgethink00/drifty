@@ -22,6 +22,8 @@ import { useShareCardCommunityModels } from "./useShareCardCommunityModels";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { detectHostPlatform, type HostPlatform } from "../../lib/api/accessibilityClient";
 
+import { useShareCardPreview } from "./useShareCardPreview";
+
 export type ShareCardModalCard =
   | { readonly kind: "day"; readonly data: ShareCardData }
   | { readonly kind: "week"; readonly data: ShareWeekCardData };
@@ -30,6 +32,8 @@ type ShareCardModalProps = {
   readonly card: ShareCardModalCard;
   readonly defaultTheme: ShareCardTheme;
   /** Opens the existing aggregate-only leaderboard opt-in flow. */
+  readonly accountScope?: string | null;
+  readonly comparisonWindowKey?: string;
   readonly onJoinLeaderboard?: () => Promise<void>;
   readonly onClose: () => void;
 };
@@ -104,7 +108,7 @@ function rankGateForStory(
   return { detail: t("share.rankUnavailable"), action: null };
 }
 
-export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose }: ShareCardModalProps) {
+export function ShareCardModal({ card, defaultTheme, accountScope = null, comparisonWindowKey = "", onJoinLeaderboard, onClose }: ShareCardModalProps) {
   const { effectiveLanguage, t } = useLocalization();
   const hostPlatform = useMemo(() => detectHostPlatform(), []);
   const [selectedStoryId, setSelectedStoryId] = useState<UnifiedShareStoryId | null>(null);
@@ -117,7 +121,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
   const liveRankStoryPeriod = LIVE_RANK_STORY_PERIOD[storyOption.value];
   // Rank stories prefer an opted-in aggregate leaderboard fact for the exact
   // matching window. Estimates use the same model as achievement alerts.
-  const { state: liveRankState, refresh: refreshLiveRanks } = useShareCardLiveRanks(Boolean(onJoinLeaderboard && liveRankStoryPeriod));
+  const { state: liveRankState, refresh: refreshLiveRanks } = useShareCardLiveRanks(Boolean(onJoinLeaderboard), accountScope, comparisonWindowKey);
   const { models: communityModels, loading: communityModelsLoading } = useShareCardCommunityModels();
   const rankGate = rankGateForStory(card, storyOption.value, liveRankState, t);
   const lockedRankPeriod = rankGate && rankStoryPeriod ? rankStoryPeriod : null;
@@ -149,11 +153,14 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
     ? `drifty-week-${card.data.startDay}`
     : `drifty-${card.data.day}`;
   const previewSrc = useMemo(() => shareCardSvgDataUrl(svg), [svg]);
+  const comparisonLoading = Boolean(liveRankStoryPeriod) && (
+    liveRankState[liveRankStoryPeriod ?? "daily"].availability === "loading"
+    || (!rankStoryPeriod && communityModelsLoading && !matchingLiveRanks[liveRankStoryPeriod ?? "daily"])
+  );
+  const preview = useShareCardPreview(previewSrc, !comparisonLoading);
   const exportSize = SHARE_CARD_EXPORT_SIZES[SHARE_CARD_FORMAT] ?? SHARE_CARD_UNIFIED_SIZE;
   const working = exportState.kind === "working";
-  const comparisonLoading = communityModelsLoading && Boolean(liveRankStoryPeriod)
-    && !rankStoryPeriod && !matchingLiveRanks[liveRankStoryPeriod ?? "daily"];
-  const actionsDisabled = working || lockedRankPeriod !== null || comparisonLoading;
+  const actionsDisabled = working || lockedRankPeriod !== null || comparisonLoading || preview.pending;
   const caption = buildShareCardCaption();
 
   useEffect(() => {
@@ -247,12 +254,17 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
               >
                 <ChevronIcon direction="previous" />
               </button>
-              <img
-                key={storyOption.value}
-                className="share-card-stage__preview"
-                src={previewSrc}
-                alt={`${previewAlt} — ${storyLabel(storyIndex, storyOption.label)}`}
-              />
+              {preview.src ? (
+                <img
+                  className="share-card-stage__preview"
+                  src={preview.src}
+                  aria-busy={preview.pending}
+                  alt={`${previewAlt} — ${storyLabel(storyIndex, storyOption.label)}`}
+                />
+              ) : null}
+              {!preview.src && !preview.failed ? (
+                <div className="share-card-stage__loading" role="status">{t("share.loadingComparison")}</div>
+              ) : null}
               <button
                 type="button"
                 className="share-card-stage__arrow share-card-stage__arrow--next"
@@ -281,7 +293,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
               </div>
             </div>
 
-            {rankGate && onJoinLeaderboard ? (
+            {rankGate && onJoinLeaderboard && !comparisonLoading ? (
               <div className="share-card-rank-gate" role="status">
                 <span>{rankGate.detail}</span>
                 {rankGate.action === "join" ? (
@@ -292,8 +304,8 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
               </div>
             ) : null}
 
-            {comparisonLoading ? (
-              <div className="share-card-rank-gate" role="status">{t("share.loadingComparison")}</div>
+            {preview.failed ? (
+              <div className="share-card-rank-gate" role="alert">{t("share.postError")}</div>
             ) : null}
 
             <div className="share-card-options" aria-label={t("share.optionsAria")}>

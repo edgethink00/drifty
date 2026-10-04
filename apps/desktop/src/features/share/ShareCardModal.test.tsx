@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModalPresence } from "../../components/ModalPresence";
 import { ShareCardModal } from "./ShareCardModal";
 import type { CommunityFocusPercentileModels } from "../companion/communityFocusPercentile";
 import type { ShareCardLiveRanks } from "./shareCardUnifiedSvg";
-import type { ShareCardLiveRanksState } from "./useShareCardLiveRanks";
+import { useShareCardLiveRanks, type ShareCardLiveRanksState } from "./useShareCardLiveRanks";
 
 const exportMocks = vi.hoisted(() => ({
   copyShareCardPng: vi.fn(() => Promise.resolve()),
   openShareComposer: vi.fn((_url: string) => Promise.resolve()),
   saveShareCardWithDialog: vi.fn((_svg: string, _width: number, _height: number, _fileName: string): Promise<{ path: string | null; cancelled: boolean }> => Promise.resolve({ path: "/Users/test/Downloads/drifty.png", cancelled: false })),
-  shareCardSvgDataUrl: vi.fn(() => "data:image/svg+xml,test"),
+  shareCardSvgDataUrl: vi.fn((_svg: string) => "data:image/svg+xml,test"),
 }));
 
 const modelMocks = vi.hoisted(() => ({
@@ -19,6 +19,7 @@ const modelMocks = vi.hoisted(() => ({
 }));
 vi.mock("../companion/communityFocusPercentileModelService", () => ({
   loadCommunityFocusPercentileModels: modelMocks.load,
+  peekCommunityFocusPercentileModels: () => undefined,
 }));
 
 const rankMocks = vi.hoisted(() => ({
@@ -50,7 +51,7 @@ const rankMocks = vi.hoisted(() => ({
 
 vi.mock("./shareCardExport", () => exportMocks);
 vi.mock("./useShareCardLiveRanks", () => ({
-  useShareCardLiveRanks: () => rankMocks,
+  useShareCardLiveRanks: vi.fn(() => rankMocks),
 }));
 
 const platformMock = vi.hoisted(() => ({ value: "macos" as "macos" | "windows" | "other" }));
@@ -59,9 +60,15 @@ vi.mock("../../lib/api/accessibilityClient", async (importOriginal) => ({
   detectHostPlatform: () => platformMock.value,
 }));
 
+beforeEach(() => {
+  vi.stubGlobal("Image", class { src = ""; decode = () => Promise.resolve(); });
+});
+
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
   vi.clearAllMocks();
+  exportMocks.shareCardSvgDataUrl.mockImplementation(() => "data:image/svg+xml,test");
   platformMock.value = "macos";
   modelMocks.load.mockReset().mockImplementation(() => Promise.resolve({ daily: null, weekly: null }));
   rankMocks.state = {
@@ -307,9 +314,64 @@ it("waits for comparison data before exporting a percentile, while focus-only ex
   renderModal();
   expect((screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("radio", { name: "Focus time" }));
-  expect((screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement).disabled).toBe(false);
+  await waitFor(() => expect((screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByRole("radio", { name: "Curve Card" }));
   expect((screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement).disabled).toBe(true);
   await act(async () => { resolveModels({ daily: null, weekly: null }); });
   expect((screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+
+it("blocks export until the selected card is decoded without remounting the preview", async () => {
+  let decoded!: () => void;
+  vi.stubGlobal("Image", class { src = ""; decode = () => new Promise<void>((resolve) => { decoded = resolve; }); });
+  exportMocks.shareCardSvgDataUrl.mockImplementation((svg) => `data:image/svg+xml,${encodeURIComponent(svg)}`);
+  renderModal();
+  await act(async () => {});
+  const image = screen.getByRole("img");
+  const oldSrc = image.getAttribute("src");
+  fireEvent.click(screen.getByRole("radio", { name: "Focus time" }));
+  const copy = screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement;
+  expect(copy.disabled).toBe(true);
+  expect(image.getAttribute("src")).toBe(oldSrc);
+  fireEvent.click(copy);
+  expect(exportMocks.copyShareCardPng).not.toHaveBeenCalled();
+  await act(async () => decoded());
+  expect(screen.getByRole("img")).toBe(image);
+  expect(image.getAttribute("src")).not.toBe(oldSrc);
+  expect(copy.disabled).toBe(false);
+});
+
+
+it("never shows the fallback card while comparison sources or image decoding are pending", async () => {
+  let modelsReady!: (models: CommunityFocusPercentileModels) => void;
+  let decoded!: () => void;
+  modelMocks.load.mockReturnValueOnce(new Promise((resolve) => { modelsReady = resolve; }));
+  rankMocks.state = { daily: { availability: "loading", rank: null }, weekly: { availability: "loading", rank: null } };
+  exportMocks.shareCardSvgDataUrl.mockImplementation((svg) => `data:image/svg+xml,${encodeURIComponent(svg)}`);
+  vi.stubGlobal("Image", class { src = ""; decode = () => new Promise<void>((resolve) => { decoded = resolve; }); });
+  const renderSheet = () => <ShareCardModal card={card} defaultTheme="light" onJoinLeaderboard={async () => {}} onClose={vi.fn()} />;
+  const { rerender } = render(renderSheet());
+  expect(screen.queryByRole("img")).toBeNull();
+  expect(screen.getByRole("status").closest(".share-card-stage")).toBeTruthy();
+  await act(async () => modelsReady({ daily: {
+    version: 1, source: "leaderboard", period: "daily", sampleSize: 100, participantCount: 100,
+    logMeanMinutes: Math.log(300), logStandardDeviationMinutes: .5, generatedAt: new Date().toISOString(),
+  }, weekly: null }));
+  expect(screen.queryByRole("img")).toBeNull();
+  rankMocks.state = { daily: { availability: "not_joined", rank: null }, weekly: { availability: "not_joined", rank: null } };
+  rerender(renderSheet());
+  expect(screen.queryByRole("img")).toBeNull();
+  await act(async () => decoded());
+  expect(decodeURIComponent(screen.getByRole("img").getAttribute("src") ?? "")).toContain("Estimated focus percentile");
+  expect(screen.queryByText("Loading comparison data…")).toBeNull();
+});
+
+it("keeps live-rank lookup enabled when navigating to a local card", async () => {
+  render(<ShareCardModal card={card} defaultTheme="light" onJoinLeaderboard={async () => {}} onClose={vi.fn()} />);
+  fireEvent.click(screen.getByRole("radio", { name: "Focus time" }));
+  await act(async () => {});
+  expect(vi.mocked(useShareCardLiveRanks)).toHaveBeenLastCalledWith(true, null, "");
+  fireEvent.click(screen.getByRole("radio", { name: "Curve Card" }));
+  expect(vi.mocked(useShareCardLiveRanks)).toHaveBeenLastCalledWith(true, null, "");
 });
