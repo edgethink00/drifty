@@ -83,6 +83,45 @@ export function formatLocalizedTimeLabel(value: string | Date, language: Display
     .format(typeof value === "string" ? new Date(value) : value);
 }
 
+/**
+ * Start–end time on one line without repeating the meridiem: "오전 1:41 – 1:48",
+ * "1:41 – 1:48 AM". Collapses to a single time when both ends land on the same
+ * displayed minute, which minute-precision capture slices hit constantly.
+ */
+export function formatLocalizedCompactTimeRange(
+  startedAt: string | Date,
+  endedAt: string | Date,
+  language: DisplayLanguage,
+): string {
+  const start = typeof startedAt === "string" ? new Date(startedAt) : startedAt;
+  const end = typeof endedAt === "string" ? new Date(endedAt) : endedAt;
+  const partsOf = (date: Date) => {
+    const minutes = date.getHours() * 60 + date.getMinutes();
+    const hour12 = date.getHours() % 12 === 0 ? 12 : date.getHours() % 12;
+    const time = `${hour12}:${String(date.getMinutes()).padStart(2, "0")}`;
+    const ampm = date.getHours() < 12
+      ? (language === "en" ? "AM" : "오전")
+      : (language === "en" ? "PM" : "오후");
+    return { minutes, time, ampm };
+  };
+  const s = partsOf(start);
+  const e = partsOf(end);
+  const join = (time: string, ampm: string) => (language === "en" ? `${time} ${ampm}` : `${ampm} ${time}`);
+  if (s.ampm === e.ampm && s.minutes === e.minutes) return join(s.time, s.ampm);
+  if (s.ampm === e.ampm) return language === "en" ? `${s.time} – ${e.time} ${s.ampm}` : `${s.ampm} ${s.time} – ${e.time}`;
+  return `${join(s.time, s.ampm)} – ${join(e.time, e.ampm)}`;
+}
+
+/**
+ * Sub-minute durations read as seconds ("54초", "54s") because minute-rounding
+ * would print them as 0; anything longer keeps the compact minute format.
+ */
+export function formatLocalizedShortDurationFromSeconds(totalSeconds: number, language: DisplayLanguage): string {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  if (seconds < 60) return language === "en" ? `${seconds}s` : `${seconds}초`;
+  return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
+}
+
 export function formatRelativeTime(value: string, locale = "en-US"): string {
   const parsed = new Date(value).getTime();
   const isKorean = locale.toLowerCase().startsWith("ko");

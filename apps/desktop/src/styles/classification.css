@@ -1180,15 +1180,25 @@
 }
 
 .classification-panel-view__capture-slice {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-2);
   min-width: 0;
-  padding: 6px var(--space-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  padding: 5px 4px;
+}
+
+/* Inset separators match the activity rows above: lines, not boxes. */
+.classification-panel-view__capture-slice + .classification-panel-view__capture-slice::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 4px;
+  right: 4px;
+  height: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 
 .classification-panel-view__capture-slice-time,
@@ -1202,6 +1212,11 @@
   font-size: 0.71875rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.classification-panel-view__capture-slice-count {
+  color: var(--text-soft);
+  font-size: 0.6875rem;
 }
 
 .classification-panel-view__capture-slice-duration {

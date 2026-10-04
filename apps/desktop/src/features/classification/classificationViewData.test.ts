@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "@drifty/domain";
-import { buildClassificationActivityRows, classificationActivityLabel, classificationSourceLabel, isUnidentifiedActivitySegment, windowTitleMatchesSiteTitle } from "./classificationViewData";
+import { buildCaptureSliceGroups, buildClassificationActivityRows, classificationActivityLabel, classificationSourceLabel, isUnidentifiedActivitySegment, windowTitleMatchesSiteTitle } from "./classificationViewData";
 
 function segment(overrides: Partial<ActivitySegment>): ActivitySegment {
   return {
@@ -135,5 +135,67 @@ describe("activity rows we could not identify", () => {
       chatgpt({ id: "big", startedAt: "2026-09-07T02:00:00", endedAt: "2026-09-07T02:10:00", durationSeconds: 600, windowTitle: "긴 작업 - drifty_mac" }),
     ]);
     expect(rows.map((row) => row.unidentified)).toEqual([false, true]);
+  });
+});
+
+describe("buildCaptureSliceGroups", () => {
+  const BASE = Date.parse("2026-10-04T00:00:00Z");
+  const slice = (id: string, startSec: number, endSec: number) => segment({
+    id,
+    startedAt: new Date(BASE + startSec * 1000).toISOString(),
+    endedAt: new Date(BASE + endSec * 1000).toISOString(),
+    durationSeconds: endSec - startSec,
+  });
+
+  it("merges captures separated by a gap of at most 60 seconds into one sitting", () => {
+    const groups = buildCaptureSliceGroups([
+      slice("a", 0, 28),
+      slice("b", 55, 81),     // 27s after a -> same group
+      slice("c", 242, 452),   // 161s after b -> new group
+      slice("d", 472, 490),   // 20s after c -> same group
+    ]);
+
+    expect(groups.map((group) => group.segments.map((item) => item.id))).toEqual([["a", "b"], ["c", "d"]]);
+    expect(groups[0].startedAt).toBe(new Date(BASE).toISOString());
+    expect(groups[0].endedAt).toBe(new Date(BASE + 81 * 1000).toISOString());
+    // The total is the sum of member captures — the gap between them is not
+    // counted as activity time.
+    expect(groups[0].durationSeconds).toBe(54);
+    expect(groups[1].durationSeconds).toBe(228);
+  });
+
+  it("splits sittings when the boundary gap exceeds 60 seconds", () => {
+    const groups = buildCaptureSliceGroups([
+      slice("a", 0, 30),
+      slice("b", 91, 120),    // gap 61s
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("keeps a single capture as its own group", () => {
+    const groups = buildCaptureSliceGroups([slice("solo", 100, 220)]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].id).toBe("solo");
+    expect(groups[0].segments).toHaveLength(1);
+  });
+
+  it("treats overlapping captures as continuous and clamps the group end", () => {
+    const groups = buildCaptureSliceGroups([
+      slice("a", 0, 100),
+      slice("b", 80, 90),     // fully inside a
+      slice("c", 150, 200),   // 50s after a's end
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].endedAt).toBe(new Date(BASE + 200 * 1000).toISOString());
+    expect(groups[0].durationSeconds).toBe(160);
+  });
+
+  it("sorts out-of-order input before grouping", () => {
+    const groups = buildCaptureSliceGroups([
+      slice("b", 110, 160),   // 70s after a: unordered input must sort before grouping
+      slice("a", 0, 40),
+    ]);
+    expect(groups.map((group) => group.id)).toEqual(["a", "b"]);
+    expect(groups[0].segments[0].id).toBe("a");
   });
 });

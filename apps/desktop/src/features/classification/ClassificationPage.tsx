@@ -11,7 +11,7 @@ import { DateNavigator } from "../../components/DateNavigator";
 import { NavChevronIcon } from "../../components/NavChevronIcon";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedTimeLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
 import {
   CLASSIFICATION_FOCUS_RATE_DESCRIPTION,
@@ -20,6 +20,7 @@ import {
 import type { ClassificationPanelStyle } from "./ClassificationBreakdownCards";
 import { ClassificationCorrectionPopover } from "./ClassificationCorrectionPopover";
 import {
+  buildCaptureSliceGroups,
   captureRowSurfaceDetails,
   classificationActivityDetailsId,
   classificationActivityLabel,
@@ -605,14 +606,18 @@ export function ClassificationPage({
                                   <div className="classification-panel-view__capture-timeline">
                                     <span className="label-mono">{t("classification.captureSlices")}</span>
                                     <div className="classification-panel-view__capture-slice-list" role="list" aria-label={t("classification.captureSlicesFor", { label: rowLabel })}>
-                                      {row.segments.map((segment, index) => {
-                                        const segmentRange = `${formatLocalizedTimeLabel(segment.startedAt, effectiveLanguage)} - ${formatLocalizedTimeLabel(segment.endedAt, effectiveLanguage)}`;
-                                        const segmentDuration = formatLocalizedCompactDurationFromSeconds(segment.durationSeconds, effectiveLanguage);
-                                        const segmentTitle = classificationActivityLabel(segment);
+                                      {buildCaptureSliceGroups(row.segments).map((group, index) => {
+                                        const groupRange = formatLocalizedCompactTimeRange(group.startedAt, group.endedAt, effectiveLanguage);
+                                        const groupDuration = formatLocalizedShortDurationFromSeconds(group.durationSeconds, effectiveLanguage);
+                                        const groupTitle = classificationActivityLabel(group.segments[0]);
+                                        const sliceCount = group.segments.length;
                                         return (
-                                          <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={t("classification.captureSliceAria", { index: index + 1, title: segmentTitle, range: segmentRange, duration: segmentDuration })}>
-                                            <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
-                                            <strong className="classification-panel-view__capture-slice-duration">{segmentDuration}</strong>
+                                          <div key={group.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={sliceCount > 1 ? t("classification.captureSliceGroupAria", { index: index + 1, title: groupTitle, range: groupRange, duration: groupDuration, count: sliceCount }) : t("classification.captureSliceAria", { index: index + 1, title: groupTitle, range: groupRange, duration: groupDuration })}>
+                                            <span className="classification-panel-view__capture-slice-time">
+                                              {groupRange}
+                                              {sliceCount > 1 ? <span className="classification-panel-view__capture-slice-count"> · {t("classification.captureSliceCount", { count: sliceCount })}</span> : null}
+                                            </span>
+                                            <strong className="classification-panel-view__capture-slice-duration">{groupDuration}</strong>
                                           </div>
                                         );
                                       })}

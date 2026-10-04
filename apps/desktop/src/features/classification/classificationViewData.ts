@@ -44,6 +44,52 @@ export type ClassificationActivityRow = {
   unidentified: boolean;
 };
 
+export type CaptureSliceGroup = {
+  /** Stable DOM/aria id: the first segment's id. */
+  id: string;
+  startedAt: string;
+  endedAt: string;
+  /** Sum of member durations — excludes untracked gaps between captures. */
+  durationSeconds: number;
+  segments: ActivitySegment[];
+};
+
+/**
+ * Consecutive captures of the same activity whose boundary gap is at most this
+ * long read as one sitting, not two separate records. Matches the communication
+ * episode convention in domain aggregation.
+ */
+export const CAPTURE_SLICE_GROUP_MAX_GAP_SECONDS = 60;
+
+export function buildCaptureSliceGroups(
+  segments: ActivitySegment[],
+  maxGapSeconds = CAPTURE_SLICE_GROUP_MAX_GAP_SECONDS,
+): CaptureSliceGroup[] {
+  const ordered = segments.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const groups: CaptureSliceGroup[] = [];
+  for (const segment of ordered) {
+    const group = groups[groups.length - 1];
+    const gapSeconds = group
+      ? (Date.parse(segment.startedAt) - Date.parse(group.endedAt)) / 1000
+      : Number.POSITIVE_INFINITY;
+    if (group && gapSeconds <= maxGapSeconds) {
+      group.segments.push(segment);
+      group.durationSeconds += segment.durationSeconds;
+      if (segment.endedAt > group.endedAt) group.endedAt = segment.endedAt;
+      if (segment.startedAt < group.startedAt) group.startedAt = segment.startedAt;
+      continue;
+    }
+    groups.push({
+      id: segment.id,
+      startedAt: segment.startedAt,
+      endedAt: segment.endedAt,
+      durationSeconds: segment.durationSeconds,
+      segments: [segment],
+    });
+  }
+  return groups;
+}
+
 export type TimelineItem = ReturnType<typeof formatTimelineItems>[number];
 
 export type CategoryBreakdownUsageItem = ReturnType<typeof buildAppUsageSummaries>[number];
