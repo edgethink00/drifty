@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Mutex, OnceLock, TryLockError};
 use std::thread;
@@ -106,6 +106,8 @@ pub enum TrackerError {
     CommandFailed(String),
     #[error("tracker serve request timed out after {0:?}")]
     ServeTimedOut(Duration),
+    #[error("tracker is shutting down")]
+    ShuttingDown,
     #[error("tracker returned invalid JSON: {0}")]
     ParseFailed(String),
     #[error("tracker returned an error: {0}")]
@@ -338,6 +340,7 @@ fn bounded_tracker_startup_failure_message(error: &TrackerError) -> String {
         }
         TrackerError::CommandFailed(_)
         | TrackerError::ServeTimedOut(_)
+        | TrackerError::ShuttingDown
         | TrackerError::ParseFailed(_)
         | TrackerError::TrackerReturnedError(_)
         | TrackerError::MissingData => TRACKER_START_ERROR_MESSAGE,
@@ -1110,6 +1113,7 @@ struct ServeProcess {
 }
 
 static SERVE_PROCESS: OnceLock<Mutex<Option<ServeProcess>>> = OnceLock::new();
+static SERVE_EXITING: AtomicBool = AtomicBool::new(false);
 static SERVE_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 // PID of the live serve child so shutdown can force-kill it when the serve
 // mutex is stuck behind a hung round trip. Unix uses the PID directly;
@@ -1294,6 +1298,7 @@ where
         // A serve timeout has already consumed the configured request budget.
         // Do not enter the unbounded one-shot path for the same invocation.
         Err(err @ TrackerError::ServeTimedOut(_)) => Err(err),
+        Err(err @ TrackerError::ShuttingDown) => Err(err),
         Err(_) if retry_safety == SidecarCommandRetrySafety::SafeRead => one_shot(),
         // A failed write/flush or a missing serve response is ambiguous: the
         // sidecar may have already completed a mutating request.
@@ -1307,6 +1312,14 @@ fn should_use_one_shot_when_serve_busy(command: &str) -> bool {
 
 fn serve_slot() -> &'static Mutex<Option<ServeProcess>> {
     SERVE_PROCESS.get_or_init(|| Mutex::new(None))
+}
+
+fn ensure_serve_accepting_requests() -> Result<(), TrackerError> {
+    if SERVE_EXITING.load(Ordering::SeqCst) {
+        Err(TrackerError::ShuttingDown)
+    } else {
+        Ok(())
+    }
 }
 
 fn spawn_serve_process(runtime: &TrackerRuntime, db: &Path) -> Result<ServeProcess, TrackerError> {
@@ -1485,6 +1498,7 @@ fn serve_request_with_lock_mode(
     lock_mode: ServeLockMode,
 ) -> Result<String, TrackerError> {
     // Lock admission and response waiting spend one invocation budget.
+    ensure_serve_accepting_requests()?;
     let budget = ServeInvocationBudget::new();
     let slot = serve_slot();
     let mut guard = match lock_mode {
@@ -1500,6 +1514,7 @@ fn serve_request_with_lock_mode(
         },
     };
 
+    ensure_serve_accepting_requests()?;
     budget.remaining()?;
 
     // Discard a process spawned for a different runtime/db (paths can change
@@ -1518,6 +1533,7 @@ fn serve_request_with_lock_mode(
     let retry_attempts = serve_retry_attempts(retry_safety);
     let mut last_err = TrackerError::CommandFailed("serve process unavailable".into());
     for _ in 0..retry_attempts {
+        ensure_serve_accepting_requests()?;
         budget.remaining()?;
         if guard.is_none() {
             *guard = Some(spawn_serve_process(runtime, db)?);
@@ -1530,6 +1546,14 @@ fn serve_request_with_lock_mode(
         }
         let line = framed.to_string();
 
+        // Exit can begin while process creation holds the slot. In that case
+        // no request may be written to a child published after shutdown's wait.
+        if let Err(error) = ensure_serve_accepting_requests() {
+            if let Some(proc) = guard.take() {
+                kill_serve_process(proc);
+            }
+            return Err(error);
+        }
         budget.remaining()?;
         let attempt = {
             match guard.as_mut() {
@@ -1570,23 +1594,53 @@ fn serve_retry_attempts(retry_safety: SidecarCommandRetrySafety) -> usize {
 const EXIT_STOP_TRACKING_WAIT: Duration = Duration::from_secs(3);
 
 /// Best-effort stop of the detached sampling daemon on app exit so activity
-/// recording does not keep running after the user quits. Runs the sidecar
-/// `stop_tracking` command on a helper thread and bounds the wait so a wedged
-/// sidecar can never hang shutdown.
+/// recording does not keep running after the user quits. Runtime resolution
+/// and the one-shot Stop share one budget; the caller reaps its Stop child
+/// before returning to the app's final exit.
 pub fn stop_tracking_daemon_for_app_exit(app: &AppHandle) {
     let app = app.clone();
-    stop_tracking_daemon_for_app_exit_with(move || {
-        let _ = TrackerController.stop(&app);
+    let _ = stop_tracking_daemon_for_app_exit_with(move || {
+        Ok((resolve_tracker_runtime(&app)?, resolve_db_path(&app)))
     });
 }
 
-fn stop_tracking_daemon_for_app_exit_with(stop: impl FnOnce() + Send + 'static) -> bool {
+pub(crate) fn shutdown_serve_for_app_exit() {
+    // An already-admitted Start must not overtake the independent exit Stop.
+    // Close admission before terminating serve so waiters cannot respawn it.
+    SERVE_EXITING.store(true, Ordering::SeqCst);
+    shutdown_serve_process();
+}
+
+fn stop_tracking_daemon_for_app_exit_with(
+    resolve: impl FnOnce() -> Result<(TrackerRuntime, PathBuf), TrackerError> + Send + 'static,
+) -> Result<Vec<u8>, TrackerError> {
+    let deadline = Instant::now() + EXIT_STOP_TRACKING_WAIT;
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        stop();
-        let _ = sender.send(());
+        // A late resolver may finish after Quit's budget, but cannot send Stop.
+        let _ = sender.send(resolve());
     });
-    receiver.recv_timeout(EXIT_STOP_TRACKING_WAIT).is_ok()
+    let (runtime, db) = receiver
+        .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        .map_err(|error| match error {
+            RecvTimeoutError::Timeout => TrackerError::ServeTimedOut(EXIT_STOP_TRACKING_WAIT),
+            RecvTimeoutError::Disconnected => {
+                TrackerError::CommandFailed("exit tracker runtime resolution failed".into())
+            }
+        })??;
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err(TrackerError::ServeTimedOut(EXIT_STOP_TRACKING_WAIT));
+    }
+    // Interactive serve may be busy. Send exactly one Stop independently, with
+    // Python's existing process/DB ownership checks. Keep child ownership on
+    // the exit caller: a detached worker's Drop might never run at app exit.
+    invoke_one_shot_with_timeout(
+        &runtime,
+        &db,
+        &json!({"command": "stop_tracking", "payload": {}}),
+        remaining,
+    )
 }
 
 /// Terminate the long-lived serve process (called on app exit). The process also
@@ -2198,11 +2252,6 @@ mod tests {
     }
 
     #[test]
-    fn stop_daemon_for_app_exit_reports_completed_fast_stop() {
-        assert!(stop_tracking_daemon_for_app_exit_with(|| {}));
-    }
-
-    #[test]
     fn windows_owner_creation_time_preserves_all_filetime_bits() {
         assert_eq!(
             windows_filetime_value(0x9abc_def0, 0x1234_5678),
@@ -2236,12 +2285,13 @@ mod tests {
     }
 
     #[test]
-    fn stop_daemon_for_app_exit_bounds_the_wait_when_stop_hangs() {
+    fn stop_daemon_for_app_exit_bounds_runtime_resolution() {
         let started = Instant::now();
-        let completed = stop_tracking_daemon_for_app_exit_with(|| {
+        let result = stop_tracking_daemon_for_app_exit_with(|| {
             thread::sleep(EXIT_STOP_TRACKING_WAIT + Duration::from_secs(5));
+            Err(TrackerError::MissingRuntime("fixture".into()))
         });
-        assert!(!completed);
+        assert!(matches!(result, Err(TrackerError::ServeTimedOut(_))));
         assert!(started.elapsed() < EXIT_STOP_TRACKING_WAIT + Duration::from_secs(2));
     }
 
@@ -3341,6 +3391,233 @@ done
             "waiter took {elapsed:?}"
         );
         assert!(serve_slot().lock().unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn app_exit_cancels_inflight_and_waiting_start_before_stop() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
+        struct ResetExit;
+        impl Drop for ResetExit {
+            fn drop(&mut self) {
+                shutdown_serve_process();
+                SERVE_EXITING.store(false, Ordering::SeqCst);
+            }
+        }
+        let _reset = ResetExit;
+        shutdown_serve_process();
+        let dir = temp_dir_path("exit-start-order");
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("fake_tracker.py");
+        std::fs::write(
+            &script,
+            r#"
+import json,sys,time
+from pathlib import Path
+root=Path(sys.argv[sys.argv.index('--db')+1]).parent
+if '--request-json' in sys.argv:
+    request=json.loads(sys.argv[sys.argv.index('--request-json')+1])
+    assert request['command']=='stop_tracking'
+    (root/'stop-applied').write_text('stop')
+    print(json.dumps({'ok':True,'data':{'running':False}}),flush=True)
+else:
+    for line in sys.stdin:
+        request=json.loads(line)
+        assert request['command']=='start_tracking'
+        (root/'start-admitted').write_text('start')
+        until=time.monotonic()+10
+        while not (root/'stop-applied').exists() and time.monotonic()<until:time.sleep(.005)
+        (root/'late-start').write_text('start after Stop')
+        print(json.dumps({'ok':True,'data':{'running':True}}),flush=True)
+"#,
+        )
+        .unwrap();
+        let runtime = TrackerRuntime::source_python(PathBuf::from("/usr/bin/python3"), script);
+        let db = dir.join("tracker.sqlite3");
+        let request_start = |runtime: TrackerRuntime, db: PathBuf| {
+            serve_request(
+                &runtime,
+                &db,
+                &json!({"command":"start_tracking","payload":{}}),
+                SidecarCommandRetrySafety::Mutation,
+            )
+        };
+        let first_runtime = runtime.clone();
+        let first_db = db.clone();
+        let first = thread::spawn(move || request_start(first_runtime, first_db));
+        let until = Instant::now() + Duration::from_secs(5);
+        while !dir.join("start-admitted").exists() && Instant::now() < until {
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(dir.join("start-admitted").exists());
+        let queued_runtime = runtime.clone();
+        let queued_db = db.clone();
+        let (waiting, entered) = mpsc::channel();
+        let queued = thread::spawn(move || {
+            waiting.send(()).unwrap();
+            request_start(queued_runtime, queued_db)
+        });
+        entered.recv().unwrap();
+        thread::sleep(Duration::from_millis(30));
+        shutdown_serve_for_app_exit();
+        let stop_result = stop_tracking_daemon_for_app_exit_with(move || Ok((runtime, db)));
+        assert!(first.join().unwrap().is_err());
+        assert!(matches!(
+            queued.join().unwrap(),
+            Err(TrackerError::ShuttingDown)
+        ));
+        assert!(
+            stop_result.is_ok(),
+            "exit Stop should still run after admission closes"
+        );
+        assert!(dir.join("stop-applied").exists());
+        assert!(
+            !dir.join("late-start").exists(),
+            "Start must not follow the final Stop"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn app_exit_rejection_does_not_fall_back_to_another_process() {
+        for safety in [
+            SidecarCommandRetrySafety::SafeRead,
+            SidecarCommandRetrySafety::Mutation,
+        ] {
+            let result = invoke_with_serve_fallback(
+                safety,
+                || Err(TrackerError::ShuttingDown),
+                || panic!("Exit must not spawn a fallback"),
+            );
+            assert!(matches!(result, Err(TrackerError::ShuttingDown)));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn app_exit_stop_reaches_the_sidecar_while_interactive_serve_is_busy() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
+        shutdown_serve_process();
+        let dir = temp_dir_path("exit-stop-busy-serve");
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("fake_tracker.py");
+        let marker = dir.join("stop-received");
+        std::fs::write(
+            &script,
+            r#"
+import json,sys
+from pathlib import Path
+def respond(request):
+    assert request['command']=='stop_tracking'
+    db=Path(sys.argv[sys.argv.index('--db')+1])
+    with (db.parent/'stop-received').open('a') as f:f.write('x')
+    print(json.dumps({'ok':True,'data':{'running':False}}),flush=True)
+if '--request-json' in sys.argv:
+    respond(json.loads(sys.argv[sys.argv.index('--request-json')+1]))
+else:
+    for line in sys.stdin:respond(json.loads(line))
+"#,
+        )
+        .unwrap();
+        let runtime = TrackerRuntime::source_python(PathBuf::from("/usr/bin/python3"), script);
+        let db = dir.join("tracker.sqlite3");
+        let busy = serve_slot().lock().unwrap();
+        let result = stop_tracking_daemon_for_app_exit_with(move || Ok((runtime, db)));
+        let received_before_queue_release = marker.exists();
+        drop(busy);
+        shutdown_serve_process();
+        let submissions = std::fs::read_to_string(marker).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+        assert!(result.is_ok(), "Quit failed to issue Stop: {result:?}");
+        assert!(
+            received_before_queue_release,
+            "Stop waited behind unrelated interactive work"
+        );
+        assert_eq!(submissions, "x", "exit Stop must be submitted once");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore]
+    fn app_exit_stop_parent_fixture() {
+        let dir = PathBuf::from(std::env::var_os("DRIFTY_EXIT_STOP_FIXTURE_DIR").unwrap());
+        let runtime = TrackerRuntime::source_python(
+            PathBuf::from("/usr/bin/python3"),
+            dir.join("fake_tracker.py"),
+        );
+        let _ = stop_tracking_daemon_for_app_exit_with(move || {
+            thread::sleep(Duration::from_millis(300));
+            Ok((runtime, dir.join("tracker.sqlite3")))
+        });
+        // Model the real app's process::exit, which does not run thread drops.
+        std::process::exit(0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn app_exit_stop_reaps_its_child_before_parent_exit() {
+        let dir = temp_dir_path("exit-stop-parent");
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("child-pid");
+        std::fs::write(
+            dir.join("fake_tracker.py"),
+            format!(
+                "import os,time\nfrom pathlib import Path\nPath({:?}).write_text(str(os.getpid()))\ntime.sleep(60)\n",
+                marker.to_string_lossy()
+            ),
+        ).unwrap();
+        let mut parent = Command::new(std::env::current_exe().unwrap());
+        parent
+            .args([
+                "--exact",
+                "tracker::tests::app_exit_stop_parent_fixture",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("DRIFTY_EXIT_STOP_FIXTURE_DIR", &dir);
+        let result = crate::bounded_process::output(&mut parent, Duration::from_secs(8)).unwrap();
+        assert!(result.status.success());
+        let pid: i32 = std::fs::read_to_string(marker).unwrap().parse().unwrap();
+        // This PID belongs to the child just spawned by our isolated fixture.
+        let survived = unsafe { libc::kill(pid, 0) } == 0;
+        if survived {
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+        assert!(!survived, "the exit Stop child outlived the exiting app");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn app_exit_stop_bounds_a_hung_child_and_does_not_replay_failure() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
+        let dir = temp_dir_path("exit-stop-failure");
+        std::fs::create_dir_all(&dir).unwrap();
+        for hang in [false, true] {
+            let marker = dir.join(if hang { "hung" } else { "failed" });
+            let script = dir.join("fake_tracker.py");
+            std::fs::write(&script, format!(
+                "from pathlib import Path\nimport time\nwith Path({:?}).open('a') as f:f.write('x')\n{}\nraise SystemExit(7)\n",
+                marker.to_string_lossy(), if hang { "time.sleep(60)" } else { "pass" }
+            )).unwrap();
+            let runtime = TrackerRuntime::source_python(PathBuf::from("/usr/bin/python3"), script);
+            let started = Instant::now();
+            let db = dir.join("tracker.sqlite3");
+            let result = stop_tracking_daemon_for_app_exit_with(move || Ok((runtime, db)));
+            assert!(result.is_err());
+            if hang {
+                assert!(
+                    matches!(result, Err(TrackerError::ServeTimedOut(d)) if d <= EXIT_STOP_TRACKING_WAIT)
+                );
+            }
+            assert!(started.elapsed() < EXIT_STOP_TRACKING_WAIT + Duration::from_secs(2));
+            assert_eq!(
+                std::fs::read_to_string(marker).unwrap(),
+                "x",
+                "failed exit Stop is never replayed"
+            );
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

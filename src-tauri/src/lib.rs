@@ -198,8 +198,8 @@ fn run_exit_cleanup_steps(
         &mut stop_tracker_recovery as &mut dyn FnMut(),
         &mut stop_tray_refresh_worker,
         &mut stop_managed_ai,
-        &mut stop_tracker_daemon,
         &mut stop_tracker_serve_process,
+        &mut stop_tracker_daemon,
     ] {
         if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(cleanup)) {
             if first_panic.is_none() {
@@ -229,7 +229,8 @@ fn shutdown_app_for_exit(app: &AppHandle) {
             || managed_ai_stop_runtime_for_app_exit(app),
             // Quitting the app must also stop the detached sampling daemon.
             || tracker::stop_tracking_daemon_for_app_exit(app),
-            tracker::shutdown_serve_process,
+            // Cancel admitted Start requests before the final independent Stop.
+            tracker::shutdown_serve_for_app_exit,
         );
     });
 }

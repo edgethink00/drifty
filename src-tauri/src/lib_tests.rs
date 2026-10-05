@@ -327,7 +327,7 @@ fn push_exit_call(calls: &std::sync::Arc<std::sync::Mutex<Vec<&'static str>>>, c
 }
 
 #[test]
-fn exit_cleanup_steps_preserve_production_order() {
+fn exit_cleanup_stops_request_producer_before_final_daemon_stop() {
     let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let managed_ai_calls = std::sync::Arc::clone(&calls);
     let daemon_calls = std::sync::Arc::clone(&calls);
@@ -351,8 +351,8 @@ fn exit_cleanup_steps_preserve_production_order() {
             "tracker-recovery-worker",
             "tray-refresh-worker",
             "managed-ai",
-            "tracker-daemon",
             "tracker-serve-process",
+            "tracker-daemon",
         ]
         .as_slice()
     );
@@ -371,11 +371,11 @@ fn exit_cleanup_steps_continue_after_a_panicking_step() {
             || push_exit_call(&calls, "tracker-recovery-worker"),
             || push_exit_call(&tray_worker_calls, "tray-refresh-worker"),
             || push_exit_call(&managed_ai_calls, "managed-ai"),
+            || push_exit_call(&daemon_calls, "tracker-daemon"),
             || {
-                push_exit_call(&daemon_calls, "tracker-daemon");
-                panic!("tracker daemon cleanup failed");
+                push_exit_call(&serve_calls, "tracker-serve-process");
+                panic!("tracker serve cleanup failed");
             },
-            || push_exit_call(&serve_calls, "tracker-serve-process"),
         );
     }));
 
@@ -389,8 +389,8 @@ fn exit_cleanup_steps_continue_after_a_panicking_step() {
             "tracker-recovery-worker",
             "tray-refresh-worker",
             "managed-ai",
-            "tracker-daemon",
             "tracker-serve-process",
+            "tracker-daemon",
         ]
         .as_slice()
     );
