@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OwnTeam } from "./teamService";
 
 import { fail, makeTeam, ok, pendingInvite, privateTeam, renderController } from "./useTeamControllerTestFixtures";
+import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 
 const teamServiceMocks = vi.hoisted(() => ({
   fetchOwnTeams: vi.fn(),
@@ -171,6 +172,8 @@ describe("useTeamController", () => {
   });
 
   it("deletes a team, then selects a remaining team and clears the deleted team's local mirror", async () => {
+    const announced = vi.fn();
+    const unsubscribe = subscribeTeamProjectMirrorChanged(announced);
     const otherTeam = makeTeam({ organization_id: "team-2", organization_name: "Studio Crew", role_label: "Member", membership_role: "member" });
     teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam, otherTeam]));
     teamServiceMocks.fetchTeamMembers.mockResolvedValue(ok([]));
@@ -190,6 +193,9 @@ describe("useTeamController", () => {
     expect(hook.result.current.members).toEqual([]);
     await waitFor(() => expect(trackerMocks.upsertTeamProjects).toHaveBeenCalledWith("team-1", []));
     expect(trackerMocks.upsertTeamProjects).not.toHaveBeenCalledWith("team-2", []);
+    // Project analysis counts team projects, so the prune is announced.
+    await waitFor(() => expect(announced).toHaveBeenCalled());
+    unsubscribe();
   });
 
   it("keeps the team and shows the error when deleting is refused", async () => {

@@ -138,8 +138,10 @@ export function TeamDashboardsView({
 
   const dayCount = windowDayCount(timeWindow);
   const windowShortLabel = dayCount <= 1 ? t("team.dashboard.today") : t("team.dashboard.days", { count: dayCount });
+  // The member count comes from the team list, which can lag a fresh join; never
+  // show more people sharing than the team has.
   const sharingLabel = memberCount > 0
-    ? t("team.dashboard.sharingCount", { sharing: memberRows.length, total: memberCount })
+    ? t("team.dashboard.sharingCount", { sharing: memberRows.length, total: Math.max(memberCount, memberRows.length) })
     : `${memberRows.length}`;
   const activeProjectCount = projects.filter((project) => project.status === "active").length;
   const localizedWindowLabel = formatLocalizedDateRangeLabel(timeWindow.start_date, timeWindow.end_date, effectiveLanguage);

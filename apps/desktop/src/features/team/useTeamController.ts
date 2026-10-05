@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { trackerClient } from "../../lib/api/trackerClient";
+import { notifyTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 import type { AuthState } from "../auth/AuthContext";
 import { fetchOwnTeams, isTeamErrorMessage, messageFromTeamError, type OwnTeam } from "./teamService";
 import { canInviteToTeam, isTeamOwner } from "./teamTypes";
@@ -215,14 +216,21 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 // project mirror is cleared. A failed load never prunes.
 async function pruneDepartedTeamMirrors(teams: readonly OwnTeam[]): Promise<void> {
   const currentTeamIds = new Set(teams.map((team) => team.organization_id));
+  let pruned = 0;
   try {
     const localProjects = await trackerClient.getTeamProjects();
     const departedTeamIds = new Set(
       localProjects.map((project) => project.organizationId).filter((organizationId) => organizationId && !currentTeamIds.has(organizationId)),
     );
-    for (const organizationId of departedTeamIds) await trackerClient.upsertTeamProjects(organizationId, []);
+    for (const organizationId of departedTeamIds) {
+      await trackerClient.upsertTeamProjects(organizationId, []);
+      pruned += 1;
+    }
   } catch {
     // Best effort: the next successful load tries again.
+  } finally {
+    // Project analysis counts team projects too, so tell it the mirror shrank.
+    if (pruned > 0) notifyTeamProjectMirrorChanged();
   }
 }
 

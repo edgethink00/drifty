@@ -2,6 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useTeamProjects } from "./useTeamProjects";
+import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 const mocks = vi.hoisted(() => ({
   projects: vi.fn(), mix: vi.fn(), members: vi.fn(), create: vi.fn(), update: vi.fn(), archive: vi.fn(), publish: vi.fn(), stop: vi.fn(),
   mirror: vi.fn(), timeline: vi.fn(),
@@ -135,4 +136,14 @@ it("does not restore the previous team's cached mix when only the new-team mix r
   expect(result.current.mix).toEqual([]);
   expect(result.current.members).toEqual([{ display_name: "B" }]);
   expect(result.current.error).toBe("Offline");
+});
+
+it("announces a mirrored project set so project analysis can count it", async () => {
+  const announced = vi.fn();
+  const unsubscribe = subscribeTeamProjectMirrorChanged(announced);
+  const { result } = renderHook(() => useTeamProjects({ ...input, organizationId: "team-a" }));
+  await loaded(result);
+  await waitFor(() => expect(mocks.mirror).toHaveBeenCalledWith("team-a", expect.any(Array)));
+  await waitFor(() => expect(announced).toHaveBeenCalled());
+  unsubscribe();
 });

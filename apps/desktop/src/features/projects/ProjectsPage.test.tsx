@@ -100,6 +100,22 @@ describe("ProjectsPage", () => {
     expect(screen.getByRole("button", { name: "Retry latest 7 days" })).toBeTruthy();
   });
 
+  it("lets a member with only team projects refresh assignments", () => {
+    const onRunAnalysis = vi.fn();
+    const { rerender } = render(<ProjectsPage {...baseProps({ onRunAnalysis })} />);
+    const disabled = screen.getByRole("button", { name: "Refresh latest 7 days" });
+    expect(disabled).toHaveProperty("disabled", true);
+    expect(screen.getByText(/Create at least one active project/i)).toBeTruthy();
+
+    // The pass matches against team projects too, so they enable it on their own.
+    rerender(<ProjectsPage {...baseProps({ onRunAnalysis, activeTeamProjectCount: 1 })} />);
+    const enabled = screen.getByRole("button", { name: "Refresh latest 7 days" });
+    expect(enabled).toHaveProperty("disabled", false);
+    expect(screen.queryByText(/Create at least one active project/i)).toBeNull();
+    fireEvent.click(enabled);
+    expect(onRunAnalysis).toHaveBeenCalledTimes(1);
+  });
+
   it("blocks a redundant refresh right after a completed pass", () => {
     const onRunAnalysis = vi.fn();
     render(

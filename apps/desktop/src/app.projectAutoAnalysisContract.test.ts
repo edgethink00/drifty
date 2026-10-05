@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 const appSource = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
 describe("project auto-analysis gating contract", () => {
-  it("gates the scheduled pass on having an active project", () => {
+  it("gates the scheduled pass on having an active personal or team project", () => {
     expect(appSource).toContain("const hasActiveProject = projectClassification.projects.some");
+    // A member who only joined a team must still get matching, or they cannot share.
+    expect(appSource).toContain("|| projectClassification.activeTeamProjectCount > 0;");
     expect(appSource).toContain("if (!projectClassificationFeatureEnabled || !hasActiveProject)");
   });
 

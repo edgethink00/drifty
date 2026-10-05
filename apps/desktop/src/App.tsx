@@ -9089,8 +9089,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   });
   // Matching has nothing to attribute to until at least one active project
   // exists, so an empty library is the gate that keeps a fresh install from
-  // sending anything on a schedule.
-  const hasActiveProject = projectClassification.projects.some((project) => project.status === "active");
+  // sending anything on a schedule. Team projects count: a member who only
+  // joined a team still needs matching before they can share project time.
+  const hasActiveProject = projectClassification.projects.some((project) => project.status === "active")
+    || projectClassification.activeTeamProjectCount > 0;
   useEffect(() => {
     if (isPreviewSurface) return undefined;
     if (!projectClassificationFeatureEnabled || !hasActiveProject) {
@@ -10654,6 +10656,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             createRequested={newProjectRequested}
             onCreateRequestHandled={() => setNewProjectRequested(false)}
             projects={projectClassification.projects}
+            activeTeamProjectCount={projectClassification.activeTeamProjectCount}
             assignments={projectClassification.assignments}
             selectedDay={selectedDay}
             startOfDayMinutes={startOfDayMinutes}

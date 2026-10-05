@@ -122,6 +122,7 @@ export function TeamWorkspace({
     handleRemoveMember,
     handleLeaveTeam,
     handleDeleteTeam,
+    refreshTeamData,
     selectTeam,
   } = controller;
 
@@ -586,7 +587,11 @@ export function TeamWorkspace({
             loading={projects.loading}
             error={displayProjectError ?? displayTeamError}
             publishNote={displayPublishNote}
-            onRefresh={() => void projects.refresh()}
+            onRefresh={() => {
+              // The team list carries the member count, so refresh it with the totals.
+              void projects.refresh();
+              void refreshTeamData();
+            }}
           />
         ) : (
           <TeamProjectsView

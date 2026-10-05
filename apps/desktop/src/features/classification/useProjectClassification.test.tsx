@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProjectClassification, type ScheduledProjectPassOutcome, type UseProjectClassificationArgs } from "./useProjectClassification";
 import { runProjectPass, type ProjectPassSummary } from "./aiProjectReviewService";
+import { notifyTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 
 vi.mock("./aiProjectReviewService", () => ({
   runProjectPass: vi.fn(),
@@ -417,5 +418,37 @@ describe("useProjectClassification manual passes", () => {
 
     expect(outcome).toEqual({ status: "failed", category: "provider_error" });
     expect(hook.result.current.lastSuccessfulPassAtMs).toBeNull();
+  });
+});
+
+describe("useProjectClassification team projects", () => {
+  it("counts active team projects and recounts when the team mirror changes", async () => {
+    const { tracker } = createTracker();
+    const getTeamProjects = vi.fn(async () => [
+      { id: "tp-1", organizationId: "team-1", name: "Release notes", status: "active" },
+      { id: "tp-2", organizationId: "team-1", name: "Old launch", status: "archived" },
+    ]);
+    const teamTracker = { ...tracker, getTeamProjects } as unknown as TrackerApi;
+    const { hook } = renderClassification(teamTracker);
+
+    await waitFor(() => expect(hook.result.current.activeTeamProjectCount).toBe(1));
+
+    // Leaving or deleting the team prunes the mirror and announces it.
+    getTeamProjects.mockResolvedValue([]);
+    act(() => notifyTeamProjectMirrorChanged());
+    await waitFor(() => expect(hook.result.current.activeTeamProjectCount).toBe(0));
+  });
+
+  it("keeps the last count when the mirror cannot be read", async () => {
+    const { tracker } = createTracker();
+    const getTeamProjects = vi.fn(async () => [{ id: "tp-1", organizationId: "team-1", name: "Release notes", status: "active" }]);
+    const teamTracker = { ...tracker, getTeamProjects } as unknown as TrackerApi;
+    const { hook } = renderClassification(teamTracker);
+    await waitFor(() => expect(hook.result.current.activeTeamProjectCount).toBe(1));
+
+    getTeamProjects.mockRejectedValue(new Error("tracker unavailable"));
+    act(() => notifyTeamProjectMirrorChanged());
+    await waitFor(() => expect(getTeamProjects).toHaveBeenCalledTimes(2));
+    expect(hook.result.current.activeTeamProjectCount).toBe(1);
   });
 });

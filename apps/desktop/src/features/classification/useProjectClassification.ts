@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeProjectColor } from "../../lib/colorPalette";
+import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 import {
   type AiReviewEvent,
   type Project,
@@ -85,6 +86,11 @@ export interface UseProjectClassificationArgs {
 export interface UseProjectClassificationResult {
   readonly projects: Project[];
   readonly projectsLoading: boolean;
+  /**
+   * Active team projects in the local mirror. The pass classifies against personal
+   * and team projects together, so a member with only team projects still needs it.
+   */
+  readonly activeTeamProjectCount: number;
   readonly assignments: ProjectAssignmentRecord[];
   /** Fixed-window AI assignments for the selected day. */
   readonly windowAssignments: ProjectWindowAssignmentRecord[];
@@ -158,6 +164,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [activeTeamProjectCount, setActiveTeamProjectCount] = useState(0);
   const [assignments, setAssignments] = useState<ProjectAssignmentRecord[]>([]);
   const [windowAssignments, setWindowAssignments] = useState<ProjectWindowAssignmentRecord[]>([]);
   const [insightAssignments, setInsightAssignments] = useState<ProjectAssignmentRecord[]>([]);
@@ -194,6 +201,16 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
       setProjects([]);
     } finally {
       setProjectsLoading(false);
+    }
+  }, [tracker]);
+
+  const loadTeamProjectCount = useCallback(async () => {
+    try {
+      const teamProjects = (await tracker.getTeamProjects?.()) ?? [];
+      if (!isMountedRef.current) return;
+      setActiveTeamProjectCount(teamProjects.filter((project) => project.status === "active").length);
+    } catch {
+      // Keep the last known count: a transient read failure must not stop analysis.
     }
   }, [tracker]);
 
@@ -309,7 +326,12 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   useEffect(() => {
     void loadProjects();
     void loadPassRuns();
-  }, [loadProjects, loadPassRuns]);
+    void loadTeamProjectCount();
+  }, [loadProjects, loadPassRuns, loadTeamProjectCount]);
+
+  useEffect(() => subscribeTeamProjectMirrorChanged(() => {
+    void loadTeamProjectCount();
+  }), [loadTeamProjectCount]);
 
   useEffect(() => {
     void loadAssignments();
@@ -509,12 +531,13 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   }, [runForegroundPass]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = useCallback(async () => {
-    await Promise.all([loadProjects(), loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
-  }, [loadProjects, loadAssignments, loadInsightAssignments, loadPassRuns]);
+    await Promise.all([loadProjects(), loadTeamProjectCount(), loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
+  }, [loadProjects, loadTeamProjectCount, loadAssignments, loadInsightAssignments, loadPassRuns]);
 
   return {
     projects,
     projectsLoading,
+    activeTeamProjectCount,
     assignments,
     windowAssignments,
     insightAssignments,

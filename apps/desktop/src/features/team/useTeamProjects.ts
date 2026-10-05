@@ -4,6 +4,7 @@ import { shiftIsoDate, type ProjectAnchor, type TeamProjectInput } from "@drifty
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
+import { notifyTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 import { getTeamFocusWindow } from "./teamAggregate";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
 import { sharedProjectTimeNote } from "./teamPublishNote";
@@ -176,7 +177,9 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       // team project + its stored assignments, so we never let a (possibly transient)
       // empty result destroy on-device data.
       if (loadedProjects.length > 0) {
-        void trackerClient.upsertTeamProjects(organizationId, toLocalTeamProjectInputs(loadedProjects)).catch(() => undefined);
+        void trackerClient.upsertTeamProjects(organizationId, toLocalTeamProjectInputs(loadedProjects))
+          .then(() => notifyTeamProjectMirrorChanged())
+          .catch(() => undefined);
       }
     } catch (caught) {
       if (!isCurrentScope() || requestRef.current !== requestId) return;

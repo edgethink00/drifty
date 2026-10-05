@@ -45,6 +45,8 @@ export interface ProjectsPageProps {
   readonly createRequested?: boolean;
   readonly onCreateRequestHandled?: () => void;
   readonly projects: readonly Project[];
+  /** Active team projects the pass also matches against; they enable a refresh on their own. */
+  readonly activeTeamProjectCount?: number;
   readonly assignments: readonly ProjectAssignmentRecord[];
   readonly selectedDay: string;
   readonly startOfDayMinutes: number;
@@ -177,6 +179,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
   }, [props.createRequested]);
 
   const activeProjects = props.projects.filter((project) => project.status === "active");
+  const matchableProjectCount = activeProjects.length + (props.activeTeamProjectCount ?? 0);
   const selectedProject = selectedProjectId
     ? props.projects.find((project) => project.id === selectedProjectId) ?? null
     : null;
@@ -390,7 +393,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
                 )}
               </div>
               <ProjectMatchingCard
-                activeProjectCount={activeProjects.length}
+                activeProjectCount={matchableProjectCount}
                 analysisConnected={props.analysisConnected}
                 analysisSetup={props.analysisSetup}
                 autoAnalysis={props.autoAnalysis}
@@ -408,7 +411,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
       {!selectedProject && activeProjects.length === 0 ? (
         <div className="projects-page__footer">
           <ProjectMatchingCard
-            activeProjectCount={activeProjects.length}
+            activeProjectCount={matchableProjectCount}
             analysisConnected={props.analysisConnected}
             analysisSetup={props.analysisSetup}
             autoAnalysis={props.autoAnalysis}
