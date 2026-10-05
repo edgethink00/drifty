@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import math
@@ -10,6 +11,7 @@ import secrets
 import shlex
 import signal
 import sqlite3
+import stat
 import subprocess
 import sys
 import threading
@@ -2619,7 +2621,8 @@ def serve():
     Keeps the interpreter warm and modules imported so each query avoids the
     ~200-400ms cold-start cost of spawning a fresh ``python main.py`` process.
     Errors are returned per request and never break the loop; EOF on stdin
-    (parent process exit / closed pipe) ends the loop cleanly.
+    (parent process exit / closed pipe) ends the loop cleanly, as does a
+    host that closes its response pipe.
     """
     # The Rust host writes UTF-8 JSON lines. Windows otherwise decodes a piped
     # stdin with the ANSI code page (cp949 on Korean Windows), which turns every
@@ -2644,9 +2647,46 @@ def serve():
             envelope = response(False, error=str(exc))
         if request_id is not None:
             envelope = {**envelope, "id": request_id}
-        sys.stdout.write(json.dumps(envelope))
-        sys.stdout.write("\n")
-        sys.stdout.flush()
+        serialized = json.dumps(envelope)
+        try:
+            sys.stdout.write(serialized)
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        except OSError as exc:
+            if not _is_closed_serve_pipe(exc):
+                raise
+            # There is no reader for this response. Stop before dispatching any
+            # more requests; a completed mutation must never be replayed here.
+            _detach_closed_stdout()
+            return
+
+
+def _is_closed_serve_pipe(error: OSError) -> bool:
+    if isinstance(error, BrokenPipeError):
+        return True
+    # The Windows CRT can report a disconnected output pipe as EINVAL rather than
+    # BrokenPipeError. Only accept that error at the response-write boundary,
+    # on Windows, with stdout confirmed to be a pipe (not a file or console).
+    if sys.platform != "win32" or error.errno != errno.EINVAL:
+        return False
+    try:
+        return stat.S_ISFIFO(os.fstat(sys.stdout.fileno()).st_mode)
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _detach_closed_stdout() -> None:
+    """Prevent Python's exit-time flush from retrying the disconnected pipe."""
+    try:
+        stdout_fd = sys.stdout.fileno()
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(devnull, stdout_fd)
+        finally:
+            os.close(devnull)
+    except (OSError, ValueError, AttributeError):
+        # A replaced/closed stream may not expose a usable file descriptor.
+        pass
 
 
 def _is_public_cli_invocation(arguments: list[str]) -> bool:

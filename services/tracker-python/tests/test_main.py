@@ -1,7 +1,9 @@
 import hashlib
+import io
 import json
 import os
 import sqlite3
+import stat
 import subprocess
 import sys
 import threading
@@ -3767,6 +3769,185 @@ class TrackerMainTests(unittest.TestCase):
         release_lock.assert_called_once_with(lock_file)
         owner_context.__exit__.assert_called_once()
 
+
+
+class ServeResponsePipeTests(unittest.TestCase):
+    def _response_failure(self, error, *, platform="win32", pipe=True, flush=False, quiet=True):
+        class FailingOutput(io.StringIO):
+            def fileno(self):
+                return 123
+
+            def write(self, text):
+                if not flush:
+                    raise error
+                return super().write(text)
+
+            def flush(self):
+                raise error
+
+        requests = "".join(json.dumps({"id": n, "command": "mutate"}) + "\n" for n in (1, 2))
+        handled = []
+
+        def mutate(payload):
+            handled.append(payload)
+            return tracker_main.response(True)
+
+        with patch.object(tracker_main, "COMMANDS", {"mutate": mutate}), patch.object(
+            tracker_main.sys, "stdin", io.StringIO(requests)
+        ), patch.object(tracker_main.sys, "stdout", FailingOutput()), patch.object(
+            tracker_main.sys, "platform", platform
+        ), patch.object(tracker_main.os, "fstat", return_value=SimpleNamespace(
+            st_mode=stat.S_IFIFO if pipe else stat.S_IFREG
+        )), patch.object(tracker_main, "_detach_closed_stdout") as detach, patch.object(
+            tracker_main, "capture_tracker_exception"
+        ) as capture:
+            if quiet:
+                tracker_main.serve()
+                detach.assert_called_once_with()
+            else:
+                with self.assertRaises(OSError) as raised:
+                    tracker_main.serve()
+                self.assertIs(raised.exception, error)
+                detach.assert_not_called()
+        self.assertEqual(len(handled), 1)
+        capture.assert_not_called()
+
+    def test_disconnected_response_stops_before_another_mutation(self):
+        for platform, error in (
+            ("darwin", BrokenPipeError(32, "Broken pipe")),
+            ("win32", OSError(22, "Invalid argument")),
+        ):
+            for flush in (False, True):
+                with self.subTest(platform=platform, flush=flush):
+                    self._response_failure(error, platform=platform, flush=flush)
+
+    def test_unrelated_response_errors_still_escape(self):
+        for platform, pipe, error in (
+            ("darwin", True, OSError(22, "Invalid argument")),
+            ("win32", False, OSError(22, "Invalid argument")),
+            ("win32", True, OSError(5, "I/O error")),
+        ):
+            with self.subTest(platform=platform, pipe=pipe, errno=error.errno):
+                self._response_failure(error, platform=platform, pipe=pipe, quiet=False)
+
+    def test_windows_invalid_argument_without_a_usable_descriptor_is_not_suppressed(self):
+        with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
+            tracker_main.sys, "stdout", io.StringIO()
+        ):
+            self.assertFalse(tracker_main._is_closed_serve_pipe(OSError(22, "Invalid argument")))
+
+    def test_request_invalid_argument_is_reported_and_the_next_request_runs(self):
+        error = OSError(22, "Invalid argument")
+        commands = {"fail": MagicMock(side_effect=error), "ping": lambda _: tracker_main.response(True)}
+        requests = "".join(json.dumps({"id": n, "command": command}) + "\n"
+                           for n, command in ((1, "fail"), (2, "ping")))
+        output = io.StringIO()
+        with patch.object(tracker_main, "COMMANDS", commands), patch.object(
+            tracker_main.sys, "stdin", io.StringIO(requests)
+        ), patch.object(tracker_main.sys, "stdout", output), patch.object(
+            tracker_main.sys, "platform", "win32"
+        ), patch.object(tracker_main, "capture_tracker_exception") as capture, patch.object(
+            tracker_main, "_detach_closed_stdout"
+        ) as detach:
+            tracker_main.serve()
+        envelopes = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual([(item["id"], item["ok"]) for item in envelopes], [(1, False), (2, True)])
+        capture.assert_called_once_with(error, {"phase": "serve", "command": "fail"})
+        detach.assert_not_called()
+
+    def test_serialization_and_input_errors_are_outside_disconnect_handling(self):
+        error = OSError(22, "Invalid argument")
+        with patch.object(tracker_main, "COMMANDS", {"ping": lambda _: tracker_main.response(True)}), patch.object(
+            tracker_main.sys, "stdin", io.StringIO('{"command":"ping"}\n')
+        ), patch.object(tracker_main.sys, "stdout", io.StringIO()), patch.object(
+            tracker_main.sys, "platform", "win32"
+        ), patch.object(tracker_main.json, "dumps", side_effect=error), patch.object(
+            tracker_main, "_detach_closed_stdout"
+        ) as detach:
+            with self.assertRaises(OSError) as raised:
+                tracker_main.serve()
+            self.assertIs(raised.exception, error)
+            detach.assert_not_called()
+
+        class FailedInput:
+            def __iter__(self):
+                raise error
+
+        with patch.object(tracker_main.sys, "stdin", FailedInput()), patch.object(
+            tracker_main, "_detach_closed_stdout"
+        ) as detach:
+            with self.assertRaises(OSError) as raised:
+                tracker_main.serve()
+            self.assertIs(raised.exception, error)
+            detach.assert_not_called()
+
+    def test_detach_closes_the_temporary_descriptor_even_when_duplication_fails(self):
+        for failure in (None, OSError(9, "Bad file descriptor")):
+            with self.subTest(failure=failure), patch.object(tracker_main.sys, "stdout") as output, patch.object(
+                tracker_main.os, "open", return_value=456
+            ) as open_null, patch.object(tracker_main.os, "dup2", side_effect=failure) as duplicate, patch.object(
+                tracker_main.os, "close"
+            ) as close:
+                output.fileno.return_value = 123
+                tracker_main._detach_closed_stdout()
+                open_null.assert_called_once_with(os.devnull, os.O_WRONLY)
+                duplicate.assert_called_once_with(456, 123)
+                close.assert_called_once_with(456)
+
+    def test_real_closed_response_pipe_exits_zero_without_shutdown_flush_errors(self):
+        from queue import Queue
+
+        code = """
+import sys
+from app import main
+calls = []
+captures = []
+def mutate(payload):
+    calls.append(payload)
+    return main.response(True, 'x' * int(sys.argv[1]))
+main.COMMANDS = {'mutate': mutate}
+main.capture_tracker_exception = lambda *args: captures.append(args)
+main.serve()
+assert len(calls) == 1, calls
+assert not captures, captures
+"""
+        environment = dict(os.environ, PYTHONPATH=str(SERVICE_ROOT))
+        for key in ("SENTRY_DSN", "DRIFTY_TRACKER_SENTRY_DSN"):
+            environment.pop(key, None)
+        requests = b'{"id":1,"command":"mutate"}\n{"id":2,"command":"mutate"}\n'
+        for size, close_during_write in ((0, False), (131072, False), (8388608, True)):
+            with self.subTest(size=size, close_during_write=close_during_write):
+                process = subprocess.Popen([sys.executable, "-c", code, str(size)],
+                                           stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE, env=environment)
+                reader = None
+                try:
+                    if close_during_write:
+                        # Read a prefix of the response before disconnecting.
+                        # The rest cannot fit in the pipe, so the child is still
+                        # writing when the host closes its end.
+                        process.stdin.write(requests)
+                        process.stdin.close()
+                        process.stdin = None
+                        prefixes = Queue()
+                        reader = threading.Thread(
+                            target=lambda: prefixes.put(process.stdout.read(64)), daemon=True
+                        )
+                        reader.start()
+                        prefix = prefixes.get(timeout=10)
+                        self.assertEqual(len(prefix), 64)
+                        self.assertTrue(prefix.startswith(b'{"ok": true,'))
+                    process.stdout.close()
+                    process.stdout = None
+                    _, stderr = process.communicate(None if close_during_write else requests, timeout=20)
+                    self.assertEqual(process.returncode, 0, stderr.decode(errors="replace"))
+                    self.assertEqual(stderr, b"")
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                    if reader is not None:
+                        reader.join(timeout=5)
+                    process.communicate(timeout=5)
 
 
 class BrowserHistoryBackfillUpgradeTests(unittest.TestCase):
