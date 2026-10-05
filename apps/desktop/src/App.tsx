@@ -2479,6 +2479,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     onAuthRequired: requestLeaderboardAuth,
   });
   const focusCard = useFocusCard({
+    userId: isPolicySignedIn ? (user?.id ?? null) : null,
     windowEndDay: leaderboardWindowEndDay,
     startOfDayMinutes,
     includeAiClassifications: showAiClassificationImpact,

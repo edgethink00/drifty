@@ -4,17 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useFocusCard } from "./useFocusCard";
 
 const mocks = vi.hoisted(() => ({
+  capture: vi.fn(),
   build: vi.fn(), refresh: vi.fn(), fetch: vi.fn(), publish: vi.fn(),
   disable: vi.fn(), flags: vi.fn(),
 }));
 vi.mock("./focusCardPublisher", () => ({ buildFocusCardPayloadFromTracker: mocks.build }));
 vi.mock("./focusCardService", () => ({
+  captureFocusCardConsent: mocks.capture,
   DEFAULT_FOCUS_CARD_DETAIL_FLAGS: { shareCategoryBreakdown: false, shareHourlyPattern: false },
   fetchOwnFocusCard: mocks.fetch, refreshFocusCardAggregates: mocks.refresh,
   publishFocusCard: mocks.publish, setFocusCardEnabled: mocks.disable,
   setFocusCardDetailFlags: mocks.flags,
 }));
-const INPUT = { windowEndDay: "2026-10-04", startOfDayMinutes: 0,
+const INPUT = { userId: "owner-a", windowEndDay: "2026-10-04", startOfDayMinutes: 0,
   includeAiClassifications: true, classificationAssessmentReady: true };
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -24,12 +26,101 @@ function deferred<T>() {
 describe("Focus Card deletion reconciliation order", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.capture.mockResolvedValue({ success: true, data: "revision-a" });
     mocks.build.mockResolvedValue({ focusSeconds7d: 3600 });
     mocks.fetch.mockResolvedValue({ success: true, data: { enabled: true } });
     mocks.refresh.mockResolvedValue({ success: true });
     mocks.publish.mockResolvedValue({ success: true });
     mocks.disable.mockResolvedValue({ success: true });
     mocks.flags.mockResolvedValue({ success: true });
+  });
+
+  it("captures consent before building and forwards that revision without reading again", async () => {
+    const snapshot = deferred<{ success: boolean; data: string }>();
+    mocks.capture.mockReturnValueOnce(snapshot.promise);
+    const { result } = renderHook(() => useFocusCard(INPUT));
+    let enabling!: Promise<boolean>;
+    await act(async () => { enabling = result.current.enable(); });
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.build).not.toHaveBeenCalled();
+    await act(async () => { snapshot.resolve({ success: true, data: "captured-before-build" }); await enabling; });
+    expect(mocks.publish).toHaveBeenCalledWith({ focusSeconds7d: 3600 }, true, undefined, "owner-a", "captured-before-build");
+    expect(mocks.capture).toHaveBeenCalledOnce();
+  });
+
+  it("binds an intent to the displayed revision and retains the atomic write response for the next choice", async () => {
+    mocks.fetch.mockResolvedValue({ success: true, data: { enabled: false,
+      detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false }, consentRevision: "displayed-revision" } });
+    mocks.publish.mockResolvedValueOnce({ success: true, data: "committed-revision" });
+    const { result } = renderHook(() => useFocusCard(INPUT));
+    await act(async () => { await result.current.refresh(); });
+    await act(async () => { await result.current.enable(); });
+    expect(mocks.capture).toHaveBeenLastCalledWith(undefined, "owner-a", {
+      enabled: false, detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false }, consentRevision: "displayed-revision",
+    });
+    await act(async () => { await result.current.setDetailFlag("shareHourlyPattern", true); });
+    expect(mocks.capture).toHaveBeenLastCalledWith(undefined, "owner-a", {
+      enabled: true, detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false }, consentRevision: "committed-revision",
+    });
+  });
+
+  it("does not build or write when capturing consent fails", async () => {
+    mocks.capture.mockResolvedValueOnce({ success: false, error: "Review changed sharing" });
+    const { result } = renderHook(() => useFocusCard(INPUT));
+    let enabledSuccessfully = true;
+    await act(async () => { enabledSuccessfully = await result.current.enable(); });
+    expect(enabledSuccessfully).toBe(false);
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(mocks.publish).not.toHaveBeenCalled();
+    expect(result.current.error).toBe("Review changed sharing");
+  });
+
+  it.each(["snapshot", "payload"] as const)("invalidates an enable while its %s is pending on disable", async (stage) => {
+    const snapshot = deferred<{ success: boolean; data: string }>();
+    const payload = deferred<{ focusSeconds7d: number }>();
+    if (stage === "snapshot") mocks.capture.mockReturnValueOnce(snapshot.promise);
+    else mocks.build.mockReturnValueOnce(payload.promise);
+    const { result } = renderHook(() => useFocusCard(INPUT));
+    let enabling!: Promise<boolean>, disabling!: Promise<void>;
+    await act(async () => { enabling = result.current.enable(); });
+    await vi.waitFor(() => expect(stage === "snapshot" ? mocks.capture : mocks.build).toHaveBeenCalledOnce());
+    await act(async () => { disabling = result.current.disable(); });
+    expect(mocks.disable).toHaveBeenCalledWith(false, undefined, "owner-a");
+    await act(async () => {
+      if (stage === "snapshot") snapshot.resolve({ success: true, data: "old-revision" });
+      else payload.resolve({ focusSeconds7d: 3600 });
+      await Promise.all([enabling, disabling]);
+    });
+    expect(mocks.publish).not.toHaveBeenCalled();
+    expect(result.current.enabled).toBe(false);
+  });
+
+  it("captures a queued publication's revision before the earlier consent write completes", async () => {
+    const release = deferred<{ success: boolean }>();
+    mocks.publish.mockReturnValueOnce(release.promise).mockResolvedValueOnce({ success: false, error: "Stale consent" });
+    mocks.capture.mockResolvedValueOnce({ success: true, data: "first-intent" })
+      .mockResolvedValueOnce({ success: true, data: "queued-intent" });
+    const { result } = renderHook(() => useFocusCard(INPUT));
+    let first!: Promise<boolean>, queued!: Promise<boolean>;
+    await act(async () => { first = result.current.enable(); });
+    await vi.waitFor(() => expect(mocks.publish).toHaveBeenCalledOnce());
+    await act(async () => { queued = result.current.enable(); });
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+    expect(mocks.build).toHaveBeenCalledOnce();
+    await act(async () => { release.resolve({ success: true }); await Promise.all([first, queued]); });
+    expect(mocks.publish.mock.calls[1][4]).toBe("queued-intent");
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBe("Stale consent");
+  });
+
+  it("does not refresh consent or retry when the server rejects a stale publication", async () => {
+    mocks.publish.mockResolvedValueOnce({ success: false, error: "Focus card consent changed. Review it and try again." });
+    const { result } = renderHook(() => useFocusCard(INPUT));
+    await act(async () => { await result.current.enable(); });
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.publish).toHaveBeenCalledOnce();
+    expect(result.current.enabled).not.toBe(true);
+    expect(result.current.error).toMatch(/consent changed/);
   });
 
   it("discards an older built payload after a newer deletion refresh starts", async () => {
@@ -158,7 +249,7 @@ describe("Focus Card deletion reconciliation order", () => {
     await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
     try {
       await act(async () => { await result.current.disable(); });
-      expect(mocks.disable).toHaveBeenCalledWith(false);
+      expect(mocks.disable).toHaveBeenCalledWith(false, undefined, "owner-a");
       expect(result.current.enabled).toBe(false);
     } finally {
       await act(async () => { release.resolve(); await old; });

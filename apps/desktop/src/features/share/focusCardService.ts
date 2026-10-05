@@ -21,6 +21,7 @@ export interface FocusCardStatus {
   enabled: boolean;
   detailFlags: FocusCardDetailFlags;
   updatedAt: string | null;
+  consentRevision: string;
 }
 
 export interface FocusCardResult<T = undefined> {
@@ -34,9 +35,15 @@ type FocusCardRow = {
   share_category_breakdown?: boolean | null;
   share_hourly_pattern?: boolean | null;
   updated_at?: string | null;
+  consent_revision?: string | null;
 };
 
 type FocusCardUpdateResult = { error: { message: string } | null };
+type FocusCardConsentBuilder = PromiseLike<FocusCardUpdateResult> & {
+  select: (columns: string) => {
+    single: () => Promise<{ data: { consent_revision: string } | null; error: { message: string } | null }>;
+  };
+};
 type FocusCardUpdateBuilder = PromiseLike<FocusCardUpdateResult> & {
   eq: (column: string, value: string | boolean) => FocusCardUpdateBuilder;
 };
@@ -49,7 +56,7 @@ type FocusCardClient = {
         maybeSingle: () => Promise<{ data: FocusCardRow | null; error: { message: string } | null }>;
       };
     };
-    upsert: (payload: Record<string, unknown>, options: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
+    upsert: (payload: Record<string, unknown>, options: { onConflict: string }) => FocusCardConsentBuilder;
     update: (payload: Record<string, unknown>) => FocusCardUpdateBuilder;
   };
 };
@@ -73,16 +80,19 @@ async function currentUserId(client: FocusCardClient): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
-export async function fetchOwnFocusCard(client?: FocusCardClient | null): Promise<FocusCardResult<FocusCardStatus | null>> {
+export async function fetchOwnFocusCard(client?: FocusCardClient | null, expectedUserId?: string | null): Promise<FocusCardResult<FocusCardStatus | null>> {
   const resolved = resolveClient(client);
   if (!resolved) return { success: false, error: "Supabase is not configured" };
   const userId = await currentUserId(resolved);
   if (!userId) return { success: false, error: "Not authenticated" };
+  if (expectedUserId !== undefined && userId !== expectedUserId) {
+    return { success: false, error: "Account changed. Reopen your profile and try again." };
+  }
 
   try {
     const { data, error } = await resolved
       .from("public_focus_cards")
-      .select("enabled, share_category_breakdown, share_hourly_pattern, updated_at")
+      .select("enabled, share_category_breakdown, share_hourly_pattern, updated_at, consent_revision")
       .eq("user_id", userId)
       .maybeSingle();
     if (error) return { success: false, error: error.message };
@@ -97,6 +107,7 @@ export async function fetchOwnFocusCard(client?: FocusCardClient | null): Promis
               shareHourlyPattern: data.share_hourly_pattern === true,
             },
             updatedAt: data.updated_at ?? null,
+            consentRevision: data.consent_revision ?? "",
           }
         : null,
     };
@@ -105,16 +116,52 @@ export async function fetchOwnFocusCard(client?: FocusCardClient | null): Promis
   }
 }
 
+// The all-zero token means the owner had no card when this intent began.
+// Capture before building aggregates or waiting for earlier work; never refresh
+// this token and silently retry a stale enable/detail expansion.
+export async function captureFocusCardConsent(client?: FocusCardClient | null, expectedUserId?: string | null, expectedState?: { enabled: boolean | null; detailFlags: FocusCardDetailFlags | null; consentRevision?: string | null }): Promise<FocusCardResult<string>> {
+  try {
+    if (expectedState?.consentRevision !== undefined && !expectedState.consentRevision) {
+      return { success: false, error: "Couldn't verify Focus Card sharing. Reopen your profile and try again." };
+    }
+    const status = await fetchOwnFocusCard(client, expectedUserId);
+    if (!status.success) return { success: false, error: status.error };
+    if (expectedState && (
+      (expectedState.enabled !== null && expectedState.enabled !== (status.data?.enabled ?? false))
+      || (expectedState.detailFlags !== null && (
+        expectedState.detailFlags.shareCategoryBreakdown !== (status.data?.detailFlags.shareCategoryBreakdown ?? false)
+        || expectedState.detailFlags.shareHourlyPattern !== (status.data?.detailFlags.shareHourlyPattern ?? false)
+      ))
+    )) return { success: false, error: "Focus Card sharing changed. Reopen your profile and review it before trying again." };
+    const revision = status.data?.consentRevision ?? "00000000-0000-0000-0000-000000000000";
+    if (!revision) return { success: false, error: "Couldn't verify Focus Card sharing. Reopen your profile and try again." };
+    // Preserve the revision displayed before the user's choice, even when a
+    // delayed read sees identical flags after a repeated OFF or an ABA change.
+    if (expectedState?.consentRevision !== undefined && expectedState.consentRevision !== revision) {
+      return { success: false, error: "Focus Card sharing changed. Reopen your profile and review it before trying again." };
+    }
+    return { success: true, error: null, data: revision };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /** Upsert the full card aggregate and set its enabled flag (used when publishing/enabling). */
-export async function publishFocusCard(payload: FocusCardPayload, enabled: boolean, client?: FocusCardClient | null): Promise<FocusCardResult> {
+export async function publishFocusCard(payload: FocusCardPayload, enabled: boolean, client?: FocusCardClient | null, expectedUserId?: string | null, consentRevision?: string): Promise<FocusCardResult<string>> {
   const resolved = resolveClient(client);
   if (!resolved) return { success: false, error: "Supabase is not configured" };
   const userId = await currentUserId(resolved);
   if (!userId) return { success: false, error: "Not authenticated" };
+  if (expectedUserId !== undefined && userId !== expectedUserId) {
+    return { success: false, error: "Account changed. Reopen your profile and try again." };
+  }
+
+  if (!consentRevision) return { success: false, error: "Couldn't verify Focus Card sharing. Reopen your profile and try again." };
 
   try {
-    const { error } = await resolved.from("public_focus_cards").upsert({
+    const { data, error } = await resolved.from("public_focus_cards").upsert({
       user_id: userId,
+      expected_consent_revision: consentRevision,
       enabled,
       focus_seconds_today: payload.focus_seconds_today,
       focus_seconds_7d: payload.focus_seconds_7d,
@@ -139,9 +186,9 @@ export async function publishFocusCard(payload: FocusCardPayload, enabled: boole
       hourly_focus_pattern: payload.hourly_focus_pattern ?? [],
       top_apps_7d: [],
       updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id" });
+    }, { onConflict: "user_id" }).select("consent_revision").single();
     if (error) return { success: false, error: error.message };
-    return { success: true, error: null };
+    return { success: true, error: null, data: data?.consent_revision };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -152,11 +199,14 @@ export async function publishFocusCard(payload: FocusCardPayload, enabled: boole
  * server flags in its WHERE clause, so a concurrent disable or detail opt-out wins instead
  * of being overwritten by a stale client read.
  */
-export async function refreshFocusCardAggregates(payload: FocusCardPayload, client?: FocusCardClient | null): Promise<FocusCardResult> {
+export async function refreshFocusCardAggregates(payload: FocusCardPayload, client?: FocusCardClient | null, expectedUserId?: string | null): Promise<FocusCardResult> {
   const resolved = resolveClient(client);
   if (!resolved) return { success: false, error: "Supabase is not configured" };
   const userId = await currentUserId(resolved);
   if (!userId) return { success: false, error: "Not authenticated" };
+  if (expectedUserId !== undefined && userId !== expectedUserId) {
+    return { success: false, error: "Account changed. Reopen your profile and try again." };
+  }
 
   const updatedAt = new Date().toISOString();
   try {
@@ -202,14 +252,18 @@ export async function refreshFocusCardAggregates(payload: FocusCardPayload, clie
  * Persist only the per-detail consent flags (used while the card itself is off, so there is
  * no fresh aggregate to publish). Any flag that is off also clears its stored data column.
  */
-export async function setFocusCardDetailFlags(flags: FocusCardDetailFlags, client?: FocusCardClient | null): Promise<FocusCardResult> {
+export async function setFocusCardDetailFlags(flags: FocusCardDetailFlags, client?: FocusCardClient | null, expectedUserId?: string | null, consentRevision?: string): Promise<FocusCardResult<string>> {
   const resolved = resolveClient(client);
   if (!resolved) return { success: false, error: "Supabase is not configured" };
   const userId = await currentUserId(resolved);
   if (!userId) return { success: false, error: "Not authenticated" };
+  if (expectedUserId !== undefined && userId !== expectedUserId) {
+    return { success: false, error: "Account changed. Reopen your profile and try again." };
+  }
 
   const payload: Record<string, unknown> = {
     user_id: userId,
+    expected_consent_revision: consentRevision,
     share_category_breakdown: flags.shareCategoryBreakdown,
     share_hourly_pattern: flags.shareHourlyPattern,
     share_top_apps: false,
@@ -219,30 +273,38 @@ export async function setFocusCardDetailFlags(flags: FocusCardDetailFlags, clien
   if (!flags.shareHourlyPattern) payload.hourly_focus_pattern = [];
   payload.top_apps_7d = [];
 
+  if (!consentRevision) return { success: false, error: "Couldn't verify Focus Card sharing. Reopen your profile and try again." };
+
   try {
-    const { error } = await resolved.from("public_focus_cards").upsert(payload, { onConflict: "user_id" });
+    const { data, error } = await resolved.from("public_focus_cards").upsert(payload, { onConflict: "user_id" }).select("consent_revision").single();
     if (error) return { success: false, error: error.message };
-    return { success: true, error: null };
+    return { success: true, error: null, data: data?.consent_revision };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
 /** Flip only the opt-in flag (e.g. making a public card private again) without recomputing. */
-export async function setFocusCardEnabled(enabled: boolean, client?: FocusCardClient | null): Promise<FocusCardResult> {
+export async function setFocusCardEnabled(enabled: boolean, client?: FocusCardClient | null, expectedUserId?: string | null, consentRevision?: string): Promise<FocusCardResult<string>> {
   const resolved = resolveClient(client);
   if (!resolved) return { success: false, error: "Supabase is not configured" };
   const userId = await currentUserId(resolved);
   if (!userId) return { success: false, error: "Not authenticated" };
+  if (expectedUserId !== undefined && userId !== expectedUserId) {
+    return { success: false, error: "Account changed. Reopen your profile and try again." };
+  }
+
+  if (enabled && !consentRevision) return { success: false, error: "Couldn't verify Focus Card sharing. Reopen your profile and try again." };
 
   try {
-    const { error } = await resolved.from("public_focus_cards").upsert({
+    const { data, error } = await resolved.from("public_focus_cards").upsert({
       user_id: userId,
+      ...(consentRevision ? { expected_consent_revision: consentRevision } : {}),
       enabled,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id" });
+    }, { onConflict: "user_id" }).select("consent_revision").single();
     if (error) return { success: false, error: error.message };
-    return { success: true, error: null };
+    return { success: true, error: null, data: data?.consent_revision };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }

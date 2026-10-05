@@ -120,6 +120,7 @@ vi.mock("./lib/api/trackerClient", () => ({
 }));
 
 vi.mock("./features/share/focusCardService", () => ({
+  captureFocusCardConsent: vi.fn().mockResolvedValue({ success: true, data: "revision-a" }),
   DEFAULT_FOCUS_CARD_DETAIL_FLAGS: { shareCategoryBreakdown: false, shareHourlyPattern: false },
   fetchOwnFocusCard: vi.fn().mockResolvedValue({
     success: true,

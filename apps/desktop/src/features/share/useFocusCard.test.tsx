@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useFocusCard } from "./useFocusCard";
 
 const mocks = vi.hoisted(() => ({
+  capture: vi.fn(),
   buildPayload: vi.fn(),
   publish: vi.fn(),
   refreshAggregates: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock("./focusCardPublisher", () => ({
 }));
 
 vi.mock("./focusCardService", () => ({
+  captureFocusCardConsent: mocks.capture,
   DEFAULT_FOCUS_CARD_DETAIL_FLAGS: {
     shareCategoryBreakdown: false,
     shareHourlyPattern: false,
@@ -29,6 +31,7 @@ vi.mock("./focusCardService", () => ({
 describe("useFocusCard classification assessment gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.capture.mockResolvedValue({ success: true, data: "revision-a" });
     mocks.buildPayload.mockResolvedValue({ focusSeconds7d: 3_600 });
     mocks.publish.mockResolvedValue({ success: true });
     mocks.fetchOwn.mockResolvedValue({ success: true, data: null });
@@ -37,7 +40,7 @@ describe("useFocusCard classification assessment gate", () => {
 
   it("keeps the public aggregate unchanged while AI classification is pending", async () => {
     const { result } = renderHook(() => useFocusCard({
-      windowEndDay: "2026-09-04",
+      userId: "owner-a", windowEndDay: "2026-09-04",
       startOfDayMinutes: 0,
       includeAiClassifications: true,
       classificationAssessmentReady: false,
@@ -56,7 +59,7 @@ describe("useFocusCard classification assessment gate", () => {
 
   it("publishes normally once the corrected assessment is ready", async () => {
     const { result } = renderHook(() => useFocusCard({
-      windowEndDay: "2026-09-04",
+      userId: "owner-a", windowEndDay: "2026-09-04",
       startOfDayMinutes: 0,
       includeAiClassifications: true,
       classificationAssessmentReady: true,
@@ -77,7 +80,7 @@ describe("useFocusCard classification assessment gate", () => {
     }));
     const { result, rerender } = renderHook(
       (props: { ready: boolean }) => useFocusCard({
-        windowEndDay: "2026-09-04",
+        userId: "owner-a", windowEndDay: "2026-09-04",
         startOfDayMinutes: 0,
         includeAiClassifications: true,
         classificationAssessmentReady: props.ready,
@@ -110,7 +113,7 @@ describe("useFocusCard classification assessment gate", () => {
     }));
     const { result, rerender } = renderHook(
       (props: { ready: boolean }) => useFocusCard({
-        windowEndDay: "2026-09-04",
+        userId: "owner-a", windowEndDay: "2026-09-04",
         startOfDayMinutes: 0,
         includeAiClassifications: true,
         classificationAssessmentReady: props.ready,
@@ -137,16 +140,16 @@ describe("useFocusCard classification assessment gate", () => {
   });
   it("refreshes an enabled card from the recomputed payload while assessment is ready", async () => {
     mocks.fetchOwn.mockResolvedValue({ success: true, data: { enabled: true } });
-    const { result } = renderHook(() => useFocusCard({ windowEndDay: "2026-09-04",
+    const { result } = renderHook(() => useFocusCard({ userId: "owner-a", windowEndDay: "2026-09-04",
       startOfDayMinutes: 0, includeAiClassifications: true, classificationAssessmentReady: true }));
     await act(async () => { await result.current.refresh(); });
-    expect(mocks.refreshAggregates).toHaveBeenCalledWith({ focusSeconds7d: 3_600 });
+    expect(mocks.refreshAggregates).toHaveBeenCalledWith({ focusSeconds7d: 3_600 }, undefined, "owner-a");
     expect(mocks.publish).not.toHaveBeenCalled();
   });
 
   it("does not publish a disabled card during post-delete refresh", async () => {
     mocks.fetchOwn.mockResolvedValue({ success: true, data: { enabled: false } });
-    const { result } = renderHook(() => useFocusCard({ windowEndDay: "2026-09-04",
+    const { result } = renderHook(() => useFocusCard({ userId: "owner-a", windowEndDay: "2026-09-04",
       startOfDayMinutes: 0, includeAiClassifications: true, classificationAssessmentReady: true }));
     await act(async () => { await result.current.refresh(); });
     expect(result.current.enabled).toBe(false);
@@ -156,7 +159,7 @@ describe("useFocusCard classification assessment gate", () => {
 
   it("preserves the assessment pause gate during post-delete refresh", async () => {
     mocks.fetchOwn.mockResolvedValue({ success: true, data: { enabled: true } });
-    const { result } = renderHook(() => useFocusCard({ windowEndDay: "2026-09-04",
+    const { result } = renderHook(() => useFocusCard({ userId: "owner-a", windowEndDay: "2026-09-04",
       startOfDayMinutes: 0, includeAiClassifications: true, classificationAssessmentReady: false }));
     await act(async () => { await result.current.refresh(); });
     expect(result.current.error).toMatch(/AI classification is paused/i);
