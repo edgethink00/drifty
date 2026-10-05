@@ -237,6 +237,17 @@ fn close_impl(request: &TargetRequest, deadline: Instant) -> Result<String, Stri
     verify_invoke_target(
         deadline,
         || resolved.selection.is_selected().unwrap_or(false),
+        || {
+            if request.process_name == "chrome" {
+                verify_chrome_display_address(
+                    &resolved.automation,
+                    &resolved.walker,
+                    &resolved.window,
+                    &resolved.verified_url,
+                )?;
+            }
+            Ok(())
+        },
         || verify_foreground_snapshot(request, &snapshot),
     )?;
     let invoke_result = resolved.close_invoke.invoke();
@@ -288,16 +299,20 @@ fn close_impl(request: &TargetRequest, deadline: Instant) -> Result<String, Stri
 }
 
 // Selection reads can synchronously block in the browser's UIA provider.
-// Recheck window/process identity and the action budget after that final read,
-// immediately before Invoke, so a late provider cannot close a background tab.
+// Recheck Chrome's native address after the final selection read: the same tab
+// can navigate while that provider call waits. Window/process identity and the
+// original action budget are checked after the address provider returns too.
 fn verify_invoke_target(
     deadline: Instant,
     is_selected: impl FnOnce() -> bool,
+    verify_address: impl FnOnce() -> Result<(), String>,
     verify_foreground: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
     if !is_selected() {
         return Err("windows_uia_stale_target".to_string());
     }
+    ensure_deadline(deadline)?;
+    verify_address()?;
     verify_foreground()?;
     ensure_deadline(deadline)
 }
@@ -330,6 +345,7 @@ struct ResolvedSelectedTab {
     close_invoke: UIInvokePattern,
     close_rect: uiautomation::types::Rect,
     runtime_id: Vec<i32>,
+    verified_url: String,
     match_kind: &'static str,
     last_tab_window_close: bool,
 }
@@ -437,6 +453,7 @@ fn resolve_selected_tab(
         runtime_id: tab
             .get_runtime_id()
             .map_err(|_| "windows_uia_stale_target".to_string())?,
+        verified_url: actual_url,
         match_kind,
         last_tab_window_close,
     })
@@ -919,6 +936,7 @@ mod tests {
                 thread::sleep(Duration::from_millis(20));
                 true
             },
+            || panic!("expired selection must not start another provider read"),
             || Ok(()),
         );
         assert_eq!(result, Err("windows_uia_timeout".to_string()));
@@ -933,6 +951,7 @@ mod tests {
                 selected_read_finished.set(true);
                 true
             },
+            || Ok(()),
             || {
                 assert!(selected_read_finished.get());
                 Err("windows_uia_stale_target".to_string())
@@ -944,11 +963,80 @@ mod tests {
     #[test]
     fn current_selected_target_is_allowed_and_deselected_target_is_refused() {
         let deadline = Instant::now() + UIA_ACTION_TIMEOUT;
-        assert_eq!(verify_invoke_target(deadline, || true, || Ok(())), Ok(()));
         assert_eq!(
-            verify_invoke_target(deadline, || false, || panic!("deselected target")),
+            verify_invoke_target(deadline, || true, || Ok(()), || Ok(())),
+            Ok(())
+        );
+        assert_eq!(
+            verify_invoke_target(
+                deadline,
+                || false,
+                || panic!("deselected target"),
+                || panic!("deselected target"),
+            ),
             Err("windows_uia_stale_target".to_string())
         );
+    }
+
+    #[test]
+    fn address_is_verified_after_the_final_selection_read() {
+        let selected_read_finished = std::cell::Cell::new(false);
+        let result = verify_invoke_target(
+            Instant::now() + UIA_ACTION_TIMEOUT,
+            || {
+                selected_read_finished.set(true);
+                true
+            },
+            || {
+                assert!(selected_read_finished.get());
+                Err("windows_uia_address_mismatch".to_string())
+            },
+            || panic!("changed URL cannot reach Invoke"),
+        );
+        assert_eq!(result, Err("windows_uia_address_mismatch".to_string()));
+    }
+
+    #[test]
+    fn delayed_address_read_cannot_extend_the_action_budget() {
+        let result = verify_invoke_target(
+            Instant::now() + Duration::from_millis(10),
+            || true,
+            || {
+                thread::sleep(Duration::from_millis(20));
+                Ok(())
+            },
+            || Ok(()),
+        );
+        assert_eq!(result, Err("windows_uia_timeout".to_string()));
+    }
+
+    #[test]
+    fn foreground_is_verified_after_the_final_address_read() {
+        let address_read_finished = std::cell::Cell::new(false);
+        let result = verify_invoke_target(
+            Instant::now() + UIA_ACTION_TIMEOUT,
+            || true,
+            || {
+                address_read_finished.set(true);
+                Ok(())
+            },
+            || {
+                assert!(address_read_finished.get());
+                Err("windows_uia_stale_target".to_string())
+            },
+        );
+        assert_eq!(result, Err("windows_uia_stale_target".to_string()));
+    }
+
+    #[test]
+    fn unavailable_address_is_refused_before_invoke() {
+        let result = verify_invoke_target(
+            Instant::now() + UIA_ACTION_TIMEOUT,
+            || true,
+            || Err("windows_uia_address_unavailable".to_string()),
+            || panic!("unverified URL cannot reach Invoke"),
+        );
+        assert_eq!(result, Err("windows_uia_address_unavailable".to_string()));
     }
 
     #[test]
