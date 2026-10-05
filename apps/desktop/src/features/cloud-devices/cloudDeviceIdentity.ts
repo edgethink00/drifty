@@ -43,9 +43,13 @@ async function readNativeCloudDeviceIdentity(): Promise<NativeCloudDeviceIdentit
 }
 
 function toCloudDevicePayload(identity: NativeCloudDeviceIdentity): CloudDevicePayload {
+  // Older deployed Cloud readers reject labels longer than 80 UTF-16 units.
+  // Bound the outgoing name without leaving half of a surrogate pair so those
+  // readers retain the real model name instead of replacing it with "Mac".
+  const label = identity.label.trim().slice(0, 80).replace(/[\uD800-\uDBFF]$/, "");
   return {
     installId: identity.installId,
-    label: identity.label || (identity.platform === "windows" ? "Windows PC" : "Mac"),
+    label: label || (identity.platform === "windows" ? "Windows PC" : "Mac"),
     platform: identity.platform,
     // The device row shows which build a person is actually running, so it must
     // carry the real app version. CLOUD_API_CLIENT_VERSION is the frozen

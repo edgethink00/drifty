@@ -77,6 +77,41 @@ describe("cloudDeviceIdentity", () => {
     });
   });
 
+  it("bounds long native Windows names for previously deployed Cloud readers", async () => {
+    const label = "LG Electronics 16Z90Q-G.AA5BK (12th Gen Intel(R) Core(TM) i5-1240P) — Engineering Workstation";
+    tauriCoreMock.isTauri.mockReturnValue(true);
+    tauriCoreMock.invoke.mockResolvedValue({
+      installId: "33333333-3333-4333-8333-333333333333",
+      label: `  ${label}  `,
+      platform: "windows",
+    });
+
+    const { readCloudDevicePayload } = await import("./cloudDeviceIdentity");
+    const payload = await readCloudDevicePayload();
+
+    expect(payload).toEqual({
+      installId: "33333333-3333-4333-8333-333333333333",
+      label: label.slice(0, 80),
+      platform: "windows",
+      appVersion: BUILD_INFO.version,
+    });
+    expect(payload?.label.length).toBeLessThanOrEqual(80);
+  });
+
+  it("does not split a Unicode character at the outgoing name limit", async () => {
+    const prefix = "기".repeat(79);
+    tauriCoreMock.isTauri.mockReturnValue(true);
+    tauriCoreMock.invoke.mockResolvedValue({
+      installId: "33333333-3333-4333-8333-333333333333",
+      label: `${prefix}💻 workstation`,
+      platform: "windows",
+    });
+
+    const { readCloudDevicePayload } = await import("./cloudDeviceIdentity");
+
+    expect((await readCloudDevicePayload())?.label).toBe(prefix);
+  });
+
   it("skips native Cloud device lookup outside Tauri", async () => {
     tauriCoreMock.isTauri.mockReturnValue(false);
 

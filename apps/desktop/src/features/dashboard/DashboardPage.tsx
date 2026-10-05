@@ -305,7 +305,7 @@ export function DashboardPage({
             options={[
               { value: "all", label: t("dashboard.allDevices") },
               { value: "local", label: t("dashboard.thisMac") },
-              ...[...deviceLabelById].map(([value, label]) => ({ value, label })),
+              ...[...deviceLabelById].map(([value, label]) => ({ value, label, title: label })),
             ]}
             onChange={onDeviceTimelineFilterChange} placement="below" />
         </div>

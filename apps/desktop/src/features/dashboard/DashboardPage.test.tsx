@@ -618,14 +618,18 @@ describe("dashboard device selection", () => {
   });
   it.each(["Today", "Week"] as const)("keeps the selected known device visible on an empty %s without falling back to another device", (dashPeriod) => {
     const onChange = vi.fn();
-    renderDashboardWithNoData({ dashPeriod, deviceTimelineFilter: "windows-pc", deviceLabelById: new Map([["windows-pc", "Windows PC"]]), onDeviceTimelineFilterChange: onChange });
+    const deviceName = "LG Electronics 16Z90Q-G.AA5BK (12th Gen Intel(R) Core(TM) i5-1240P)";
+    renderDashboardWithNoData({ dashPeriod, deviceTimelineFilter: "windows-pc", deviceLabelById: new Map([["windows-pc", deviceName]]), onDeviceTimelineFilterChange: onChange });
     const select = screen.getByRole("combobox", { name: "Device filter" });
-    expect(select.textContent).toContain("Windows PC");
+    expect(select.textContent).toContain(deviceName);
+    expect(select.getAttribute("title")).toBe(deviceName);
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(select);
     expect(screen.getByRole("option", { name: "All devices" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "This device" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "Windows PC" }).getAttribute("aria-selected")).toBe("true");
+    const option = screen.getByRole("option", { name: deviceName });
+    expect(option.getAttribute("aria-selected")).toBe("true");
+    expect(option.getAttribute("title")).toBe(deviceName);
   });
 
   it.each(["Today", "Week"] as const)("selects devices from the %s header without a separate button strip", (dashPeriod) => {
@@ -633,6 +637,8 @@ describe("dashboard device selection", () => {
     renderDashboardWithNoData({ dashPeriod, deviceLabelById: new Map([["windows-pc", "Windows PC"]]), onDeviceTimelineFilterChange: onChange });
     const select = screen.getByRole("combobox", { name: "Device filter" });
     expect(select.closest(".dashboard-page-head__side")).toBeTruthy();
+    // Preserve the existing elapsed-time explanation on the All devices wrapper.
+    expect(select.hasAttribute("title")).toBe(false);
     expect(screen.queryByRole("button", { name: "All devices" })).toBeNull();
     fireEvent.click(select);
     fireEvent.click(screen.getByRole("option", { name: "Windows PC" }));

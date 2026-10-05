@@ -24,6 +24,8 @@ export type SettingsSelectOption<TValue extends string> = {
   readonly label: string;
   /** Optional customer-facing title, also used as the accessible option name. */
   readonly displayLabel?: string;
+  /** Full name to show on hover when the visible label may be shortened. */
+  readonly title?: string;
   readonly description?: string;
   /** Persistent state text beside the option title, separate from hover actions. */
   readonly statusLabel?: string;
@@ -387,7 +389,7 @@ export function SettingsSelect<TValue extends string>({
           : "settings-select-control__trigger"}
         role="combobox"
         aria-label={triggerLabel}
-        title={triggerVisual ? triggerLabel : undefined}
+        title={triggerVisual ? triggerLabel : showPlaceholder ? undefined : selectedOption.title}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={listboxId}
@@ -425,6 +427,7 @@ export function SettingsSelect<TValue extends string>({
                   id={optionId(option.value)}
                   type="button"
                   role="option"
+                  title={option.title}
                   aria-label={option.description || option.statusLabel ? (option.displayLabel ?? option.label) : undefined}
                   aria-describedby={[
                     option.statusLabel ? `${optionId(option.value)}-status` : null,
