@@ -1,4 +1,5 @@
 import type {
+  DeletedTeam,
   LeftTeam,
   OwnTeam,
   PublishedTeamProjectTotals,
@@ -83,6 +84,15 @@ export function normalizeLeftTeam(row: unknown): LeftTeam {
     organization_id: readString(record, "organization_id"),
     removed_total_rows: readNumber(record, "removed_total_rows"),
     revoked_invite_count: readNumber(record, "revoked_invite_count"),
+  };
+}
+
+export function normalizeDeletedTeam(row: unknown): DeletedTeam {
+  const record = toRecord(row);
+  return {
+    organization_id: readString(record, "organization_id"),
+    member_count: readNumber(record, "member_count"),
+    deleted_total_rows: readNumber(record, "deleted_total_rows"),
   };
 }
 

@@ -327,6 +327,15 @@ export function useTeamQaMockController(): UseTeamControllerResult {
     return true;
   }, [teams]);
 
+  const handleDeleteTeam = useCallback(async (input: { readonly organization_id: string; readonly confirmation_name: string }) => {
+    const target = teams.find((team) => team.organization_id === input.organization_id);
+    if (!target || target.organization_name.trim().toLowerCase() !== input.confirmation_name.trim().toLowerCase()) return false;
+    const remaining = teams.filter((team) => team.organization_id !== input.organization_id);
+    setTeams(remaining);
+    setSelectedTeamId(remaining[0]?.organization_id ?? MOCK_ORG_ID);
+    return true;
+  }, [teams]);
+
   return {
     selectedTeam,
     teamActionError: null,
@@ -347,6 +356,7 @@ export function useTeamQaMockController(): UseTeamControllerResult {
     refreshMembers: async () => undefined,
     handleRemoveMember,
     handleLeaveTeam,
+    handleDeleteTeam,
     selectTeam: setSelectedTeamId,
   };
 }

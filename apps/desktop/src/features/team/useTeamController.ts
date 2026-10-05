@@ -27,6 +27,7 @@ export type UseTeamControllerResult = {
   readonly handleSetMemberInvites: TeamInviteActions["handleSetMemberInvites"];
   readonly members: TeamMemberActions["members"]; readonly refreshMembers: TeamMemberActions["refreshMembers"];
   readonly handleRemoveMember: TeamMemberActions["handleRemoveMember"]; readonly handleLeaveTeam: TeamMemberActions["handleLeaveTeam"];
+  readonly handleDeleteTeam: TeamMemberActions["handleDeleteTeam"];
   readonly selectTeam: (organizationId: string) => void;
 };
 
@@ -164,7 +165,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     isTeamOwner(teamsRef.current.find((team) => team.organization_id === organizationId))
   ), []);
 
-  const { members, refreshMembers, handleRemoveMember, handleLeaveTeam } = useTeamMemberActions({ activeTab, canUseTeamServices, selectedTeamId, isOwnerOf, requireTeamActionAccess, refreshTeamDataCore, refreshInvites, setTeamActionError, setTeamActionLoading });
+  const { members, refreshMembers, handleRemoveMember, handleLeaveTeam, handleDeleteTeam } = useTeamMemberActions({ activeTab, canUseTeamServices, selectedTeamId, isOwnerOf, requireTeamActionAccess, refreshTeamDataCore, refreshInvites, setTeamActionError, setTeamActionLoading });
 
   const refreshTeamData = useCallback(async (preferredTeamId = selectedTeamIdRef.current) => {
     const refreshedTeamId = await refreshTeamDataCore(preferredTeamId);
@@ -204,7 +205,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   return {
     selectedTeam, teamActionError, teamActionLoading, teamError: teamBlockingError,
     teamLoading: teamBlockingLoading, teamStatusMessage, teamStatusTone, teams, invites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites,
-    members, refreshMembers, handleRemoveMember, handleLeaveTeam,
+    members, refreshMembers, handleRemoveMember, handleLeaveTeam, handleDeleteTeam,
     refreshTeamData, selectTeam,
   };
 }

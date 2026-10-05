@@ -1313,6 +1313,25 @@
   gap: var(--space-4);
 }
 
+/* The owner's delete confirmation: impact, the typed name, then cancel and delete. */
+.team-set-delete {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.team-set-delete__label {
+  font-size: 0.78rem;
+  font-weight: 560;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.team-set-delete__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 /* Owner-only invite permission: label and hint on the left, switch on the right. */
 .team-set-permission {
   display: flex;

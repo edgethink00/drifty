@@ -87,7 +87,11 @@ export function TeamWorkspace({
   // Removing a member and leaving the team each take a second press within 3s.
   const [armedRemovalKey, setArmedRemovalKey] = useState<string | null>(null);
   const [leaveArmed, setLeaveArmed] = useState(false);
-  const [memberActionFailed, setMemberActionFailed] = useState(false);
+  // Which settings section shows the latest action error, so it appears once, next to its control.
+  const [failedAction, setFailedAction] = useState<"member" | "delete" | null>(null);
+  // Deleting a team opens a type-the-name confirmation first.
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteName, setDeleteName] = useState("");
   const disarmTimerRef = useRef<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addTab, setAddTab] = useState<"create" | "join">("create");
@@ -117,6 +121,7 @@ export function TeamWorkspace({
     refreshMembers,
     handleRemoveMember,
     handleLeaveTeam,
+    handleDeleteTeam,
     selectTeam,
   } = controller;
 
@@ -155,7 +160,9 @@ export function TeamWorkspace({
   useEffect(() => {
     setArmedRemovalKey(null);
     setLeaveArmed(false);
-    setMemberActionFailed(false);
+    setFailedAction(null);
+    setDeleteOpen(false);
+    setDeleteName("");
     if (settingsOpen && isOwner && selectedTeam) void refreshMembers(selectedTeam.organization_id);
   }, [settingsOpen, isOwner, selectedTeam?.organization_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -177,7 +184,7 @@ export function TeamWorkspace({
     }
     setArmedRemovalKey(null);
     const removed = await handleRemoveMember({ organization_id: selectedTeam.organization_id, member_key: memberKey });
-    setMemberActionFailed(!removed);
+    setFailedAction(removed ? null : "member");
   };
 
   const leaveSelectedTeam = async () => {
@@ -188,8 +195,19 @@ export function TeamWorkspace({
     }
     setLeaveArmed(false);
     const left = await handleLeaveTeam({ organization_id: selectedTeam.organization_id });
-    setMemberActionFailed(!left);
+    setFailedAction(left ? null : "member");
     if (left) setSettingsOpen(false);
+  };
+
+  // The server compares the same way: case and surrounding spaces do not matter.
+  const deleteNameMatches = Boolean(selectedTeam)
+    && deleteName.trim().toLowerCase() === (selectedTeam?.organization_name ?? "").trim().toLowerCase();
+
+  const deleteSelectedTeam = async () => {
+    if (!selectedTeam || !deleteNameMatches) return;
+    const deleted = await handleDeleteTeam({ organization_id: selectedTeam.organization_id, confirmation_name: deleteName });
+    setFailedAction(deleted ? null : "delete");
+    if (deleted) setSettingsOpen(false);
   };
 
   // The switcher closes on an outside press or Escape, and opens on the current team.
@@ -735,7 +753,7 @@ export function TeamWorkspace({
                   <p className="team-modal__hint">{t("team.settings.membersLoading")}</p>
                 )}
                 <p className="team-modal__hint">{t("team.settings.removeHint")}</p>
-                {memberActionFailed && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
+                {failedAction === "member" && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
               </div>
             ) : null}
 
@@ -780,12 +798,12 @@ export function TeamWorkspace({
                     ariaLabel={t("team.settings.membersCanInvite")}
                     ariaDescribedBy="team-member-invites-hint"
                     onChange={(enabled) => {
-                      setMemberActionFailed(false);
+                      setFailedAction(null);
                       void handleSetMemberInvites({ organization_id: selectedTeam.organization_id, enabled });
                     }}
                   />
                 </div>
-                {!memberActionFailed && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
+                {failedAction === null && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
               </div>
             ) : null}
 
@@ -832,7 +850,69 @@ export function TeamWorkspace({
                     {leaveArmed ? t("team.settings.leaveConfirm") : t("team.settings.leave")}
                   </button>
                 </div>
-                {memberActionFailed && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
+                {failedAction === "member" && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
+              </div>
+            ) : null}
+
+            {/* The owner deletes the team instead of leaving it. */}
+            {isOwner && selectedTeam ? (
+              <div className="team-set-section">
+                <span className="label-mono">{t("team.settings.deleteSection")}</span>
+                {deleteOpen ? (
+                  <form
+                    className="team-set-delete"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void deleteSelectedTeam();
+                    }}
+                  >
+                    <p className="team-modal__hint">{t("team.settings.deleteHint")}</p>
+                    <label className="team-set-delete__label" htmlFor="team-delete-confirm">
+                      {t("team.settings.deleteConfirmLabel", { team: selectedTeam.organization_name })}
+                    </label>
+                    <input
+                      id="team-delete-confirm"
+                      className="settings-input"
+                      value={deleteName}
+                      maxLength={120}
+                      autoComplete="off"
+                      spellCheck={false}
+                      autoFocus
+                      onChange={(event) => setDeleteName(event.target.value)}
+                    />
+                    <div className="team-set-delete__actions">
+                      <button
+                        type="button"
+                        className="modal-btn modal-btn--ghost"
+                        onClick={() => {
+                          setDeleteOpen(false);
+                          setDeleteName("");
+                        }}
+                      >
+                        {t("common.cancel")}
+                      </button>
+                      <button type="submit" className="modal-btn modal-btn--danger" disabled={!deleteNameMatches || teamActionLoading}>
+                        {t("team.settings.deleteConfirm")}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="team-set-leave">
+                    <p className="team-modal__hint">{t("team.settings.deleteHint")}</p>
+                    <button
+                      type="button"
+                      className="modal-btn modal-btn--danger team-set-remove"
+                      disabled={teamActionLoading}
+                      onClick={() => {
+                        setFailedAction(null);
+                        setDeleteOpen(true);
+                      }}
+                    >
+                      {t("team.settings.delete")}
+                    </button>
+                  </div>
+                )}
+                {failedAction === "delete" && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
               </div>
             ) : null}
           </div>

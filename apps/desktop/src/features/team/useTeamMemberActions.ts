@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import {
+  deleteTeam,
   fetchTeamMembers,
   isTeamErrorMessage,
   leaveTeam,
   messageFromTeamError,
   removeTeamMember,
+  type DeleteTeamInput,
   type LeaveTeamInput,
   type RemoveTeamMemberInput,
   type TeamMember,
@@ -31,6 +33,7 @@ export type UseTeamMemberActionsResult = {
   readonly refreshMembers: (organizationId?: string | null) => Promise<void>;
   readonly handleRemoveMember: (input: RemoveTeamMemberInput) => Promise<boolean>;
   readonly handleLeaveTeam: (input: LeaveTeamInput) => Promise<boolean>;
+  readonly handleDeleteTeam: (input: DeleteTeamInput) => Promise<boolean>;
 };
 
 type Roster = { readonly organizationId: string; readonly members: readonly TeamMember[] };
@@ -110,8 +113,21 @@ export function useTeamMemberActions({
     return true;
   }), [refreshInvites, refreshTeamDataCore, runMemberAction, setTeamActionError]);
 
+  const handleDeleteTeam = useCallback((input: DeleteTeamInput) => runMemberAction(async () => {
+    const result = await deleteTeam(input);
+    if (!result.success) {
+      setTeamActionError(result.error ?? "Unable to delete the team.");
+      return false;
+    }
+    setRoster(null);
+    // Same as leaving: the reload drops the deleted team and prunes its local project mirror.
+    const refreshedTeamId = await refreshTeamDataCore(null);
+    await refreshInvites(refreshedTeamId);
+    return true;
+  }), [refreshInvites, refreshTeamDataCore, runMemberAction, setTeamActionError]);
+
   const members = roster && roster.organizationId === selectedTeamId ? roster.members : EMPTY_MEMBERS;
-  return { members, refreshMembers, handleRemoveMember, handleLeaveTeam };
+  return { members, refreshMembers, handleRemoveMember, handleLeaveTeam, handleDeleteTeam };
 }
 
 const EMPTY_MEMBERS: readonly TeamMember[] = [];

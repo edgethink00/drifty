@@ -93,7 +93,16 @@ describe("Korean translations", () => {
     expect(KOREAN_TRANSLATIONS["settings.account.deleteBillingRetention"]).toMatch(/Polar.*과거 결제 기록이 남/);
     expect(KOREAN_TRANSLATIONS["settings.account.deleteAnalyticsRetention"]).toMatch(/PostHog.*삭제되지/);
     expect(KOREAN_TRANSLATIONS["settings.account.deleteTeamsImpact"]).toMatch(/다른 멤버.*계정 삭제를 차단/);
-    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).toMatch(/데이터를 보호.*계정 삭제를 차단.*직접 정리를 지원하지 않습니다/);
+    // Owners can now clear a shared team themselves, so the blocked message
+    // names those exits instead of saying cleanup is unsupported.
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).toMatch(/데이터를 보호.*계정 삭제를 차단.*팀 설정에서 멤버를 내보내거나 팀을 삭제/);
+    expect(ENGLISH_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).toContain("delete the team in Team settings");
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeamAfterBilling"]).toMatch(/팀 설정에서.*팀을 삭제/);
+    expect(ENGLISH_TRANSLATIONS["settings.account.deleteErrorSharedTeamAfterBilling"]).toContain("delete the team in Team settings");
+    for (const key of ["settings.account.deleteErrorSharedTeam", "settings.account.deleteErrorSharedTeamAfterBilling"] as const) {
+      expect(KOREAN_TRANSLATIONS[key]).not.toContain("지원하지 않습니다");
+      expect(ENGLISH_TRANSLATIONS[key]).not.toContain("does not yet support");
+    }
     expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).not.toContain("지원팀");
     // The app can now release an organization seat, so the blocked message has
     // to name that exit instead of reading as a dead end.

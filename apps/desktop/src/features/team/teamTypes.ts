@@ -74,6 +74,14 @@ export type LeftTeam = {
   readonly revoked_invite_count: number;
 };
 
+export type DeleteTeamInput = { readonly organization_id: string; readonly confirmation_name: string };
+
+export type DeletedTeam = {
+  readonly organization_id: string;
+  readonly member_count: number;
+  readonly deleted_total_rows: number;
+};
+
 export type TeamInvite = {
   readonly invite_id: string;
   readonly organization_id: string;
@@ -215,6 +223,7 @@ export type RpcProcedure =
   | "get_organization_members"
   | "remove_organization_member"
   | "leave_organization"
+  | "delete_organization_team"
   | "create_organization_project"
   | "update_organization_project"
   | "archive_organization_project"

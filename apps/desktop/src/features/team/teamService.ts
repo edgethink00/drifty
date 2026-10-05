@@ -1,5 +1,6 @@
 import { callFirstRow, callRows, fail, invokeTeamInvite, requireAuthenticatedClient } from "./teamServiceClient";
 import {
+  normalizeDeletedTeam,
   normalizeLeftTeam,
   normalizeOwnTeam,
   normalizeRemovedTeamMember,
@@ -20,6 +21,8 @@ import type {
   CreateTeamInput,
   CreateTeamInviteInput,
   CreateTeamProjectInput,
+  DeletedTeam,
+  DeleteTeamInput,
   FetchTeamInvitesInput,
   FetchTeamMembersInput,
   FetchTeamProjectsInput,
@@ -54,6 +57,8 @@ export type {
   AcceptTeamInviteInput,
   CreateTeamInput,
   CreateTeamInviteInput,
+  DeletedTeam,
+  DeleteTeamInput,
   FetchTeamInvitesInput,
   FetchTeamMembersInput,
   LeaveTeamInput,
@@ -198,6 +203,23 @@ export async function leaveTeam(
   return callFirstRow(auth.data.client, "leave_organization", {
     input_organization_id: organizationId.value,
   }, normalizeLeftTeam);
+}
+
+/** Owner-only. The server checks the typed name again and deletes the team with everything in it. */
+export async function deleteTeam(
+  input: DeleteTeamInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<DeletedTeam | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  const confirmationName = requiredText(input.confirmation_name, "Type the team name to confirm.", 120);
+  if (!confirmationName.ok) return fail("invalid_input", confirmationName.error);
+  return callFirstRow(auth.data.client, "delete_organization_team", {
+    input_organization_id: organizationId.value,
+    input_confirmation_name: confirmationName.value,
+  }, normalizeDeletedTeam);
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ const teamServiceMocks = vi.hoisted(() => ({
   fetchTeamMembers: vi.fn(),
   removeTeamMember: vi.fn(),
   leaveTeam: vi.fn(),
+  deleteTeam: vi.fn(),
 }));
 
 const trackerMocks = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ vi.mock("./teamService", () => ({
   fetchTeamMembers: teamServiceMocks.fetchTeamMembers,
   removeTeamMember: teamServiceMocks.removeTeamMember,
   leaveTeam: teamServiceMocks.leaveTeam,
+  deleteTeam: teamServiceMocks.deleteTeam,
   isTeamErrorMessage: (value: unknown): value is { readonly message: string } => (
     typeof value === "object" && value !== null && "message" in value && typeof (value as { message: unknown }).message === "string"
   ),
@@ -65,6 +67,7 @@ describe("useTeamController", () => {
     teamServiceMocks.fetchTeamMembers.mockReset();
     teamServiceMocks.removeTeamMember.mockReset();
     teamServiceMocks.leaveTeam.mockReset();
+    teamServiceMocks.deleteTeam.mockReset();
     teamServiceMocks.fetchTeamInvites.mockResolvedValue(ok([]));
     trackerMocks.getTeamProjects.mockReset().mockResolvedValue([]);
     trackerMocks.upsertTeamProjects.mockReset().mockResolvedValue([]);
@@ -165,6 +168,45 @@ describe("useTeamController", () => {
     expect(left).toBe(false);
     expect(hook.result.current.teamActionError).toBe("The team owner cannot leave the team.");
     expect(hook.result.current.teams).toEqual([memberTeam]);
+  });
+
+  it("deletes a team, then selects a remaining team and clears the deleted team's local mirror", async () => {
+    const otherTeam = makeTeam({ organization_id: "team-2", organization_name: "Studio Crew", role_label: "Member", membership_role: "member" });
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam, otherTeam]));
+    teamServiceMocks.fetchTeamMembers.mockResolvedValue(ok([]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.selectedTeam?.organization_id).toBe("team-1"));
+
+    trackerMocks.getTeamProjects.mockResolvedValue([{ id: "project-a", organizationId: "team-1" }, { id: "project-b", organizationId: "team-2" }]);
+    teamServiceMocks.deleteTeam.mockResolvedValue(ok({ organization_id: "team-1", member_count: 2, deleted_total_rows: 3 }));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([otherTeam]));
+    let deleted = false;
+    await act(async () => {
+      deleted = await hook.result.current.handleDeleteTeam({ organization_id: "team-1", confirmation_name: privateTeam.organization_name });
+    });
+    expect(deleted).toBe(true);
+    expect(teamServiceMocks.deleteTeam).toHaveBeenCalledWith({ organization_id: "team-1", confirmation_name: privateTeam.organization_name });
+    expect(hook.result.current.selectedTeam?.organization_id).toBe("team-2");
+    expect(hook.result.current.members).toEqual([]);
+    await waitFor(() => expect(trackerMocks.upsertTeamProjects).toHaveBeenCalledWith("team-1", []));
+    expect(trackerMocks.upsertTeamProjects).not.toHaveBeenCalledWith("team-2", []);
+  });
+
+  it("keeps the team and shows the error when deleting is refused", async () => {
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    teamServiceMocks.fetchTeamMembers.mockResolvedValue(ok([]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([privateTeam]));
+
+    teamServiceMocks.deleteTeam.mockResolvedValue(fail("Type the team name to confirm."));
+    let deleted = true;
+    await act(async () => {
+      deleted = await hook.result.current.handleDeleteTeam({ organization_id: "team-1", confirmation_name: "wrong" });
+    });
+    expect(deleted).toBe(false);
+    expect(hook.result.current.teamActionError).toBe("Type the team name to confirm.");
+    expect(hook.result.current.teams).toEqual([privateTeam]);
+    expect(trackerMocks.upsertTeamProjects).not.toHaveBeenCalledWith("team-1", []);
   });
 
   it("does not read invites for a member whose team keeps invites owner-only, and does once the owner allows it", async () => {

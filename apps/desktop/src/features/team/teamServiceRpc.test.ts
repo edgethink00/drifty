@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createTeam,
+  deleteTeam,
   fetchOwnTeams,
   fetchTeamInvites,
   fetchTeamMembers,
@@ -199,6 +200,27 @@ describe("teamService RPC mapping", () => {
       success: true,
       error: null,
       data: { organization_id: organizationId, removed_total_rows: 0, revoked_invite_count: 0 },
+    });
+    expect(blank).toMatchObject({ success: false, reason: "invalid_input" });
+  });
+
+  it("deletes a team with the typed name and refuses a blank confirmation before calling the server", async () => {
+    const client = createClient();
+    client.setRpcResponse("delete_organization_team", {
+      data: [{ organization_id: organizationId, member_count: "3", deleted_total_rows: 4 }],
+      error: null,
+    });
+
+    const deleted = await deleteTeam({ organization_id: organizationId, confirmation_name: " Focus Crew " }, client);
+    const blank = await deleteTeam({ organization_id: organizationId, confirmation_name: "   " }, client);
+
+    expect(client.rpcCalls).toEqual([
+      { procedure: "delete_organization_team", args: { input_organization_id: organizationId, input_confirmation_name: "Focus Crew" } },
+    ]);
+    expect(deleted).toEqual({
+      success: true,
+      error: null,
+      data: { organization_id: organizationId, member_count: 3, deleted_total_rows: 4 },
     });
     expect(blank).toMatchObject({ success: false, reason: "invalid_input" });
   });
