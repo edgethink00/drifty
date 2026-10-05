@@ -4,6 +4,9 @@ import {
   createTeam,
   fetchOwnTeams,
   fetchTeamInvites,
+  fetchTeamMembers,
+  leaveTeam,
+  removeTeamMember,
   setTeamMemberInvites,
   type TeamClient,
 } from "./teamService";
@@ -140,5 +143,63 @@ describe("teamService RPC mapping", () => {
       { procedure: "set_organization_member_invites", args: { input_organization_id: organizationId, input_enabled: false } },
     ]);
     expect(result).toEqual({ success: true, error: null, data: { organization_id: organizationId, members_can_invite: false } });
+  });
+
+  it("reads the owner roster, removes a member and leaves through their RPCs without account ids", async () => {
+    const client = createClient();
+    client.setRpcResponse("get_organization_members", {
+      data: [{
+        member_key: "member-key-1",
+        display_name: "Aria Chen",
+        role_label: "Member",
+        membership_role: "member",
+        joined_at: "2026-06-03T09:00:00.000Z",
+        is_self: false,
+        app_user_id: "must-not-leak",
+      }],
+      error: null,
+    });
+    client.setRpcResponse("remove_organization_member", {
+      data: [{ organization_id: organizationId, member_count: "2", removed_total_rows: 3, revoked_invite_count: 1 }],
+      error: null,
+    });
+    client.setRpcResponse("leave_organization", {
+      data: [{ organization_id: organizationId, removed_total_rows: 0, revoked_invite_count: 0 }],
+      error: null,
+    });
+
+    const roster = await fetchTeamMembers({ organization_id: organizationId }, client);
+    const removed = await removeTeamMember({ organization_id: organizationId, member_key: "member-key-1" }, client);
+    const left = await leaveTeam({ organization_id: organizationId }, client);
+    const blank = await removeTeamMember({ organization_id: organizationId, member_key: "  " }, client);
+
+    expect(client.rpcCalls).toEqual([
+      { procedure: "get_organization_members", args: { input_organization_id: organizationId } },
+      { procedure: "remove_organization_member", args: { input_organization_id: organizationId, input_member_key: "member-key-1" } },
+      { procedure: "leave_organization", args: { input_organization_id: organizationId } },
+    ]);
+    expect(roster).toEqual({
+      success: true,
+      error: null,
+      data: [{
+        member_key: "member-key-1",
+        display_name: "Aria Chen",
+        role_label: "Member",
+        membership_role: "member",
+        joined_at: "2026-06-03T09:00:00.000Z",
+        is_self: false,
+      }],
+    });
+    expect(removed).toEqual({
+      success: true,
+      error: null,
+      data: { organization_id: organizationId, member_count: 2, removed_total_rows: 3, revoked_invite_count: 1 },
+    });
+    expect(left).toEqual({
+      success: true,
+      error: null,
+      data: { organization_id: organizationId, removed_total_rows: 0, revoked_invite_count: 0 },
+    });
+    expect(blank).toMatchObject({ success: false, reason: "invalid_input" });
   });
 });

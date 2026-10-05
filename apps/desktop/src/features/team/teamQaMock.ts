@@ -7,12 +7,13 @@ import { getTeamFocusWindow } from "./teamAggregate";
 import type {
   OwnTeam,
   TeamInvite,
+  TeamMember,
   TeamPeriod,
   TeamProject,
   TeamProjectMemberRow,
   TeamProjectMixRow,
 } from "./teamTypes";
-import { canInviteToTeam } from "./teamTypes";
+import { canInviteToTeam, isTeamOwner } from "./teamTypes";
 import type { UseTeamControllerResult } from "./useTeamController";
 import type {
   CreateTeamProjectFields,
@@ -72,6 +73,30 @@ const MOCK_INVITING_MEMBER_TEAM: OwnTeam = {
   membership_role: "member",
   members_can_invite: true,
 };
+
+function mockMember(key: string, name: string, role: "owner" | "member", joinedAt: string, isSelf = false): TeamMember {
+  return {
+    member_key: key,
+    display_name: name,
+    role_label: role === "owner" ? "Owner" : "Member",
+    membership_role: role,
+    joined_at: joinedAt,
+    is_self: isSelf,
+  };
+}
+
+const MOCK_SELF_OWNER = mockMember("qa-member-self", "Minseok Park", "owner", "2026-06-02T09:00:00.000Z", true);
+
+// The owner team's roster: names as shared with the team, plus one member who
+// has not shared yet and so shows the email-derived name.
+const MOCK_OWNER_ROSTER: readonly TeamMember[] = [
+  MOCK_SELF_OWNER,
+  mockMember("qa-member-aria", "Aria Chen", "member", "2026-06-03T09:00:00.000Z"),
+  mockMember("qa-member-devin", "Devin Ross", "member", "2026-06-04T09:00:00.000Z"),
+  mockMember("qa-member-yuki", "Yuki Tanaka", "member", "2026-06-05T09:00:00.000Z"),
+  mockMember("qa-member-priya", "Priya Nair", "member", "2026-06-09T09:00:00.000Z"),
+  mockMember("qa-member-sam", "sam.ortiz", "member", "2026-07-01T09:00:00.000Z"),
+];
 
 function makeInvite(code: string, team: OwnTeam = MOCK_TEAM): TeamInvite {
   return {
@@ -229,11 +254,19 @@ export function useTeamQaMockController(): UseTeamControllerResult {
     [MOCK_ORG_ID]: [makeInvite("DRFT-K4M2-9QXZ")],
     [MOCK_MEMBER_ORG_ID]: [makeInvite("DRFT-SEOU-7PRD", MOCK_MEMBER_TEAM)],
   });
+  const [rosterByTeam, setRosterByTeam] = useState<Readonly<Record<string, readonly TeamMember[]>>>({
+    [MOCK_ORG_ID]: MOCK_OWNER_ROSTER,
+  });
   const nextTeamIdRef = useRef(1);
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.organization_id === selectedTeamId) ?? teams[0] ?? null,
     [selectedTeamId, teams],
+  );
+  // Only the owner reads the roster, as on the server.
+  const members = useMemo(
+    () => (selectedTeam && isTeamOwner(selectedTeam) ? rosterByTeam[selectedTeam.organization_id] ?? [MOCK_SELF_OWNER] : []),
+    [rosterByTeam, selectedTeam],
   );
   // Members without invite permission cannot read invites, as on the server.
   const invites = useMemo(
@@ -276,6 +309,24 @@ export function useTeamQaMockController(): UseTeamControllerResult {
     )));
   }, []);
 
+  const handleRemoveMember = useCallback(async (input: { readonly organization_id: string; readonly member_key: string }) => {
+    setRosterByTeam((current) => ({
+      ...current,
+      [input.organization_id]: (current[input.organization_id] ?? [MOCK_SELF_OWNER]).filter((member) => member.member_key !== input.member_key),
+    }));
+    setTeams((current) => current.map((team) => (
+      team.organization_id === input.organization_id ? { ...team, member_count: Math.max(1, team.member_count - 1) } : team
+    )));
+    return true;
+  }, []);
+
+  const handleLeaveTeam = useCallback(async (input: { readonly organization_id: string }) => {
+    const remaining = teams.filter((team) => team.organization_id !== input.organization_id);
+    setTeams(remaining);
+    setSelectedTeamId(remaining[0]?.organization_id ?? MOCK_ORG_ID);
+    return true;
+  }, [teams]);
+
   return {
     selectedTeam,
     teamActionError: null,
@@ -292,6 +343,10 @@ export function useTeamQaMockController(): UseTeamControllerResult {
     handleCreateInvite,
     handleRevokeInvite,
     handleSetMemberInvites,
+    members,
+    refreshMembers: async () => undefined,
+    handleRemoveMember,
+    handleLeaveTeam,
     selectTeam: setSelectedTeamId,
   };
 }

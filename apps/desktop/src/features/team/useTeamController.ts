@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { trackerClient } from "../../lib/api/trackerClient";
 import type { AuthState } from "../auth/AuthContext";
 import { fetchOwnTeams, isTeamErrorMessage, messageFromTeamError, type OwnTeam } from "./teamService";
-import { canInviteToTeam } from "./teamTypes";
+import { canInviteToTeam, isTeamOwner } from "./teamTypes";
 import { useTeamInviteActions } from "./useTeamInviteActions";
+import { useTeamMemberActions } from "./useTeamMemberActions";
 
 type TeamInviteActions = ReturnType<typeof useTeamInviteActions>;
+type TeamMemberActions = ReturnType<typeof useTeamMemberActions>;
 
 export type UseTeamControllerInput = {
   readonly activeTab: string; readonly hasRequiredAccountAuth: boolean; readonly isEffectiveAuthRequired: boolean;
@@ -22,6 +25,8 @@ export type UseTeamControllerResult = {
   readonly handleCreateTeam: TeamInviteActions["handleCreateTeam"]; readonly handleAcceptInvite: TeamInviteActions["handleAcceptInvite"];
   readonly handleCreateInvite: TeamInviteActions["handleCreateInvite"]; readonly handleRevokeInvite: TeamInviteActions["handleRevokeInvite"];
   readonly handleSetMemberInvites: TeamInviteActions["handleSetMemberInvites"];
+  readonly members: TeamMemberActions["members"]; readonly refreshMembers: TeamMemberActions["refreshMembers"];
+  readonly handleRemoveMember: TeamMemberActions["handleRemoveMember"]; readonly handleLeaveTeam: TeamMemberActions["handleLeaveTeam"];
   readonly selectTeam: (organizationId: string) => void;
 };
 
@@ -108,6 +113,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
       setTeams(nextTeams);
       teamsRef.current = nextTeams;
+      void pruneDepartedTeamMirrors(nextTeams);
       setSelectedTeamId(nextSelectedTeamId);
       selectedTeamIdRef.current = nextSelectedTeamId;
       hasResolvedOnceRef.current = true;
@@ -154,6 +160,12 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
   const { invites, refreshInvites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites } = useTeamInviteActions({ activeTab, canUseTeamServices, selectedTeamId, canViewInvites, requireTeamActionAccess, refreshTeamDataCore, setTeamActionError, setTeamActionLoading });
 
+  const isOwnerOf = useCallback((organizationId: string) => (
+    isTeamOwner(teamsRef.current.find((team) => team.organization_id === organizationId))
+  ), []);
+
+  const { members, refreshMembers, handleRemoveMember, handleLeaveTeam } = useTeamMemberActions({ activeTab, canUseTeamServices, selectedTeamId, isOwnerOf, requireTeamActionAccess, refreshTeamDataCore, refreshInvites, setTeamActionError, setTeamActionLoading });
+
   const refreshTeamData = useCallback(async (preferredTeamId = selectedTeamIdRef.current) => {
     const refreshedTeamId = await refreshTeamDataCore(preferredTeamId);
     await refreshInvites(refreshedTeamId);
@@ -192,8 +204,25 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   return {
     selectedTeam, teamActionError, teamActionLoading, teamError: teamBlockingError,
     teamLoading: teamBlockingLoading, teamStatusMessage, teamStatusTone, teams, invites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites,
+    members, refreshMembers, handleRemoveMember, handleLeaveTeam,
     refreshTeamData, selectTeam,
   };
+}
+
+// A successful team list is authoritative: a team that left it (the member left
+// or was removed) must stop shaping local project classification, so its local
+// project mirror is cleared. A failed load never prunes.
+async function pruneDepartedTeamMirrors(teams: readonly OwnTeam[]): Promise<void> {
+  const currentTeamIds = new Set(teams.map((team) => team.organization_id));
+  try {
+    const localProjects = await trackerClient.getTeamProjects();
+    const departedTeamIds = new Set(
+      localProjects.map((project) => project.organizationId).filter((organizationId) => organizationId && !currentTeamIds.has(organizationId)),
+    );
+    for (const organizationId of departedTeamIds) await trackerClient.upsertTeamProjects(organizationId, []);
+  } catch {
+    // Best effort: the next successful load tries again.
+  }
 }
 
 function chooseSelectedTeamId(teams: readonly OwnTeam[], preferredTeamId: string | null): string | null {

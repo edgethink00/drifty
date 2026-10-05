@@ -1,9 +1,12 @@
 import { callFirstRow, callRows, fail, invokeTeamInvite, requireAuthenticatedClient } from "./teamServiceClient";
 import {
+  normalizeLeftTeam,
   normalizeOwnTeam,
+  normalizeRemovedTeamMember,
   normalizePublishedTeamProjectTotals,
   normalizeStoppedTeamProjectSharing,
   normalizeTeamInvite,
+  normalizeTeamMember,
   normalizeTeamMemberInvitesSetting,
   normalizeTeamProject,
   normalizeTeamProjectMemberRow,
@@ -18,11 +21,16 @@ import type {
   CreateTeamInviteInput,
   CreateTeamProjectInput,
   FetchTeamInvitesInput,
+  FetchTeamMembersInput,
   FetchTeamProjectsInput,
   FetchTeamProjectWindowInput,
+  LeaveTeamInput,
+  LeftTeam,
   OwnTeam,
   PublishedTeamProjectTotals,
   PublishTeamProjectTotalsInput,
+  RemovedTeamMember,
+  RemoveTeamMemberInput,
   RevokeTeamInviteInput,
   SetTeamMemberInvitesInput,
   StopTeamProjectSharingInput,
@@ -30,6 +38,7 @@ import type {
   TeamClient,
   TeamInvite,
   TeamInviteActionResponse,
+  TeamMember,
   TeamMemberInvitesSetting,
   TeamPeriod,
   TeamProject,
@@ -46,7 +55,12 @@ export type {
   CreateTeamInput,
   CreateTeamInviteInput,
   FetchTeamInvitesInput,
+  FetchTeamMembersInput,
+  LeaveTeamInput,
+  LeftTeam,
   OwnTeam,
+  RemovedTeamMember,
+  RemoveTeamMemberInput,
   RevokeTeamInviteInput,
   SetTeamMemberInvitesInput,
   TeamClient,
@@ -54,6 +68,7 @@ export type {
   TeamInvite,
   TeamInviteActionResponse,
   TeamInviteStatus,
+  TeamMember,
   TeamMemberInvitesSetting,
   TeamPeriod,
   TeamResult,
@@ -140,6 +155,49 @@ export async function setTeamMemberInvites(
     input_organization_id: organizationId.value,
     input_enabled: input.enabled,
   }, normalizeTeamMemberInvitesSetting);
+}
+
+// Owner-only roster. Members are addressed by a per-team opaque key.
+export async function fetchTeamMembers(
+  input: FetchTeamMembersInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<readonly TeamMember[]>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callRows(auth.data.client, "get_organization_members", {
+    input_organization_id: organizationId.value,
+  }, normalizeTeamMember);
+}
+
+export async function removeTeamMember(
+  input: RemoveTeamMemberInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<RemovedTeamMember | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  const memberKey = requiredText(input.member_key, "Team member is required.", 120);
+  if (!memberKey.ok) return fail("invalid_input", memberKey.error);
+  return callFirstRow(auth.data.client, "remove_organization_member", {
+    input_organization_id: organizationId.value,
+    input_member_key: memberKey.value,
+  }, normalizeRemovedTeamMember);
+}
+
+export async function leaveTeam(
+  input: LeaveTeamInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<LeftTeam | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callFirstRow(auth.data.client, "leave_organization", {
+    input_organization_id: organizationId.value,
+  }, normalizeLeftTeam);
 }
 
 // ---------------------------------------------------------------------------

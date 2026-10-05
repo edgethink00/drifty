@@ -14,7 +14,17 @@ const teamServiceMocks = vi.hoisted(() => ({
   createTeamInvite: vi.fn(),
   revokeTeamInvite: vi.fn(),
   setTeamMemberInvites: vi.fn(),
+  fetchTeamMembers: vi.fn(),
+  removeTeamMember: vi.fn(),
+  leaveTeam: vi.fn(),
 }));
+
+const trackerMocks = vi.hoisted(() => ({
+  getTeamProjects: vi.fn(),
+  upsertTeamProjects: vi.fn(),
+}));
+
+vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: trackerMocks }));
 
 vi.mock("./teamService", () => ({
   DEFAULT_TEAM_PERIOD: "weekly",
@@ -26,6 +36,9 @@ vi.mock("./teamService", () => ({
   createTeamInvite: teamServiceMocks.createTeamInvite,
   revokeTeamInvite: teamServiceMocks.revokeTeamInvite,
   setTeamMemberInvites: teamServiceMocks.setTeamMemberInvites,
+  fetchTeamMembers: teamServiceMocks.fetchTeamMembers,
+  removeTeamMember: teamServiceMocks.removeTeamMember,
+  leaveTeam: teamServiceMocks.leaveTeam,
   isTeamErrorMessage: (value: unknown): value is { readonly message: string } => (
     typeof value === "object" && value !== null && "message" in value && typeof (value as { message: unknown }).message === "string"
   ),
@@ -49,7 +62,109 @@ describe("useTeamController", () => {
     teamServiceMocks.createTeamInvite.mockReset();
     teamServiceMocks.revokeTeamInvite.mockReset();
     teamServiceMocks.setTeamMemberInvites.mockReset();
+    teamServiceMocks.fetchTeamMembers.mockReset();
+    teamServiceMocks.removeTeamMember.mockReset();
+    teamServiceMocks.leaveTeam.mockReset();
     teamServiceMocks.fetchTeamInvites.mockResolvedValue(ok([]));
+    trackerMocks.getTeamProjects.mockReset().mockResolvedValue([]);
+    trackerMocks.upsertTeamProjects.mockReset().mockResolvedValue([]);
+  });
+
+  it("clears the local project mirror of a team the account no longer belongs to, and never on a failed load", async () => {
+    trackerMocks.getTeamProjects.mockResolvedValue([
+      { id: "project-a", organizationId: "team-1" },
+      { id: "project-b", organizationId: "team-gone" },
+      { id: "project-c", organizationId: "team-gone" },
+    ]);
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(trackerMocks.upsertTeamProjects).toHaveBeenCalledTimes(1));
+    expect(trackerMocks.upsertTeamProjects).toHaveBeenCalledWith("team-gone", []);
+
+    trackerMocks.upsertTeamProjects.mockClear();
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(fail("Offline"));
+    await act(async () => {
+      await hook.result.current.refreshTeamData();
+    });
+    expect(trackerMocks.upsertTeamProjects).not.toHaveBeenCalled();
+  });
+
+  it("loads the owner's roster and reloads the team, roster and invites after a removal", async () => {
+    const roster = [
+      { member_key: "key-owner", display_name: "Alex", role_label: "Owner", membership_role: "owner", joined_at: "2026-07-01T00:00:00.000Z", is_self: true },
+      { member_key: "key-aria", display_name: "Aria", role_label: "Member", membership_role: "member", joined_at: "2026-07-02T00:00:00.000Z", is_self: false },
+    ] as const;
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    teamServiceMocks.fetchTeamMembers.mockResolvedValue(ok(roster));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([privateTeam]));
+    await act(async () => {
+      await hook.result.current.refreshMembers("team-1");
+    });
+    expect(hook.result.current.members).toEqual(roster);
+
+    teamServiceMocks.removeTeamMember.mockResolvedValue(ok({ organization_id: "team-1", member_count: 1, removed_total_rows: 2, revoked_invite_count: 1 }));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([{ ...privateTeam, member_count: 1 }]));
+    teamServiceMocks.fetchTeamMembers.mockResolvedValue(ok([roster[0]]));
+    teamServiceMocks.fetchTeamInvites.mockClear();
+    let removed = false;
+    await act(async () => {
+      removed = await hook.result.current.handleRemoveMember({ organization_id: "team-1", member_key: "key-aria" });
+    });
+    expect(removed).toBe(true);
+    expect(teamServiceMocks.removeTeamMember).toHaveBeenCalledWith({ organization_id: "team-1", member_key: "key-aria" });
+    expect(hook.result.current.members).toEqual([roster[0]]);
+    expect(hook.result.current.selectedTeam?.member_count).toBe(1);
+    expect(teamServiceMocks.fetchTeamInvites).toHaveBeenCalledWith({ organization_id: "team-1" });
+  });
+
+  it("never asks a member for the roster", async () => {
+    const memberTeam = makeTeam({ role_label: "Member", membership_role: "member" });
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([memberTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([memberTeam]));
+    await act(async () => {
+      await hook.result.current.refreshMembers("team-1");
+    });
+    expect(teamServiceMocks.fetchTeamMembers).not.toHaveBeenCalled();
+    expect(hook.result.current.members).toEqual([]);
+  });
+
+  it("leaves a team, then selects a remaining team and clears the departed team's local mirror", async () => {
+    const memberTeam = makeTeam({ role_label: "Member", membership_role: "member" });
+    const otherTeam = makeTeam({ organization_id: "team-2", organization_name: "Studio Crew" });
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([memberTeam, otherTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.selectedTeam?.organization_id).toBe("team-1"));
+
+    trackerMocks.getTeamProjects.mockResolvedValue([{ id: "project-a", organizationId: "team-1" }, { id: "project-b", organizationId: "team-2" }]);
+    teamServiceMocks.leaveTeam.mockResolvedValue(ok({ organization_id: "team-1", removed_total_rows: 3, revoked_invite_count: 0 }));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([otherTeam]));
+    let left = false;
+    await act(async () => {
+      left = await hook.result.current.handleLeaveTeam({ organization_id: "team-1" });
+    });
+    expect(left).toBe(true);
+    expect(teamServiceMocks.leaveTeam).toHaveBeenCalledWith({ organization_id: "team-1" });
+    expect(hook.result.current.selectedTeam?.organization_id).toBe("team-2");
+    await waitFor(() => expect(trackerMocks.upsertTeamProjects).toHaveBeenCalledWith("team-1", []));
+    expect(trackerMocks.upsertTeamProjects).not.toHaveBeenCalledWith("team-2", []);
+  });
+
+  it("keeps the team and shows the error when leaving is refused", async () => {
+    const memberTeam = makeTeam({ role_label: "Member", membership_role: "member" });
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([memberTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([memberTeam]));
+
+    teamServiceMocks.leaveTeam.mockResolvedValue(fail("The team owner cannot leave the team."));
+    let left = true;
+    await act(async () => {
+      left = await hook.result.current.handleLeaveTeam({ organization_id: "team-1" });
+    });
+    expect(left).toBe(false);
+    expect(hook.result.current.teamActionError).toBe("The team owner cannot leave the team.");
+    expect(hook.result.current.teams).toEqual([memberTeam]);
   });
 
   it("does not read invites for a member whose team keeps invites owner-only, and does once the owner allows it", async () => {

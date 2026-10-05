@@ -84,6 +84,11 @@ export function TeamWorkspace({
   const [windowOffset, setWindowOffset] = useState(0);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Removing a member and leaving the team each take a second press within 3s.
+  const [armedRemovalKey, setArmedRemovalKey] = useState<string | null>(null);
+  const [leaveArmed, setLeaveArmed] = useState(false);
+  const [memberActionFailed, setMemberActionFailed] = useState(false);
+  const disarmTimerRef = useRef<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addTab, setAddTab] = useState<"create" | "join">("create");
   const [teamName, setTeamName] = useState("");
@@ -108,6 +113,10 @@ export function TeamWorkspace({
     handleCreateInvite,
     handleRevokeInvite,
     handleSetMemberInvites,
+    members,
+    refreshMembers,
+    handleRemoveMember,
+    handleLeaveTeam,
     selectTeam,
   } = controller;
 
@@ -141,6 +150,47 @@ export function TeamWorkspace({
   const hasTeam = teams.length > 0 && Boolean(selectedTeam);
   const isOwner = isTeamOwner(selectedTeam);
   const canInvite = canInviteToTeam(selectedTeam);
+
+  // The owner's roster loads when team settings open; the armed state never outlives them.
+  useEffect(() => {
+    setArmedRemovalKey(null);
+    setLeaveArmed(false);
+    setMemberActionFailed(false);
+    if (settingsOpen && isOwner && selectedTeam) void refreshMembers(selectedTeam.organization_id);
+  }, [settingsOpen, isOwner, selectedTeam?.organization_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => {
+    if (disarmTimerRef.current !== null) window.clearTimeout(disarmTimerRef.current);
+  }, []);
+
+  const armWithTimeout = (arm: () => void, disarm: () => void) => {
+    arm();
+    if (disarmTimerRef.current !== null) window.clearTimeout(disarmTimerRef.current);
+    disarmTimerRef.current = window.setTimeout(disarm, 3000);
+  };
+
+  const removeMember = async (memberKey: string) => {
+    if (!selectedTeam) return;
+    if (armedRemovalKey !== memberKey) {
+      armWithTimeout(() => setArmedRemovalKey(memberKey), () => setArmedRemovalKey(null));
+      return;
+    }
+    setArmedRemovalKey(null);
+    const removed = await handleRemoveMember({ organization_id: selectedTeam.organization_id, member_key: memberKey });
+    setMemberActionFailed(!removed);
+  };
+
+  const leaveSelectedTeam = async () => {
+    if (!selectedTeam) return;
+    if (!leaveArmed) {
+      armWithTimeout(() => setLeaveArmed(true), () => setLeaveArmed(false));
+      return;
+    }
+    setLeaveArmed(false);
+    const left = await handleLeaveTeam({ organization_id: selectedTeam.organization_id });
+    setMemberActionFailed(!left);
+    if (left) setSettingsOpen(false);
+  };
 
   // The switcher closes on an outside press or Escape, and opens on the current team.
   useEffect(() => {
@@ -651,6 +701,44 @@ export function TeamWorkspace({
               </div>
             </div>
 
+            {isOwner && selectedTeam ? (
+              <div className="team-set-section">
+                <span className="label-mono">{t("team.settings.members")}</span>
+                {members.length > 0 ? (
+                  <ul className="team-set-members" aria-label={t("team.settings.members")}>
+                    {members.map((member) => {
+                      const armed = armedRemovalKey === member.member_key;
+                      return (
+                        <li key={member.member_key} className="team-set-member">
+                          <span className="team-set-member__name">
+                            {member.display_name}
+                            {member.is_self ? <span className="team-set-you">{t("team.settings.you")}</span> : null}
+                            {member.membership_role === "owner" ? <span className="team-set-role--admin">{localizedTeamRole("owner", t)}</span> : null}
+                          </span>
+                          {member.membership_role !== "owner" ? (
+                            <button
+                              type="button"
+                              // Quiet until armed, so a long roster does not read as a wall of warnings.
+                              className={armed ? "modal-btn modal-btn--danger team-set-remove is-armed" : "modal-btn modal-btn--ghost team-set-remove"}
+                              disabled={teamActionLoading}
+                              aria-label={armed ? t("team.settings.removeConfirm") : t("team.settings.removeAria", { name: member.display_name })}
+                              onClick={() => void removeMember(member.member_key)}
+                            >
+                              {armed ? t("team.settings.removeConfirm") : t("team.settings.remove")}
+                            </button>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="team-modal__hint">{t("team.settings.membersLoading")}</p>
+                )}
+                <p className="team-modal__hint">{t("team.settings.removeHint")}</p>
+                {memberActionFailed && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
+              </div>
+            ) : null}
+
             {canInvite ? (
               <div className="team-set-section">
                 <div className="team-set-memhead">
@@ -691,10 +779,13 @@ export function TeamWorkspace({
                     disabled={teamActionLoading}
                     ariaLabel={t("team.settings.membersCanInvite")}
                     ariaDescribedBy="team-member-invites-hint"
-                    onChange={(enabled) => void handleSetMemberInvites({ organization_id: selectedTeam.organization_id, enabled })}
+                    onChange={(enabled) => {
+                      setMemberActionFailed(false);
+                      void handleSetMemberInvites({ organization_id: selectedTeam.organization_id, enabled });
+                    }}
                   />
                 </div>
-                {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
+                {!memberActionFailed && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
               </div>
             ) : null}
 
@@ -725,6 +816,25 @@ export function TeamWorkspace({
               </div>
               {displayProjectActionError ? <p className="team-message team-message--error">{displayProjectActionError}</p> : null}
             </div>
+
+            {/* Members can leave; the owner cannot until ownership can be transferred. */}
+            {!isOwner && selectedTeam ? (
+              <div className="team-set-section">
+                <span className="label-mono">{t("team.settings.leaveSection")}</span>
+                <div className="team-set-leave">
+                  <p className="team-modal__hint">{t("team.settings.leaveHint")}</p>
+                  <button
+                    type="button"
+                    className={`modal-btn modal-btn--danger team-set-remove${leaveArmed ? " is-armed" : ""}`}
+                    disabled={teamActionLoading}
+                    onClick={() => void leaveSelectedTeam()}
+                  >
+                    {leaveArmed ? t("team.settings.leaveConfirm") : t("team.settings.leave")}
+                  </button>
+                </div>
+                {memberActionFailed && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

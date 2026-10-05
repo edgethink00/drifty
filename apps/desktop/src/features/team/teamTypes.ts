@@ -47,6 +47,33 @@ export type SetTeamMemberInvitesInput = { readonly organization_id: string; read
 
 export type TeamMemberInvitesSetting = { readonly organization_id: string; readonly members_can_invite: boolean };
 
+/** Owner-only roster row. member_key is a per-team opaque key, never an account id. */
+export type TeamMember = {
+  readonly member_key: string;
+  readonly display_name: string;
+  readonly role_label: string;
+  readonly membership_role: TeamMembershipRole;
+  readonly joined_at: string;
+  readonly is_self: boolean;
+};
+
+export type FetchTeamMembersInput = { readonly organization_id: string };
+export type RemoveTeamMemberInput = { readonly organization_id: string; readonly member_key: string };
+export type LeaveTeamInput = { readonly organization_id: string };
+
+export type RemovedTeamMember = {
+  readonly organization_id: string;
+  readonly member_count: number;
+  readonly removed_total_rows: number;
+  readonly revoked_invite_count: number;
+};
+
+export type LeftTeam = {
+  readonly organization_id: string;
+  readonly removed_total_rows: number;
+  readonly revoked_invite_count: number;
+};
+
 export type TeamInvite = {
   readonly invite_id: string;
   readonly organization_id: string;
@@ -185,6 +212,9 @@ export type RpcProcedure =
   | "create_organization_team"
   | "get_organization_invites"
   | "set_organization_member_invites"
+  | "get_organization_members"
+  | "remove_organization_member"
+  | "leave_organization"
   | "create_organization_project"
   | "update_organization_project"
   | "archive_organization_project"

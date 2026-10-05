@@ -1,8 +1,11 @@
 import type {
+  LeftTeam,
   OwnTeam,
   PublishedTeamProjectTotals,
+  RemovedTeamMember,
   StoppedTeamProjectSharing,
   TeamInvite,
+  TeamMember,
   TeamMemberInvitesSetting,
   TeamMembershipRole,
   TeamProject,
@@ -48,6 +51,38 @@ export function normalizeTeamMemberInvitesSetting(row: unknown): TeamMemberInvit
   return {
     organization_id: readString(record, "organization_id"),
     members_can_invite: readBoolean(record, "members_can_invite"),
+  };
+}
+
+export function normalizeTeamMember(row: unknown): TeamMember {
+  const record = toRecord(row);
+  const roleLabel = readString(record, "role_label");
+  return {
+    member_key: readString(record, "member_key"),
+    display_name: readString(record, "display_name"),
+    role_label: roleLabel,
+    membership_role: readMembershipRole(record, roleLabel),
+    joined_at: readString(record, "joined_at"),
+    is_self: readBoolean(record, "is_self"),
+  };
+}
+
+export function normalizeRemovedTeamMember(row: unknown): RemovedTeamMember {
+  const record = toRecord(row);
+  return {
+    organization_id: readString(record, "organization_id"),
+    member_count: readNumber(record, "member_count"),
+    removed_total_rows: readNumber(record, "removed_total_rows"),
+    revoked_invite_count: readNumber(record, "revoked_invite_count"),
+  };
+}
+
+export function normalizeLeftTeam(row: unknown): LeftTeam {
+  const record = toRecord(row);
+  return {
+    organization_id: readString(record, "organization_id"),
+    removed_total_rows: readNumber(record, "removed_total_rows"),
+    revoked_invite_count: readNumber(record, "revoked_invite_count"),
   };
 }
 

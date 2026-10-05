@@ -1271,6 +1271,48 @@
   flex-wrap: wrap;
 }
 
+/* Owner-only roster: name and badges on the left, a two-step remove on the right. */
+.team-set-members {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+}
+
+.team-set-members .team-set-member {
+  min-height: 2.6rem;
+  padding: 0.3rem 0.45rem 0.3rem 0.75rem;
+  border-radius: 0;
+  background: transparent;
+}
+
+.team-set-members .team-set-member + .team-set-member {
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.team-set-you {
+  color: var(--text-muted);
+  font-size: 0.71875rem;
+  font-weight: 560;
+}
+
+.team-set-remove {
+  flex: 0 0 auto;
+  min-height: 1.85rem;
+  padding: 0.25rem 0.7rem !important;
+  font-size: 0.74rem !important;
+}
+
+/* A member's leave control: what happens on the left, the two-step button on the right. */
+.team-set-leave {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
 /* Owner-only invite permission: label and hint on the left, switch on the right. */
 .team-set-permission {
   display: flex;
