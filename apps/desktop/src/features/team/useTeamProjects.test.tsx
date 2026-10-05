@@ -16,7 +16,7 @@ vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: {
   upsertTeamProjects: mocks.mirror, getTimeline: mocks.timeline,
   getTeamProjectAssignments: vi.fn().mockResolvedValue([]), getProjectWindowAssignments: vi.fn().mockResolvedValue([]),
 } }));
-vi.mock("./teamProjectTime", () => ({ aggregateTeamProjectDayTotals: () => [{ organization_project_id: "project-a", activity_date: "2026-10-04", seconds: 60 }] }));
+vi.mock("./teamProjectTime", () => ({ aggregateTeamProjectDayTotals: () => [{ project_id: "project-a", activity_date: "2026-10-04", seconds: 60 }] }));
 const input = { enabled: true, memberDisplayName: "Member", userEmail: "owner@example.test", startOfDayMinutes: 240, currentDay: "2026-10-04" };
 const project = { id: "project-a", organization_id: "team-a", name: "Private A", description: "", color: "#123456", status: "active", anchors: [] };
 const ok = (data: unknown) => ({ success: true, data });
@@ -79,6 +79,17 @@ it("does not let an old team's completed action refresh over the new team", asyn
   await act(async () => { action.resolve(ok({})); expect(await task).toBe(false); });
   expect(mocks.projects).toHaveBeenCalledTimes(fetchCount);
   expect(result.current.projects[0]?.id).toBe("project-b");
+});
+
+it("reports the shared time and project count after a share", async () => {
+  const { result } = renderHook(() => useTeamProjects({ ...input, organizationId: "team-a" }));
+  await loaded(result);
+  await act(async () => { await result.current.publishMyTime(); });
+  expect(mocks.publish).toHaveBeenCalledWith(expect.objectContaining({
+    organization_id: "team-a",
+    entries: [{ project_id: "project-a", activity_date: "2026-10-04", seconds: 60 }],
+  }));
+  expect(result.current.publishNote).toBe("Shared 1m across 1 project for this window.");
 });
 
 it("cancels a share after local reads if its team changes", async () => {

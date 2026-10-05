@@ -6,6 +6,7 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
 import { getTeamFocusWindow } from "./teamAggregate";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
+import { sharedProjectTimeNote } from "./teamPublishNote";
 import {
   archiveTeamProject,
   createTeamProject,
@@ -280,9 +281,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         setActionError(result.error ?? "Unable to share your project time.");
         return;
       }
-      setPublishNote(entries.length === 0
-        ? "No classified team-project time yet — run Analyze on the Projects tab, then share."
-        : `Shared ${result.data?.published_row_count ?? entries.length} day totals.`);
+      setPublishNote(sharedProjectTimeNote(entries));
       await refresh();
     } catch (caught) {
       if (!isCurrentScope()) return;
