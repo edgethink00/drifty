@@ -3574,8 +3574,9 @@ function prefersReducedMotion(): boolean {
 /**
  * The alarm classifies every non-contact reason that is not a user catch or
  * a context change as a technical rejection, so the base token must stay
- * `target_unavailable`. The native diagnostic rides behind a colon purely for
- * the Dev debug log; it never carries page titles, URLs, or window names.
+ * `target_unavailable`. A stable native diagnostic also lets App keep an
+ * unavailable Windows UIA read from starting a close. It never carries page
+ * titles, URLs, or window names.
  */
 export function formatTargetUnavailableReason(diagnostic: string | null | undefined): string {
   const trimmed = diagnostic?.trim() ?? "";

@@ -40,6 +40,8 @@ mod watcher_extreme_nudge;
 mod window_chrome;
 #[cfg(target_os = "windows")]
 mod windows_browser_uia;
+#[cfg(any(target_os = "windows", test))]
+mod windows_browser_uia_operation;
 mod windows_overlay;
 
 pub use accessibility::*;

@@ -6156,6 +6156,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               evaluation,
             });
           }
+          // An expired/blocked read recovery proves neither native readiness
+          // nor a user catch. Keep the fallback without starting another action.
+          if (intervention.reason === "target_unavailable:windows_uia_geometry_recovery_timeout"
+            || intervention.reason === "target_unavailable:windows_uia_geometry_recovery_blocked") {
+            return { applied: false, diagnostic: "pet_geometry_unavailable" } as const;
+          }
           // Focus or another non-drift context can become current during the
           // native approach. That is neither a catch nor a technical failure:
           // the target is no longer current, so do not close it in the

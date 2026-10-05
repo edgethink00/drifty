@@ -1,6 +1,5 @@
 use std::{
     path::Path,
-    sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -23,6 +22,8 @@ use windows_sys::Win32::{
     },
 };
 
+use super::windows_browser_uia_operation::{OperationGate, OperationKind, ReadRecovery};
+
 // UIA target resolution must finish inside this budget before any browser
 // mutation starts. Keep it separate from the caller's completion budget: once
 // Invoke has closed a tab, Chromium can take several more seconds to expose a
@@ -35,7 +36,11 @@ const POST_CLOSE_SETTLE: Duration = Duration::from_millis(500);
 // The last Chrome tab destroys its window instead of selecting a survivor.
 // Observe only the original HWND after Invoke; do not act on the new foreground.
 const LAST_TAB_WINDOW_CLOSE_WAIT: Duration = Duration::from_secs(2);
-static UIA_OPERATION_ACTIVE: AtomicBool = AtomicBool::new(false);
+static UIA_OPERATIONS: OperationGate = OperationGate::new();
+// Failed geometry does not animate, so this read-completion wait plus the
+// original five-second lookup remains inside the existing 18s pet failsafe.
+// It never extends a provider deadline or performs another provider call.
+const UIA_READ_RECOVERY_WAIT: Duration = Duration::from_secs(5);
 // Firefox's native UI Automation provider exposes DOM ids as AutomationId and
 // DOM classes as ClassName, independent of the UI language (measured on
 // Firefox 154, Windows 11). Floorp 12.18 and Waterfox 6.7 expose the same tab
@@ -79,31 +84,51 @@ struct ForegroundSnapshot {
 // off Tauri and bound the caller. A provider that ignores cancellation owns at
 // most one quarantined thread; later actions fail closed instead of leaking an
 // unbounded queue of automation threads.
-struct OperationGuard;
-
-impl OperationGuard {
-    fn acquire() -> Result<Self, String> {
-        UIA_OPERATION_ACTIVE
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .map(|_| Self)
-            .map_err(|_| "windows_uia_busy".to_string())
-    }
-}
-
-impl Drop for OperationGuard {
-    fn drop(&mut self) {
-        UIA_OPERATION_ACTIVE.store(false, Ordering::Release);
-    }
-}
-
 pub(super) fn locate_foreground_tab_close(
     process_name: &str,
     browser_identity: &str,
     site_url: &str,
     site_domain: &str,
 ) -> Result<ForegroundTabClosePoint, String> {
+    locate_tab_close(process_name, browser_identity, site_url, site_domain, None)
+}
+
+pub(super) fn locate_foreground_tab_close_for_pet(
+    process_name: &str,
+    browser_identity: &str,
+    site_url: &str,
+    site_domain: &str,
+    intervention_id: &str,
+) -> Result<ForegroundTabClosePoint, String> {
+    let result = locate_tab_close(
+        process_name,
+        browser_identity,
+        site_url,
+        site_domain,
+        Some(intervention_id.to_string()),
+    );
+    if result.as_ref().err().map(String::as_str) != Some("windows_uia_geometry_timeout") {
+        return result;
+    }
+    // Discard late geometry. The renderer still reports a technical rejection,
+    // then App rechecks authorization/current identity before its first close.
+    match UIA_OPERATIONS.wait_for_read(intervention_id, UIA_READ_RECOVERY_WAIT) {
+        ReadRecovery::Ready => result,
+        ReadRecovery::Blocked => Err("windows_uia_geometry_recovery_blocked".to_string()),
+        ReadRecovery::TimedOut => Err("windows_uia_geometry_recovery_timeout".to_string()),
+    }
+}
+
+fn locate_tab_close(
+    process_name: &str,
+    browser_identity: &str,
+    site_url: &str,
+    site_domain: &str,
+    owner: Option<String>,
+) -> Result<ForegroundTabClosePoint, String> {
     let request = owned_request(process_name, browser_identity, site_url, site_domain)?;
     run_bounded(
+        OperationKind::Read { owner },
         "windows_uia_geometry_timeout",
         UIA_ACTION_TIMEOUT,
         UIA_ACTION_TIMEOUT,
@@ -119,6 +144,7 @@ pub(super) fn close_foreground_tab(
 ) -> Result<String, String> {
     let request = owned_request(process_name, browser_identity, site_url, site_domain)?;
     run_bounded(
+        OperationKind::Close,
         "windows_uia_timeout",
         UIA_ACTION_TIMEOUT,
         UIA_CLOSE_COMPLETION_TIMEOUT,
@@ -160,12 +186,13 @@ fn owned_request(
 }
 
 fn run_bounded<T: Send + 'static>(
+    kind: OperationKind,
     timeout_diagnostic: &'static str,
     action_timeout: Duration,
     completion_timeout: Duration,
     work: impl FnOnce(Instant) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
-    let guard = OperationGuard::acquire()?;
+    let guard = UIA_OPERATIONS.acquire(kind)?;
     let deadline = Instant::now() + action_timeout;
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     thread::spawn(move || {
@@ -594,9 +621,105 @@ fn read_page_url(
     if values.len() != 1 {
         return Err("windows_uia_document_unavailable".to_string());
     }
-    values
+    let document_url = values
         .pop()
-        .ok_or_else(|| "windows_uia_document_unavailable".to_string())
+        .ok_or_else(|| "windows_uia_document_unavailable".to_string())?;
+    if process_name == "chrome" {
+        verify_chrome_display_address(automation, walker, window, &document_url)?;
+    }
+    Ok(document_url)
+}
+
+fn verify_chrome_display_address(
+    automation: &UIAutomation,
+    walker: &UITreeWalker,
+    window: &UIElement,
+    document_url: &str,
+) -> Result<(), String> {
+    // Chrome's Document ValuePattern can retain the loaded URL after a
+    // same-document history change. Veto disagreement with the native omnibox;
+    // never replace the existing exact Document URL proof with display text.
+    let unavailable = || "windows_uia_address_unavailable".to_string();
+    let condition = automation
+        .create_property_condition(
+            UIProperty::ControlType,
+            Variant::from(ControlType::Edit as i32),
+            None,
+        )
+        .map_err(|_| unavailable())?;
+    let edits = window
+        .find_all(TreeScope::Descendants, &condition)
+        .map_err(|_| unavailable())?;
+    let window_rect = window.get_bounding_rectangle().map_err(|_| unavailable())?;
+    let mut values = Vec::new();
+    for edit in edits {
+        if edit.is_offscreen().unwrap_or(true)
+            || edit.get_classname().ok().as_deref() != Some("OmniboxViewViews")
+            || edit.get_automation_id().ok().as_deref() != Some("view_1012")
+            || !has_exact_window_ancestry(automation, walker, &edit, window, true, false, None)
+        {
+            continue;
+        }
+        // A focused omnibox may contain uncommitted user text, including the
+        // old URL. It cannot corroborate the displayed page's current address.
+        if edit.has_keyboard_focus().unwrap_or(true) {
+            return Err(unavailable());
+        }
+        let rect = edit.get_bounding_rectangle().map_err(|_| unavailable())?;
+        if !positive_rect(&rect) || !rect_inside(&rect, &window_rect, 2) {
+            return Err(unavailable());
+        }
+        let value = edit
+            .get_pattern::<UIValuePattern>()
+            .and_then(|pattern| pattern.get_value())
+            .map_err(|_| unavailable())?;
+        values.push(value);
+    }
+    if values.len() != 1 {
+        return Err(unavailable());
+    }
+    if !chrome_display_address_matches_document(&values[0], document_url) {
+        return Err("windows_uia_address_mismatch".to_string());
+    }
+    Ok(())
+}
+
+fn chrome_display_address_matches_document(display: &str, document_url: &str) -> bool {
+    if display != display.trim() {
+        return false;
+    }
+    let Some(document_url) = normalize_http_url(document_url) else {
+        return false;
+    };
+    if let Some(explicit_url) = normalize_http_url(display) {
+        return explicit_url == document_url;
+    }
+    if display.contains("://") || display.starts_with("//") {
+        return false;
+    }
+    let Ok(document) = Url::parse(&document_url) else {
+        return false;
+    };
+    // Chrome may elide the scheme and a leading www in its displayed text.
+    // These allowances only corroborate the already validated Document URL;
+    // they are never a source of target URL, origin, or browser identity.
+    let Some(display_url) = normalize_http_url(&format!("{}://{}", document.scheme(), display))
+    else {
+        return false;
+    };
+    let Ok(display) = Url::parse(&display_url) else {
+        return false;
+    };
+    let same_host = display.host_str() == document.host_str()
+        || document
+            .host_str()
+            .and_then(|host| host.strip_prefix("www."))
+            == display.host_str();
+    same_host
+        && display.port_or_known_default() == document.port_or_known_default()
+        && display.path() == document.path()
+        && display.query() == document.query()
+        && display.fragment() == document.fragment()
 }
 
 fn has_exact_window_ancestry(
@@ -861,6 +984,69 @@ mod tests {
             r"https:\\example.com\path",
         ] {
             assert_eq!(normalize_http_url(value), None, "{value}");
+        }
+    }
+
+    #[test]
+    fn chrome_address_corroboration_accepts_only_supported_display_elision() {
+        let document = "https://www.example.com/Case?Token=AbC#Frag";
+        for display in [
+            document,
+            "www.example.com/Case?Token=AbC#Frag",
+            "example.com/Case?Token=AbC#Frag",
+        ] {
+            assert!(
+                chrome_display_address_matches_document(display, document),
+                "{display}"
+            );
+        }
+        assert!(chrome_display_address_matches_document(
+            "127.0.0.1:19517/?role=target",
+            "http://127.0.0.1:19517/?role=target"
+        ));
+        assert!(!chrome_display_address_matches_document(
+            "https://example.com/Case?Token=AbC#Frag",
+            document
+        )); // Explicit URLs still require the complete authority.
+    }
+
+    #[test]
+    fn chrome_address_corroboration_refuses_changed_path_query_fragment_and_port() {
+        let document = "https://www.example.com/Case?Token=AbC#Frag";
+        for display in [
+            "example.com/case?Token=AbC#Frag",
+            "example.com/Case?Token=abc#Frag",
+            "example.com/Case?Token=AbC&changed=1#Frag",
+            "example.com/Case?Token=AbC#Other",
+            "example.com:444/Case?Token=AbC#Frag",
+            "other.example.com/Case?Token=AbC#Frag",
+            "http://www.example.com/Case?Token=AbC#Frag",
+        ] {
+            assert!(
+                !chrome_display_address_matches_document(display, document),
+                "{display}"
+            );
+        }
+    }
+
+    #[test]
+    fn chrome_address_corroboration_refuses_edited_or_unsupported_text() {
+        for display in [
+            "",
+            " https://example.com/",
+            "https://example.com/ ",
+            "example.com/ ",
+            "Search example.com",
+            "file:///C:/private.txt",
+            "//example.com/",
+            "example.com/a b",
+            "user@example.com/",
+            r"example.com\path",
+        ] {
+            assert!(
+                !chrome_display_address_matches_document(display, "https://example.com/"),
+                "{display}"
+            );
         }
     }
 

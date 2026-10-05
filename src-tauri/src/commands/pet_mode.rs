@@ -8340,7 +8340,7 @@ mod tests {
         // the close share one UIA resolver on Windows, Firefox included. A
         // separate geometry path could approve a close the resolver refuses.
         let windows_source = include_str!("pet_mode_windows.rs");
-        assert!(windows_source.contains("windows_browser_uia::locate_foreground_tab_close("));
+        assert!(windows_source.contains("windows_browser_uia::locate_foreground_tab_close_for_pet("));
         assert!(!windows_source.contains("process_name == \"firefox\""));
         assert!(!windows_source.to_ascii_lowercase().contains("powershell"));
     }

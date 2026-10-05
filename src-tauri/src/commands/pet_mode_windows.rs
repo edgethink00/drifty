@@ -88,11 +88,12 @@ fn resolve_browser_tab_close_target(
 
     // The paw points at the exact control the close will press. Both come from
     // the same UIA resolver, so a close it would refuse is never acted out.
-    match super::super::windows_browser_uia::locate_foreground_tab_close(
+    match super::super::windows_browser_uia::locate_foreground_tab_close_for_pet(
         process_name,
         &browser_identity,
         site_url,
         site_domain,
+        &target.id,
     ) {
         Ok(result) => {
             if !result.x.is_finite() || !result.y.is_finite() {
