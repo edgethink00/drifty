@@ -1241,7 +1241,8 @@ class TrackerDatabase:
                     ),
                 )
                 after = conn.execute("SELECT * FROM activity_segments WHERE id = ?", (last["id"],)).fetchone()
-                return CaptureMutation(CaptureTiming.from_row(last), CaptureTiming.from_row(after), sample_seconds)
+                return CaptureMutation(CaptureTiming.from_row(last), CaptureTiming.from_row(after), sample_seconds,
+                                       after["youtube_video_id"], after["site_url"])
 
             cursor = conn.execute(
                 """
@@ -1294,7 +1295,8 @@ class TrackerDatabase:
                 ),
             )
             after = conn.execute("SELECT * FROM activity_segments WHERE id = ?", (cursor.lastrowid,)).fetchone()
-            return CaptureMutation(None, CaptureTiming.from_row(after), sample_seconds)
+            return CaptureMutation(None, CaptureTiming.from_row(after), sample_seconds,
+                                   after["youtube_video_id"], after["site_url"])
 
     def latest_local_engagement_evidence(self) -> str | None:
         with self.connect() as conn:

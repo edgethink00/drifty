@@ -210,6 +210,8 @@ def _sanitize_url(raw_url: str) -> str | None:
     if parsed.scheme not in VALID_URL_SCHEMES or parsed.hostname is None:
         return None
     host = parsed.hostname.lower()
+    if ":" in host:
+        host = f"[{host}]"
     if parsed.port is not None:
         host = f"{host}:{parsed.port}"
     path = parsed.path or "/"

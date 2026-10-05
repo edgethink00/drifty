@@ -72,7 +72,11 @@ def segments_from_visits(
             continue
         last_visit = current[-1]
         gap_seconds = int((visit.visited_at - last_visit.visited_at).total_seconds())
-        if visit.site_domain == last_visit.site_domain and gap_seconds <= SESSION_TIMEOUT_SECONDS:
+        if (
+            visit.browser_name == last_visit.browser_name
+            and visit.site_domain == last_visit.site_domain
+            and gap_seconds <= SESSION_TIMEOUT_SECONDS
+        ):
             current.append(visit)
             continue
         segment = _segment_from_session(current, next_visit_at=visit.visited_at, window_end=request.observed_at)

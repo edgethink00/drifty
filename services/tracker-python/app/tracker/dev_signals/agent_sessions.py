@@ -297,14 +297,100 @@ def parse_codex_session(path: str | Path, *, raise_io_errors: bool = False) -> l
     cache_read: int | None = None
     cache_write: int | None = None
     start: datetime | None = None
+    turn_id: str | None = None
     turn_identity: str | None = None
     last_seen: datetime | None = None
+    pending_context: tuple[str | None, str | None, datetime | None] | None = None
+    pending_context_turn_id: str | None = None
+
+    def apply_pending_context(owner_id: str | None = None) -> None:
+        nonlocal cwd_key, model, last_seen, pending_context, pending_context_turn_id
+        if owner_id is not None and pending_context_turn_id is not None and pending_context_turn_id != owner_id:
+            return
+        if pending_context is not None:
+            cwd_key, model, context_stamp = pending_context
+            if context_stamp is not None:
+                last_seen = context_stamp
+            pending_context = None
+            pending_context_turn_id = None
+
+    def append_interrupted_turn() -> None:
+        if start is None or last_seen is None or last_seen < start:
+            return
+        observed = (last_seen - start).total_seconds()
+        end = start + timedelta(seconds=min(observed, float(UNTERMINATED_TURN_CAP_SECONDS)))
+        turns.append(
+            _build_turn(
+                PROVIDER_CODEX, session_key, stable_turn_index(session_key, turn_identity), start, end,
+                cwd_key, model, total_tokens,
+                tokens_in, tokens_out, cache_read, cache_write,
+            )
+        )
 
     for record in _iter_json_lines(file_path, raise_io_errors=raise_io_errors):
         record_type = record.get("type")
         payload = record.get("payload")
         payload = payload if isinstance(payload, dict) else {}
         stamp = _parse_timestamp(record.get("timestamp"))
+        event_type = payload.get("type") if record_type == "event_msg" else None
+
+        if record_type == "turn_context":
+            context_cwd, context_model, context_stamp = pending_context or (cwd_key, model, None)
+            resolved = _cwd_key(payload.get("cwd"))
+            if resolved is not None:
+                context_cwd = resolved
+            candidate_model = payload.get("model")
+            if isinstance(candidate_model, str) and candidate_model:
+                context_model = candidate_model
+            pending_context = (context_cwd, context_model, stamp or context_stamp)
+            context_id = payload.get("turn_id")
+            if isinstance(context_id, str) and context_id:
+                pending_context_turn_id = context_id
+            if start is not None and (turn_id is None or payload.get("turn_id") != turn_id):
+                # A next-turn context can precede task_started, including in
+                # legacy logs without IDs. Do not let this prelude alter the
+                # unfinished task if the writer pauses before its next start.
+                continue
+            apply_pending_context()
+            continue
+
+        if event_type == "task_started" and stamp is not None:
+            explicit_turn_id = payload.get("turn_id")
+            next_id = explicit_turn_id if isinstance(explicit_turn_id, str) and explicit_turn_id else None
+            next_identity = next_id or stamp.isoformat()
+            if start is not None and next_identity == turn_identity:
+                # Replayed start markers are neither a new run nor activity.
+                continue
+            # Flush before observing this start: time waiting for a new task
+            # is not evidence of work performed by the interrupted task.
+            append_interrupted_turn()
+            apply_pending_context(next_id)
+            start = stamp
+            turn_id = next_id
+            turn_identity = next_identity
+            last_seen = stamp
+            continue
+
+        if event_type == "turn_aborted" and stamp is not None:
+            aborted_id = payload.get("turn_id")
+            if start is None or (
+                turn_id is not None and isinstance(aborted_id, str)
+                and aborted_id and aborted_id != turn_id
+            ):
+                continue
+            # Codex permits older abort records without a turn ID. A matching
+            # abort closes the current task under the same unfinished cap.
+            apply_pending_context(turn_id)
+            last_seen = stamp
+            append_interrupted_turn()
+            start = None
+            turn_id = None
+            turn_identity = None
+            continue
+
+        # A continuing record (including completion) associates an ambiguous
+        # legacy context with the current task, retaining its existing policy.
+        apply_pending_context(turn_id)
         if stamp is not None:
             last_seen = stamp
 
@@ -316,19 +402,9 @@ def parse_codex_session(path: str | Path, *, raise_io_errors: bool = False) -> l
                 cwd_key = _cwd_key(payload.get("cwd"))
             continue
 
-        if record_type == "turn_context":
-            resolved = _cwd_key(payload.get("cwd"))
-            if resolved is not None:
-                cwd_key = resolved
-            candidate_model = payload.get("model")
-            if isinstance(candidate_model, str) and candidate_model:
-                model = candidate_model
-            continue
-
         if record_type != "event_msg":
             continue
 
-        event_type = payload.get("type")
         if event_type == "token_count":
             info = payload.get("info")
             if isinstance(info, dict):
@@ -343,12 +419,6 @@ def parse_codex_session(path: str | Path, *, raise_io_errors: bool = False) -> l
                     cache_write = parsed_write
             continue
 
-        if event_type == "task_started" and stamp is not None:
-            start = stamp
-            explicit_turn_id = payload.get("turn_id")
-            turn_identity = explicit_turn_id if isinstance(explicit_turn_id, str) and explicit_turn_id else stamp.isoformat()
-            continue
-
         if event_type == "task_complete" and stamp is not None and start is not None:
             turns.append(
                 _build_turn(
@@ -358,21 +428,13 @@ def parse_codex_session(path: str | Path, *, raise_io_errors: bool = False) -> l
                 )
             )
             start = None
+            turn_id = None
             turn_identity = None
 
     # A turn with no completion event means the session died mid-run. Cap it at
     # the last observed event rather than extending to file mtime, which would
     # silently bill idle hours as agent time.
-    if start is not None and last_seen is not None and last_seen >= start:
-        observed = (last_seen - start).total_seconds()
-        end = start + timedelta(seconds=min(observed, float(UNTERMINATED_TURN_CAP_SECONDS)))
-        turns.append(
-            _build_turn(
-                PROVIDER_CODEX, session_key, stable_turn_index(session_key, turn_identity), start, end,
-                cwd_key, model, total_tokens,
-                tokens_in, tokens_out, cache_read, cache_write,
-            )
-        )
+    append_interrupted_turn()
 
     return turns
 

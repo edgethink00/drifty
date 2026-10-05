@@ -26,6 +26,10 @@ class CaptureMutation:
     before: CaptureTiming | None
     after: CaptureTiming
     sample_seconds: int
+    # Optional enrichment must use the content that survived storage redaction,
+    # never the caller's original foreground observation.
+    youtube_video_id: str | None = None
+    site_url: str | None = None
 
 
 @dataclass(frozen=True)

@@ -2355,7 +2355,8 @@ def _daemon_tick(
         timeline.remember(mutation, snapshot_tick,
                           input_tick - idle_seconds if idle_seconds is not None else None,
                           passive=engagement.is_passive, continuous=last_capture_tick is not None)
-    enqueue_youtube_metadata_fetch(db, snapshot.youtube_video_id, snapshot.site_url)
+    if isinstance(mutation, CaptureMutation):
+        enqueue_youtube_metadata_fetch(db, mutation.youtube_video_id, mutation.site_url)
     backfill_browser_history_context(db, snapshot.observed_at)
     db.set_meta("last_event_at", snapshot.observed_at)
     # Preserve the existing public tracker-mode vocabulary. Passive support is

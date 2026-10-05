@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { readAppStyles } from "./test/readStyles";
 
 function cssBlock(styles: string, selector: string): string {
@@ -9,11 +9,21 @@ function cssBlock(styles: string, selector: string): string {
 }
 
 describe("mixed app and favicon alignment styles", () => {
-  it("computes lettered site fallbacks onto the centering layout", () => {
-    const style = document.createElement("style");
-    style.textContent = readAppStyles();
-    document.head.append(style);
+  const style = document.createElement("style");
+  let styles: string;
 
+  beforeAll(() => {
+    // Parse the full application cascade once as shared fixture setup. Repeating
+    // it inside assertions makes these layout checks depend on cold CSS parsing.
+    styles = readAppStyles();
+    style.textContent = styles;
+    document.head.append(style);
+  });
+
+  afterEach(() => document.body.replaceChildren());
+  afterAll(() => style.remove());
+
+  it("computes lettered site fallbacks onto the centering layout", () => {
     const slot = document.createElement("span");
     slot.className = "usage-identity-icon usage-identity-icon--sm";
     const fallback = document.createElement("div");
@@ -30,10 +40,6 @@ describe("mixed app and favicon alignment styles", () => {
   });
 
   it("keeps resolved app and site images on a block layout without cropping artwork", () => {
-    const style = document.createElement("style");
-    style.textContent = readAppStyles();
-    document.head.append(style);
-
     for (const className of ["site-favicon", "app-icon app-icon--md"]) {
       const image = document.createElement("img");
       image.className = className;
@@ -48,7 +54,6 @@ describe("mixed app and favicon alignment styles", () => {
   });
 
   it("uses stable icon slots for source rows that mix app icons and favicons", () => {
-    const styles = readAppStyles();
     const classificationSourceIconBlock = cssBlock(styles, ".classification-panel-view__source-icon");
     const historyIdentityIconBlock = cssBlock(styles, ".history-row__identity-icon");
 

@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 from app.tracker import macos_workspace as workspace
 from app.tracker.browser_automation import BrowserMetadata
-from app.tracker.macos_capture import CommandScope, ContextWorker
+from app.tracker.macos_capture import CommandScope, ContextWorker, FrontmostApplication
 
 
 @unittest.skipIf(sys.platform == "win32", "Mac helper fixture uses a POSIX executable")
@@ -193,16 +193,23 @@ class SafariWorkerIntegrationTests(unittest.TestCase):
             return metadata
 
         self.browser.side_effect = delayed_browser
+        # This case starts after app identity has been acquired. A slow Python
+        # fixture startup must not send it through the separate legacy path.
+        native = FrontmostApplication("Safari", "com.apple.Safari", 42)
         try:
-            with patch.object(workspace, "CAPTURE_TIMEOUT_SECONDS", 0.5):
+            with patch.object(workspace, "read_frontmost_application", return_value=native) as identity, \
+                 patch.object(workspace, "CAPTURE_TIMEOUT_SECONDS", 0.5):
                 result = workspace.current_snapshot(False)
+                identity.assert_called_once_with()
             self.assertTrue(entered.is_set())
+            self.assertEqual(result.frontmost_capture_source, "nsworkspace")
             self.assertIsNone(result.site_url)
         finally:
             release.set()
         self.wait_idle()
+        self.assertEqual(len(self.scopes), 1)
         self.assertEqual(self.scopes[0].calls, [])
-        self.assertEqual(len(self.children), 1)  # initial app identity only
+        self.assertEqual(self.children, [])
 
 
 if __name__ == "__main__":
