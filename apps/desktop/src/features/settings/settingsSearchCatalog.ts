@@ -281,20 +281,25 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.privacy.excludedAppsTitle",
     keywords: "앱 제외 기록하지 않을 앱 password manager exclude unblock 비밀번호 관리자",
     descriptionKey: "settings.privacy.excludedAppsSubtitle",
-    reveal: "privacy-excluded-apps",
+  },
+  {
+    id: "settings.privacy.productAnalyticsTitle",
+    section: "privacy",
+    titleKey: "settings.privacy.productAnalyticsTitle",
+    keywords: "제품 사용 분석 통계 공유 analytics telemetry PostHog opt out 데이터 전송 끄기",
+    descriptionKey: "settings.privacy.productAnalyticsDescription",
+  },
+  {
+    id: "settings.privacy.driftySharing",
+    section: "privacy",
+    titleKey: "settings.privacy.driftySharing",
+    keywords: "Drifty 데이터 공유 개인정보처리방침 privacy policy data use 원본 기록 공개 리더보드 프로필",
   },
   {
     id: "settings.data.database",
     section: "privacy",
     titleKey: "settings.data.database",
     keywords: "로컬 데이터베이스 저장 경로 local database storage path",
-  },
-  {
-    id: "settings.data.iconCache",
-    section: "privacy",
-    titleKey: "settings.data.iconCache",
-    keywords: "아이콘 캐시 비우기 clear icon cache",
-    descriptionKey: "settings.data.iconCacheDescription",
   },
   {
     id: "settings.privacy.deleteTitle",

@@ -1,11 +1,10 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { AppIconMap, ExcludedAppRule } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { mergeAppIconResults } from "../app-icons/appIconRequests";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { useLocalization } from "../localization/LocalizationContext";
-import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
-import "./AppExclusionSettingsCard.css";
+import "./AppExclusionSettingsRows.css";
 
 type RecentAppItem = {
   readonly name: string;
@@ -13,17 +12,6 @@ type RecentAppItem = {
   readonly lastSeenAt: string;
   readonly totalSeconds: number;
 };
-
-function EyeOffIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 3l18 18" />
-      <path d="M10.7 10.7a3 3 0 0 0 4.1 4.1" />
-      <path d="M9.9 5.2A11 11 0 0 1 12 5c6 0 9.5 7 9.5 7a13 13 0 0 1-2.2 3" />
-      <path d="M6.6 6.7A13 13 0 0 0 2.5 12S6 19 12 19a10 10 0 0 0 3.9-.8" />
-    </svg>
-  );
-}
 
 function PlusIcon() {
   return (
@@ -50,7 +38,12 @@ function compareName(a: string, b: string): number {
   return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
-export function AppExclusionSettingsCard({ deviceSyncEnabled = false }: { readonly deviceSyncEnabled?: boolean } = {}) {
+/**
+ * The rows of the "apps not to record" setting. They are direct children of a
+ * `.settings-block`, so the list, the picker and the add button read as ordinary
+ * settings rows instead of a card of their own.
+ */
+export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readonly deviceSyncEnabled?: boolean } = {}) {
   const { t } = useLocalization();
   const pickerId = useId();
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -216,165 +209,138 @@ export function AppExclusionSettingsCard({ deviceSyncEnabled = false }: { readon
     if (canAddTyped) void handleAddApp(query);
   }
 
-  const summary = loading
-    ? undefined
-    : (
-      <span className="chip gray">
-        {t("settings.privacy.excludedAppsCount", { count: sortedApps.length })}
-      </span>
-    );
+  function handleEscape(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape" && addPanelOpen) {
+      event.stopPropagation();
+      handleCloseAddPanel();
+    }
+  }
 
   return (
-    <SettingsCollapsibleCard
-      searchReveal="privacy-excluded-apps"
-      settingId="settings.privacy.excludedApps"
-      leading={<EyeOffIcon />}
-      subtitle={t("settings.privacy.excludedAppsSubtitle")}
-      summary={summary}
-      title={t("settings.privacy.excludedAppsTitle")}
-    >
-      <div
-        className="excluded-apps-card"
-        onKeyDown={(event) => {
-          if (event.key === "Escape" && addPanelOpen) {
-            event.stopPropagation();
-            handleCloseAddPanel();
-          }
-        }}
-      >
-        <p className="excluded-apps-card__desc">{t("settings.privacy.excludedAppsDesc")}</p>
-        {deviceSyncEnabled ? (
-          <p className="excluded-apps-card__desc">{t("settings.privacy.excludedAppsSyncOn")}</p>
-        ) : null}
-
+    <>
+      <div className="settings-row" data-setting-id="settings.privacy.excludedApps" onKeyDown={handleEscape}>
+        <div>
+          <div className="lbl">{t("settings.privacy.excludedAppsTitle")}</div>
+          <div className="desc">
+            {t("settings.privacy.excludedAppsSubtitle")} {t("settings.privacy.excludedAppsDesc")}
+          </div>
+          {deviceSyncEnabled ? <div className="desc">{t("settings.privacy.excludedAppsSyncOn")}</div> : null}
+        </div>
         {!loading ? (
-          <>
-            <div className="excluded-apps-toolbar">
-              {showSearch ? (
-                <input
-                  ref={searchRef}
-                  type="search"
-                  className="settings-input excluded-apps-toolbar__search"
-                  value={search}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
-                  aria-label={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
-                  aria-controls={pickerId}
-                  onChange={(event) => setSearch(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      submitSearch();
-                    }
-                  }}
-                />
-              ) : <span />}
-              {addPanelOpen ? (
-                <div className="excluded-apps-toolbar__btn-group">
-                  {canAddTyped ? (
-                    <button
-                      type="button"
-                      className="settings-btn settings-btn--primary excluded-apps-toolbar__action"
-                      onClick={submitSearch}
-                    >
-                      {t("settings.privacy.excludedAppsCustomSubmit")}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="settings-btn excluded-apps-toolbar__action"
-                    onClick={handleCloseAddPanel}
-                  >
-                    {t("settings.privacy.excludedAppsCancel")}
-                  </button>
-                </div>
-              ) : (
-                <button
-                  ref={addButtonRef}
-                  type="button"
-                  className="settings-btn excluded-apps-toolbar__action excluded-apps-toolbar__add"
-                  aria-expanded={false}
-                  aria-controls={pickerId}
-                  onClick={() => void handleOpenAddPanel()}
-                >
-                  <PlusIcon />
-                  {t("settings.privacy.excludedAppsAdd")}
-                </button>
-              )}
-            </div>
+          <div className="ctrl">
+            {addPanelOpen ? (
+              <button type="button" className="settings-btn" onClick={handleCloseAddPanel}>
+                {t("settings.privacy.excludedAppsCancel")}
+              </button>
+            ) : (
+              <button
+                ref={addButtonRef}
+                type="button"
+                className="settings-btn excluded-apps-add"
+                aria-expanded={false}
+                aria-controls={pickerId}
+                onClick={() => void handleOpenAddPanel()}
+              >
+                <PlusIcon />
+                {t("settings.privacy.excludedAppsAdd")}
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
 
-            <div
-              id={pickerId}
-              className="excluded-apps-shell"
-              role="region"
-              aria-label={t(addPanelOpen ? "settings.privacy.excludedAppsPickerAria" : "settings.privacy.excludedAppsListAria")}
-            >
-              {addPanelOpen ? (
-                filteredRecent.length > 0 || canAddTyped ? (
-                  <ul className="excluded-apps-list">
-                    {filteredRecent.slice(0, 15).map((item) => (
-                      <li key={item.bundleId || item.name} className="excluded-apps-item">
-                        <button
-                          type="button"
-                          className="excluded-apps-item__pick"
-                          onClick={() => void handleAddApp(item.name, item.bundleId)}
-                        >
-                          <span className="excluded-apps-item__identity">
-                            <AppGlyph appName={item.name} iconSrc={iconSrcFor(item, appIcons)} size="sm" />
-                            <span className="excluded-apps-item__name">{item.name}</span>
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                    {canAddTyped ? (
-                      <li className="excluded-apps-item">
-                        <button
-                          type="button"
-                          className="excluded-apps-item__pick"
-                          onClick={() => void handleAddApp(query)}
-                        >
-                          <span className="excluded-apps-item__identity">
-                            <span className="excluded-apps-item__add-glyph" aria-hidden="true">
-                              <PlusIcon />
-                            </span>
-                            <span className="excluded-apps-item__name">{t("settings.privacy.excludedAppsAddNamed", { name: query })}</span>
-                          </span>
-                        </button>
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <p className="excluded-apps-shell__empty">
-                    {query ? t("settings.privacy.excludedAppsNoMatches") : t("settings.privacy.excludedAppsNoRecent")}
-                  </p>
-                )
-              ) : visibleApps.length > 0 ? (
+      {!loading && showSearch ? (
+        <div className="settings-row excluded-apps-find" onKeyDown={handleEscape}>
+          <div className="excluded-apps-find__bar">
+            <input
+              ref={searchRef}
+              type="search"
+              className="settings-input excluded-apps-find__search"
+              value={search}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
+              aria-label={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
+              aria-controls={pickerId}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  submitSearch();
+                }
+              }}
+            />
+            {canAddTyped ? (
+              <button type="button" className="settings-btn settings-btn--primary excluded-apps-btn" onClick={submitSearch}>
+                {t("settings.privacy.excludedAppsCustomSubmit")}
+              </button>
+            ) : null}
+          </div>
+          {addPanelOpen ? (
+            <div id={pickerId} role="region" aria-label={t("settings.privacy.excludedAppsPickerAria")}>
+              {filteredRecent.length > 0 || canAddTyped ? (
                 <ul className="excluded-apps-list">
-                  {visibleApps.map((app) => (
-                    <ExcludedAppRow
-                      key={app.id}
-                      app={app}
-                      count={historyCounts[app.id] ?? 0}
-                      iconSrc={iconSrcFor(app, appIcons)}
-                      removeLabel={t("settings.privacy.excludedAppsRemove")}
-                      removeNamed={t("settings.privacy.excludedAppsRemoveNamed", { name: app.name })}
-                      deletePastCount={t("settings.privacy.excludedAppsDeletePastCount", { count: historyCounts[app.id] ?? 0 })}
-                      onRemove={() => void handleRemoveApp(app.id)}
-                      onDeleteHistory={() => void handleDeleteHistory(app)}
-                    />
+                  {filteredRecent.slice(0, 15).map((item) => (
+                    <li key={item.bundleId || item.name} className="excluded-apps-item">
+                      <button
+                        type="button"
+                        className="excluded-apps-item__pick"
+                        onClick={() => void handleAddApp(item.name, item.bundleId)}
+                      >
+                        <span className="excluded-apps-item__identity">
+                          <AppGlyph appName={item.name} iconSrc={iconSrcFor(item, appIcons)} size="sm" />
+                          <span className="excluded-apps-item__name">{item.name}</span>
+                        </span>
+                      </button>
+                    </li>
                   ))}
+                  {canAddTyped ? (
+                    <li className="excluded-apps-item">
+                      <button type="button" className="excluded-apps-item__pick" onClick={() => void handleAddApp(query)}>
+                        <span className="excluded-apps-item__identity">
+                          <span className="excluded-apps-item__add-glyph" aria-hidden="true">
+                            <PlusIcon />
+                          </span>
+                          <span className="excluded-apps-item__name">{t("settings.privacy.excludedAppsAddNamed", { name: query })}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ) : null}
                 </ul>
               ) : (
-                <p className="excluded-apps-shell__empty">
-                  {query ? t("settings.privacy.excludedAppsNoMatches") : t("settings.privacy.excludedAppsEmpty")}
+                <p className="excluded-apps-empty">
+                  {query ? t("settings.privacy.excludedAppsNoMatches") : t("settings.privacy.excludedAppsNoRecent")}
                 </p>
               )}
             </div>
-          </>
-        ) : null}
-      </div>
-    </SettingsCollapsibleCard>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!loading && !addPanelOpen
+        ? visibleApps.map((app) => (
+            <ExcludedAppRow
+              key={app.id}
+              app={app}
+              count={historyCounts[app.id] ?? 0}
+              iconSrc={iconSrcFor(app, appIcons)}
+              removeLabel={t("settings.privacy.excludedAppsRemove")}
+              removeNamed={t("settings.privacy.excludedAppsRemoveNamed", { name: app.name })}
+              deletePastCount={t("settings.privacy.excludedAppsDeletePastCount", { count: historyCounts[app.id] ?? 0 })}
+              onRemove={() => void handleRemoveApp(app.id)}
+              onDeleteHistory={() => void handleDeleteHistory(app)}
+            />
+          ))
+        : null}
+
+      {!loading && !addPanelOpen && visibleApps.length === 0 ? (
+        <div className="settings-row excluded-apps-row">
+          <div className="desc">
+            {query ? t("settings.privacy.excludedAppsNoMatches") : t("settings.privacy.excludedAppsEmpty")}
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -398,21 +364,21 @@ function ExcludedAppRow({
   readonly onDeleteHistory: () => void;
 }) {
   return (
-    <li className="excluded-apps-item">
+    <div className="settings-row excluded-apps-row">
       <div className="excluded-apps-item__identity">
         <AppGlyph appName={app.name} iconSrc={iconSrc} size="sm" />
         <span className="excluded-apps-item__name">{app.name}</span>
       </div>
-      <div className="excluded-apps-item__actions">
+      <div className="ctrl excluded-apps-item__actions">
         {count > 0 ? (
           <button type="button" className="excluded-apps-item__history" onClick={onDeleteHistory}>
             {deletePastCount}
           </button>
         ) : null}
-        <button type="button" className="settings-btn excluded-apps-item__unblock" onClick={onRemove} aria-label={removeNamed}>
+        <button type="button" className="settings-btn excluded-apps-btn" onClick={onRemove} aria-label={removeNamed}>
           {removeLabel}
         </button>
       </div>
-    </li>
+    </div>
   );
 }

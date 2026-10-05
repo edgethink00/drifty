@@ -92,6 +92,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
     try {
       const result = await trackerClient.deleteHistoryRange({ ...bounds, scopes: DELETE_SCOPES, dryRun: false });
       setDone(result);
+      if (preset === "all") await clearIconCachesBestEffort();
       await onDeleted();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
@@ -182,6 +183,19 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
       </section>
     </div>
   );
+}
+
+/**
+ * Cached app and site icons are named after what was tracked. A full wipe clears them
+ * too, so no trace of the history remains. They are regenerable and nothing is left to
+ * fetch icons for; a failure here must not turn a completed deletion into an error.
+ */
+async function clearIconCachesBestEffort(): Promise<void> {
+  try {
+    await trackerClient.clearIconCaches();
+  } catch {
+    // Best effort only.
+  }
 }
 
 function rangeBounds(

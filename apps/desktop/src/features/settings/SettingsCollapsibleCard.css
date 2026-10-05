@@ -94,6 +94,8 @@
   border-bottom: 2px solid currentColor;
   border-right: 2px solid currentColor;
   display: inline-block;
+  /* The optional summary must not change the chevron's grid column. */
+  grid-column: -2;
   height: 0.48rem;
   justify-self: end;
   opacity: 0.82;

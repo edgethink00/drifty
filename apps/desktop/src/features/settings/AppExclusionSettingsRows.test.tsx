@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AppExclusionSettingsCard } from "./AppExclusionSettingsCard";
+import { AppExclusionSettingsRows } from "./AppExclusionSettingsRows";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
 
-describe("AppExclusionSettingsCard", () => {
+describe("AppExclusionSettingsRows", () => {
   afterEach(cleanup);
 
   beforeEach(() => {
@@ -32,10 +32,11 @@ describe("AppExclusionSettingsCard", () => {
     ]);
     const deleteSpy = vi.spyOn(trackerClient, "deleteExcludedApp").mockResolvedValue({ deleted: true });
 
-    render(<AppExclusionSettingsCard />);
+    render(<AppExclusionSettingsRows />);
 
-    const cardToggle = screen.getByRole("button", { name: /Apps not to record/i });
-    fireEvent.click(cardToggle);
+    // The rows are the children of a settings group, so the title is a row label, not a card heading.
+    expect(screen.getByText("Apps not to record")).toBeTruthy();
+    expect(screen.queryByRole("heading")).toBeNull();
 
     await waitFor(() => {
       expect(screen.getByText("1Password")).toBeTruthy();
@@ -67,8 +68,7 @@ describe("AppExclusionSettingsCard", () => {
       source: "user",
     });
 
-    render(<AppExclusionSettingsCard />);
-    fireEvent.click(screen.getByRole("button", { name: /Apps not to record/i }));
+    render(<AppExclusionSettingsRows />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Add app/i })).toBeTruthy();
@@ -98,8 +98,7 @@ describe("AppExclusionSettingsCard", () => {
       { id: "com.bank.app", name: "MyBankApp", bundleId: "com.bank.app", source: "user" },
     ]);
 
-    render(<AppExclusionSettingsCard />);
-    fireEvent.click(screen.getByRole("button", { name: /Apps not to record/i }));
+    render(<AppExclusionSettingsRows />);
 
     await waitFor(() => {
       expect(screen.getByText("MyBankApp")).toBeTruthy();
@@ -118,8 +117,7 @@ describe("AppExclusionSettingsCard", () => {
       ...DEFAULT_EXCLUDED_APPS,
     ]);
 
-    render(<AppExclusionSettingsCard />);
-    fireEvent.click(screen.getByRole("button", { name: /Apps not to record/i }));
+    render(<AppExclusionSettingsRows />);
 
     await waitFor(() => {
       expect(screen.getByText("1Password")).toBeTruthy();
@@ -147,8 +145,7 @@ describe("AppExclusionSettingsCard", () => {
       source: "user",
     });
 
-    render(<AppExclusionSettingsCard />);
-    fireEvent.click(screen.getByRole("button", { name: /Apps not to record/i }));
+    render(<AppExclusionSettingsRows />);
     await waitFor(() => expect(screen.getByRole("button", { name: /Add app/i })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /Add app/i }));
 

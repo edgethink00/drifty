@@ -1,0 +1,274 @@
+/* AI data sending. The four switchable rows are stock `.settings-row` children of the
+   privacy group, so edges, dividers and the switch come from the shared settings
+   styles. This file only adds what those rows show in their description, and the
+   reference text inside the three disclosure rows. */
+
+/* Korean wraps by character by default, which breaks words mid-syllable-block.
+   keep-all wraps on word boundaries; the example value keeps anywhere-breaking so a
+   long address still folds instead of overflowing. */
+.ai-privacy-review__detail,
+.ai-privacy-review__lede,
+.ai-privacy-review__row-note,
+.ai-privacy-review__row-cost,
+.ai-privacy-review__footnotes,
+.ai-privacy-review__glossary-item dd {
+  word-break: keep-all;
+}
+
+.ai-privacy-review__lede {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 62ch;
+}
+
+/* The visible state, each row's word and the newly drawn cost line all report a
+   change on screen, so the live region only exists for screen readers. It must
+   carry the cost sentence too, or switching a field off would announce less than
+   it draws. */
+.ai-privacy-review__status {
+  border: 0;
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* ---- the switchable rows ----------------------------------------------- */
+
+/* Inside the folded card the row has no hover fill, only the pointer. */
+.settings-collapsible-card__panel > .settings-row.ai-privacy-review__optional {
+  cursor: pointer;
+}
+
+.content--settings .settings-block:has(> h3) > .settings-row.ai-privacy-review__optional {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.content--settings .settings-block:has(> h3) > .settings-row.ai-privacy-review__optional:hover {
+  background: color-mix(in srgb, var(--text) 3.5%, var(--settings-row-card-bg));
+}
+
+.ai-privacy-review__optional.is-off .lbl {
+  color: var(--text-muted);
+}
+
+.ai-privacy-review__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  user-select: text;
+}
+
+.ai-privacy-review__example {
+  overflow-wrap: anywhere;
+}
+
+.ai-privacy-review__row-note {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+}
+
+/* The price is drawn only while the row is off, directly under the line it replaced,
+   so cause and effect are never separated. */
+.ai-privacy-review__row-cost {
+  align-items: baseline;
+  animation: ai-privacy-cost-in var(--transition-fast) both;
+  color: var(--text-muted);
+  display: flex;
+  font-size: var(--type-caption-size);
+  gap: var(--space-2);
+  line-height: 1.45;
+  max-width: 66ch;
+}
+
+.ai-privacy-review__cost-mark {
+  align-self: flex-start;
+  background: var(--text-soft);
+  border-radius: 1px;
+  flex: 0 0 auto;
+  height: 1.5px;
+  /* Sits on the first line rather than centring on the wrapped block, so a
+     three-line Korean string does not leave the mark floating mid-paragraph. */
+  margin-top: 0.67em;
+  width: 10px;
+}
+
+@keyframes ai-privacy-cost-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ai-privacy-review__control {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.ai-privacy-review__row-state {
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* ---- disclosure bodies -------------------------------------------------- */
+
+/* The disclosure holds three reference sections; the example request leads. */
+.ai-privacy-review__section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ai-privacy-review__section + .ai-privacy-review__section {
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-3);
+}
+
+.ai-privacy-review__section-title {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+  margin: 0;
+}
+
+/* The caption says "example" in words: a user with Chrome open and a saved work
+   profile must never read these fixed values as their own captured activity. */
+.ai-privacy-review__caption {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 600;
+  margin: 0;
+}
+
+.ai-privacy-review__rows {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-privacy-review__row + .ai-privacy-review__row {
+  border-top: 1px solid var(--line);
+}
+
+.ai-privacy-review__row-inner {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  min-height: 2.5rem;
+  padding-block: var(--space-1);
+}
+
+.ai-privacy-review__row-body {
+  align-items: baseline;
+  display: grid;
+  flex: 1 1 auto;
+  gap: var(--space-1) var(--space-3);
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  min-width: 0;
+}
+
+.ai-privacy-review__row-label {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+}
+
+.ai-privacy-review__row-value {
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--type-setting-value-size);
+  gap: 2px;
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* One claim per line: request identifiers, cloud-route additions and sample
+   retention are separate promises and are checked separately. */
+.ai-privacy-review__footnotes {
+  border-top: 1px solid var(--line);
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--type-caption-size);
+  gap: var(--space-1);
+  line-height: 1.45;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) 0 0;
+}
+
+.ai-privacy-review__footnotes > li {
+  max-width: 74ch;
+}
+
+.ai-privacy-review__glossary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.ai-privacy-review__glossary-item {
+  display: grid;
+  gap: var(--space-1) var(--space-3);
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+}
+
+.ai-privacy-review__glossary-item dt {
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 600;
+}
+
+.ai-privacy-review__glossary-item dd {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-privacy-review__glossary-item dd > p {
+  margin: 0;
+}
+
+.ai-privacy-review__glossary-item dd > p + p {
+  margin-top: var(--space-1);
+}
+
+/* ---- narrow ------------------------------------------------------------ */
+
+@media (max-width: 620px) {
+  .ai-privacy-review__row-body,
+  .ai-privacy-review__glossary-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-privacy-review__row-inner {
+    gap: var(--space-2);
+  }
+
+  .ai-privacy-review__row-state {
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-privacy-review__row-cost {
+    animation: none;
+  }
+}

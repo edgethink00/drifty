@@ -31,6 +31,7 @@ const animatedModalPanelFiles = [
   "./features/profile/ProfileModals.tsx",
   "./features/projects/ProjectEditorModal.tsx",
   "./features/settings/AccountPlanModal.tsx",
+  "./features/settings/AiPrivacyDetailsModal.tsx",
   "./features/settings/AiSetupModelDialogs.tsx",
   "./features/settings/DebugLogModal.tsx",
   "./features/settings/DeleteHistoryModal.tsx",

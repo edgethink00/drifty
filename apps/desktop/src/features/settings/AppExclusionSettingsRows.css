@@ -1,52 +1,45 @@
-.excluded-apps-card {
-  display: flex;
+/* The "apps not to record" rows. The label row, each excluded app and the picker are
+   stock settings rows inside the privacy group; only the picker and the compact app
+   rows need anything beyond the shared row styles. */
+
+.content--settings .settings-block:has(> h3) > .settings-row.excluded-apps-row {
+  min-height: 2.9rem;
+  padding-block: 0.45rem;
+}
+
+.content--settings .settings-btn.excluded-apps-add {
+  gap: 0.35rem;
+}
+
+.excluded-apps-add svg {
+  display: block;
+  height: 0.8rem;
+  width: 0.8rem;
+}
+
+/* Search field and the list of candidates share one full-width row. */
+.content--settings .settings-block:has(> h3) > .settings-row.excluded-apps-find {
+  align-items: stretch;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
-.collapsible-panel:has(.excluded-apps-card).is-expanded {
-  grid-template-rows: auto;
-}
-
-.collapsible-panel:has(.excluded-apps-card) .collapsible-panel__inner {
-  min-height: min-content;
-  overflow: visible;
-}
-
-.excluded-apps-card__desc {
-  color: var(--text-muted);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.4;
-  margin: 0;
-  max-width: 62ch;
-  text-wrap: balance;
-  word-break: keep-all;
-}
-
-.excluded-apps-toolbar {
+.excluded-apps-find__bar {
   align-items: center;
   display: flex;
   gap: var(--space-2);
   min-width: 0;
 }
 
-.excluded-apps-toolbar__btn-group {
-  align-items: center;
-  display: flex;
-  gap: var(--space-1);
-  flex-shrink: 0;
-}
-
-.content--settings .excluded-apps-card .settings-input.excluded-apps-toolbar__search {
+.content--settings .excluded-apps-find .settings-input.excluded-apps-find__search {
   flex: 1 1 auto;
-  min-width: 0;
-  width: auto;
   font-family: var(--font-ui);
   letter-spacing: 0;
+  min-width: 0;
+  width: auto;
 }
 
-.content--settings .excluded-apps-card .settings-btn.excluded-apps-toolbar__action,
-.content--settings .excluded-apps-card .settings-btn.excluded-apps-item__unblock {
+.content--settings .settings-btn.excluded-apps-btn {
   flex: 0 0 auto;
   font-size: var(--type-caption-size);
   height: var(--settings-control-height);
@@ -56,60 +49,39 @@
   padding-inline: 0.75rem;
 }
 
-.excluded-apps-toolbar__add {
-  gap: 0.35rem;
-}
-
-.excluded-apps-toolbar__add svg {
-  display: block;
-  height: 0.8rem;
-  width: 0.8rem;
-}
-
-.excluded-apps-shell {
-  background: color-mix(in srgb, var(--bg) 58%, var(--surface));
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  flex: 0 0 auto;
-  max-height: 20rem;
-  min-width: 0;
-  overflow: auto;
-}
-
-.excluded-apps-shell__empty {
+.excluded-apps-empty {
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
   line-height: 1.4;
   margin: 0;
-  padding: 0.85rem 0.9rem;
-  text-wrap: balance;
+  padding: 0.35rem 0;
   word-break: keep-all;
 }
 
 .excluded-apps-list {
+  border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   list-style: none;
   margin: 0;
+  max-height: 18rem;
+  overflow: auto;
   padding: 0;
 }
 
 .excluded-apps-item {
   align-items: center;
   display: grid;
-  gap: var(--space-2);
-  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 2.45rem;
-  padding: 0 0.75rem;
   position: relative;
 }
 
 .excluded-apps-item:not(:last-child)::after {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
+  background: var(--line);
   bottom: 0;
   content: "";
   height: 1px;
-  left: calc(0.75rem + 24px + 0.65rem);
+  left: calc(24px + 0.65rem);
   position: absolute;
   right: 0;
 }
@@ -127,20 +99,23 @@
 }
 
 .excluded-apps-item .app-glyph--sm,
-.excluded-apps-item .app-icon--sm {
+.excluded-apps-item .app-icon--sm,
+.excluded-apps-row .app-glyph--sm,
+.excluded-apps-row .app-icon--sm {
   border-radius: 7px;
   height: 24px;
   width: 24px;
 }
 
-.excluded-apps-item .app-glyph--sm span {
+.excluded-apps-item .app-glyph--sm span,
+.excluded-apps-row .app-glyph--sm span {
   font-size: 0.7rem;
 }
 
 .excluded-apps-item__name {
   color: var(--text);
   font-size: var(--type-setting-label-size);
-  font-weight: 600;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -149,7 +124,6 @@
 .excluded-apps-item__actions {
   align-items: center;
   display: flex;
-  flex-shrink: 0;
   gap: 0.15rem;
 }
 
@@ -173,8 +147,7 @@
 
 .excluded-apps-item__history:focus-visible,
 .excluded-apps-item__pick:focus-visible,
-.content--settings .excluded-apps-card .settings-btn.excluded-apps-item__unblock:focus-visible,
-.content--settings .excluded-apps-card .settings-btn.excluded-apps-toolbar__action:focus-visible {
+.content--settings .settings-btn.excluded-apps-btn:focus-visible {
   outline: 2px solid var(--settings-focus-ring);
   outline-offset: 1px;
 }
@@ -187,17 +160,11 @@
   color: inherit;
   cursor: pointer;
   display: flex;
-  margin: 0 -0.75rem;
   min-height: 2.45rem;
   min-width: 0;
-  padding: 0 0.75rem;
+  padding: 0;
   text-align: left;
-  width: calc(100% + 1.5rem);
-}
-
-.excluded-apps-item:has(.excluded-apps-item__pick) {
-  grid-template-columns: minmax(0, 1fr);
-  padding-inline: 0.75rem;
+  width: 100%;
 }
 
 .excluded-apps-item__add-glyph {
@@ -218,11 +185,11 @@
 }
 
 @media (max-width: 760px) {
-  .excluded-apps-toolbar {
+  .excluded-apps-find__bar {
     flex-wrap: wrap;
   }
 
-  .content--settings .excluded-apps-card .settings-input.excluded-apps-toolbar__search {
+  .content--settings .excluded-apps-find .settings-input.excluded-apps-find__search {
     flex-basis: 12rem;
   }
 }

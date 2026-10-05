@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsSearch } from "./SettingsSearch";
 import { SettingsSearchDestination, SettingsSearchProvider } from "./SettingsSearchContext";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
+import { PrivacySettingsSection } from "./PrivacySettingsSection";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import type { SettingsSection } from "./SettingsSidebar";
 import { searchSettings, type SettingsSearchAvailability } from "./settingsSearchIndex";
@@ -127,6 +128,57 @@ describe("settings search", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Privacy" }).getAttribute("aria-expanded")).toBe("true"));
     expect(changeSetting).not.toHaveBeenCalled();
   });
+  it("unfolds the AI data sending card when search lands on it, without changing any setting", async () => {
+    window.localStorage.setItem("drifty.aiPrivacyRequestSettings.v1", JSON.stringify({
+      version: 1,
+      optional: { siteUrl: false, windowTitle: true, contentContext: true, workProfile: true },
+    }));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
+    function Harness() {
+      const [section, setSection] = useState<SettingsSection>("general");
+      return <SettingsSearchProvider activeSection={section} availability={publicAvailability} onNavigate={(entry) => setSection(entry.section)}>
+        <SettingsSearch><nav /></SettingsSearch>
+        <SettingsSearchDestination>{section === "privacy" ? <PrivacySettingsSection /> : null}</SettingsSearchDestination>
+      </SettingsSearchProvider>;
+    }
+    render(<Harness />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "AI data sending" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(document.activeElement?.getAttribute("data-setting-id")).toBe("settings.privacy.aiSending"));
+    expect(screen.getByRole("button", { name: /^AI data sending/ }).getAttribute("aria-expanded")).toBe("true");
+    // Landing on the card never flips a switch inside it.
+    expect(screen.getByRole("switch", { name: "Page address" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("switch", { name: "Window title" }).getAttribute("aria-checked")).toBe("true");
+    window.localStorage.removeItem("drifty.aiPrivacyRequestSettings.v1");
+  });
+
+  it("finds and focuses usage statistics without changing a saved opt-out", async () => {
+    window.localStorage.setItem("drifty.privacy.productAnalytics.v1", "0");
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
+    for (const query of ["사용 통계", "PostHog", "telemetry"]) {
+      expect(searchSettings(query, publicAvailability).some((entry) => entry.id === "settings.privacy.productAnalyticsTitle")).toBe(true);
+    }
+    function Harness() {
+      const [section, setSection] = useState<SettingsSection>("general");
+      return <SettingsSearchProvider activeSection={section} availability={publicAvailability} onNavigate={(entry) => setSection(entry.section)}>
+        <SettingsSearch><nav /></SettingsSearch>
+        <SettingsSearchDestination>{section === "privacy" ? <PrivacySettingsSection /> : null}</SettingsSearchDestination>
+      </SettingsSearchProvider>;
+    }
+    render(<Harness />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "PostHog" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(document.activeElement?.getAttribute("data-setting-id")).toBe("settings.privacy.productAnalyticsTitle"));
+    const preference = screen.getByRole("switch", { name: "Usage statistics" });
+    expect(preference.getAttribute("aria-checked")).toBe("false");
+    expect(window.localStorage.getItem("drifty.privacy.productAnalytics.v1")).toBe("0");
+    window.localStorage.removeItem("drifty.privacy.productAnalytics.v1");
+  });
+
   it("keeps a pending request across delayed navigation and consumes it before destination remount", async () => {
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));

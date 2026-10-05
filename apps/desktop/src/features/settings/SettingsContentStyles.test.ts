@@ -395,12 +395,41 @@ describe("Settings content styles", () => {
     expect(privacySource).toContain('<h3>{t("settings.privacy.localData")}</h3>');
   });
 
-  it("keeps the privacy review component in Privacy settings only", () => {
+  it("keeps the privacy review rows in Privacy settings only", () => {
     const aiSetupSource = readFileSync("src/features/settings/AiSetupSupportSections.tsx", "utf8");
     const privacySource = readFileSync("src/features/settings/PrivacySettingsSection.tsx", "utf8");
 
-    expect(aiSetupSource).not.toContain("<AiPrivacyReview />");
-    expect(privacySource).toContain("<AiPrivacyReview />");
+    expect(aiSetupSource).not.toContain("<AiDataSendingRows");
+    expect(privacySource).toContain("<AiDataSendingRows");
+  });
+
+  it("builds Privacy from the same flat blocks as General, with the AI group as its one folded card", () => {
+    const privacySource = readFileSync("src/features/settings/PrivacySettingsSection.tsx", "utf8");
+    const privacyRowSources = [
+      "AiPrivacyReview.tsx",
+      "AppExclusionSettingsRows.tsx",
+      "DriftySharingRows.tsx",
+    ].map((file) => readFileSync("src/features/settings/" + file, "utf8"));
+
+    // The page title, Drifty sharing and data on this device are settings-blocks with a title and
+    // direct-child rows. The AI group is the only card and it is folded.
+    expect(privacySource.match(/<div className="settings-block"/g)).toHaveLength(3);
+    expect(privacySource.match(/<h3>/g)).toHaveLength(3);
+    expect(privacySource.match(/<SettingsCollapsibleCard/g)).toHaveLength(1);
+    expect(privacySource).toContain("<AiDataSendingRows");
+    // The folded header carries its title and subtitle only. A state badge there would have to
+    // be kept in step with the switches and would leave the card looking unlike the other groups.
+    const card = privacySource.slice(privacySource.indexOf("<SettingsCollapsibleCard"), privacySource.indexOf("</SettingsCollapsibleCard>"));
+    expect(card).not.toContain("summary=");
+    expect(card).toContain('searchReveal="privacy-ai"');
+    for (const source of [privacySource, ...privacyRowSources]) {
+      expect(source).not.toContain("SettingsCard");
+      expect(source).not.toContain("drifty-checkbox");
+    }
+    for (const source of privacyRowSources) expect(source).not.toContain("SettingsCollapsibleCard");
+    // One switch everywhere: the shared Toggle, not a privacy-only checkbox.
+    expect(privacyRowSources[0]).toContain("<Toggle");
+    expect(privacyRowSources[2]).toContain("<Toggle");
   });
 
   it("keeps dark selected work-profile chips and the description field readable", () => {

@@ -1,9 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type {
-  ChangeEvent,
-  KeyboardEvent as ReactKeyboardEvent,
-  MouseEvent as ReactMouseEvent,
-} from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
+import { Toggle } from "../../components/Toggle";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import {
@@ -15,7 +12,7 @@ import {
   type AiPrivacyRequestSettings,
 } from "./aiPrivacyRequestSettings";
 import { resolveInitialEnhancedContextSettings } from "./settingsStorage";
-import "./AiSetupPrivacyReview.css";
+import "./AiPrivacyReview.css";
 
 type VisibleField = {
   readonly detailKey: TranslationKey;
@@ -228,7 +225,13 @@ export function useAiPrivacyReviewModel(): AiPrivacyReviewModel {
   return { requiredFields, optionalFields, handleOptionalChange };
 }
 
-export function AiPrivacyReview() {
+/**
+ * The rows of the "AI data sending" settings group. They are direct children of the
+ * group's `.settings-block`, so they share the card edges, dividers and switch of every
+ * other settings page: what is always sent, the four fields the user can switch off,
+ * what is never sent, then a row that opens the reference text behind all of them.
+ */
+export function AiDataSendingRows({ onOpenDetails }: { readonly onOpenDetails: () => void }) {
   const { t } = useLocalization();
   const { requiredFields, optionalFields, handleOptionalChange } = useAiPrivacyReviewModel();
   const [statusMessage, setStatusMessage] = useState("");
@@ -236,10 +239,11 @@ export function AiPrivacyReview() {
   const includedOptional = optionalFields.filter((field) => field.enabled).length;
   const siteUrlEnabled = optionalFields.some((field) => field.settingKey === "siteUrl" && field.enabled);
   const contentContextEnabled = optionalFields.some((field) => field.settingKey === "contentContext" && field.enabled);
-  const enhancedContextOn = enhancedContextCanReachProvider();
-  // The Soul digest is only resolved when Work profile is on (classificationMemoryContext.ts),
-  // so the recent-activity row has to report a different payload in that state.
-  const workProfileEnabled = optionalFields.some((field) => field.settingKey === "workProfile" && field.enabled);
+  const alwaysSent = requiredFields
+    .map((field) => REQUIRED_ROW_COPY[field.scope])
+    .filter((copy) => copy !== undefined)
+    .map((copy) => t(copy.labelKey))
+    .join(" · ");
 
   const toggleOptional = (settingKey: keyof AiPrivacyRequestOptionalSettings, nextEnabled: boolean) => {
     handleOptionalChange(settingKey, nextEnabled);
@@ -257,170 +261,181 @@ export function AiPrivacyReview() {
   };
 
   return (
-    <section className="ai-privacy-review" aria-label={t("settings.aiPrivacy.reviewAria")}>
-      {/* No heading here: the host (the Privacy settings card) already renders a
-          title + subtitle above this panel, so a heading would repeat them. The
-          section's aria-label carries the accessible name. */}
-      <p className="ai-privacy-review__lede">{t("settings.aiPrivacy.receiptLede")}</p>
-
-      {/* Controls first. The four switchable fields are the only thing on this panel
-          a user can act on, so they are no longer buried inside the disclosure that
-          explains them. The worked example, the glossary and the never-sent list stay
-          one click away, in that order. */}
-      <div className="ai-privacy-review__controls">
-        <div className="ai-privacy-review__controls-head">
-          <h5 className="ai-privacy-review__controls-title">{t("settings.aiPrivacy.controlsHeading")}</h5>
-          <p className="ai-privacy-review__receipt-count">
-            {t("settings.aiPrivacy.includedCount", { included: includedOptional, total: optionalFields.length })}
+    <>
+      <div className="settings-row" data-setting-id="settings.privacy.aiAlways">
+        <div>
+          <div className="lbl">{t("settings.privacy.aiAlwaysTitle")}</div>
+          <div className="desc">{t("settings.privacy.aiAlwaysDescription", { fields: alwaysSent })}</div>
+          {/* Lives in the first row because the rows must stay the only children of the
+              group: the card's rounded corners come from the first and last row. */}
+          <p aria-live="polite" className="ai-privacy-review__status" role="status">
+            {statusMessage}
           </p>
         </div>
+      </div>
 
-        <ul className="ai-privacy-review__rows" aria-label={t("settings.aiPrivacy.optionalFieldsAria")}>
-          {optionalFields.map((field) => (
-            <OptionalRow
-              field={field}
-              key={field.detailKey}
-              contentContextEnabled={contentContextEnabled}
-              siteUrlEnabled={siteUrlEnabled}
-              onOptionalChange={toggleOptional}
-            />
+      {optionalFields.map((field) => (
+        <OptionalRow
+          field={field}
+          key={field.detailKey}
+          contentContextEnabled={contentContextEnabled}
+          siteUrlEnabled={siteUrlEnabled}
+          onOptionalChange={toggleOptional}
+        />
+      ))}
+
+      {/* What is never sent is as important as what is sent, and it is short, so it is
+          a plain row. The wording that proves each claim is in the details dialog. */}
+      <div className="settings-row" data-setting-id="settings.privacy.aiNeverSent">
+        <div>
+          <div className="lbl">{t("settings.aiPrivacy.neverSentHeading")}</div>
+          <div className="desc">{AI_EXCLUDED_FIELDS.map((field) => t(field.labelKey)).join(" · ")}</div>
+        </div>
+      </div>
+
+      <div className="settings-row" data-setting-id="settings.privacy.aiDetails">
+        <div>
+          <div className="lbl">{t("settings.aiPrivacy.detailsHeading")}</div>
+          <div className="desc">{t("settings.aiPrivacy.detailsDescription")}</div>
+        </div>
+        <div className="ctrl">
+          <button type="button" className="settings-btn" onClick={onOpenDetails}>
+            {t("settings.aiPrivacy.detailsAction")}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * The reference text behind the AI rows: a worked example request, what each field
+ * means, and the wording that proves each never-sent claim. It is long and rarely read,
+ * so the settings page opens it in a dialog instead of lengthening itself. It reads the
+ * live settings, so the example reflects the switches the user has set.
+ */
+export function AiPrivacyDetails() {
+  const { t } = useLocalization();
+  const { requiredFields, optionalFields } = useAiPrivacyReviewModel();
+  const enhancedContextOn = enhancedContextCanReachProvider();
+  // The Soul digest is only resolved when Work profile is on (classificationMemoryContext.ts),
+  // so the recent-activity row has to report a different payload in that state.
+  const workProfileEnabled = optionalFields.some((field) => field.settingKey === "workProfile" && field.enabled);
+
+  return (
+    <>
+      <section className="ai-privacy-review__section">
+        <h3 className="ai-privacy-review__section-title">{t("settings.aiPrivacy.exampleRequestHeading")}</h3>
+        <p className="ai-privacy-review__lede">{t("settings.aiPrivacy.receiptLede")}</p>
+        <p className="ai-privacy-review__caption">{t("settings.aiPrivacy.exampleHeading")}</p>
+
+        <ul className="ai-privacy-review__rows" aria-label={t("settings.aiPrivacy.requiredFieldsAria")}>
+          {requiredFields.map((field) => (
+            <RequiredReceiptRow field={field} key={field.detailKey} />
           ))}
         </ul>
-      </div>
 
-      <div className="ai-privacy-review__more-stack">
-        <details className="ai-privacy-review__more">
-          <summary className="ai-privacy-review__more-summary">
-            <span className="ai-privacy-review__more-label">{t("settings.aiPrivacy.receiptHeading")}</span>
-            <span aria-hidden="true" className="ai-privacy-review__chevron" />
-          </summary>
-          <div className="ai-privacy-review__receipt">
-            <div className="ai-privacy-review__receipt-head">
-              <h5 className="ai-privacy-review__receipt-title">{t("settings.aiPrivacy.exampleHeading")}</h5>
+        <ul className="ai-privacy-review__rows" aria-label={t("settings.aiPrivacy.contextFieldsAria")}>
+          <li className="ai-privacy-review__row ai-privacy-review__row--always">
+            <div className="ai-privacy-review__row-inner">
+              <span className="ai-privacy-review__row-body">
+                <span className="ai-privacy-review__row-label">{t("settings.aiPrivacy.rowMemory")}</span>
+                <span className="ai-privacy-review__row-value">
+                  {t(workProfileEnabled ? "settings.aiPrivacy.valueMemory" : "settings.aiPrivacy.valueMemoryNoProfile")}
+                  <small className="ai-privacy-review__row-note">
+                    {t(workProfileEnabled ? "settings.aiPrivacy.noteMemory" : "settings.aiPrivacy.noteMemoryNoProfile")}
+                  </small>
+                </span>
+              </span>
+              <span className="ai-privacy-review__row-state">{t("settings.aiPrivacy.statePerSegment")}</span>
             </div>
+          </li>
 
-            <ul className="ai-privacy-review__rows" aria-label={t("settings.aiPrivacy.requiredFieldsAria")}>
-              {requiredFields.map((field) => (
-                <RequiredReceiptRow field={field} key={field.detailKey} />
-              ))}
-            </ul>
-
-            <ul className="ai-privacy-review__rows" aria-label={t("settings.aiPrivacy.contextFieldsAria")}>
-              <li className="ai-privacy-review__row ai-privacy-review__row--always">
-                <div className="ai-privacy-review__row-inner">
-                  <span className="ai-privacy-review__row-body">
-                    <span className="ai-privacy-review__row-label">{t("settings.aiPrivacy.rowMemory")}</span>
-                    <span className="ai-privacy-review__row-value">
-                      {t(workProfileEnabled ? "settings.aiPrivacy.valueMemory" : "settings.aiPrivacy.valueMemoryNoProfile")}
-                      <small className="ai-privacy-review__row-note">
-                        {t(workProfileEnabled ? "settings.aiPrivacy.noteMemory" : "settings.aiPrivacy.noteMemoryNoProfile")}
-                      </small>
-                    </span>
-                  </span>
-                  <span className="ai-privacy-review__row-state ai-privacy-review__row-state--always">
-                    {t("settings.aiPrivacy.statePerSegment")}
-                  </span>
-                </div>
-              </li>
-
-              {/* Enhanced context is a real outbound field (localAiProviderRequest promptItem),
-                  not a variant of Content context. It ships as a bounded retry-only production
-                  field, so it keeps its own receipt row instead of being folded into Content context. */}
-              <li className="ai-privacy-review__row ai-privacy-review__row--always">
-                <div className="ai-privacy-review__row-inner">
-                  <span className="ai-privacy-review__row-body">
-                    <span className="ai-privacy-review__row-label">{t("settings.aiPrivacy.rowEnhancedContext")}</span>
-                    <span className="ai-privacy-review__row-value">
-                      {t(enhancedContextOn ? "settings.aiPrivacy.valueEnhancedContext" : "settings.aiPrivacy.valueEnhancedContextOff")}
-                      {enhancedContextOn ? (
-                        <small className="ai-privacy-review__row-note">{t("settings.aiPrivacy.noteEnhancedContext")}</small>
-                      ) : (
-                        <small className="ai-privacy-review__row-note">{t("settings.aiPrivacy.noteEnhancedContextOff")}</small>
-                      )}
-                    </span>
-                  </span>
-                  <span className="ai-privacy-review__row-state ai-privacy-review__row-state--always">
-                    {t(enhancedContextOn ? "settings.aiPrivacy.stateEnhancedContextOn" : "settings.aiPrivacy.stateEnhancedContextOff")}
-                  </span>
-                </div>
-              </li>
-            </ul>
-
-            {/* One policy per line. The single 371-character paragraph this replaces
-                mixed request identifiers, cloud-only additions and sample retention,
-                so no individual claim could be found or checked. */}
-            <ul className="ai-privacy-review__footnotes">
-              <li>{t("settings.aiPrivacy.footnote")}</li>
-              <li>{t("settings.aiPrivacy.footnoteCloud")}</li>
-              <li>{t("settings.aiPrivacy.footnoteSamples")}</li>
-            </ul>
-          </div>
-        </details>
-        <details className="ai-privacy-review__more">
-          <summary className="ai-privacy-review__more-summary">
-            <span className="ai-privacy-review__more-label">{t("settings.aiPrivacy.glossaryHeading")}</span>
-            <span aria-hidden="true" className="ai-privacy-review__chevron" />
-          </summary>
-          <dl className="ai-privacy-review__glossary">
-            {requiredFields.map((field) => {
-              const copy = REQUIRED_ROW_COPY[field.scope];
-              return copy ? (
-                <div className="ai-privacy-review__glossary-item" key={field.detailKey}>
-                  <dt>{t(copy.labelKey)}</dt>
-                  <dd>{t(copy.meaningKey)}</dd>
-                </div>
-              ) : null;
-            })}
-            {optionalFields.map((field) => {
-              const copy = field.settingKey ? OPTIONAL_ROW_COPY[field.settingKey] : undefined;
-              return copy ? (
-                <div className="ai-privacy-review__glossary-item" key={field.detailKey}>
-                  <dt>{t(copy.labelKey)}</dt>
-                  <dd>{t(copy.meaningKey)}</dd>
-                </div>
-              ) : null;
-            })}
-            <div className="ai-privacy-review__glossary-item">
-              <dt>{t("settings.aiPrivacy.rowMemory")}</dt>
-              <dd>{t("settings.aiPrivacy.meaningMemory")}</dd>
+          {/* Enhanced context is a real outbound field (localAiProviderRequest promptItem),
+              not a variant of Content context. It ships as a bounded retry-only production
+              field, so it keeps its own receipt row instead of being folded into Content context. */}
+          <li className="ai-privacy-review__row ai-privacy-review__row--always">
+            <div className="ai-privacy-review__row-inner">
+              <span className="ai-privacy-review__row-body">
+                <span className="ai-privacy-review__row-label">{t("settings.aiPrivacy.rowEnhancedContext")}</span>
+                <span className="ai-privacy-review__row-value">
+                  {t(enhancedContextOn ? "settings.aiPrivacy.valueEnhancedContext" : "settings.aiPrivacy.valueEnhancedContextOff")}
+                  <small className="ai-privacy-review__row-note">
+                    {t(enhancedContextOn ? "settings.aiPrivacy.noteEnhancedContext" : "settings.aiPrivacy.noteEnhancedContextOff")}
+                  </small>
+                </span>
+              </span>
+              <span className="ai-privacy-review__row-state">
+                {t(enhancedContextOn ? "settings.aiPrivacy.stateEnhancedContextOn" : "settings.aiPrivacy.stateEnhancedContextOff")}
+              </span>
             </div>
-            <div className="ai-privacy-review__glossary-item">
-              <dt>{t("settings.aiPrivacy.rowEnhancedContext")}</dt>
-              <dd>
-                <p>{t("settings.aiPrivacy.meaningEnhancedContext")}</p>
-                <p>{t("settings.aiPrivacy.meaningEnhancedContextDetail")}</p>
-              </dd>
-            </div>
-            {/* Project matching is the one surface that also sends what the user
-                wrote when defining a project, so it is disclosed here rather
-                than left implicit in the shared activity rows. */}
-            <div className="ai-privacy-review__glossary-item">
-              <dt>{t("settings.aiPrivacy.projectDefinitions")}</dt>
-              <dd>{t("settings.aiPrivacy.projectDefinitionsReceipt")}</dd>
-            </div>
-          </dl>
-        </details>
+          </li>
+        </ul>
 
-        <details className="ai-privacy-review__more">
-          <summary className="ai-privacy-review__more-summary">
-            <span className="ai-privacy-review__more-label">{t("settings.aiPrivacy.neverSentHeading")}</span>
-            <span aria-hidden="true" className="ai-privacy-review__chevron" />
-          </summary>
-          <dl className="ai-privacy-review__glossary">
-            {AI_EXCLUDED_FIELDS.map((field) => (
-              <div className="ai-privacy-review__glossary-item" key={field.labelKey}>
-                <dt>{t(field.labelKey)}</dt>
-                <dd>{t(field.receiptDetailKey)}</dd>
+        {/* One policy per line. The single 371-character paragraph this replaces
+            mixed request identifiers, cloud-only additions and sample retention,
+            so no individual claim could be found or checked. */}
+        <ul className="ai-privacy-review__footnotes">
+          <li>{t("settings.aiPrivacy.footnote")}</li>
+          <li>{t("settings.aiPrivacy.footnoteCloud")}</li>
+          <li>{t("settings.aiPrivacy.footnoteSamples")}</li>
+        </ul>
+      </section>
+
+      <section className="ai-privacy-review__section">
+        <h3 className="ai-privacy-review__section-title">{t("settings.aiPrivacy.glossaryHeading")}</h3>
+        <dl className="ai-privacy-review__glossary">
+          {requiredFields.map((field) => {
+            const copy = REQUIRED_ROW_COPY[field.scope];
+            return copy ? (
+              <div className="ai-privacy-review__glossary-item" key={field.detailKey}>
+                <dt>{t(copy.labelKey)}</dt>
+                <dd>{t(copy.meaningKey)}</dd>
               </div>
-            ))}
-          </dl>
-        </details>
-      </div>
+            ) : null;
+          })}
+          {optionalFields.map((field) => {
+            const copy = field.settingKey ? OPTIONAL_ROW_COPY[field.settingKey] : undefined;
+            return copy ? (
+              <div className="ai-privacy-review__glossary-item" key={field.detailKey}>
+                <dt>{t(copy.labelKey)}</dt>
+                <dd>{t(copy.meaningKey)}</dd>
+              </div>
+            ) : null;
+          })}
+          <div className="ai-privacy-review__glossary-item">
+            <dt>{t("settings.aiPrivacy.rowMemory")}</dt>
+            <dd>{t("settings.aiPrivacy.meaningMemory")}</dd>
+          </div>
+          <div className="ai-privacy-review__glossary-item">
+            <dt>{t("settings.aiPrivacy.rowEnhancedContext")}</dt>
+            <dd>
+              <p>{t("settings.aiPrivacy.meaningEnhancedContext")}</p>
+              <p>{t("settings.aiPrivacy.meaningEnhancedContextDetail")}</p>
+            </dd>
+          </div>
+          {/* Project matching is the one surface that also sends what the user
+              wrote when defining a project, so it is disclosed here rather
+              than left implicit in the shared activity rows. */}
+          <div className="ai-privacy-review__glossary-item">
+            <dt>{t("settings.aiPrivacy.projectDefinitions")}</dt>
+            <dd>{t("settings.aiPrivacy.projectDefinitionsReceipt")}</dd>
+          </div>
+        </dl>
+      </section>
 
-      <p aria-live="polite" className="ai-privacy-review__status" role="status">
-        {statusMessage}
-      </p>
-    </section>
+      <section className="ai-privacy-review__section">
+        <h3 className="ai-privacy-review__section-title">{t("settings.aiPrivacy.neverSentDetailsHeading")}</h3>
+        <dl className="ai-privacy-review__glossary">
+          {AI_EXCLUDED_FIELDS.map((field) => (
+            <div className="ai-privacy-review__glossary-item" key={field.labelKey}>
+              <dt>{t(field.labelKey)}</dt>
+              <dd>{t(field.receiptDetailKey)}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </>
   );
 }
 
@@ -454,7 +469,7 @@ function OptionalRow({
 }: {
   readonly contentContextEnabled: boolean;
   readonly field: ControlField;
-  readonly onOptionalChange?: (key: keyof AiPrivacyRequestOptionalSettings, enabled: boolean) => void;
+  readonly onOptionalChange: (key: keyof AiPrivacyRequestOptionalSettings, enabled: boolean) => void;
   readonly siteUrlEnabled: boolean;
 }) {
   const { t } = useLocalization();
@@ -463,8 +478,7 @@ function OptionalRow({
   const enabled = field.enabled;
   const reactId = useId();
   const pressOrigin = useRef<{ readonly x: number; readonly y: number } | null>(null);
-  const inputId = "ai-privacy-" + reactId.replace(/:/g, "") + "-switch";
-  const valueId = inputId + "-value";
+  const valueId = "ai-privacy-" + reactId.replace(/:/g, "") + "-value";
   if (!copy || !settingKey) return null;
   const label = t(copy.labelKey);
   // The price is charged only while the row is off, so it is only stated then.
@@ -480,70 +494,65 @@ function OptionalRow({
   // reaches.) Both rows on is already covered by the Content context row's own copy.
   const redditNote = redditNoteKeyFor({ contentContextEnabled, enabled, settingKey, siteUrlEnabled });
 
-  const toggle = () => onOptionalChange?.(settingKey, !enabled);
-
   // Whole-row activation without wrapping the value in a <label>: a <label> around
   // selectable text makes a drag across the URL flip the setting (the earlier R2-A bug).
   // A press that travels is a drag, so it selects text and must never toggle — including
   // a drag that happens to land between two text lines and select nothing.
-  const handleRowMouseDown = (event: ReactMouseEvent<HTMLLIElement>) => {
+  const handleRowMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     pressOrigin.current = { x: event.clientX, y: event.clientY };
   };
 
-  const handleRowClick = (event: ReactMouseEvent<HTMLLIElement>) => {
+  const handleRowClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest("input, a, button, summary")) return;
     if ((window.getSelection()?.toString() ?? "").length > 0) return;
     const origin = pressOrigin.current;
     pressOrigin.current = null;
     if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > DRAG_SLOP_PX) return;
-    toggle();
+    onOptionalChange(settingKey, !enabled);
   };
 
   return (
-    <li
-      className={"ai-privacy-review__row" + (enabled ? "" : " ai-privacy-review__row--off")}
+    <div
+      className={"settings-row ai-privacy-review__optional" + (enabled ? "" : " is-off")}
       onClick={handleRowClick}
       onMouseDown={handleRowMouseDown}
     >
-      <div className="ai-privacy-review__row-inner">
-        <span className="ai-privacy-review__row-body">
-          <span className="ai-privacy-review__row-label">{label}</span>
-          <span className="ai-privacy-review__row-value" id={valueId}>
-            {enabled ? (
-              <>
-                {t(copy.valueKey)}
-                {copy.noteKey ? <small className="ai-privacy-review__row-note">{t(copy.noteKey)}</small> : null}
-              </>
-            ) : null}
-            {cost ? (
-              <small className="ai-privacy-review__row-cost">
-                <span aria-hidden="true" className="ai-privacy-review__cost-mark" />
-                {cost}
-              </small>
-            ) : null}
-            {redditNote ? <small className="ai-privacy-review__row-note">{t(redditNote)}</small> : null}
-          </span>
-        </span>
-        <span className="ai-privacy-review__row-control">
-          {/* An on switch already reads as "sent"; repeating the word next to every
-              row added a second state vocabulary without adding information. Only the
-              held-back state, which the switch alone understates, keeps a word. */}
-          {enabled ? null : (
-            <span aria-hidden="true" className="ai-privacy-review__row-state">
-              {t("settings.aiPrivacy.stateHeld")}
+      <div>
+        <div className="lbl">{label}</div>
+        <div className="desc ai-privacy-review__detail" id={valueId}>
+          {enabled ? (
+            <>
+              <span className="ai-privacy-review__example">{t("settings.aiPrivacy.exampleValue", { value: t(copy.valueKey) })}</span>
+              {copy.noteKey ? <span className="ai-privacy-review__row-note">{t(copy.noteKey)}</span> : null}
+            </>
+          ) : null}
+          {cost ? (
+            <span className="ai-privacy-review__row-cost">
+              <span aria-hidden="true" className="ai-privacy-review__cost-mark" />
+              {cost}
             </span>
-          )}
-          <ControlSwitch
-            describedById={enabled ? undefined : valueId}
-            field={field}
-            inputId={inputId}
-            label={label}
-            onOptionalChange={onOptionalChange}
-          />
-        </span>
+          ) : null}
+          {redditNote ? <span className="ai-privacy-review__row-note">{t(redditNote)}</span> : null}
+        </div>
       </div>
-    </li>
+      <div className="ctrl ai-privacy-review__control">
+        {/* An on switch already reads as "sent"; repeating the word next to every
+            row added a second state vocabulary without adding information. Only the
+            held-back state, which the switch alone understates, keeps a word. */}
+        {enabled ? null : (
+          <span aria-hidden="true" className="ai-privacy-review__row-state">
+            {t("settings.aiPrivacy.stateHeld")}
+          </span>
+        )}
+        <Toggle
+          ariaDescribedBy={enabled ? undefined : valueId}
+          ariaLabel={label}
+          checked={enabled}
+          onChange={(next) => onOptionalChange(settingKey, next)}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -558,57 +567,8 @@ function RequiredReceiptRow({ field }: { readonly field: ControlField }) {
           <span className="ai-privacy-review__row-label">{t(copy.labelKey)}</span>
           <span className="ai-privacy-review__row-value">{t(copy.valueKey)}</span>
         </span>
-        <span className="ai-privacy-review__row-state ai-privacy-review__row-state--always">
-          {t("settings.aiPrivacy.stateAlways")}
-        </span>
+        <span className="ai-privacy-review__row-state">{t("settings.aiPrivacy.stateAlways")}</span>
       </div>
     </li>
-  );
-}
-
-export function ControlSwitch({
-  describedById,
-  field,
-  inputId,
-  label,
-  onOptionalChange,
-}: {
-  readonly describedById?: string;
-  readonly field: ControlField;
-  readonly inputId?: string;
-  readonly label?: string;
-  readonly onOptionalChange?: (key: keyof AiPrivacyRequestOptionalSettings, enabled: boolean) => void;
-}) {
-  const { t } = useLocalization();
-  const settingKey = field.settingKey;
-  const detail = label ?? t(field.detailKey);
-  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!settingKey || !onOptionalChange) return;
-    onOptionalChange(settingKey, event.currentTarget.checked);
-  };
-  // A checkbox ignores Enter, but APG expects role=switch to respond to it.
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter" || !settingKey || !onOptionalChange) return;
-    event.preventDefault();
-    onOptionalChange(settingKey, !field.enabled);
-  };
-
-  return (
-    <span className="ai-privacy-review__switch">
-      <input
-        aria-describedby={describedById}
-        aria-label={detail}
-        checked={field.enabled}
-        className="ai-privacy-review__switch-input"
-        id={inputId}
-        role="switch"
-        type="checkbox"
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-      />
-      <span aria-hidden="true" className="ai-privacy-review__switch-track">
-        <span className="ai-privacy-review__switch-knob" />
-      </span>
-    </span>
   );
 }

@@ -1,0 +1,26 @@
+/* A reading dialog: the header and footer stay put, only the body scrolls. */
+
+.ai-privacy-modal {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(46rem, calc(100vh - var(--space-6)));
+  max-width: none;
+  overflow: hidden;
+  width: min(48rem, calc(100vw - var(--space-6)));
+}
+
+.ai-privacy-modal__body {
+  display: grid;
+  gap: var(--space-4);
+  margin-inline: calc(var(--modal-shell-inset) * -1);
+  min-height: 0;
+  overflow-y: auto;
+  padding-inline: var(--modal-shell-inset);
+}
+
+@media (max-width: 720px) {
+  .ai-privacy-modal {
+    width: calc(100vw - var(--space-4));
+  }
+}
