@@ -21,7 +21,7 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app import main as tracker_main
-from app import windows_process_liveness
+from app import process_liveness
 from app.storage import db as tracker_storage
 from app.storage.db import TrackerDatabase
 from app.storage.live_tail import fetch_live_tail
@@ -2699,7 +2699,7 @@ class TrackerMainTests(unittest.TestCase):
                 with patch.object(tracker_main.sys, "platform", platform), patch.dict(sys.modules, {
                     "app.windows_daemon_shutdown": SimpleNamespace(WindowsDaemonStopEvent=create_stop_event)
                 }), patch.object(
-                    windows_process_liveness, "tracker_app_owner", return_value=owner_context, create=True
+                    process_liveness, "tracker_app_owner", return_value=owner_context, create=True
                 ), patch.object(tracker_main, "_acquire_tracker_daemon_lock", return_value=lock_file), patch.object(
                     tracker_main, "_release_tracker_daemon_lock"
                 ) as release_lock, patch.object(tracker_main, "_write_tracker_pid"), patch.object(
@@ -2738,7 +2738,7 @@ class TrackerMainTests(unittest.TestCase):
         owner_context = MagicMock()
         owner_context.__enter__.return_value = owner
         with patch.object(
-            windows_process_liveness, "tracker_app_owner", return_value=owner_context, create=True
+            process_liveness, "tracker_app_owner", return_value=owner_context, create=True
         ), patch.object(tracker_main, "_acquire_tracker_daemon_lock") as acquire_lock, patch.object(
             tracker_main, "_release_tracker_daemon_lock"
         ), patch.object(tracker_main, "_remove_pid_record_if_owned"), patch.object(
@@ -2766,7 +2766,7 @@ class TrackerMainTests(unittest.TestCase):
         owner_context.__enter__.return_value = owner
         lock_file = MagicMock()
         with patch.object(
-            windows_process_liveness, "tracker_app_owner", return_value=owner_context
+            process_liveness, "tracker_app_owner", return_value=owner_context
         ), patch.object(tracker_main, "_acquire_tracker_daemon_lock", return_value=lock_file), patch.object(
             tracker_main, "_release_tracker_daemon_lock"
         ) as release_lock, patch.object(tracker_main, "database") as open_db:
@@ -3746,7 +3746,7 @@ class TrackerMainTests(unittest.TestCase):
             return 1.0
 
         with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
-            windows_process_liveness, "tracker_app_owner", return_value=owner_context
+            process_liveness, "tracker_app_owner", return_value=owner_context
         ), patch.dict(sys.modules, {
             "app.windows_daemon_shutdown": SimpleNamespace(WindowsDaemonStopEvent=lambda _db: stop_event)
         }), patch.object(tracker_main, "_acquire_tracker_daemon_lock", return_value=lock_file), patch.object(

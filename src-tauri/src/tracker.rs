@@ -1749,10 +1749,52 @@ fn command_from_argv(argv: Vec<OsString>) -> Result<Command, TrackerError> {
         command.env("DRIFTY_TRACKER_APP_PID", std::process::id().to_string());
         command.env("DRIFTY_TRACKER_APP_CREATION_TIME", creation_time.to_string());
     }
+    #[cfg(target_os = "macos")]
+    {
+        // The daemon can outlive both a failed exit cleanup and the one-shot
+        // process that recovered it. Bind it to this app's native lifetime.
+        // Refuse launch if identity cannot be read; missing env means standalone CLI.
+        let creation_time = macos_app_process_creation_time()?;
+        command.env("DRIFTY_TRACKER_APP_PID", std::process::id().to_string());
+        command.env(
+            "DRIFTY_TRACKER_APP_CREATION_TIME",
+            creation_time.to_string(),
+        );
+    }
     for (key, value) in crate::observability::tracker_sentry_env_vars() {
         command.env(key, value);
     }
     Ok(command)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_app_process_creation_time() -> Result<u64, TrackerError> {
+    let pid = std::process::id();
+    // proc_bsdinfo is defined by the platform libc ABI. Python validates the
+    // same Unix birth time before and after retaining a kqueue exit subscription.
+    let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of_val(&info) as i32;
+    let read = unsafe {
+        libc::proc_pidinfo(
+            pid as i32,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            &mut info as *mut _ as *mut libc::c_void,
+            size,
+        )
+    };
+    if read != size || info.pbi_pid != pid || info.pbi_start_tvusec >= 1_000_000 {
+        return Err(TrackerError::CommandFailed(
+            "tracker owning app process identity is unavailable".into(),
+        ));
+    }
+    info.pbi_start_tvsec
+        .checked_mul(1_000_000)
+        .and_then(|seconds| seconds.checked_add(info.pbi_start_tvusec))
+        .filter(|created| *created > 0)
+        .ok_or_else(|| {
+            TrackerError::CommandFailed("tracker owning app process identity is unavailable".into())
+        })
 }
 
 #[cfg(any(windows, test))]
@@ -2258,6 +2300,33 @@ mod tests {
             0x1234_5678_9abc_def0
         );
         assert_eq!(windows_filetime_value(u32::MAX, u32::MAX), u64::MAX);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn all_macos_tracker_launch_modes_carry_the_current_app_identity() {
+        let created = macos_app_process_creation_time().unwrap().to_string();
+        assert_eq!(
+            created,
+            macos_app_process_creation_time().unwrap().to_string()
+        );
+        for mode in ["serve", "--request-json", "daemon"] {
+            let command = command_from_argv(vec!["drifty-tracker".into(), mode.into()])
+                .expect("owned tracker command");
+            let env: std::collections::HashMap<_, _> = command.get_envs().collect();
+            assert_eq!(
+                env.get(std::ffi::OsStr::new("DRIFTY_TRACKER_APP_PID"))
+                    .copied()
+                    .flatten(),
+                Some(std::ffi::OsStr::new(&std::process::id().to_string()))
+            );
+            assert_eq!(
+                env.get(std::ffi::OsStr::new("DRIFTY_TRACKER_APP_CREATION_TIME"))
+                    .copied()
+                    .flatten(),
+                Some(std::ffi::OsStr::new(&created))
+            );
+        }
     }
 
     #[cfg(windows)]

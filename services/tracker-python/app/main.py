@@ -76,7 +76,7 @@ from app.tracker.dev_signals.ssh_sources import (
 )
 
 if TYPE_CHECKING:
-    from app.windows_process_liveness import WindowsProcessOwner
+    from app.process_liveness import ProcessOwner
     from app.tracker.macos_workspace import Snapshot
     from app.tracker.power_state import PowerStateSample
     from app.tracker.youtube_metadata import YouTubeVideoMetadata
@@ -2424,7 +2424,7 @@ def _close_loaded_macos_capture() -> None:
 
 
 def daemon():
-    from app.windows_process_liveness import tracker_app_owner
+    from app.process_liveness import tracker_app_owner
 
     with tracker_app_owner() as owner:
         if owner is not None and not owner.is_alive():
@@ -2444,7 +2444,7 @@ def _is_sqlite_lock_error(error: sqlite3.OperationalError) -> bool:
     ) or message.startswith(("database table is locked:", "database schema is locked:"))
 
 
-def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
+def _daemon_with_owner(owner: ProcessOwner | None) -> None:
     daemon_pid = os.getpid()
     lock_file = _acquire_tracker_daemon_lock()
     if lock_file is None:
