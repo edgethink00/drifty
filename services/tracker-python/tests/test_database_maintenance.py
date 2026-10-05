@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import textwrap
 import unittest
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
@@ -25,6 +26,7 @@ from app.storage.database_maintenance import (
     quick_check_database,
 )
 from app.storage.db import TrackerDatabase
+from app.tracker.capture_contract import Snapshot
 from tests.support_cleanup import cleanup_temp_dir
 
 
@@ -50,6 +52,120 @@ class DatabaseMaintenanceTests(unittest.TestCase):
             with self.subTest(immutable=immutable):
                 self.assertFalse(quick_check_database(self.db_path, immutable=immutable))
         self.assertEqual(self.db_path.read_bytes(), b"")
+
+    def test_permanent_delete_removes_backup_interrupted_by_worker_shutdown(self) -> None:
+        database = TrackerDatabase(self.db_path, perform_maintenance=False)
+        self.addCleanup(database.close)
+        database.record_snapshot(Snapshot(datetime.now(timezone.utc).isoformat(), 'Editor',
+                                          'fixture.editor', 'Delete me', 'test'), 5)
+        segment_id = str(database.connect().execute('SELECT id FROM activity_segments').fetchone()[0])
+        script = textwrap.dedent('''
+            import sys,threading
+            from pathlib import Path
+            from unittest.mock import patch
+            from app.daemon_maintenance import DaemonMaintenance
+            from app.storage import database_maintenance as storage
+            ready=threading.Event()
+            original=storage.quick_check_database
+            def slow_verify(path, **kwargs):
+                valid=original(path, **kwargs)
+                if path.name.endswith('.tmp'):
+                    ready.set()
+                    threading.Event().wait(60)
+                return valid
+            with patch.object(storage,'quick_check_database',side_effect=slow_verify):
+                worker=DaemonMaintenance(Path(sys.argv[1]),backfill_days=30,max_files=40)
+                worker.request_backup()
+                if not ready.wait(5):raise RuntimeError('backup never reached verification')
+                worker.close()
+        ''')
+        result = subprocess.run([sys.executable, '-c', script, str(self.db_path)],
+                                cwd=SERVICE_ROOT, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        interrupted = list(database_backup_dir(self.db_path).glob('.*.tmp'))
+        self.assertEqual(len(interrupted), 1)
+        with closing(sqlite3.connect(f'{interrupted[0].as_uri()}?mode=ro&immutable=1', uri=True)) as copy:
+            self.assertEqual(copy.execute('SELECT count(*) FROM activity_segments').fetchone()[0], 1)
+        self.assertEqual(database.delete_activity_segments([segment_id]), 1)
+        self.assertFalse(interrupted[0].exists(), 'permanent deletion left an interrupted copy containing deleted activity')
+        for backup in database_backup_dir(self.db_path).glob('*.sqlite3'):
+            with closing(sqlite3.connect(f'{backup.as_uri()}?mode=ro&immutable=1', uri=True)) as copy:
+                self.assertEqual(copy.execute('SELECT count(*) FROM activity_segments').fetchone()[0], 0)
+
+    def test_backup_reuse_cleans_only_owned_interrupted_files(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        self.addCleanup(database.close)
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        temp = backup.with_name(f'.{self.db_path.name}-20261005T010000000000Z.{"a"*32}.tmp')
+        temp.write_bytes(backup.read_bytes())
+        sidecars = [Path(str(temp)+suffix) for suffix in ('-wal','-shm','-journal')]
+        for path in sidecars:
+            path.write_bytes(b'interrupted')
+        unrelated = [backup.with_name('.tracker-not-generated.sqlite3.unknown.tmp'),
+                     backup.with_name(f'.other.sqlite3-20261005T010000000000Z.{"a"*32}.tmp'),
+                     backup.with_name(f'.{backup.name}.{"a"*32}.tmp')]
+        for path in unrelated:
+            path.write_bytes(b'preserve')
+        self.assertIsNone(create_rotating_backup(database.connect(), self.db_path))
+        self.assertTrue(backup.exists())
+        self.assertTrue(all(path.exists() for path in unrelated))
+        self.assertFalse(any(path.exists() for path in [temp,*sidecars]))
+
+    def test_cleanup_preserves_active_backup_for_same_stem_other_database(self) -> None:
+        first = TrackerDatabase(self.db_path, perform_maintenance=False)
+        self.addCleanup(first.close)
+        other_path = self.db_path.with_suffix('.db')
+        other = TrackerDatabase(other_path, perform_maintenance=False)
+        other.close()
+        from app.storage import database_maintenance as storage
+        original = storage.quick_check_database
+        entered, release = threading.Event(), threading.Event()
+        errors, backups = [], []
+        def verify(path, **kwargs):
+            if path.name.endswith('.tmp') and threading.current_thread() is thread:
+                entered.set()
+                if not release.wait(5):
+                    raise AssertionError('backup verification was not released')
+            return original(path, **kwargs)
+        def run():
+            db = TrackerDatabase(other_path, perform_maintenance=False)
+            try:
+                backups.append(create_rotating_backup(db.connect(), other_path, interval_seconds=0))
+            except Exception as error:
+                errors.append(error)
+            finally:
+                db.close()
+        thread = threading.Thread(target=run)
+        with patch.object(storage, 'quick_check_database', side_effect=verify):
+            thread.start()
+            try:
+                self.assertTrue(entered.wait(5))
+                create_rotating_backup(first.connect(), self.db_path, interval_seconds=0)
+            finally:
+                release.set()
+                thread.join(5)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertTrue(backups[0].exists())
+
+    def test_unremovable_interrupted_backup_prevents_permanent_delete(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        self.addCleanup(database.close)
+        database.record_snapshot(Snapshot(datetime.now(timezone.utc).isoformat(), 'Editor',
+                                          'fixture.editor', 'Keep on failure', 'test'), 5)
+        segment_id = str(database.connect().execute('SELECT id FROM activity_segments').fetchone()[0])
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        temp = backup.with_name(f'.{self.db_path.name}-20261005T010000000000Z.{"b"*32}.tmp')
+        temp.write_bytes(backup.read_bytes())
+        unlink = Path.unlink
+        def refuse(path, *args, **kwargs):
+            if path == temp:
+                raise PermissionError('synthetic locked backup')
+            return unlink(path, *args, **kwargs)
+        with patch.object(Path, 'unlink', refuse), self.assertRaises(PermissionError):
+            database.delete_activity_segments([segment_id])
+        self.assertEqual(database.connect().execute('SELECT count(*) FROM activity_segments').fetchone()[0], 1)
+        self.assertTrue(temp.exists())
 
     def test_truncated_empty_source_recovers_the_existing_backup(self) -> None:
         database = TrackerDatabase(self.db_path)

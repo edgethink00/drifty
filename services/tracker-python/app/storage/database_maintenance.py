@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sqlite3
 import stat
@@ -229,6 +230,23 @@ def _quarantine_candidates(db_path: Path) -> list[Path]:
     )
 
 
+def _interrupted_backup_candidates(db_path: Path) -> list[Path]:
+    # Only names this module generates, including possible SQLite sidecars.
+    # Match the full DB filename, just like its maintenance lock. Different
+    # DBs may share a stem in one directory. Preserve ambiguous legacy names.
+    # Under that lock a matching file cannot belong to a live backup; abrupt
+    # process exit may have bypassed the creator's finally.
+    pattern = re.compile(
+        rf"\.{re.escape(db_path.name)}-\d{{8}}T\d{{12}}Z\.[0-9a-f]{{32}}\.tmp"
+        r"(?:-(?:journal|wal|shm))?"
+    )
+    try:
+        entries = list(database_backup_dir(db_path).iterdir())
+    except FileNotFoundError:
+        return []
+    return [path for path in entries if pattern.fullmatch(path.name) and _is_regular_file(path)]
+
+
 @contextmanager
 def permanent_deletion_guard(
     db_path: Path,
@@ -256,7 +274,8 @@ def permanent_deletion_guard(
             nonlocal invalidated
             if invalidated:
                 return
-            for path in [*_backup_candidates(db_path), *_quarantine_candidates(db_path)]:
+            for path in [*_interrupted_backup_candidates(db_path),
+                         *_backup_candidates(db_path), *_quarantine_candidates(db_path)]:
                 path.unlink()
             _recovery_pending_path(db_path).unlink(missing_ok=True)
             invalidated = True
@@ -413,12 +432,14 @@ def _create_rotating_backup_locked(
     interval_seconds: int,
     retention: int,
 ) -> Path | None:
+    for interrupted in _interrupted_backup_candidates(db_path):
+        interrupted.unlink()
     if not _backup_is_due(db_path, now, interval_seconds):
         return None
     backup_dir = database_backup_dir(db_path)
     backup_dir.mkdir(parents=True, exist_ok=True)
     final_path = _backup_path(db_path, now)
-    temp_path = backup_dir / f".{final_path.name}.{uuid.uuid4().hex}.tmp"
+    temp_path = backup_dir / f".{db_path.name}-{_timestamp_slug(now)}.{uuid.uuid4().hex}.tmp"
     destination: sqlite3.Connection | None = None
     try:
         destination = sqlite3.connect(temp_path)

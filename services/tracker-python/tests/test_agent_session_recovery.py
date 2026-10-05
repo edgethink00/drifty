@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from dataclasses import replace
@@ -17,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.storage.db import TrackerDatabase
 from app import main as tracker_main
+from app import daemon_maintenance
 from app.tracker.dev_signals import ingest
 from app.tracker.dev_signals.adapters import PROVIDERS
 from app.tracker.dev_signals.agent_sessions import parse_codex_session
@@ -275,16 +277,26 @@ class CodexInterruptedTurnTests(unittest.TestCase):
 
         for _ in range(2):
             database = TrackerDatabase(db_path, perform_maintenance=False)
+            completed = threading.Event()
+            worker = tracker_main.DaemonMaintenance(db_path, backfill_days=30, max_files=40)
+            def run_ingest(db, **kwargs):
+                try:
+                    return ingest.ingest_agent_sessions(db, **kwargs)
+                finally:
+                    completed.set()
             try:
                 with patch.object(ingest, "PROVIDERS", (adapter,)), patch.object(
                     ingest, "_turn_rows", wraps=ingest._turn_rows,
-                ) as parse:
-                    tracker_main._maybe_ingest_dev_signals(database, 0, now_wall_seconds=now)
+                ) as parse, patch.object(daemon_maintenance, "ingest_agent_sessions", side_effect=run_ingest):
+                    tracker_main._maybe_ingest_dev_signals(worker, 0, now_wall_seconds=now)
+                    self.assertTrue(completed.wait(5))
+                    worker.close()
                     parse.assert_not_called()
                 self.assertEqual(database.get_meta("dev_signals_watermark_codex"), checkpoint)
                 rows = database.fetch_agent_session_events("2026-10-04T00:00:00Z", "2026-10-05T00:00:00Z")
                 self.assertEqual([row["activeSeconds"] for row in rows], [60])
             finally:
+                worker.close()
                 database.close()
 
         # Normal source updates still use the corrected parser. No historical

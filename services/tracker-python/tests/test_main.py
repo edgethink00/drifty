@@ -2948,14 +2948,15 @@ class TrackerMainTests(unittest.TestCase):
                 "time",
                 side_effect=[0.0, float(tracker_main.DATABASE_BACKUP_CHECK_SECONDS)],
             ), patch.object(
-                tracker_main, "ingest_dev_agent_sessions"
-            ), patch.object(
+                tracker_main, "DaemonMaintenance"
+            ) as maintenance, patch.object(
                 tracker_main.time, "sleep", side_effect=KeyboardInterrupt
             ):
                 with self.assertRaises(KeyboardInterrupt):
                     tracker_main.daemon()
 
-        mock_db.create_periodic_backup.assert_called_once_with()
+        maintenance.return_value.request_backup.assert_called_once_with()
+        maintenance.return_value.close.assert_called_once_with()
 
     @patch("app.main.sys.platform", "darwin")
     def test_daemon_ingests_dev_signals_when_the_window_is_due(self) -> None:
@@ -2975,25 +2976,28 @@ class TrackerMainTests(unittest.TestCase):
                 "time",
                 side_effect=[0.0, float(tracker_main.DEV_SIGNALS_INGEST_INTERVAL_SECONDS)],
             ), patch.object(
-                tracker_main, "ingest_dev_agent_sessions"
-            ) as ingest_sessions, patch.object(
+                tracker_main, "DaemonMaintenance"
+            ) as maintenance, patch.object(
                 tracker_main.time, "sleep", side_effect=KeyboardInterrupt
             ):
                 with self.assertRaises(KeyboardInterrupt):
                     tracker_main.daemon()
 
-        ingest_sessions.assert_called_once_with(
-            mock_db,
+        maintenance.assert_called_once_with(
+            tracker_main.DB_PATH,
             backfill_days=tracker_main.DEV_SIGNALS_BACKFILL_DAYS,
             max_files=tracker_main.DEV_SIGNALS_DAEMON_MAX_FILES,
         )
+        maintenance.return_value.request_agent_ingest.assert_called_once_with()
+        maintenance.return_value.close.assert_called_once_with()
 
     @patch("app.main.sys.platform", "darwin")
-    def test_unexpected_periodic_backup_error_does_not_skip_sampling(self) -> None:
+    def test_unexpected_periodic_backup_scheduling_error_does_not_skip_sampling(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
-            mock_db.create_periodic_backup.side_effect = RuntimeError("backup bug")
+            maintenance = MagicMock()
+            maintenance.request_backup.side_effect = RuntimeError("backup scheduling bug")
             power_state = PowerStateSample(
                 observed_at=datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc),
                 should_capture=False,
@@ -3010,7 +3014,7 @@ class TrackerMainTests(unittest.TestCase):
             ) as capture_exception, patch.object(
                 tracker_main.sys, "stderr", MagicMock()
             ), patch.object(
-                tracker_main, "ingest_dev_agent_sessions"
+                tracker_main, "DaemonMaintenance", return_value=maintenance
             ), patch.object(
                 tracker_main.time, "sleep", side_effect=KeyboardInterrupt
             ):
@@ -3034,7 +3038,7 @@ class TrackerMainTests(unittest.TestCase):
             ),
             100.0,
         )
-        mock_db.create_periodic_backup.assert_not_called()
+        mock_db.request_backup.assert_not_called()
 
         self.assertEqual(
             tracker_main._maybe_create_periodic_backup(
@@ -3042,7 +3046,7 @@ class TrackerMainTests(unittest.TestCase):
             ),
             100.0 + interval,
         )
-        mock_db.create_periodic_backup.assert_called_once_with()
+        mock_db.request_backup.assert_called_once_with()
 
         self.assertEqual(
             tracker_main._maybe_create_periodic_backup(
@@ -3050,7 +3054,7 @@ class TrackerMainTests(unittest.TestCase):
             ),
             50.0,
         )
-        mock_db.create_periodic_backup.assert_called_once_with()
+        mock_db.request_backup.assert_called_once_with()
 
     def test_daemon_tick_leaves_gap_when_foreground_identity_is_unavailable(self) -> None:
         mock_db = MagicMock()

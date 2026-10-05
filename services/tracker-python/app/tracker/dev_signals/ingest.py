@@ -14,6 +14,7 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Callable
 
 from app.platform_locks import lock_exclusive_nonblocking, unlock
 
@@ -30,7 +31,7 @@ CODEX_IDENTITY_VERSION = 2
 #: cadence than session ingestion rather than on every refresh.
 DISCOVERY_INTERVAL_SECONDS = 6 * 60 * 60
 
-#: Ceiling on files read in one pass, so a first run cannot stall the tracker.
+#: Bound the number of files per pass (not the byte count or elapsed time).
 MAX_FILES_PER_PASS = 400
 
 #: Share of every pass reserved for the newest session files.
@@ -272,6 +273,7 @@ def ingest_agent_sessions(
     *,
     backfill_days: int = DEFAULT_BACKFILL_DAYS,
     max_files: int = MAX_FILES_PER_PASS,
+    cancelled: Callable[[], bool] | None = None,
 ) -> tuple[int, int, int]:
     """Ingest new agent turns for every registered provider.
 
@@ -289,18 +291,30 @@ def ingest_agent_sessions(
         if not lock_exclusive_nonblocking(lock_file):
             return 0, 0, 0
         try:
-            return _ingest_agent_sessions(database, backfill_days=backfill_days, max_files=max_files)
+            return _ingest_agent_sessions(database, backfill_days=backfill_days, max_files=max_files,
+                                          cancelled=cancelled)
         finally:
             unlock(lock_file)
 
 
-def _ingest_agent_sessions(database, *, backfill_days: int, max_files: int) -> tuple[int, int, int]:
+class IngestCancelled(Exception):
+    """Stop an optional pass without publishing its partially parsed provider."""
+
+
+def _check_cancelled(cancelled: Callable[[], bool] | None) -> None:
+    if cancelled is not None and cancelled():
+        raise IngestCancelled()
+
+
+def _ingest_agent_sessions(database, *, backfill_days: int, max_files: int,
+                           cancelled: Callable[[], bool] | None = None) -> tuple[int, int, int]:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=max(1, backfill_days))).timestamp()
     total_turns = 0
     total_scanned = 0
     total_skipped = 0
 
     for adapter in PROVIDERS:
+        _check_cancelled(cancelled)
         _prepare_provider_identity(database, adapter)
         watermark, watermark_files = _read_session_watermark(database, adapter.key)
         retry_state, retry_next = _read_session_retries(database, adapter.key)
@@ -316,7 +330,9 @@ def _ingest_agent_sessions(database, *, backfill_days: int, max_files: int) -> t
         candidates: dict[str, tuple[float, Path]] = {}
         for root in roots:
             for item in _candidate_files(root, watermark, cutoff, adapter.patterns, watermark_files, set(retry_files)):
+                _check_cancelled(cancelled)
                 candidates[_file_key(item[1])] = item
+        _check_cancelled(cancelled)
         if not candidates:
             if retry_state:
                 _write_session_watermark(
@@ -345,6 +361,7 @@ def _ingest_agent_sessions(database, *, backfill_days: int, max_files: int) -> t
         completed_at_highest = dict(watermark_files)
         batch: list[dict] = []
         for modified, path in backlog:
+            _check_cancelled(cancelled)
             total_scanned += 1
             try:
                 # Record the version before parsing. An append during parsing
@@ -369,6 +386,7 @@ def _ingest_agent_sessions(database, *, backfill_days: int, max_files: int) -> t
         # The newest files land in the same pass, ahead of the unread middle.
         # They stay behind the watermark so the backlog still gets read.
         for modified, path in [*head, *retries]:
+            _check_cancelled(cancelled)
             total_scanned += 1
             try:
                 _, version = _session_file_state(path)
@@ -387,12 +405,14 @@ def _ingest_agent_sessions(database, *, backfill_days: int, max_files: int) -> t
             if modified == highest:
                 completed_at_highest[_file_key(path)] = version
 
+        _check_cancelled(cancelled)
         total_turns += database.save_agent_session_events(
             batch,
             replace_sessions=adapter.replace_sessions,
         )
         # Only advance the watermark past files this pass actually reached, so a
         # truncated batch resumes instead of skipping the remainder.
+        _check_cancelled(cancelled)
         _write_session_watermark(
             database, adapter.key, highest, completed_at_highest,
             retry_files=[(key, retry_times[key]) for key in dict.fromkeys(retry_queue)], retry_next=retry_next,

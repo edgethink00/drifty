@@ -26,6 +26,7 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 from app.fs_safety import ensure_directory
+from app.daemon_maintenance import DaemonMaintenance
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
 from app.tracker.app_exclusion import match_app_exclusion, redact_snapshot
 from app.platform_locks import (
@@ -63,7 +64,6 @@ from app.tracker.dev_signals.aggregation import peak_concurrency, summarize_agen
 from app.tracker.dev_signals.discovery import discover_repositories as discover_dev_repositories
 from app.tracker.dev_signals.ingest import (
     DEFAULT_BACKFILL_DAYS as DEV_SIGNALS_BACKFILL_DAYS,
-    ingest_agent_sessions as ingest_dev_agent_sessions,
     register_repo as register_dev_repo,
     run_ingest as run_dev_signals_ingest,
 )
@@ -2366,7 +2366,7 @@ def _daemon_tick(
 
 
 def _maybe_create_periodic_backup(
-    db: TrackerDatabase,
+    maintenance: DaemonMaintenance,
     last_check_wall_seconds: float,
     *,
     now_wall_seconds: float | None = None,
@@ -2379,12 +2379,12 @@ def _maybe_create_periodic_backup(
         return current
     if elapsed < DATABASE_BACKUP_CHECK_SECONDS:
         return last_check_wall_seconds
-    db.create_periodic_backup()
+    maintenance.request_backup()
     return current
 
 
 def _maybe_ingest_dev_signals(
-    db: TrackerDatabase,
+    maintenance: DaemonMaintenance,
     last_check_wall_seconds: float,
     *,
     now_wall_seconds: float | None = None,
@@ -2397,11 +2397,7 @@ def _maybe_ingest_dev_signals(
         return current
     if elapsed < DEV_SIGNALS_INGEST_INTERVAL_SECONDS:
         return last_check_wall_seconds
-    ingest_dev_agent_sessions(
-        db,
-        backfill_days=DEV_SIGNALS_BACKFILL_DAYS,
-        max_files=DEV_SIGNALS_DAEMON_MAX_FILES,
-    )
+    maintenance.request_agent_ingest()
     return current
 
 
@@ -2453,6 +2449,7 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
         return
 
     stop_event = None
+    maintenance = None
     try:
         if owner is not None and not owner.is_alive():
             return
@@ -2518,6 +2515,8 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
                     return
 
         last_capture_tick: float | None = None
+        maintenance = DaemonMaintenance(DB_PATH, backfill_days=DEV_SIGNALS_BACKFILL_DAYS,
+                                        max_files=DEV_SIGNALS_DAEMON_MAX_FILES)
         last_backup_check = time.time()
         # One wall-clock read per loop feeds both maintenance windows.
         last_dev_signals_ingest = last_backup_check
@@ -2526,7 +2525,7 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
             backup_check_started_at = time.time()
             try:
                 last_backup_check = _maybe_create_periodic_backup(
-                    db,
+                    maintenance,
                     last_backup_check,
                     now_wall_seconds=backup_check_started_at,
                 )
@@ -2541,7 +2540,7 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
                 break
             try:
                 last_dev_signals_ingest = _maybe_ingest_dev_signals(
-                    db,
+                    maintenance,
                     last_dev_signals_ingest,
                     now_wall_seconds=backup_check_started_at,
                 )
@@ -2574,6 +2573,8 @@ def _daemon_with_owner(owner: WindowsProcessOwner | None) -> None:
                 break
     finally:
         try:
+            if maintenance is not None:
+                maintenance.close()
             _close_loaded_macos_capture()
             _close_loaded_windows_capture()
         finally:
