@@ -231,6 +231,18 @@ describe("leaderboardPublisher", () => {
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 
+  it("preserves the current quota guidance if publication becomes blocked during collection", async () => {
+    getTimeline.mockResolvedValue([]);
+    const result = await publishLeaderboardPeriods({ mode: "join", profileDisplayName: "Alex",
+      leaderboardWindowEndDay: todayIsoDate(), timezone: "Asia/Seoul", startOfDayMinutes: 0,
+      showAiClassificationImpact: false, publicationAllowed: () => false,
+      publicationBlockedReason: () => "quota_exceeded",
+      publicationBlockedError: () => "Cloud AI hourly limit reached. Automatic classification can retry later.",
+    });
+    expect(result.error).toBe("Cloud AI hourly limit reached. Automatic classification can retry later.");
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
+  });
+
   it("builds an exact closed weekly checkpoint without replacing it with today", async () => {
     vi.setSystemTime(new Date(2026, 6, 8, 12, 0, 0, 0));
     const closedDay = "2026-07-05";

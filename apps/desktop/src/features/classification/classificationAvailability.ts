@@ -1,5 +1,7 @@
 import type { AiConnectionStatus, LocalAiProviderStatus } from "../ai-connection/AiConnectionStatusBar";
-import { type AiConnectionIssueKind, type CloudAiConnectionCheck } from "../ai-connection/aiConnectionHealth";
+import type { AiConnectionIssueKind, CloudAiConnectionCheck } from "../ai-connection/aiConnectionHealth";
+import type { CloudAiQuotaWindow } from "./cloudAiRequestBackoff";
+import type { CloudQuotaRecovery } from "./cloudQuotaGuidance";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { AnalysisProvider } from "../settings/analysisModelSetup";
 
@@ -32,7 +34,7 @@ export type ClassificationAvailabilityReason =
   | "cloud_device_limit"
   | "cloud_quota_exceeded";
 
-export type ClassificationRecoveryAction = "connect" | "retry" | "upgrade" | "choose_local" | null;
+export type ClassificationRecoveryAction = "connect" | "retry" | "upgrade" | "choose_local" | "manage_billing" | "manage_devices" | null;
 
 export type ClassificationAvailability = {
   readonly state: ClassificationAvailabilityState;
@@ -46,6 +48,7 @@ export type ClassificationAvailability = {
   readonly showRecovery: boolean;
   readonly recoveryAction: ClassificationRecoveryAction;
   readonly issueKind: AiConnectionIssueKind | null;
+  readonly cloudQuota?: CloudQuotaRecovery;
 };
 
 export type ClassificationAvailabilityInput = {
@@ -62,6 +65,8 @@ export type ClassificationAvailabilityInput = {
   readonly cloudConnectionCheck: CloudAiConnectionCheck | null;
   readonly cloudQuotaExceeded?: boolean;
   readonly cloudQuotaDaily?: boolean;
+  readonly cloudQuotaWindow?: CloudAiQuotaWindow | null;
+  readonly cloudQuotaRetryAtMs?: number | null;
 };
 
 export function resolveClassificationAvailability(input: ClassificationAvailabilityInput): ClassificationAvailability {
@@ -185,9 +190,14 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
     });
   }
   if (input.cloudQuotaExceeded) {
+    const window = input.cloudQuotaWindow ?? (input.cloudQuotaDaily ? "day" : null);
+    const canUpgradeTrial = window === "day" && input.billingEntitlement?.status === "trialing"
+      && input.billingEntitlement.entitlementOwner !== "organization"
+      && !input.billingEntitlementLoading && !input.billingEntitlementError;
     return availability("cloud_locked", "cloud", "cloud_quota_exceeded", {
       showRecovery: true,
-      recoveryAction: input.cloudQuotaDaily ? "upgrade" : "retry",
+      recoveryAction: canUpgradeTrial ? "upgrade" : "retry",
+      cloudQuota: { window, retryAtMs: input.cloudQuotaRetryAtMs ?? null },
     });
   }
   if (input.billingEntitlementLoading) {
@@ -253,12 +263,12 @@ function lockedCloudAvailability(reason: BillingEntitlement["lockedReason"]): Cl
     case "payment_required":
       return availability("cloud_locked", "cloud", "cloud_payment_required", {
         showRecovery: true,
-        recoveryAction: "upgrade",
+        recoveryAction: "manage_billing",
       });
     case "device_limit_reached":
       return availability("cloud_locked", "cloud", "cloud_device_limit", {
         showRecovery: true,
-        recoveryAction: "upgrade",
+        recoveryAction: "manage_devices",
       });
     case "billing_missing":
     case undefined:

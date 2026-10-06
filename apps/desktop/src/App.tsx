@@ -1884,6 +1884,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     cloudConnectionCheck: cloudAiConnectionCheck,
     cloudQuotaExceeded: isCloudQuotaExceeded,
     cloudQuotaDaily: Boolean(cloudRateLimitBackoff && isDailyCloudQuotaBackoff(cloudRateLimitBackoff)),
+    cloudQuotaWindow: cloudRateLimitBackoff?.quotaWindow,
+    cloudQuotaRetryAtMs: cloudRateLimitBackoff?.retryAtMs,
   };
   const cloudClassificationAvailability = resolveClassificationAvailability({
     ...classificationAvailabilityInput,
@@ -2469,6 +2471,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     classificationRecoveryPending: classificationRecoveryPending || classificationRecoveryTransitionPending,
     classificationCatchingUp: isClassificationCatchingUp,
     classificationAvailabilityReason: classificationAvailability.reason,
+    classificationRecoveryAction: classificationAvailability.recoveryAction,
+    classificationCloudQuota: classificationAvailability.cloudQuota,
     showAiClassificationImpact,
     includeBuiltInHeuristics: allowBuiltInHeuristics,
     builtInHeuristicsUnavailableSince,
@@ -3258,6 +3262,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         route: currentAvailability.route,
         reason: currentAvailability.reason,
         recoveryAction: currentAvailability.recoveryAction,
+        cloudQuota: currentAvailability.cloudQuota,
         unavailableSince: builtInHeuristicsUnavailableSinceRef.current,
       } as const : undefined;
       const inferredPendingSeconds = inferredPendingAssessment

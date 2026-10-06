@@ -113,14 +113,15 @@ describe("resolveClassificationAvailability", () => {
     }))).toMatchObject({ reason: "cloud_entitlement_unavailable", recoveryAction: "retry" });
   });
 
-  it("locks Cloud after a confirmed quota and upgrades only a daily limit", () => {
+  it("keeps paid quota recovery separate from trial upgrades", () => {
     expect(resolveClassificationAvailability(input({
       cloudQuotaExceeded: true,
       cloudQuotaDaily: true,
     }))).toMatchObject({
       state: "cloud_locked",
       reason: "cloud_quota_exceeded",
-      recoveryAction: "upgrade",
+      recoveryAction: "retry",
+      cloudQuota: { window: "day", retryAtMs: null },
       allowAutomaticClassification: false,
     });
     expect(resolveClassificationAvailability(input({
@@ -131,6 +132,31 @@ describe("resolveClassificationAvailability", () => {
       reason: "cloud_quota_exceeded",
       recoveryAction: "retry",
     });
+  });
+
+  it.each(["minute", "hour", "day", null] as const)("does not sell another plan to Pro or Enterprise for %s quota", (window) => {
+    for (const entitlementOwner of ["individual", "organization"] as const) {
+      expect(resolveClassificationAvailability(input({
+        billingEntitlement: { ...activeEntitlement, entitlementOwner },
+        cloudQuotaExceeded: true, cloudQuotaWindow: window, cloudQuotaRetryAtMs: 1_800_000_000_000,
+      }))).toMatchObject({ recoveryAction: "retry", cloudQuota: { window, retryAtMs: 1_800_000_000_000 } });
+    }
+  });
+
+  it("offers Upgrade only for a verified individual trial daily quota", () => {
+    const trial = { ...activeEntitlement, status: "trialing" as const };
+    expect(resolveClassificationAvailability(input({ billingEntitlement: trial, cloudQuotaExceeded: true, cloudQuotaWindow: "day" })).recoveryAction).toBe("upgrade");
+    for (const overrides of [
+      { billingEntitlement: null }, { billingEntitlement: trial, billingEntitlementError: "failed" },
+      { billingEntitlement: trial, billingEntitlementLoading: true },
+      { billingEntitlement: trial, cloudQuotaWindow: "hour" as const },
+    ]) {
+      expect(resolveClassificationAvailability(input({ cloudQuotaExceeded: true, cloudQuotaWindow: "day", ...overrides })).recoveryAction).toBe("retry");
+    }
+  });
+
+  it.each([["payment_required", "manage_billing"], ["device_limit_reached", "manage_devices"]] as const)("routes %s to account recovery", (lockedReason, recoveryAction) => {
+    expect(resolveClassificationAvailability(input({ billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason } })).recoveryAction).toBe(recoveryAction);
   });
 
   it("waits while provider or entitlement readiness is still being checked", () => {

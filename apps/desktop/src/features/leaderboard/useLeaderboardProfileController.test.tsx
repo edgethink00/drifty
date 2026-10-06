@@ -26,7 +26,7 @@ vi.mock("../../lib/api/trackerClient", () => ({
   },
 }));
 
-import { optOutLeaderboard } from "./leaderboardService";
+import { optOutLeaderboard, publishOwnLeaderboardCheckpoint } from "./leaderboardService";
 import { saveOwnProfile } from "../profile/profileService";
 
 function defaultProps() {
@@ -66,6 +66,8 @@ describe("useLeaderboardProfileController - AI gate & catch-up UX", () => {
       ...defaultProps(),
       classificationAssessmentReady: false,
       classificationAvailabilityReason: "cloud_quota_exceeded",
+      classificationRecoveryAction: "upgrade",
+      classificationCloudQuota: { window: "day", retryAtMs: null },
     }));
 
     await act(async () => {
@@ -73,8 +75,22 @@ describe("useLeaderboardProfileController - AI gate & catch-up UX", () => {
     });
 
     expect(result.current.leaderboardActionError).toBe(
-      "Daily AI classification limit reached. You can join the leaderboard once your quota resets or after upgrading to Pro.",
+      "Cloud AI daily limit reached. Automatic classification will retry when the wait ends. Trial users can also upgrade to Pro. You can join the leaderboard after AI catches up.",
     );
+  });
+
+  it.each(["minute", "hour", "day", null] as const)("does not suggest Upgrade for a paid %s quota when joining", async (window) => {
+    const { result } = renderHook(() => useLeaderboardProfileController({
+      ...defaultProps(), classificationAssessmentReady: false,
+      classificationAvailabilityReason: "cloud_quota_exceeded", classificationRecoveryAction: "retry",
+      classificationCloudQuota: { window, retryAtMs: new Date("2026-10-06T15:00:00Z").getTime() },
+    }));
+    await act(async () => { await result.current.handleLeaderboardOptIn(); });
+    expect(result.current.leaderboardActionError).toContain("Automatic classification can retry at");
+    expect(result.current.leaderboardActionError).not.toContain("{time}");
+    expect(result.current.leaderboardActionError).not.toMatch(/upgrad/i);
+    if (window !== "day") expect(result.current.leaderboardActionError).not.toMatch(/daily/i);
+    expect(publishOwnLeaderboardCheckpoint).not.toHaveBeenCalled();
   });
 
   beforeEach(() => {

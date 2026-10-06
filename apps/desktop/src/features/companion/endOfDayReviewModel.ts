@@ -1,3 +1,4 @@
+import type { CloudQuotaRecovery } from "../classification/cloudQuotaGuidance";
 import {
   buildAppUsageSummaries,
   buildProductivityDurations,
@@ -71,6 +72,7 @@ export type EndOfDayReviewPendingAssessment = {
   route: ClassificationProviderRoute;
   reason: ClassificationAvailabilityReason;
   recoveryAction: ClassificationRecoveryAction;
+  cloudQuota?: CloudQuotaRecovery;
   unavailableSince?: string | null;
   pendingSeconds?: number;
 };

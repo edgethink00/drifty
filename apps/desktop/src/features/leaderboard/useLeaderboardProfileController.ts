@@ -28,7 +28,9 @@ import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
-import type { ClassificationAvailabilityReason, ClassificationAvailabilityState } from "../classification/classificationAvailability";
+import { cloudQuotaRecoveryMessage, type CloudQuotaRecovery } from "../classification/cloudQuotaGuidance";
+import type { LocalizationController } from "../localization/LocalizationContext";
+import type { ClassificationRecoveryAction, ClassificationAvailabilityReason, ClassificationAvailabilityState } from "../classification/classificationAvailability";
 import {
   LEADERBOARD_AUTO_PUBLISH_SLOT_MS,
   buildLeaderboardAutoPublishPayloadKey,
@@ -83,6 +85,8 @@ type UseLeaderboardProfileControllerInput = {
   readonly classificationRecoveryPending?: boolean;
   readonly classificationCatchingUp?: boolean;
   readonly classificationAvailabilityReason?: ClassificationAvailabilityReason;
+  readonly classificationRecoveryAction?: ClassificationRecoveryAction;
+  readonly classificationCloudQuota?: CloudQuotaRecovery;
   readonly showAiClassificationImpact: boolean;
   readonly includeBuiltInHeuristics?: boolean;
   readonly builtInHeuristicsUnavailableSince?: string | null;
@@ -365,15 +369,16 @@ function resolveLeaderboardBlockedReason(input: {
 function getAssessmentBlockedErrorMessage(
   reason: LeaderboardGateBlockedReason,
   context: "join" | "pre_publish",
-  t: ReturnType<typeof useLocalization>["t"],
+  localization: Pick<LocalizationController, "t" | "effectiveLanguage">,
+  quota?: CloudQuotaRecovery,
+  recoveryAction?: ClassificationRecoveryAction,
 ): string {
   if (reason === "plan_check_failed") {
-    return t("leaderboard.planCheckFailed");
+    return localization.t("leaderboard.planCheckFailed");
   }
   if (reason === "quota_exceeded") {
-    return context === "join"
-      ? "Daily AI classification limit reached. You can join the leaderboard once your quota resets or after upgrading to Pro."
-      : "Daily AI classification limit reached before focus totals were published. You can publish once your quota resets or after upgrading to Pro.";
+    return cloudQuotaRecoveryMessage(quota, recoveryAction === "upgrade", localization)
+      + " " + localization.t(context === "join" ? "leaderboard.quota.joinAfterRecovery" : "leaderboard.quota.publishAfterRecovery");
   }
   if (reason === "catching_up") {
     return context === "join"
@@ -401,6 +406,8 @@ export function useLeaderboardProfileController({
   classificationRecoveryPending = false,
   classificationCatchingUp = false,
   classificationAvailabilityReason = "ready",
+  classificationRecoveryAction = null,
+  classificationCloudQuota,
   showAiClassificationImpact,
   includeBuiltInHeuristics,
   builtInHeuristicsUnavailableSince,
@@ -409,7 +416,7 @@ export function useLeaderboardProfileController({
   user,
   onAuthRequired,
 }: UseLeaderboardProfileControllerInput): UseLeaderboardProfileControllerResult {
-  const { t } = useLocalization();
+  const { t, effectiveLanguage } = useLocalization();
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [ownLeaderboardEntry, setOwnLeaderboardEntry] = useState<OwnLeaderboardEntry | null>(null);
   const [activeLeaderboardPeriod, setActiveLeaderboardPeriod] = useState<LeaderboardPeriod>(DEFAULT_LEADERBOARD_PERIOD);
@@ -461,6 +468,8 @@ export function useLeaderboardProfileController({
   classificationAvailabilityStateRef.current = classificationAvailabilityState;
   const classificationAvailabilityReasonRef = useRef(classificationAvailabilityReason);
   classificationAvailabilityReasonRef.current = classificationAvailabilityReason;
+  const quotaGuidanceRef = useRef({ classificationRecoveryAction, classificationCloudQuota });
+  quotaGuidanceRef.current = { classificationRecoveryAction, classificationCloudQuota };
 
   useEffect(() => () => {
     selectedProfileRequestRef.current += 1;
@@ -1119,7 +1128,7 @@ export function useLeaderboardProfileController({
           catchingUp: classificationCatchingUpRef.current,
           availabilityReason: classificationAvailabilityReasonRef.current,
         });
-        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "join", t));
+        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "join", { t, effectiveLanguage }, quotaGuidanceRef.current.classificationCloudQuota, quotaGuidanceRef.current.classificationRecoveryAction));
         return;
       }
       if (isEffectiveAuthRequired && !hasRequiredAccountAuth) {
@@ -1223,7 +1232,7 @@ export function useLeaderboardProfileController({
           catchingUp: classificationCatchingUpRef.current,
           availabilityReason: classificationAvailabilityReasonRef.current,
         });
-        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "pre_publish", t));
+        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "pre_publish", { t, effectiveLanguage }, quotaGuidanceRef.current.classificationCloudQuota, quotaGuidanceRef.current.classificationRecoveryAction));
         return;
       }
       const result = await publishLeaderboardPeriods({
@@ -1237,6 +1246,11 @@ export function useLeaderboardProfileController({
         builtInHeuristicsUnavailableSince,
         publicationAllowed: () => classificationAssessmentReadyRef.current
           && classificationAssessmentRevisionRef.current === assessmentRevision,
+        publicationBlockedError: () => getAssessmentBlockedErrorMessage(resolveLeaderboardBlockedReason({
+          availabilityState: classificationAvailabilityStateRef.current,
+          catchingUp: classificationCatchingUpRef.current,
+          availabilityReason: classificationAvailabilityReasonRef.current,
+        }), "pre_publish", { t, effectiveLanguage }, quotaGuidanceRef.current.classificationCloudQuota, quotaGuidanceRef.current.classificationRecoveryAction),
         publicationBlockedReason: () => resolveLeaderboardBlockedReason({
           availabilityState: classificationAvailabilityStateRef.current,
           catchingUp: classificationCatchingUpRef.current,
@@ -1285,7 +1299,7 @@ export function useLeaderboardProfileController({
       leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
-  }, [activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, builtInHeuristicsUnavailableSince, classificationAssessmentReady, hasRequiredAccountAuth, includeBuiltInHeuristics, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
+  }, [activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, builtInHeuristicsUnavailableSince, classificationAssessmentReady, effectiveLanguage, t, hasRequiredAccountAuth, includeBuiltInHeuristics, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
 
   const handleLeaderboardOptOut = useCallback(async (options?: { readonly makeProfilePrivate?: boolean }) => {
     setLeaderboardActionLoading(true);

@@ -48,6 +48,7 @@ function renderReview(
     onDismiss?: () => void;
     onOpenDashboard?: () => void;
     onOpenAiSettings?: () => void;
+    onUpgrade?: () => void;
   },
 ) {
   const onDismiss = options?.onDismiss ?? vi.fn();
@@ -59,6 +60,7 @@ function renderReview(
         onDismiss={onDismiss}
         onOpenDashboard={onOpenDashboard}
         onOpenAiSettings={options?.onOpenAiSettings}
+        onUpgrade={options?.onUpgrade}
       />
     </LocalizationTestProvider>,
   );
@@ -84,15 +86,37 @@ describe("CompanionPillDayReview", () => {
         route: "cloud",
         reason: "cloud_quota_exceeded",
         recoveryAction: "upgrade",
+        cloudQuota: { window: "day", retryAtMs: null },
         unavailableSince: "2026-09-11T10:00:00.000Z",
       },
     };
 
-    renderReview(quotaEvent, { onOpenAiSettings: onUpgrade });
+    renderReview(quotaEvent, { onOpenAiSettings: vi.fn(), onUpgrade });
 
     expect(screen.getByText("Daily limit reached")).toBeTruthy();
-    expect(screen.getByText("Daily AI classification limit reached")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Upgrade to Pro" })).toBeTruthy();
+    expect(screen.getByText("Cloud AI daily limit reached")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
+    expect(onUpgrade).toHaveBeenCalledOnce();
+  });
+
+  it.each(["minute", "hour", "day", null] as const)("shows paid %s quota recovery without an upgrade", (window) => {
+    const onUpgrade = vi.fn(), onOpenAiSettings = vi.fn();
+    renderReview({ ...reviewEvent, assessment: {
+      state: "pending", route: "cloud", reason: "cloud_quota_exceeded", recoveryAction: "retry",
+      cloudQuota: { window, retryAtMs: new Date("2026-10-06T15:00:00Z").getTime() },
+    } }, { onUpgrade, onOpenAiSettings });
+    expect(screen.queryByRole("button", { name: "Upgrade to Pro" })).toBeNull();
+    expect(screen.getByText(/Automatic classification can retry at/).textContent).not.toContain("{time}");
+    if (window !== "day") expect(screen.queryByText("Daily limit reached")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "AI settings" }));
+    expect(onOpenAiSettings).toHaveBeenCalledOnce();
+    expect(onUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("uses the stored recovery action rather than deriving Upgrade from a quota reason", () => {
+    renderReview({ ...reviewEvent, assessment: { state: "pending", route: "cloud", reason: "cloud_quota_exceeded", recoveryAction: null } }, { onUpgrade: vi.fn(), onOpenAiSettings: vi.fn() });
+    expect(screen.queryByText(/Trial users/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Upgrade to Pro" })).toBeNull();
   });
 
   it("renders AI disconnected badge only when the provider is genuinely disconnected", () => {
@@ -266,7 +290,7 @@ describe("CompanionPillDayReview", () => {
       },
     };
 
-    const { container } = renderReview(pendingEvent, { onOpenDashboard, onOpenAiSettings });
+    const { container } = renderReview(pendingEvent, { onOpenDashboard, onOpenAiSettings, onUpgrade: onOpenAiSettings });
 
     expect(screen.getByText("Trial ended")).toBeTruthy();
     expect(screen.getByText("Tracked time")).toBeTruthy();
@@ -309,7 +333,7 @@ describe("CompanionPillDayReview", () => {
       },
     };
 
-    renderReview(pendingEvent, { language: "ko", onOpenAiSettings: vi.fn() });
+    renderReview(pendingEvent, { language: "ko", onOpenAiSettings: vi.fn(), onUpgrade: vi.fn() });
     expect(screen.getByText("체험 종료")).toBeTruthy();
     expect(screen.getByText("추적 시간")).toBeTruthy();
     expect(screen.getByText("Pro 체험이 끝났습니다")).toBeTruthy();

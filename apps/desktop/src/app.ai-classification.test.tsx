@@ -220,6 +220,7 @@ vi.mock("./features/profile/profileService", () => ({
 }));
 
 import App from "./App";
+import { cloudAiRequestBackoffs } from "./features/classification/cloudAiRequestBackoff";
 import { readAppStyles } from "./test/readStyles";
 
 const selectedDayMetrics: ClassificationMetrics = {
@@ -1441,6 +1442,23 @@ describe("App AI classification controls", () => {
     const recoveryQuery = aiClassificationMocks.runAiClassificationUntilEmpty.mock.calls[0]?.[0];
     expect(recoveryQuery).not.toHaveProperty("day");
     expect(new Date(recoveryQuery?.end ?? 0).getTime()).toBeGreaterThan(new Date(cutoff).getTime());
+  });
+
+  it("drains the paid quota backlog after expiry without waiting for new activity", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-10-06T10:00:00+09:00"));
+    setRendererFocus(false);
+    cloudAiRequestBackoffs.record({ key: "user-1", status: 429, message: "Minute AI classification quota exceeded", quotaWindow: "minute" });
+    trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, currentAutoClassificationDay()));
+    const view = render(<App />);
+    try {
+      await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
+      await waitFor(() => expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).not.toBeNull());
+      expect(aiClassificationMocks.runAiClassificationUntilEmpty).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_100); });
+      await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalled());
+      expect(cloudAiRequestBackoffs.current("user-1")).toBeNull();
+    } finally { view.unmount(); cloudAiRequestBackoffs.clear(); }
   });
 
   it("probes the recorded Cloud outage backlog without waiting for new activity today", async () => {

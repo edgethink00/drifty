@@ -3,6 +3,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
+import { cloudQuotaTitleKey, cloudQuotaResumeMessage } from "../classification/cloudQuotaGuidance";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { PillBrandMark, PillDismissIcon } from "./CompanionPillIcons";
 
@@ -28,8 +29,8 @@ type BarStyle = CSSProperties & { "--w"?: string; "--glyph"?: string };
 type DonutRingStyle = CSSProperties & { background: string };
 
 
-function pendingAssessmentBadgeKey(reason?: string): TranslationKey {
-  if (reason === "cloud_quota_exceeded") return "companion.dayReview.dailyLimitReached";
+function pendingAssessmentBadgeKey(reason?: string, window?: string | null): TranslationKey {
+  if (reason === "cloud_quota_exceeded") return window === "day" ? "companion.dayReview.dailyLimitReached" : "ai.quota.limitReached";
   if (reason === "cloud_trial_expired") return "companion.dayReview.trialEnded";
   if (reason === "provider_checking" || reason === "cloud_entitlement_checking") {
     return "companion.dayReview.checking";
@@ -63,6 +64,8 @@ export function CompanionPillDayReview({
   const topShare = sources[0]?.percent ?? 0;
   const signals = event.dailySignals;
   const pendingAssessment = event.assessment?.state === "pending" ? event.assessment : null;
+  const pendingAction = pendingAssessment?.recoveryAction === "upgrade" && onUpgrade ? onUpgrade : onOpenAiSettings;
+  const pendingActionLabel = pendingAssessment?.recoveryAction === "upgrade" && onUpgrade ? t("sidebar.cta.upgrade.action") : t("account.aiSettings");
   const longestRun = signals?.longestFocusRunSeconds ?? 0;
   const longestRunStart = signals?.longestFocusRunStartedAt ? new Date(signals.longestFocusRunStartedAt) : null;
   const longestRunStartLabel = longestRunStart && Number.isFinite(longestRunStart.getTime())
@@ -87,7 +90,7 @@ export function CompanionPillDayReview({
             <PillBrandMark />
           </span>
           {t("companion.dayReview.title")}
-          {pendingAssessment ? <span className="eod__badge">{t(pendingAssessmentBadgeKey(pendingAssessment.reason))}</span> : null}
+          {pendingAssessment ? <span className="eod__badge">{t(pendingAssessmentBadgeKey(pendingAssessment.reason, pendingAssessment.cloudQuota?.window))}</span> : null}
           {!pendingAssessment && event.highlightLabel ? <span className="eod__badge">{event.highlightLabel}</span> : null}
         </span>
         <button className="card__close" type="button" title={t("companion.dayReview.dismiss")} onClick={onDismiss}>
@@ -225,21 +228,20 @@ export function CompanionPillDayReview({
             data-tone={pendingAssessment.reason === "cloud_trial_expired" || pendingAssessment.reason === "cloud_quota_exceeded" ? "trial-ended" : undefined}
           >
             <div className="eodv12__pending-head">
-              <b>{t(pendingAssessmentTitleKey(pendingAssessment.reason))}</b>
-              {(onOpenAiSettings || onUpgrade) ? (
+              <b>{t(pendingAssessment.reason === "cloud_quota_exceeded" ? cloudQuotaTitleKey(pendingAssessment.cloudQuota?.window) : pendingAssessmentTitleKey(pendingAssessment.reason))}</b>
+              {pendingAction ? (
                 <button
                   className="act act--primary eodv12__pending-action"
                   type="button"
-                  onClick={
-                    (pendingAssessment.reason === "cloud_quota_exceeded" || pendingAssessment.reason === "cloud_trial_expired") && onUpgrade
-                      ? onUpgrade
-                      : onOpenAiSettings
-                  }
+                  onClick={pendingAction}
                 >
-                  {pendingAssessmentActionLabel(pendingAssessment.reason, t)}
+                  {pendingActionLabel}
                 </button>
               ) : null}
             </div>
+            {pendingAssessment.reason === "cloud_quota_exceeded" ? <p className="eodv12__sub">
+              {cloudQuotaResumeMessage(pendingAssessment.cloudQuota, pendingAssessment.recoveryAction === "upgrade", { t, effectiveLanguage })}
+            </p> : null}
           </div>
         ) : null}
       </div>
@@ -266,13 +268,6 @@ function pendingAssessmentTitleKey(reason: NonNullable<EndOfDayReviewEvent["asse
     return "companion.dayReview.pending.connectAi";
   }
   return "companion.dayReview.pending.disconnected";
-}
-
-function pendingAssessmentActionLabel(reason: string, t: LocalizationController["t"]): string {
-  if (reason === "cloud_quota_exceeded" || reason === "cloud_trial_expired" || reason === "cloud_payment_required" || reason === "cloud_billing_missing") {
-    return t("sidebar.cta.upgrade.action");
-  }
-  return t("account.aiSettings");
 }
 
 function CategoryRow({
