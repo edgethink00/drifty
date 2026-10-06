@@ -288,6 +288,11 @@ class TrackerDatabase:
                   imported_at TEXT NOT NULL
                 );
 
+                -- Parent deletion must find referencing keys without scanning
+                -- the whole import history for each segment under the write lock.
+                CREATE INDEX IF NOT EXISTS idx_browser_history_import_keys_segment_id
+                ON browser_history_import_keys(segment_id);
+
                 CREATE TABLE IF NOT EXISTS youtube_video_metadata (
                   video_id TEXT PRIMARY KEY,
                   category TEXT,

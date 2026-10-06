@@ -934,6 +934,73 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertIn("idx_activity_segments_started_at", indexes)
         self.assertIn("idx_activity_segments_ended_at", indexes)
 
+    def test_existing_import_keys_gain_segment_lookup_without_changing_rows(self) -> None:
+        segment_id = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        with self.database.connect() as conn:
+            conn.execute("DROP INDEX IF EXISTS idx_browser_history_import_keys_segment_id")
+            conn.executemany(
+                "INSERT INTO browser_history_import_keys(import_key, segment_id, imported_at) VALUES (?, ?, ?)",
+                [("linked", segment_id, "2026-04-06"), ("deleted", None, "2026-04-05")],
+            )
+            before = [tuple(row) for row in conn.execute(
+                "SELECT * FROM browser_history_import_keys ORDER BY import_key"
+            )]
+        self.database.close()
+
+        # Upgrade a populated database, then reopen it again to verify idempotence.
+        for _ in range(2):
+            with closing(TrackerDatabase(self.db_path, perform_maintenance=False)) as upgraded:
+                conn = upgraded.connect()
+                after = [tuple(row) for row in conn.execute(
+                    "SELECT * FROM browser_history_import_keys ORDER BY import_key"
+                )]
+                self.assertEqual(after, before)
+                plan = [row["detail"] for row in conn.execute(
+                    "EXPLAIN QUERY PLAN SELECT rowid FROM browser_history_import_keys WHERE segment_id = ?",
+                    (segment_id,),
+                )]
+                self.assertTrue(any("SEARCH" in step and "USING" in step for step in plan), plan)
+                self.assertFalse(any("SCAN browser_history_import_keys" in step for step in plan), plan)
+                self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+    def test_segment_deletion_does_not_scan_every_import_key_for_each_segment(self) -> None:
+        with self.database.connect() as conn:
+            conn.executemany(
+                "INSERT INTO activity_segments(id, started_at, ended_at, duration_seconds, app_name, platform, source)"
+                " VALUES (?, '2026-04-06T09:00:00+00:00', '2026-04-06T09:00:05+00:00', 5, 'QA', 'macos', 'qa')",
+                [(i,) for i in range(1, 302)],
+            )
+            conn.executemany(
+                "INSERT INTO browser_history_import_keys(import_key, segment_id, imported_at) VALUES (?, ?, '2026-04-06')",
+                [(f"deleted-{i}", i) for i in range(1, 301)]
+                + [(f"kept-{i}", 301) for i in range(1000)],
+            )
+
+        # Bound SQLite work rather than wall-clock speed. Without the child-key
+        # index, each parent deletion scans all 1,300 keys and exceeds this budget.
+        progress_calls = 0
+
+        def bound_sqlite_work() -> int:
+            nonlocal progress_calls
+            progress_calls += 1
+            return int(progress_calls >= 300)
+
+        conn.set_progress_handler(bound_sqlite_work, 1000)
+        try:
+            self.assertEqual(self.database.delete_activity_segments([str(i) for i in range(1, 301)]), 300)
+        finally:
+            conn.set_progress_handler(None, 0)
+
+        # Preserve import deduplication keys even when their segment is deleted.
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM browser_history_import_keys").fetchone()[0], 1300)
+        self.assertEqual(conn.execute(
+            "SELECT COUNT(*) FROM browser_history_import_keys WHERE segment_id IS NULL"
+        ).fetchone()[0], 300)
+        self.assertEqual(conn.execute(
+            "SELECT COUNT(*) FROM browser_history_import_keys WHERE segment_id = 301"
+        ).fetchone()[0], 1000)
+        self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+
     def test_hourly_summary_groups_by_hour(self) -> None:
         started_at = "2026-04-06T09:00:00+00:00"
         self.database.insert_segment(
