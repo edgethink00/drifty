@@ -4466,9 +4466,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   ]);
 
   const loadMoreHistorySearchSegments = useCallback(async (): Promise<void> => {
-    if (historySearchLoading || !historySearchHasMoreSegments || historySearchNextCursor === null || normalizedHistorySearchQuery.length === 0) return;
+    if (historySearchLoading || normalizedHistorySearchQuery.length === 0) return;
+    const searchCursor = historySearchNextCursor;
+    const retryFirstPage = searchCursor === null;
+    if (retryFirstPage) {
+      if (historySearchError === null) return;
+    } else if (!historySearchHasMoreSegments) {
+      return;
+    }
 
-    const requestId = historySearchRequestRef.current;
+    const requestId = retryFirstPage
+      ? historySearchRequestRef.current + 1
+      : historySearchRequestRef.current;
+    if (retryFirstPage) historySearchRequestRef.current = requestId;
     setHistorySearchLoading(true);
     setHistorySearchError(null);
 
@@ -4476,15 +4486,23 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const timelinePage = await trackerClient.searchTimeline({
         query: normalizedHistorySearchQuery,
         ...FULL_HISTORY_SEARCH_RANGE,
-        beforeEndedAt: historySearchNextCursor.beforeEndedAt,
-        beforeSegmentId: historySearchNextCursor.beforeSegmentId,
+        ...(searchCursor === null
+          ? {}
+          : {
+              beforeEndedAt: searchCursor.beforeEndedAt,
+              beforeSegmentId: searchCursor.beforeSegmentId,
+            }),
         limit: HISTORY_TIMELINE_PAGE_SIZE,
       });
       const materializedPage = materializeBuiltInHeuristicTimeline(timelinePage.items);
 
       if (historySearchRequestRef.current !== requestId) return;
 
-      setHistorySearchSegments((currentSegments) => mergeHistoryTimelinePages(currentSegments, materializedPage.segments));
+      setHistorySearchSegments((currentSegments) => (
+        retryFirstPage
+          ? materializedPage.segments
+          : mergeHistoryTimelinePages(currentSegments, materializedPage.segments)
+      ));
       setHistorySearchNextCursor(timelinePage.nextCursor);
       setHistorySearchHasMoreSegments(timelinePage.hasMore);
       scheduleAvailableBuiltInHeuristicPersistence(materializedPage.classifications);
@@ -4492,7 +4510,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       loadMissingAppIcons({
         segments: materializedPage.segments,
         shouldReportFailure: () => historySearchRequestRef.current === requestId,
-        failureMessage: "Failed to load additional history search app icons",
+        failureMessage: retryFirstPage
+          ? "Failed to load history search app icons"
+          : "Failed to load additional history search app icons",
       });
       loadMissingSiteIcons(materializedPage.segments);
     } catch (nextError) {
@@ -4504,6 +4524,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       }
     }
   }, [
+    historySearchError,
     historySearchHasMoreSegments,
     historySearchLoading,
     historySearchNextCursor,
@@ -8669,7 +8690,28 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           reason: "Manual project correction.",
           assignedAt,
         }));
-        await trackerClient.saveProjectAssignments(assignments);
+        const result = await trackerClient.saveProjectAssignments(assignments);
+        if (result.saved !== assignments.length) {
+          try {
+            const [storedAssignments, storedWindowAssignments] = await Promise.all([
+              trackerClient.getProjectAssignments?.(dashboardProjectRange) ?? Promise.resolve([]),
+              trackerClient.getProjectWindowAssignments?.(dashboardProjectRange) ?? Promise.resolve([]),
+            ]);
+            setDashboardProjectAssignmentLoad({
+              key: dashboardProjectRangeKey,
+              assignments: storedAssignments ?? [],
+              windowAssignments: storedWindowAssignments ?? [],
+            });
+          } catch {
+            // Keep the incomplete-save error below. The week range effect reloads this cache later.
+          }
+          try {
+            await projectClassification.reload();
+          } catch {
+            // The stored rows remain authoritative on the next successful reload.
+          }
+          throw new Error(`Only ${result.saved} of ${assignments.length} project assignments were saved.`);
+        }
         const changedIds = new Set(assignments.map((assignment) => assignment.segmentId));
         setDashboardProjectAssignmentLoad((current) => {
           if (current.key !== dashboardProjectRangeKey) return current;
@@ -8705,6 +8747,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [
     clearLocalActivityCaches,
     dashboardProjectRangeKey,
+    dashboardProjectRange,
     isDashboardDemoReplayActive,
     isPreviewSurface,
     projectClassification.reload,

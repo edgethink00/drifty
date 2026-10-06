@@ -212,6 +212,30 @@ describe("HistoryView", () => {
     expect(screen.getByText("Try another search.")).toBeTruthy();
   });
 
+  it("shows a failed backend search instead of an empty result and retries it", () => {
+    const onLoadMore = vi.fn();
+
+    render(
+      <HistoryView
+        appIcons={{}}
+        deleting={false}
+        loadMoreError="tracker_search_timeline failed"
+        onDeleteSelected={vi.fn()}
+        onLoadMore={onLoadMore}
+        searchQuery="backend-only-token"
+        searchUsesBackend
+        segments={[]}
+      />,
+    );
+
+    expect(screen.getByRole("alert").textContent).toBe("tracker_search_timeline failed");
+    expect(screen.queryByText("No history records found.")).toBeNull();
+    expect(screen.queryByText("Try another search.")).toBeNull();
+    expect(screen.getByRole("searchbox", { name: /search history/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps History search controls fixed while records scroll independently", () => {
     expect(cssRule(".content--history")).toContain("overflow-y: hidden;");
     expect(cssRule(".content--history .page--history")).toMatch(/display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*min-height:\s*0;/);

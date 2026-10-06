@@ -138,6 +138,10 @@ export function HistoryView({
     if (canLoadBackendRows) void onLoadMore?.();
   }, [canLoadBackendRows, onLoadMore]);
 
+  const retryFailedLoad = useCallback(() => {
+    void onLoadMore?.();
+  }, [onLoadMore]);
+
   useEffect(() => {
     if (!hasMoreRows || loadMoreError) return;
     if (typeof IntersectionObserver === "undefined") return;
@@ -225,16 +229,30 @@ export function HistoryView({
       ) : null}
 
       {groups.length === 0 ? (
-        <div className="history-empty" role="status">
-          <strong>{initialLoading ? t("history.loading") : t("history.empty")}</strong>
-          <span>
-            {initialLoading
-              ? t("history.searching")
-              : query
-                ? t("history.tryAnother")
-                : t("history.emptyDetail")}
-          </span>
-        </div>
+        loadMoreError && !initialLoading ? (
+          <div className="history-empty">
+            <p className="history-load-more-error" role="alert">{loadMoreError}</p>
+            <button
+              type="button"
+              className="app-btn app-btn--secondary history-show-more"
+              disabled={loadingMore}
+              onClick={retryFailedLoad}
+            >
+              {t("common.retry")}
+            </button>
+          </div>
+        ) : (
+          <div className="history-empty" role="status">
+            <strong>{initialLoading ? t("history.loading") : t("history.empty")}</strong>
+            <span>
+              {initialLoading
+                ? t("history.searching")
+                : query
+                  ? t("history.tryAnother")
+                  : t("history.emptyDetail")}
+            </span>
+          </div>
+        )
       ) : (
         <div className="history-groups" ref={scrollRootRef}>
           {groups.map((group) => (
@@ -263,7 +281,7 @@ export function HistoryView({
                 type="button"
                 className="app-btn app-btn--secondary history-show-more"
                 disabled={loadingMore}
-                onClick={() => loadMore()}
+                onClick={retryFailedLoad}
               >
                 {t("common.retry")}
               </button>
