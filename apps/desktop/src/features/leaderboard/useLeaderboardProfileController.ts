@@ -30,7 +30,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
 import type { CloudQuotaRecovery } from "../classification/cloudQuotaGuidance";
 import type { LocalizationController } from "../localization/LocalizationContext";
-import type { ClassificationRecoveryAction, ClassificationAvailabilityReason, ClassificationAvailabilityState } from "../classification/classificationAvailability";
+import { isQuietCloudPause, type ClassificationRecoveryAction, type ClassificationAvailabilityReason, type ClassificationAvailabilityState } from "../classification/classificationAvailability";
 import {
   LEADERBOARD_AUTO_PUBLISH_SLOT_MS,
   buildLeaderboardAutoPublishPayloadKey,
@@ -426,6 +426,7 @@ export function useLeaderboardProfileController({
   const [leaderboardActionLoading, setLeaderboardActionLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboardActionError, setLeaderboardActionError] = useState<string | null>(null);
+  const [leaderboardAssessmentContext, setLeaderboardAssessmentContext] = useState<"join" | "pre_publish" | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileDraft, setProfileDraft] = useState<ProfileDraft>(() => emptyProfileDraft(null, ""));
   const [profileLoading, setProfileLoading] = useState(false);
@@ -482,19 +483,23 @@ export function useLeaderboardProfileController({
     classificationAssessmentRevisionRef.current += 1;
   }
 
+  // Assessment advice follows the current gate and language. Service/action
+  // errors have their own state and must survive an unrelated gate recovery.
+  const leaderboardAssessmentError = !classificationAssessmentReady && leaderboardAssessmentContext
+    ? getAssessmentBlockedErrorMessage(resolveLeaderboardBlockedReason({
+      availabilityState: classificationAvailabilityState,
+      availabilityReason: classificationAvailabilityReason,
+      catchingUp: isClassificationCatchingUp,
+    }), leaderboardAssessmentContext, { t, effectiveLanguage }, classificationCloudQuota, classificationRecoveryAction)
+    : null;
   useEffect(() => {
-    if (classificationAssessmentReady) {
-      setLeaderboardActionError((current) => {
-        if (current?.includes("catching up") || current?.includes("verified") || current?.includes("limit reached")) {
-          return null;
-        }
-        return current;
-      });
+    if (classificationAssessmentReady || isQuietCloudPause({
+      reason: classificationAvailabilityReason,
+      recoveryAction: classificationRecoveryAction,
+    })) {
+      setLeaderboardAssessmentContext(null);
     }
-    if (classificationAvailabilityReason === "cloud_quota_exceeded" && classificationRecoveryAction !== "upgrade") {
-      setLeaderboardActionError((current) => current === t("companion.dayReview.pending.quotaExceeded") ? null : current);
-    }
-  }, [classificationAssessmentReady, classificationAvailabilityReason, classificationRecoveryAction, t]);
+  }, [classificationAssessmentReady, classificationAvailabilityReason, classificationRecoveryAction, leaderboardAssessmentContext]);
   const [leaderboardAutoPublishRefreshing, setLeaderboardAutoPublishRefreshing] = useState(false);
   const [leaderboardAutoPublishError, setLeaderboardAutoPublishError] = useState<string | null>(null);
 
@@ -1122,16 +1127,12 @@ export function useLeaderboardProfileController({
     setLeaderboardActionLoading(true);
     leaderboardManualActionInFlightRef.current = true;
     setLeaderboardActionError(null);
+    setLeaderboardAssessmentContext(null);
     setProfileError(null);
 
     try {
       if (!classificationAssessmentReadyRef.current) {
-        const reason = resolveLeaderboardBlockedReason({
-          availabilityState: classificationAvailabilityStateRef.current,
-          catchingUp: classificationCatchingUpRef.current,
-          availabilityReason: classificationAvailabilityReasonRef.current,
-        });
-        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "join", { t, effectiveLanguage }, quotaGuidanceRef.current.classificationCloudQuota, quotaGuidanceRef.current.classificationRecoveryAction));
+        setLeaderboardAssessmentContext("join");
         return;
       }
       if (isEffectiveAuthRequired && !hasRequiredAccountAuth) {
@@ -1230,12 +1231,7 @@ export function useLeaderboardProfileController({
 
       if (!classificationAssessmentReadyRef.current
         || classificationAssessmentRevisionRef.current !== assessmentRevision) {
-        const reason = resolveLeaderboardBlockedReason({
-          availabilityState: classificationAvailabilityStateRef.current,
-          catchingUp: classificationCatchingUpRef.current,
-          availabilityReason: classificationAvailabilityReasonRef.current,
-        });
-        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "pre_publish", { t, effectiveLanguage }, quotaGuidanceRef.current.classificationCloudQuota, quotaGuidanceRef.current.classificationRecoveryAction));
+        setLeaderboardAssessmentContext("pre_publish");
         return;
       }
       const result = await publishLeaderboardPeriods({
@@ -1262,7 +1258,8 @@ export function useLeaderboardProfileController({
       });
 
       if (!result.success) {
-        setLeaderboardActionError(result.error);
+        if (result.blockedByAssessment) setLeaderboardAssessmentContext("pre_publish");
+        else setLeaderboardActionError(result.error);
         if (result.error === "Not authenticated") onAuthRequired();
         capturePostHogEvent("leaderboard_action", {
           action: "publish",
@@ -1308,6 +1305,7 @@ export function useLeaderboardProfileController({
     setLeaderboardActionLoading(true);
     leaderboardManualActionInFlightRef.current = true;
     setLeaderboardActionError(null);
+    setLeaderboardAssessmentContext(null);
     const makeProfilePrivate = options?.makeProfilePrivate === true;
 
     try {
@@ -1539,7 +1537,7 @@ export function useLeaderboardProfileController({
     isClassificationCatchingUp,
     isClassificationAssessmentReady: classificationAssessmentReady,
     isProfileEditorOpen,
-    leaderboardActionError,
+    leaderboardActionError: leaderboardActionError ?? leaderboardAssessmentError,
     leaderboardActionLoading,
     leaderboardError: leaderboardBlockingError,
     leaderboardLoading: leaderboardBlockingLoading,

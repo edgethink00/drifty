@@ -62,7 +62,10 @@ export type PublishLeaderboardPeriodsInput = {
   readonly publicationBlockedReason?: () => "catching_up" | "checking" | "quota_exceeded" | "plan_check_failed" | "paused" | null;
 };
 
-export type PublishLeaderboardPeriodsResult = LeaderboardResult<LeaderboardPublishPayloads>;
+export type PublishLeaderboardPeriodsResult = LeaderboardResult<LeaderboardPublishPayloads> & {
+  /** Distinguish gate advice from a failed service request without parsing copy. */
+  readonly blockedByAssessment?: true;
+};
 
 export async function buildLeaderboardPublishPayloads(
   input: Omit<PublishLeaderboardPeriodsInput, "mode" | "publicationAllowed">,
@@ -166,6 +169,7 @@ export async function publishLeaderboardPeriods(input: PublishLeaderboardPeriods
       success: false,
       error,
       data: payloads,
+      blockedByAssessment: true,
     };
   }
   const result = await publishLeaderboardPayloads(input.mode, payloads.payloads);

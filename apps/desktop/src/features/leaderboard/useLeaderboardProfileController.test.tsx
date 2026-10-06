@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import type { ActivitySegment } from "@drifty/domain";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLeaderboardProfileController } from "./useLeaderboardProfileController";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -10,6 +11,7 @@ vi.mock("./leaderboardService", () => ({
   fetchGlobalLeaderboard: vi.fn().mockResolvedValue({ success: true, error: null, data: [] }),
   fetchOwnLeaderboardEntry: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
   optOutLeaderboard: vi.fn().mockResolvedValue({ success: true, error: null }),
+  publishOwnFocusTotal: vi.fn().mockResolvedValue({ success: true, error: null }),
   publishOwnLeaderboardCheckpoint: vi.fn().mockResolvedValue({ success: true, error: null, data: true }),
 }));
 
@@ -26,8 +28,9 @@ vi.mock("../../lib/api/trackerClient", () => ({
   },
 }));
 
-import { optOutLeaderboard, publishOwnLeaderboardCheckpoint } from "./leaderboardService";
+import { optOutLeaderboard, publishOwnFocusTotal, publishOwnLeaderboardCheckpoint } from "./leaderboardService";
 import { saveOwnProfile } from "../profile/profileService";
+import { trackerClient } from "../../lib/api/trackerClient";
 
 function defaultProps() {
   return {
@@ -231,5 +234,137 @@ describe("useLeaderboardProfileController - share message", () => {
     });
 
     expect(result.current.profileShareMessage).toBe("먼저 프로필을 저장하거나 리더보드에 참여하면 공개 링크가 만들어집니다.");
+  });
+});
+
+describe("useLeaderboardProfileController - assessment transitions", () => {
+  it.each([
+    ["catching_up", "paid_quota"],
+    ["catching_up", "read_failed"],
+    ["paused", "paid_quota"],
+    ["paused", "read_failed"],
+    ["paused", "ready"],
+  ] as const)("clears %s assessment advice when state becomes %s", async (before, after) => {
+    const { result, rerender } = renderHook(({ transitioned }) => {
+      const nextState = !transitioned ? {
+        classificationAssessmentReady: false,
+        classificationAvailabilityState: before === "paused" ? "degraded" as const : "ready" as const,
+        classificationAvailabilityReason: before === "paused" ? "cloud_disconnected" as const : "ready" as const,
+        classificationCatchingUp: before === "catching_up",
+      } : after === "paid_quota" ? {
+        classificationAssessmentReady: false,
+        classificationAvailabilityState: "cloud_locked" as const,
+        classificationAvailabilityReason: "cloud_quota_exceeded" as const,
+        classificationCatchingUp: false,
+        classificationRecoveryAction: null,
+      } : after === "read_failed" ? {
+        classificationAssessmentReady: false,
+        classificationAvailabilityState: "degraded" as const,
+        classificationAvailabilityReason: "cloud_entitlement_unavailable" as const,
+        classificationCatchingUp: false,
+        classificationRecoveryAction: null,
+      } : {
+        classificationAssessmentReady: true,
+        classificationAvailabilityState: "ready" as const,
+        classificationAvailabilityReason: "ready" as const,
+        classificationCatchingUp: false,
+      };
+      return useLeaderboardProfileController({ ...defaultProps(), ...nextState });
+    }, { initialProps: { transitioned: false } });
+    await act(async () => { await result.current.handleLeaderboardOptIn(); });
+    expect(result.current.leaderboardActionError).not.toBeNull();
+    rerender({ transitioned: true });
+    expect(result.current.leaderboardActionError).toBeNull();
+  });
+});
+
+describe("useLeaderboardProfileController - localized assessment recovery", () => {
+  it.each(["en", "ko"] as const)("clears the %s trial quota notice after assessment is ready", async (language) => {
+    const { result, rerender } = renderHook(({ ready }) => useLeaderboardProfileController({
+      ...defaultProps(),
+      classificationAssessmentReady: ready,
+      classificationAvailabilityState: ready ? "ready" : "cloud_locked",
+      classificationAvailabilityReason: ready ? "ready" : "cloud_quota_exceeded",
+      classificationRecoveryAction: ready ? null : "upgrade",
+    }), {
+      initialProps: { ready: false },
+      wrapper: ({ children }) => <LocalizationTestProvider language={language}>{children}</LocalizationTestProvider>,
+    });
+    await act(async () => { await result.current.handleLeaderboardOptIn(); });
+    expect(result.current.leaderboardActionError).not.toBeNull();
+    rerender({ ready: true });
+    expect(result.current.leaderboardActionError).toBeNull();
+  });
+});
+
+describe("useLeaderboardProfileController - assessment and service error separation", () => {
+  beforeEach(() => {
+    vi.mocked(trackerClient.getTimeline).mockResolvedValue([]);
+    vi.mocked(publishOwnFocusTotal).mockResolvedValue({ success: true, error: null });
+    vi.mocked(publishOwnFocusTotal).mockClear();
+  });
+
+  it("updates a trial quota notice when the language changes", async () => {
+    let language = "en" as "en" | "ko";
+    const { result, rerender } = renderHook(() => useLeaderboardProfileController({
+      ...defaultProps(), classificationAssessmentReady: false,
+      classificationAvailabilityReason: "cloud_quota_exceeded", classificationRecoveryAction: "upgrade",
+    }), { wrapper: ({ children }) => <LocalizationTestProvider language={language}>{children}</LocalizationTestProvider> });
+    await act(async () => { await result.current.handleLeaderboardOptIn(); });
+    expect(result.current.leaderboardActionError).toBe("Daily AI classification limit reached");
+    language = "ko";
+    rerender();
+    expect(result.current.leaderboardActionError).toBe("오늘치 무료 AI 분류 한도에 도달했습니다");
+  });
+
+  it("does not revive a quiet join warning when the next block requires AI recovery", async () => {
+    const { result, rerender } = renderHook(({ quiet }) => useLeaderboardProfileController({
+      ...defaultProps(), classificationAssessmentReady: false,
+      classificationAvailabilityState: quiet ? "cloud_locked" : "degraded",
+      classificationAvailabilityReason: quiet ? "cloud_quota_exceeded" : "cloud_disconnected",
+    }), { initialProps: { quiet: true } });
+    await act(async () => { await result.current.handleLeaderboardOptIn(); });
+    expect(result.current.leaderboardActionError).toBeNull();
+    rerender({ quiet: false });
+    expect(result.current.leaderboardActionError).toBeNull();
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
+  });
+
+  it("keeps a real publication failure through quiet waits and assessment recovery", async () => {
+    const message = "Server publication limit reached";
+    vi.mocked(publishOwnFocusTotal).mockResolvedValue({ success: false, error: message });
+    const { result, rerender } = renderHook(({ ready }) => useLeaderboardProfileController({
+      ...defaultProps(), classificationAssessmentReady: ready,
+      classificationAvailabilityState: ready ? "ready" : "cloud_locked",
+      classificationAvailabilityReason: ready ? "ready" : "cloud_quota_exceeded",
+    }), { initialProps: { ready: true } });
+    await act(async () => { await result.current.handleLeaderboardOptIn(); });
+    expect(publishOwnFocusTotal).toHaveBeenCalled();
+    expect(result.current.leaderboardActionError).toBe(message);
+    rerender({ ready: false });
+    expect(result.current.leaderboardActionError).toBe(message);
+    rerender({ ready: true });
+    expect(result.current.leaderboardActionError).toBe(message);
+  });
+
+  it("clears a gate warning created during payload collection after recovery without publishing", async () => {
+    let resolveTimeline: (segments: ActivitySegment[]) => void;
+    const timeline = new Promise<ActivitySegment[]>((resolve) => { resolveTimeline = resolve; });
+    vi.mocked(trackerClient.getTimeline).mockReturnValue(timeline);
+    vi.mocked(trackerClient.getTimeline).mockClear();
+    const { result, rerender } = renderHook(({ ready }) => useLeaderboardProfileController({
+      ...defaultProps(), classificationAssessmentReady: ready,
+      classificationAvailabilityState: ready ? "ready" : "degraded",
+      classificationAvailabilityReason: ready ? "ready" : "cloud_disconnected",
+    }), { initialProps: { ready: true } });
+    let join: Promise<void>;
+    act(() => { join = result.current.handleLeaderboardOptIn(); });
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    rerender({ ready: false });
+    await act(async () => { resolveTimeline!([]); await join!; });
+    expect(result.current.leaderboardActionError).toContain("paused before");
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
+    rerender({ ready: true });
+    expect(result.current.leaderboardActionError).toBeNull();
   });
 });
