@@ -727,8 +727,9 @@ describe("App AI classification controls", () => {
     expect(cssRule(".content--classification .page")).toMatch(/height:\s*100%;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".content--classification .classification-panel-view")).toMatch(/flex:\s*1 1 auto;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".classification-panel-view__grid")).toMatch(/height:\s*100%;[\s\S]*min-height:\s*0;/);
+    expect(cssRule(".classification-panel-view__grid")).toMatch(/grid-template-columns:\s*minmax\(0,\s*0\.95fr\)\s+minmax\(0,\s*1\.1fr\)\s+minmax\(0,\s*1\.45fr\);/);
     expect(styles).toMatch(/\.content--classification \.page\s*{[\s\S]*container-name:\s*classification-page;[\s\S]*container-type:\s*inline-size;/);
-    expect(styles).toMatch(/@container classification-page \(max-width:\s*55rem\)\s*{[\s\S]*\.classification-panel-view__grid\s*{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);[\s\S]*\.classification-panel-view__panel--detail\s*{[\s\S]*grid-column:\s*1 \/ -1;/);
+    expect(styles).not.toMatch(/@container classification-page\s*\(max-width:\s*55rem\)/);
     expect(styles).toMatch(/\.panel-header\s*{[\s\S]*min-height:\s*52px;[\s\S]*padding:\s*8px 10px 7px;/);
     expect(styles).toMatch(/\.classification-panel-view\s*\{[\s\S]*--classification-row-height:\s*48px;/);
     expect(styles).toMatch(/\.classification-panel-view__category-row,\s*\.classification-panel-view__source-row\s*{[\s\S]*min-height:\s*var\(--classification-row-height\);/);

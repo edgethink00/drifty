@@ -62,7 +62,13 @@
 
 .classification-panel-view__grid {
   display: grid;
-  grid-template-columns: minmax(15rem, 0.95fr) minmax(18rem, 1.1fr) minmax(22rem, 1.45fr);
+  /* The window can shrink to 960px with the sidebar open, leaving this page
+     about 700px wide. Tracks floored at 15/18/22rem (880px) used to overflow
+     and get clipped, so a 55rem container query moved Activity details onto a
+     second row. Keep Categories, Apps & Sites, and Activity details on one
+     row and let the tracks shrink; row titles already ellipsize. The 860px
+     viewport rule still stacks the panels when the shell itself collapses. */
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.1fr) minmax(0, 1.45fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -83,37 +89,6 @@
 
 .classification-panel-view__panel:last-child {
   border-right: none;
-}
-
-/* The native window can shrink to 960px while the expanded sidebar remains
-   visible. At that size the classification page itself is only ~715px wide,
-   so its 880px three-column minimum used to be clipped by the grid's hidden
-   overflow. Reflow against the content container, not the outer viewport:
-   keep Categories and Apps & Sites side by side, then give Activity details
-   the full second row. */
-@container classification-page (max-width: 55rem) {
-  .classification-panel-view {
-    overflow-y: auto;
-  }
-
-  .classification-panel-view__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-content: start;
-    height: max-content;
-    min-height: 100%;
-  }
-
-  .classification-panel-view__panel:nth-child(2) {
-    border-right: none;
-  }
-
-  .classification-panel-view__panel:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--line);
-  }
-
-  .classification-panel-view__panel--detail {
-    grid-column: 1 / -1;
-  }
 }
 
 .classification-panel-view__panel--detail {
