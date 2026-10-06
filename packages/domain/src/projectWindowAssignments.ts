@@ -1,4 +1,4 @@
-import { clipDeviceElapsedTimeSegment } from "./deviceElapsedTime";
+import { aggregateDeviceElapsedTime, clipDeviceElapsedTimeSegment, sampledActivityTimeBounds, sampledActivitySecondsWithinInterval } from "./deviceElapsedTime";
 import { isFailedForegroundCaptureSegment, type ActivitySegment } from "./activity";
 import { preserveCapturedActivityDuration } from "./capturedActivityDuration";
 import type {
@@ -65,7 +65,7 @@ export function buildTeamProjectSliceProjection(
 function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceProjection {
   // Stored assignments from older Windows builds may still reference failed
   // foreground reads. Hide both those slices and unassigned legacy activity.
-  const segments = input.segments
+  const segments = aggregateDeviceElapsedTime(input.segments)
     .filter((segment) => !isFailedForegroundCaptureSegment(segment))
     .map((segment) => preserveCapturedActivityDuration(segment, segment));
   const sourceById = new Map(segments.map((segment) => [segment.id, segment]));
@@ -93,25 +93,36 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
       const projectId = manualBySegmentId.has(source.id)
         ? manualBySegmentId.get(source.id) ?? null
         : input.projectIdForWindow(assignment);
-      const sliceId = `project-window:${input.scope}:${assignment.windowStartedAt}:${source.id}`;
+      const intervals = coveredIntervalsBySourceId.get(source.id) ?? [];
       const bounds = clippedBounds(source, assignment.windowStartedAt, assignment.windowEndedAt);
-      const boundsStartMs = Date.parse(bounds.startedAt);
-      const boundsEndMs = Date.parse(bounds.endedAt);
-      if (Number.isFinite(boundsStartMs) && Number.isFinite(boundsEndMs) && boundsEndMs > boundsStartMs) {
-        const intervals = coveredIntervalsBySourceId.get(source.id) ?? [];
-        intervals.push({ startMs: boundsStartMs, endMs: boundsEndMs });
-        coveredIntervalsBySourceId.set(source.id, intervals);
-      }
-      const slice = clipDeviceElapsedTimeSegment({
-        ...source,
-        id: sliceId,
-        startedAt: bounds.startedAt,
-        endedAt: bounds.endedAt,
-        durationSeconds: overlap.durationSeconds,
+      const windowStart = Date.parse(bounds.startedAt);
+      const windowEnd = Date.parse(bounds.endedAt);
+      if (!Number.isFinite(windowStart) || !Number.isFinite(windowEnd) || windowEnd <= windowStart) continue;
+      const gaps = uncoveredBounds(source, intervals).flatMap(gap => {
+        const startMs = Math.max(windowStart, gap.startMs);
+        const endMs = Math.min(windowEnd, gap.endMs);
+        return endMs > startMs ? [{ startMs, endMs }] : [];
       });
-      coveredSecondsBySourceId.set(source.id, (coveredSecondsBySourceId.get(source.id) ?? 0) + slice.durationSeconds);
-      projectedSegments.push(slice);
-      if (projectId) projectBySegmentId.set(sliceId, projectId);
+      for (const [index, gap] of gaps.entries()) {
+        const sliceId = `project-window:${input.scope}:${assignment.windowStartedAt}:${source.id}${gaps.length > 1 ? ":" + index : ""}`;
+        // Persisted overlap seconds were historically wall-clock seconds. The
+        // local source sample and window bounds own the time budget, including
+        // already-saved windows. Do not allocate an interval twice.
+        const seconds = sampledActivitySecondsWithinInterval(source, gap.startMs, gap.endMs);
+        if (!(seconds > 0)) continue;
+        const slice = clipDeviceElapsedTimeSegment({
+          ...source,
+          id: sliceId,
+          startedAt: new Date(gap.startMs).toISOString(),
+          endedAt: new Date(gap.endMs).toISOString(),
+          durationSeconds: seconds,
+        });
+        intervals.push(gap);
+        coveredIntervalsBySourceId.set(source.id, intervals);
+        coveredSecondsBySourceId.set(source.id, (coveredSecondsBySourceId.get(source.id) ?? 0) + slice.durationSeconds);
+        projectedSegments.push(slice);
+        if (projectId) projectBySegmentId.set(sliceId, projectId);
+      }
     }
   }
 
@@ -156,8 +167,7 @@ function uncoveredBounds(
   source: ActivitySegment,
   coveredIntervals: readonly { readonly startMs: number; readonly endMs: number }[],
 ): Array<{ readonly startMs: number; readonly endMs: number }> {
-  const sourceStartMs = Date.parse(source.startedAt);
-  const sourceEndMs = Date.parse(source.endedAt);
+  const { start: sourceStartMs, end: sourceEndMs } = sampledActivityTimeBounds(source);
   if (!Number.isFinite(sourceStartMs) || !Number.isFinite(sourceEndMs) || sourceEndMs <= sourceStartMs) return [];
 
   const merged: Array<{ startMs: number; endMs: number }> = [];
@@ -196,7 +206,7 @@ function allocateDurationAcrossGaps(
     if (!(availableSeconds > 0)) return [];
     const durationSeconds = index === gaps.length - 1
       ? availableSeconds
-      : Math.min(availableSeconds, Math.max(0, Math.round(totalSeconds * ((gap.endMs - gap.startMs) / totalGapMs))));
+      : Math.min(availableSeconds, Math.max(0, totalSeconds * ((gap.endMs - gap.startMs) / totalGapMs)));
     if (!(durationSeconds > 0)) return [];
     allocatedSeconds += durationSeconds;
     return [{ ...gap, durationSeconds }];
@@ -208,8 +218,7 @@ function clippedBounds(
   windowStartedAt: string,
   windowEndedAt: string,
 ): { readonly startedAt: string; readonly endedAt: string } {
-  const sourceStart = Date.parse(source.startedAt);
-  const sourceEnd = Date.parse(source.endedAt);
+  const { start: sourceStart, end: sourceEnd } = sampledActivityTimeBounds(source);
   const windowStart = Date.parse(windowStartedAt);
   const windowEnd = Date.parse(windowEndedAt);
   if ([sourceStart, sourceEnd, windowStart, windowEnd].some(Number.isNaN)) {

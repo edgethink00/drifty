@@ -2,7 +2,7 @@ import { preserveCapturedActivityDuration } from "./capturedActivityDuration";
 import { isExcludedSegment, isFailedForegroundCaptureSegment, type ActivitySegment } from "./activity";
 
 type WeightedInterval = { start: number; end: number; rate: number };
-type ElapsedProjection = { start: number; end: number; intervals: WeightedInterval[] };
+type ElapsedProjection = { start: number; end: number; intervals: WeightedInterval[]; capturedDensity: number };
 // Derived, in-memory metadata only. JSON/SQLite/sync DTOs never carry it.
 const elapsedProjection = Symbol("deviceElapsedTime");
 type ProjectedSegment = ActivitySegment & { [elapsedProjection]?: ElapsedProjection };
@@ -87,7 +87,7 @@ export function aggregateDeviceElapsedTime(segments: readonly ActivitySegment[])
   return records.map((record, index): ProjectedSegment => preserveCapturedActivityDuration(record.segment, {
     ...record.segment,
     durationSeconds: intervals[index].reduce((total, interval) => total + (interval.end - interval.start) / 1000 * interval.rate, 0),
-    [elapsedProjection]: { start: record.start, end: record.end, intervals: intervals[index] },
+    [elapsedProjection]: { start: record.start, end: record.end, intervals: intervals[index], capturedDensity: record.density },
   }));
 }
 
@@ -124,6 +124,37 @@ export function clipDeviceElapsedTimeSegment(segment: ActivitySegment, window?: 
   return {
     ...segment,
     durationSeconds: intervals.reduce((sum, interval) => sum + (interval.end - interval.start) / 1000 * interval.rate, 0),
-    [elapsedProjection]: { start: Math.max(start, projection.start), end: Math.min(end, projection.end), intervals },
+    [elapsedProjection]: { start: Math.max(start, projection.start), end: Math.min(end, projection.end), intervals, capturedDensity: projection.capturedDensity },
   } as ProjectedSegment;
+}
+
+/** Recorded samples spread across their observed span; an initial point sample
+ * extends forward. Derived multi-device intervals keep their exact allocation. */
+export function sampledActivityTimeBounds(segment: ActivitySegment): { start: number; end: number } {
+  const projection = (segment as ProjectedSegment)[elapsedProjection];
+  if (projection) return projection;
+  const start = Date.parse(segment.startedAt);
+  const capturedEnd = Date.parse(segment.endedAt);
+  const duration = segment.durationSeconds;
+  const valid = Number.isFinite(start) && Number.isFinite(capturedEnd) && capturedEnd >= start
+    && Number.isFinite(duration) && duration > 0;
+  return { start, end: valid ? Math.max(capturedEnd, start + duration * 1000) : start };
+}
+
+export function sampledActivitySecondsWithinInterval(segment: ActivitySegment, start: number, end: number): number {
+  if ((segment as ProjectedSegment)[elapsedProjection]) return activitySecondsWithinInterval(segment, start, end);
+  const bounds = sampledActivityTimeBounds(segment);
+  if (!(bounds.end > bounds.start)) return 0;
+  const overlap = Math.max(0, Math.min(end, bounds.end) - Math.max(start, bounds.start));
+  return overlap / (bounds.end - bounds.start) * segment.durationSeconds;
+}
+
+
+/** Captured sample evidence within a window, before display-only device
+ * allocation. Kept in memory so derived/clipped inputs do not change which
+ * surface an AI classification correction targets. */
+export function sampledActivityEvidenceSecondsWithinInterval(segment: ActivitySegment, start: number, end: number): number {
+  const projection = (segment as ProjectedSegment)[elapsedProjection];
+  if (!projection) return sampledActivitySecondsWithinInterval(segment, start, end);
+  return Math.max(0, Math.min(end, projection.end) - Math.max(start, projection.start)) / 1000 * projection.capturedDensity;
 }

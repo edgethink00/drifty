@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import sys
 import uuid
@@ -3406,12 +3407,12 @@ class TrackerDatabase:
                             continue
                         segment_id = str(overlap.get("segmentId", overlap.get("segment_id", ""))).strip()
                         try:
-                            duration_seconds = int(
+                            duration_seconds = float(
                                 overlap.get("durationSeconds", overlap.get("duration_seconds", 0))
                             )
                         except (TypeError, ValueError):
                             continue
-                        if not segment_id or duration_seconds <= 0:
+                        if not segment_id or not math.isfinite(duration_seconds) or duration_seconds <= 0:
                             continue
                         overlaps.append(
                             {"segmentId": segment_id, "durationSeconds": duration_seconds}
@@ -3425,7 +3426,7 @@ class TrackerDatabase:
                     continue
                 confidence = item.get("confidence")
                 try:
-                    duration_seconds = int(
+                    duration_seconds = float(
                         item.get(
                             "durationSeconds",
                             item.get("duration_seconds", sum(overlap["durationSeconds"] for overlap in overlaps)),
@@ -3433,7 +3434,7 @@ class TrackerDatabase:
                     )
                 except (TypeError, ValueError):
                     continue
-                if duration_seconds <= 0:
+                if not math.isfinite(duration_seconds) or duration_seconds <= 0:
                     continue
 
                 if not conn.in_transaction:
@@ -3536,10 +3537,10 @@ class TrackerDatabase:
                         continue
                     segment_id = str(overlap.get("segmentId", "")).strip()
                     try:
-                        overlap_seconds = int(overlap.get("durationSeconds", 0))
+                        overlap_seconds = float(overlap.get("durationSeconds", 0))
                     except (TypeError, ValueError):
                         continue
-                    if segment_id and overlap_seconds > 0:
+                    if segment_id and math.isfinite(overlap_seconds) and overlap_seconds > 0:
                         overlaps.append(
                             {"segmentId": segment_id, "durationSeconds": overlap_seconds}
                         )
@@ -4544,7 +4545,7 @@ class TrackerDatabase:
     def project_trend_timeline(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
         # Minimal segment view for the Projects tab trend chart + detail sources:
         # attribution happens client-side against project assignments, so only
-        # identity, timing, and app/site labels are needed. window_title,
+        # identity, device, timing, and app/site labels are needed. window_title,
         # site_title, and site_source feed the hide-uncertain-site-context rule
         # and are not serialized.
         query = """
@@ -4559,6 +4560,7 @@ class TrackerDatabase:
                 window_title,
                 site_title,
                 site_source,
+                origin_device_id,
                 platform,
                 source
             FROM activity_segments

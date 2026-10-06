@@ -140,7 +140,7 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
 
 
 def serialize_project_trend_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
-    """Minimal row for the Projects tab trend chart: identity, timing, and the
+    """Minimal row for the Projects tab trend chart: identity, device, timing, and the
     app/site labels its detail view aggregates on. Everything else the full
     timeline serializer emits is unused there and would only inflate the
     multi-day payload."""
@@ -153,6 +153,9 @@ def serialize_project_trend_activity_row(row: Mapping[str, RowValue]) -> dict[st
         "platform": row.get("platform") or "macos",
         "source": row.get("source") or "unknown",
     }
+    device_id = row.get("origin_device_id")
+    if device_id:
+        serialized["deviceId"] = device_id
     bundle_id = row.get("bundle_id")
     if bundle_id:
         serialized["bundleId"] = bundle_id

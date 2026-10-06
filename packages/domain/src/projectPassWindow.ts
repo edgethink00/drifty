@@ -1,3 +1,4 @@
+import { aggregateDeviceElapsedTime, sampledActivityTimeBounds, sampledActivitySecondsWithinInterval, sampledActivityEvidenceSecondsWithinInterval } from "./deviceElapsedTime";
 import type {
   ActivityCategory,
   ActivitySegment,
@@ -97,6 +98,7 @@ type MutableContributor = {
   readonly appName: string;
   readonly domain: string | null;
   durationSeconds: number;
+  capturedSeconds: number;
   readonly segmentIds: Set<string>;
   readonly contexts: Map<string, ProjectPassWindowContributorContext>;
   isShorts: boolean;
@@ -256,36 +258,38 @@ function mergeSeconds(map: Map<string, number>, key: string, seconds: number): v
   map.set(key, (map.get(key) ?? 0) + seconds);
 }
 
-function mutableContributorFrom(segment: ActivitySegment, durationSeconds: number, policy: ProjectPassContextPolicy): MutableContributor {
+function mutableContributorFrom(segment: ActivitySegment, durationSeconds: number, capturedSeconds: number, policy: ProjectPassContextPolicy): MutableContributor {
   const contributor: MutableContributor = {
     key: surfaceKey(segment),
     appName: segment.appName,
     domain: normalizedDomain(segment),
     durationSeconds: 0,
+    capturedSeconds: 0,
     segmentIds: new Set<string>(),
     contexts: new Map<string, ProjectPassWindowContributorContext>(),
     isShorts: false,
     classifications: new Map<string, MutableClassificationSummary>(),
   };
-  mergeContributor(contributor, segment, durationSeconds, policy);
+  mergeContributor(contributor, segment, durationSeconds, capturedSeconds, policy);
   return contributor;
 }
 
-function mergeContributor(contributor: MutableContributor, segment: ActivitySegment, durationSeconds: number, policy: ProjectPassContextPolicy): void {
+function mergeContributor(contributor: MutableContributor, segment: ActivitySegment, durationSeconds: number, capturedSeconds: number, policy: ProjectPassContextPolicy): void {
   contributor.durationSeconds += durationSeconds;
+  contributor.capturedSeconds += capturedSeconds;
   contributor.segmentIds.add(segment.id);
   contributor.isShorts = contributor.isShorts || segment.youtubeIsShorts === true;
   addContext(contributor, segment, durationSeconds, policy);
-  addClassification(contributor, classificationSummary(segment), durationSeconds);
+  addClassification(contributor, classificationSummary(segment), capturedSeconds);
 }
 
-function addContribution(bucket: MutableBucket, segment: ActivitySegment, durationSeconds: number, policy: ProjectPassContextPolicy): void {
+function addContribution(bucket: MutableBucket, segment: ActivitySegment, durationSeconds: number, capturedSeconds: number, policy: ProjectPassContextPolicy): void {
   const key = surfaceKey(segment);
   const contributor = bucket.contributors.get(key);
   if (contributor) {
-    mergeContributor(contributor, segment, durationSeconds, policy);
+    mergeContributor(contributor, segment, durationSeconds, capturedSeconds, policy);
   } else {
-    bucket.contributors.set(key, mutableContributorFrom(segment, durationSeconds, policy));
+    bucket.contributors.set(key, mutableContributorFrom(segment, durationSeconds, capturedSeconds, policy));
   }
   bucket.durationSeconds += durationSeconds;
   mergeSeconds(bucket.segmentOverlaps, segment.id, durationSeconds);
@@ -304,7 +308,10 @@ function dominantClassification(contributor: MutableContributor): Classification
 }
 
 function sortedContributors(contributors: Map<string, MutableContributor>): ProjectPassWindowContributor[] {
+  // Elapsed shares are summary counts, not attention evidence. Preserve the
+  // captured-evidence surface/classification when choosing correction targets.
   return Array.from(contributors.values())
+    .sort((left, right) => right.capturedSeconds - left.capturedSeconds || surfaceLabel(left).localeCompare(surfaceLabel(right)))
     .map((contributor) => {
       const summary = dominantClassification(contributor);
       return {
@@ -320,8 +327,7 @@ function sortedContributors(contributors: Map<string, MutableContributor>): Proj
         productivity: summary.productivity,
         source: summary.source,
       };
-    })
-    .sort((left, right) => right.durationSeconds - left.durationSeconds || surfaceLabel(left).localeCompare(surfaceLabel(right)));
+    });
 }
 
 function surfaceLabel(contributor: Pick<ProjectPassWindowContributor, "appName" | "domain">): string {
@@ -372,10 +378,11 @@ export function buildProjectPassAnalysisWindows(
   };
   const buckets = new Map<number, MutableBucket>();
 
-  for (const segment of segments) {
-    const segmentStartMs = parsedMs(segment.startedAt);
-    const segmentEndMs = parsedMs(segment.endedAt);
-    if (segmentStartMs === null || segmentEndMs === null) continue;
+  // Raw tracker timelines include synced devices. Count elapsed time once;
+  // already-derived inputs retain their exact allocation.
+  for (const segment of aggregateDeviceElapsedTime(segments)) {
+    const { start: segmentStartMs, end: segmentEndMs } = sampledActivityTimeBounds(segment);
+    if (!Number.isFinite(segmentStartMs) || !Number.isFinite(segmentEndMs)) continue;
     const clippedStartMs = Math.max(segmentStartMs, rangeStartMs ?? segmentStartMs);
     const clippedEndMs = Math.min(segmentEndMs, rangeEndMs ?? segmentEndMs);
     if (clippedEndMs <= clippedStartMs) continue;
@@ -384,7 +391,7 @@ export function buildProjectPassAnalysisWindows(
     while (cursorMs < clippedEndMs) {
       const startedAtMs = intervalStartMs(cursorMs, intervalMinutes);
       const endedAtMs = startedAtMs + intervalMs;
-      const overlapSeconds = Math.max(0, Math.round((Math.min(clippedEndMs, endedAtMs) - Math.max(clippedStartMs, startedAtMs)) / 1000));
+      const overlapSeconds = sampledActivitySecondsWithinInterval(segment, Math.max(clippedStartMs, startedAtMs), Math.min(clippedEndMs, endedAtMs));
       if (overlapSeconds > 0) {
         const bucket = buckets.get(startedAtMs) ?? {
           startedAtMs,
@@ -393,7 +400,9 @@ export function buildProjectPassAnalysisWindows(
           contributors: new Map<string, MutableContributor>(),
           segmentOverlaps: new Map<string, number>(),
         };
-        addContribution(bucket, segment, overlapSeconds, contextPolicy);
+        const capturedSeconds = sampledActivityEvidenceSecondsWithinInterval(segment,
+          Math.max(clippedStartMs, startedAtMs), Math.min(clippedEndMs, endedAtMs));
+        addContribution(bucket, segment, overlapSeconds, capturedSeconds, contextPolicy);
         buckets.set(startedAtMs, bucket);
       }
       cursorMs = endedAtMs;

@@ -30,7 +30,7 @@ function classified(
     id,
     startedAt,
     endedAt,
-    durationSeconds: 600,
+    durationSeconds: Math.max(0, (Date.parse(endedAt) - Date.parse(startedAt)) / 1000),
     appName,
     classification: { category, productivity, source, confidence: 0.8, inputFingerprint: `fp-${id}` },
   });
@@ -204,6 +204,50 @@ function mockTracker(overrides: Partial<TrackerApi> = {}): { tracker: TrackerApi
 }
 
 describe("runProjectPass orchestration", () => {
+  it("persists corrections for the captured-evidence surface despite a different elapsed majority", async () => {
+    const raw = [
+      seg({ id: "a", startedAt: "2026-04-06T09:00:00Z", endedAt: "2026-04-06T09:03:00Z", durationSeconds: 19, appName: "Code", classification: { category: "workspace", productivity: "focus", source: "llm", confidence: 0.9 } }),
+      seg({ id: "b", deviceId: "pc", platform: "windows", startedAt: "2026-04-06T09:01:30Z", endedAt: "2026-04-06T09:03:00Z", durationSeconds: 20, appName: "Editor", classification: { category: "workspace", productivity: "focus", source: "llm", confidence: 0.9 } }),
+    ];
+    const { tracker, spies } = mockTracker({ getTimeline: vi.fn(async () => raw) as TrackerApi["getTimeline"] });
+    const inference = vi.fn<ProjectPassInference>(async (_prompt, input) => ({
+      output: { assignments: [], corrections: [{ id: input!.coreWindows[0].id, category: "social_media", productivity: "drift", confidence: 0.99 }] },
+      usage: {},
+    }));
+    await runProjectPass({
+      range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" }, trigger: "manual",
+      tracker, inference, now: () => "2026-04-07T00:00:00Z", contextPolicy: CONTEXT_POLICY,
+    });
+    expect(inference.mock.calls[0][1]!.coreWindows[0].appName).toBe("Editor");
+    expect(spies.saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "b", category: "social_media", productivity: "drift" })]);
+  });
+
+  it("uses elapsed union for raw synced-device prompts and persisted overlaps", async () => {
+    const raw = [
+      seg({ id: "local", startedAt: "2026-04-06T09:00:00Z", endedAt: "2026-04-06T09:06:00Z", durationSeconds: 60, appName: "Code" }),
+      seg({ id: "remote", deviceId: "pc", platform: "windows", startedAt: "2026-04-06T09:00:00Z", endedAt: "2026-04-06T09:06:00Z", durationSeconds: 60, appName: "Editor" }),
+    ];
+    const { tracker, spies } = mockTracker({ getTimeline: vi.fn(async () => raw) as TrackerApi["getTimeline"] });
+    const inference = vi.fn<ProjectPassInference>(async (_prompt, input) => ({
+      output: { assignments: input!.coreWindows.map(w => ({ id: w.id, projectId: "p1", confidence: 0.9 })), corrections: [] },
+      usage: {},
+    }));
+    await runProjectPass({
+      range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" },
+      trigger: "manual", tracker, inference, now: () => "2026-04-07T00:00:00Z", contextPolicy: CONTEXT_POLICY,
+    });
+    const windows = inference.mock.calls.flatMap(call => call[1]!.coreWindows);
+    expect(windows.map(w => w.durationSeconds)).toEqual([30, 30]);
+    expect(windows.every(w => w.segmentOverlaps.reduce((n, s) => n + s.durationSeconds, 0) === w.durationSeconds)).toBe(true);
+    const saved = spies.saveProjectWindowAssignments.mock.calls[0] as unknown as [typeof windows];
+    expect(saved[0].map(w => w.durationSeconds)).toEqual([30, 30]);
+    expect(saved[0].map(w => w.segmentOverlaps)).toEqual([
+      [{ segmentId: "local", durationSeconds: 15 }, { segmentId: "remote", durationSeconds: 15 }],
+      [{ segmentId: "local", durationSeconds: 15 }, { segmentId: "remote", durationSeconds: 15 }],
+    ]);
+    expect(raw.map(s => s.durationSeconds)).toEqual([60, 60]);
+  });
+
   it("omits old Windows capture failures from analysis prompts and saved overlaps", async () => {
     const failedCapture = seg({
       id: "failed",
