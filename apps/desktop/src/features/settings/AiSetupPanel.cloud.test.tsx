@@ -19,7 +19,7 @@ describe("AiSetupPanel Cloud setup", () => {
     window.localStorage.clear();
   });
 
-  it.each([null, "active"] as const)("refreshes an unresolved %s plan instead of offering Upgrade", async (status) => {
+  it.each([null, "active"] as const)("keeps an unresolved %s plan quiet without purchase or refresh actions", (status) => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const { onStartCloudSetup } = renderPanel({
       currentBillingPlan: status === "active" ? "individual" : null,
@@ -31,23 +31,24 @@ describe("AiSetupPanel Cloud setup", () => {
     fireEvent.click(within(card).getByRole("combobox", { name: /^AI model$/i }));
     expect(within(card).queryByRole("button", { name: /Upgrade/i })).toBeNull();
     expect((within(card).getByRole("option", { name: /^Drifty Cloud$/i }) as HTMLButtonElement).disabled).toBe(true);
-    if (status === "active") expect(screen.getByText(/last confirmed plan is Pro/i)).toBeTruthy();
-    await act(async () => fireEvent.click(within(card).getByRole("button", { name: "Refresh plan" })));
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/last confirmed plan is Pro|could not be verified/i)).toBeNull();
+    expect(within(card).queryByRole("button", { name: "Refresh plan" })).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
     expect(onStartCloudSetup).not.toHaveBeenCalled();
   });
 
   it("does not relabel a retained Enterprise seat as individual Pro", () => {
     renderPanel({ billingEntitlementOwner: "organization", billingEntitlementError: "failed" });
     expect(screen.queryByText(/Your last confirmed plan is Pro/)).toBeNull();
-    expect(screen.getByText(/Your Cloud plan could not be verified/i)).toBeTruthy();
+    expect(screen.queryByText(/Your Cloud plan could not be verified/i)).toBeNull();
   });
 
   it("keeps a pending plan check disabled without an Upgrade action", () => {
     renderPanel({ currentBillingPlan: null, billingEntitlementStatus: null, cloudStatusRefreshing: true });
     const card = screen.getByRole("region", { name: /^Model being used$/i });
     fireEvent.click(within(card).getByRole("combobox", { name: /^AI model$/i }));
-    expect((within(card).getByRole("button", { name: "Checking your plan…" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(card).queryByRole("button", { name: /Checking your plan|Refresh plan/i })).toBeNull();
+    expect(within(card).getByRole("option", { name: /^Drifty Cloud$/i })).toHaveProperty("disabled", true);
     expect(within(card).queryByRole("button", { name: /Upgrade/i })).toBeNull();
   });
 
@@ -63,12 +64,8 @@ describe("AiSetupPanel Cloud setup", () => {
     expect(screen.queryByText("Start your trial when you are ready to use Cloud AI.")).toBeNull();
     const card = screen.getByRole("region", { name: /^Model being used$/i });
     fireEvent.click(within(card).getByRole("combobox", { name: /^AI model$/i }));
-    const action = within(card).getByRole("button", { name: state === "checking" ? "Checking your plan…" : "Refresh plan" });
-    if (state === "checking") expect(action).toHaveProperty("disabled", true);
-    else {
-      await act(async () => fireEvent.click(action));
-      expect(refresh).toHaveBeenCalledOnce();
-    }
+    expect(within(card).queryByRole("button", { name: /Checking your plan|Refresh plan|Upgrade/i })).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
     expect(onStartCloudTrial).not.toHaveBeenCalled();
     expect(onStartCloudSetup).not.toHaveBeenCalled();
   });

@@ -153,7 +153,7 @@ export async function publishLeaderboardPeriods(input: PublishLeaderboardPeriods
   const payloads = await buildLeaderboardPublishPayloads(payloadInput);
   if (!publicationAllowed()) {
     const blockedReason = input.publicationBlockedReason?.() ?? "paused";
-    const error = input.publicationBlockedError?.() ?? (blockedReason === "plan_check_failed"
+    const error = input.publicationBlockedError ? input.publicationBlockedError() : (blockedReason === "plan_check_failed"
       ? "Your Cloud plan could not be verified. Open AI settings and refresh your plan, then try again."
       : blockedReason === "quota_exceeded"
       ? "Cloud AI classification limit reached before publishing focus totals."

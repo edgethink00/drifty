@@ -66,6 +66,8 @@ type UseCloudBillingControllerResult = {
 };
 
 export const CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS = 1_500;
+export const CLOUD_ENTITLEMENT_BACKGROUND_RETRY_MS = 30_000;
+const CLOUD_ENTITLEMENT_MAX_BACKGROUND_RETRY_MS = 5 * 60_000;
 
 /**
  * An entitlement check runs on auth resolution, on every return from the billing
@@ -128,12 +130,14 @@ export function useCloudBillingController({
   const couponRedemptionRequestRef = useRef(0);
   const billingActionGenerationRef = useRef(0);
   const billingPortalPendingRef = useRef(false);
+  const entitlementRetryAttemptRef = useRef(0);
 
   // Responses from a previous account (or an unmounted controller) must never
   // open a billing URL or clear the current account's request state.
   useEffect(() => {
     billingActionGenerationRef.current += 1;
     billingEntitlementRequestRef.current += 1;
+    entitlementRetryAttemptRef.current = 0;
     setBillingEntitlement(null);
     cloudTrialRequestRef.current = null;
     setCloudTrialStarting(false);
@@ -150,7 +154,10 @@ export function useCloudBillingController({
     setCloudCheckoutAwaitingBrowser(false);
     setBillingActionError(null);
     setBillingActionErrorCode(null);
-    return () => { billingActionGenerationRef.current += 1; };
+    return () => {
+      billingActionGenerationRef.current += 1;
+      billingEntitlementRequestRef.current += 1;
+    };
   }, [user?.id, hasRequiredAccountAuth, isSupabaseConfigured, shouldCheckBillingEntitlement]);
 
   const activateCloudTrial = useCallback((): Promise<BillingEntitlement> => {
@@ -580,6 +587,9 @@ export function useCloudBillingController({
           error_kind: toAnalyticsErrorKind(result.error),
         });
       }
+    }).catch((error) => {
+      if (cancelled || requestId !== billingEntitlementRequestRef.current) return;
+      setBillingEntitlementError(toErrorMessage(error));
     }).finally(() => {
       if (!cancelled && requestId === billingEntitlementRequestRef.current) setBillingEntitlementLoading(false);
     });
@@ -588,6 +598,23 @@ export function useCloudBillingController({
       cancelled = true;
     };
   }, [shouldCheckBillingEntitlement, user?.id]);
+
+  useEffect(() => {
+    if (!shouldCheckBillingEntitlement || !user?.id || billingEntitlementLoading) return;
+    if (!billingEntitlementError) {
+      entitlementRetryAttemptRef.current = 0;
+      return;
+    }
+    const delay = Math.min(
+      CLOUD_ENTITLEMENT_BACKGROUND_RETRY_MS * 2 ** entitlementRetryAttemptRef.current,
+      CLOUD_ENTITLEMENT_MAX_BACKGROUND_RETRY_MS,
+    );
+    const timer = window.setTimeout(() => {
+      entitlementRetryAttemptRef.current = Math.min(entitlementRetryAttemptRef.current + 1, 4);
+      void refreshBillingEntitlement();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [billingEntitlementError, billingEntitlementLoading, refreshBillingEntitlement, shouldCheckBillingEntitlement, user?.id]);
 
   useEffect(() => {
     void refreshIndividualPricingQuote();

@@ -52,13 +52,14 @@ function defaultProps() {
 }
 
 describe("useLeaderboardProfileController - AI gate & catch-up UX", () => {
-  it("identifies a failed plan check instead of asking the user to reconnect the provider", async () => {
+  it("keeps a failed plan check quiet while retaining the publication gate", async () => {
     const { result } = renderHook(() => useLeaderboardProfileController({
       ...defaultProps(), classificationAssessmentReady: false,
       classificationAvailabilityState: "degraded", classificationAvailabilityReason: "cloud_entitlement_unavailable",
     }));
     await act(async () => { await result.current.handleLeaderboardOptIn(); });
-    expect(result.current.leaderboardActionError).toBe("Your Cloud plan could not be verified. Open AI settings and refresh your plan, then try again.");
+    expect(result.current.leaderboardActionError).toBeNull();
+    expect(publishOwnLeaderboardCheckpoint).not.toHaveBeenCalled();
   });
 
   it("surfaces the quota exceeded error when joining while daily quota has reached limit", async () => {
@@ -75,21 +76,30 @@ describe("useLeaderboardProfileController - AI gate & catch-up UX", () => {
     });
 
     expect(result.current.leaderboardActionError).toBe(
-      "Cloud AI daily limit reached. Automatic classification will retry when the wait ends. Trial users can also upgrade to Pro. You can join the leaderboard after AI catches up.",
+      "Daily AI classification limit reached",
     );
   });
 
-  it.each(["minute", "hour", "day", null] as const)("does not suggest Upgrade for a paid %s quota when joining", async (window) => {
+  it("clears a prior trial quota notice when the plan becomes paid while classification is still paused", async () => {
+    const { result, rerender } = renderHook(({ paid }) => useLeaderboardProfileController({
+      ...defaultProps(), classificationAssessmentReady: false,
+      classificationAvailabilityReason: "cloud_quota_exceeded", classificationRecoveryAction: paid ? null : "upgrade",
+    }), { initialProps: { paid: false } });
+    await act(async () => { await result.current.handleLeaderboardOptIn(); });
+    expect(result.current.leaderboardActionError).toBe("Daily AI classification limit reached");
+    rerender({ paid: true });
+    expect(result.current.leaderboardActionError).toBeNull();
+    expect(publishOwnLeaderboardCheckpoint).not.toHaveBeenCalled();
+  });
+
+  it.each(["minute", "hour", "day", null] as const)("keeps a paid %s quota quiet when joining without publishing", async (window) => {
     const { result } = renderHook(() => useLeaderboardProfileController({
       ...defaultProps(), classificationAssessmentReady: false,
-      classificationAvailabilityReason: "cloud_quota_exceeded", classificationRecoveryAction: "retry",
+      classificationAvailabilityReason: "cloud_quota_exceeded", classificationRecoveryAction: null,
       classificationCloudQuota: { window, retryAtMs: new Date("2026-10-06T15:00:00Z").getTime() },
     }));
     await act(async () => { await result.current.handleLeaderboardOptIn(); });
-    expect(result.current.leaderboardActionError).toContain("Automatic classification can retry at");
-    expect(result.current.leaderboardActionError).not.toContain("{time}");
-    expect(result.current.leaderboardActionError).not.toMatch(/upgrad/i);
-    if (window !== "day") expect(result.current.leaderboardActionError).not.toMatch(/daily/i);
+    expect(result.current.leaderboardActionError).toBeNull();
     expect(publishOwnLeaderboardCheckpoint).not.toHaveBeenCalled();
   });
 

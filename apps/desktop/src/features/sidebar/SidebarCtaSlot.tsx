@@ -4,7 +4,7 @@ import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar"
 import { aiFailureResolvesWithoutUser } from "../ai-connection/aiFailureGuidance";
 import { canStartCloudTrial } from "../billing/billingEligibility";
 import type { BillingEntitlement } from "../billing/billingService";
-import type { ClassificationAvailability } from "../classification/classificationAvailability";
+import { isQuietCloudPause, type ClassificationAvailability } from "../classification/classificationAvailability";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import {
@@ -168,9 +168,7 @@ export function resolveSidebarCtaSlot({
   }
 
   if (billingEntitlementLoading) return null;
-  if (billingEntitlementError && aiStatus.issueKind === "entitlement") {
-    return aiDisconnectedState("entitlement", "Drifty Cloud", false);
-  }
+  if (classificationAvailability && isQuietCloudPause(classificationAvailability)) return null;
   if (billingEntitlementError && !localAiConfigured) return null;
 
   if (canStartCloudTrial(billingEntitlement)) return {

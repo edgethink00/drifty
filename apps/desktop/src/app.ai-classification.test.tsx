@@ -1455,6 +1455,9 @@ describe("App AI classification controls", () => {
       await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
       await waitFor(() => expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).not.toBeNull());
       expect(aiClassificationMocks.runAiClassificationUntilEmpty).not.toHaveBeenCalled();
+      expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
+      expect(screen.queryByText(/Rate limited|AI limit reached|Cloud AI daily limit/i)).toBeNull();
+      expect(document.querySelector(".sidebar-cta")).toBeNull();
       await act(async () => { await vi.advanceTimersByTimeAsync(60_100); });
       await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalled());
       expect(cloudAiRequestBackoffs.current("user-1")).toBeNull();

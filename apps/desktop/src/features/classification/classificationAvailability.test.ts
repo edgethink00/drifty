@@ -62,6 +62,17 @@ describe("resolveClassificationAvailability", () => {
     });
   });
 
+  it.each([
+    ["payment_required", "cloud_payment_required", "manage_billing"],
+    ["device_limit_reached", "cloud_device_limit", "manage_devices"],
+    ["trial_expired", "cloud_trial_expired", "upgrade"],
+  ] as const)("keeps confirmed %s recovery visible even during an older quota wait", (lockedReason, reason, recoveryAction) => {
+    expect(resolveClassificationAvailability(input({
+      cloudQuotaExceeded: true, cloudQuotaDaily: true,
+      billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason },
+    }))).toMatchObject({ reason, recoveryAction, showRecovery: true, allowAutomaticClassification: false });
+  });
+
   it("maps an active but offline Cloud route to retrying rather than billing lock", () => {
     expect(resolveClassificationAvailability(input({ cloudOnline: false }))).toMatchObject({
       state: "retrying",
@@ -89,8 +100,10 @@ describe("resolveClassificationAvailability", () => {
       state: "degraded",
       reason: "cloud_entitlement_unavailable",
       allowRecoveryProbe: true,
-      recoveryAction: "retry",
-      issueKind: "entitlement",
+      recoveryAction: null,
+      showRecovery: false,
+      allowAutomaticClassification: false,
+      issueKind: null,
     });
   });
 
@@ -110,7 +123,7 @@ describe("resolveClassificationAvailability", () => {
     expect(resolveClassificationAvailability(input({
       billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" },
       billingEntitlementError: "failed refresh",
-    }))).toMatchObject({ reason: "cloud_entitlement_unavailable", recoveryAction: "retry" });
+    }))).toMatchObject({ reason: "cloud_entitlement_unavailable", recoveryAction: null, showRecovery: false });
   });
 
   it("keeps paid quota recovery separate from trial upgrades", () => {
@@ -120,7 +133,7 @@ describe("resolveClassificationAvailability", () => {
     }))).toMatchObject({
       state: "cloud_locked",
       reason: "cloud_quota_exceeded",
-      recoveryAction: "retry",
+      recoveryAction: null, showRecovery: false,
       cloudQuota: { window: "day", retryAtMs: null },
       allowAutomaticClassification: false,
     });
@@ -130,7 +143,7 @@ describe("resolveClassificationAvailability", () => {
     }))).toMatchObject({
       state: "cloud_locked",
       reason: "cloud_quota_exceeded",
-      recoveryAction: "retry",
+      recoveryAction: null, showRecovery: false,
     });
   });
 
@@ -139,7 +152,7 @@ describe("resolveClassificationAvailability", () => {
       expect(resolveClassificationAvailability(input({
         billingEntitlement: { ...activeEntitlement, entitlementOwner },
         cloudQuotaExceeded: true, cloudQuotaWindow: window, cloudQuotaRetryAtMs: 1_800_000_000_000,
-      }))).toMatchObject({ recoveryAction: "retry", cloudQuota: { window, retryAtMs: 1_800_000_000_000 } });
+      }))).toMatchObject({ recoveryAction: null, showRecovery: false, cloudQuota: { window, retryAtMs: 1_800_000_000_000 } });
     }
   });
 
@@ -151,7 +164,7 @@ describe("resolveClassificationAvailability", () => {
       { billingEntitlement: trial, billingEntitlementLoading: true },
       { billingEntitlement: trial, cloudQuotaWindow: "hour" as const },
     ]) {
-      expect(resolveClassificationAvailability(input({ cloudQuotaExceeded: true, cloudQuotaWindow: "day", ...overrides })).recoveryAction).toBe("retry");
+      expect(resolveClassificationAvailability(input({ cloudQuotaExceeded: true, cloudQuotaWindow: "day", ...overrides })).recoveryAction).toBeNull();
     }
   });
 
@@ -205,6 +218,17 @@ describe("resolveProjectAnalysisConnected", () => {
 });
 
 describe("applyClassificationAvailabilityToAiStatus", () => {
+  it.each(["quota", "entitlement"] as const)("keeps the %s pause free of an error badge without granting classification", (pause) => {
+    const availability = resolveClassificationAvailability(input(pause === "quota"
+      ? { cloudQuotaExceeded: true, cloudQuotaDaily: true }
+      : { billingEntitlementError: "Unavailable." }));
+    expect(availability.allowAutomaticClassification).toBe(false);
+    const status = applyClassificationAvailabilityToAiStatus({
+      tone: "error", label: "Rate limited", providerLabel: "Drifty Cloud", memoryLabel: null, issueKind: "rate_limited",
+    }, availability);
+    expect(status).toMatchObject({ label: pause === "quota" ? "Connected" : "Checking", issueKind: null });
+  });
+
   it("does not present a retrying provider as connected", () => {
     const retrying = resolveClassificationAvailability(input({
       route: "local",

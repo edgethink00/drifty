@@ -127,8 +127,9 @@ export function applyClassificationAvailabilityToAiStatus(
   status: AiConnectionStatus,
   availability: ClassificationAvailability,
 ): AiConnectionStatus {
-  if (availability.reason === "cloud_entitlement_unavailable" && availability.state === "degraded") {
-    return { tone: "error", label: "Plan check failed", providerLabel: "Drifty Cloud", memoryLabel: null, issueKind: "entitlement" };
+  if (isQuietCloudPause(availability)) {
+    const quotaWait = availability.reason === "cloud_quota_exceeded";
+    return { tone: quotaWait ? "ok" : "neutral", label: quotaWait ? "Connected" : "Checking", providerLabel: "Drifty Cloud", memoryLabel: null, issueKind: null };
   }
   if (availability.state !== "checking" && availability.state !== "retrying") return status;
   return {
@@ -138,6 +139,16 @@ export function applyClassificationAvailabilityToAiStatus(
     memoryLabel: status.memoryLabel,
     issueKind: null,
   };
+}
+
+/** Internal waits must not become account errors or user recovery work. */
+export function isQuietCloudPause(input: {
+  readonly reason: ClassificationAvailabilityReason;
+  readonly recoveryAction?: ClassificationRecoveryAction;
+}): boolean {
+  return input.reason === "cloud_entitlement_checking"
+    || input.reason === "cloud_entitlement_unavailable"
+    || (input.reason === "cloud_quota_exceeded" && input.recoveryAction !== "upgrade");
 }
 
 function resolveLocalAvailability(input: ClassificationAvailabilityInput): ClassificationAvailability {
@@ -189,14 +200,18 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
       recoveryAction: "connect",
     });
   }
+  // A confirmed account block takes precedence over an older quota backoff.
+  if (!input.billingEntitlementLoading && !input.billingEntitlementError && input.billingEntitlement?.status === "locked") {
+    return lockedCloudAvailability(input.billingEntitlement.lockedReason);
+  }
   if (input.cloudQuotaExceeded) {
     const window = input.cloudQuotaWindow ?? (input.cloudQuotaDaily ? "day" : null);
     const canUpgradeTrial = window === "day" && input.billingEntitlement?.status === "trialing"
       && input.billingEntitlement.entitlementOwner !== "organization"
       && !input.billingEntitlementLoading && !input.billingEntitlementError;
     return availability("cloud_locked", "cloud", "cloud_quota_exceeded", {
-      showRecovery: true,
-      recoveryAction: canUpgradeTrial ? "upgrade" : "retry",
+      showRecovery: canUpgradeTrial,
+      recoveryAction: canUpgradeTrial ? "upgrade" : null,
       cloudQuota: { window, retryAtMs: input.cloudQuotaRetryAtMs ?? null },
     });
   }
@@ -204,21 +219,14 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
     return availability("checking", "cloud", "cloud_entitlement_checking");
   }
 
-  // The billing controller keeps loading=true while it silently confirms the
-  // first transport failure. An exposed error therefore already represents a
-  // repeated failure and should move from quiet retrying to visible recovery.
+  // Keep the access gate closed while the billing controller retries in the
+  // background. A failed read does not confirm a Free plan or account block.
   if (input.billingEntitlementError) {
     return availability("degraded", "cloud", "cloud_entitlement_unavailable", {
       allowRecoveryProbe: true,
-      showRecovery: true,
-      recoveryAction: "retry",
-      issueKind: "entitlement",
     });
   }
 
-  if (input.billingEntitlement?.status === "locked") {
-    return lockedCloudAvailability(input.billingEntitlement.lockedReason);
-  }
   const cloudFailures = input.cloudConnectionCheck?.consecutiveFailures ?? 0;
   const cloudIssueKind = input.cloudConnectionCheck?.issueKind ?? null;
   if (cloudFailures >= 2) {
@@ -247,10 +255,7 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
       allowBuiltInHeuristics: true,
     });
   }
-  return availability("unavailable", "cloud", "cloud_entitlement_unavailable", {
-    showRecovery: true,
-    recoveryAction: "choose_local",
-  });
+  return availability("unavailable", "cloud", "cloud_entitlement_unavailable");
 }
 
 function lockedCloudAvailability(reason: BillingEntitlement["lockedReason"]): ClassificationAvailability {

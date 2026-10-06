@@ -33,6 +33,7 @@ export const ORGANIZATION_SEAT_MANAGEMENT_URL = "https://drifty.so/account/organ
 export type AccountSettingsSectionProps = {
   readonly billingCheckoutAwaitingConfirmation?: boolean;
   readonly billingActionErrorCode?: CheckoutFailureCode | null;
+  readonly billingActionError?: string | null;
   readonly onCheckForUpdates?: () => void;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlement?: BillingEntitlement | null;
@@ -83,6 +84,7 @@ export type AccountSettingsSectionProps = {
 export function AccountSettingsSection({
   billingCheckoutAwaitingConfirmation = false,
   billingActionErrorCode,
+  billingActionError = null,
   onCheckForUpdates,
   billingCheckoutLoadingInterval,
   billingEntitlement = null,
@@ -251,7 +253,7 @@ export function AccountSettingsSection({
   const planStatusUnknown = isSignedIn && isSupabaseConfigured && billingEntitlementStatus === null;
   const planNeedsRefresh = planStatusUnknown || Boolean(billingEntitlementError);
   const plansDisabled = billingPlansDisabled || planActionBusy || planNeedsRefresh || cloudStatusRefreshing;
-  const actionError = localActionError ?? billingEntitlementError;
+  const actionError = localActionError ?? billingActionError;
   const billingProgress = billingCheckoutAwaitingConfirmation
     ? t("settings.account.checkoutPending")
     : planActionBusy ? t("settings.account.billingOpening") : null;
@@ -309,10 +311,10 @@ export function AccountSettingsSection({
         ) : null}
         <div className="settings-row account-plan-summary">
           <div>
-            <div className="lbl">{trialAvailable ? t("billing.trialActivation.available") : organizationSeatCopy ? organizationSeatCopy.title : planStatusUnknown ? t(cloudStatusRefreshing ? "settings.account.planChecking" : "settings.account.planUnavailable") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
+            <div className="lbl">{trialAvailable ? t("billing.trialActivation.available") : organizationSeatCopy ? organizationSeatCopy.title : planStatusUnknown ? t("settings.ai.status.checking") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
             <div className="desc">{trialAvailable ? t("billing.trialActivation.availableBody") : organizationSeat && organizationSeatCopy
               ? [organizationSeatCopy.summary, t("settings.account.organizationRole", { role: organizationRoleLabel(organizationSeat.role, t) })].join(" ")
-              : planStatusUnknown ? t("settings.account.planUnknownDescription") : isTrialing
+              : planStatusUnknown ? "" : isTrialing
                 ? t("billing.plan.trialBadge")
                 : planState === "trial_expired"
                   ? t("settings.account.trialEndedSummary")
@@ -326,10 +328,6 @@ export function AccountSettingsSection({
               onClick={(event) => { event.currentTarget.focus(); setPlanModalOpen(true); }}>
               {t("settings.account.changePlan")}
             </button>
-            {planNeedsRefresh ? (
-              <button type="button" className="settings-btn" disabled={cloudStatusRefreshing}
-                onClick={() => void onRefreshCloudStatus()}>{t("settings.account.refreshPlan")}</button>
-            ) : null}
             {canManageCurrentPlan && !organizationSeat ? (
               <button type="button" className="settings-btn" disabled={planActionBusy || billingPlansDisabled}
                 onClick={() => void runBillingAction(onManageCloudBilling)}>
@@ -461,11 +459,6 @@ export function AccountSettingsSection({
       {organizationOpenError ? <p className="account-plan-progress" role="alert">{t("settings.account.organizationOpenFailed")}</p> : null}
 
       <AccountPlanModal open={planModalOpen} busy={planActionBusy} onClose={() => setPlanModalOpen(false)}>
-        {planNeedsRefresh ? <div className="account-plan-progress" role="status">
-          <p>{t("settings.account.planUnknownDescription")}</p>
-          <button type="button" className="modal-btn" disabled={cloudStatusRefreshing}
-            onClick={() => void onRefreshCloudStatus()}>{t("settings.account.refreshPlan")}</button>
-        </div> : null}
         {canManageCurrentPlan ? <p className="account-plan-progress">{t("settings.account.existingPlanComparison")}</p> : null}
         {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
         {planCards}

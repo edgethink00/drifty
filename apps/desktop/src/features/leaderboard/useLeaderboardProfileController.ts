@@ -28,7 +28,7 @@ import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
-import { cloudQuotaRecoveryMessage, type CloudQuotaRecovery } from "../classification/cloudQuotaGuidance";
+import type { CloudQuotaRecovery } from "../classification/cloudQuotaGuidance";
 import type { LocalizationController } from "../localization/LocalizationContext";
 import type { ClassificationRecoveryAction, ClassificationAvailabilityReason, ClassificationAvailabilityState } from "../classification/classificationAvailability";
 import {
@@ -360,7 +360,7 @@ function resolveLeaderboardBlockedReason(input: {
   readonly catchingUp: boolean;
 }): LeaderboardGateBlockedReason {
   if (input.availabilityReason === "cloud_quota_exceeded") return "quota_exceeded";
-  if (input.availabilityReason === "cloud_entitlement_unavailable") return "plan_check_failed";
+  if (input.availabilityReason === "cloud_entitlement_unavailable" || input.availabilityReason === "cloud_entitlement_checking") return "plan_check_failed";
   if (input.catchingUp) return "catching_up";
   if (input.availabilityState === "checking") return "checking";
   return "paused";
@@ -370,15 +370,15 @@ function getAssessmentBlockedErrorMessage(
   reason: LeaderboardGateBlockedReason,
   context: "join" | "pre_publish",
   localization: Pick<LocalizationController, "t" | "effectiveLanguage">,
-  quota?: CloudQuotaRecovery,
+  _quota?: CloudQuotaRecovery,
   recoveryAction?: ClassificationRecoveryAction,
-): string {
+): string | null {
   if (reason === "plan_check_failed") {
-    return localization.t("leaderboard.planCheckFailed");
+    return null;
   }
   if (reason === "quota_exceeded") {
-    return cloudQuotaRecoveryMessage(quota, recoveryAction === "upgrade", localization)
-      + " " + localization.t(context === "join" ? "leaderboard.quota.joinAfterRecovery" : "leaderboard.quota.publishAfterRecovery");
+    if (recoveryAction !== "upgrade") return null;
+    return localization.t("companion.dayReview.pending.quotaExceeded");
   }
   if (reason === "catching_up") {
     return context === "join"
@@ -491,7 +491,10 @@ export function useLeaderboardProfileController({
         return current;
       });
     }
-  }, [classificationAssessmentReady]);
+    if (classificationAvailabilityReason === "cloud_quota_exceeded" && classificationRecoveryAction !== "upgrade") {
+      setLeaderboardActionError((current) => current === t("companion.dayReview.pending.quotaExceeded") ? null : current);
+    }
+  }, [classificationAssessmentReady, classificationAvailabilityReason, classificationRecoveryAction, t]);
   const [leaderboardAutoPublishRefreshing, setLeaderboardAutoPublishRefreshing] = useState(false);
   const [leaderboardAutoPublishError, setLeaderboardAutoPublishError] = useState<string | null>(null);
 
@@ -1259,7 +1262,7 @@ export function useLeaderboardProfileController({
       });
 
       if (!result.success) {
-        setLeaderboardActionError(result.error ?? "Unable to join leaderboard");
+        setLeaderboardActionError(result.error);
         if (result.error === "Not authenticated") onAuthRequired();
         capturePostHogEvent("leaderboard_action", {
           action: "publish",

@@ -84,7 +84,7 @@ import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_
 import { testCloudAiConnection } from "./features/settings/cloudAiConnectionTest";
 import { getClassificationActivitySnapshot, useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
-import { applyClassificationAvailabilityToAiStatus, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch } from "./features/classification/classificationAvailability";
+import { applyClassificationAvailabilityToAiStatus, isQuietCloudPause, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch } from "./features/classification/classificationAvailability";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
@@ -2551,15 +2551,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // failure hysteresis); only cloud runs surface summary errors here, and
     // content-level failures (provider answered, output unusable) never do.
     classificationIssueKind: selectedClassificationRoute === "cloud" ? establishedCloudClassificationIssueKind : null,
-    cloudIssueKind: isCloudQuotaExceeded
+    cloudIssueKind: classificationAvailability.reason === "cloud_quota_exceeded" && classificationAvailability.showRecovery
       ? "rate_limited"
-      : selectedClassificationRoute === "cloud" && billingEntitlementError
-        ? "entitlement"
-        : selectedClassificationRoute === "cloud" && billingEntitlement?.lockedReason === "device_limit_reached"
+      : selectedClassificationRoute === "cloud" && billingEntitlement?.lockedReason === "device_limit_reached"
           ? "provider"
           : null,
   });
-  const aiConnectionStatus = classificationAvailabilityGateEnabled
+  const aiConnectionStatus = classificationAvailabilityGateEnabled || isQuietCloudPause(classificationAvailability)
     ? applyClassificationAvailabilityToAiStatus(resolvedAiConnectionStatus, classificationAvailability)
     : resolvedAiConnectionStatus;
   const previousAiClassificationProviderKeyRef = useRef<string | null>(null);
@@ -10027,7 +10025,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   const effectiveBillingEntitlement = activeDashboardAiUnavailablePreviewInput?.billingEntitlement ?? billingEntitlement;
   const effectiveBillingEntitlementError = activeDashboardAiUnavailablePreviewInput?.billingEntitlementError ?? billingEntitlementError;
-  const effectiveBillingSettingsError = effectiveBillingEntitlementError ?? billingActionError;
   const effectiveBillingEntitlementLoading = activeDashboardAiUnavailablePreviewInput?.billingEntitlementLoading ?? billingEntitlementLoading;
   const effectiveIsSupabaseConfigured = activeDashboardAiUnavailablePreviewInput?.isSupabaseConfigured ?? isSupabaseConfigured;
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
@@ -10912,7 +10909,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     billingActionErrorCode={billingActionErrorCode}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                    billingEntitlementError={effectiveBillingSettingsError}
+                    billingEntitlementError={effectiveBillingEntitlementError}
+                    billingActionError={billingActionError}
                     billingEntitlement={effectiveBillingEntitlement}
                     billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}

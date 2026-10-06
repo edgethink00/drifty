@@ -40,7 +40,7 @@ describe("Account plan comparison", () => {
     const {rerender} = render(<AccountSettingsSection {...props} />);
     expect(screen.getByText("Free trial")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", {name: "Change plan"}));
-    rerender(<AccountSettingsSection {...props} billingEntitlementError="Checkout could not be opened." />);
+    rerender(<AccountSettingsSection {...props} billingActionError="Checkout could not be opened." />);
     expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toContain("Checkout could not be opened");
     expect(within(screen.getByRole("dialog")).queryByText("Current plan")).toBeNull();
   });
@@ -63,7 +63,7 @@ describe("Account plan comparison", () => {
     const free = screen.getByRole("button", {name: "Open AI setup"});
     expect(free).toHaveProperty("disabled", true);
     fireEvent.click(free); expect(aiSetup).not.toHaveBeenCalled();
-    rerender(<AccountSettingsSection {...props} billingEntitlementError="Update Drifty to confirm the current price." billingActionErrorCode="pricing_revision_mismatch" />);
+    rerender(<AccountSettingsSection {...props} billingActionError="Update Drifty to confirm the current price." billingActionErrorCode="pricing_revision_mismatch" />);
     fireEvent.click(screen.getByRole("button", {name: "Check for updates"}));
     expect(update).toHaveBeenCalledTimes(1);
     rerender(<AccountSettingsSection {...props} billingCheckoutLoadingInterval="monthly" />);
@@ -90,20 +90,21 @@ describe("Account plan hardening", () => {
     fireEvent.click(screen.getByRole("button", {name: "Change plan"}));
     expect(screen.getByRole("button", {name: /choose drifty pro plan/i})).toHaveProperty("disabled", false);
   });
-  it("never calls an unconfirmed subscription Free and provides refresh inside the dialog", () => {
+  it("never calls an unconfirmed subscription Free or adds a refresh action", () => {
     const refresh = vi.fn();
     const props = {...defaults, currentBillingPlan: null, billingEntitlementStatus: null, billingEntitlementLockedReason: null, onRefreshCloudStatus: refresh, onOpenAiSetup: vi.fn()};
     const {rerender} = render(<AccountSettingsSection {...props} cloudStatusRefreshing />);
-    expect(screen.getByText("Checking your plan…")).toBeTruthy();
+    expect(screen.getByText("Checking")).toBeTruthy();
     expect(screen.queryByText("Free")).toBeNull();
     rerender(<AccountSettingsSection {...props} billingEntitlementError="Offline" />);
-    expect(screen.getByText("Plan unavailable")).toBeTruthy();
+    expect(screen.getByText("Checking")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", {name: "Change plan"}));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("button", {name: /choose drifty pro plan/i})).toHaveProperty("disabled", true);
     expect(within(dialog).getByRole("button", {name: "Open AI setup"})).toHaveProperty("disabled", false);
-    fireEvent.click(within(dialog).getByRole("button", {name: "Refresh plan"}));
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(within(dialog).queryByRole("button", {name: "Refresh plan"})).toBeNull();
+    expect(screen.queryByText("Offline")).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
   });
   it("explains browser confirmation and preserves the guard when comparison is reopened", () => {
     render(<AccountSettingsSection {...defaults} billingCheckoutAwaitingConfirmation billingPlansDisabled />);

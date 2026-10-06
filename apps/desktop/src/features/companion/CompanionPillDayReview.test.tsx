@@ -94,22 +94,33 @@ describe("CompanionPillDayReview", () => {
     renderReview(quotaEvent, { onOpenAiSettings: vi.fn(), onUpgrade });
 
     expect(screen.getByText("Daily limit reached")).toBeTruthy();
-    expect(screen.getByText("Cloud AI daily limit reached")).toBeTruthy();
+    expect(screen.getByText("Daily AI classification limit reached")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
     expect(onUpgrade).toHaveBeenCalledOnce();
   });
 
-  it.each(["minute", "hour", "day", null] as const)("shows paid %s quota recovery without an upgrade", (window) => {
+  it("keeps an unverified Cloud plan quiet without presenting assessed focus totals", () => {
+    renderReview({ ...reviewEvent, assessment: {
+      state: "pending", route: "cloud", reason: "cloud_entitlement_unavailable", recoveryAction: null,
+    } });
+    expect(screen.queryByText(/AI disconnected|plan check failed|classification is paused/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "AI settings" })).toBeNull();
+    expect(screen.queryByText("4h 12m")).toBeNull();
+    expect(screen.getByRole("button", { name: "See full day" })).toBeTruthy();
+  });
+
+  it.each(["minute", "hour", "day", null] as const)("keeps paid %s quota quiet and unassessed", (window) => {
     const onUpgrade = vi.fn(), onOpenAiSettings = vi.fn();
     renderReview({ ...reviewEvent, assessment: {
-      state: "pending", route: "cloud", reason: "cloud_quota_exceeded", recoveryAction: "retry",
+      state: "pending", route: "cloud", reason: "cloud_quota_exceeded", recoveryAction: null,
       cloudQuota: { window, retryAtMs: new Date("2026-10-06T15:00:00Z").getTime() },
     } }, { onUpgrade, onOpenAiSettings });
     expect(screen.queryByRole("button", { name: "Upgrade to Pro" })).toBeNull();
-    expect(screen.getByText(/Automatic classification can retry at/).textContent).not.toContain("{time}");
-    if (window !== "day") expect(screen.queryByText("Daily limit reached")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "AI settings" }));
-    expect(onOpenAiSettings).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/limit reached|retry at|quota|AI disconnected/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "AI settings" })).toBeNull();
+    expect(screen.getByText("Tracked time")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "See full day" })).toBeTruthy();
+    expect(onOpenAiSettings).not.toHaveBeenCalled();
     expect(onUpgrade).not.toHaveBeenCalled();
   });
 

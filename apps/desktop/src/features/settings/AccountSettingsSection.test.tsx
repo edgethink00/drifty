@@ -52,10 +52,17 @@ describe("AccountSettingsSection", () => {
     fireEvent.click(paidAction);
     expect(props.onStartCloudSetup).not.toHaveBeenCalled();
     expect(props.onManageCloudBilling).not.toHaveBeenCalled();
-    if (!checking) {
-      await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Refresh plan" })));
-      expect(props.onRefreshCloudStatus).toHaveBeenCalledOnce();
-    }
+    expect(screen.queryByRole("button", { name: "Refresh plan" })).toBeNull();
+    expect(screen.queryByText(/Plan check unavailable|subscription status has not been confirmed/i)).toBeNull();
+    expect(props.onRefreshCloudStatus).not.toHaveBeenCalled();
+  });
+
+  it("keeps an explicit billing action failure visible while a background read failure stays quiet", () => {
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlementError: "Background read failed.", billingActionError: "Checkout could not open.",
+    })} />);
+    expect(screen.getByText("Checkout could not open.")).toBeTruthy();
+    expect(screen.queryByText("Background read failed.")).toBeNull();
   });
 
   it("shows active Cloud devices in Account settings and confirms before removing a non-current device", async () => {

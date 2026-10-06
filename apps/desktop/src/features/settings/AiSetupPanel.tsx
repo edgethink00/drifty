@@ -86,10 +86,8 @@ export function AiSetupPanel({
   onStartCloudTrial,
   billingCheckoutLoadingInterval,
   billingEntitlementStatus,
-  billingEntitlementOwner,
   billingEntitlementLockedReason,
   billingEntitlementError = null,
-  onRefreshCloudStatus,
   onManageCloudDevices,
   billingPlansDisabled,
   cloudStatusRefreshing,
@@ -151,10 +149,8 @@ export function AiSetupPanel({
     lockedReason: billingEntitlementLockedReason
       ?? (billingEntitlementStatus === "locked" && currentBillingPlan !== "individual" ? "billing_missing" : undefined),
   });
-  const cloudSubscribeActionLabel = cloudStatusRefreshing
-    ? t("settings.account.planChecking")
-    : cloudNeedsPlanCheck
-    ? t("settings.account.refreshPlan")
+  const cloudSubscribeActionLabel = cloudStatusRefreshing || cloudNeedsPlanCheck
+    ? null
     : cloudNeedsSignIn
     ? t("account.signIn")
     : cloudDeviceLimited
@@ -165,7 +161,7 @@ export function AiSetupPanel({
     ? (billingCheckoutLoadingInterval === null ? t("settings.ai.upgrade") : t("settings.ai.opening"))
     : null;
   const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || cloudTrialStarting || billingCheckoutLoadingInterval !== null
-    || (cloudNeedsPlanCheck && !onRefreshCloudStatus) || (cloudDeviceLimited && !onManageCloudDevices);
+    || cloudNeedsPlanCheck || (cloudDeviceLimited && !onManageCloudDevices);
   const trialRequestRef = useRef(false);
   const trialRequestGenerationRef = useRef(0);
   const mountedRef = useRef(true);
@@ -181,7 +177,6 @@ export function AiSetupPanel({
   }, []);
   async function handleCloudSetup(target: "classification" | "intelligence") {
     if (cloudSubscribeActionDisabled) return;
-    if (cloudNeedsPlanCheck) { await onRefreshCloudStatus?.(); return; }
     if (cloudDeviceLimited) { onManageCloudDevices?.(); return; }
     if (!cloudTrialAvailable) { await onStartCloudSetup(); return; }
     if (trialRequestRef.current || cloudSubscribeActionDisabled || !onStartCloudTrial) return;
@@ -314,9 +309,6 @@ export function AiSetupPanel({
         </button>
       </div> : null}
       {cloudTrialError || trialRequestError ? <p role="alert" className="account-plan-notice__error">{cloudTrialError || trialRequestError}</p> : null}
-      {billingEntitlementError ? <p role="status" className="account-plan-notice__error">
-        {t(billingEntitlementStatus === "active" && billingEntitlementOwner !== "organization" ? "settings.ai.proCheckFailed" : "settings.ai.planCheckFailed")}
-      </p> : null}
       <AiSetupPanelTabs activeTab={activePanelTab} onChange={setActivePanelTab} showIntelligenceTab={showIntelligenceTab} />
 
       {activePanelTab === "providers" ? (

@@ -11,6 +11,7 @@ import { LocalizationTestProvider, type DisplayLanguage } from "../localization/
 import type { BillingEntitlement } from "./billingService";
 import {
   CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS,
+  CLOUD_ENTITLEMENT_BACKGROUND_RETRY_MS,
   useCloudBillingController,
 } from "./useCloudBillingController";
 
@@ -137,7 +138,7 @@ describe("useCloudBillingController", () => {
     expect(result.current.billingEntitlementLoading).toBe(false);
   });
 
-  it("retains last-confirmed Pro after a failed refresh and restores verified access on retry", async () => {
+  it("retains last-confirmed Pro after a failed refresh and restores verified access automatically", async () => {
     vi.useFakeTimers();
     const pro: BillingEntitlement = { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null };
     billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: pro });
@@ -156,10 +157,61 @@ describe("useCloudBillingController", () => {
     expect(result.current.billingEntitlement).toEqual(pro);
     expect(result.current.billingEntitlementError).toBe("Plan check unavailable.");
     billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: pro });
-    await act(async () => { await result.current.refreshBillingEntitlement(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(CLOUD_ENTITLEMENT_BACKGROUND_RETRY_MS); });
     expect(result.current.billingEntitlementError).toBeNull();
     expect(result.current.billingEntitlementLoading).toBe(false);
     expect(billingMocks.createIndividualCheckout).not.toHaveBeenCalled();
+  });
+
+  it("backs off repeated entitlement failures and stops retrying after recovery", async () => {
+    vi.useFakeTimers();
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: false, error: "Unavailable." });
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      user: signedInUser, onAuthRequired: vi.fn(),
+    }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS); });
+    for (const delay of [30_000, 60_000, 120_000, 240_000, 300_000, 300_000]) {
+      const count = billingMocks.fetchBillingEntitlement.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(delay - 1); });
+      expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(count);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS); });
+      expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(count + 2);
+    }
+    const pro: BillingEntitlement = { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null };
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: pro });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300_000); });
+    expect(result.current.billingEntitlement).toEqual(pro);
+    expect(result.current.billingEntitlementError).toBeNull();
+    const count = billingMocks.fetchBillingEntitlement.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(600_000); });
+    expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(count);
+  });
+
+  it.each(["unmount", "account switch"] as const)("cancels the failed account's background retry on %s", async (change) => {
+    vi.useFakeTimers();
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: false, error: "Unavailable." });
+    const { result, rerender, unmount } = renderHook(
+      ({ user }) => useCloudBillingController({
+        hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+        user, onAuthRequired: vi.fn(),
+      }), { initialProps: { user: signedInUser } },
+    );
+    await act(async () => { await vi.advanceTimersByTimeAsync(CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS); });
+    if (change === "unmount") unmount();
+    else {
+      billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: {
+        plan: "individual", status: "locked", canUseApp: false, lockedReason: "billing_missing", trialEndsAt: null, currentPeriodEnd: null,
+      } });
+      rerender({ user: { ...signedInUser, id: "user-2" } });
+      await act(async () => { await Promise.resolve(); });
+      expect(result.current.billingEntitlement?.canUseApp).toBe(false);
+      expect(result.current.billingEntitlementError).toBeNull();
+    }
+    const count = billingMocks.fetchBillingEntitlement.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(600_000); });
+    expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(count);
   });
 
   it("abandons a pending confirmation when entitlement checking is turned off", async () => {
