@@ -185,6 +185,7 @@ function toneForIssueKind(issueKind: AiConnectionIssueKind): AiConnectionTone {
     case "rate_limited":
     case "unavailable":
       return "warning";
+    case "entitlement":
     case "authentication":
     case "credits":
     case "access":
@@ -202,6 +203,8 @@ function labelForIssueKind(issueKind: AiConnectionIssueKind): string {
   switch (issueKind) {
     case "network":
       return "Connection issue";
+    case "entitlement":
+      return "Plan check failed";
     case "authentication":
       return "Key issue";
     case "credits":

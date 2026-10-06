@@ -19,6 +19,72 @@ describe("AiSetupPanel Cloud setup", () => {
     window.localStorage.clear();
   });
 
+  it.each([null, "active"] as const)("refreshes an unresolved %s plan instead of offering Upgrade", async (status) => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const { onStartCloudSetup } = renderPanel({
+      currentBillingPlan: status === "active" ? "individual" : null,
+      billingEntitlementStatus: status,
+      billingEntitlementError: "Unable to check billing status.",
+      onRefreshCloudStatus: refresh,
+    });
+    const card = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(card).getByRole("combobox", { name: /^AI model$/i }));
+    expect(within(card).queryByRole("button", { name: /Upgrade/i })).toBeNull();
+    expect((within(card).getByRole("option", { name: /^Drifty Cloud$/i }) as HTMLButtonElement).disabled).toBe(true);
+    if (status === "active") expect(screen.getByText(/last confirmed plan is Pro/i)).toBeTruthy();
+    await act(async () => fireEvent.click(within(card).getByRole("button", { name: "Refresh plan" })));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(onStartCloudSetup).not.toHaveBeenCalled();
+  });
+
+  it("does not relabel a retained Enterprise seat as individual Pro", () => {
+    renderPanel({ billingEntitlementOwner: "organization", billingEntitlementError: "failed" });
+    expect(screen.queryByText(/Your last confirmed plan is Pro/)).toBeNull();
+    expect(screen.getByText(/Your Cloud plan could not be verified/i)).toBeTruthy();
+  });
+
+  it("keeps a pending plan check disabled without an Upgrade action", () => {
+    renderPanel({ currentBillingPlan: null, billingEntitlementStatus: null, cloudStatusRefreshing: true });
+    const card = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(card).getByRole("combobox", { name: /^AI model$/i }));
+    expect((within(card).getByRole("button", { name: "Checking your plan…" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(card).queryByRole("button", { name: /Upgrade/i })).toBeNull();
+  });
+
+  it.each(["checking", "failed"] as const)("hides a retained trial offer while the plan is %s", async (state) => {
+    const onStartCloudTrial = vi.fn().mockResolvedValue(true);
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const { onStartCloudSetup } = renderPanel({
+      currentBillingPlan: "free", billingEntitlementStatus: "locked", cloudTrialAvailable: true,
+      billingEntitlementError: state === "failed" ? "Plan check unavailable." : null,
+      cloudStatusRefreshing: state === "checking", onStartCloudTrial, onRefreshCloudStatus: refresh,
+    });
+    expect(screen.queryByText("7-day free trial available")).toBeNull();
+    expect(screen.queryByText("Start your trial when you are ready to use Cloud AI.")).toBeNull();
+    const card = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(card).getByRole("combobox", { name: /^AI model$/i }));
+    const action = within(card).getByRole("button", { name: state === "checking" ? "Checking your plan…" : "Refresh plan" });
+    if (state === "checking") expect(action).toHaveProperty("disabled", true);
+    else {
+      await act(async () => fireEvent.click(action));
+      expect(refresh).toHaveBeenCalledOnce();
+    }
+    expect(onStartCloudTrial).not.toHaveBeenCalled();
+    expect(onStartCloudSetup).not.toHaveBeenCalled();
+  });
+
+  it("routes a confirmed device limit to device management", () => {
+    const { onManageCloudDevices, onManageCloudBilling, onStartCloudSetup } = renderPanel({
+      currentBillingPlan: "individual", billingEntitlementStatus: "locked", billingEntitlementLockedReason: "device_limit_reached",
+    });
+    const card = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(card).getByRole("combobox", { name: /^AI model$/i }));
+    fireEvent.click(within(card).getByRole("button", { name: "Manage devices" }));
+    expect(onManageCloudDevices).toHaveBeenCalledOnce();
+    expect(onManageCloudBilling).not.toHaveBeenCalled();
+    expect(onStartCloudSetup).not.toHaveBeenCalled();
+  });
+
   it("locks the Drifty cloud model behind upgrade for non-subscribers", () => {
     const { onStartCloudSetup } = renderPanel({ currentBillingPlan: "free", billingEntitlementStatus: "locked" });
 

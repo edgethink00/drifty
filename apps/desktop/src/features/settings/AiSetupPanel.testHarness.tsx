@@ -146,7 +146,12 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 export function renderPanel({
   connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI", memoryLabel: null, issueKind: null },
   currentBillingPlan = "individual",
-  billingEntitlementStatus = "active",
+  billingEntitlementStatus = currentBillingPlan === "free" ? "locked" : "active",
+  billingEntitlementOwner,
+  billingEntitlementLockedReason,
+  billingEntitlementError = null,
+  cloudStatusRefreshing = false,
+  onRefreshCloudStatus = vi.fn(),
   initialSetup = DEFAULT_LOCAL_AI_SETUP,
   workProfileUserId = "local",
   cloudTrialAvailable = false,
@@ -157,8 +162,13 @@ export function renderPanel({
   memorySuggestionProvider = null,
 }: {
   readonly connectionStatus?: AiConnectionStatus;
-  readonly currentBillingPlan?: "free" | "individual";
+  readonly currentBillingPlan?: "free" | "individual" | null;
   readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
+  readonly billingEntitlementOwner?: "individual" | "organization";
+  readonly billingEntitlementLockedReason?: "trial_expired" | "payment_required" | "billing_missing" | "device_limit_reached";
+  readonly billingEntitlementError?: string | null;
+  readonly cloudStatusRefreshing?: boolean;
+  readonly onRefreshCloudStatus?: () => void | Promise<unknown>;
   readonly initialSetup?: LocalAiSetupState;
   readonly workProfileUserId?: string;
   readonly cloudTrialAvailable?: boolean;
@@ -191,8 +201,13 @@ export function renderPanel({
         {...(onStartCloudTrial ? { onStartCloudTrial } : {})}
         billingCheckoutLoadingInterval={null}
         billingEntitlementStatus={billingEntitlementStatus}
+        billingEntitlementOwner={billingEntitlementOwner}
+        billingEntitlementLockedReason={billingEntitlementLockedReason}
+        billingEntitlementError={billingEntitlementError}
+        onRefreshCloudStatus={onRefreshCloudStatus}
+        onManageCloudDevices={onManageCloudDevices}
         billingPlansDisabled={false}
-        cloudStatusRefreshing={false}
+        cloudStatusRefreshing={cloudStatusRefreshing}
         connectionStatus={currentConnectionStatus}
         connectionTest={connectionTest}
         currentBillingPlan={currentBillingPlan}

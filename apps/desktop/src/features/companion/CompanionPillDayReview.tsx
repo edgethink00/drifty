@@ -256,6 +256,7 @@ export function CompanionPillDayReview({
 }
 
 function pendingAssessmentTitleKey(reason: NonNullable<EndOfDayReviewEvent["assessment"]>["reason"]): TranslationKey {
+  if (reason === "cloud_entitlement_unavailable") return "settings.ai.status.planCheckFailed";
   if (reason === "cloud_quota_exceeded") return "companion.dayReview.pending.quotaExceeded";
   if (reason === "cloud_trial_expired") return "companion.dayReview.pending.trialEnded";
   if (reason === "cloud_payment_required" || reason === "cloud_billing_missing") {

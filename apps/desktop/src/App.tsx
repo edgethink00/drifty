@@ -72,7 +72,6 @@ import {
   storeSidebarUpgradeDismissal,
 } from "./features/sidebar/sidebarUpgradeDismissal";
 import {
-  aiConnectionIssueKindFromMessage,
   isEstablishedCloudAiDisconnect,
   nextCloudAiConnectionCheck,
   type CloudAiConnectionCheck,
@@ -2551,7 +2550,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     cloudIssueKind: isCloudQuotaExceeded
       ? "rate_limited"
       : selectedClassificationRoute === "cloud" && billingEntitlementError
-        ? aiConnectionIssueKindFromMessage(billingEntitlementError)
+        ? "entitlement"
         : selectedClassificationRoute === "cloud" && billingEntitlement?.lockedReason === "device_limit_reached"
           ? "provider"
           : null,
@@ -11011,6 +11010,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     }}
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
+                    billingEntitlementOwner={effectiveBillingEntitlement?.entitlementOwner}
+                    billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason}
+                    billingEntitlementError={billingEntitlementError}
+                    onRefreshCloudStatus={refreshBillingEntitlement}
+                    onManageCloudDevices={() => setSettingsSection("account")}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                     connectionStatus={runtimeAwareAiConnectionStatus}

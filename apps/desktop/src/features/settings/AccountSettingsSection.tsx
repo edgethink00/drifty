@@ -241,14 +241,16 @@ export function AccountSettingsSection({
       },
   );
   const isTrialing = planState === "pro_trial";
-  const trialAvailable = canStartCloudTrial(billingEntitlement);
+  const trialAvailable = canStartCloudTrial(billingEntitlement)
+    && !billingEntitlementError && !cloudStatusRefreshing;
   const planCardsCurrentPlan: BillingPlanId | null = isTrialing ? null : billingEntitlementStatus === "locked" && !isDeviceLimitLocked && !isPaymentRequiredLocked ? "free" : currentBillingPlan;
   // Keep billing recovery directly accessible even when comparison is closed.
   const canManageCurrentPlan = isCurrentCloudPlan || isDeviceLimitLocked || isPaymentRequiredLocked;
   const trimmedUserEmail = userEmail?.trim() ?? "";
   const isSignedIn = hasSignedInAccount ?? trimmedUserEmail.length > 0;
   const planStatusUnknown = isSignedIn && isSupabaseConfigured && billingEntitlementStatus === null;
-  const plansDisabled = billingPlansDisabled || planActionBusy || planStatusUnknown;
+  const planNeedsRefresh = planStatusUnknown || Boolean(billingEntitlementError);
+  const plansDisabled = billingPlansDisabled || planActionBusy || planNeedsRefresh || cloudStatusRefreshing;
   const actionError = localActionError ?? billingEntitlementError;
   const billingProgress = billingCheckoutAwaitingConfirmation
     ? t("settings.account.checkoutPending")
@@ -324,7 +326,7 @@ export function AccountSettingsSection({
               onClick={(event) => { event.currentTarget.focus(); setPlanModalOpen(true); }}>
               {t("settings.account.changePlan")}
             </button>
-            {planStatusUnknown ? (
+            {planNeedsRefresh ? (
               <button type="button" className="settings-btn" disabled={cloudStatusRefreshing}
                 onClick={() => void onRefreshCloudStatus()}>{t("settings.account.refreshPlan")}</button>
             ) : null}
@@ -459,7 +461,7 @@ export function AccountSettingsSection({
       {organizationOpenError ? <p className="account-plan-progress" role="alert">{t("settings.account.organizationOpenFailed")}</p> : null}
 
       <AccountPlanModal open={planModalOpen} busy={planActionBusy} onClose={() => setPlanModalOpen(false)}>
-        {planStatusUnknown ? <div className="account-plan-progress" role="status">
+        {planNeedsRefresh ? <div className="account-plan-progress" role="status">
           <p>{t("settings.account.planUnknownDescription")}</p>
           <button type="button" className="modal-btn" disabled={cloudStatusRefreshing}
             onClick={() => void onRefreshCloudStatus()}>{t("settings.account.refreshPlan")}</button>

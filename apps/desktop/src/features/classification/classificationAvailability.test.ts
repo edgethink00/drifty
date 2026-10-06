@@ -87,10 +87,10 @@ describe("resolveClassificationAvailability", () => {
       billingEntitlementError: "Network connection failed while checking billing.",
     }))).toMatchObject({
       state: "degraded",
-      reason: "cloud_disconnected",
+      reason: "cloud_entitlement_unavailable",
       allowRecoveryProbe: true,
       recoveryAction: "retry",
-      issueKind: "network",
+      issueKind: "entitlement",
     });
   });
 
@@ -104,6 +104,13 @@ describe("resolveClassificationAvailability", () => {
       allowBuiltInHeuristics: false,
       recoveryAction: "upgrade",
     });
+  });
+
+  it("refreshes a stale locked plan before offering a purchase", () => {
+    expect(resolveClassificationAvailability(input({
+      billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" },
+      billingEntitlementError: "failed refresh",
+    }))).toMatchObject({ reason: "cloud_entitlement_unavailable", recoveryAction: "retry" });
   });
 
   it("locks Cloud after a confirmed quota and upgrades only a daily limit", () => {

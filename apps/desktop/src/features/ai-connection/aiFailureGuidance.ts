@@ -25,9 +25,7 @@ export type AiFailureGuidance = {
 /**
  * Every actionable failure is resolved from the AI settings surface, so this
  * module does not model a destination. If a future issue kind needs a different
- * destination (for example a Drifty Cloud entitlement problem, which today is
- * carried by the availability contract rather than by an issue kind), add the
- * destination here rather than at the call site.
+ * destination, add it here rather than at the call site.
  *
  * The actionable/transient split matches the sidebar recovery card, which has
  * shipped this judgment for longer: only rate limiting and provider capacity
@@ -35,6 +33,12 @@ export type AiFailureGuidance = {
  * so the pill and the card can never disagree about the same failure.
  */
 const AI_FAILURE_GUIDANCE: Readonly<Record<AiConnectionIssueKind, AiFailureGuidance>> = {
+  entitlement: {
+    kind: "entitlement",
+    needsUserAction: true,
+    headlineKey: "settings.ai.failure.entitlement.headline",
+    nextStepKey: "settings.ai.failure.entitlement.nextStep",
+  },
   authentication: {
     kind: "authentication",
     needsUserAction: true,

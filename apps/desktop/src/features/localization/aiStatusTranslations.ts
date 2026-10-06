@@ -43,6 +43,7 @@ const AI_STATUS_TRANSLATION_KEYS = {
   // They are different conditions and must not share a key.
   Issue: "settings.ai.status.issue",
   "Provider error": "settings.ai.status.providerError",
+  "Plan check failed": "settings.ai.status.planCheckFailed",
   "Classifying…": "settings.ai.status.classifying",
   "AI setup needed": "settings.ai.status.setupNeeded",
   "Open settings": "settings.ai.status.openSettings",

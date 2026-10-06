@@ -11,6 +11,7 @@ import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "../settings/managedLocalAiCat
 export type AiConnectionIssueKind =
   | "network"
   | "provider"
+  | "entitlement"
   | "authentication"
   | "credits"
   | "access"

@@ -52,6 +52,15 @@ function defaultProps() {
 }
 
 describe("useLeaderboardProfileController - AI gate & catch-up UX", () => {
+  it("identifies a failed plan check instead of asking the user to reconnect the provider", async () => {
+    const { result } = renderHook(() => useLeaderboardProfileController({
+      ...defaultProps(), classificationAssessmentReady: false,
+      classificationAvailabilityState: "degraded", classificationAvailabilityReason: "cloud_entitlement_unavailable",
+    }));
+    await act(async () => { await result.current.handleLeaderboardOptIn(); });
+    expect(result.current.leaderboardActionError).toBe("Your Cloud plan could not be verified. Open AI settings and refresh your plan, then try again.");
+  });
+
   it("surfaces the quota exceeded error when joining while daily quota has reached limit", async () => {
     const { result } = renderHook(() => useLeaderboardProfileController({
       ...defaultProps(),

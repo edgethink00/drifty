@@ -39,6 +39,7 @@ import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { useWorkProfileSettings } from "./useWorkProfileSettings";
 import type { UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
 import { useLocalization } from "../localization/LocalizationContext";
+import { canStartIndividualCheckout } from "../billing/billingEligibility";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -49,6 +50,11 @@ export type AiSetupPanelProps = {
   readonly onStartCloudTrial?: () => Promise<boolean>;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
+  readonly billingEntitlementOwner?: BillingEntitlement["entitlementOwner"];
+  readonly billingEntitlementLockedReason?: BillingEntitlement["lockedReason"];
+  readonly billingEntitlementError?: string | null;
+  readonly onRefreshCloudStatus?: () => void | Promise<unknown>;
+  readonly onManageCloudDevices?: () => void;
   readonly billingPlansDisabled: boolean;
   readonly cloudStatusRefreshing: boolean;
   readonly connectionStatus: AiConnectionStatus;
@@ -80,6 +86,11 @@ export function AiSetupPanel({
   onStartCloudTrial,
   billingCheckoutLoadingInterval,
   billingEntitlementStatus,
+  billingEntitlementOwner,
+  billingEntitlementLockedReason,
+  billingEntitlementError = null,
+  onRefreshCloudStatus,
+  onManageCloudDevices,
   billingPlansDisabled,
   cloudStatusRefreshing,
   connectionStatus,
@@ -122,25 +133,39 @@ export function AiSetupPanel({
   const workProfileSettings = useWorkProfileSettings(workProfileUserId);
   const canUseCloudModel = currentBillingPlan === "individual"
     && !shouldShowCloudCheckoutPlans
+    && !cloudStatusRefreshing
+    && !billingEntitlementError
     && (billingEntitlementStatus === "active" || billingEntitlementStatus === "trialing");
   const cloudIsTrialing = billingEntitlementStatus === "trialing";
-  // A "locked" entitlement means the user HAS a subscription that's currently blocked
-  // (device limit reached, payment required, …). Those states must route to Manage
-  // billing (Stripe portal) to recover — never to a fresh checkout, which would sell
-  // them a second subscription.
+  // Recover confirmed account blocks through billing or device management.
+  // A failed plan read must be refreshed before offering a purchase.
   const cloudLocked = !cloudTrialAvailable && billingEntitlementStatus === "locked" && currentBillingPlan === "individual";
-  // Manage-billing states = fully active (secondary, hover action) OR locked (primary
-  // recovery action). Upgrade/checkout states = trialing (convert the trial) OR a
-  // genuine no-subscription. `canManageBilling` covers active + locked; the Upgrade
-  // label is shown only for the trialing / no-sub states.
-  const cloudCanManageBilling = (canUseCloudModel && !cloudIsTrialing) || cloudLocked;
-  const cloudShowsUpgrade = cloudIsTrialing || (!canUseCloudModel && !cloudLocked);
-  const cloudSubscribeActionLabel = cloudTrialAvailable
+  const cloudNeedsPlanCheck = Boolean(billingEntitlementError)
+    || (billingEntitlementStatus === null && currentBillingPlan !== "free");
+  const cloudNeedsSignIn = billingEntitlementStatus === null && currentBillingPlan === "free";
+  const cloudDeviceLimited = billingEntitlementLockedReason === "device_limit_reached";
+  const cloudCanManageBilling = !cloudNeedsPlanCheck && !cloudStatusRefreshing && !cloudDeviceLimited
+    && ((canUseCloudModel && !cloudIsTrialing) || cloudLocked);
+  const cloudShowsUpgrade = canStartIndividualCheckout(billingEntitlementStatus === null ? null : {
+    status: billingEntitlementStatus,
+    lockedReason: billingEntitlementLockedReason
+      ?? (billingEntitlementStatus === "locked" && currentBillingPlan !== "individual" ? "billing_missing" : undefined),
+  });
+  const cloudSubscribeActionLabel = cloudStatusRefreshing
+    ? t("settings.account.planChecking")
+    : cloudNeedsPlanCheck
+    ? t("settings.account.refreshPlan")
+    : cloudNeedsSignIn
+    ? t("account.signIn")
+    : cloudDeviceLimited
+    ? t("sidebar.cta.device.action")
+    : cloudTrialAvailable
     ? t(cloudTrialStarting ? "billing.trialActivation.starting" : "billing.trialActivation.start")
     : cloudShowsUpgrade
     ? (billingCheckoutLoadingInterval === null ? t("settings.ai.upgrade") : t("settings.ai.opening"))
     : null;
-  const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || cloudTrialStarting || billingCheckoutLoadingInterval !== null;
+  const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || cloudTrialStarting || billingCheckoutLoadingInterval !== null
+    || (cloudNeedsPlanCheck && !onRefreshCloudStatus) || (cloudDeviceLimited && !onManageCloudDevices);
   const trialRequestRef = useRef(false);
   const trialRequestGenerationRef = useRef(0);
   const mountedRef = useRef(true);
@@ -155,6 +180,9 @@ export function AiSetupPanel({
     };
   }, []);
   async function handleCloudSetup(target: "classification" | "intelligence") {
+    if (cloudSubscribeActionDisabled) return;
+    if (cloudNeedsPlanCheck) { await onRefreshCloudStatus?.(); return; }
+    if (cloudDeviceLimited) { onManageCloudDevices?.(); return; }
     if (!cloudTrialAvailable) { await onStartCloudSetup(); return; }
     if (trialRequestRef.current || cloudSubscribeActionDisabled || !onStartCloudTrial) return;
     const snapshot = latestSelection.current;
@@ -278,7 +306,7 @@ export function AiSetupPanel({
         <h3>{t("settings.section.aiSetup")}</h3>
       </div>
 
-      {cloudTrialAvailable ? <div className="settings-row">
+      {cloudTrialAvailable && !cloudNeedsPlanCheck && !cloudStatusRefreshing ? <div className="settings-row">
         <div><div className="lbl">{t("billing.trialActivation.available")}</div><div className="desc">{t("billing.trialActivation.availableBody")}</div></div>
         <button type="button" className="settings-btn primary" disabled={cloudSubscribeActionDisabled || !onStartCloudTrial}
           aria-busy={cloudTrialStarting} onClick={() => void handleCloudSetup(activePanelTab === "intelligence" ? "intelligence" : "classification")}>
@@ -286,6 +314,9 @@ export function AiSetupPanel({
         </button>
       </div> : null}
       {cloudTrialError || trialRequestError ? <p role="alert" className="account-plan-notice__error">{cloudTrialError || trialRequestError}</p> : null}
+      {billingEntitlementError ? <p role="status" className="account-plan-notice__error">
+        {t(billingEntitlementStatus === "active" && billingEntitlementOwner !== "organization" ? "settings.ai.proCheckFailed" : "settings.ai.planCheckFailed")}
+      </p> : null}
       <AiSetupPanelTabs activeTab={activePanelTab} onChange={setActivePanelTab} showIntelligenceTab={showIntelligenceTab} />
 
       {activePanelTab === "providers" ? (

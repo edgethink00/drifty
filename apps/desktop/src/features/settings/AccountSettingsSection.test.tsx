@@ -28,6 +28,36 @@ function desktopSourcePath(relativePath: string): string {
 }
 
 describe("AccountSettingsSection", () => {
+  it.each(["retained Pro", "retained trial", "checking trial"] as const)("requires plan verification before purchase for %s", async (state) => {
+    const trial = state !== "retained Pro";
+    const checking = state === "checking trial";
+    const props = accountProps({
+      billingEntitlement: trial ? {
+        ...individualEntitlement, status: "locked", canUseApp: false, lockedReason: "billing_missing",
+        trialActivation: { state: "available", startedAt: null, endsAt: null },
+      } : individualEntitlement,
+      billingEntitlementStatus: trial ? "locked" : "active",
+      billingEntitlementLockedReason: trial ? "billing_missing" : null,
+      currentBillingPlan: trial ? "free" : "individual",
+      billingEntitlementError: checking ? null : "Plan check unavailable.",
+      cloudStatusRefreshing: checking,
+    });
+    render(<AccountSettingsSection {...props} />);
+    expect(screen.queryByText("7-day free trial available")).toBeNull();
+    if (!trial) expect(screen.getByText(ENGLISH_TRANSLATIONS["billing.plan.pro"], { selector: ".lbl" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Change plan" }));
+    const dialog = screen.getByRole("dialog", { name: "Change plan" });
+    const paidAction = within(dialog).getByRole("button", { name: trial ? ENGLISH_TRANSLATIONS["billing.plan.proChooseAria"] : "Manage billing" });
+    expect(paidAction).toHaveProperty("disabled", true);
+    fireEvent.click(paidAction);
+    expect(props.onStartCloudSetup).not.toHaveBeenCalled();
+    expect(props.onManageCloudBilling).not.toHaveBeenCalled();
+    if (!checking) {
+      await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Refresh plan" })));
+      expect(props.onRefreshCloudStatus).toHaveBeenCalledOnce();
+    }
+  });
+
   it("shows active Cloud devices in Account settings and confirms before removing a non-current device", async () => {
     const onRevokeCloudDevice = vi.fn();
     const onRefreshCloudStatus = vi.fn();

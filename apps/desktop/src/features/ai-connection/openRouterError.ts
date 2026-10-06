@@ -50,6 +50,7 @@ export function openRouterConnectionFailureMessage(issueKind: AiConnectionIssueK
       return "OpenRouter has no available provider for this request.";
     case "network":
       return "OpenRouter could not be reached.";
+    case "entitlement":
     case "provider":
       return `Provider returned HTTP ${status || "unknown"}.`;
     default:

@@ -68,10 +68,12 @@ export function driftyModelOptions({
     ? undefined
     : cloudSubscribeActionLabel === t("settings.ai.opening")
       ? t("settings.ai.openingCloudCheckoutAria")
-      : t("settings.ai.upgradeCloudAria");
-  const cloudNeedsUpgrade = cloudSubscribeActionLabel !== null;
+      : cloudSubscribeActionLabel === t("settings.ai.upgrade")
+        ? t("settings.ai.upgradeCloudAria")
+        : cloudSubscribeActionLabel;
+  const cloudHasPrimaryAction = cloudSubscribeActionLabel !== null;
 
-  const cloudOption: SettingsSelectOption<string> = cloudNeedsUpgrade
+  const cloudOption: SettingsSelectOption<string> = cloudHasPrimaryAction
     ? {
       value: DRIFTY_CLOUD_MODEL_ID,
       label: DRIFTY_CLOUD_MODEL_LABEL,
@@ -101,7 +103,7 @@ export function driftyModelOptions({
           void onManageCloudBilling();
         },
       }
-      : { value: DRIFTY_CLOUD_MODEL_ID, label: DRIFTY_CLOUD_MODEL_LABEL };
+      : { value: DRIFTY_CLOUD_MODEL_ID, label: DRIFTY_CLOUD_MODEL_LABEL, disabled: !cloudSelectable };
 
   return [
     { ...cloudOption, description: t("ai.resources.cloudModelSummary") },

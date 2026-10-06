@@ -348,7 +348,7 @@ function selectAutoPublishPayloads({
 }
 
 
-export type LeaderboardGateBlockedReason = "checking" | "catching_up" | "quota_exceeded" | "paused";
+export type LeaderboardGateBlockedReason = "checking" | "catching_up" | "quota_exceeded" | "plan_check_failed" | "paused";
 
 function resolveLeaderboardBlockedReason(input: {
   readonly availabilityState?: ClassificationAvailabilityState;
@@ -356,15 +356,20 @@ function resolveLeaderboardBlockedReason(input: {
   readonly catchingUp: boolean;
 }): LeaderboardGateBlockedReason {
   if (input.availabilityReason === "cloud_quota_exceeded") return "quota_exceeded";
+  if (input.availabilityReason === "cloud_entitlement_unavailable") return "plan_check_failed";
   if (input.catchingUp) return "catching_up";
   if (input.availabilityState === "checking") return "checking";
   return "paused";
 }
 
 function getAssessmentBlockedErrorMessage(
-  reason: "checking" | "catching_up" | "quota_exceeded" | "paused",
+  reason: LeaderboardGateBlockedReason,
   context: "join" | "pre_publish",
+  t: ReturnType<typeof useLocalization>["t"],
 ): string {
+  if (reason === "plan_check_failed") {
+    return t("leaderboard.planCheckFailed");
+  }
   if (reason === "quota_exceeded") {
     return context === "join"
       ? "Daily AI classification limit reached. You can join the leaderboard once your quota resets or after upgrading to Pro."
@@ -1114,7 +1119,7 @@ export function useLeaderboardProfileController({
           catchingUp: classificationCatchingUpRef.current,
           availabilityReason: classificationAvailabilityReasonRef.current,
         });
-        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "join"));
+        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "join", t));
         return;
       }
       if (isEffectiveAuthRequired && !hasRequiredAccountAuth) {
@@ -1218,7 +1223,7 @@ export function useLeaderboardProfileController({
           catchingUp: classificationCatchingUpRef.current,
           availabilityReason: classificationAvailabilityReasonRef.current,
         });
-        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "pre_publish"));
+        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "pre_publish", t));
         return;
       }
       const result = await publishLeaderboardPeriods({

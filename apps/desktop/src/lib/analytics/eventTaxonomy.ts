@@ -135,6 +135,7 @@ export const CLASSIFICATION_FAILURE_KINDS = ["transport", "quota", "content"] as
 // taxonomy stays free of feature imports; aiFailureGuidance.test.ts pins the
 // two lists to the same members.
 export const AI_ISSUE_KINDS = [
+  "entitlement",
   "network",
   "provider",
   "authentication",

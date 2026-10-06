@@ -1,5 +1,5 @@
 import type { AiConnectionStatus, LocalAiProviderStatus } from "../ai-connection/AiConnectionStatusBar";
-import { aiConnectionIssueKindFromMessage, type AiConnectionIssueKind, type CloudAiConnectionCheck } from "../ai-connection/aiConnectionHealth";
+import { type AiConnectionIssueKind, type CloudAiConnectionCheck } from "../ai-connection/aiConnectionHealth";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { AnalysisProvider } from "../settings/analysisModelSetup";
 
@@ -122,6 +122,9 @@ export function applyClassificationAvailabilityToAiStatus(
   status: AiConnectionStatus,
   availability: ClassificationAvailability,
 ): AiConnectionStatus {
+  if (availability.reason === "cloud_entitlement_unavailable" && availability.state === "degraded") {
+    return { tone: "error", label: "Plan check failed", providerLabel: "Drifty Cloud", memoryLabel: null, issueKind: "entitlement" };
+  }
   if (availability.state !== "checking" && availability.state !== "retrying") return status;
   return {
     tone: "neutral",
@@ -187,9 +190,6 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
       recoveryAction: input.cloudQuotaDaily ? "upgrade" : "retry",
     });
   }
-  if (input.billingEntitlement?.status === "locked") {
-    return lockedCloudAvailability(input.billingEntitlement.lockedReason);
-  }
   if (input.billingEntitlementLoading) {
     return availability("checking", "cloud", "cloud_entitlement_checking");
   }
@@ -198,14 +198,17 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
   // first transport failure. An exposed error therefore already represents a
   // repeated failure and should move from quiet retrying to visible recovery.
   if (input.billingEntitlementError) {
-    return availability("degraded", "cloud", "cloud_disconnected", {
+    return availability("degraded", "cloud", "cloud_entitlement_unavailable", {
       allowRecoveryProbe: true,
       showRecovery: true,
       recoveryAction: "retry",
-      issueKind: aiConnectionIssueKindFromMessage(input.billingEntitlementError),
+      issueKind: "entitlement",
     });
   }
 
+  if (input.billingEntitlement?.status === "locked") {
+    return lockedCloudAvailability(input.billingEntitlement.lockedReason);
+  }
   const cloudFailures = input.cloudConnectionCheck?.consecutiveFailures ?? 0;
   const cloudIssueKind = input.cloudConnectionCheck?.issueKind ?? null;
   if (cloudFailures >= 2) {

@@ -14,6 +14,7 @@ import {
 const ALL_ISSUE_KINDS = [
   "network",
   "provider",
+  "entitlement",
   "authentication",
   "credits",
   "access",
@@ -32,6 +33,7 @@ const ACTIONABLE_KINDS: readonly AiConnectionIssueKind[] = [
   "model_unavailable",
   "network",
   "provider",
+  "entitlement",
 ];
 
 describe("aiFailureGuidance", () => {

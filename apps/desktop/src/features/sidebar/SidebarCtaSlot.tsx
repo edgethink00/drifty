@@ -155,6 +155,7 @@ export function resolveSidebarCtaSlot({
   if (classificationAvailability?.route === "local") {
     if (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying") return null;
     if (classificationAvailability.state === "ready") {
+      if (billingEntitlementLoading || billingEntitlementError) return null;
       return billingEntitlement?.status === "active" ? null : localModelUpgradeState(billingCheckoutLoading);
     }
     if (classificationAvailability.state === "unavailable" || classificationAvailability.state === "degraded") {
@@ -165,6 +166,12 @@ export function resolveSidebarCtaSlot({
       );
     }
   }
+
+  if (billingEntitlementLoading) return null;
+  if (billingEntitlementError && aiStatus.issueKind === "entitlement") {
+    return aiDisconnectedState("entitlement", "Drifty Cloud", false);
+  }
+  if (billingEntitlementError && !localAiConfigured) return null;
 
   if (canStartCloudTrial(billingEntitlement)) return {
     actionLabelKey: "sidebar.cta.ai.action", alert: null,
@@ -217,15 +224,9 @@ export function resolveSidebarCtaSlot({
     };
   }
 
-  // An entitlement request failure is not evidence that a signed-in user is
-  // free. When the warning came only from that failed request, avoid sending
-  // them to AI settings or selling a plan they may already own.
-  const unresolvedBillingFailure = billingEntitlement === null
-    && billingEntitlementError !== null
-    && !localAiConfigured;
   const confirmedAiDisconnection = sidebarRecoveryNeeded
     && (!localAiConfigured || aiStatus.issueKind !== "network" || localAiDisconnectConfirmed);
-  if (confirmedAiDisconnection && !unresolvedBillingFailure) {
+  if (confirmedAiDisconnection) {
     return aiDisconnectedState(
       aiStatus.issueKind,
       aiRecoveryProviderLabel(localAiProvider, localAiConfigured),
@@ -436,6 +437,8 @@ function aiRecoveryCopy(
         title: "sidebar.cta.ai.networkTitle",
         detail: automaticRetry ? "sidebar.cta.ai.networkRetryDetail" : "sidebar.cta.ai.networkDetail",
       };
+    case "entitlement":
+      return { title: "settings.ai.status.planCheckFailed", detail: "settings.ai.failure.entitlement.nextStep" };
     case "authentication":
       return { title: "sidebar.cta.ai.authenticationTitle", detail: "sidebar.cta.ai.authenticationDetail" };
     case "credits":

@@ -58,7 +58,7 @@ export type PublishLeaderboardPeriodsInput = {
   /** Revalidate mutable publication policy after local payload construction. */
   readonly publicationAllowed: () => boolean;
   /** Specific reason if publication is blocked by the assessment gate. */
-  readonly publicationBlockedReason?: () => "catching_up" | "checking" | "quota_exceeded" | "paused" | null;
+  readonly publicationBlockedReason?: () => "catching_up" | "checking" | "quota_exceeded" | "plan_check_failed" | "paused" | null;
 };
 
 export type PublishLeaderboardPeriodsResult = LeaderboardResult<LeaderboardPublishPayloads>;
@@ -152,7 +152,9 @@ export async function publishLeaderboardPeriods(input: PublishLeaderboardPeriods
   const payloads = await buildLeaderboardPublishPayloads(payloadInput);
   if (!publicationAllowed()) {
     const blockedReason = input.publicationBlockedReason?.() ?? "paused";
-    const error = blockedReason === "quota_exceeded"
+    const error = blockedReason === "plan_check_failed"
+      ? "Your Cloud plan could not be verified. Open AI settings and refresh your plan, then try again."
+      : blockedReason === "quota_exceeded"
       ? "Daily AI classification limit reached before publishing focus totals."
       : blockedReason === "catching_up"
         ? "AI is catching up on recent activity. You can publish focus totals once catch-up completes."

@@ -88,7 +88,7 @@ describe("analytics AI_ISSUE_KINDS mirrors AiConnectionIssueKind", () => {
   it("lists exactly the connection issue kinds", () => {
     const connectionKinds: readonly AiConnectionIssueKind[] = [
       "network", "provider", "authentication", "credits",
-      "access", "model_unavailable", "rate_limited", "unavailable",
+      "access", "model_unavailable", "rate_limited", "unavailable", "entitlement",
     ];
     expect([...AI_ISSUE_KINDS].sort()).toEqual([...connectionKinds].sort());
   });

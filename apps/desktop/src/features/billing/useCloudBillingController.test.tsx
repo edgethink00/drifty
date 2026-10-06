@@ -137,6 +137,31 @@ describe("useCloudBillingController", () => {
     expect(result.current.billingEntitlementLoading).toBe(false);
   });
 
+  it("retains last-confirmed Pro after a failed refresh and restores verified access on retry", async () => {
+    vi.useFakeTimers();
+    const pro: BillingEntitlement = { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null };
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: pro });
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      user: signedInUser, onAuthRequired: vi.fn(),
+    }));
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.billingEntitlement).toEqual(pro);
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: false, error: "Plan check unavailable." });
+    await act(async () => {
+      const pending = result.current.refreshBillingEntitlement();
+      await vi.advanceTimersByTimeAsync(CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS);
+      await pending;
+    });
+    expect(result.current.billingEntitlement).toEqual(pro);
+    expect(result.current.billingEntitlementError).toBe("Plan check unavailable.");
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: pro });
+    await act(async () => { await result.current.refreshBillingEntitlement(); });
+    expect(result.current.billingEntitlementError).toBeNull();
+    expect(result.current.billingEntitlementLoading).toBe(false);
+    expect(billingMocks.createIndividualCheckout).not.toHaveBeenCalled();
+  });
+
   it("abandons a pending confirmation when entitlement checking is turned off", async () => {
     vi.useFakeTimers();
     billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: false, error: "Network connection failed." });
