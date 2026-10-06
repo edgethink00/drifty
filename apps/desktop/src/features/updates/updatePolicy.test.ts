@@ -1,13 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GENERAL_PROMPT_AFTER_MS,
+  POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY,
   UPDATE_AUTO_INSTALL_STORAGE_KEY,
   UPDATE_BACKGROUND_APPLY_STORAGE_KEY,
   fallbackUpdatePolicy,
+  clearPostUpdateRelaunchFocusPending,
+  consumePostUpdateRelaunchFocusPending,
   fetchUpdatePolicy,
   markUpdateBackgroundPreparationAttempted,
   markUpdateBackgroundPreparationFailed,
   markUpdateInteracted,
+  markPostUpdateRelaunchFocusPending,
   normalizeUpdatePolicyMetadata,
   parseUpdateInteractionMap,
   persistBackgroundUpdatesEnabled,
@@ -39,6 +43,49 @@ describe("updatePolicy", () => {
         setItem: (key: string, value: string) => values.set(key, value),
       },
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("marks and consumes the optional post-update focus hint once", () => {
+    markPostUpdateRelaunchFocusPending();
+
+    expect(window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBe("1");
+    expect(consumePostUpdateRelaunchFocusPending()).toBe(true);
+    expect(window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBeNull();
+    expect(consumePostUpdateRelaunchFocusPending()).toBe(false);
+  });
+
+  it.each([
+    ["mark", markPostUpdateRelaunchFocusPending],
+    ["clear", clearPostUpdateRelaunchFocusPending],
+    ["consume", consumePostUpdateRelaunchFocusPending],
+  ])("tolerates unavailable localStorage during focus hint %s", (_operation, helper) => {
+    Object.defineProperty(window, "localStorage", {
+      get: () => { throw new Error("Storage access denied"); },
+    });
+
+    expect(() => helper()).not.toThrow();
+  });
+
+  it("returns no focus hint when reading storage fails", () => {
+    vi.spyOn(window.localStorage, "getItem").mockImplementation(() => {
+      throw new Error("Storage read denied");
+    });
+
+    expect(consumePostUpdateRelaunchFocusPending()).toBe(false);
+  });
+
+  it("returns a readable focus hint even when its removal fails", () => {
+    markPostUpdateRelaunchFocusPending();
+    vi.spyOn(window.localStorage, "removeItem").mockImplementation(() => {
+      throw new Error("Storage removal denied");
+    });
+
+    expect(consumePostUpdateRelaunchFocusPending()).toBe(true);
   });
 
   it("defaults missing policy metadata to the existing 72-hour manual prompt policy", () => {

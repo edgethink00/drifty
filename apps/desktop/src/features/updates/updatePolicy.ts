@@ -198,19 +198,31 @@ export function persistBackgroundUpdatesEnabled(enabled: boolean): void {
 
 export function markPostUpdateRelaunchFocusPending(): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY, "1");
+  try {
+    window.localStorage.setItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY, "1");
+  } catch {
+    // The optional focus hint must never prevent an installed update's restart.
+  }
 }
 
 export function clearPostUpdateRelaunchFocusPending(): void {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY);
+  } catch {
+    // Best-effort cleanup must preserve the original native restart error.
+  }
 }
 
 export function consumePostUpdateRelaunchFocusPending(): boolean {
   if (typeof window === "undefined") return false;
-  if (window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY) !== "1") return false;
-  clearPostUpdateRelaunchFocusPending();
-  return true;
+  try {
+    if (window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY) !== "1") return false;
+    clearPostUpdateRelaunchFocusPending();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function upsertUpdateSeen(interactions: UpdateInteractionMap, version: string, nowMs: number): UpdateInteractionMap {

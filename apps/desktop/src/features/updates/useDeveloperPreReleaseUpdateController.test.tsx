@@ -12,11 +12,13 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 import { acquireUpdateOperation } from "./versionSwitchState";
 import { POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY } from "./updatePolicy";
+import { installAndRelaunchDeveloperPreReleaseUpdate } from "./preReleaseUpdaterClient";
 import { useDeveloperPreReleaseUpdateController } from "./useDeveloperPreReleaseUpdateController";
 
 describe("useDeveloperPreReleaseUpdateController", () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     window.localStorage.clear();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   });
@@ -100,6 +102,44 @@ describe("useDeveloperPreReleaseUpdateController", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("developer_install_pre_release_update"));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: false }));
     expect(window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBe("1");
+  });
+
+  it("restarts an installed pre-release update when the optional focus hint exceeds storage quota", async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "developer_check_pre_release_update") return { available: true, currentVersion: "1.0.14", version: "1.0.15", date: null, body: null };
+      return command === "developer_install_pre_release_update" ? true : null;
+    });
+    const setItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY) throw new DOMException("Storage quota exhausted", "QuotaExceededError");
+      setItem.call(this, key, value);
+    });
+    render(<LatestBuildControllerHarness />);
+    fireEvent.click(screen.getByRole("button", { name: /^Check latest build$/i }));
+    await screen.findByText(/drifty 1\.0\.15 pre-release is available/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Install latest build$/i }));
+
+    expect(await screen.findByText("Pre-release update installed. Relaunching...")).toBeTruthy();
+    expect(invokeMock.mock.calls.filter(([command]) => command === "developer_install_pre_release_update")).toHaveLength(1);
+    expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: false });
+    expect(screen.queryByText(/pre-release update install failed/i)).toBeNull();
+  });
+
+  it("preserves the native restart error when clearing the optional focus hint fails", async () => {
+    const restartError = new Error("Native restart refused");
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "app_restart_after_update") throw restartError;
+      return true;
+    });
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new DOMException("Storage removal denied", "SecurityError");
+    });
+
+    await expect(installAndRelaunchDeveloperPreReleaseUpdate()).rejects.toBe(restartError);
+
+    expect(invokeMock).toHaveBeenCalledWith("developer_install_pre_release_update");
+    expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: false });
   });
 
   it("blocks prerelease installation while another channel owns the installer, then allows retry", async () => {
