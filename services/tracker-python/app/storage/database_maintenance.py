@@ -183,7 +183,52 @@ def _backup_pattern(db_path: Path) -> str:
 
 
 def _backup_path(db_path: Path, now: datetime) -> Path:
-    return database_backup_dir(db_path) / f"{db_path.stem}-{_timestamp_slug(now)}.sqlite3"
+    # A publication record must refer to one unique snapshot. Never reuse a
+    # basename after rotation, including across same-stem custom databases.
+    name = f"{db_path.stem}-{_timestamp_slug(now)}-{uuid.uuid4().hex}.sqlite3"
+    return database_backup_dir(db_path) / name
+
+
+def _backup_order_record_path(db_path: Path) -> Path:
+    return db_path.parent / f".{db_path.name}.backup-order"
+
+
+def _is_backup_record_name(db_path: Path, name: str) -> bool:
+    pattern = rf"{re.escape(db_path.stem)}-\d{{8}}T\d{{12}}Z(?:-[0-9a-f]{{32}})?\.sqlite3"
+    return re.fullmatch(pattern, name) is not None
+
+
+def _recorded_backup_order(db_path: Path) -> list[Path]:
+    try:
+        names = _backup_order_record_path(db_path).read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    except UnicodeError as error:
+        raise sqlite3.DatabaseError("invalid database backup order record") from error
+    # Only generated basenames are valid; recovery metadata cannot choose an
+    # arbitrary file outside this database's existing backup family.
+    if not names or len(names) != len(set(names)) or any(
+        not _is_backup_record_name(db_path, name) for name in names
+    ):
+        raise sqlite3.DatabaseError("invalid database backup order record")
+    return [database_backup_dir(db_path) / name for name in names]
+
+
+def _record_backup_order(db_path: Path, candidates: list[Path]) -> None:
+    record_path = _backup_order_record_path(db_path)
+    temp_path = record_path.with_name(f"{record_path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8") as record:
+            # Non-generated legacy names remain fallbacks; do not introduce
+            # an invalid or path-bearing name into the validated order record.
+            record.write("\n".join(
+                path.name for path in candidates if _is_backup_record_name(db_path, path.name)
+            ))
+            record.flush()
+            os.fsync(record.fileno())
+        os.replace(temp_path, record_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def _backup_created_at(db_path: Path, backup_path: Path) -> datetime:
@@ -191,6 +236,7 @@ def _backup_created_at(db_path: Path, backup_path: Path) -> datetime:
     suffix = ".sqlite3"
     if backup_path.name.startswith(prefix) and backup_path.name.endswith(suffix):
         timestamp = backup_path.name[len(prefix) : -len(suffix)]
+        timestamp = re.sub(r"-[0-9a-f]{32}$", "", timestamp)
         try:
             return datetime.strptime(timestamp, "%Y%m%dT%H%M%S%fZ").replace(
                 tzinfo=timezone.utc
@@ -213,9 +259,43 @@ def _recovery_files(directory: Path, pattern: str) -> list[Path]:
     ]
 
 
+def _other_database_paths(db_path: Path, record_suffix: str) -> list[Path]:
+    owners: list[Path] = []
+    for record in _recovery_files(db_path.parent, f".*{record_suffix}"):
+        owner_name = record.name[1:-len(record_suffix)]
+        if owner_name != db_path.name and Path(owner_name).stem == db_path.stem:
+            owners.append(db_path.with_name(owner_name))
+    return owners
+
+
+def _foreign_recorded_backups(db_path: Path) -> set[Path]:
+    claimed: set[Path] = set()
+    for owner in _other_database_paths(db_path, ".backup-order"):
+        # A filename-scoped record claims only that publisher's snapshots.
+        # Unreadable claims fail before deletion or corruption recovery.
+        claimed.update(_recorded_backup_order(owner))
+    return claimed
+
+
+def _has_other_same_stem_database(db_path: Path) -> bool:
+    if _other_database_paths(db_path, ".maintenance.lock") or _other_database_paths(db_path, ".backup-order"):
+        return True
+    # Older installations may predate maintenance records. A sibling SQLite
+    # filename also makes the provenance of shared legacy copies ambiguous.
+    return any(
+        path.name != db_path.name and path.stem == db_path.stem
+        and path.suffix.lower() in {".sqlite3", ".sqlite", ".db"}
+        for path in _recovery_files(db_path.parent, "*")
+    )
+
+
 def _backup_candidates(db_path: Path) -> list[Path]:
+    # List files before reading ownership records: a concurrent publisher
+    # records its unique basename before making that file visible.
+    candidates = _recovery_files(database_backup_dir(db_path), _backup_pattern(db_path))
+    foreign = _foreign_recorded_backups(db_path)
     return sorted(
-        _recovery_files(database_backup_dir(db_path), _backup_pattern(db_path)),
+        (path for path in candidates if path not in foreign and _is_regular_file(path)),
         key=lambda path: (_backup_created_at(db_path, path), path.name),
         reverse=True,
     )
@@ -278,6 +358,7 @@ def permanent_deletion_guard(
                          *_backup_candidates(db_path), *_quarantine_candidates(db_path)]:
                 path.unlink()
             _recovery_pending_path(db_path).unlink(missing_ok=True)
+            _backup_order_record_path(db_path).unlink(missing_ok=True)
             invalidated = True
 
         try:
@@ -298,8 +379,23 @@ def permanent_deletion_guard(
                     on_backup_error(error)
 
 
+def _ordered_backup_candidates(db_path: Path, *, skip_unreadable: bool = False) -> list[Path]:
+    candidates = _backup_candidates(db_path)
+    try:
+        recorded = _recorded_backup_order(db_path)
+    except (OSError, sqlite3.DatabaseError):
+        if not skip_unreadable:
+            raise
+        recorded = []
+    # Missing publication targets and already-rotated copies are ignored. Keep
+    # unrecorded legacy snapshots as fallbacks without guessing their order.
+    ordered = [path for path in recorded if path in candidates]
+    return [*ordered, *(path for path in candidates if path not in ordered)]
+
+
 def _latest_valid_backup(db_path: Path, *, skip_unreadable: bool = False) -> Path | None:
-    for candidate in _backup_candidates(db_path):
+    candidates = _ordered_backup_candidates(db_path, skip_unreadable=skip_unreadable)
+    for candidate in candidates:
         try:
             if quick_check_database(candidate, immutable=True):
                 return candidate
@@ -394,12 +490,22 @@ def _backup_is_due(db_path: Path, now: datetime, interval_seconds: int) -> bool:
     elapsed_seconds = (
         now.astimezone(timezone.utc) - _backup_created_at(db_path, latest)
     ).total_seconds()
-    return elapsed_seconds >= max(0, interval_seconds)
+    # A corrected clock must not postpone backups until a future filename
+    # catches up. The next verified snapshot resets the interval baseline.
+    return elapsed_seconds < 0 or elapsed_seconds >= max(0, interval_seconds)
 
 
 def _rotate_backups(db_path: Path, retention: int) -> None:
-    keep = max(1, retention)
-    for stale_path in _backup_candidates(db_path)[keep:]:
+    # Successful publication order survives clock changes for every retained
+    # copy, including the fallback when the newest snapshot becomes corrupt.
+    candidates = _ordered_backup_candidates(db_path)
+    ambiguous_legacy = _has_other_same_stem_database(db_path)
+    recorded = set(_recorded_backup_order(db_path))
+    for stale_path in candidates[max(1, retention):]:
+        # Correcting one DB's clock must not remove another DB's unrecorded
+        # legacy copy. Preserve uncertain provenance until explicitly resolved.
+        if ambiguous_legacy and stale_path not in recorded:
+            continue
         stale_path.unlink(missing_ok=True)
 
 
@@ -413,8 +519,10 @@ def create_rotating_backup(
 ) -> Path | None:
     """Create a verified SQLite snapshot and retain only the newest copies."""
 
-    resolved_now = now or datetime.now(timezone.utc)
     with _maintenance_lock(db_path):
+        # Sample the real clock after admission; an older queued sample must
+        # not look like a backward clock correction after another backup wins.
+        resolved_now = now or datetime.now(timezone.utc)
         return _create_rotating_backup_locked(
             source,
             db_path,
@@ -448,6 +556,20 @@ def _create_rotating_backup_locked(
         destination = None
         if not quick_check_database(temp_path, immutable=True):
             raise sqlite3.DatabaseError("database backup failed quick_check")
+        previous = _ordered_backup_candidates(db_path, skip_unreadable=True)
+        try:
+            recorded = set(_recorded_backup_order(db_path))
+        except (OSError, sqlite3.DatabaseError):
+            recorded = set()
+        # Do not claim unrecorded legacy copies whose provenance is unknown.
+        previous = [path for path in previous if path in recorded]
+        # Publish intent before the snapshot: a process exit after its rename
+        # must not leave a complete newer copy behind an older recovery record.
+        # Keep all prior entries until rotation; a failed rename has a missing
+        # target and must preserve the previous recovery order even at retention 1.
+        _record_backup_order(db_path, [final_path, *(
+            path for path in previous if path != final_path
+        )])
         os.replace(temp_path, final_path)
         _rotate_backups(db_path, retention)
         return final_path
