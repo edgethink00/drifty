@@ -2018,11 +2018,11 @@ class TrackerDatabase:
             refresh_backup=refresh_recovery_backup,
         ) as invalidate_recovery_copies:
             with self.connect() as conn:
-                if expected_capture_timings is not None and not conn.in_transaction:
-                    # Validation and guarded deletion must share a write
-                    # transaction. A SELECT alone does not start Python's
-                    # SQLite transaction and would let another writer replace
-                    # the validated row before its ID is deleted.
+                if not conn.in_transaction:
+                    # Targets, associated metadata and optional capture validation
+                    # must share the deletion's write transaction. A SELECT alone
+                    # would let daemon writers change those references before the
+                    # first DELETE acquires SQLite's write lock.
                     conn.execute("BEGIN IMMEDIATE")
                 rows: list[sqlite3.Row] = []
                 columns = "*" if expected_capture_timings is not None else "id, segment_uid, youtube_video_id"

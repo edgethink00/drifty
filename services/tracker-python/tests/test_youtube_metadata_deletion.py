@@ -53,6 +53,81 @@ class YouTubeMetadataDeletionTests(unittest.TestCase):
         self.assertEqual(self.db.delete_activity_segments([segment_id]), 1)
         self.assertEqual(self.metadata_ids(), set())
 
+    def test_selected_deletion_reads_metadata_after_waiting_for_writer(self):
+        self.db.record_snapshot(Snapshot(
+            observed_at="2026-10-03T09:00:00+00:00",
+            app_name="Synthetic Browser", bundle_id="fixture.browser",
+            window_title="Awaiting browser-history context", source="accessibility",
+        ), 5)
+        segment_id = str(self.db.connect().execute(
+            "SELECT MAX(id) FROM activity_segments"
+        ).fetchone()[0])
+        self.db.save_youtube_metadata(YouTubeVideoMetadata(video_id="backfilled-video"))
+        self.db.save_youtube_metadata(YouTubeVideoMetadata(video_id="retained-cache"))
+        entered, release = threading.Event(), threading.Event()
+        worker_errors = []
+
+        def writer():
+            try:
+                with closing(sqlite3.connect(self.path, timeout=5)) as conn:
+                    with conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        conn.execute(
+                            "UPDATE activity_segments SET youtube_video_id = ? WHERE id = ?",
+                            ("backfilled-video", int(segment_id)),
+                        )
+                        entered.set()
+                        if not release.wait(5):
+                            raise RuntimeError("QA backfill writer release timeout")
+            except BaseException as error:
+                worker_errors.append(error)
+
+        # Release the producer when deletion requests a SQLite transaction.
+        # A deferred BEGIN after reading targets sees stale metadata; admission
+        # before that read waits for this committed reference to become visible.
+        def release_writer(statement):
+            if statement.lstrip().upper().startswith("BEGIN"):
+                release.set()
+
+        thread = threading.Thread(target=writer)
+        thread.start()
+        connection = self.db.connect()
+        try:
+            self.assertTrue(entered.wait(5))
+            connection.set_trace_callback(release_writer)
+            self.assertEqual(self.db.delete_activity_segments([segment_id]), 1)
+        finally:
+            connection.set_trace_callback(None)
+            release.set()
+            thread.join(5)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(worker_errors, [])
+        self.assertEqual(connection.execute(
+            "SELECT COUNT(*) FROM activity_segments"
+        ).fetchone()[0], 0)
+        self.assertEqual(self.metadata_ids(), {"retained-cache"})
+
+    def test_busy_writer_refusal_preserves_rows_metadata_and_backup(self):
+        from app.storage.database_maintenance import create_rotating_backup
+        segment_id = self.add_activity("blocked-video")
+        self.db.save_youtube_metadata(YouTubeVideoMetadata(video_id="blocked-video"))
+        backup = create_rotating_backup(self.db.connect(), self.path, interval_seconds=0)
+        expected = backup.read_bytes()
+        self.db.connect().execute("PRAGMA busy_timeout = 50")
+        with closing(sqlite3.connect(self.path)) as writer:
+            writer.execute("BEGIN IMMEDIATE")
+            try:
+                with self.assertRaisesRegex(sqlite3.OperationalError, "locked"):
+                    self.db.delete_activity_segments([segment_id])
+            finally:
+                writer.rollback()
+        self.assertFalse(self.db.connect().in_transaction)
+        self.assertEqual(self.db.connect().execute(
+            "SELECT COUNT(*) FROM activity_segments"
+        ).fetchone()[0], 1)
+        self.assertEqual(self.metadata_ids(), {"blocked-video"})
+        self.assertEqual(backup.read_bytes(), expected)
+
     def test_shared_reference_keeps_metadata_until_last_segment_is_deleted(self):
         first = self.add_activity("shared-video")
         second = self.add_activity("shared-video", minute=2)
