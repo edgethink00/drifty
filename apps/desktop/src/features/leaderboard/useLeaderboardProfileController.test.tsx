@@ -29,7 +29,7 @@ vi.mock("../../lib/api/trackerClient", () => ({
 }));
 
 import { optOutLeaderboard, publishOwnFocusTotal, publishOwnLeaderboardCheckpoint } from "./leaderboardService";
-import { saveOwnProfile } from "../profile/profileService";
+import { fetchOwnProfile, saveOwnProfile } from "../profile/profileService";
 import { trackerClient } from "../../lib/api/trackerClient";
 
 function defaultProps() {
@@ -196,19 +196,10 @@ describe("useLeaderboardProfileController - leave privacy", () => {
     vi.mocked(optOutLeaderboard).mockClear();
   });
 
-  it("does not change profile visibility when leaving without the privacy option", async () => {
+  it("closes the public profile when leaving the leaderboard", async () => {
     const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()));
     await act(async () => {
       await result.current.handleLeaderboardOptOut();
-    });
-    expect(optOutLeaderboard).toHaveBeenCalled();
-    expect(saveOwnProfile).not.toHaveBeenCalled();
-  });
-
-  it("makes the public profile private when leaving with that option", async () => {
-    const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()));
-    await act(async () => {
-      await result.current.handleLeaderboardOptOut({ makeProfilePrivate: true });
     });
     expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ is_public: false }));
   });
@@ -217,9 +208,39 @@ describe("useLeaderboardProfileController - leave privacy", () => {
     vi.mocked(saveOwnProfile).mockResolvedValueOnce({ success: false, error: "write failed" });
     const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()));
     await act(async () => {
-      await result.current.handleLeaderboardOptOut({ makeProfilePrivate: true });
+      await result.current.handleLeaderboardOptOut();
     });
     expect(result.current.leaderboardActionError).toMatch(/public profile page is still on/i);
+  });
+});
+
+describe("useLeaderboardProfileController - editor draft", () => {
+  afterEach(() => {
+    vi.mocked(fetchOwnProfile).mockResolvedValue({ success: true, error: null, data: null });
+  });
+
+  it("drops unsaved edits when the editor closes, so a later leave saves only what was confirmed", async () => {
+    vi.mocked(fetchOwnProfile).mockResolvedValue({
+      success: true,
+      error: null,
+      data: { display_name: "Saved name", bio: "Saved bio", avatar_url: "", website_url: "", github_url: "", linkedin_url: "", is_public: false } as never,
+    });
+    vi.mocked(saveOwnProfile).mockClear();
+    const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()));
+    await waitFor(() => expect(result.current.profileDraft.displayName).toBe("Saved name"));
+
+    act(() => result.current.openProfileEditor());
+    act(() => result.current.updateProfileDraft({ displayName: "Typed name", bio: "Typed bio" }));
+    expect(result.current.profileDraft.displayName).toBe("Typed name");
+
+    act(() => result.current.closeProfileEditor());
+    expect(result.current.isProfileEditorOpen).toBe(false);
+    expect(result.current.profileDraft).toMatchObject({ displayName: "Saved name", bio: "Saved bio" });
+
+    await act(async () => {
+      await result.current.handleLeaderboardOptOut();
+    });
+    expect(saveOwnProfile).toHaveBeenLastCalledWith(expect.objectContaining({ display_name: "Saved name", bio: "Saved bio", is_public: false }));
   });
 });
 

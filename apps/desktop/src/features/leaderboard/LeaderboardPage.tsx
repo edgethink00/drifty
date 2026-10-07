@@ -27,7 +27,7 @@ export type LeaderboardPageProps = {
   statusTone?: "error" | "neutral";
   totalFocusSeconds7d: number;
   onOptIn: () => void;
-  onOptOut: (options?: { readonly makeProfilePrivate?: boolean }) => void;
+  onOptOut: () => void;
   onPeriodChange: (period: LeaderboardPeriod) => void;
   onSelectProfile: (row: LeaderboardRow) => void;
   onSignIn: () => void;

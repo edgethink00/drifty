@@ -546,8 +546,7 @@
 }
 
 /* ── Public-profile / edit-preview social links as chips ────────────────── */
-.profile-modal > .profile-socials,
-.profile-editor-preview .profile-socials {
+.profile-modal > .profile-socials {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -556,12 +555,7 @@
   list-style: none;
 }
 
-.profile-editor-preview .profile-socials {
-  margin-bottom: 0;
-}
-
-.profile-modal > .profile-socials a,
-.profile-editor-preview .profile-socials a {
+.profile-modal > .profile-socials a {
   display: inline-flex;
   align-items: center;
   padding: 0.3rem 0.66rem;
@@ -578,55 +572,10 @@
     color 120ms ease;
 }
 
-.profile-editor-preview .profile-socials a {
-  padding: 0.24rem 0.6rem;
-  font-size: 0.75rem;
-  color: var(--text-soft);
-  background: color-mix(in srgb, var(--surface-strong) 40%, transparent);
-}
-
-.profile-modal > .profile-socials a:hover,
-.profile-editor-preview .profile-socials a:hover {
+.profile-modal > .profile-socials a:hover {
   color: var(--accent-strong);
   border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
   background: var(--accent-soft);
-}
-
-/* ── Public-visibility toggle copy (reset sidebar-form label cascade) ────── */
-.profile-editor-modal .profile-visibility-toggle {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 0.6rem;
-  cursor: pointer;
-}
-
-.profile-editor-modal .profile-visibility-toggle__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.14rem;
-  min-width: 0;
-}
-
-.profile-editor-modal .profile-visibility-toggle__copy strong {
-  font-family: var(--font-sans);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-  line-height: 1.35;
-  color: var(--text);
-}
-
-.profile-editor-modal .profile-visibility-toggle__copy small {
-  font-family: var(--font-sans);
-  font-size: 0.72rem;
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  line-height: 1.5;
-  color: var(--text-soft);
-  justify-self: start;
 }
 
 /* Public-profile freshness line sits flush against the modal's bottom padding. */

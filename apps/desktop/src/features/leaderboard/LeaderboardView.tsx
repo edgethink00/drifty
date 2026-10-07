@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { formatLocalizedDuration } from "../../lib/formatting";
-import { normalizeExternalUrl, openPublicProfilePage, type ProfileDraft } from "../profile/ProfileModals";
+import { normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
 import type { FocusCardControls } from "../share/useFocusCard";
 import { LeaderboardBoard } from "./LeaderboardBoard";
@@ -9,7 +9,6 @@ import { ProfileAvatar, StateBlock } from "./leaderboardViewHelpers";
 import { RankEmbedsModal } from "./RankEmbedsModal";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
-import { useModalDismiss } from "../../lib/useModalDismiss";
 import { LeaderboardSparkline } from "./LeaderboardSparkline";
 import { DEFAULT_LEADERBOARD_GRAPH_STYLE, type LeaderboardGraphStyle } from "./leaderboardGraphStyle";
 import { formatPreciseTopPercentile, getPreciseTopPercentile } from "./leaderboardStanding";
@@ -21,8 +20,6 @@ export type LeaderboardPublicProfileControls = {
   readonly draft: ProfileDraft;
   readonly focusSeconds7d: number;
   readonly isPreviewProfile?: boolean;
-  /** True whenever `is_public` keeps the profile page live while the user is off the board. */
-  readonly liveOffBoard?: boolean;
   readonly localMetricsStatus?: "loading" | "ready" | "error";
   readonly profileError: string | null;
   readonly profileLoading: boolean;
@@ -33,7 +30,6 @@ export type LeaderboardPublicProfileControls = {
   readonly onCopyProfileLink: () => void;
   readonly onEditProfile: () => void;
   readonly onEnsureProfile: () => Promise<boolean>;
-  readonly onSetProfileVisibility: (isPublic: boolean) => Promise<boolean>;
 };
 
 export type LeaderboardViewProps = {
@@ -64,7 +60,7 @@ export type LeaderboardViewProps = {
   statusTone?: "error" | "neutral";
   onOptIn?: () => void;
   onSignIn?: () => void;
-  onOptOut?: (options?: { readonly makeProfilePrivate?: boolean }) => void;
+  onOptOut?: () => void;
   onPeriodChange?: (period: LeaderboardPeriod) => void;
   onSelectProfile?: (row: LeaderboardRow) => void;
   /** Dev-only sparkline. Production callers leave this unset / "off". */
@@ -105,17 +101,6 @@ export function LeaderboardView({
   const { effectiveLanguage, t } = useLocalization();
   const [searchQuery, setSearchQuery] = useState("");
   const [rankEmbedOpen, setRankEmbedOpen] = useState(false);
-  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const [leaveMakePrivate, setLeaveMakePrivate] = useState(true);
-  // Confirm only when a public page actually exists. A first-run draft defaults
-  // isPublic true, and that must not put a hide-profile checkbox on leave.
-  const publicProfileIsOn = Boolean(publicProfile?.publicId) && publicProfile?.draft.isPublic === true;
-  const closeLeaveConfirm = useCallback(() => setLeaveConfirmOpen(false), []);
-  useModalDismiss(closeLeaveConfirm, { disabled: !leaveConfirmOpen || !publicProfileIsOn });
-  useEffect(() => {
-    if (publicProfileIsOn) return;
-    setLeaveConfirmOpen(false);
-  }, [publicProfileIsOn]);
   const previewName = resolvePublicNamePreview(profileDisplayName, email, effectiveLanguage);
   // Display names are intentionally non-unique. Only the authenticated own-entry
   // RPC rank may associate a public row with this account.
@@ -127,8 +112,6 @@ export function LeaderboardView({
   const profileDraft = publicProfile?.draft ?? null;
   const profileAvatarUrl = profileDraft?.avatarUrl.trim() ?? "";
   const previewBio = profileDraft?.bio?.trim() ?? "";
-  // Captured out of the closure so the open-page button keeps its non-null narrowing.
-  const publicPageId = publicProfile?.publicId ?? null;
   const editProfile = publicProfile?.onEditProfile ?? null;
   const weekFocusSeconds = publicProfile?.focusSeconds7d ?? 0;
   const dailyAverageSeconds = Math.round(weekFocusSeconds / 7);
@@ -286,11 +269,6 @@ export function LeaderboardView({
                         className="app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
                         aria-describedby="leaderboard-participation-privacy"
                         onClick={() => {
-                          if (publicProfileIsOn) {
-                            setLeaveMakePrivate(true);
-                            setLeaveConfirmOpen(true);
-                            return;
-                          }
                           onOptOut?.();
                         }}
                         disabled={isActionLoading || isLoading || !onOptOut}
@@ -349,30 +327,6 @@ export function LeaderboardView({
                 {!isLoading && actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
                 {!isLoading && !isOptedIn && isCatchingUp && !actionError ? (
                   <p className="capture-recency" role="status">{t("leaderboard.catchingUpNotice")}</p>
-                ) : null}
-                {!isLoading && !isOptedIn && publicProfile?.liveOffBoard && publicProfile.isPreviewProfile !== true ? (
-                  <div className="leaderboard-public-profile__notice" role="status">
-                    <p className="capture-recency">{t("leaderboard.publicProfileOffBoard")}</p>
-                    <div className="leaderboard-public-profile__notice-actions">
-                      <button
-                        type="button"
-                        className="app-btn app-btn--secondary app-btn--compact"
-                        onClick={() => void publicProfile.onSetProfileVisibility(false)}
-                        disabled={publicProfile.profileSaving}
-                      >
-                        {t("leaderboard.makeProfilePrivate")}
-                      </button>
-                      {publicPageId ? (
-                        <button
-                          type="button"
-                          className="app-btn app-btn--quiet app-btn--compact"
-                          onClick={() => void openPublicProfilePage(publicPageId)}
-                        >
-                          {t("profile.editor.openPublicPage")}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
                 ) : null}
                 {!isLoading && (publicProfile?.profileError || publicProfile?.profileMessage) ? (
                   <div className="leaderboard-public-profile__messages">
@@ -610,11 +564,6 @@ export function LeaderboardView({
                       className="app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
                       aria-describedby="leaderboard-participation-privacy"
                       onClick={() => {
-                        if (publicProfileIsOn) {
-                          setLeaveMakePrivate(true);
-                          setLeaveConfirmOpen(true);
-                          return;
-                        }
                         onOptOut?.();
                       }}
                       disabled={isActionLoading || !onOptOut}
@@ -706,30 +655,6 @@ export function LeaderboardView({
           {!isLoading && !isOptedIn && isCatchingUp && !actionError ? (
             <p className="capture-recency" role="status">{t("leaderboard.catchingUpNotice")}</p>
           ) : null}
-          {!isLoading && !isOptedIn && publicProfile?.liveOffBoard && publicProfile.isPreviewProfile !== true ? (
-            <div className="leaderboard-public-profile__notice" role="status">
-              <p className="capture-recency">{t("leaderboard.publicProfileOffBoard")}</p>
-              <div className="leaderboard-public-profile__notice-actions">
-                <button
-                  type="button"
-                  className="app-btn app-btn--secondary app-btn--compact"
-                  onClick={() => void publicProfile.onSetProfileVisibility(false)}
-                  disabled={publicProfile.profileSaving}
-                >
-                  {t("leaderboard.makeProfilePrivate")}
-                </button>
-                {publicPageId ? (
-                  <button
-                    type="button"
-                    className="app-btn app-btn--quiet app-btn--compact"
-                    onClick={() => void openPublicProfilePage(publicPageId)}
-                  >
-                    {t("profile.editor.openPublicPage")}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
           {!isLoading && (publicProfile?.profileError || publicProfile?.profileMessage) ? (
             <div className="leaderboard-public-profile__messages">
               {publicProfile.profileError ? <p className="capture-recency capture-recency--error">{publicProfile.profileError}</p> : null}
@@ -760,50 +685,7 @@ export function LeaderboardView({
       </div>
 
       <ModalPresence>
-        {leaveConfirmOpen && publicProfileIsOn ? (
-        <div className="auth-modal__overlay" onClick={() => setLeaveConfirmOpen(false)}>
-          <section
-            className="auth-modal modal-shell leaderboard-leave-dialog"
-            data-modal-variant="compact"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="leaderboard-leave-title"
-            aria-describedby="leaderboard-leave-body"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-head">
-              <div className="modal-head__copy">
-                <h2 id="leaderboard-leave-title">{t("leaderboard.leaveConfirmTitle")}</h2>
-                <p id="leaderboard-leave-body">{t("leaderboard.leaveConfirmBody")}</p>
-              </div>
-            </div>
-            <label className="leaderboard-leave-check">
-              <input
-                className="leaderboard-leave-check__input"
-                type="checkbox"
-                checked={leaveMakePrivate}
-                onChange={(event) => setLeaveMakePrivate(event.target.checked)}
-              />
-              <span className="leaderboard-leave-check__copy">{t("leaderboard.leaveMakePrivate")}</span>
-            </label>
-            <div className="modal-foot">
-              <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setLeaveConfirmOpen(false)}>
-                {t("common.cancel")}
-              </button>
-              <button
-                type="button"
-                className="modal-btn modal-btn--danger"
-                onClick={() => {
-                  setLeaveConfirmOpen(false);
-                  onOptOut?.({ makeProfilePrivate: leaveMakePrivate });
-                }}
-              >
-                {t("leaderboard.leave")}
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : !isLoading && publicProfile && rankEmbedOpen ? (
+        {!isLoading && publicProfile && rankEmbedOpen ? (
         <RankEmbedsModal
           avatarUrl={profileAvatarUrl}
           displayName={previewName}

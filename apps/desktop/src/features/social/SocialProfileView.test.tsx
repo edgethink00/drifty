@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LeaderboardPublicProfileControls } from "../leaderboard/LeaderboardView";
 import type { FocusCardControls } from "../share/useFocusCard";
 import { SocialProfileView } from "./SocialProfileView";
 
 const PUBLIC_ID = "9f3a1b2c-0000-4d5e-8f6a-1b2c3d4e5f60";
+
+afterEach(() => {
+  cleanup();
+});
 
 function makeCard(overrides: Partial<FocusCardControls> = {}): FocusCardControls {
   return {
@@ -63,7 +67,6 @@ function makeProfile(card = makeCard()): LeaderboardPublicProfileControls {
     onCopyProfileLink: vi.fn(),
     onEditProfile: vi.fn(),
     onEnsureProfile: vi.fn().mockResolvedValue(true),
-    onSetProfileVisibility: vi.fn().mockResolvedValue(true),
   };
 }
 
@@ -85,7 +88,8 @@ describe("SocialProfileView", () => {
 
     expect(screen.getByRole("heading", { name: "Alex" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /what you share/i })).toBeTruthy();
-    expect(screen.getByRole("switch", { name: /public profile/i })).toBeTruthy();
+    expect(screen.queryByRole("switch", { name: /public profile/i })).toBeNull();
+    expect(screen.getByText(/joining the leaderboard publishes this page/i)).toBeTruthy();
     expect(screen.getByRole("switch", { name: /focus summary/i })).toBeTruthy();
     expect(screen.queryByRole("switch", { name: /leaderboard rank/i })).toBeNull();
     expect(screen.getByRole("button", { name: /profile embed/i })).toBeTruthy();
@@ -99,13 +103,10 @@ describe("SocialProfileView", () => {
     expect(within(publicPreview).queryByText("Workspace")).toBeNull();
   });
 
-  it("persists master visibility and focus detail choices", () => {
+  it("persists focus detail choices", () => {
     const card = makeCard();
     const profile = makeProfile(card);
     renderProfile(profile);
-
-    fireEvent.click(screen.getByRole("switch", { name: /public profile/i }));
-    expect(profile.onSetProfileVisibility).toHaveBeenCalledWith(false);
 
     fireEvent.click(screen.getByRole("checkbox", { name: /category breakdown/i }));
     expect(card.setDetailFlag).toHaveBeenCalledWith("shareCategoryBreakdown", true);

@@ -1,6 +1,7 @@
 import type { LeaderboardPageProps } from "../leaderboard/LeaderboardPage";
 import { LeaderboardPage } from "../leaderboard/LeaderboardPage";
 import { SocialProfileView } from "./SocialProfileView";
+import { useLocalization } from "../localization/LocalizationContext";
 import "../leaderboard/leaderboard.css";
 import "../leaderboard/rank-embeds.css";
 import "./social.css";
@@ -12,15 +13,15 @@ export type SocialPageProps = LeaderboardPageProps & {
 };
 
 export function SocialPage({ activeSection, ...leaderboardProps }: SocialPageProps) {
+  const { t } = useLocalization();
   if (activeSection === "leaderboard") return <LeaderboardPage {...leaderboardProps} />;
 
   return (
     <div className="page social-page">
       <div className="pg-head social-page__head">
         <div>
-          <span className="eyebrow">Public, by choice</span>
-          <h1>Profile</h1>
-          <p className="page-subhead">Choose what appears publicly and create portable embeds.</p>
+          <h1>{t("social.profile.title")}</h1>
+          <p className="page-subhead">{t("social.profile.subhead")}</p>
         </div>
       </div>
 

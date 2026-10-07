@@ -944,36 +944,6 @@
   font-weight: 600;
 }
 
-.profile-visibility-toggle {
-  align-items: flex-start;
-  cursor: pointer;
-  display: flex;
-  gap: 0.6rem;
-}
-
-.profile-visibility-toggle .drifty-checkbox {
-  flex: 0 0 auto;
-  margin-top: 0.1rem;
-}
-
-.profile-visibility-toggle__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.profile-visibility-toggle__copy strong {
-  font-size: 0.82rem;
-}
-
-.profile-visibility-toggle__copy small {
-  color: var(--text-soft, inherit);
-  font-size: 0.74rem;
-  line-height: 1.45;
-  opacity: 0.85;
-}
-
 /* ── Responsive ────────────────────────────────────────────────────────────*/
 @media (max-width: 760px) {
   .profile-page--v2 .profile-share__publish {

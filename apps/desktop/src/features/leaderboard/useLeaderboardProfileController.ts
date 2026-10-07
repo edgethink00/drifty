@@ -9,7 +9,6 @@ import {
 } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { shouldUseLeaderboardPreview } from "../../lib/api/previewData";
-import { isPublicProfileLiveOffBoard } from "./publicProfileOffBoard";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { capturePostHogDailyEvent, capturePostHogEvent, toAnalyticsErrorKind, toCountBucket, toDailyDedupKey, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
 
@@ -134,11 +133,6 @@ type UseLeaderboardProfileControllerResult = {
   readonly profileReadyUserId: string | null;
   readonly profileSaving: boolean;
   readonly profileShareMessage: string | null;
-  /**
-   * True whenever the profile page is serving while the user is off the board. The user
-   * still chooses whether to unpublish; this only refuses to keep the state invisible.
-   */
-  readonly publicProfileLiveOffBoard: boolean;
   readonly rows: LeaderboardRow[];
   readonly selectedLeaderboardRow: LeaderboardRow | null;
   readonly selectedProfileError: string | null;
@@ -148,9 +142,8 @@ type UseLeaderboardProfileControllerResult = {
   readonly closeProfileEditor: () => void;
   readonly closeSelectedProfile: () => void;
   readonly handleLeaderboardOptIn: () => Promise<void>;
-  readonly handleLeaderboardOptOut: (options?: { readonly makeProfilePrivate?: boolean }) => Promise<void>;
+  readonly handleLeaderboardOptOut: () => Promise<void>;
   readonly handleProfilePhotoSelected: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
-  readonly handleProfileVisibilityChange: (isPublic: boolean) => Promise<boolean>;
   readonly handleSaveProfile: () => Promise<boolean>;
   readonly handleSaveProfileFromModal: () => Promise<void>;
   readonly handleSelectLeaderboardProfile: (row: LeaderboardRow) => Promise<void>;
@@ -218,8 +211,8 @@ function profileDraftFromProfile(
     websiteUrl: profile?.website_url ?? "",
     githubUrl: profile?.github_url ?? "",
     linkedinUrl: profile?.linkedin_url ?? "",
-    // Real server value — the user's visibility choice must survive edits and saves.
-    isPublic: profile?.is_public ?? true,
+    // No saved row is not a public page. Joining the leaderboard is what publishes one.
+    isPublic: profile?.is_public ?? false,
   };
 }
 
@@ -238,8 +231,8 @@ function emptyProfileDraft(
     websiteUrl: "",
     githubUrl: "",
     linkedinUrl: "",
-    // First-time profiles default to public (matches the profiles.is_public column default).
-    isPublic: true,
+    // A page does not exist until the user joins the leaderboard.
+    isPublic: false,
   };
 }
 
@@ -454,6 +447,7 @@ export function useLeaderboardProfileController({
   const leaderboardAutoPublishInFlightRef = useRef(false);
   const leaderboardCheckpointPublishInFlightRef = useRef(false);
   const leaderboardManualActionInFlightRef = useRef(false);
+  const profileVisibilitySyncKeyRef = useRef<string | null>(null);
   const leaderboardOptInCacheRef = useRef<LeaderboardOptInCache | null>(null);
   const leaderboardAutoPublishDayRef = useRef<string | null>(null);
   const isClassificationCatchingUp = Boolean(
@@ -556,12 +550,56 @@ export function useLeaderboardProfileController({
     || !isSupabaseConfigured
     || (isAuthResolved && (!isPolicySignedIn || leaderboardOwnEntryScopeRef.current === leaderboardOwnEntryScopeKey));
 
-  const publicProfileLiveOffBoard = isPublicProfileLiveOffBoard({
-    isParticipationResolved: isLeaderboardParticipationResolved,
-    isOptedIn: isLeaderboardOptedIn,
-    isProfileReady: profileReadyUserId !== null && profileReadyUserId === (user?.id ?? null),
-    isPublic: profile?.is_public,
-  });
+  useEffect(() => {
+    if (leaderboardUsesPreviewProfile || !isSupabaseConfigured || !isLeaderboardParticipationResolved) return;
+    if (!isPolicySignedIn || !user || profileReadyUserId !== user.id || !profile || profileLoading || profileError) return;
+    if (leaderboardManualActionInFlightRef.current || leaderboardActionLoading || profileSaving) return;
+    const shouldBePublic = isLeaderboardOptedIn;
+    if (profile.is_public === shouldBePublic) {
+      profileVisibilitySyncKeyRef.current = null;
+      return;
+    }
+    const syncKey = `${user.id}:${shouldBePublic}:${profile.updated_at}`;
+    if (profileVisibilitySyncKeyRef.current === syncKey) return;
+    profileVisibilitySyncKeyRef.current = syncKey;
+    const nextDraft = { ...profileDraftFromProfile(profile, user, authMetadataAvatarUrl), isPublic: shouldBePublic };
+    void (async () => {
+      const saved = await saveOwnProfile({
+        display_name: nextDraft.displayName,
+        bio: nextDraft.bio,
+        avatar_url: nextDraft.avatarUrl,
+        website_url: nextDraft.websiteUrl,
+        github_url: nextDraft.githubUrl,
+        linkedin_url: nextDraft.linkedinUrl,
+        timezone: leaderboardTimezone,
+        is_public: shouldBePublic,
+      });
+      if (profileVisibilitySyncKeyRef.current !== syncKey) return;
+      if (!saved.success || !saved.data) {
+        setProfileError(saved.error ?? t("leaderboard.publicPageSyncFailed"));
+        return;
+      }
+      const alignedProfile = { ...saved.data, is_public: shouldBePublic };
+      setProfile(alignedProfile);
+      setProfileDraft(profileDraftFromProfile(alignedProfile, user, authMetadataAvatarUrl));
+    })();
+  }, [
+    authMetadataAvatarUrl,
+    isLeaderboardOptedIn,
+    isLeaderboardParticipationResolved,
+    isPolicySignedIn,
+    isSupabaseConfigured,
+    leaderboardActionLoading,
+    leaderboardTimezone,
+    leaderboardUsesPreviewProfile,
+    profile,
+    profileError,
+    profileLoading,
+    profileReadyUserId,
+    profileSaving,
+    t,
+    user,
+  ]);
 
   useEffect(() => {
     leaderboardOptInCacheRef.current = null;
@@ -1112,7 +1150,12 @@ export function useLeaderboardProfileController({
   }, []);
 
   const openProfileEditor = useCallback(() => setIsProfileEditorOpen(true), []);
-  const closeProfileEditor = useCallback(() => setIsProfileEditorOpen(false), []);
+  const closeProfileEditor = useCallback(() => {
+    setIsProfileEditorOpen(false);
+    // Closing without saving drops the edits. Reopening, and a later leave that
+    // rewrites the profile, start from what was actually saved.
+    setProfileDraft(profile ? profileDraftFromProfile(profile, user, authMetadataAvatarUrl) : emptyProfileDraft(user, authMetadataAvatarUrl));
+  }, [authMetadataAvatarUrl, profile, user]);
 
   const closeSelectedProfile = useCallback(() => {
     selectedProfileRequestRef.current += 1;
@@ -1210,7 +1253,7 @@ export function useLeaderboardProfileController({
         github_url: joinDraft.githubUrl,
         linkedin_url: joinDraft.linkedinUrl,
         timezone: leaderboardTimezone,
-        is_public: joinDraft.isPublic,
+        is_public: true,
       });
 
       if (!profileResult.success || !profileResult.data) {
@@ -1301,12 +1344,11 @@ export function useLeaderboardProfileController({
     }
   }, [activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, builtInHeuristicsUnavailableSince, classificationAssessmentReady, effectiveLanguage, t, hasRequiredAccountAuth, includeBuiltInHeuristics, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
 
-  const handleLeaderboardOptOut = useCallback(async (options?: { readonly makeProfilePrivate?: boolean }) => {
+  const handleLeaderboardOptOut = useCallback(async () => {
     setLeaderboardActionLoading(true);
     leaderboardManualActionInFlightRef.current = true;
     setLeaderboardActionError(null);
     setLeaderboardAssessmentContext(null);
-    const makeProfilePrivate = options?.makeProfilePrivate === true;
 
     try {
       const optOutResults = await Promise.all(LEADERBOARD_PERIODS.map((period) => optOutLeaderboard(period)));
@@ -1327,29 +1369,31 @@ export function useLeaderboardProfileController({
       clearLeaderboardAutoPublishRecordsForUser(leaderboardOwnEntryScopeKey);
       setOwnLeaderboardEntry(null);
       await refreshLeaderboardData();
-      if (makeProfilePrivate) {
-        const nextDraft = { ...profileDraft, isPublic: false };
-        setProfileDraft(nextDraft);
-        const hidden = await saveOwnProfile({
-          display_name: nextDraft.displayName,
-          bio: nextDraft.bio,
-          avatar_url: nextDraft.avatarUrl,
-          website_url: nextDraft.websiteUrl,
-          github_url: nextDraft.githubUrl,
-          linkedin_url: nextDraft.linkedinUrl,
-          timezone: leaderboardTimezone,
-          is_public: false,
-        });
-        if (!hidden.success) {
-          setProfileDraft(profileDraft);
-          setLeaderboardActionError(t("leaderboard.leaveProfileStillPublic"));
-        }
+      const nextDraft = { ...profileDraft, isPublic: false };
+      setProfileDraft(nextDraft);
+      const hidden = await saveOwnProfile({
+        display_name: nextDraft.displayName,
+        bio: nextDraft.bio,
+        avatar_url: nextDraft.avatarUrl,
+        website_url: nextDraft.websiteUrl,
+        github_url: nextDraft.githubUrl,
+        linkedin_url: nextDraft.linkedinUrl,
+        timezone: leaderboardTimezone,
+        is_public: false,
+      });
+      if (!hidden.success || !hidden.data) {
+        setProfileDraft(profileDraft);
+        setLeaderboardActionError(t("leaderboard.leaveProfileStillPublic"));
+      } else {
+        const closedProfile = { ...hidden.data, is_public: false };
+        setProfile(closedProfile);
+        setProfileDraft(profileDraftFromProfile(closedProfile, user, authMetadataAvatarUrl));
       }
       capturePostHogEvent("leaderboard_action", {
         action: "opt_out",
         result: "success",
         period: activeLeaderboardPeriod,
-        profile_made_private: makeProfilePrivate,
+        profile_made_private: hidden.success,
       });
     } catch (nextError) {
       setLeaderboardActionError(toErrorMessage(nextError));
@@ -1363,7 +1407,7 @@ export function useLeaderboardProfileController({
       leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
-  }, [activeLeaderboardPeriod, leaderboardOwnEntryScopeKey, leaderboardTimezone, profileDraft, refreshLeaderboardData, t]);
+  }, [activeLeaderboardPeriod, authMetadataAvatarUrl, leaderboardOwnEntryScopeKey, leaderboardTimezone, profileDraft, refreshLeaderboardData, t, user]);
 
   const saveProfileDraft = useCallback(async (nextDraft: ProfileDraft) => {
     setProfileSaving(true);
@@ -1402,15 +1446,6 @@ export function useLeaderboardProfileController({
   }, [activeTab, authMetadataAvatarUrl, leaderboardTimezone, onAuthRequired, refreshLeaderboardData, user]);
 
   const handleSaveProfile = useCallback(async () => saveProfileDraft(profileDraft), [profileDraft, saveProfileDraft]);
-
-  const handleProfileVisibilityChange = useCallback(async (isPublic: boolean) => {
-    const previousDraft = profileDraft;
-    const nextDraft = { ...previousDraft, isPublic };
-    setProfileDraft(nextDraft);
-    const saved = await saveProfileDraft(nextDraft);
-    if (!saved) setProfileDraft(previousDraft);
-    return saved;
-  }, [profileDraft, saveProfileDraft]);
 
   const handleSaveProfileFromModal = useCallback(async () => {
     const saved = await handleSaveProfile();
@@ -1563,7 +1598,6 @@ export function useLeaderboardProfileController({
     profileReadyUserId,
     profileSaving,
     profileShareMessage,
-    publicProfileLiveOffBoard,
     rows: leaderboardRows,
     selectedLeaderboardRow,
     selectedProfileError,
@@ -1575,7 +1609,6 @@ export function useLeaderboardProfileController({
     handleLeaderboardOptIn,
     handleLeaderboardOptOut,
     handleProfilePhotoSelected,
-    handleProfileVisibilityChange,
     handleSaveProfile,
     handleSaveProfileFromModal,
     handleSelectLeaderboardProfile,

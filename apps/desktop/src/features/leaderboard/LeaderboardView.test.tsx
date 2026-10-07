@@ -89,7 +89,6 @@ function makePublicProfile(overrides: Partial<NonNullable<TestProps["publicProfi
     onCopyProfileLink: vi.fn(),
     onEditProfile: vi.fn(),
     onEnsureProfile: vi.fn().mockResolvedValue(true),
-    onSetProfileVisibility: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -134,7 +133,7 @@ describe("LeaderboardView", () => {
     const participation = screen.getByLabelText(/your leaderboard participation/i);
     expect(within(participation).queryByText("#6")).toBeNull();
     expect(within(participation).queryByText("52m")).toBeNull();
-    expect(within(participation).getByRole("button", { name: /join leaderboard/i }).getAttribute("title")).toMatch(/profile visibility is separate/i);
+    expect(within(participation).getByRole("button", { name: /join leaderboard/i }).getAttribute("title")).toMatch(/public profile page/i);
   });
 
   it("uses the authenticated entry total even when the user is outside the visible board slice", () => {
@@ -469,24 +468,6 @@ describe("LeaderboardView", () => {
     expect(within(totals).getByText("—")).toBeTruthy();
     expect(within(totals).queryByText("0m")).toBeNull();
     expect(screen.getByRole("status").textContent).toBe("Calculating your 30-day focus total…");
-  });
-
-  it("reports a live public page while off the board, and offers to unpublish", () => {
-    const onSetProfileVisibility = vi.fn().mockResolvedValue(true);
-    renderView({
-      isOptedIn: false,
-      publicProfile: makePublicProfile({ liveOffBoard: true, onSetProfileVisibility }),
-    });
-
-    expect(screen.getByText(/public profile page is on/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Make profile private" }));
-    expect(onSetProfileVisibility).toHaveBeenCalledWith(false);
-  });
-
-  it("keeps that notice hidden while the user is still on the board", () => {
-    renderView({ isOptedIn: true, publicProfile: makePublicProfile({ liveOffBoard: true }) });
-
-    expect(screen.queryByText(/public profile page is on/i)).toBeNull();
   });
 
   it("renders background refresh status as a non-error toolbar status", () => {
@@ -1060,14 +1041,12 @@ describe("LeaderboardView", () => {
     expect(screen.queryByText(/score failed public validation/i)).toBeNull();
   });
 
-  it("asks before leaving when the public profile is on", () => {
+  it("leaves immediately, including when the public page is on", () => {
     const onOptOut = vi.fn();
     renderView({ isOptedIn: true, onOptOut, publicProfile: makePublicProfile() });
     fireEvent.click(screen.getByRole("button", { name: /leave leaderboard/i }));
-    expect(onOptOut).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("dialog", { name: /leave the leaderboard/i });
-    fireEvent.click(within(dialog).getByRole("button", { name: /^leave leaderboard$/i }));
-    expect(onOptOut).toHaveBeenCalledWith({ makeProfilePrivate: true });
+    expect(screen.queryByRole("dialog", { name: /leave the leaderboard/i })).toBeNull();
+    expect(onOptOut).toHaveBeenCalledOnce();
   });
 
   it("leaves immediately when the public profile is off", () => {
@@ -1080,46 +1059,7 @@ describe("LeaderboardView", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /leave leaderboard/i }));
     expect(screen.queryByRole("dialog", { name: /leave the leaderboard/i })).toBeNull();
-    expect(onOptOut).toHaveBeenCalledWith();
-  });
-
-  it("leaves immediately when there is no public profile to hide", () => {
-    const onOptOut = vi.fn();
-    renderView({ isOptedIn: true, onOptOut });
-    fireEvent.click(screen.getByRole("button", { name: /leave leaderboard/i }));
-    expect(screen.queryByRole("dialog", { name: /leave the leaderboard/i })).toBeNull();
-    expect(onOptOut).toHaveBeenCalledWith();
-  });
-
-  it("leaves immediately when the public profile is on in draft but has no public page", () => {
-    const onOptOut = vi.fn();
-    renderView({
-      isOptedIn: true,
-      onOptOut,
-      publicProfile: makePublicProfile({ publicId: null }),
-    });
-    fireEvent.click(screen.getByRole("button", { name: /leave leaderboard/i }));
-    expect(screen.queryByRole("dialog", { name: /leave the leaderboard/i })).toBeNull();
-    expect(onOptOut).toHaveBeenCalledWith();
-  });
-
-  it("cancels leave without opting out", () => {
-    const onOptOut = vi.fn();
-    renderView({ isOptedIn: true, onOptOut, publicProfile: makePublicProfile() });
-    fireEvent.click(screen.getByRole("button", { name: /leave leaderboard/i }));
-    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    expect(screen.queryByRole("dialog", { name: /leave the leaderboard/i })).toBeNull();
-    expect(onOptOut).not.toHaveBeenCalled();
-  });
-
-  it("can leave the board without hiding the public profile", () => {
-    const onOptOut = vi.fn();
-    renderView({ isOptedIn: true, onOptOut, publicProfile: makePublicProfile() });
-    fireEvent.click(screen.getByRole("button", { name: /leave leaderboard/i }));
-    const dialog = screen.getByRole("dialog", { name: /leave the leaderboard/i });
-    fireEvent.click(within(dialog).getByRole("checkbox"));
-    fireEvent.click(within(dialog).getByRole("button", { name: /^leave leaderboard$/i }));
-    expect(onOptOut).toHaveBeenCalledWith({ makeProfilePrivate: false });
+    expect(onOptOut).toHaveBeenCalledOnce();
   });
 
   it("hides the week sparkline unless a graph style is opted in", () => {

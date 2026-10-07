@@ -138,6 +138,21 @@ export function ProfileModal({
   );
 }
 
+type GraphemeSegmenter = { segment(input: string): Iterable<{ segment: string }> };
+
+/** First visible character of a name, keeping emoji, flags, and joined sequences whole. */
+function firstGrapheme(value: string): string {
+  const text = value.trim();
+  const Segmenter = (Intl as unknown as {
+    Segmenter?: new (locales?: string | string[], options?: { granularity: "grapheme" }) => GraphemeSegmenter;
+  }).Segmenter;
+  if (Segmenter) {
+    for (const part of new Segmenter(undefined, { granularity: "grapheme" }).segment(text)) return part.segment;
+    return "";
+  }
+  return Array.from(text)[0] ?? "";
+}
+
 export function EditProfileModal({
   displayName,
   avatarUrl,
@@ -171,6 +186,7 @@ export function EditProfileModal({
   const dialogRef = useRef<HTMLElement | null>(null);
   const trimmedAvatarUrl = avatarUrl.trim();
   const bioLength = profileDraft.bio.length;
+  const avatarInitial = firstGrapheme(profileDraft.displayName.trim() || displayName).toUpperCase();
   useModalDismiss(onClose, { disabled: profileSaving });
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-modal-initial-focus]" });
 
@@ -181,67 +197,65 @@ export function EditProfileModal({
         <div className="modal-head">
           <div className="modal-head__copy">
             <h2 id="edit-profile-dialog-title">{t("profile.editor.title")}</h2>
+            <p>{t("profile.editor.previewPrivacy")}</p>
           </div>
         </div>
 
-        <div className="profile-editor-layout">
-          <aside className="profile-editor-preview" aria-label={t("profile.editor.previewAria")}>
-            <div className="profile-editor-preview__photo">
-              <label className="profile-photo-picker">
-                {trimmedAvatarUrl ? <img className="profile-editor-preview__avatar" src={trimmedAvatarUrl} alt="" aria-hidden="true" /> : <span className="profile-editor-preview__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>}
-                <span className="profile-photo-picker__badge" aria-hidden="true">
-                  <span className="profile-photo-picker__camera" />
-                </span>
-                <input type="file" accept="image/*" aria-label={t("profile.editor.choosePhoto")} onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
-              </label>
-              {trimmedAvatarUrl ? (
-                <button type="button" className="profile-photo-picker__remove" onClick={onRemovePhoto} disabled={profileLoading || profileSaving}>
-                  {t("profile.editor.removePhoto")}
-                </button>
-              ) : null}
-            </div>
-            <div className="profile-editor-preview__copy">
-              <div className="profile-editor-preview__heading">
-                <span className="label-mono">{t("profile.editor.publicPreview")}</span>
-                <span className="profile-editor-preview__privacy-badge">{t("profile.editor.aggregatesOnly")}</span>
-              </div>
-              <strong>{profileDraft.displayName.trim() || displayName}</strong>
-              <p>{profileDraft.bio.trim() || t("profile.noBio")}</p>
-            </div>
-            <ProfileSocialLinks profile={{ website_url: profileDraft.websiteUrl, github_url: profileDraft.githubUrl, linkedin_url: profileDraft.linkedinUrl }} />
-            <p className="profile-editor-preview__privacy">{t("profile.editor.previewPrivacy")}</p>
-            {/* Visibility sits with the preview it governs: what is published, whether it is
-                published, and a way to go look at it now read as one cluster. */}
-            <PublicProfileToggle
-              checked={profileDraft.isPublic}
-              disabled={profileLoading || profileSaving}
-              onChange={(isPublic) => onChange({ isPublic })}
-            />
-            {publicId && profileDraft.isPublic ? (
-              <button
-                type="button"
-                className="app-btn app-btn--quiet app-btn--compact profile-editor-preview__open-page"
-                onClick={() => void openPublicProfilePage(publicId)}
-              >
-                {t("profile.editor.openPublicPage")}
+        <div className="profile-editor-fields">
+          <div className="profile-editor-photo">
+            <label className="profile-photo-picker">
+              {trimmedAvatarUrl ? <img className="profile-photo-picker__avatar" src={trimmedAvatarUrl} alt="" aria-hidden="true" /> : <span className="profile-photo-picker__avatar" aria-hidden="true">{avatarInitial}</span>}
+              <span className="profile-photo-picker__badge" aria-hidden="true">
+                <span className="profile-photo-picker__plus" />
+              </span>
+              <input type="file" accept="image/*" aria-label={t("profile.editor.choosePhoto")} onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
+            </label>
+            {trimmedAvatarUrl ? (
+              <button type="button" className="profile-photo-picker__remove" onClick={onRemovePhoto} disabled={profileLoading || profileSaving}>
+                {t("profile.editor.removePhoto")}
               </button>
             ) : null}
-          </aside>
-
-          <div className="leaderboard-profile-sidebar__form">
-            <label><span>{t("profile.editor.displayName")}</span><input className="settings-input" data-modal-initial-focus value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-            <label>
-              <span>{t("profile.editor.bio")}</span>
-              <textarea className="settings-input settings-textarea" value={profileDraft.bio} onChange={(event) => onChange({ bio: event.target.value })} disabled={profileLoading || profileSaving} maxLength={160} />
-              <small>{t("profile.editor.characters", { count: bioLength })}</small>
-            </label>
-            <fieldset className="profile-editor-links">
-              <legend>{t("profile.editor.publicLinks")}</legend>
-              <label><span>{t("dashboard.today.website")}</span><input className="settings-input modal-code" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-              <label><span>GitHub</span><input className="settings-input modal-code" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-              <label><span>LinkedIn</span><input className="settings-input modal-code" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-            </fieldset>
           </div>
+          <label className="profile-editor-tile">
+            <span>{t("profile.editor.displayName")}</span>
+            <input
+              className="profile-editor-input profile-editor-input--name"
+              data-modal-initial-focus
+              aria-label={t("profile.editor.displayName")}
+              placeholder={displayName}
+              value={profileDraft.displayName}
+              onChange={(event) => onChange({ displayName: event.target.value })}
+              disabled={profileLoading || profileSaving}
+            />
+          </label>
+          <label className="profile-editor-tile">
+            <span>{t("profile.editor.bio")}</span>
+            <textarea
+              className="profile-editor-input profile-editor-input--bio"
+              aria-label={t("profile.editor.bio")}
+              placeholder={t("profile.editor.bioPlaceholder")}
+              value={profileDraft.bio}
+              onChange={(event) => onChange({ bio: event.target.value })}
+              disabled={profileLoading || profileSaving}
+              maxLength={160}
+              rows={2}
+            />
+            <small className="profile-editor-count">{t("profile.editor.characters", { count: bioLength })}</small>
+          </label>
+          <div className="profile-editor-tile profile-editor-links" role="group" aria-label={t("profile.editor.publicLinks")}>
+            <label className="profile-editor-row"><span>{t("dashboard.today.website")}</span><input className="profile-editor-input" inputMode="url" autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} placeholder="example.com" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            <label className="profile-editor-row"><span>GitHub</span><input className="profile-editor-input" inputMode="url" autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} placeholder="github.com/username" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            <label className="profile-editor-row"><span>LinkedIn</span><input className="profile-editor-input" inputMode="url" autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} placeholder="linkedin.com/in/username" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+          </div>
+          {publicId && profileDraft.isPublic ? (
+            <button
+              type="button"
+              className="app-btn app-btn--quiet app-btn--compact profile-editor-fields__open-page"
+              onClick={() => void openPublicProfilePage(publicId)}
+            >
+              {t("profile.editor.openPublicPage")}
+            </button>
+          ) : null}
         </div>
 
         {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}
@@ -253,39 +267,6 @@ export function EditProfileModal({
         </div>
       </section>
     </div>
-  );
-}
-
-/**
- * Master visibility for profile-owned surfaces. `profiles.is_public` gates the public profile
- * page and profile/rank embeds. Leaderboard rows are governed separately by their opt-in state.
- */
-export function PublicProfileToggle({
-  checked,
-  disabled,
-  onChange,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  const { t } = useLocalization();
-  return (
-    <label className="profile-visibility-toggle">
-      <input
-        className="modal-switch"
-        type="checkbox"
-        role="switch"
-        aria-label={t("profile.editor.publicAria")}
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-      <span className="profile-visibility-toggle__copy">
-        <strong>{t("profile.editor.publicTitle")}</strong>
-        <small>{t("profile.editor.publicDetail")}</small>
-      </span>
-    </label>
   );
 }
 

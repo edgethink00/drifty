@@ -24,7 +24,6 @@ const animatedModalPanelFiles = [
   "./features/device-sync/DeviceSyncSetupModal.tsx",
   "./features/feedback/FeedbackModal.tsx",
   "./features/history/HistoryView.tsx",
-  "./features/leaderboard/LeaderboardView.tsx",
   "./features/leaderboard/RankEmbedsModal.tsx",
   "./features/onboarding/AutomaticCloseConfirmDialog.tsx",
   "./features/profile/ProfileEmbedsModal.tsx",

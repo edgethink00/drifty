@@ -13,6 +13,21 @@
   margin-bottom: var(--space-1);
 }
 
+.social-kicker {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
+  text-transform: uppercase;
+}
+
+.social-profile-identity__meta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+}
+
 .social-switch input:focus-visible + span {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -133,8 +148,15 @@
   gap: 5px;
 }
 
-.social-profile-publish__heading strong {
-  font-size: 0.96rem;
+.social-profile-publish__heading h2,
+.social-public-preview__head h2,
+.social-section__heading h2 {
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 0;
 }
 
 .social-profile-publish > p {
@@ -249,13 +271,6 @@
 .social-section__heading > div {
   display: grid;
   gap: 5px;
-}
-
-.social-section__heading h2 {
-  font-family: var(--font-display);
-  font-size: 1.18rem;
-  letter-spacing: -0.025em;
-  margin: 0;
 }
 
 .social-section__heading > p {
@@ -538,13 +553,6 @@
 .social-public-preview__head > div {
   display: grid;
   gap: 4px;
-}
-
-.social-public-preview__head h2 {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  letter-spacing: -0.025em;
-  margin: 0;
 }
 
 .social-public-preview__empty {

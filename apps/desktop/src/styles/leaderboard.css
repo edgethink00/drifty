@@ -34,7 +34,7 @@
 
 .profile-editor-modal,
 .auth-modal.profile-modal.profile-editor-modal {
-  max-width: 640px;
+  max-width: 560px;
 }
 
 .profile-modal__header {

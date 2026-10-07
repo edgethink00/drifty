@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { shiftIsoDate, todayIsoDate, type ActivitySegment } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -256,6 +256,7 @@ function makeOwnLeaderboardEntry(period: LeaderboardPeriod): OwnLeaderboardEntry
 
 describe("App leaderboard participation", () => {
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
   });
 
@@ -563,7 +564,7 @@ describe("App leaderboard participation", () => {
         github_url: "https://github.com/saved",
         linkedin_url: "https://linkedin.com/in/saved",
         timezone,
-        is_public: false,
+        is_public: true,
       });
       expect(publishOwnFocusTotal).toHaveBeenCalledTimes(3);
     });
@@ -1283,22 +1284,6 @@ describe("App leaderboard participation", () => {
       });
     });
 
-    const leaveButton = await screen.findByRole("button", { name: /^leave leaderboard$/i });
-    fireEvent.click(leaveButton);
-
-    const leaveDialog = await screen.findByRole("dialog", { name: /leave the leaderboard/i });
-    fireEvent.click(within(leaveDialog).getByRole("checkbox"));
-    fireEvent.click(within(leaveDialog).getByRole("button", { name: /^leave leaderboard$/i }));
-
-    await waitFor(() => {
-      expect(optOutLeaderboard).toHaveBeenCalledTimes(3);
-      expect(optOutLeaderboard).toHaveBeenCalledWith("daily");
-      expect(optOutLeaderboard).toHaveBeenCalledWith("weekly");
-      expect(optOutLeaderboard).toHaveBeenCalledWith("monthly");
-    });
-
-    expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
-
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window.navigator, "clipboard", {
       value: { writeText },
@@ -1312,6 +1297,19 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("https://drifty.so/profile/?id=profile-1");
     });
+
+    await openSocialLeaderboard();
+    const leaveButton = await screen.findByRole("button", { name: /^leave leaderboard$/i });
+    fireEvent.click(leaveButton);
+
+    await waitFor(() => {
+      expect(optOutLeaderboard).toHaveBeenCalledTimes(3);
+      expect(optOutLeaderboard).toHaveBeenCalledWith("daily");
+      expect(optOutLeaderboard).toHaveBeenCalledWith("weekly");
+      expect(optOutLeaderboard).toHaveBeenCalledWith("monthly");
+    });
+
+    expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
   });
 
   it("keeps rendered leaderboard content mounted during a deferred refresh after initial load", async () => {

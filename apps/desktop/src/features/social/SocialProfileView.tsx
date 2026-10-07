@@ -4,6 +4,7 @@ import { ModalPresence } from "../../components/ModalPresence";
 import type { LeaderboardPublicProfileControls } from "../leaderboard/LeaderboardView";
 import { ProfileEmbedsModal } from "../profile/ProfileEmbedsModal";
 import { ProfileSocialLinks, buildPublicProfileUrl } from "../profile/ProfileModals";
+import { useLocalization } from "../localization/LocalizationContext";
 import type { FocusCardDetailFlags } from "../share/focusCardService";
 
 type SocialProfileViewProps = {
@@ -38,6 +39,7 @@ export function SocialProfileView({
   publicProfile,
   onSignIn,
 }: SocialProfileViewProps) {
+  const { t } = useLocalization();
   const [embedsOpen, setEmbedsOpen] = useState(false);
   const [focusSwitchBusy, setFocusSwitchBusy] = useState(false);
 
@@ -70,7 +72,6 @@ export function SocialProfileView({
   const displayName = draft.displayName.trim() || profileDisplayName?.trim() || "drifty";
   const profileUrl = publicProfile.publicId ? buildPublicProfileUrl(publicProfile.publicId) : null;
   const focusLive = draft.isPublic && card?.enabled === true;
-  const controlsDisabled = publicProfile.profileLoading || publicProfile.profileSaving || publicProfile.isPreviewProfile === true;
   const detailFlags = card?.detailFlags;
   const categoryPreview = card?.previewPayload?.category_breakdown_7d ?? [];
   const hourlyPreview = card?.previewPayload?.hourly_focus_pattern ?? [];
@@ -113,7 +114,9 @@ export function SocialProfileView({
               <span className={`profile-state-pill${draft.isPublic ? " profile-state-pill--on" : ""}`}>
                 {draft.isPublic ? "Public" : "Private"}
               </span>
-              {publicProfile.publicId ? <span className="label-mono">Link ready</span> : <span className="label-mono">No public link</span>}
+              <span className="social-profile-identity__meta">
+                {publicProfile.publicId ? t("social.profile.linkReady") : t("social.profile.noPublicLink")}
+              </span>
             </div>
             <h2>{displayName}</h2>
             <p>{draft.bio.trim() || "Add a short bio to make your public profile feel like yours."}</p>
@@ -127,32 +130,23 @@ export function SocialProfileView({
         <div className="social-profile-publish">
           <div className="social-profile-publish__heading">
             <div>
-              <span className="label-mono">Master visibility</span>
-              <strong>Public profile</strong>
+              <span className="social-kicker">{t("social.profile.pageKicker")}</span>
+              <h2>{draft.isPublic ? t("social.profile.pageOn") : t("social.profile.pageOff")}</h2>
             </div>
-            <label className="social-switch">
-              <input
-                type="checkbox"
-                role="switch"
-                aria-label="Public profile"
-                checked={draft.isPublic}
-                disabled={controlsDisabled}
-                onChange={(event) => void publicProfile.onSetProfileVisibility(event.target.checked)}
-              />
-              <span aria-hidden="true" />
-            </label>
           </div>
-          <p>Turn this off to remove your profile and embeds from public responses. Leaderboard participation is separate.</p>
+          <p>{t("social.profile.pageRule")}</p>
           {profileUrl ? (
             <div className="social-profile-url">
               <span className="social-profile-url__value">{profileUrl}</span>
               <button type="button" className="app-btn app-btn--primary" onClick={publicProfile.onCopyProfileLink}>Copy link</button>
               {draft.isPublic ? <a href={profileUrl} target="_blank" rel="noreferrer" aria-label="Open public profile">↗</a> : null}
             </div>
-          ) : (
+          ) : draft.isPublic ? (
             <button type="button" className="app-btn app-btn--primary social-profile-setup" disabled={publicProfile.profileSaving} onClick={() => void publicProfile.onEnsureProfile()}>
               {publicProfile.profileSaving ? "Creating…" : "Create public link"}
             </button>
+          ) : (
+            <p>{t("social.profile.joinToPublish")}</p>
           )}
           <div className="social-profile-publish__actions">
             <button
@@ -170,8 +164,8 @@ export function SocialProfileView({
       <section className="social-public-preview" aria-labelledby="social-public-preview-title">
         <div className="social-public-preview__head">
           <div>
-            <span className="label-mono">Visitor view</span>
-            <h2 id="social-public-preview-title">Public preview</h2>
+            <span className="social-kicker">{t("social.profile.visitorKicker")}</span>
+            <h2 id="social-public-preview-title">{t("social.profile.visitorTitle")}</h2>
           </div>
           <span className={`social-live-state${draft.isPublic ? " social-live-state--on" : ""}`}>
             {draft.isPublic ? "Public" : "Hidden"}
@@ -232,10 +226,10 @@ export function SocialProfileView({
       <section className="social-section" aria-labelledby="social-sharing-title">
         <div className="social-section__heading">
           <div>
-            <span className="label-mono">Privacy controls</span>
-            <h2 id="social-sharing-title">What you share</h2>
+            <span className="social-kicker">{t("social.profile.privacyKicker")}</span>
+            <h2 id="social-sharing-title">{t("social.profile.shareTitle")}</h2>
           </div>
-          <p>Public fields and aggregates only. Raw activity stays local.</p>
+          <p>{t("social.profile.shareDetail")}</p>
         </div>
 
         <div className="social-share-list">

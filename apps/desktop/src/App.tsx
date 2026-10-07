@@ -2446,7 +2446,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     profileReadyUserId,
     profileSaving,
     profileShareMessage,
-    publicProfileLiveOffBoard,
     rows: leaderboardRows,
     selectedLeaderboardRow,
     selectedProfileError,
@@ -2458,7 +2457,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     handleLeaderboardOptIn,
     handleLeaderboardOptOut,
     handleProfilePhotoSelected,
-    handleProfileVisibilityChange,
     handleSaveProfile,
     handleSaveProfileFromModal,
     handleSelectLeaderboardProfile,
@@ -10828,7 +10826,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               focusSeconds7d: localRollingFocusSeconds,
               localMetricsStatus: leaderboardLocalMetricsStatus,
               isPreviewProfile: leaderboardUsesPreviewProfile,
-              liveOffBoard: publicProfileLiveOffBoard,
               profileError: isProfileEditorOpen ? null : profileError,
               profileLoading,
               profileMessage: isProfileEditorOpen ? null : profileMessage,
@@ -10838,13 +10835,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               onCopyProfileLink: () => void handleShareLeaderboardProfile(),
               onEditProfile: openProfileEditor,
               onEnsureProfile: handleSaveProfile,
-              onSetProfileVisibility: handleProfileVisibilityChange,
             }}
             statusMessage={leaderboardStatusMessage}
             statusTone={leaderboardStatusTone}
             totalFocusSeconds7d={totalLeaderboardFocusSeconds}
             onOptIn={() => void handleLeaderboardOptIn()}
-            onOptOut={(options) => void handleLeaderboardOptOut(options)}
+            onOptOut={() => void handleLeaderboardOptOut()}
             onPeriodChange={setActiveLeaderboardPeriod}
             onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
             onSignIn={() => void handleLeaderboardOptIn()}

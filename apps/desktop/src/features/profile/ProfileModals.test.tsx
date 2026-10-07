@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditProfileModal, type ProfileDraft } from "./ProfileModals";
 import { ModalPresence } from "../../components/ModalPresence";
@@ -65,6 +65,92 @@ describe("EditProfileModal focus lifecycle", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe("EditProfileModal fields", () => {
+  it("keeps an emoji name whole in the avatar initial", () => {
+    renderEditor({ draft: { displayName: "👩‍💻 Dev" } });
+
+    expect(document.querySelector(".profile-photo-picker__avatar")?.textContent).toBe("👩‍💻");
+  });
+
+  it("falls back to the account name for the avatar and the name hint when the draft name is blank", () => {
+    renderEditor({ displayName: "member", draft: { displayName: "   " } });
+
+    expect(document.querySelector(".profile-photo-picker__avatar")?.textContent).toBe("M");
+    expect(screen.getByLabelText("Display name").getAttribute("placeholder")).toBe("member");
+  });
+
+  it("keeps the three links in one labelled group", () => {
+    renderEditor();
+
+    const group = screen.getByRole("group", { name: "Public links" });
+    expect(within(group).getByLabelText("Website")).toBeTruthy();
+    expect(within(group).getByLabelText("GitHub")).toBeTruthy();
+    expect(within(group).getByLabelText("LinkedIn")).toBeTruthy();
+  });
+
+  it("writes each field's edit to its own draft key", () => {
+    const onChange = vi.fn();
+    renderEditor({ onChange });
+
+    fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Sam" } });
+    fireEvent.change(screen.getByLabelText("Bio"), { target: { value: "Writes code." } });
+    fireEvent.change(screen.getByLabelText("Website"), { target: { value: "sam.dev" } });
+    fireEvent.change(screen.getByLabelText("GitHub"), { target: { value: "github.com/sam" } });
+    fireEvent.change(screen.getByLabelText("LinkedIn"), { target: { value: "linkedin.com/in/sam" } });
+
+    expect(onChange.mock.calls.map(([patch]) => patch)).toEqual([
+      { displayName: "Sam" },
+      { bio: "Writes code." },
+      { websiteUrl: "sam.dev" },
+      { githubUrl: "github.com/sam" },
+      { linkedinUrl: "linkedin.com/in/sam" },
+    ]);
+  });
+
+  it("offers photo removal only when a photo is set", () => {
+    const onRemovePhoto = vi.fn();
+    const { rerender } = renderEditor({ onRemovePhoto });
+    expect(screen.queryByRole("button", { name: "Remove photo" })).toBeNull();
+
+    rerender(editorElement({ avatarUrl: "data:image/png;base64,AAAA", onRemovePhoto }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove photo" }));
+
+    expect(onRemovePhoto).toHaveBeenCalledTimes(1);
+  });
+});
+
+type EditorOverrides = {
+  displayName?: string;
+  avatarUrl?: string;
+  draft?: Partial<ProfileDraft>;
+  onChange?: (patch: Partial<ProfileDraft>) => void;
+  onRemovePhoto?: () => void;
+};
+
+function editorElement({ displayName = "Alex", avatarUrl = "", draft = {}, onChange = vi.fn(), onRemovePhoto = vi.fn() }: EditorOverrides = {}) {
+  return (
+    <EditProfileModal
+      displayName={displayName}
+      avatarUrl={avatarUrl}
+      publicId={null}
+      profileDraft={{ ...PROFILE_DRAFT, ...draft }}
+      profileLoading={false}
+      profileSaving={false}
+      profileMessage={null}
+      profileError={null}
+      onClose={vi.fn()}
+      onPhotoSelected={vi.fn()}
+      onRemovePhoto={onRemovePhoto}
+      onChange={onChange}
+      onSave={vi.fn()}
+    />
+  );
+}
+
+function renderEditor(overrides: EditorOverrides = {}) {
+  return render(editorElement(overrides));
+}
 
 function EditProfileModalHarness({
   profileSaving = false,
