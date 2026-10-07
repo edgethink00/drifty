@@ -24,6 +24,7 @@ import {
 import { toErrorMessage } from "../../lib/formatting";
 import { capturePostHogDailyEvent, capturePostHogEvent, toAnalyticsErrorKind, toDailyDedupKey, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
 import { canStartIndividualCheckout } from "./billingEligibility";
+import { useNativeTrialStatus } from "./useNativeTrialStatus";
 import { useLocalization } from "../localization/LocalizationContext";
 
 type UseCloudBillingControllerInput = {
@@ -104,6 +105,8 @@ export function useCloudBillingController({
 }: UseCloudBillingControllerInput): UseCloudBillingControllerResult {
   const { t } = useLocalization();
   const [billingEntitlement, setBillingEntitlement] = useState<BillingEntitlement | null>(null);
+  // The account a stored entitlement belongs to, so a previous account's trial never reaches the menu.
+  const [billingEntitlementAccountId, setBillingEntitlementAccountId] = useState<string | null>(null);
   const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
   const [billingActionError, setBillingActionError] = useState<string | null>(null);
@@ -179,6 +182,7 @@ export function useCloudBillingController({
         if (!result.success) throw new Error(result.error);
         billingEntitlementRequestRef.current += 1;
         setBillingEntitlement(result.data);
+        setBillingEntitlementAccountId(user.id);
         setBillingEntitlementLoading(false);
         setBillingEntitlementError(null);
         if (!result.data.canUseApp) throw new Error(t("billing.trialActivation.failed"));
@@ -263,6 +267,7 @@ export function useCloudBillingController({
     if (requestId !== billingEntitlementRequestRef.current) return null;
     if (result.success) {
       setBillingEntitlement(result.data);
+      setBillingEntitlementAccountId(user?.id ?? null);
       setBillingEntitlementLoading(false);
       captureEntitlementCheckOncePerDay({
         action: "entitlement_check",
@@ -281,7 +286,7 @@ export function useCloudBillingController({
       error_kind: toAnalyticsErrorKind(result.error),
     });
     return null;
-  }, [shouldCheckBillingEntitlement]);
+  }, [shouldCheckBillingEntitlement, user?.id]);
 
   /** Opens billing management for an existing or recoverable subscription. */
   const handleManageCloudBilling = useCallback(async () => {
@@ -572,6 +577,7 @@ export function useCloudBillingController({
       if (requestId !== billingEntitlementRequestRef.current) return;
       if (result.success) {
         setBillingEntitlement(result.data);
+        setBillingEntitlementAccountId(user?.id ?? null);
         capturePostHogEvent("billing_action", {
           action: "entitlement_check",
           result: "success",
@@ -706,6 +712,11 @@ export function useCloudBillingController({
     cloudCheckoutPendingRef.current = false;
     setCloudCheckoutAwaitingBrowser(false);
   }, [billingEntitlement?.status, cloudCheckoutAwaitingBrowser]);
+
+  const hasConfirmedAccountEntitlement = shouldCheckBillingEntitlement && hasRequiredAccountAuth
+    && isSupabaseConfigured && Boolean(user?.id) && billingEntitlementAccountId === user?.id
+    && !billingEntitlementLoading && !billingEntitlementError;
+  useNativeTrialStatus(billingEntitlement, hasConfirmedAccountEntitlement);
 
   return {
     billingActionError,

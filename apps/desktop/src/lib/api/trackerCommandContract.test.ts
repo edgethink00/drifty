@@ -36,6 +36,9 @@ function registeredTrackerClientCommands(source: string): string[] {
 }
 
 function assertTypedInvokeContract(invokeCommand: TrackerClientInvoke) {
+  void invokeCommand("tray_update_trial_status", { trialEndsAt: null, trialExpired: false });
+  // @ts-expect-error Trial status must include the confirmed expiry flag.
+  void invokeCommand("tray_update_trial_status", { trialEndsAt: null });
   // @ts-expect-error Command names must be registered.
   void invokeCommand("tracker_get_stauts");
   // @ts-expect-error Tracker payloads use the exact top-level query key.

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tray-update-trial-status"
+description = "Enables the tray_update_trial_status command without any pre-configured scope."
+commands.allow = ["tray_update_trial_status"]
+
+[[permission]]
+identifier = "deny-tray-update-trial-status"
+description = "Denies the tray_update_trial_status command without any pre-configured scope."
+commands.deny = ["tray_update_trial_status"]

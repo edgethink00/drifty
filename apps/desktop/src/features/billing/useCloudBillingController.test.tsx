@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthState } from "../auth/AuthContext";
 import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 import type { BillingEntitlement } from "./billingService";
+import { useNativeTrialStatus } from "./useNativeTrialStatus";
 import {
   CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS,
   CLOUD_ENTITLEMENT_BACKGROUND_RETRY_MS,
@@ -46,6 +47,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 }));
 
 vi.mock("../../lib/analytics/proFunnel", () => ({ recordProFunnelStep: vi.fn().mockResolvedValue(true) }));
+vi.mock("./useNativeTrialStatus", () => ({ useNativeTrialStatus: vi.fn() }));
 
 const signedInUser: NonNullable<AuthState["user"]> = {
   id: "user-1",
@@ -75,6 +77,19 @@ describe("useCloudBillingController", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+  });
+
+  it("sends the native menu only this account's confirmed trial, never the previous account's", async () => {
+    const trial: BillingEntitlement = { plan: "individual", status: "trialing", canUseApp: true,
+      trialEndsAt: "2026-10-09T00:00:00.000Z", currentPeriodEnd: null };
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: trial });
+    const { rerender } = renderHook(({ user }) => useCloudBillingController({
+      user, hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true, onAuthRequired: vi.fn(),
+    }), { initialProps: { user: signedInUser } });
+    await waitFor(() => expect(vi.mocked(useNativeTrialStatus)).toHaveBeenLastCalledWith(trial, true));
+    billingMocks.fetchBillingEntitlement.mockImplementation(() => new Promise(() => {}));
+    rerender({ user: { ...signedInUser, id: "user-2" } });
+    expect(vi.mocked(useNativeTrialStatus).mock.lastCall?.[1]).toBe(false);
   });
 
   it("keeps a single entitlement failure provisional when the confirmation succeeds", async () => {

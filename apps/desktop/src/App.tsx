@@ -5283,6 +5283,24 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     };
   }, [openSettingsTab]);
 
+  // The native menu's trial row opens Account, where plans are compared.
+  useEffect(() => {
+    if (!isTauriRuntime()) return undefined;
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listen("tray-open-account-settings", openAccountSettings).then((nextUnlisten) => {
+      if (disposed) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+    });
+    return () => {
+      disposed = true;
+      cleanupTauriEventListener(unlisten);
+    };
+  }, [openAccountSettings]);
+
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
 

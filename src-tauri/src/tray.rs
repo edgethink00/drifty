@@ -1,6 +1,7 @@
 mod drift_alarm_status;
 mod menu;
 mod productivity_icon;
+mod trial_status;
 #[cfg(test)]
 mod tests;
 
@@ -47,6 +48,24 @@ use crate::shell_action::{self, tray_menu_id, ShellAction};
 use crate::tracker::{TrackerController, TrackerError, TrackerStartupState};
 use crate::tracking_pause::{self, TrackingPauseSnapshot, TrackingPauseState, TrackingPauseView};
 use crate::app_menu;
+
+use self::trial_status::TrialStatus;
+
+/// Last confirmed trial presentation pushed by the renderer. Never grants access.
+#[derive(Default)]
+pub struct TrayTrialState(Mutex<TrialStatus>);
+
+#[tauri::command]
+pub async fn tray_update_trial_status(
+    app: AppHandle,
+    state: State<'_, TrayTrialState>,
+    trial_ends_at: Option<String>,
+    trial_expired: bool,
+) -> Result<(), String> {
+    let parsed = TrialStatus::parse(trial_ends_at.as_deref(), trial_expired)?;
+    *state.0.lock().map_err(|_| "tray trial state lock poisoned".to_string())? = parsed;
+    run_menu_update(app, refresh_tray_menu_on_main_thread).await
+}
 
 const TRAY_ID: &str = "drifty-menu";
 const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
@@ -423,6 +442,7 @@ struct TrayMenuPlan {
     drift_alerts_status: String,
     drift_summary: Option<String>,
     app_info: String,
+    trial_status: Option<String>,
 }
 
 struct TrayMenuState(Mutex<TrayMenu<tauri::Wry>>);
@@ -436,14 +456,17 @@ fn tray_menu_plan(app: &AppHandle) -> TrayMenuPlan {
     let lang = latest_tray_language(app);
     let ko = lang.is_korean();
 
-    tray_menu_plan_from(
+    let mut plan = tray_menu_plan_from(
         lang,
         drift_status.tracker_running(),
         pause.snapshot,
         drift_alerts_status_label(&drift_status, ko),
         drift_summary_label(&drift_status, ko),
         &app.package_info().version.to_string(),
-    )
+    );
+    plan.trial_status = app.try_state::<TrayTrialState>()
+        .and_then(|state| state.0.lock().ok().and_then(|status| status.label(Utc::now(), lang)));
+    plan
 }
 
 fn tray_menu_plan_from(
@@ -462,6 +485,7 @@ fn tray_menu_plan_from(
         drift_alerts_status,
         drift_summary,
         app_info: app_version_label(version),
+        trial_status: None,
     }
 }
 
@@ -551,6 +575,13 @@ fn tray_menu_rows(plan: &TrayMenuPlan) -> Vec<MenuRow> {
         ),
         MenuRow::separator("app-info-separator"),
         MenuRow::item(tray_menu_id::APP_INFO, &plan.app_info, false, true),
+        // Owner-approved placement: directly below the version, above Check for Updates.
+        MenuRow::item(
+            tray_menu_id::TRIAL_STATUS,
+            plan.trial_status.as_deref().unwrap_or(""),
+            true,
+            plan.trial_status.is_some(),
+        ),
         MenuRow::item(
             tray_menu_id::UPDATE_STATUS,
             if ko {
@@ -974,6 +1005,15 @@ fn refresh_tray_icon_on_worker(app: &AppHandle, stopping: &Arc<AtomicBool>) {
     if stopping.load(Ordering::Acquire) {
         return;
     }
+
+    // Countdown labels need their own clock refresh even when the icon is unchanged.
+    let menu_scheduler = app.clone();
+    let menu_app = app.clone();
+    let _ = enqueue_main_thread_mutation(
+        stopping,
+        move |callback| menu_scheduler.run_on_main_thread(callback),
+        move || { let _ = refresh_tray_menu_on_main_thread(&menu_app); },
+    );
 
     let request_generation = claim_tray_icon_render_request();
     let Some(icon) = prepare_tray_icon(app, request_generation) else {

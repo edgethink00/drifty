@@ -14,6 +14,7 @@ pub(crate) mod app_menu_id {
 }
 
 pub(crate) mod tray_menu_id {
+    pub(crate) const TRIAL_STATUS: &str = "menu-trial-status";
     pub(crate) const APP_INFO: &str = "menu-app-info";
     pub(crate) const UPDATE_STATUS: &str = "menu-update-status";
     pub(crate) const OPEN_DASHBOARD: &str = "menu-open-dashboard";
@@ -33,6 +34,7 @@ pub(crate) mod tray_menu_id {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ShellAction {
     OpenDashboard,
+    AccountSettings,
     ToggleTracking,
     PauseTrackingFor(u64),
     PauseTrackingForever,
@@ -57,6 +59,7 @@ impl ShellAction {
 
     pub(crate) fn from_tray_menu_id(id: &str) -> Option<Self> {
         match id {
+            tray_menu_id::TRIAL_STATUS => Some(Self::AccountSettings),
             tray_menu_id::OPEN_DASHBOARD => Some(Self::OpenDashboard),
             tray_menu_id::TRACKING_TOGGLE => Some(Self::ToggleTracking),
             tray_menu_id::PAUSE_FOR_15 => Some(Self::PauseTrackingFor(15)),
@@ -90,6 +93,10 @@ impl ShellAction {
     const fn effects(self) -> &'static [ShellActionEffect] {
         match self {
             Self::OpenDashboard => &[ShellActionEffect::RevealMainWindow],
+            Self::AccountSettings => &[
+                ShellActionEffect::RevealMainWindow,
+                ShellActionEffect::EmitMainWindowEvent("tray-open-account-settings"),
+            ],
             Self::ToggleTracking => &[ShellActionEffect::ToggleTracking],
             Self::PauseTrackingFor(15) => &[ShellActionEffect::PauseTrackingFor(15)],
             Self::PauseTrackingFor(30) => &[ShellActionEffect::PauseTrackingFor(30)],
@@ -404,6 +411,14 @@ mod tests {
         }
 
         assert!(target.effects.is_empty());
+    }
+
+    #[test]
+    fn trial_menu_opens_account_settings_once() {
+        let mut target = FakeTarget::default();
+        assert!(ShellAction::from_app_menu_id(tray_menu_id::TRIAL_STATUS).is_none());
+        dispatch_to_target(ShellAction::from_tray_menu_id(tray_menu_id::TRIAL_STATUS).unwrap(), &mut target);
+        assert_eq!(target.effects, vec![ShellActionEffect::RevealMainWindow, ShellActionEffect::EmitMainWindowEvent("tray-open-account-settings")]);
     }
 
     #[test]

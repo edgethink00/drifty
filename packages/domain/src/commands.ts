@@ -81,6 +81,7 @@ export const trayInvokeCommands = [
   "tray_update_display_mode",
   "tray_update_drift_alarm_status",
   "tray_set_language",
+  "tray_update_trial_status",
 ] as const;
 
 export const trackerClientInvokeCommands = [
@@ -220,6 +221,7 @@ export type TrayCommandMap = {
   };
   tray_update_drift_alarm_status: { args: { status: DriftAlarmTrayStatus }; result: void };
   tray_set_language: { args: { language: string }; result: void };
+  tray_update_trial_status: { args: { trialEndsAt: string | null; trialExpired: boolean }; result: void };
 };
 
 export type TrackerCommand = keyof TrackerCommandMap;

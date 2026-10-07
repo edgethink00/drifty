@@ -105,6 +105,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tray_update_display_mode",
   "tray_update_drift_alarm_status",
   "tray_set_language",
+  "tray_update_trial_status",
 ];
 
 describe("trackerClient command registry", () => {

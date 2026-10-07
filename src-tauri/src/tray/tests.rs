@@ -893,3 +893,23 @@ fn tray_refresh_worker_records_refresh_panics() {
 
     assert!(worker.shutdown());
 }
+
+#[test]
+fn trial_row_sits_between_version_and_updates_and_keeps_the_menu_pool_stable() {
+    let mut plan = sample_tray_menu_plan(TrayLanguage::Korean, TrackingPauseSnapshot::Inactive, None);
+    let hidden = tray_menu_rows(&plan);
+    assert!(!hidden.iter().find(|r| r.id == tray_menu_id::TRIAL_STATUS).unwrap().visible);
+    for label in ["Pro 체험 2일 남음", "Pro 체험 종료 · 플랜 보기"] {
+        plan.trial_status = Some(label.into());
+        let visible = tray_menu_rows(&plan);
+        assert_eq!(hidden.iter().map(|r| r.id).collect::<Vec<_>>(), visible.iter().map(|r| r.id).collect::<Vec<_>>());
+        let row = visible.iter().find(|r| r.id == tray_menu_id::TRIAL_STATUS).unwrap();
+        assert!(row.visible && row.enabled);
+        assert_eq!(ShellAction::from_tray_menu_id(row.id), Some(ShellAction::AccountSettings));
+        let shown = visible_rows(&plan);
+        let index = shown.iter().position(|(id, _, _)| id == tray_menu_id::TRIAL_STATUS).unwrap();
+        assert_eq!(shown[index].1, label);
+        assert_eq!(shown[index - 1].0, tray_menu_id::APP_INFO);
+        assert_eq!(shown[index + 1].0, tray_menu_id::UPDATE_STATUS);
+    }
+}

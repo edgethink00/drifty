@@ -132,6 +132,7 @@
     "allow-tracker-revert-ai-review-event",
     "allow-tray-update-productivity-icon",
     "allow-tray-update-drift-alarm-status",
+    "allow-tray-update-trial-status",
     "allow-tray-update-icon-style",
     "allow-tray-update-display-mode",
     "allow-tray-set-language",

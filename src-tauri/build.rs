@@ -116,6 +116,7 @@ fn main() {
             "living_soul_write",
             "tray_update_productivity_icon",
             "tray_update_drift_alarm_status",
+            "tray_update_trial_status",
             "auth_take_pending_deep_links",
             "auth_load_saved_session",
             "auth_save_session",
