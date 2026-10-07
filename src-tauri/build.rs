@@ -123,6 +123,8 @@ fn main() {
             "openrouter_load_api_key",
             "openrouter_save_api_key",
             "openrouter_clear_api_key",
+            "analysis_provider_load_api_key",
+            "analysis_provider_save_api_key",
             "custom_endpoint_load_api_key",
             "custom_endpoint_save_api_key",
             "custom_endpoint_clear_api_key",

@@ -68,6 +68,11 @@ export interface UseProjectClassificationArgs {
   readonly selectedDayRange: { readonly start: string; readonly end: string } | null;
   readonly startOfDayMinutes: number;
   readonly analysisSetup: AnalysisAiSetupState;
+  readonly requestScopeKey?: string;
+  readonly analysisOwnerId?: string | null;
+  readonly analysisCloudRecovery?: boolean;
+  readonly canFallbackToCloud?: () => boolean;
+  readonly onProviderUnavailable?: (reason: import("../settings/intelligenceRouting").AnalysisUnavailableReason) => void;
   /** Resolve the OpenRouter provisioned key from the Keychain (null when none). */
   readonly resolveOpenRouterKey: () => Promise<string | null>;
   /** Whether the analysis model is configured enough to run the pass. */
@@ -147,6 +152,8 @@ function last7DaysRange(now: string): { start: string; end: string } {
 
 export function useProjectClassification(args: UseProjectClassificationArgs): UseProjectClassificationResult {
   const { tracker, selectedDayRange, analysisSetup, resolveOpenRouterKey, analysisConnected } = args;
+  const currentScope = useRef(args.requestScopeKey);
+  currentScope.current = args.requestScopeKey;
   const now = args.now ?? (() => new Date().toISOString());
 
   const selectedDayRangeStart = selectedDayRange?.start ?? null;
@@ -180,6 +187,13 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   const reviewEventsRequestRef = useRef(0);
   const insightAssignmentsRequestRef = useRef(0);
   const isMountedRef = useRef(false);
+
+  useEffect(() => {
+    setRunning(false);
+    setProgress(null);
+    setRunError(null);
+    setLastRunSummary(null);
+  }, [args.requestScopeKey]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -355,8 +369,14 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     if (setup.provider === "openrouter") {
       setup.openRouterApiKey = (await resolveOpenRouterKey()) ?? "";
     }
-    return createProjectPassInference(setup);
-  }, [analysisSetup, resolveOpenRouterKey]);
+    return createProjectPassInference(setup, {
+      isRequestCurrent: () => isMountedRef.current && currentScope.current === args.requestScopeKey,
+      expectedCloudUserId: args.analysisOwnerId,
+      cloudRecovery: args.analysisCloudRecovery,
+      canFallbackToCloud: args.canFallbackToCloud,
+      onProviderUnavailable: args.onProviderUnavailable,
+    });
+  }, [analysisSetup, resolveOpenRouterKey, args.requestScopeKey, args.analysisOwnerId, args.analysisCloudRecovery, args.canFallbackToCloud, args.onProviderUnavailable]);
 
   const runForegroundPass = useCallback(
     async (
@@ -367,6 +387,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
       setRunning(true);
       setRunError(null);
       setProgress(null);
+      const isCurrent = () => isMountedRef.current && currentScope.current === args.requestScopeKey;
       try {
         const inference = await buildInference();
         const privacySettings = readAiPrivacyRequestSettings();
@@ -377,6 +398,8 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
           trigger: options.trigger,
           tracker,
           inference,
+          requestScopeKey: args.requestScopeKey,
+          persistenceAllowed: isCurrent,
           now,
           workProfile,
           contextPolicy: {
@@ -385,8 +408,9 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
             contentContext: privacySettings.optional.contentContext,
           },
           startOfDayMinutes: args.startOfDayMinutes,
-          onProgress: (done, total) => setProgress({ done, total }),
+          onProgress: (done, total) => { if (isCurrent()) setProgress({ done, total }); },
         });
+        if (!isCurrent()) return null;
         setLastRunSummary(summary);
         // Only a clean pass makes the window fresh; a partially failed one must
         // not start a cooldown that hides the retry the user needs.
@@ -408,14 +432,16 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
       } catch (error) {
         // A pass the user did not ask for reports through the project's own row
         // state, never through a banner carrying a raw provider/transport message.
-        if (!options.quiet) setRunError(error instanceof Error ? error.message : String(error));
+        if (!options.quiet && isCurrent()) setRunError(error instanceof Error ? error.message : String(error));
         return null;
       } finally {
-        setRunning(false);
-        setProgress(null);
+        if (isCurrent()) {
+          setRunning(false);
+          setProgress(null);
+        }
       }
     },
-    [analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
+    [analysisConnected, buildInference, tracker, now, args.requestScopeKey, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
   );
 
   const runPassNow = useCallback(
@@ -442,6 +468,8 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
           trigger,
           tracker,
           inference,
+          requestScopeKey: args.requestScopeKey,
+          persistenceAllowed: () => isMountedRef.current && currentScope.current === args.requestScopeKey,
           now,
           workProfile,
           contextPolicy: {
@@ -470,7 +498,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         return { status: "failed", category: scheduledProjectPassFailureCategory(error) };
       }
     },
-    [analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
+    [analysisConnected, buildInference, tracker, now, args.requestScopeKey, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
   );
 
   // Mutations swallow their own errors (surfacing via runError) so a failed

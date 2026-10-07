@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProjectClassification, type ScheduledProjectPassOutcome, type UseProjectClassificationArgs } from "./useProjectClassification";
 import { runProjectPass, type ProjectPassSummary } from "./aiProjectReviewService";
+import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
 import { notifyTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 
 vi.mock("./aiProjectReviewService", () => ({
@@ -450,5 +451,29 @@ describe("useProjectClassification team projects", () => {
     act(() => notifyTeamProjectMirrorChanged());
     await waitFor(() => expect(getTeamProjects).toHaveBeenCalledTimes(2));
     expect(hook.result.current.activeTeamProjectCount).toBe(1);
+  });
+});
+
+
+describe("Intelligence execution scope", () => {
+  it("revokes persistence and hides a late foreground result after the account/configuration scope changes", async () => {
+    const { tracker } = createTracker();
+    const pass = deferred<ProjectPassSummary>();
+    scheduledProjectPass.mockReturnValue(pass.promise);
+    const { hook, initialProps } = renderClassification(tracker, { analysisSetup: DEFAULT_ANALYSIS_AI_SETUP, analysisConnected: true, requestScopeKey: "account-a/config-a" });
+    let pending!: ReturnType<typeof hook.result.current.runPassNow>;
+    act(() => { pending = hook.result.current.runPassNow(rangeA); });
+    await waitFor(() => expect(scheduledProjectPass).toHaveBeenCalledTimes(1));
+    const options = scheduledProjectPass.mock.calls[0][0];
+    expect(options.persistenceAllowed?.()).toBe(true);
+    hook.rerender({ ...initialProps, requestScopeKey: "account-b/config-b" });
+    expect(options.persistenceAllowed?.()).toBe(false);
+    await act(async () => {
+      pass.resolve({ ran: true, chunks: 1, assignments: 1, corrections: 0, tokensIn: 10, tokensOut: 1, failedChunks: 0 });
+      expect(await pending).toBeNull();
+    });
+    expect(hook.result.current.running).toBe(false);
+    expect(hook.result.current.lastRunSummary).toBeNull();
+    expect(hook.result.current.runError).toBeNull();
   });
 });

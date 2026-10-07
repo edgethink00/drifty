@@ -42,6 +42,8 @@ const AI_CONNECTION_RETEST_MAX_DELAY_MS = 5 * 60_000;
 
 type UseAiSetupControllerResult = {
   readonly aiConnectionTest: UseAiConnectionTestRunnerResult;
+  readonly customEndpointCredentialState: import("./intelligenceRouting").AnalysisCredentialState;
+  readonly retryCustomEndpointKeyRead: () => void;
   readonly aiSetupDialogOpen: boolean;
   readonly localAiClassificationOptions: LocalAiClassificationOptions | null;
   readonly localAiConnectionFingerprint: string | null;
@@ -70,7 +72,10 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   if (keyEditRef.current.value !== localAiSetup.openRouterApiKey) {
     keyEditRef.current = { value: localAiSetup.openRouterApiKey, revision: keyEditRef.current.revision + 1 };
   }
+  const [customEndpointCredentialState, setCustomEndpointCredentialState] = useState<import("./intelligenceRouting").AnalysisCredentialState>("idle");
   const [customEndpointKeyLoaded, setCustomEndpointKeyLoaded] = useState(false);
+  const [customEndpointKeyReadRevision, setCustomEndpointKeyReadRevision] = useState(0);
+  const retryCustomEndpointKeyRead = useCallback(() => setCustomEndpointKeyReadRevision(current => current + 1), []);
   const lastSavedCustomEndpointKeyRef = useRef<string | null>(null);
   const customEndpointKeyEditRef = useRef({ value: localAiSetup.selfHostedApiKey, revision: 0 });
   if (customEndpointKeyEditRef.current.value !== localAiSetup.selfHostedApiKey) {
@@ -81,7 +86,10 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   }
   // Intelligence can use the shared custom endpoint while Classification uses
   // another provider; its key must still be available after a restart.
-  const [analysisUsesCustomEndpoint] = useState(() => resolveInitialAnalysisAiSetup().provider === "self_hosted");
+  const [analysisUsesCustomEndpoint] = useState(() => {
+    const saved = resolveInitialAnalysisAiSetup();
+    return saved.provider === "self_hosted" && saved.selectionSource !== "automatic";
+  });
   const localAiRetryAfterMsRef = useRef<number | null>(null);
 
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
@@ -294,7 +302,8 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     if (!shouldLoadCustomEndpointKey || customEndpointKeyLoaded) return;
     let cancelled = false;
     const keyAtLoadStart = customEndpointKeyEditRef.current;
-    void loadCustomEndpointApiKey().then((savedApiKey) => {
+    setCustomEndpointCredentialState("loading");
+    void loadCustomEndpointApiKey({ throwOnError: true }).then((savedApiKey) => {
       if (cancelled) return;
       const normalizedApiKey = savedApiKey?.trim() ?? "";
       lastSavedCustomEndpointKeyRef.current = normalizedApiKey;
@@ -309,11 +318,22 @@ export function useAiSetupController(): UseAiSetupControllerResult {
           : { ...current, selfHostedApiKey: normalizedApiKey });
       }
       setCustomEndpointKeyLoaded(true);
+      setCustomEndpointCredentialState((editedDuringLoad ? customEndpointKeyEditRef.current.value.trim() : normalizedApiKey) ? "ready" : "missing");
+    }).catch(() => {
+      if (!cancelled) setCustomEndpointCredentialState("error");
     });
     return () => {
       cancelled = true;
     };
-  }, [shouldLoadCustomEndpointKey, customEndpointKeyLoaded]);
+  }, [shouldLoadCustomEndpointKey, customEndpointKeyLoaded, customEndpointKeyReadRevision]);
+
+  // A deliberate key edit resolves an unknown/failed read. Do not let a late
+  // Keychain response overwrite the edit or prevent it from being saved.
+  useEffect(() => {
+    if (customEndpointKeyEditRef.current.revision === 0) return;
+    setCustomEndpointKeyLoaded(true);
+    setCustomEndpointCredentialState(localAiSetup.selfHostedApiKey.trim() ? "ready" : "missing");
+  }, [localAiSetup.selfHostedApiKey]);
 
   useEffect(() => {
     if (!customEndpointKeyLoaded) return;
@@ -361,6 +381,8 @@ export function useAiSetupController(): UseAiSetupControllerResult {
 
   return {
     aiConnectionTest,
+    customEndpointCredentialState,
+    retryCustomEndpointKeyRead,
     aiSetupDialogOpen,
     localAiClassificationOptions,
     localAiConnectionFingerprint,

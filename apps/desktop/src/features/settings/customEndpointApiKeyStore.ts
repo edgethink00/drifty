@@ -13,11 +13,12 @@ function handleKeyStoreError(operation: string, error: unknown): null {
   return null;
 }
 
-export async function loadCustomEndpointApiKey(): Promise<string | null> {
+export async function loadCustomEndpointApiKey(options?: { throwOnError?: boolean }): Promise<string | null> {
   try {
     const value = await invoke<string | null>("custom_endpoint_load_api_key");
     return typeof value === "string" && value.trim() ? value.trim() : null;
   } catch (error) {
+    if (options?.throwOnError) throw new Error("Unable to read provider credentials.");
     return handleKeyStoreError("load", error);
   }
 }

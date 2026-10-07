@@ -8,6 +8,17 @@ import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingMod
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY } from "./features/settings/settingsStorage";
 
+// Browser fixtures have no native store. A keyless endpoint has a confirmed
+// absent key, rather than a failed OS read; failed reads are covered separately.
+vi.mock("./features/settings/customEndpointApiKeyStore", () => ({
+  loadCustomEndpointApiKey: vi.fn(async () => null),
+  saveCustomEndpointApiKey: vi.fn(async () => undefined),
+}));
+vi.mock("./features/settings/analysisProviderKeyStore", () => ({
+  loadAnalysisProviderKey: vi.fn(async () => null),
+  saveAnalysisProviderKey: vi.fn(async () => undefined),
+}));
+
 const styles = readAppStyles();
 const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
@@ -1843,5 +1854,20 @@ describe("App AI classification controls", () => {
     }
   });
 
+
+  it.each([true, false])("shows the actual Intelligence route for a missing Anthropic key with Cloud eligibility %s", async cloudReady => {
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({ provider: "managed_local", driftyRoute: "cloud" }));
+    window.localStorage.setItem("drifty.analysisAiSetup.v1", JSON.stringify({ provider: "anthropic" }));
+    if (!cloudReady) billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: { plan: "individual", status: "locked", canUseApp: false, lockedReason: "billing_missing", trialEndsAt: null, currentPeriodEnd: null } });
+    render(<App />);
+    await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /AI connection:.*Open AI settings/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /^Intelligence$/i }));
+    const summary = await screen.findByRole("region", { name: /Analysis model being used/i });
+    await waitFor(() => expect(within(summary).getByRole("combobox", { name: "Analysis provider" }).textContent).toContain(cloudReady ? "Drifty Cloud" : "Anthropic"));
+    if (cloudReady) expect(within(summary).getByText(/analysis uses Drifty Cloud/i)).toBeTruthy();
+    else expect(within(summary).queryByText(/analysis uses Drifty Cloud/i)).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem("drifty.analysisAiSetup.v1")!).provider).toBe("anthropic");
+  });
 
 });

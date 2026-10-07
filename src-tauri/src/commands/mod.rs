@@ -1,5 +1,6 @@
 mod accessibility;
 mod ai;
+mod analysis_credentials;
 #[cfg(target_os = "macos")]
 mod ax_values;
 mod cloud_sync;
@@ -46,6 +47,7 @@ mod windows_overlay;
 
 pub use accessibility::*;
 pub use ai::*;
+pub use analysis_credentials::*;
 pub use cloud_sync::*;
 pub use companion_context::*;
 pub use correction_evidence::*;

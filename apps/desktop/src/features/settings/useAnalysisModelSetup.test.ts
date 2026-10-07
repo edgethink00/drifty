@@ -3,8 +3,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ANALYSIS_AI_SETUP_STORAGE_KEY } from "./analysisModelSetup";
+import { ANALYSIS_AI_SETUP_STORAGE_KEY, DEFAULT_ANALYSIS_AI_SETUP, toPersistedAnalysisAiSetup } from "./analysisModelSetup";
 import { useAnalysisModelSetup } from "./useAnalysisModelSetup";
+
+const directMocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn() }));
+vi.mock("./analysisProviderKeyStore", () => ({ loadAnalysisProviderKey: directMocks.load, saveAnalysisProviderKey: directMocks.save }));
 
 const storeMocks = vi.hoisted(() => ({
   loadOpenRouterApiKey: vi.fn<() => Promise<string | null>>(),
@@ -19,6 +22,8 @@ describe("useAnalysisModelSetup OpenRouter key gating", () => {
   beforeEach(() => {
     storeMocks.loadOpenRouterApiKey.mockReset();
     storeMocks.loadOpenRouterApiKey.mockResolvedValue(null);
+    directMocks.load.mockReset().mockResolvedValue(null);
+    directMocks.save.mockReset().mockResolvedValue(undefined);
     window.localStorage.clear();
   });
 
@@ -37,6 +42,7 @@ describe("useAnalysisModelSetup OpenRouter key gating", () => {
 
     expect(result.current.analysisSetup.provider).toBe("cloud");
     expect(storeMocks.loadOpenRouterApiKey).not.toHaveBeenCalled();
+    expect(directMocks.load).not.toHaveBeenCalled();
   });
 
   it("reads the Keychain on mount when the persisted analysis provider is OpenRouter", async () => {
@@ -184,4 +190,130 @@ describe("useAnalysisModelSetup OpenRouter key gating", () => {
     await waitFor(() => expect(window.localStorage.getItem(ANALYSIS_AI_SETUP_STORAGE_KEY)).not.toContain("legacy-intelligence.example"));
     expect(onSharedConnectionChange).not.toHaveBeenCalled();
   });
+});
+
+
+describe("Intelligence Cloud recovery and credential restoration", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    directMocks.load.mockReset().mockResolvedValue(null);
+    directMocks.save.mockReset().mockResolvedValue(undefined);
+    storeMocks.loadOpenRouterApiKey.mockReset().mockResolvedValue(null);
+  });
+  afterEach(() => window.localStorage.clear());
+  const eligible = { ownerKey: "account-a", cloudFallbackAllowed: true, cloudReady: true };
+  it("waits for the Anthropic key read, then executes on Cloud while retaining the preference", async () => {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify({ provider: "anthropic" }));
+    let finish!: (value: string | null) => void;
+    directMocks.load.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { result } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
+    expect(result.current.analysisConnected).toBe(false);
+    expect(result.current.effectiveAnalysisSetup.provider).toBe("anthropic");
+    await act(async () => finish(null));
+    expect(result.current.analysisConnected).toBe(true);
+    expect(result.current.effectiveAnalysisSetup.provider).toBe("cloud");
+    expect(result.current.analysisSetup.provider).toBe("anthropic");
+    expect(JSON.parse(window.localStorage.getItem(ANALYSIS_AI_SETUP_STORAGE_KEY)!)).toEqual({ provider: "anthropic" });
+  });
+  it("restores a direct key and preserves a healthy preference across restart", async () => {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify({ provider: "anthropic" }));
+    directMocks.load.mockResolvedValue("synthetic-restored-key");
+    const { result } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
+    await waitFor(() => expect(result.current.analysisConnected).toBe(true));
+    expect(result.current.effectiveAnalysisSetup.provider).toBe("anthropic");
+    expect(result.current.analysisSetup.anthropicApiKey).toBe("synthetic-restored-key");
+    expect(window.localStorage.getItem(ANALYSIS_AI_SETUP_STORAGE_KEY)).not.toContain("synthetic-restored-key");
+  });
+  it("does not turn denied credential-store access into missing credentials", async () => {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify({ provider: "openai" }));
+    directMocks.load.mockRejectedValue(new Error("access denied"));
+    const { result } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
+    await act(async () => {});
+    expect(result.current.effectiveAnalysisSetup.provider).toBe("openai");
+    expect(result.current.analysisConnected).toBe(false);
+  });
+  it("rejects old account callbacks and Cloud eligibility after account change", async () => {
+    const { result, rerender } = renderHook(({ ownerKey }) => useAnalysisModelSetup(true, "managed_local", undefined, { ...eligible, ownerKey }), { initialProps: { ownerKey: "account-a" } });
+    const oldCanFallback = result.current.canFallbackNow;
+    const oldMark = result.current.markUnavailable;
+    rerender({ ownerKey: "account-b" });
+    expect(oldCanFallback()).toBe(false);
+    act(() => oldMark("authentication"));
+    expect(result.current.analysisSetup.provider).toBe("cloud");
+  });
+  it("does not pin an automatically stored OpenRouter snapshot after Cloud activation fails", () => {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedAnalysisAiSetup({ ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openrouter", selectionSource: "automatic" })));
+    const { result } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
+    expect(result.current.analysisSetup.provider).toBe("cloud");
+  });
+  it("saves direct keys through native storage without leaking into settings", async () => {
+    const { result, unmount } = renderHook(() => useAnalysisModelSetup(true));
+    act(() => result.current.setAnalysisSetup({ ...result.current.analysisSetup, anthropicApiKey: "synthetic-edit" }));
+    expect(window.localStorage.getItem(ANALYSIS_AI_SETUP_STORAGE_KEY)).not.toContain("synthetic-edit");
+    unmount();
+    await waitFor(() => expect(directMocks.save).toHaveBeenCalledWith("anthropic", "synthetic-edit"));
+  });
+  it("keeps an explicit manual OpenAI default instead of applying the old default migration", async () => {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedAnalysisAiSetup({ ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openai", selectionSource: "manual" })));
+    directMocks.load.mockResolvedValue("synthetic-key");
+    const { result } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
+    await waitFor(() => expect(result.current.analysisConnected).toBe(true));
+    expect(result.current.effectiveAnalysisSetup.provider).toBe("openai");
+  });
+  it("restores the preference immediately after fixing its key and retries an unchanged route after cooldown", async () => {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify({ provider: "anthropic" }));
+    directMocks.load.mockResolvedValue("synthetic-key");
+    const { result, unmount } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
+    await waitFor(() => expect(result.current.analysisConnected).toBe(true));
+    vi.useFakeTimers();
+    try {
+      act(() => result.current.markUnavailable("authentication"));
+      expect(result.current.effectiveAnalysisSetup.provider).toBe("cloud");
+      act(() => result.current.setAnalysisSetup({ ...result.current.analysisSetup, anthropicApiKey: "synthetic-fixed" }));
+      expect(result.current.effectiveAnalysisSetup.provider).toBe("anthropic");
+      act(() => result.current.markUnavailable("model_unavailable"));
+      expect(result.current.effectiveAnalysisSetup.provider).toBe("cloud");
+      act(() => vi.advanceTimersByTime(5 * 60_000));
+      expect(result.current.effectiveAnalysisSetup.provider).toBe("anthropic");
+      unmount();
+    } finally { vi.useRealTimers(); }
+  });
+  it("keeps a newly edited direct key over a delayed native load", async () => {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify({ provider: "anthropic" }));
+    let finish!: (key: string) => void;
+    directMocks.load.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { result, unmount } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
+    act(() => result.current.setAnalysisSetup({ ...result.current.analysisSetup, anthropicApiKey: "synthetic-new-key" }));
+    await act(async () => finish("synthetic-old-key"));
+    expect(result.current.analysisSetup.anthropicApiKey).toBe("synthetic-new-key");
+    expect(result.current.effectiveAnalysisSetup.provider).toBe("anthropic");
+    unmount();
+    await waitFor(() => expect(directMocks.save).toHaveBeenCalledWith("anthropic", "synthetic-new-key"));
+  });
+  it("serializes native writes so a late save cannot restore a cleared key", async () => {
+    const { result, unmount } = renderHook(() => useAnalysisModelSetup(true));
+    let finishSave!: () => void;
+    directMocks.save.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    vi.useFakeTimers();
+    try {
+      act(() => result.current.setAnalysisSetup({ ...result.current.analysisSetup, openaiApiKey: "synthetic-key" }));
+      await act(async () => vi.advanceTimersByTime(250));
+      expect(directMocks.save).toHaveBeenCalledTimes(1);
+      act(() => result.current.setAnalysisSetup({ ...result.current.analysisSetup, openaiApiKey: "" }));
+      await act(async () => vi.advanceTimersByTime(250));
+      expect(directMocks.save).toHaveBeenCalledTimes(1);
+      await act(async () => finishSave());
+      expect(directMocks.save).toHaveBeenLastCalledWith("openai", "");
+      unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("revokes a pending Cloud fallback when the settings owner unmounts", () => {
+    const { result, unmount } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
+    const canFallback = result.current.canFallbackNow;
+    expect(canFallback()).toBe(true);
+    unmount();
+    expect(canFallback()).toBe(false);
+  });
+
 });

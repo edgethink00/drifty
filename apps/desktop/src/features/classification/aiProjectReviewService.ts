@@ -62,6 +62,7 @@ export interface ProjectPassInferenceUsage {
 }
 
 export interface ProjectPassInferenceResult {
+  readonly unavailableReason?: import("../settings/intelligenceRouting").AnalysisUnavailableReason;
   readonly output: ProjectPassOutput | null;
   readonly usage: ProjectPassInferenceUsage;
 }
@@ -258,6 +259,8 @@ export interface RunProjectPassOptions {
   readonly workProfile?: string | null;
   /** Reports chunk progress: (completed, total). Fired once with (0, total) up front. */
   readonly onProgress?: (done: number, total: number) => void;
+  readonly requestScopeKey?: string;
+  readonly persistenceAllowed?: () => boolean;
 }
 
 export interface ProjectPassSummary {
@@ -304,7 +307,7 @@ function projectPassRangeKey(range: { readonly start: string; readonly end: stri
  * queue behind the current run instead of sharing its result.
  */
 export function runProjectPass(options: RunProjectPassOptions): Promise<ProjectPassSummary> {
-  const rangeKey = projectPassRangeKey(options.range);
+  const rangeKey = JSON.stringify([projectPassRangeKey(options.range), options.requestScopeKey ?? "legacy"]);
   if (inFlight && inFlightRangeKey === rangeKey) return inFlight;
 
   const start = (): Promise<ProjectPassSummary> => {
@@ -429,6 +432,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       workProfile: options.workProfile ?? null,
       projects: promptProjects,
     };
+    assertProjectPassCurrent(options);
     const prompt = buildProjectPassPrompt(promptInput);
     const { output, usage } = await inference(prompt, promptInput);
     // A null output means the provider call failed or returned something we
@@ -470,6 +474,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     };
   }
 
+  assertProjectPassCurrent(options);
   const passRecord = await tracker.recordProjectPass({
     rangeStart: range.start,
     rangeEnd: range.end,
@@ -496,9 +501,11 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       passId: passRecord.id,
     } satisfies ProjectWindowAssignmentRecord;
   });
+  assertProjectPassCurrent(options);
   if (persistedWindowAssignments.length) await tracker.saveProjectWindowAssignments(persistedWindowAssignments);
   let persistedCorrections = 0;
   if (bufferedClassifications.length) {
+    assertProjectPassCurrent(options);
     const result = await tracker.saveClassifications(bufferedClassifications.map((record) => ({
       ...record, reviewPassId: passRecord.id,
     })));
@@ -554,4 +561,8 @@ async function runProjectPassChunks(
     const result = results.get(index);
     return result ? [result] : [];
   });
+}
+
+function assertProjectPassCurrent(options: RunProjectPassOptions): void {
+  if (options.persistenceAllowed && !options.persistenceAllowed()) throw new Error("Intelligence settings changed during analysis.");
 }

@@ -1,3 +1,4 @@
+import { analysisUnavailableReasonFromHttp } from "../settings/intelligenceRouting";
 import { parseProjectPassOutput, type ProjectPassInferenceResult } from "./aiProjectReviewService";
 import type { NativeOpenAiChatResponse } from "./managedLocalAiChat";
 
@@ -76,7 +77,8 @@ function httpFailure(options: ProjectPassChatDispatchOptions, response: NativeOp
   const detail = typeof response.body === "string" ? response.body.slice(0, 300) : "";
   if (options.throwHttpError) throw options.throwHttpError(status, detail);
   console.warn(`[project-pass] ${options.provider} analysis model HTTP ${status}: ${detail}`);
-  return { output: null, usage: { provider: options.provider, latencyMs } };
+  const unavailableReason = analysisUnavailableReasonFromHttp(status, response.body);
+  return { output: null, usage: { provider: options.provider, latencyMs }, ...(unavailableReason ? { unavailableReason } : {}) };
 }
 
 async function repairProjectPassChat(

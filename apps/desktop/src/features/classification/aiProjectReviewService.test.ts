@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
+import { resolveIntelligenceRoute } from "../settings/intelligenceRouting";
+import { createProjectPassInference } from "./projectPassInference";
 import { buildProjectPassAnalysisWindows, type ActivityCategory, type ActivityClassificationRecord, type ActivitySegment, type Project, type ProductivityLabel, type StoredClassificationSource, type TrackerApi } from "@drifty/domain";
 import {
   chunkProjectPassWindows,
@@ -783,5 +786,61 @@ describe("runProjectPass orchestration", () => {
     expect(spies.saveProjectWindowAssignments).not.toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ windowId: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}` })]),
     );
+  });
+});
+
+
+describe("Intelligence provider recovery delivery", () => {
+  const range = { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" };
+  const cloudOutput = { content: JSON.stringify({ assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] }), model: "drifty-cloud", tokensIn: 100, tokensOut: 20 };
+  const preferred = { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "anthropic" as const, anthropicApiKey: "synthetic-key" };
+  it("persists a Cloud assignment after a definite Anthropic rejection without changing the saved preference", async () => {
+    const { tracker, spies } = mockTracker();
+    const invokeAnthropicChat = vi.fn().mockResolvedValue({ status: 401, body: '{"error":{"type":"authentication_error"}}' });
+    const invokeCloud = vi.fn().mockResolvedValue(cloudOutput);
+    const onProviderUnavailable = vi.fn();
+    const inference = createProjectPassInference(preferred, { invokeAnthropicChat, invokeCloud, canFallbackToCloud: () => true, onProviderUnavailable });
+    const result = await runProjectPass({ tracker, range, trigger: "manual", inference, now: () => "2026-04-07T00:00:00Z", contextPolicy: CONTEXT_POLICY });
+    expect(result).toMatchObject({ assignments: 1, failedChunks: 0, tokensIn: 100, tokensOut: 20 });
+    expect(invokeAnthropicChat).toHaveBeenCalledTimes(1);
+    expect(invokeCloud).toHaveBeenCalledTimes(1);
+    expect(onProviderUnavailable).toHaveBeenCalledWith("authentication");
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ projectId: "p1", passId: 7 })]);
+    expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ provider: "cloud", model: "drifty-cloud" }));
+    expect(preferred.provider).toBe("anthropic");
+  });
+  it("routes an incomplete Custom configuration to Cloud before any Custom request and saves its assignment", async () => {
+    const { tracker, spies } = mockTracker();
+    const route = resolveIntelligenceRoute({ setup: { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "self_hosted", selfHostedBaseUrl: "invalid", selfHostedModel: "" }, credentialState: "missing", cloudReady: true, cloudFallbackAllowed: true });
+    const invokeChat = vi.fn();
+    const invokeCloud = vi.fn().mockResolvedValue(cloudOutput);
+    const inference = createProjectPassInference(route.setup, { invokeChat, invokeCloud });
+    await runProjectPass({ tracker, range, trigger: "schedule", inference, now: () => "2026-04-07T00:00:00Z", contextPolicy: CONTEXT_POLICY });
+    expect(invokeChat).not.toHaveBeenCalled();
+    expect(invokeCloud).toHaveBeenCalledTimes(1);
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ projectId: "p1" })]);
+  });
+  it.each([401, 429, 503])("keeps rejected/transient HTTP %s from delivering through an unauthorized Cloud route", async status => {
+    const { tracker, spies } = mockTracker();
+    const invokeCloud = vi.fn();
+    const inference = createProjectPassInference(preferred, { invokeAnthropicChat: vi.fn().mockResolvedValue({ status, body: "{}" }), invokeCloud, canFallbackToCloud: () => false });
+    const result = await runProjectPass({ tracker, range, trigger: "manual", inference, now: () => "2026-04-07T00:00:00Z", contextPolicy: CONTEXT_POLICY });
+    expect(result).toMatchObject({ assignments: 0, failedChunks: 1 });
+    expect(invokeCloud).not.toHaveBeenCalled();
+    expect(spies.saveProjectWindowAssignments).not.toHaveBeenCalled();
+  });
+  it("discards late inference output after the account or provider scope changes", async () => {
+    const { tracker, spies } = mockTracker();
+    let current = true;
+    let finish!: (value: Awaited<ReturnType<ProjectPassInference>>) => void;
+    const inference = vi.fn<ProjectPassInference>().mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const pending = runProjectPass({ tracker, range, trigger: "manual", inference, now: () => "2026-04-07T00:00:00Z", contextPolicy: CONTEXT_POLICY, requestScopeKey: "synthetic-scope", persistenceAllowed: () => current });
+    await vi.waitFor(() => expect(inference).toHaveBeenCalledTimes(1));
+    current = false;
+    finish({ output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] }, usage: { provider: "cloud" } });
+    await expect(pending).rejects.toThrow("settings changed");
+    expect(spies.recordProjectPass).not.toHaveBeenCalled();
+    expect(spies.saveProjectWindowAssignments).not.toHaveBeenCalled();
+    expect(spies.saveClassifications).not.toHaveBeenCalled();
   });
 });

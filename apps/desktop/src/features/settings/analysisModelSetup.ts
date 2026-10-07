@@ -15,6 +15,7 @@ export type AnalysisProvider = "cloud" | "openrouter" | "self_hosted" | "openai"
 
 export interface AnalysisAiSetupState {
   readonly provider: AnalysisProvider;
+  readonly selectionSource?: "automatic" | "manual" | "legacy";
   readonly openRouterApiKey: string;
   readonly openRouterModel: string;
   readonly openRouterFallbackModels: string[];
@@ -29,7 +30,7 @@ export interface AnalysisAiSetupState {
 
 // Keys are never written to localStorage (privacy boundary). The shared
 // custom endpoint and OpenRouter keys persist in the OS credential store;
-// the direct OpenAI/Anthropic keys stay session-only.
+// direct OpenAI/Anthropic keys also persist in their own OS credential slots.
 export type PersistedAnalysisAiSetupState = Omit<
   AnalysisAiSetupState,
   "openRouterApiKey" | "selfHostedBaseUrl" | "selfHostedApiKey" | "openaiApiKey" | "anthropicApiKey"
@@ -82,6 +83,7 @@ export function analysisModelDisplayLabel(modelId: string): string {
 
 export const DEFAULT_ANALYSIS_AI_SETUP: AnalysisAiSetupState = {
   provider: "cloud",
+  selectionSource: "automatic",
   openRouterApiKey: "",
   openRouterModel: DEFAULT_ANALYSIS_MODEL,
   openRouterFallbackModels: [],
@@ -104,6 +106,7 @@ export function toPersistedAnalysisAiSetup(setup: AnalysisAiSetupState): Persist
   const openRouterModel = normalizeOpenRouterPrimaryModel(setup.openRouterModel);
   return {
     provider: setup.provider,
+    selectionSource: setup.selectionSource ?? "manual",
     openRouterModel,
     openRouterFallbackModels: normalizeOpenRouterFallbackModels(openRouterModel, setup.openRouterFallbackModels),
     selfHostedModel: setup.selfHostedModel.trim(),
@@ -176,6 +179,7 @@ export function resolveInitialAnalysisAiSetup(): AnalysisAiSetupState {
     const openRouterModel = normalizeOpenRouterPrimaryModel(typeof record.openRouterModel === "string" ? record.openRouterModel : "");
     return {
       provider: parseAnalysisProvider(record.provider),
+      selectionSource: record.selectionSource === "automatic" || record.selectionSource === "manual" ? record.selectionSource : "legacy",
       openRouterApiKey: "",
       openRouterModel,
       openRouterFallbackModels: Array.isArray(record.openRouterFallbackModels)

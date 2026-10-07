@@ -66,6 +66,8 @@ export type AiSetupPanelProps = {
   /** Provider that writes Memory suggestions (local, bring-your-own or Drifty Cloud); null when none is selected. */
   readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
   readonly analysisSetup: AnalysisAiSetupState;
+  readonly effectiveAnalysisSetup?: AnalysisAiSetupState;
+  readonly onAnalysisProviderVisible?: (provider: AnalysisAiSetupState["provider"]) => void;
   readonly analysisOpenRouterConnected: boolean;
   /** Show the Intelligence tab (project-classification preview). Dev-gated. */
   readonly showIntelligenceTab: boolean;
@@ -99,6 +101,8 @@ export function AiSetupPanel({
   workProfileUserId,
   memorySuggestionProvider,
   analysisSetup,
+  effectiveAnalysisSetup,
+  onAnalysisProviderVisible,
   analysisOpenRouterConnected,
   showIntelligenceTab,
   requestedTab = null,
@@ -377,6 +381,8 @@ export function AiSetupPanel({
         <section data-setting-id="settings.ai.intelligence" id="ai-setup-panel-tab-intelligence" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.intelligence")}>
           <IntelligenceSetupPanel
             setup={analysisSetup}
+            effectiveSetup={effectiveAnalysisSetup}
+            onProviderVisible={onAnalysisProviderVisible}
             onChange={onAnalysisChange}
             openRouterApiKey={localAiSetup.openRouterApiKey}
             onOpenRouterApiKeyChange={(openRouterApiKey) => onLocalAiSetupChange(current => ({ ...current, openRouterApiKey }))}

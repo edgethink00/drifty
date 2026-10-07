@@ -35,6 +35,7 @@ use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_m
 #[cfg(target_os = "windows")]
 use commands::configure_main_window_material;
 use commands::{
+    analysis_provider_load_api_key, analysis_provider_save_api_key,
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
     ai_classification_openai_chat, ai_list_openai_models, cloud_sync_http_post,
     companion_informational_moments_suppressed, correction_evidence_append,
@@ -667,6 +668,12 @@ fn app_restart_after_update(app: AppHandle, silent: Option<bool>) {
     );
 }
 
+// Share the generated configuration/capabilities with native IPC smoke tests.
+// Expanding generate_context twice also duplicates macOS's embedded Info.plist.
+fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
+    tauri::generate_context!()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -1065,6 +1072,8 @@ pub fn run() {
             openrouter_load_api_key,
             openrouter_save_api_key,
             openrouter_clear_api_key,
+            analysis_provider_load_api_key,
+            analysis_provider_save_api_key,
             custom_endpoint_load_api_key,
             custom_endpoint_save_api_key,
             custom_endpoint_clear_api_key,
@@ -1161,7 +1170,7 @@ pub fn run() {
             pet_quick_controls_cursor_inside,
             pet_quick_controls_action,
         ])
-        .build(tauri::generate_context!());
+        .build(app_context());
 
     let mut app = match app_result {
         Ok(app) => app,

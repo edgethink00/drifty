@@ -1163,6 +1163,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [showAiClassificationImpact, setShowAiClassificationImpact] = useState(resolveInitialAiClassificationVisibility);
   const {
     aiConnectionTest,
+    customEndpointCredentialState,
+    retryCustomEndpointKeyRead,
     aiSetupDialogOpen,
     localAiClassificationOptions,
     localAiConnectionFingerprint,
@@ -8138,9 +8140,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const sharedCustomEndpointConnection = useMemo(() => ({
     baseUrl: localAiSetup.selfHostedBaseUrl,
     apiKey: localAiSetup.selfHostedApiKey,
+    credentialState: customEndpointCredentialState,
+    retryCredentialRead: retryCustomEndpointKeyRead,
     preferStoredConnection: shouldPreferLegacyAnalysisCustomConnection(localAiSetup),
     onChange: updateSharedCustomEndpoint,
   }), [
+    customEndpointCredentialState,
+    retryCustomEndpointKeyRead,
     localAiSetup.selfHostedApiKey,
     localAiSetup.selfHostedBaseUrl,
     localAiSetup.selfHostedModel,
@@ -8150,10 +8156,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     isSupabaseConfigured,
     localAiSetup.provider,
     sharedCustomEndpointConnection,
+    { ownerKey: user?.id ?? "local", cloudFallbackAllowed: cloudAiSelected, cloudReady: cloudClassificationAvailability.state === "ready" },
   );
   const projectAnalysisConnected = resolveProjectAnalysisConnected({
     analysisConnected: analysisModel.analysisConnected,
-    analysisProvider: analysisModel.analysisSetup.provider,
+    analysisProvider: analysisModel.effectiveAnalysisSetup.provider,
     cloudAvailability: cloudClassificationAvailability,
     gateEnabled: classificationAvailabilityGateEnabled,
   });
@@ -8164,7 +8171,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     selectedDayRange,
     startOfDayMinutes,
     insightRange: { start: insightRange.start, end: insightRange.end },
-    analysisSetup: analysisModel.analysisSetup,
+    analysisSetup: analysisModel.effectiveAnalysisSetup,
+    requestScopeKey: analysisModel.requestScopeKey,
+    analysisOwnerId: user?.id ?? null,
+    analysisCloudRecovery: analysisModel.usingCloudRecovery,
+    onProviderUnavailable: analysisModel.markUnavailable,
+    canFallbackToCloud: analysisModel.canFallbackNow,
     resolveOpenRouterKey: analysisModel.resolveOpenRouterKey,
     analysisConnected: projectAnalysisConnected,
     onClassificationChanged: () => { void refreshHistoryData(); },
@@ -10730,7 +10742,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             running={projectClassification.running}
             runError={projectClassification.runError}
             analysisConnected={projectAnalysisConnected}
-            analysisSetup={analysisModel.analysisSetup}
+            analysisSetup={analysisModel.effectiveAnalysisSetup}
             autoAnalysis={projectAutoAnalysis}
             matchCooldown={projectMatchCooldown}
             onTrendWindowChange={handleProjectsTrendWindowChange}
@@ -11039,6 +11051,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     workProfileUserId={user?.id ?? "local"}
                     memorySuggestionProvider={memorySuggestionProvider}
                     analysisSetup={analysisModel.analysisSetup}
+                    effectiveAnalysisSetup={analysisModel.effectiveAnalysisSetup}
+                    onAnalysisProviderVisible={analysisModel.onProviderVisible}
                     analysisOpenRouterConnected={analysisModel.openRouterConnected}
                     showIntelligenceTab={projectClassificationFeatureEnabled}
                     requestedTab={aiSetupRequestedTab}

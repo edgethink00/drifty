@@ -383,3 +383,22 @@ describe("IntelligenceSetupPanel", () => {
     expect(screen.getByLabelText("Anthropic API key")).toBeTruthy();
   });
 });
+
+
+it("keeps incomplete inactive Custom and Anthropic edits as configuration without activating them", () => {
+  const onChange = vi.fn();
+  renderPanel({ setup: buildSetup({ provider: "cloud" }), onChange });
+  fireEvent.click(screen.getByRole("button", { name: /custom.*setup row/i }));
+  fireEvent.change(screen.getByLabelText("Analysis endpoint base URL"), { target: { value: "invalid" } });
+  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ provider: "cloud", selfHostedBaseUrl: "invalid" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Anthropic setup row$/i }));
+  fireEvent.change(screen.getByLabelText("Anthropic API key"), { target: { value: "partial" } });
+  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ provider: "cloud", anthropicApiKey: "partial" }));
+});
+
+it("shows the effective Cloud destination while retaining the saved Anthropic configuration fields", () => {
+  const setup = buildSetup({ provider: "anthropic" });
+  renderPanel({ setup, effectiveSetup: { ...setup, provider: "cloud" } });
+  expect(within(summaryRegion()).getAllByText("Drifty Cloud").length).toBeGreaterThan(0);
+  expect(screen.getByLabelText("Anthropic model id")).toHaveProperty("value", "claude-sonnet-5");
+});

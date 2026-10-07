@@ -5,6 +5,9 @@ import { DEFAULT_LOCAL_AI_SETUP } from "../settings/localAiSetup";
 import { toLocalProviderRequest, type MinimizedActivityPayload } from "./localAiProviderRequest";
 import { createProjectPassInference } from "./projectPassInference";
 
+const cloudAuth = vi.hoisted(() => ({ getSession: vi.fn() }));
+vi.mock("../../lib/supabase/client", () => ({ supabase: { auth: cloudAuth } }));
+
 const OUTPUT_JSON = JSON.stringify({ assignments: [{ id: "r0", projectId: "p1", confidence: 0.9 }], corrections: [] });
 
 const CLASSIFICATION_PAYLOAD: MinimizedActivityPayload = {
@@ -234,4 +237,117 @@ describe("createProjectPassInference", () => {
     expect(result.output).toBeNull();
     expect(result.usage.tokensIn).toBeNull();
   });
+});
+
+
+describe("bounded Intelligence Cloud recovery", () => {
+  const setup = { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openai" as const, openaiApiKey: "synthetic-key" };
+  it("recovers a rejected chunk once, then uses Cloud for remaining chunks in that pass", async () => {
+    const invokeChat = vi.fn().mockResolvedValue({ status: 404, body: '{"error":{"code":"model_not_found"}}' });
+    const invokeCloud = vi.fn().mockResolvedValue({ content: OUTPUT_JSON });
+    const inference = createProjectPassInference(setup, { invokeChat, invokeCloud, canFallbackToCloud: () => true });
+    expect((await inference("chunk-a")).usage.provider).toBe("cloud");
+    expect((await inference("chunk-b")).usage.provider).toBe("cloud");
+    expect(invokeChat).toHaveBeenCalledTimes(1);
+    expect(invokeCloud).toHaveBeenCalledTimes(2);
+  });
+  it("rechecks eligibility after the rejection and before subsequent Cloud chunks", async () => {
+    let eligible = true;
+    const invokeChat = vi.fn().mockResolvedValue({ status: 401, body: "{}" });
+    const invokeCloud = vi.fn().mockResolvedValue({ content: OUTPUT_JSON });
+    const inference = createProjectPassInference(setup, { invokeChat, invokeCloud, canFallbackToCloud: () => eligible });
+    await inference("chunk-a");
+    eligible = false;
+    expect((await inference("chunk-b")).output).toBeNull();
+    expect(invokeCloud).toHaveBeenCalledTimes(1);
+  });
+  it.each([403, 404, 429, 500, 503])("does not switch destinations on ambiguous/transient HTTP %s", async status => {
+    const invokeCloud = vi.fn();
+    const inference = createProjectPassInference(setup, { invokeChat: vi.fn().mockResolvedValue({ status, body: "{}" }), invokeCloud, canFallbackToCloud: () => true });
+    expect((await inference("prompt")).output).toBeNull();
+    expect(invokeCloud).not.toHaveBeenCalled();
+  });
+  it("does not duplicate a charged malformed response when its repair gets an auth error", async () => {
+    const invokeChat = vi.fn().mockResolvedValueOnce(chatBody('{"assignments":[')).mockResolvedValueOnce({ status: 401, body: "{}" });
+    const invokeCloud = vi.fn();
+    const inference = createProjectPassInference(setup, { invokeChat, invokeCloud, canFallbackToCloud: () => true });
+    expect((await inference("prompt")).output).toBeNull();
+    expect(invokeChat).toHaveBeenCalledTimes(2);
+    expect(invokeCloud).not.toHaveBeenCalled();
+  });
+  it("does not reroute an uncertain network/timeout failure", async () => {
+    const invokeCloud = vi.fn();
+    const inference = createProjectPassInference(setup, { invokeChat: vi.fn().mockRejectedValue(new Error("timeout")), invokeCloud, canFallbackToCloud: () => true });
+    await expect(inference("prompt")).rejects.toThrow("timeout");
+    expect(invokeCloud).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("Intelligence dispatch ownership after async auth", () => {
+  const setup = { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openai" as const, openaiApiKey: "synthetic-key" };
+  const session = (id: string) => ({ data: { session: { access_token: "synthetic-cloud-token", user: { id } } } });
+  it.each(["owner", "eligibility"])("cancels Cloud recovery if %s changes while loading the token", async changed => {
+    let current = true;
+    let eligible = true;
+    let finish!: (value: ReturnType<typeof session>) => void;
+    cloudAuth.getSession.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const invokeChat = vi.fn().mockResolvedValue({ status: 401, body: "{}" });
+    const inference = createProjectPassInference(setup, { invokeChat, isRequestCurrent: () => current, expectedCloudUserId: "account-a", canFallbackToCloud: () => eligible });
+    const pending = inference("prompt");
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    if (changed === "owner") current = false;
+    else eligible = false;
+    finish(session("account-a"));
+    await expect(pending).rejects.toThrow("settings changed");
+    expect(invokeChat).toHaveBeenCalledTimes(1);
+  });
+  it("rejects another account's session even before React has published its account change", async () => {
+    cloudAuth.getSession.mockResolvedValueOnce(session("account-b"));
+    const invokeChat = vi.fn().mockResolvedValue({ status: 401, body: "{}" });
+    const inference = createProjectPassInference(setup, { invokeChat, isRequestCurrent: () => true, expectedCloudUserId: "account-a", canFallbackToCloud: () => true });
+    await expect(inference("prompt")).rejects.toThrow("settings changed");
+    expect(invokeChat).toHaveBeenCalledTimes(1);
+  });
+  it("keeps explicitly selected Cloud usable independently of the Classification fallback choice", async () => {
+    cloudAuth.getSession.mockResolvedValueOnce(session("account-a"));
+    const invokeChat = vi.fn().mockResolvedValue(chatBody(OUTPUT_JSON));
+    const inference = createProjectPassInference(DEFAULT_ANALYSIS_AI_SETUP, { invokeChat, isRequestCurrent: () => true, expectedCloudUserId: "account-a", canFallbackToCloud: () => false });
+    expect((await inference("prompt")).usage.provider).toBe("cloud");
+    expect(invokeChat).toHaveBeenCalledTimes(1);
+  });
+  it("does not send a JSON repair after its owner was invalidated during the first response", async () => {
+    let current = true;
+    const invokeChat = vi.fn().mockImplementationOnce(async () => { current = false; return chatBody('{"assignments":['); });
+    const inference = createProjectPassInference(setup, { invokeChat, isRequestCurrent: () => current });
+    await expect(inference("prompt")).rejects.toThrow("settings changed");
+    expect(invokeChat).toHaveBeenCalledTimes(1);
+  });
+  it("also rechecks eligibility for Cloud recovery chosen before dispatch because configuration was incomplete", async () => {
+    let eligible = true;
+    let finish!: (value: ReturnType<typeof session>) => void;
+    cloudAuth.getSession.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const invokeChat = vi.fn();
+    const inference = createProjectPassInference(DEFAULT_ANALYSIS_AI_SETUP, { invokeChat, cloudRecovery: true, isRequestCurrent: () => true, expectedCloudUserId: "account-a", canFallbackToCloud: () => eligible });
+    const pending = inference("prompt");
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    eligible = false;
+    finish(session("account-a"));
+    await expect(pending).rejects.toThrow("settings changed");
+    expect(invokeChat).not.toHaveBeenCalled();
+  });
+
+  it("uses the same minimized structured Cloud payload and Cloud token during a native recovery", async () => {
+    cloudAuth.getSession.mockResolvedValueOnce(session("account-a"));
+    const invokeChat = vi.fn().mockResolvedValueOnce({ status: 401, body: "{}" }).mockResolvedValueOnce(chatBody(OUTPUT_JSON));
+    const inference = createProjectPassInference(setup, { invokeChat, isRequestCurrent: () => true, expectedCloudUserId: "account-a", canFallbackToCloud: () => true });
+    const input = { beforeContextWindows: [], coreWindows: [], afterContextWindows: [], workProfile: null, projects: [] };
+    expect((await inference("minimized prompt", input)).usage.provider).toBe("cloud");
+    const recovered = invokeChat.mock.calls[1][0];
+    expect(recovered).toMatchObject({ apiKey: "synthetic-cloud-token", model: "drifty-cloud" });
+    expect(JSON.parse(recovered.messages[0].content)).toEqual({ driftyReviewChunk: input });
+    expect(JSON.stringify(recovered)).not.toContain("synthetic-key");
+    expect(invokeChat).toHaveBeenCalledTimes(2);
+  });
+
 });

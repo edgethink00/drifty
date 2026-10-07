@@ -34,6 +34,12 @@ export interface ProjectPassCloudResponse {
 }
 
 export interface ProjectPassInferenceDeps {
+  readonly isRequestCurrent?: () => boolean;
+  readonly expectedCloudUserId?: string | null;
+  /** The setup was already resolved to Cloud because the preference is unavailable. */
+  readonly cloudRecovery?: boolean;
+  readonly canFallbackToCloud?: () => boolean;
+  readonly onProviderUnavailable?: (reason: import("../settings/intelligenceRouting").AnalysisUnavailableReason) => void;
   readonly invokeChat?: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse>;
   /** Anthropic's Messages API is not OpenAI-shaped, so it has its own native command. */
   readonly invokeAnthropicChat?: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse>;
@@ -162,12 +168,20 @@ function cloudHttpError(status: number, detail: string): Error {
  * Build a provider-bound ProjectPassInference from the analysis slot config.
  * Secrets (keys) must already be resolved onto `setup` by the caller (Keychain).
  */
-export function createProjectPassInference(setup: AnalysisAiSetupState, deps: ProjectPassInferenceDeps = {}): ProjectPassInference {
-  const invokeChat = deps.invokeChat ?? ((request) => invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request }));
-  const invokeAnthropicChat =
+function createProviderProjectPassInference(setup: AnalysisAiSetupState, deps: ProjectPassInferenceDeps = {}, cloudRecovery = false): ProjectPassInference {
+  const assertCurrent = () => {
+    if ((deps.isRequestCurrent && !deps.isRequestCurrent()) || (cloudRecovery && !deps.canFallbackToCloud?.())) {
+      throw new Error("Intelligence settings changed during analysis.");
+    }
+  };
+  const chat = deps.invokeChat ?? ((request) => invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request }));
+  const anthropicChat =
     deps.invokeAnthropicChat ?? ((request) => invoke<NativeOpenAiChatResponse>("ai_classification_anthropic_chat", { request }));
+  const invokeChat = (request: Record<string, unknown>) => { assertCurrent(); return chat(request); };
+  const invokeAnthropicChat = (request: Record<string, unknown>) => { assertCurrent(); return anthropicChat(request); };
 
   return async (prompt: string, promptInput?: ProjectPassPromptInput): Promise<ProjectPassInferenceResult> => {
+    assertCurrent();
     if (setup.provider === "cloud") {
       if (deps.invokeCloud) {
         const result = await deps.invokeCloud(prompt);
@@ -175,6 +189,12 @@ export function createProjectPassInference(setup: AnalysisAiSetupState, deps: Pr
       }
       if (!supabase) throw new Error("Supabase is not configured.");
       const { data } = await supabase.auth.getSession();
+      assertCurrent();
+      // Auth state can change before React publishes the new account. Never
+      // attach the old owner's captured inputs to a newly returned session.
+      if (deps.expectedCloudUserId !== undefined && data.session?.user.id !== deps.expectedCloudUserId) {
+        throw new Error("Intelligence settings changed during analysis.");
+      }
       const accessToken = data.session?.access_token;
       if (!accessToken) throw new Error("Sign in to use Drifty Cloud analysis.");
       // WKWebView fetch aborts long response-less waits (the LLM streams nothing
@@ -236,5 +256,22 @@ export function createProjectPassInference(setup: AnalysisAiSetupState, deps: Pr
       provider: "self_hosted",
       shape: "openai",
     });
+  };
+}
+
+
+export function createProjectPassInference(setup: AnalysisAiSetupState, deps: ProjectPassInferenceDeps = {}): ProjectPassInference {
+  const preferred = createProviderProjectPassInference(setup, deps, deps.cloudRecovery ?? false);
+  let rejected = false;
+  return async (prompt, input) => {
+    if (!rejected) {
+      const result = await preferred(prompt, input);
+      if (!result.unavailableReason || setup.provider === "cloud") return result;
+      rejected = true;
+      deps.onProviderUnavailable?.(result.unavailableReason);
+      if (!deps.canFallbackToCloud?.()) return result;
+    }
+    if (!deps.canFallbackToCloud?.()) return { output: null, usage: { provider: setup.provider } };
+    return createProviderProjectPassInference({ ...setup, provider: "cloud" }, deps, true)(prompt, input);
   };
 }

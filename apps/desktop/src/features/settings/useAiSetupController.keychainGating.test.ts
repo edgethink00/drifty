@@ -222,4 +222,24 @@ describe("useAiSetupController custom endpoint key persistence", () => {
 
     await waitFor(() => expect(customEndpointStoreMocks.saveCustomEndpointApiKey).toHaveBeenLastCalledWith(""));
   });
+  it("keeps a failed custom key read unknown and retries it when its configuration is opened", async () => {
+    window.localStorage.setItem("drifty.analysisAiSetup.v1", JSON.stringify({ provider: "self_hosted" }));
+    customEndpointStoreMocks.loadCustomEndpointApiKey.mockRejectedValueOnce(new Error("credential store denied")).mockResolvedValueOnce(null);
+    const { result } = renderHook(() => useAiSetupController());
+    await waitFor(() => expect(result.current.customEndpointCredentialState).toBe("error"));
+    expect(customEndpointStoreMocks.saveCustomEndpointApiKey).not.toHaveBeenCalled();
+    act(() => result.current.retryCustomEndpointKeyRead());
+    await waitFor(() => expect(result.current.customEndpointCredentialState).toBe("missing"));
+    expect(customEndpointStoreMocks.loadCustomEndpointApiKey).toHaveBeenCalledTimes(2);
+  });
+  it("allows an explicit custom key edit after a failed read and saves it", async () => {
+    window.localStorage.setItem("drifty.analysisAiSetup.v1", JSON.stringify({ provider: "self_hosted" }));
+    customEndpointStoreMocks.loadCustomEndpointApiKey.mockRejectedValue(new Error("credential store denied"));
+    const { result } = renderHook(() => useAiSetupController());
+    await waitFor(() => expect(result.current.customEndpointCredentialState).toBe("error"));
+    act(() => result.current.setLocalAiSetup(current => ({ ...current, selfHostedApiKey: "synthetic-fixed-key" })));
+    expect(result.current.customEndpointCredentialState).toBe("ready");
+    await waitFor(() => expect(customEndpointStoreMocks.saveCustomEndpointApiKey).toHaveBeenCalledWith("synthetic-fixed-key"));
+  });
+
 });
