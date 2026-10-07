@@ -184,11 +184,11 @@
 .sidebar-cta-slot[data-tone] {
   --cta-tone-fill-strength: 24%;
   /* The toned surface is otherwise fully opaque (both mix inputs carry no
-     alpha). A 95% alpha lets a trace of the sidebar canvas through so the
-     card sits in the rail rather than on top of it, while staying above the
-     ~90% floor where the canvas starts greying the pastel out. Dark canvases
-     show the same alpha more strongly, so they run two points higher. */
-  --cta-surface-alpha: 95%;
+     alpha). Light stays at 86% so the card belongs to the glass rail instead
+     of sitting on it as the only solid slab. Dark canvases show the same
+     alpha more strongly, so they run at 90%. Tint strength is unchanged for
+     this pass; going lower than 86% needs a stronger tint or the pastel greys. */
+  --cta-surface-alpha: 86%;
   --cta-shadow-ambient: 8%;
   --cta-shadow-contact: 5%;
   --cta-shadow-ambient-hover: 11%;
@@ -437,7 +437,7 @@
    reducing only its intensity. */
 :root[data-theme="dark"] .sidebar-cta-slot[data-tone] {
   --cta-tone-fill-strength: 34%;
-  --cta-surface-alpha: 97%;
+  --cta-surface-alpha: 90%;
   --cta-shadow-ambient: 4%;
   --cta-shadow-contact: 3%;
   --cta-shadow-ambient-hover: 6%;

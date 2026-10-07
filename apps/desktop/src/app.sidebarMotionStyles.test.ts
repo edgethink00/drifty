@@ -254,6 +254,17 @@ describe("sidebar motion styles", () => {
     expect(tone).not.toContain("0 10px 24px");
   });
 
+  it("keeps the sidebar card translucent enough to sit in the glass rail", () => {
+    const styles = readFileSync(resolve("src/features/sidebar/SidebarCtaSlot.css"), "utf8");
+    const tone = cssBlock(styles, ".sidebar-cta-slot[data-tone]");
+    const darkTone = cssBlock(styles, ':root[data-theme="dark"] .sidebar-cta-slot[data-tone]');
+
+    expect(tone).toContain("--cta-surface-alpha: 86%;");
+    expect(darkTone).toContain("--cta-surface-alpha: 90%;");
+    expect(tone).not.toContain("--cta-surface-alpha: 95%;");
+    expect(darkTone).not.toContain("--cta-surface-alpha: 97%;");
+  });
+
   it("keeps the settings sidebar column the same width as the dashboard sidebar", () => {
     const styles = readStyles();
     const appShellBlock = cssBlock(styles, ".app-shell");
