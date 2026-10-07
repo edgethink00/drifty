@@ -253,7 +253,13 @@ with sqlite3.connect(path) as connection:
         finally:
             other.close()
         self.assertTrue(legacy.is_file())
-        self.assertEqual(self.recover_value(), "before")
+        self.db.close()
+        original = b"confirmed synthetic SQLite corruption"
+        self.path.write_bytes(original)
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "ambiguous.*backup"):
+            prepare_database(self.path, now=self.clock)
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertTrue(legacy.is_file())
 
     def test_unreadable_foreign_order_record_preserves_source_and_backups(self) -> None:
         ours = self.backup(0)
@@ -313,13 +319,19 @@ with sqlite3.connect(path) as connection:
         finally:
             other.close()
         self.assertTrue(legacy.is_file(), "clock correction removed an unowned legacy backup")
-        self.assertEqual(self.recover_value(), "before")
+        self.db.close()
+        original = b"confirmed synthetic SQLite corruption"
+        self.path.write_bytes(original)
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "ambiguous.*backup"):
+            prepare_database(self.path, now=self.clock)
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertTrue(legacy.is_file())
 
     def test_single_database_legacy_rotation_is_not_disabled_by_pid_file(self) -> None:
         for day in (0, 1, 2):
             self.backup(day)
             (self.path.parent / f".{self.path.name}.backup-order").unlink()
-        (self.path.parent / "tracker.pid").write_text("synthetic PID", encoding="utf-8")
+        (self.path.parent / "tracker.pid").write_text("12345", encoding="utf-8")
         self.write("after")
         self.backup(3)
         self.assertEqual(len(list(database_backup_dir(self.path).glob("*.sqlite3"))), 3)

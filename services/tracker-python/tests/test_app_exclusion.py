@@ -206,7 +206,7 @@ class AppExclusionTests(unittest.TestCase):
         self.assertIsNotNone(older_backup)
         quarantine_dir = database_quarantine_dir(self.db_path)
         quarantine_dir.mkdir(parents=True, exist_ok=True)
-        quarantined_copy = quarantine_dir / "tracker-corrupt-excluded-app.sqlite3"
+        quarantined_copy = quarantine_dir / "tracker-corrupt-20261006T000000000000Z.sqlite3"
         quarantined_copy.write_bytes(self.db_path.read_bytes())
 
         deleted_count = self.database.delete_excluded_app_history(

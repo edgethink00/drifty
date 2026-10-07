@@ -494,7 +494,7 @@ class DatabaseMaintenanceTests(unittest.TestCase):
                     segment_id = str(connection.execute(
                         "SELECT id FROM activity_segments").fetchone()[0])
                     backup = create_rotating_backup(connection, db_path, interval_seconds=0)
-                    quarantine = database_quarantine_dir(db_path) / "tracker-corrupt-owned.sqlite3"
+                    quarantine = database_quarantine_dir(db_path) / "tracker-corrupt-20261006T000000000000Z.sqlite3"
                     quarantine.parent.mkdir()
                     quarantine.write_bytes(backup.read_bytes())
                     original_backup = backup.read_bytes()

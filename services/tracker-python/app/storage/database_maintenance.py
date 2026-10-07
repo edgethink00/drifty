@@ -178,10 +178,6 @@ def _timestamp_slug(now: datetime) -> str:
     return now.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
-def _backup_pattern(db_path: Path) -> str:
-    return f"{db_path.stem}-*.sqlite3"
-
-
 def _backup_path(db_path: Path, now: datetime) -> Path:
     # A publication record must refer to one unique snapshot. Never reuse a
     # basename after rotation, including across same-stem custom databases.
@@ -259,11 +255,21 @@ def _recovery_files(directory: Path, pattern: str) -> list[Path]:
     ]
 
 
+def _backup_families_overlap(first_stem: str, second_stem: str) -> bool:
+    # Legacy discovery used a stem prefix, so a longer, hyphenated stem can
+    # also own a file in that family. Treat that provenance as ambiguous.
+    return (
+        first_stem == second_stem
+        or first_stem.startswith(f"{second_stem}-")
+        or second_stem.startswith(f"{first_stem}-")
+    )
+
+
 def _other_database_paths(db_path: Path, record_suffix: str) -> list[Path]:
     owners: list[Path] = []
     for record in _recovery_files(db_path.parent, f".*{record_suffix}"):
         owner_name = record.name[1:-len(record_suffix)]
-        if owner_name != db_path.name and Path(owner_name).stem == db_path.stem:
+        if owner_name != db_path.name and _backup_families_overlap(Path(owner_name).stem, db_path.stem):
             owners.append(db_path.with_name(owner_name))
     return owners
 
@@ -277,22 +283,35 @@ def _foreign_recorded_backups(db_path: Path) -> set[Path]:
     return claimed
 
 
-def _has_other_same_stem_database(db_path: Path) -> bool:
+def _has_other_backup_family_database(db_path: Path) -> bool:
     if _other_database_paths(db_path, ".maintenance.lock") or _other_database_paths(db_path, ".backup-order"):
         return True
-    # Older installations may predate maintenance records. A sibling SQLite
-    # filename also makes the provenance of shared legacy copies ambiguous.
-    return any(
-        path.name != db_path.name and path.stem == db_path.stem
-        and path.suffix.lower() in {".sqlite3", ".sqlite", ".db"}
-        for path in _recovery_files(db_path.parent, "*")
-    )
+    # Legacy/custom databases may have no suffix or any suffix, and a corrupt
+    # sibling need not have a readable SQLite header. A related filename makes
+    # stem-only provenance ambiguous. Exclude our own live SQLite sidecars.
+    own_files = {db_path.name, *(f"{db_path.name}{suffix}" for suffix in ("-wal", "-shm", "-journal"))}
+    for path in _recovery_files(db_path.parent, "*"):
+        if path.name in own_files or not _backup_families_overlap(path.stem, db_path.stem):
+            continue
+        if path.name == "tracker.pid":
+            # Legacy process metadata contains a positive ASCII PID. A custom
+            # or corrupt database using that name is not proven PID metadata.
+            with path.open("rb") as sibling:
+                metadata = sibling.read(32)
+            pid = metadata.strip()
+            if len(metadata) < 32 and pid.isdigit() and int(pid) > 0:
+                continue
+        return True
+    return False
 
 
 def _backup_candidates(db_path: Path) -> list[Path]:
     # List files before reading ownership records: a concurrent publisher
     # records its unique basename before making that file visible.
-    candidates = _recovery_files(database_backup_dir(db_path), _backup_pattern(db_path))
+    candidates = [
+        path for path in _recovery_files(database_backup_dir(db_path), "*")
+        if path.name.startswith(f"{db_path.stem}-") and path.name.endswith(".sqlite3")
+    ]
     foreign = _foreign_recorded_backups(db_path)
     return sorted(
         (path for path in candidates if path not in foreign and _is_regular_file(path)),
@@ -301,13 +320,41 @@ def _backup_candidates(db_path: Path) -> list[Path]:
     )
 
 
+def _quarantine_body_pattern(db_path: Path) -> str:
+    # Preserve old names while recognizing new collision-resistant copies.
+    return rf"{re.escape(db_path.stem)}-corrupt-\d{{8}}T\d{{12}}Z(?:-[0-9a-f]{{32}})?{re.escape(db_path.suffix)}"
+
+
 def _quarantine_candidates(db_path: Path) -> list[Path]:
-    return sorted(
-        _recovery_files(
-            database_quarantine_dir(db_path),
-            f"{db_path.stem}-corrupt-*{db_path.suffix}*",
-        )
+    # Match generated basenames literally, with only SQLite's known sidecars.
+    # A suffix prefix (.sqlite vs .sqlite3), glob character, or missing suffix
+    # must never broaden permanent deletion to another database's originals.
+    pattern = re.compile(_quarantine_body_pattern(db_path) + r"(?:-(?:wal|shm|journal))?")
+    candidates = sorted(
+        path for path in _recovery_files(database_quarantine_dir(db_path), "*")
+        if pattern.fullmatch(path.name)
     )
+    # A custom DB ending in -wal/-shm/-journal can have the same quarantine
+    # basename as our sidecar. Its persistent filename-scoped records prove
+    # this is not safe to unlink, in either direction, even after quarantine.
+    owners = {
+        *_other_database_paths(db_path, ".maintenance.lock"),
+        *_other_database_paths(db_path, ".backup-order"),
+    }
+    if any(
+        re.fullmatch(_quarantine_body_pattern(owner) + r"(?:-(?:wal|shm|journal))?", candidate.name)
+        for owner in owners for candidate in candidates
+    ):
+        raise sqlite3.DatabaseError(
+            "ambiguous database quarantine ownership; resolve before permanent deletion"
+        )
+    return candidates
+
+
+def _has_ambiguous_legacy_backups(db_path: Path) -> bool:
+    candidates = _backup_candidates(db_path)
+    recorded = set(_recorded_backup_order(db_path))
+    return any(path not in recorded for path in candidates) and _has_other_backup_family_database(db_path)
 
 
 def _interrupted_backup_candidates(db_path: Path) -> list[Path]:
@@ -354,6 +401,14 @@ def permanent_deletion_guard(
             nonlocal invalidated
             if invalidated:
                 return
+            # Preserve both the live rows and every recovery copy when an old
+            # stem-only snapshot might belong to either database. Ignoring it
+            # would allow deleted rows to reappear; unlinking it could destroy
+            # the other database's only recovery copy.
+            if _has_ambiguous_legacy_backups(db_path):
+                raise sqlite3.DatabaseError(
+                    "ambiguous legacy database backups; resolve ownership before permanent deletion"
+                )
             for path in [*_interrupted_backup_candidates(db_path),
                          *_backup_candidates(db_path), *_quarantine_candidates(db_path)]:
                 path.unlink()
@@ -387,9 +442,11 @@ def _ordered_backup_candidates(db_path: Path, *, skip_unreadable: bool = False) 
         if not skip_unreadable:
             raise
         recorded = []
-    # Missing publication targets and already-rotated copies are ignored. Keep
-    # unrecorded legacy snapshots as fallbacks without guessing their order.
+    # Missing publication targets and already-rotated copies are ignored.
+    # Only a single unambiguous database may use stem-only legacy fallbacks.
     ordered = [path for path in recorded if path in candidates]
+    if _has_other_backup_family_database(db_path):
+        return ordered
     return [*ordered, *(path for path in candidates if path not in ordered)]
 
 
@@ -404,6 +461,12 @@ def _latest_valid_backup(db_path: Path, *, skip_unreadable: bool = False) -> Pat
             # A healthy live DB may still create a new periodic backup.
             if not skip_unreadable:
                 raise
+    if not skip_unreadable and _has_ambiguous_legacy_backups(db_path):
+        # No proven usable copy exists. Stop before moving the corrupt source
+        # or publishing a fresh empty database over this unresolved recovery.
+        raise sqlite3.DatabaseError(
+            "ambiguous legacy database backups; resolve ownership before recovery"
+        )
     return None
 
 
@@ -463,7 +526,7 @@ def prepare_database(db_path: Path, *, now: datetime | None = None) -> DatabaseP
             raise sqlite3.DatabaseError("pending database recovery has no valid backup")
         if source_exists:
             quarantined_path = database_quarantine_dir(db_path) / (
-                f"{db_path.stem}-corrupt-{_timestamp_slug(resolved_now)}{db_path.suffix}"
+                f"{db_path.stem}-corrupt-{_timestamp_slug(resolved_now)}-{uuid.uuid4().hex}{db_path.suffix}"
             )
             # Persist intent even without a backup: an interrupted sidecar
             # move must not leave old WAL/SHM beside a newly initialized database.
@@ -499,7 +562,7 @@ def _rotate_backups(db_path: Path, retention: int) -> None:
     # Successful publication order survives clock changes for every retained
     # copy, including the fallback when the newest snapshot becomes corrupt.
     candidates = _ordered_backup_candidates(db_path)
-    ambiguous_legacy = _has_other_same_stem_database(db_path)
+    ambiguous_legacy = _has_other_backup_family_database(db_path)
     recorded = set(_recorded_backup_order(db_path))
     for stale_path in candidates[max(1, retention):]:
         # Correcting one DB's clock must not remove another DB's unrecorded
