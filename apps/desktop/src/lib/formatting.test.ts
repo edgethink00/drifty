@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatCompactDurationFromSeconds, formatDateRangeLabel, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatRelativeTime } from "./formatting";
+import { formatCompactDurationFromSeconds, formatDateRangeLabel, formatDeviceTimeZone, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatRelativeTime } from "./formatting";
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("device time zone label", () => {
+  it("names the system zone with its UTC offset on the given date", () => {
+    // The Vitest setup pins the process zone to Asia/Seoul (+9, no daylight saving).
+    expect(formatDeviceTimeZone(new Date("2026-10-07T00:00:00Z"))).toBe("Asia/Seoul · GMT+9");
+  });
 });
 
 describe("duration rounding", () => {

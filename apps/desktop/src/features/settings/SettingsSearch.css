@@ -166,7 +166,28 @@
   outline: 2px solid var(--accent) !important;
   outline-offset: 3px;
   border-radius: var(--radius-sm);
+}
+
+.settings-search-target:not(.settings-row) {
   background-color: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+/* A row is one slice of a grouped card: its box has square inner edges, so an
+   outline on it spills past the card and cuts across the neighbouring rows.
+   Draw a fully rounded ring inside the row instead; the row itself keeps its
+   background and corner radii, so the card is left untouched. */
+.settings-search-target.settings-row {
+  outline: none !important;
+}
+
+.settings-search-target.settings-row::before {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  content: "";
+  inset: 4px 8px;
+  pointer-events: none;
+  position: absolute;
 }
 
 [data-setting-id] {

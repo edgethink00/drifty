@@ -3,6 +3,7 @@ import { startupSettingsClient } from "../../lib/api/startupSettingsClient";
 import { reportStartupRegistration } from "../../lib/analytics/startupEnvironment";
 import { toErrorMessage } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
+import { Toggle } from "../../components/Toggle";
 
 type StartupSettingsStatus = "loading" | "ready" | "saving" | "unavailable";
 
@@ -72,20 +73,17 @@ export function StartupSettingsRow() {
 
   return (
     <div data-setting-id="settings.general.openAtLogin" className="settings-row">
-      <label htmlFor="open-at-login">
+      <div>
         <div className="lbl">{t("settings.general.openAtLogin")}</div>
         <div className="desc">{t("settings.general.openAtLoginDescription")}</div>
         {error ? <p className="capture-recency capture-recency--error" role="status">{error}</p> : null}
-      </label>
+      </div>
       <div className="ctrl">
-        <input
-          id="open-at-login"
-          className="drifty-checkbox"
-          type="checkbox"
-          aria-label={t("settings.general.openAtLogin")}
+        <Toggle
+          ariaLabel={t("settings.general.openAtLogin")}
           checked={enabled}
           disabled={disabled}
-          onChange={(event) => void handleChange(event.target.checked)}
+          onChange={(nextEnabled) => void handleChange(nextEnabled)}
         />
       </div>
     </div>

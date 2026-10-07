@@ -200,7 +200,8 @@ function ColorRoleRow<TKey extends string>({
   readonly title: string;
   /** Group name for assistive tech; defaults to the title. */
   readonly ariaLabel?: string;
-  readonly description: string;
+  /** Optional: chip-only rows are self-explanatory (the palette names who uses a ring colour). */
+  readonly description?: string;
   readonly options: readonly ColorOption<TKey>[];
   readonly overrides: Partial<Record<TKey, string>>;
   readonly ariaType: string;
@@ -240,7 +241,7 @@ function ColorRoleRow<TKey extends string>({
     >
       <div>
         <div className="lbl">{title}</div>
-        <div className="desc">{description}</div>
+        {description ? <div className="desc">{description}</div> : null}
       </div>
       <div className={inline ? "ctrl" : "ctrl settings-row__actions settings-color-editor"}>
         <div className="settings-color-roles" ref={rootRef}>
@@ -278,7 +279,6 @@ export function CategoryColorControls({ options, overrides, onColorChange, onCol
     <ColorRoleRow
       settingId="settings.appearance.categoryColors"
       title={t("settings.appearance.categoryColors")}
-      description={t("settings.appearance.categoryColorsDescription")}
       options={options.map((option) => ({ ...option, label: localizedCategoryLabel(option.key, t) }))}
       overrides={overrides}
       ariaType="category"
@@ -313,7 +313,6 @@ export function ProductivityColorControls({ productivityOptions, overrides, onCo
     <ColorRoleRow
       settingId="settings.appearance.productivityColors"
       title={t("settings.appearance.productivityColors")}
-      description={t("settings.appearance.productivityColorsDescription")}
       options={productivityOptions.map((option) => ({ ...option, label: localizedThemeColorOptionLabel(option.key, option.label, t) }))}
       overrides={overrides}
       ariaType="theme"

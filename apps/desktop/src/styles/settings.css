@@ -529,6 +529,8 @@
 .toggle {
   width: 36px;
   height: 20px;
+  /* Never let a tight flex row squeeze the switch into a narrow pill. */
+  flex: none;
   border-radius: 999px;
   background: var(--bg-2);
   border: 1px solid var(--line);

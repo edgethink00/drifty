@@ -19,7 +19,7 @@ describe("Settings page width styles", () => {
     expectRuleToContain(pageRule, [
       "max-width: 1120px;",
       "margin: 0 auto;",
-      "padding: 24px clamp(var(--space-6), 5.35vw, 6.5rem) 40px;",
+      "padding: 56px clamp(var(--space-6), calc(22.5vw - 160px), 10rem) 56px;",
     ]);
 
   });

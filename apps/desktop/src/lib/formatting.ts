@@ -268,6 +268,25 @@ export function formatStartOfDayOptionLabel(minutes: number, locale = UI_LOCALE)
   return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", hour12: true }).format(date);
 }
 
+/** The device's IANA time zone with its current UTC offset, e.g. "Asia/Seoul · GMT+9". */
+export function formatDeviceTimeZone(now = new Date()): string {
+  let zone = "UTC";
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return zone;
+  }
+  try {
+    const offset = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "shortOffset" })
+      .formatToParts(now)
+      .find((part) => part.type === "timeZoneName")?.value;
+    return offset ? zone + " · " + offset : zone;
+  } catch {
+    // An engine without shortOffset still knows the zone name; show it alone.
+    return zone;
+  }
+}
+
 export function filterSegmentsForRange(segments: ActivitySegment[], start: string, end: string): ActivitySegment[] {
   const startMs = Date.parse(start);
   const endMs = Date.parse(end);

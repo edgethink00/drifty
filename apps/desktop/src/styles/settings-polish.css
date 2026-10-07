@@ -86,11 +86,15 @@
 }
 
 .content--settings .page {
-  /* Settings keeps its established inset and centered form layout rather than
-     the shared page gutter: its controls were designed around this width. */
+  /* Settings keeps its own roomy inset and centered form layout rather than
+     the shared page gutter: the form sits in a calm column with generous
+     breathing room below the window chrome and beside the content. */
   max-width: 1120px;
   margin: 0 auto;
-  padding: 24px clamp(var(--space-6), 5.35vw, 6.5rem) 40px;
+  /* The side inset grows with the window: ~56px at the 960px minimum width,
+     128px at 1280px, capped at 10rem. A flat percentage would take ~96px at
+     the minimum width and crush the dense Dev > Lab controls. */
+  padding: 56px clamp(var(--space-6), calc(22.5vw - 160px), 10rem) 56px;
 }
 
 .content--settings .settings-layout {

@@ -7,7 +7,7 @@ import {
   START_OF_DAY_OPTIONS,
 } from "./settingsStorage";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
-import { formatStartOfDayOptionLabel } from "../../lib/formatting";
+import { formatDeviceTimeZone, formatStartOfDayOptionLabel } from "../../lib/formatting";
 import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 
@@ -61,6 +61,7 @@ export function GeneralSettingsSection({
     { value: "sunday", label: t("settings.weekday.sunday") },
     { value: "saturday", label: t("settings.weekday.saturday") },
   ] satisfies ReadonlyArray<{ value: StartOfWeek; label: string }>;
+  const deviceTimeZone = formatDeviceTimeZone();
   const startOfDayOptions = START_OF_DAY_OPTIONS.map((option) => ({
     ...option,
     label: formatStartOfDayOptionLabel(option.minutes, effectiveLanguage === "ko" ? "ko-KR" : "en-US"),
@@ -72,6 +73,7 @@ export function GeneralSettingsSection({
         <div data-setting-id="settings.general.language" className="settings-row"><div><div className="lbl">{t("settings.general.language")}</div><div className="desc">{t(hostPlatform === "windows" ? "settings.general.languageDescriptionWindows" : "settings.general.languageDescription")}</div></div><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.language")} value={effectiveLanguage} options={languageOptions} onChange={setDisplayLanguage} /></div></div>
         <div data-setting-id="settings.general.startOfDay" className="settings-row"><label><div className="lbl">{t("settings.general.startOfDay")}</div><div className="desc">{t(hostPlatform === "windows" ? "settings.general.startOfDayDescriptionWindows" : "settings.general.startOfDayDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfDay")} value={startOfDayValue} options={startOfDayOptions} onChange={onStartOfDayChange} /></div></div>
         <div data-setting-id="settings.general.startOfWeek" className="settings-row"><label><div className="lbl">{t("settings.general.startOfWeek")}</div><div className="desc">{t("settings.general.startOfWeekDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfWeek")} value={startOfWeek} options={startOfWeekOptions} onChange={onStartOfWeekChange} /></div></div>
+        <div data-setting-id="settings.general.timeZone" className="settings-row"><div><div className="lbl">{t("settings.general.timeZone")}</div><div className="desc">{t(hostPlatform === "windows" ? "settings.general.timeZoneDescriptionWindows" : "settings.general.timeZoneDescription")}</div></div><div className="ctrl ctrl--value">{deviceTimeZone}</div></div>
       </div>
       <div className="settings-block"><h3>{t("settings.general.startup")}</h3>
         <StartupSettingsRow />

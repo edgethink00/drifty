@@ -12,12 +12,15 @@ vi.mock("../../lib/api/startupSettingsClient", () => ({ startupSettingsClient })
 
 import { StartupSettingsRow } from "./StartupSettingsRow";
 
-function getStartupCheckbox(): HTMLInputElement {
-  const checkbox = screen.getByRole("checkbox", { name: /open drifty at login/i });
-  if (!(checkbox instanceof HTMLInputElement)) {
-    throw new Error("Open at login control must be a checkbox input");
-  }
-  return checkbox;
+// The row uses the shared Toggle, so it is a switch button rather than a checkbox input.
+function getStartupCheckbox(): { click: () => void; checked: boolean; disabled: boolean; element: HTMLElement } {
+  const element = screen.getByRole("switch", { name: /open drifty at login/i });
+  return {
+    element,
+    click: () => fireEvent.click(element),
+    get checked() { return element.getAttribute("aria-checked") === "true"; },
+    get disabled() { return (element as HTMLButtonElement).disabled; },
+  };
 }
 
 describe("StartupSettingsRow", () => {
@@ -42,26 +45,26 @@ describe("StartupSettingsRow", () => {
 
     render(<StartupSettingsRow />);
 
-    await screen.findByRole("checkbox", { name: /open drifty at login/i });
+    await screen.findByRole("switch", { name: /open drifty at login/i });
     const checkbox = getStartupCheckbox();
 
     await waitFor(() => expect(checkbox.checked).toBe(true));
     expect(startupSettingsClient.isOpenAtLoginEnabled).toHaveBeenCalledTimes(1);
   });
 
-  it("enables login startup when the checkbox is checked", async () => {
+  it("enables login startup when the switch is turned on", async () => {
     render(<StartupSettingsRow />);
 
-    await screen.findByRole("checkbox", { name: /open drifty at login/i });
+    await screen.findByRole("switch", { name: /open drifty at login/i });
     const checkbox = getStartupCheckbox();
     await waitFor(() => expect(checkbox.disabled).toBe(false));
-    fireEvent.click(checkbox);
+    checkbox.click();
 
     await waitFor(() => expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true));
     await waitFor(() => expect(checkbox.checked).toBe(true));
   });
 
-  it("disables login startup when the checkbox is unchecked", async () => {
+  it("disables login startup when the switch is turned off", async () => {
     startupSettingsClient.isOpenAtLoginEnabled.mockResolvedValue(true);
     startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue({
       success: true,
@@ -72,10 +75,10 @@ describe("StartupSettingsRow", () => {
 
     render(<StartupSettingsRow />);
 
-    await screen.findByRole("checkbox", { name: /open drifty at login/i });
+    await screen.findByRole("switch", { name: /open drifty at login/i });
     const checkbox = getStartupCheckbox();
     await waitFor(() => expect(checkbox.checked).toBe(true));
-    fireEvent.click(checkbox);
+    checkbox.click();
 
     await waitFor(() => expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(false));
     await waitFor(() => expect(checkbox.checked).toBe(false));
@@ -96,7 +99,7 @@ describe("StartupSettingsRow", () => {
     render(<StartupSettingsRow />);
     const checkbox = getStartupCheckbox();
     await waitFor(() => expect(checkbox.disabled).toBe(false));
-    fireEvent.click(checkbox);
+    checkbox.click();
 
     await waitFor(() => expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true));
     await waitFor(() => expect(checkbox.disabled).toBe(false));
@@ -109,7 +112,7 @@ describe("StartupSettingsRow", () => {
     render(<StartupSettingsRow />);
     const checkbox = getStartupCheckbox();
     await waitFor(() => expect(checkbox.checked).toBe(true));
-    fireEvent.click(checkbox);
+    checkbox.click();
 
     await waitFor(() => expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(false));
     await waitFor(() => expect(checkbox.disabled).toBe(false));
@@ -122,7 +125,7 @@ describe("StartupSettingsRow", () => {
     render(<StartupSettingsRow />);
     const checkbox = getStartupCheckbox();
     await waitFor(() => expect(checkbox.disabled).toBe(false));
-    fireEvent.click(checkbox);
+    checkbox.click();
 
     await screen.findByRole("status");
     expect(checkbox.checked).toBe(false);
@@ -135,7 +138,7 @@ describe("StartupSettingsRow", () => {
 
     render(<StartupSettingsRow />);
 
-    await screen.findByRole("checkbox", { name: /open drifty at login/i });
+    await screen.findByRole("switch", { name: /open drifty at login/i });
     const checkbox = getStartupCheckbox();
 
     expect(checkbox.disabled).toBe(true);

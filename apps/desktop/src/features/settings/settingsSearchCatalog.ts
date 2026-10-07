@@ -53,6 +53,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.general.startOfWeekDescription",
   },
   {
+    id: "settings.general.timeZone",
+    section: "general",
+    titleKey: "settings.general.timeZone",
+    keywords: "시간대 타임존 지역 표준시 서울 timezone time zone utc gmt",
+    descriptionKey: "settings.general.timeZoneDescription",
+  },
+  {
     id: "settings.general.openAtLogin",
     section: "general",
     titleKey: "settings.general.openAtLogin",
@@ -94,7 +101,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: "appearance",
     titleKey: "settings.appearance.categoryColors",
     keywords: "카테고리 색상 category color",
-    descriptionKey: "settings.appearance.categoryColorsDescription",
   },
   {
     id: "settings.appearance.accent",
@@ -108,7 +114,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: "appearance",
     titleKey: "settings.appearance.productivityColors",
     keywords: "집중 딴짓 중립 색상 focus drift neutral colors",
-    descriptionKey: "settings.appearance.productivityColorsDescription",
   },
   {
     id: "settings.pet.show",
