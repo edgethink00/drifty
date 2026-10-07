@@ -374,6 +374,34 @@ def _interrupted_backup_candidates(db_path: Path) -> list[Path]:
     return [path for path in entries if pattern.fullmatch(path.name) and _is_regular_file(path)]
 
 
+def _interrupted_restore_candidates(db_path: Path) -> list[Path]:
+    # Restore works beside the live DB, unlike backup staging. An abrupt exit
+    # can leave this closed copy holding rows a later permanent delete removes.
+    # The filename-scoped maintenance lock excludes an active restore here.
+    pattern = re.compile(
+        rf"(\.{re.escape(db_path.name)}\.restore-[0-9a-f]{{32}}\.tmp)"
+        r"(?:-(?:journal|wal|shm))?"
+    )
+    candidates: list[Path] = []
+    for path in db_path.parent.iterdir():
+        match = pattern.fullmatch(path.name)
+        if match is None or not _is_regular_file(path):
+            continue
+        # A custom database can use a generated-looking basename. Its own
+        # durable records prove that deleting this file or its sidecars is unsafe.
+        owners = {path, path.with_name(match.group(1))}
+        if any(
+            _is_regular_file(_maintenance_lock_path(owner))
+            or _is_regular_file(_backup_order_record_path(owner))
+            for owner in owners
+        ):
+            raise sqlite3.DatabaseError(
+                "ambiguous database restore ownership; resolve before permanent deletion"
+            )
+        candidates.append(path)
+    return candidates
+
+
 @contextmanager
 def permanent_deletion_guard(
     db_path: Path,
@@ -409,7 +437,8 @@ def permanent_deletion_guard(
                 raise sqlite3.DatabaseError(
                     "ambiguous legacy database backups; resolve ownership before permanent deletion"
                 )
-            for path in [*_interrupted_backup_candidates(db_path),
+            for path in [*_interrupted_restore_candidates(db_path),
+                         *_interrupted_backup_candidates(db_path),
                          *_backup_candidates(db_path), *_quarantine_candidates(db_path)]:
                 path.unlink()
             _recovery_pending_path(db_path).unlink(missing_ok=True)

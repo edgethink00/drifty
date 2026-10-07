@@ -92,6 +92,143 @@ class DatabaseMaintenanceTests(unittest.TestCase):
             with closing(sqlite3.connect(f'{backup.as_uri()}?mode=ro&immutable=1', uri=True)) as copy:
                 self.assertEqual(copy.execute('SELECT count(*) FROM activity_segments').fetchone()[0], 0)
 
+    def test_permanent_delete_removes_restore_interrupted_by_process_exit(self) -> None:
+        database = TrackerDatabase(self.db_path, perform_maintenance=False)
+        database.record_snapshot(
+            Snapshot(datetime.now(timezone.utc).isoformat(), 'Editor',
+                     'fixture.editor', 'Delete me', 'test'), 5
+        )
+        segment_id = str(database.connect().execute(
+            'SELECT id FROM activity_segments'
+        ).fetchone()[0])
+        create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        database.close()
+        self.db_path.write_bytes(b'corrupt source requiring restore')
+        script = textwrap.dedent('''
+            import os,sys
+            from pathlib import Path
+            from unittest.mock import patch
+            from app.storage import database_maintenance as storage
+            from app.storage.db import TrackerDatabase
+            copy=storage.shutil.copy2
+            def exit_after_copy(source,destination):
+                result=copy(source,destination)
+                if '.restore-' in Path(destination).name:
+                    os._exit(73)
+                return result
+            with patch.object(storage.shutil,'copy2',side_effect=exit_after_copy):
+                TrackerDatabase(Path(sys.argv[1]))
+        ''')
+        result = subprocess.run(
+            [sys.executable, '-c', script, str(self.db_path)],
+            cwd=SERVICE_ROOT, capture_output=True, text=True, timeout=10
+        )
+        self.assertEqual(result.returncode, 73, result.stderr)
+        interrupted = list(self.db_path.parent.glob('.tracker.sqlite3.restore-*.tmp'))
+        self.assertEqual(len(interrupted), 1)
+        with closing(sqlite3.connect(
+            interrupted[0].as_uri() + '?mode=ro&immutable=1', uri=True
+        )) as copy:
+            self.assertEqual(copy.execute('SELECT count(*) FROM activity_segments').fetchone()[0], 1)
+        reopened = TrackerDatabase(self.db_path)
+        self.addCleanup(reopened.close)
+        self.assertEqual(reopened.delete_activity_segments([segment_id]), 1)
+        self.assertEqual(reopened.connect().execute('SELECT count(*) FROM activity_segments').fetchone()[0], 0)
+        self.assertFalse(interrupted[0].exists(), 'permanent deletion left the interrupted restore containing deleted activity')
+
+    def test_history_range_delete_removes_interrupted_restore_copy(self) -> None:
+        database = TrackerDatabase(self.db_path, perform_maintenance=False)
+        self.addCleanup(database.close)
+        database.insert_segment({
+            'started_at': '2026-10-07T09:00:00+00:00',
+            'ended_at': '2026-10-07T09:01:00+00:00',
+            'duration_seconds': 60, 'app_name': 'Delete me',
+        })
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        interrupted = self.db_path.with_name(f'.{self.db_path.name}.restore-{"a"*32}.tmp')
+        interrupted.write_bytes(backup.read_bytes())
+        result = database.delete_history_range(
+            start='2026-10-07', end='2026-10-07', scopes={'activity': True}
+        )
+        self.assertEqual(result['activitySegments'], 1)
+        self.assertFalse(interrupted.exists())
+        for recovery in database_backup_dir(self.db_path).glob('*.sqlite3'):
+            with closing(sqlite3.connect(
+                recovery.as_uri() + '?mode=ro&immutable=1', uri=True
+            )) as copy:
+                self.assertEqual(copy.execute('SELECT count(*) FROM activity_segments').fetchone()[0], 0)
+
+    def test_restore_cleanup_keeps_foreign_and_unrecognized_files(self) -> None:
+        self.db_path = self.db_path.with_name('tracker[qa].sqlite3')
+        database = TrackerDatabase(self.db_path, perform_maintenance=False)
+        self.addCleanup(database.close)
+        database.record_snapshot(
+            Snapshot(datetime.now(timezone.utc).isoformat(), 'Editor',
+                     'fixture.editor', 'Delete me', 'test'), 5
+        )
+        segment_id = str(database.connect().execute('SELECT id FROM activity_segments').fetchone()[0])
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        interrupted = self.db_path.with_name(f'.{self.db_path.name}.restore-{"b"*32}.tmp')
+        interrupted.write_bytes(backup.read_bytes())
+        sidecars = [Path(str(interrupted) + suffix) for suffix in ('-wal', '-shm', '-journal')]
+        for sidecar in sidecars:
+            sidecar.write_bytes(b'owned closed restore sidecar')
+        foreign = [
+            self.db_path.with_name(f'.tracker[qa].db.restore-{"b"*32}.tmp'),
+            self.db_path.with_name(f'.trackerq.sqlite3.restore-{"b"*32}.tmp'),
+            self.db_path.with_name(f'.tracker[qa].sqlite3.restore-{"b"*31}.tmp'),
+            self.db_path.with_name(f'.tracker[qa].sqlite3.restore-{"z"*32}.tmp'),
+            Path(str(interrupted) + '-custom'),
+        ]
+        for path in foreign:
+            path.write_bytes(backup.read_bytes())
+        expected = {path: path.read_bytes() for path in foreign}
+        self.assertEqual(database.delete_activity_segments([segment_id]), 1)
+        self.assertFalse(any(path.exists() for path in [interrupted, *sidecars]))
+        self.assertEqual({path: path.read_bytes() for path in foreign}, expected)
+
+    def test_unremovable_restore_copy_prevents_permanent_delete(self) -> None:
+        database = TrackerDatabase(self.db_path, perform_maintenance=False)
+        self.addCleanup(database.close)
+        database.record_snapshot(
+            Snapshot(datetime.now(timezone.utc).isoformat(), 'Editor',
+                     'fixture.editor', 'Keep until deletion can complete', 'test'), 5
+        )
+        segment_id = str(database.connect().execute('SELECT id FROM activity_segments').fetchone()[0])
+        backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        interrupted = self.db_path.with_name(f'.{self.db_path.name}.restore-{"c"*32}.tmp')
+        interrupted.write_bytes(backup.read_bytes())
+        expected_backup = backup.read_bytes()
+        unlink = Path.unlink
+        def deny_restore_unlink(path, *args, **kwargs):
+            if path == interrupted:
+                raise PermissionError('restore copy sharing denial')
+            return unlink(path, *args, **kwargs)
+        with patch.object(Path, 'unlink', deny_restore_unlink):
+            with self.assertRaisesRegex(PermissionError, 'restore copy sharing denial'):
+                database.delete_activity_segments([segment_id])
+        self.assertEqual(database.connect().execute('SELECT count(*) FROM activity_segments').fetchone()[0], 1)
+        self.assertEqual(interrupted.read_bytes(), expected_backup)
+        self.assertEqual(backup.read_bytes(), expected_backup)
+
+    def test_restore_named_database_ownership_blocks_cleanup(self) -> None:
+        database = TrackerDatabase(self.db_path, perform_maintenance=False)
+        self.addCleanup(database.close)
+        database.record_snapshot(
+            Snapshot(datetime.now(timezone.utc).isoformat(), 'Editor',
+                     'fixture.editor', 'Keep until ownership is resolved', 'test'), 5
+        )
+        segment_id = str(database.connect().execute('SELECT id FROM activity_segments').fetchone()[0])
+        foreign_path = self.db_path.with_name(f'.{self.db_path.name}.restore-{"d"*32}.tmp')
+        foreign = TrackerDatabase(foreign_path, perform_maintenance=False)
+        self._insert_marker(foreign, 'foreign database')
+        foreign.close()
+        expected = foreign_path.read_bytes()
+        with self.assertRaisesRegex(sqlite3.DatabaseError, 'ambiguous.*restore'):
+            database.delete_activity_segments([segment_id])
+        self.assertEqual(database.connect().execute('SELECT count(*) FROM activity_segments').fetchone()[0], 1)
+        self.assertEqual(foreign_path.read_bytes(), expected)
+
     def test_backup_reuse_cleans_only_owned_interrupted_files(self) -> None:
         database = TrackerDatabase(self.db_path)
         self.addCleanup(database.close)
