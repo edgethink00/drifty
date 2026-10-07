@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from ipaddress import IPv6Address
 from typing import Final
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
@@ -104,7 +105,11 @@ def _canonicalize_youtube_url(scheme: str, host: str, path: str, query: str) -> 
         return None
 
     first_path_part = path_parts[0] if path_parts else ""
-    query_values = dict(parse_qsl(query, keep_blank_values=True))
+    # Match URLSearchParams.get() used when the desktop creates this rule.
+    # Collapsing with dict() picks the last duplicate instead of the first.
+    query_values: dict[str, str] = {}
+    for key, value in parse_qsl(query, keep_blank_values=True):
+        query_values.setdefault(key, value)
     if first_path_part == "watch":
         video_id = query_values.get("v", "").strip()
         return f"https://youtube.com/watch?v={quote(video_id, safe='')}" if video_id else None
@@ -125,13 +130,17 @@ def canonicalize_classification_rule_site_url(value: str | None) -> str | None:
     if candidate is None:
         return None
 
-    parsed = urlparse(candidate)
-    if parsed.scheme not in {"http", "https"}:
-        return None
-    if not parsed.hostname:
-        return None
     try:
+        # urlparse itself rejects malformed bracketed hosts and invalid
+        # authorities. One invalid captured URL must not abort a rules batch.
+        parsed = urlparse(candidate)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return None
         parsed.port
+        if parsed.netloc.rsplit("@", 1)[-1].startswith("["):
+            # Python 3.9 accepts some malformed bracketed IPv6 authorities
+            # that URL() on the desktop rejects.
+            IPv6Address(parsed.hostname)
     except ValueError:
         return None
 

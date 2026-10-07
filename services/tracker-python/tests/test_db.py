@@ -33,6 +33,33 @@ class ClassificationRuleUrlTests(unittest.TestCase):
             "https://example.com:8443/work/plan?view=compact",
         )
 
+    def test_youtube_duplicate_query_uses_first_value_like_desktop(self) -> None:
+        for query, expected in (
+            ("watch?v=FIRST&v=SECOND", "watch?v=FIRST"),
+            ("playlist?list=FIRST&list=SECOND", "playlist?list=FIRST"),
+            ("watch?%76=FIRST&v=SECOND", "watch?v=FIRST"),
+            ("watch?v=FIRST&v=", "watch?v=FIRST"),
+            ("watch?v=&v=SECOND", "watch?v=&v=SECOND"),
+        ):
+            with self.subTest(query=query):
+                self.assertEqual(
+                    canonicalize_classification_rule_site_url(f"https://youtube.com/{query}"),
+                    f"https://youtube.com/{expected}",
+                )
+
+    def test_malformed_authorities_return_none_instead_of_aborting_rule_matching(self) -> None:
+        for value in ("http://[invalid", "http://[::1", "https://[::::]/", "https://example.com:bad/work"):
+            with self.subTest(value=value):
+                self.assertIsNone(canonicalize_classification_rule_site_url(value))
+
+    def test_query_privacy_and_ordinary_parameter_policy_remain_intact(self) -> None:
+        self.assertEqual(
+            canonicalize_classification_rule_site_url(
+                "https://user:pass@example.com/work?view=compact&t=30&token=secret&utm_source=x#section"
+            ),
+            "https://example.com/work?view=compact",
+        )
+
 
 class TrackerDatabaseTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -2148,6 +2175,90 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(result["matchedCount"], 1)
         self.assertEqual(events[0]["classification"]["classificationRuleId"], rule["id"])
         self.assertNotIn("classification", events[1])
+
+
+    def test_site_url_rule_created_from_duplicate_youtube_url_applies_to_that_activity(self) -> None:
+        for hour, video in enumerate(("FIRST&v=SECOND", "SECOND"), 9):
+            self.database.insert_segment({
+                "started_at": f"2026-04-06T{hour:02d}:00:00+00:00",
+                "ended_at": f"2026-04-06T{hour:02d}:01:00+00:00",
+                "duration_seconds": 60,
+                "app_name": "Safari",
+                "site_domain": "youtube.com",
+                "site_url": f"https://youtube.com/watch?v={video}",
+            })
+        rule = self.database.save_classification_rule({
+            "targetKind": "site", "targetValue": "youtube.com",
+            "matchScope": "detail", "detailKind": "siteUrl",
+            # The existing desktop helper returns the first query value.
+            "detailValue": "https://youtube.com/watch?v=FIRST",
+            "category": "learning", "productivity": "focus",
+        })
+        result = self.database.apply_classification_rules()
+        self.assertEqual(result, {"matchedCount": 1, "appliedCount": 1, "skippedCount": 0})
+        events = self.database.fetch_timeline("2026-04-06")
+        self.assertEqual(events[0]["classification"]["classificationRuleId"], rule["id"])
+        self.assertNotIn("classification", events[1])
+
+    def test_malformed_site_url_does_not_roll_back_other_rows_classification(self) -> None:
+        for hour, url in enumerate(("https://example.com/work", "http://[invalid"), 9):
+            self.database.insert_segment({
+                "started_at": f"2026-04-06T{hour:02d}:00:00+00:00",
+                "ended_at": f"2026-04-06T{hour:02d}:01:00+00:00",
+                "duration_seconds": 60,
+                "app_name": "Safari", "site_domain": "example.com", "site_url": url,
+            })
+        rule = self.database.save_classification_rule({
+            "targetKind": "site", "targetValue": "example.com",
+            "matchScope": "detail", "detailKind": "siteUrl",
+            "detailValue": "https://example.com/work",
+            "category": "workspace", "productivity": "focus",
+        })
+        result = self.database.apply_classification_rules()
+        self.assertEqual(result, {"matchedCount": 1, "appliedCount": 1, "skippedCount": 0})
+        events = self.database.fetch_timeline("2026-04-06")
+        self.assertEqual(events[0]["classification"]["classificationRuleId"], rule["id"])
+        self.assertNotIn("classification", events[1])
+        # Invalid user-entered rules remain rejected without storing a row.
+        with self.assertRaisesRegex(ValueError, "detailKind and detailValue"):
+            self.database.save_classification_rule({
+                **rule, "id": "invalid-rule", "detailValue": "http://[invalid",
+            })
+        self.assertEqual(len(self.database.get_classification_rules()), 1)
+
+    def test_malformed_site_without_domain_does_not_abort_site_rule_batch(self) -> None:
+        for scope in ("surface", "detail"):
+            with self.subTest(scope=scope):
+                database = TrackerDatabase(
+                    Path(self.tempdir.name) / f"{scope}.sqlite3", perform_maintenance=False,
+                )
+                try:
+                    for hour, domain, url in (
+                        (9, "example.com", "https://example.com/work"),
+                        (10, None, "http://[invalid"),
+                        (11, "", "http://[invalid"),
+                        (12, "http://[invalid", "http://[invalid"),
+                    ):
+                        database.insert_segment({
+                            "started_at": f"2026-04-06T{hour:02d}:00:00+00:00",
+                            "ended_at": f"2026-04-06T{hour:02d}:01:00+00:00",
+                            "duration_seconds": 60,
+                            "app_name": "Safari", "site_domain": domain, "site_url": url,
+                        })
+                    rule = database.save_classification_rule({
+                        "targetKind": "site", "targetValue": "example.com",
+                        "matchScope": scope, "detailKind": "siteUrl",
+                        "detailValue": "https://example.com/work",
+                        "category": "workspace", "productivity": "focus",
+                    })
+                    self.assertEqual(database.apply_classification_rules(), {
+                        "matchedCount": 1, "appliedCount": 1, "skippedCount": 0,
+                    })
+                    events = database.fetch_timeline("2026-04-06")
+                    self.assertEqual(events[0]["classification"]["classificationRuleId"], rule["id"])
+                    self.assertTrue(all("classification" not in event for event in events[1:]))
+                finally:
+                    database.close()
 
     def test_site_url_detail_classification_rule_matches_only_same_canonical_url(self) -> None:
         self.database.insert_segment(

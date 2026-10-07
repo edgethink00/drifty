@@ -4739,8 +4739,13 @@ class TrackerDatabase:
         text = value.strip().lower()
         if not text:
             return ""
-        parsed = urlparse(text if "://" in text else f"//{text}")
-        host = parsed.hostname or text.split("/", 1)[0].split(":", 1)[0]
+        try:
+            parsed = urlparse(text if "://" in text else f"//{text}")
+            host = parsed.hostname or text.split("/", 1)[0].split(":", 1)[0]
+        except ValueError:
+            # Captured metadata can have a malformed URL and no site_domain.
+            # It cannot match a site rule, but must not abort the rules batch.
+            return ""
         while host.startswith("www."):
             host = host[4:]
         return host.strip(".")
