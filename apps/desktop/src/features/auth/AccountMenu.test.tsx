@@ -7,6 +7,8 @@ import {
   ACCOUNT_POPOVER_EXPANDED_GAP_PX,
   AccountMenu,
   collapsedAccountPopoverLeftPx,
+  type AccountMenuTrackerSummary,
+  type AccountTrackerAttention,
 } from "./AccountMenu";
 import {
   LocalizationProvider,
@@ -21,9 +23,10 @@ type RenderAccountMenuOptions = {
   readonly userAvatarUrl?: string | null;
   readonly userEmail?: string | null;
   readonly language?: DisplayLanguage;
+  readonly tracker?: AccountMenuTrackerSummary | null;
 };
 
-function renderAccountMenu({ userAvatarUrl = null, userEmail = null, language = "en" }: RenderAccountMenuOptions = {}) {
+function renderAccountMenu({ userAvatarUrl = null, userEmail = null, language = "en", tracker = null }: RenderAccountMenuOptions = {}) {
   const handlers = {
     onProfile: vi.fn(),
     onAiSetting: vi.fn(),
@@ -48,6 +51,7 @@ function renderAccountMenu({ userAvatarUrl = null, userEmail = null, language = 
           isPetVisible={false}
           onTogglePet={() => {}}
           onToggle={() => setIsOpen((open) => !open)}
+          tracker={tracker}
           {...handlers}
         />
       </LocalizationTestProvider>
@@ -305,5 +309,124 @@ describe("AccountMenu", () => {
     expect(screen.getByRole("menuitem", { name: "AI 설정" })).toBeTruthy();
     expect(screen.getByRole("menuitemcheckbox", { name: "다크 모드" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "로그인" })).toBeTruthy();
+  });
+  describe("tracker", () => {
+    function trackerSummary(
+      state: string,
+      attention: AccountTrackerAttention | null,
+      overrides: Partial<AccountMenuTrackerSummary> = {},
+    ): AccountMenuTrackerSummary {
+      return {
+        state,
+        attention,
+        markRow: false,
+        statusLabel: attention === "paused" ? "Tracking paused" : "Tracking now",
+        appLabel: "Visual Studio Code",
+        description: "Tracking now · Visual Studio Code",
+        actionLabel: state === "pause" ? "Pause tracking" : "Resume tracking",
+        actionDisabled: false,
+        onAction: vi.fn(),
+        onSetup: vi.fn(),
+        ...overrides,
+      };
+    }
+
+    // Product decision 2026-10-07: the tracker card moves into the account
+    // menu as one block directly above Log out, set apart by its fill with no
+    // separators, and the account row stays quiet unless tracking needs the user.
+    it("places the tracker block between Send feedback and Log out without separators", () => {
+      renderAccountMenu({ userEmail: "alex@example.com", tracker: trackerSummary("pause", null) });
+      fireEvent.click(screen.getByRole("button", { name: "alex" }));
+
+      const menu = screen.getByRole("menu", { name: "Account menu" });
+      const children = Array.from(menu.children);
+      const block = menu.querySelector(".account-menu-tracker-block");
+      const blockIndex = children.indexOf(block as Element);
+
+      expect(block?.textContent).toContain("Tracking now");
+      expect(block?.textContent).toContain("Visual Studio Code");
+      expect(children[blockIndex - 1]).toBe(screen.getByRole("menuitem", { name: "Send feedback" }));
+      expect(children[blockIndex + 1]).toBe(screen.getByRole("menuitem", { name: "Log out" }));
+      expect(children[children.length - 1]).toBe(screen.getByRole("menuitem", { name: "Log out" }));
+    });
+
+    it("keeps the separator before Log out when there is no tracker block", () => {
+      renderAccountMenu({ userEmail: "alex@example.com" });
+      fireEvent.click(screen.getByRole("button", { name: "alex" }));
+
+      const logOut = screen.getByRole("menuitem", { name: "Log out" });
+      expect(logOut.previousElementSibling?.getAttribute("role")).toBe("separator");
+    });
+
+    it("pauses from the block with the sidebar card's pause control", () => {
+      const tracker = trackerSummary("pause", null);
+      renderAccountMenu({ userEmail: "alex@example.com", tracker });
+      fireEvent.click(screen.getByRole("button", { name: "alex" }));
+
+      const pause = screen.getByRole("menuitem", { name: "Pause tracking" });
+      expect(pause.querySelector(".account-tracker-action-icon--pause")).toBeTruthy();
+      fireEvent.click(pause);
+      expect(tracker.onAction).toHaveBeenCalledTimes(1);
+    });
+
+    // Owner choice 2026-10-07: the block keeps the sidebar card's red dot
+    // while paused; the pause glyph is only the collapsed rail's avatar badge.
+    it("shows a paused tracker as the sidebar card's red dot in the block", () => {
+      renderAccountMenu({ userEmail: "alex@example.com", tracker: trackerSummary("resume", "paused") });
+      fireEvent.click(screen.getByRole("button", { name: "alex" }));
+
+      const block = screen.getByRole("menu", { name: "Account menu" }).querySelector(".account-menu-tracker-block");
+      expect(block?.querySelector('.account-tracker-dot[data-state="resume"]')).toBeTruthy();
+      expect(block?.querySelector(".account-status-mark")).toBeNull();
+      expect(screen.getByRole("menuitem", { name: "Resume tracking" })).toBeTruthy();
+    });
+
+    it.each([
+      ["recording", "pause", null, true],
+      ["paused while the sidebar card shows it", "resume", "paused", false],
+    ] as const)("keeps the account row quiet when %s", (_case, state, attention, markRow) => {
+      const { container } = renderAccountMenu({
+        userEmail: "alex@example.com",
+        tracker: trackerSummary(state, attention, { markRow }),
+      });
+
+      const trigger = screen.getByRole("button", { name: "alex" });
+      expect(container.querySelector(".account-avatar-status")).toBeNull();
+      expect(container.querySelector(".account-trigger__attention")).toBeNull();
+      expect(container.querySelector(".account-trigger__copy")?.textContent).toBe("alex");
+      expect(trigger.hasAttribute("aria-describedby")).toBe(false);
+    });
+
+    it.each([
+      ["paused", "resume", "Paused", "account-status-mark--paused"],
+      ["attention", "resume", "Needs attention", "account-status-mark--alert"],
+      ["setup", "unavailable", "Setup needed", "account-status-mark--alert"],
+    ] as const)("badges the avatar when tracking is %s and the sidebar card is hidden", (attention, state, words, markClass) => {
+      const { container } = renderAccountMenu({
+        userEmail: "alex@example.com",
+        tracker: trackerSummary(state, attention, { markRow: true }),
+      });
+
+      const trigger = screen.getByRole("button", { name: "alex" });
+      const status = container.querySelector(".account-trigger__attention");
+      // Spoken, never printed: the row keeps the account's one-line layout.
+      expect(status?.textContent).toBe(words);
+      expect(status?.classList.contains("sr-only")).toBe(true);
+      expect(trigger.getAttribute("aria-describedby")).toBe(status?.id);
+      expect(container.querySelector(".account-avatar-status")?.classList.contains(markClass)).toBe(true);
+    });
+
+    it("turns the block into a route to setup when the tracker cannot run", () => {
+      const tracker = trackerSummary("unavailable", "setup", {
+        statusLabel: "Tracker setup needed",
+        appLabel: "Start tracker to collect activity",
+      });
+      renderAccountMenu({ userEmail: "alex@example.com", tracker });
+      fireEvent.click(screen.getByRole("button", { name: "alex" }));
+
+      expect(screen.queryByRole("menuitem", { name: "Resume tracking" })).toBeNull();
+      fireEvent.click(screen.getByRole("menuitem", { name: /Tracker setup needed/ }));
+      expect(tracker.onSetup).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -202,15 +202,14 @@
 .account-popover--collapsed { width: 14rem; }
 
 /* The expanded menu covers the whole sidebar foot, and it is glass by
-   contract, so at its 78% alpha the upsell card and the tracker pill printed
-   through the lower items ("Sign in" over "Visual Studio Code"). Fade what sits
+   contract, so at its 78% alpha the upsell card printed through the lower
+   items. Fade what sits
    under it while it is open instead of thickening the glass. The collapsed rail
    opens the menu beside the foot rather than over it, so it keeps its cards. */
-body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap,
-body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
+body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap {
   opacity: 0.08;
   /* Faded is never clickable. Today's menu covers this area completely, so
-     nothing can reach Pause tracking or Upgrade to Pro anyway; this keeps that
+     nothing can reach Upgrade to Pro anyway; this keeps that
      true if the menu ever stops overlapping the whole foot, because the menu
      dismisses on `pointerdown` and the following `click` would still land. */
   pointer-events: none;
@@ -218,8 +217,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap,
-  body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
+  body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap {
     transition: none;
   }
 }

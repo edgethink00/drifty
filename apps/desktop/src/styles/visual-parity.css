@@ -37,14 +37,11 @@
 
 /* Visual parity correction: mock leaderboard has hero -> toolbar -> list only. */
 
-
 /* Corrected Drifty prototype parity: Insights top focus/drift graph */
 
 /* Corrected Drifty prototype parity: Insights chart panel exact inset */
 
-
 /* Corrected Drifty prototype parity: hide non-mock Insights support/copy blocks */
-
 
 /* Corrected Drifty prototype parity: Day flow header has no explanatory copy. */
 .flow-chart-copy {
@@ -110,13 +107,9 @@
   font-size: 0.95rem;
 }
 
-
-
 /* Drifty prototype parity: tighter Your Day app usage ranking. */
 
-
 /* Drifty prototype exact stat footer sizing for top app card. */
-
 
 /* Sidebar collapse rail */
 .brand,
@@ -124,17 +117,6 @@
 .nav-label,
 .nav-item,
 .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
-.tracker-control,
-.live-pill,
-.live-pill .k,
-.live-pill__summary-copy,
-.live-pill__meta-row,
-.live-pill__status-dot,
-.live-pill .app-name,
-.live-pill .app-class,
-.sidebar-tracker-toggle,
-.sidebar-tracker-toggle span,
-.sidebar-tracker-toggle__icon,
 .account-trigger,
 .account-trigger__copy,
 .account-trigger__chevrons {
@@ -154,8 +136,6 @@
 
 .brand,
 .nav-item,
-.tracker-control,
-.sidebar-tracker-toggle,
 .account-trigger {
   transition:
     opacity var(--sidebar-fade-duration) ease-out,
@@ -169,10 +149,6 @@
 .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
 .settings-sidebar-back span,
 .settings-nav-item__label,
-.live-pill__summary-copy,
-.live-pill .app-name,
-.live-pill .app-class,
-.sidebar-tracker-toggle span,
 .account-trigger__copy,
 .account-trigger__chevrons {
   transition:
@@ -192,7 +168,6 @@
   --sidebar-collapse-brand-align-x: 1px;
   --sidebar-collapse-nav-icon-align-x: 2px;
   --sidebar-collapse-settings-icon-align-x: 1px;
-  --sidebar-collapse-tracker-align-x: 1px;
   /* The collapsed account button carries its own padding (see below), so the
      avatar already lands on the rail centre without a transform nudge. */
   --sidebar-collapse-account-align-x: 0px;
@@ -249,10 +224,6 @@
 
 .app-shell:not(.app-shell--sidebar-collapsed) .nav-label,
 .app-shell:not(.app-shell--sidebar-collapsed) .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
-.app-shell:not(.app-shell--sidebar-collapsed) .live-pill .k,
-.app-shell:not(.app-shell--sidebar-collapsed) .live-pill__summary-copy,
-.app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-name,
-.app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-class,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__copy,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__chevrons {
   transition-delay: var(--sidebar-duration);
@@ -261,10 +232,6 @@
 .sidebar--collapsed .nav-label,
 .sidebar--collapsed .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
 .sidebar--collapsed .settings-sidebar-back span,
-.sidebar--collapsed .live-pill .k,
-.sidebar--collapsed .live-pill__summary-copy,
-.sidebar--collapsed .live-pill .app-name,
-.sidebar--collapsed .live-pill .app-class,
 .sidebar--collapsed .account-trigger__copy,
 .sidebar--collapsed .account-trigger__chevrons {
   transition-delay: 0ms;
@@ -425,10 +392,10 @@
   }
 
   /* The card is hidden rather than unmounted so removing it cannot shift the
-     tracker and account rows underneath. `visibility` (not `display`) keeps the
+     account row underneath. `visibility` (not `display`) keeps the
      box in the flex flow, and the wrap stays sized by the card it contains -
      a pinned height would under-reserve for a three-line CTA and let the
-     tracker row jump as the rail collapses. */
+     account row jump as the rail collapses. */
   .sidebar--collapsed .sidebar-cta-slot-wrap {
     visibility: hidden;
     pointer-events: none;
@@ -451,60 +418,6 @@
     display: none;
   }
 
-  /* Collapsing is a width-only tween on the shell grid, but the expanded
-     tracker (icon + copy + trailing control on one row) and the collapsed
-     tracker (dot stacked over the control) are different layouts, and CSS
-     cannot interpolate between them. Restyling at frame 0 teleported the
-     control to the rail; restyling at the end clipped it away mid-tween and
-     then popped it back.
-
-     So the collapsed layout is applied immediately, which keeps the end state
-     pixel-identical to the pre-change build, and only `transform` moves. Each
-     control starts at the delta between its expanded and collapsed centre and
-     eases to zero on the same duration and curve as the column width, so it
-     reads as riding the shrinking rail.
-
-     Offsets are measured centre-to-centre in the default window size. They are
-     presentational only: if they drift, the control lands slightly off during
-     the tween while the collapsed end state stays correct. */
-  .sidebar--collapsed {
-    /* play/pause: expanded centre (179, 719.9) -> collapsed centre (26, 725) */
-    --sidebar-collapse-toggle-ride-x: 153px;
-    --sidebar-collapse-toggle-ride-y: -5.1px;
-    /* 24px expanded control scaled into the 36px collapsed plate */
-    --sidebar-collapse-toggle-ride-scale: 0.6667;
-    /* status dot: expanded row sits 17.9px below the collapsed stack slot */
-    --sidebar-collapse-dot-ride-y: 17.9px;
-  }
-
-  .sidebar--collapsed .tracker-control {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: center;
-    align-content: center;
-    gap: 8px;
-    width: 2.25rem;
-    max-width: 2.25rem;
-    /* Matches the expanded row so the bottom-anchored foot - and the CTA card
-       above it - cannot slide down as the stack replaces the row. */
-    height: var(--sidebar-tracker-row-height);
-    min-height: var(--sidebar-tracker-row-height);
-    padding: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    overflow: visible;
-    transform: translateX(var(--sidebar-collapse-tracker-align-x));
-  }
-
-  .sidebar--collapsed .live-pill,
-  .sidebar--collapsed .sidebar-tracker-toggle {
-    width: 2.25rem;
-    max-width: 2.25rem;
-  }
-
   /* The account row hugs the rail instead of keeping its expanded box. Its
      hover and focus surface is now a whole chip instead of a rectangle sheared
      off at the rail edge, and nothing overflows the rail, so no scroll can push
@@ -513,175 +426,6 @@
     width: var(--sidebar-collapsed-account-width);
     min-width: var(--sidebar-collapsed-account-width);
     max-width: var(--sidebar-collapsed-account-width);
-  }
-
-  .sidebar--collapsed .live-pill {
-    max-height: 8px;
-    min-height: 8px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    overflow: visible;
-    margin-inline: auto;
-  }
-
-  .sidebar--collapsed .live-pill__summary {
-    width: 100%;
-    grid-template-columns: 1fr;
-    place-items: center;
-  }
-
-  .sidebar--collapsed .live-pill .k {
-    width: 8px;
-    gap: 0;
-    justify-content: center;
-    margin: 0;
-    max-width: 8px;
-    height: 8px;
-    max-height: 8px;
-    opacity: 1;
-    color: transparent;
-    font-size: 0;
-    letter-spacing: 0;
-    overflow: hidden;
-    pointer-events: none;
-    animation: sidebar-collapsed-dot-ride var(--sidebar-duration) var(--sidebar-ease);
-  }
-
-  /* The dot rides the same curve as the column: it holds the expanded row
-     position while the rail is still wide, then lands on the collapsed stack
-     as the last of the width is taken away. */
-  @keyframes sidebar-collapsed-dot-ride {
-    from { transform: translate(0, var(--sidebar-collapse-dot-ride-y)); }
-    58% { transform: translate(0, var(--sidebar-collapse-dot-ride-y)); }
-    to { transform: none; }
-  }
-
-  .sidebar--collapsed .live-pill__summary-copy {
-    max-width: 0;
-    max-height: 0;
-    opacity: 0;
-    overflow: hidden;
-    pointer-events: none;
-    transform: translateX(-4px);
-  }
-
-  .sidebar--collapsed .live-pill .k::before {
-    width: 8px;
-    height: 8px;
-  }
-
-  .sidebar--collapsed .live-pill .app-name,
-  .sidebar--collapsed .live-pill .app-class {
-    max-width: 0;
-    max-height: 0;
-    margin: 0;
-    opacity: 0;
-    overflow: hidden;
-    pointer-events: none;
-    transform: translateX(-4px);
-  }
-
-  .sidebar--collapsed .live-pill__status-dot {
-    visibility: hidden;
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle__icon {
-    display: none;
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle {
-    height: 2.25rem;
-    display: grid;
-    place-items: center;
-    place-content: center;
-    margin: 0 auto;
-    padding: 0;
-    border-color: color-mix(in srgb, var(--accent) 26%, var(--line-strong));
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--accent-soft) 54%, var(--shell-floating-surface));
-    color: var(--text);
-    font-size: 0;
-    position: relative;
-    overflow: visible;
-    backdrop-filter: blur(18px) saturate(1.1);
-    -webkit-backdrop-filter: blur(18px) saturate(1.1);
-    animation: sidebar-collapsed-toggle-ride var(--sidebar-duration) var(--sidebar-ease);
-  }
-
-  @keyframes sidebar-collapsed-toggle-ride {
-    from {
-      transform:
-        translate(
-          var(--sidebar-collapse-toggle-ride-x),
-          var(--sidebar-collapse-toggle-ride-y)
-        )
-        scale(var(--sidebar-collapse-toggle-ride-scale));
-      border-color: transparent;
-      background: transparent;
-      backdrop-filter: none;
-      -webkit-backdrop-filter: none;
-    }
-    45% {
-      border-color: transparent;
-      background: transparent;
-    }
-    to { transform: none; }
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle span {
-    grid-area: 1 / 1;
-    width: 0;
-    height: 0;
-    max-width: 0;
-    opacity: 0;
-    overflow: hidden;
-    pointer-events: none;
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle:disabled {
-    display: grid;
-    cursor: not-allowed;
-    opacity: 0.64;
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle::before {
-    grid-area: 1 / 1;
-    content: "▶";
-    display: block;
-    font-size: 0.74rem;
-    line-height: 1;
-    transform: none;
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle::after {
-    content: none;
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle[data-state="resume"]::before {
-    transform: translate(1px, 0.25px);
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle[data-state="pause"]::before {
-    content: "";
-    width: 6.3px;
-    height: 9px;
-    background: linear-gradient(to right, currentColor 0 34%, transparent 34% 66%, currentColor 66% 100%);
-    border-radius: 1px;
-    transform: translateY(-1px);
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle[data-state="unavailable"]::before {
-    content: "!";
-    font-size: 0.78rem;
-    font-weight: 700;
-  }
-
-  .sidebar--collapsed .sidebar-tracker-toggle[data-state="unavailable"]::after {
-    content: none;
   }
 
   .sidebar--collapsed .account-menu-shell {
@@ -742,24 +486,10 @@
   .nav-item__hover-label,
   .settings-nav-item__icon,
   .settings-nav-item__label,
-  .tracker-control,
-  .live-pill,
-  .live-pill .k,
-  .live-pill__summary-copy,
-  .live-pill .app-name,
-  .live-pill .app-class,
-  .sidebar-tracker-toggle,
   .account-trigger,
   .account-trigger__copy,
   .account-trigger__chevrons {
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
-  }
-
-  /* The collapsed rail settles with keyframes rather than transitions, so it
-     needs its own opt-out or it keeps animating under reduced motion. */
-  .sidebar--collapsed .live-pill .k,
-  .sidebar--collapsed .sidebar-tracker-toggle {
-    animation: none !important;
   }
 }

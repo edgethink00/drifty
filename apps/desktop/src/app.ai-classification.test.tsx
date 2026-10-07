@@ -1252,7 +1252,7 @@ describe("App AI classification controls", () => {
     expect(trackerClient.updateTrayDriftAlarmStatus).not.toHaveBeenCalled();
   });
 
-  it("keeps 15-second drift alarm polling out of the live tracker sidebar state", async () => {
+  it("keeps 15-second drift alarm polling out of the account menu tracker state", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
     const today = "2026-06-16";
@@ -1330,12 +1330,20 @@ describe("App AI classification controls", () => {
     });
     trackerClient.getCurrentSnapshot.mockImplementation(async () => (livePollStarted ? chromeSnapshot : focusSnapshot));
 
-    const { container } = render(<App />);
+    render(<App />);
 
-    const livePill = container.querySelector(".live-pill");
-    if (!(livePill instanceof HTMLElement)) {
-      throw new Error("Expected live tracker sidebar pill to render.");
-    }
+    // The live tracker lives in the account menu; open it and keep it open.
+    const accountTrigger = await waitFor(() => {
+      const trigger = document.querySelector(".account-trigger");
+      if (!(trigger instanceof HTMLElement)) throw new Error("Expected the account trigger to render.");
+      return trigger;
+    });
+    fireEvent.click(accountTrigger);
+    const livePill = await waitFor(() => {
+      const block = document.querySelector(".account-menu-tracker-block");
+      if (!(block instanceof HTMLElement)) throw new Error("Expected the account menu tracker block to render.");
+      return block;
+    });
 
     await waitFor(() => expect(within(livePill).getByText("Visual Studio Code")).toBeTruthy());
     trackerClient.getCurrentSnapshot.mockClear();

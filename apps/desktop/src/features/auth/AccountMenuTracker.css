@@ -1,0 +1,207 @@
+/* The tracker in the account menu: the former sidebar tracker card as one
+   block directly above Log out, plus the account row's avatar badge where the
+   sidebar card cannot show that tracking needs the user. Block content sits
+   on the menu item grid (17px icon column, 9px gap); the 24px pause/resume
+   control is centred on the Dark mode switch axis (26px from the row edge). */
+
+/* Status marks: shape as well as colour */
+.account-tracker-dot {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  isolation: isolate;
+}
+
+/* Same 1.8s live halo the sidebar card used, as a composited circle. */
+.account-tracker-dot[data-state="pause"]::before,
+.account-tracker-dot[data-state="replay"]::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  z-index: -1;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  pointer-events: none;
+  animation: account-tracker-halo 1.8s infinite;
+}
+
+@keyframes account-tracker-halo {
+  0%, 100% { transform: scale(calc(1 / 3)); opacity: 1; }
+  50% { transform: scale(1); opacity: 0; }
+}
+
+.account-tracker-dot[data-state="resume"] { background: var(--warn); }
+.account-tracker-dot[data-state="unavailable"] { background: var(--gray-seg); }
+
+.account-status-mark {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--warn);
+  color: #fff;
+}
+
+/* The collapsed rail's paused badge: the user's own choice, so gold like its
+   sidebar card. Red stays for a tracker that failed or cannot be reached. The
+   menu block shows a paused tracker as the sidebar card's red dot instead. */
+.account-status-mark--paused {
+  background: var(--gold);
+}
+
+.account-status-mark svg {
+  width: 8px;
+  height: 8px;
+  fill: currentColor;
+}
+
+/* Account row: an avatar badge only where the sidebar card is hidden */
+.account-avatar-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  justify-self: center;
+}
+
+.account-status-mark.account-avatar-status {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* Menu block: grouped by its fill alone, with no outline (owner choice,
+   2026-10-07). The control is a white key with a soft lift. */
+.account-menu-tracker-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  /* Stands in for the separators above and below the block. */
+  margin: 6px 0;
+  padding: 6px 14px 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-2) 84%, transparent);
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+button.account-menu-tracker-block {
+  padding-right: 10px;
+  cursor: pointer;
+}
+
+button.account-menu-tracker-block:hover,
+button.account-menu-tracker-block:focus-visible {
+  background: color-mix(in srgb, var(--bg-2) 86%, transparent);
+  transform: none;
+}
+
+.account-menu-tracker-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.account-menu-tracker-copy__label,
+.account-menu-tracker-copy__app {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.account-menu-tracker-copy__label { font-size: 0.84375rem; }
+
+.account-menu-tracker-copy__app {
+  color: var(--text-soft);
+  font-size: 0.71875rem;
+}
+
+/* Setup guidance and a tracker error read in full instead of truncating. */
+.account-menu-tracker-block--setup .account-menu-tracker-copy__app,
+.account-menu-tracker-block[data-attention="attention"] .account-menu-tracker-copy__app { white-space: normal; }
+
+/* The sidebar card's pause/resume glyphs; CSS picks one from data-state. */
+.account-tracker-action-icon {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+}
+
+.account-tracker-action-icon > * { display: none; }
+[data-state="pause"] > .account-tracker-action-icon .account-tracker-action-icon--pause,
+[data-state="resume"] > .account-tracker-action-icon .account-tracker-action-icon--play,
+[data-state="replay"] > .account-tracker-action-icon .account-tracker-action-icon--stop {
+  display: block;
+}
+
+.account-tracker-control {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.account-tracker-control:hover:not(:disabled) {
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  transform: none;
+}
+
+.account-tracker-control:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.account-tracker-control:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* A dark menu sits close to --bg-2, so the block and its key lift with a
+   light layer instead. */
+:root[data-theme="dark"] .account-menu-tracker-block {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+:root[data-theme="dark"] button.account-menu-tracker-block:hover,
+:root[data-theme="dark"] button.account-menu-tracker-block:focus-visible {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+}
+
+:root[data-theme="dark"] .account-tracker-control {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .account-tracker-control:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-tracker-dot::before { animation: none; }
+}

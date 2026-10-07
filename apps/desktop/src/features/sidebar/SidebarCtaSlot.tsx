@@ -23,12 +23,12 @@ import "./SidebarCtaSlot.css";
  * still uses `plan: "individual"` and `create-polar-checkout` rejects anything
  * else with a 400, so the rename stays in display copy only.
  */
-export type SidebarCtaSlotKind = "ai" | "upgrade" | "trial" | "trial-ended" | "billing" | "device-limit" | "download" | "preparing";
+export type SidebarCtaSlotKind = "ai" | "upgrade" | "trial" | "trial-ended" | "billing" | "device-limit" | "download" | "preparing" | "tracker";
 
 /** Drives the tinted drop shadow: red for "act now", gold for "handle soon". */
 export type SidebarCtaSlotAlert = "critical" | "warn";
 
-export type SidebarCtaSlotTone = "ai" | "upgrade" | "trial" | "ended" | "billing" | "device" | "download";
+export type SidebarCtaSlotTone = "ai" | "upgrade" | "trial" | "ended" | "billing" | "device" | "download" | "tracker" | "paused";
 
 type SidebarCtaActionState = {
   readonly actionLabelKey: TranslationKey;

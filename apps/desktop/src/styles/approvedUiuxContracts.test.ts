@@ -125,16 +125,15 @@ describe("approved UI polish contracts", () => {
 
   it("fades the expanded sidebar foot under the glass account menu and respects reduced motion", () => {
     // The popover stays translucent by contract, so the fix is underneath it.
-    expect(prototype).toContain("body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap,");
-    const fade = ruleBody(prototype, "body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control");
+    const fade = ruleBody(prototype, "body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap");
     expect(fade).toContain("opacity: 0.08;");
-    // Pause tracking and Upgrade to Pro sit in there; a dismissing click on an
-    // invisible control must not reach them.
+    // Upgrade to Pro sits in there; a dismissing click on an invisible control
+    // must not reach it.
     expect(fade).toContain("pointer-events: none;");
     expect(prototype).toContain("@media (prefers-reduced-motion: reduce)");
 
     // The collapsed rail opens the menu beside the foot, so it must keep its cards.
-    expect(prototype).not.toContain("body:has(.account-popover) .sidebar .tracker-control");
+    expect(prototype).not.toContain("body:has(.account-popover) .sidebar .sidebar-cta-slot-wrap");
   });
 
   it("drops the label on 12px week events, where a 12px line could only clip", () => {

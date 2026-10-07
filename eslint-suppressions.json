@@ -14,7 +14,7 @@
   },
   "apps/desktop/src/app.sidebarMotionStyles.test.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 1
     }
   },
   "apps/desktop/src/components/AnchoredPresence.tsx": {

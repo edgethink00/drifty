@@ -60,6 +60,7 @@ import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./feature
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "./features/ai-connection/managedLocalAiRuntimeStatus";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
+import { resolveTrackerCtaSlot } from "./features/sidebar/trackerCtaSlot";
 import { resolveSidebarLiveActivityLabels } from "./features/sidebar/sidebarLiveActivity";
 import { UpgradePlanModal } from "./features/billing/UpgradePlanModal";
 import { canStartIndividualCheckout } from "./features/billing/billingEligibility";
@@ -457,7 +458,7 @@ import {
   toTrackerModeAnalytics,
 } from "./app/appAnalytics";
 import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
-import { AccountMenu } from "./features/auth/AccountMenu";
+import { AccountMenu, type AccountTrackerAttention } from "./features/auth/AccountMenu";
 import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./features/auth/AuthGates";
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
 import { FocusDriftSection, FocusDriftSummaryTiles } from "./features/dashboard/FocusDriftSection";
@@ -7925,15 +7926,43 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     startOfDayMinutes,
   ]);
   const sidebarTrackerControlState = replaySidebarTrackerCard?.controlState ?? (isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume");
-  const sidebarTrackerIndicatorClassName = replaySidebarTrackerCard?.indicatorClassName ?? (status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable || isTrackerDegraded ? "unavailable" : "idle");
-  const sidebarTrackerCollapsedLabel = replaySidebarTrackerCard?.collapsedLabel ?? (status?.running ? (isTrackerIdle ? localization.t("tracker.idleNow") : localization.t("tracker.nowTracking")) : isTrackerUnavailable ? localization.t("tracker.unavailable") : isTrackerDegraded ? localization.t("tracker.needsAttention") : localization.t("tracker.paused"));
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerDegraded ? (status?.message ?? localization.t("tracker.couldNotStart")) : trackerStateLabel);
+  // A degraded tracker leads with a short title that fits beside the control;
+  // its message is the second line, which wraps in the menu block.
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerDegraded ? localization.t("tracker.needsAttentionShort") : trackerStateLabel);
   const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerDegraded ? null : formatDuration(dayTotalSeconds));
-  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? localization.t("tracker.startToCollect") : isTrackerDegraded ? localization.t("tracker.retryActivity") : liveAppLabel);
+  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? localization.t("tracker.startToCollect") : isTrackerDegraded ? (status?.message ?? localization.t("tracker.couldNotStart")) : liveAppLabel);
   const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
   const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? localization.t("tracker.lastCapture", { time: lastCaptureDistanceLabel });
   const sidebarTrackerActionLabel = replaySidebarTrackerCard?.actionLabel ?? liveTrackerActionLabel;
   const isSidebarTrackerActionDisabled = replaySidebarTrackerCard === null && (isTrackerUnavailable || trackerPausePending);
+  // The account row speaks only when tracking needs the user (product decision
+  // 2026-10-07). Loading, recording, idle and a dashboard replay stay quiet.
+  const accountTrackerAttention: AccountTrackerAttention | null = replaySidebarTrackerCard || isBootstrappingTracker
+    ? null
+    : isTrackerUnavailable
+      ? "setup"
+      : isTrackerDegraded
+        ? "attention"
+        : status?.running
+          ? null
+          : "paused";
+  // Paused or broken tracking takes the sidebar card slot ahead of every AI
+  // and billing card (product decision 2026-10-07): those cards say activity
+  // tracking continues. A browser build has no tracker to set up, so its
+  // "Setup needed" stays in the account menu. A dev CTA preview keeps the slot.
+  const sidebarTrackerCtaSlot = isSidebarCtaPreviewActive ? null : resolveTrackerCtaSlot({
+    attention: accountTrackerAttention === "setup" && !isTauriRuntime() ? null : accountTrackerAttention,
+    running: status?.running === true,
+    trackingPaused: status?.trackingPaused === true,
+    pausePending: trackerPausePending,
+  });
+  const visibleSidebarCtaSlot = isSettingsTab
+    ? null
+    : sidebarTrackerCtaSlot ?? (shouldShowSidebarCtaSlot ? sidebarCtaSlot : null);
+  // The avatar badge stands in for the card only where no card shows the
+  // state: the collapsed rail hides the slot. Settings swaps out this sidebar.
+  const markAccountRowAttention = accountTrackerAttention !== null
+    && (isSidebarVisuallyCollapsed || visibleSidebarCtaSlot?.kind !== "tracker");
 
   const activeSlots = dayField.filter((slot) => slot.totalSeconds > 0);
   const activeHours = Array.from(new Set(activeSlots.map((slot) => slot.hour)));
@@ -10397,24 +10426,33 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </div>
 
         <div className="sidebar-foot">
-          {shouldShowSidebarCtaSlot && sidebarCtaSlot ? (
+          {visibleSidebarCtaSlot ? (
             <SidebarCtaSlot
               funnelEnabled={funnelEnabled}
-              state={sidebarCtaSlot}
-              onDismiss={sidebarCtaSlot.kind === "upgrade" && !isSidebarCtaPreviewActive
+              state={visibleSidebarCtaSlot}
+              onDismiss={visibleSidebarCtaSlot.kind === "upgrade" && !isSidebarCtaPreviewActive
                 ? () => setSidebarUpgradeDismissedUntil(storeSidebarUpgradeDismissal())
                 : undefined}
               onAction={() => {
-                if (sidebarCtaSlot.kind === "ai") {
+                if (visibleSidebarCtaSlot.kind === "tracker") {
+                  // Tracker permissions live in General settings.
+                  if (accountTrackerAttention === "setup") {
+                    openSettingsTab();
+                    return;
+                  }
+                  void (status?.running ? handleStopTracking() : handleStartTracking());
+                  return;
+                }
+                if (visibleSidebarCtaSlot.kind === "ai") {
                   openAiSetupSettings();
                   return;
                 }
-                if (sidebarCtaSlot.kind === "device-limit") {
+                if (visibleSidebarCtaSlot.kind === "device-limit") {
                   openAccountSettings();
                   return;
                 }
-                if (sidebarCtaSlot.kind === "download" || sidebarCtaSlot.kind === "preparing") return;
-                if (sidebarCtaSlot.kind === "billing") {
+                if (visibleSidebarCtaSlot.kind === "download" || visibleSidebarCtaSlot.kind === "preparing") return;
+                if (visibleSidebarCtaSlot.kind === "billing") {
                   // Existing subscription with a blocked payment: recover it in
                   // the portal instead of starting a second one.
                   void handleManageCloudBilling();
@@ -10424,69 +10462,37 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               }}
             />
           ) : null}
-          <div
-            className="tracker-control"
-            data-sidebar-guide-anchor="tracking"
-            role="group"
-            data-state={sidebarTrackerControlState}
-            aria-label={[
-              sidebarTrackerStatusLabel,
-              sidebarTrackerAppLabel,
-              sidebarTrackerSiteLabel,
-              sidebarTrackerDurationLabel,
-              sidebarTrackerMetaLabel,
-            ].filter(Boolean).join(" · ")}
-          >
-            <div className="live-pill">
-              <div className="live-pill__summary">
-                <div className={`k ${sidebarTrackerIndicatorClassName}`}>
-                  {sidebarTrackerCollapsedLabel}
-                </div>
-                <div className="live-pill__summary-copy">
-                  <span className="live-pill__status-row">
-                    <span className="live-pill__status-dot" aria-hidden="true" />
-                    <span className="live-pill__status-label">
-                      {sidebarTrackerStatusLabel}
-                    </span>
-                  </span>
-                  <span className="live-pill__summary-name">
-                    <span className="live-pill__summary-app">{sidebarTrackerAppLabel}</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="sidebar-tracker-toggle"
-              data-state={sidebarTrackerControlState}
-              onClick={() => {
-                if (replaySidebarTrackerCard) {
-                  stopDashboardDemoReplay();
-                  return;
-                }
-                void (status?.running ? handleStopTracking() : handleStartTracking());
-              }}
-              disabled={isSidebarTrackerActionDisabled}
-              aria-busy={trackerPausePending || undefined}
-              aria-label={sidebarTrackerActionLabel}
-              title={sidebarTrackerActionLabel}
-            >
-              <svg className="sidebar-tracker-toggle__icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-                <g className="sidebar-tracker-toggle__icon--pause">
-                  <rect x="2.5" y="2" width="2.25" height="8" rx="0.8" />
-                  <rect x="7.25" y="2" width="2.25" height="8" rx="0.8" />
-                </g>
-                <path className="sidebar-tracker-toggle__icon--play" d="M3 1.8 10 6 3 10.2Z" />
-                <rect className="sidebar-tracker-toggle__icon--stop" x="3" y="3" width="6" height="6" rx="1" />
-              </svg>
-              <span>{sidebarTrackerActionLabel}</span>
-            </button>
-          </div>
           <AccountMenu
             isOpen={accountMenuOpen}
             isSidebarCollapsed={isSidebarVisuallyCollapsed}
             userAvatarUrl={profile?.avatar_url || profileDraft.avatarUrl || authMetadataAvatarUrl}
             userEmail={user?.email ?? null}
+            tracker={{
+              state: sidebarTrackerControlState,
+              attention: accountTrackerAttention,
+              markRow: markAccountRowAttention,
+              statusLabel: sidebarTrackerStatusLabel,
+              appLabel: sidebarTrackerAppLabel,
+              description: [
+                sidebarTrackerStatusLabel,
+                sidebarTrackerAppLabel,
+                sidebarTrackerSiteLabel,
+                sidebarTrackerDurationLabel,
+                sidebarTrackerMetaLabel,
+              ].filter(Boolean).join(" · "),
+              actionLabel: sidebarTrackerActionLabel,
+              actionDisabled: isSidebarTrackerActionDisabled,
+              busy: trackerPausePending,
+              onAction: () => {
+                if (replaySidebarTrackerCard) {
+                  stopDashboardDemoReplay();
+                  return;
+                }
+                void (status?.running ? handleStopTracking() : handleStartTracking());
+              },
+              // Tracker permissions live in General settings.
+              onSetup: openSettingsTab,
+            }}
             isDarkMode={theme === "dark"}
             isPetVisible={petModeEnabled}
             showPetNewBadge={featureNewBadges.showPet}

@@ -1,12 +1,13 @@
 import { PetIcon } from "../../components/PetIcon";
 import { getAccountDisplayName } from "./accountDisplay";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, SVGProps } from "react";
 import { createPortal } from "react-dom";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
 import { BUILD_INFO } from "../../buildInfo";
+import "./AccountMenuTracker.css";
 
 const menuIconProps: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -129,6 +130,118 @@ function SignInIcon() {
   );
 }
 
+/** Same glyphs as the sidebar tracker toggle; CSS picks one from `data-state`. */
+function TrackerActionIcon() {
+  return (
+    <svg className="account-tracker-action-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+      <g className="account-tracker-action-icon--pause">
+        <rect x="2.5" y="2" width="2.25" height="8" rx="0.8" />
+        <rect x="7.25" y="2" width="2.25" height="8" rx="0.8" />
+      </g>
+      <path className="account-tracker-action-icon--play" d="M3 1.8 10 6 3 10.2Z" />
+      <rect className="account-tracker-action-icon--stop" x="3" y="3" width="6" height="6" rx="1" />
+    </svg>
+  );
+}
+
+/**
+ * Tracking that needs the user: paused (by the user or because recording
+ * stopped), "attention" (the tracker failed to start or stopped on its own),
+ * or "setup" (the app cannot reach the tracker). Null while recording, idle,
+ * replaying, or still loading.
+ */
+export type AccountTrackerAttention = "paused" | "attention" | "setup";
+
+/**
+ * The live tracker card, handed to the account menu. `state` keeps the
+ * sidebar control vocabulary: "pause" means tracking is running (the action
+ * pauses it), "resume" means it is stopped, "replay" a dashboard replay, and
+ * "unavailable" means it cannot run.
+ */
+export type AccountMenuTrackerSummary = {
+  readonly state: string;
+  readonly attention: AccountTrackerAttention | null;
+  /**
+   * Badge the avatar with the attention state. The sidebar card above the
+   * account row normally carries it, so the app sets this only where no card
+   * shows it: the collapsed rail, and a browser build with no tracker to set up.
+   */
+  readonly markRow: boolean;
+  readonly statusLabel: string;
+  readonly appLabel: string;
+  /** Spoken summary: status, app, site, today's total, last capture. */
+  readonly description: string;
+  readonly actionLabel: string;
+  readonly actionDisabled: boolean;
+  /** A pause request is in flight. */
+  readonly busy?: boolean;
+  readonly onAction: () => void;
+  /** Opens the tracker permissions while the app cannot reach the tracker. */
+  readonly onSetup?: () => void;
+};
+
+/** The sidebar tracker card's 24px pause/resume control, now in the menu block. */
+function TrackerControl({ tracker }: { tracker: AccountMenuTrackerSummary }) {
+  if (tracker.state === "unavailable") return null;
+  return (
+    <button
+      type="button"
+      className="account-tracker-control"
+      role="menuitem"
+      data-state={tracker.state}
+      onClick={tracker.onAction}
+      disabled={tracker.actionDisabled}
+      aria-busy={tracker.busy || undefined}
+      aria-label={tracker.actionLabel}
+      title={tracker.actionLabel}
+    >
+      <TrackerActionIcon />
+    </button>
+  );
+}
+
+function PausedGlyph() {
+  return (
+    <svg viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+      <rect x="1.7" y="1.5" width="1.6" height="5" rx="0.5" />
+      <rect x="4.7" y="1.5" width="1.6" height="5" rx="0.5" />
+    </svg>
+  );
+}
+
+function AlertGlyph() {
+  return (
+    <svg viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+      <rect x="3.15" y="1.2" width="1.7" height="3.7" rx="0.7" />
+      <circle cx="4" cy="6.35" r="0.95" />
+    </svg>
+  );
+}
+
+/**
+ * Status is carried by shape as well as colour: a live dot while recording, a
+ * red dot while stopped, "!" when the tracker needs attention or setup. The
+ * pause glyph marks only the avatar badge on the collapsed rail; the menu
+ * block keeps the sidebar card's red dot while paused (owner choice).
+ */
+function TrackerStatusMark({
+  state,
+  attention,
+  className = "",
+}: {
+  state: string;
+  attention: AccountTrackerAttention | null;
+  className?: string;
+}) {
+  if (attention === "attention" || attention === "setup") {
+    return <span className={`account-status-mark account-status-mark--alert ${className}`} aria-hidden="true"><AlertGlyph /></span>;
+  }
+  if (attention === "paused") {
+    return <span className={`account-status-mark account-status-mark--paused ${className}`} aria-hidden="true"><PausedGlyph /></span>;
+  }
+  return <span className={`account-tracker-dot ${className}`} data-state={state} aria-hidden="true" />;
+}
+
 export const ACCOUNT_POPOVER_EXPANDED_EDGE_OFFSET_PX = 6;
 
 export const ACCOUNT_POPOVER_EXPANDED_GAP_PX = 5;
@@ -166,6 +279,7 @@ type AccountMenuProps = {
   readonly onFeedback: () => void;
   readonly onSignIn: () => void;
   readonly onSignOut: () => void;
+  readonly tracker?: AccountMenuTrackerSummary | null;
 };
 
 export function AccountMenu({
@@ -187,6 +301,7 @@ export function AccountMenu({
   onFeedback,
   onSignIn,
   onSignOut,
+  tracker = null,
 }: AccountMenuProps) {
   const { effectiveLanguage, setDisplayLanguage, t } = useLocalization();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -321,6 +436,59 @@ export function AccountMenu({
     ? t("settings.general.languageKorean")
     : t("settings.general.languageEnglish");
 
+  const avatarMark = (
+    <span className={shouldShowUserAvatar ? "account-avatar" : "account-avatar account-avatar--placeholder"}>
+      {shouldShowUserAvatar ? (
+        <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" />
+      ) : (
+        <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" aria-hidden="true" focusable="false">
+          <circle cx="14" cy="10.4" r="3.5" />
+          <path d="M7.6 22c1.2-4 3.6-6.1 6.4-6.1s5.2 2.1 6.4 6.1" />
+        </svg>
+      )}
+    </span>
+  );
+  // The sidebar tracker card lives in the menu as one block, directly above
+  // Log out: the menu opens upward from the account row, so this is the spot
+  // nearest the pointer and where the card used to sit. Log out stays last.
+  const trackerBlock = tracker ? (
+    tracker.attention === "setup" && tracker.onSetup ? (
+      <button
+        type="button"
+        className="account-menu-tracker-block account-menu-tracker-block--setup"
+        data-state={tracker.state}
+        role="menuitem"
+        onClick={tracker.onSetup}
+      >
+        <span className="account-menu-icon">
+          <TrackerStatusMark state={tracker.state} attention={tracker.attention} />
+        </span>
+        <span className="account-menu-tracker-copy">
+          <span className="account-menu-tracker-copy__label">{tracker.statusLabel}</span>
+          <span className="account-menu-tracker-copy__app">{tracker.appLabel}</span>
+        </span>
+        <span className="account-menu-language-chevron" aria-hidden="true"><ChevronRightIcon /></span>
+      </button>
+    ) : (
+      <div
+        className="account-menu-tracker-block"
+        data-state={tracker.state}
+        data-attention={tracker.attention ?? undefined}
+        role="group"
+        aria-label={tracker.description}
+      >
+        <span className="account-menu-icon">
+          <TrackerStatusMark state={tracker.state} attention={tracker.attention === "paused" ? null : tracker.attention} />
+        </span>
+        <span className="account-menu-tracker-copy">
+          <span className="account-menu-tracker-copy__label">{tracker.statusLabel}</span>
+          <span className="account-menu-tracker-copy__app">{tracker.appLabel}</span>
+        </span>
+        <TrackerControl tracker={tracker} />
+      </div>
+    )
+  ) : null;
+
   // The boundary sits inside the portal because the exit pose is applied through
   // a descendant selector; one left behind in the sidebar never reaches this menu.
   const popover = createPortal(
@@ -441,9 +609,13 @@ export function AccountMenu({
         <span className="account-menu-icon"><FeedbackIcon /></span>
         <span>{t("account.sendFeedback")}</span>
       </button>
+      {/* The tracker block's fill sets it apart from the items above and
+          from Log out, so it stands in for the separator there (owner
+          choice, 2026-10-07). Without it, Log out keeps its separator. */}
+      {trackerBlock}
       {isSignedIn ? (
         <>
-          <div className="account-menu-separator" role="separator" />
+          {trackerBlock ? null : <div className="account-menu-separator" role="separator" />}
           <button type="button" className="account-menu-item account-menu-item--danger" onClick={onSignOut} role="menuitem">
             <span className="account-menu-icon"><LogoutIcon /></span>
             <span>{t("account.logOut")}</span>
@@ -451,7 +623,7 @@ export function AccountMenu({
         </>
       ) : (
         <>
-          <div className="account-menu-separator" role="separator" />
+          {trackerBlock ? null : <div className="account-menu-separator" role="separator" />}
           <button type="button" className="account-menu-item" onClick={onSignIn} role="menuitem">
             <span className="account-menu-icon"><SignInIcon /></span>
             <span>{t("account.signIn")}</span>
@@ -463,6 +635,21 @@ export function AccountMenu({
     document.body,
   );
 
+  // The closed row keeps the account's plain layout. Paused and broken
+  // tracking speak through the sidebar card above it; the avatar badge stands
+  // in only where that card is hidden. A recording tracker never marks the
+  // row: a green avatar dot reads as "online".
+  const rowAttention = tracker?.markRow ? tracker.attention : null;
+  const attentionText = rowAttention === "setup"
+    ? t("tracker.setupNeededShort")
+    : rowAttention === "attention"
+      ? t("tracker.needsAttentionShort")
+      : rowAttention === "paused"
+        ? t("tracker.pausedShort")
+        : null;
+  // The badge's words describe the button; its name stays the account name.
+  const attentionId = useId();
+
   return (
     <div className="account-menu-shell">
       {popover}
@@ -472,21 +659,23 @@ export function AccountMenu({
         className="account-trigger"
         onClick={onToggle}
         aria-label={triggerLabel}
+        aria-describedby={attentionText ? attentionId : undefined}
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        <span className={shouldShowUserAvatar ? "account-avatar" : "account-avatar account-avatar--placeholder"}>
-          {shouldShowUserAvatar ? (
-            <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" />
-          ) : (
-            <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" aria-hidden="true" focusable="false">
-              <circle cx="14" cy="10.4" r="3.5" />
-              <path d="M7.6 22c1.2-4 3.6-6.1 6.4-6.1s5.2 2.1 6.4 6.1" />
-            </svg>
-          )}
-        </span>
+        {rowAttention && tracker ? (
+          <span className="account-avatar-wrap">
+            {avatarMark}
+            <TrackerStatusMark state={tracker.state} attention={rowAttention} className="account-avatar-status" />
+          </span>
+        ) : avatarMark}
         <span className="account-trigger__copy">
           <strong>{displayName}</strong>
+          {attentionText ? (
+            <span id={attentionId} className="sr-only account-trigger__attention" data-attention={rowAttention ?? undefined}>
+              {attentionText}
+            </span>
+          ) : null}
         </span>
         <span className="account-trigger__chevrons" aria-hidden="true">
           <span className="account-trigger__chevron-mark account-trigger__chevron-mark--up" />

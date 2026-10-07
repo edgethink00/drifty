@@ -13,21 +13,6 @@ function cssBlock(styles: string, selector: string, occurrence: "first" | "last"
   return (occurrence === "last" ? matches[matches.length - 1] : matches[0])?.[0] ?? "";
 }
 
-/**
- * The collapsed play/pause control is declared twice: once as the real rule and
- * once inside the reduced-motion opt-out. Positional lookups ("first"/"last")
- * silently pick the wrong one when either moves, so select the rule that owns
- * the plate geometry.
- */
-function collapsedToggleRule(styles: string): string {
-  const blocks = Array.from(
-    styles.matchAll(/\.sidebar--collapsed \.sidebar-tracker-toggle\s*\{[\s\S]*?\n\s*\}/g),
-  ).map((match) => match[0]);
-  const rule = blocks.find((block) => block.includes("height:"));
-  if (!rule) throw new Error("collapsed tracker toggle rule not found");
-  return rule;
-}
-
 describe("sidebar motion styles", () => {
   it("right-aligns Windows history controls to the expanded sidebar rail", () => {
     const styles = readStyles();
@@ -103,19 +88,8 @@ describe("sidebar motion styles", () => {
     const collapsedNavLabelBlock = cssBlock(styles, ".sidebar--collapsed .nav-label");
     const collapsedSidebarBlock = cssBlock(styles, ".sidebar--collapsed");
     const collapsedNavTextBlock = cssBlock(styles, ".sidebar--collapsed .nav-item > span:not(.nav-item__hover-label):not(.status-badge)");
-    const collapsedLivePillBlock = cssBlock(styles, ".sidebar--collapsed .live-pill");
-    const collapsedLiveStatusBlock = cssBlock(styles, ".sidebar--collapsed .live-pill .k");
-    const collapsedLiveCopyBlock =
-      styles.match(/\.sidebar--collapsed \.live-pill \.app-name,\s*\.sidebar--collapsed \.live-pill \.app-class\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
-    const collapsedTrackerControlBlock = cssBlock(styles, ".sidebar--collapsed .tracker-control");
     const collapsedAccountWidthBlock =
       styles.match(/\.sidebar--collapsed \.account-trigger\s*\{\s*width: var\(--sidebar-collapsed-account-width\);[\s\S]*?\n\s*\}/)?.[0] ?? "";
-    const collapsedTrackerToggleBlock = collapsedToggleRule(styles);
-    const collapsedTrackerToggleLabelBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle span");
-    const collapsedTrackerIconBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle::before");
-    const collapsedTrackerDotBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle::after");
-    const collapsedTrackerResumeIconBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle[data-state=\"resume\"]::before");
-    const collapsedTrackerPauseIconBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle[data-state=\"pause\"]::before");
     const collapsedAccountTriggerBlock = cssBlock(styles, ".sidebar--collapsed .account-trigger", "last");
 
     expect(navTextBlock).toContain("max-width: 9rem;");
@@ -128,23 +102,9 @@ describe("sidebar motion styles", () => {
     expect(collapsedNavLabelBlock).toContain("padding: 12px 10px 4px;");
     expect(collapsedNavTextBlock).toContain("opacity: 0;");
     expect(collapsedNavTextBlock).toContain("max-width: 0;");
-    expect(collapsedTrackerControlBlock).toContain("width: 2.25rem;");
-    expect(collapsedTrackerControlBlock).toContain("grid-template-columns: minmax(0, 1fr);");
-    expect(collapsedTrackerControlBlock).toContain("padding: 0;");
-    expect(collapsedTrackerControlBlock).toContain("background: transparent;");
-    expect(collapsedTrackerControlBlock).toContain("box-shadow: none;");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapsed-account-width: 38px;");
     expect(collapsedAccountWidthBlock).toContain("max-width: var(--sidebar-collapsed-account-width);");
     expect(collapsedAccountWidthBlock).not.toContain("var(--sidebar-expanded-width)");
-    expect(collapsedLivePillBlock).toContain("place-items: center;");
-    expect(collapsedLiveStatusBlock).toContain("width: 8px;");
-    expect(collapsedLiveStatusBlock).not.toContain("display: none;");
-    expect(collapsedLiveCopyBlock).toContain("opacity: 0;");
-    expect(collapsedTrackerToggleBlock).toContain("height: 2.25rem;");
-    expect(collapsedTrackerToggleBlock).toContain("place-content: center;");
-    expect(collapsedTrackerToggleBlock).toContain("sidebar-collapsed-toggle-ride");
-    expect(collapsedTrackerPauseIconBlock).toContain("width: 6.3px;");
-    expect(collapsedTrackerPauseIconBlock).toContain("height: 9px;");
   });
 
   it("pins collapsed rail boxes while their marks ride onto one center axis", () => {
@@ -158,7 +118,6 @@ describe("sidebar motion styles", () => {
     const collapsedNavItemBlock = cssBlock(styles, ".sidebar--collapsed .nav-item");
     const collapsedNavIconBlock = cssBlock(styles, ".sidebar--collapsed .nav-item > svg");
     const collapsedSettingsIconBlock = cssBlock(styles, ".sidebar--collapsed .settings-nav-item__icon");
-    const collapsedTrackerControlBlock = cssBlock(styles, ".sidebar--collapsed .tracker-control");
     const collapsedAccountTriggerBlock = cssBlock(styles, ".sidebar--collapsed .account-trigger", "last");
     const collapsedRailWidthBlock =
       styles.match(/\.sidebar--collapsed \.brand,\s*\.sidebar--collapsed \.nav-label,\s*\.sidebar--collapsed \.sidebar-nav,\s*\.sidebar--collapsed \.settings-sidebar-back,\s*\.sidebar--collapsed \.settings-nav,\s*\.sidebar--collapsed \.sidebar-foot\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
@@ -168,7 +127,6 @@ describe("sidebar motion styles", () => {
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-brand-align-x: 1px;");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-nav-icon-align-x: 2px;");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-settings-icon-align-x: 1px;");
-    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-tracker-align-x: 1px;");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-account-align-x: 0px;");
     // The scroll box lends 4px per side to focus rings (margin-inline -4px,
     // padding-inline 4px), so the collapsed box is 8px wider and its content
@@ -185,7 +143,6 @@ describe("sidebar motion styles", () => {
     expect(collapsedNavItemBlock).toContain("min-width: 0;");
     expect(collapsedNavIconBlock).toContain("transform: translateX(var(--sidebar-collapse-nav-icon-align-x));");
     expect(collapsedSettingsIconBlock).toContain("transform: translateX(var(--sidebar-collapse-settings-icon-align-x));");
-    expect(collapsedTrackerControlBlock).toContain("transform: translateX(var(--sidebar-collapse-tracker-align-x));");
     expect(collapsedAccountTriggerBlock).toContain("transform: translateX(var(--sidebar-collapse-account-align-x));");
     expect(styles).toMatch(/\.nav-item > svg\s*\{[^}]*transition:\s*transform var\(--sidebar-duration\) var\(--sidebar-ease\);/);
     expect(styles).toMatch(/\.settings-nav-item__icon\s*\{[^}]*transform var\(--sidebar-duration\) var\(--sidebar-ease\)/);
@@ -250,24 +207,40 @@ describe("sidebar motion styles", () => {
 
   it("hides collapsed copy immediately instead of squeezing it through the shrinking rail", () => {
     const styles = readStyles();
-    const expandedLiveStatusBlock = cssBlock(styles, ".app-shell:not(.app-shell--sidebar-collapsed) .live-pill .k");
     const navLabelMotionBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label):not(.status-badge)", "last");
     const collapsedNavItemBlock = cssBlock(styles, ".sidebar--collapsed .nav-item");
 
-    expect(expandedLiveStatusBlock).toContain("display: none;");
     expect(navLabelMotionBlock).not.toMatch(/transition:[^;]*(?:width|max-width|padding|margin)/);
     expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("visibility: hidden;");
     expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("transition: none;");
     expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("margin: 0;");
-    expect(cssBlock(styles, ".sidebar--collapsed .live-pill .k")).toContain("width: 8px;");
-    expect(collapsedToggleRule(styles)).toContain("height: 2.25rem;");
-    expect(collapsedToggleRule(styles)).toContain("sidebar-collapsed-toggle-ride");
-    expect(cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle[data-state=\"pause\"]::before")).toContain("width: 6.3px;");
     expect(collapsedNavItemBlock).toContain("justify-content: flex-start;");
     expect(collapsedNavItemBlock).toContain("width: 100%;");
     expect(collapsedNavItemBlock).toContain("padding: 0 10px;");
   });
 
+
+  it("keeps no sidebar tracker card styles now that tracking lives in the account menu", () => {
+    const styles = readStyles();
+
+    expect(styles).not.toContain(".tracker-control");
+    expect(styles).not.toContain(".live-pill");
+    expect(styles).not.toContain(".sidebar-tracker-toggle");
+    expect(styles).not.toContain("--sidebar-tracker-row");
+  });
+
+  // Owner choice 2026-10-07: the menu tracker block is grouped by its fill
+  // alone, and a stopped tracker keeps the sidebar card's red dot.
+  it("draws the account menu tracker block without an outline and a stopped tracker as a red dot", () => {
+    const styles = readFileSync(resolve("src/features/auth/AccountMenuTracker.css"), "utf8");
+    const block = cssBlock(styles, ".account-menu-tracker-block");
+    const control = cssBlock(styles, ".account-tracker-control");
+
+    expect(block).toContain("box-shadow: none;");
+    expect(block).not.toContain("inset 0 0 0 1px");
+    expect(control).not.toContain("inset 0 0 0 1px");
+    expect(styles).toMatch(/\.account-tracker-dot\[data-state="resume"\]\s*\{\s*background:\s*var\(--warn\);/);
+  });
 
   it("lets the CTA glow sit in a wrap bleed instead of clipping at the card edge", () => {
     const styles = readFileSync(resolve("src/features/sidebar/SidebarCtaSlot.css"), "utf8");

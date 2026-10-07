@@ -1,8 +1,8 @@
 /**
- * The freed sidebar slot. One state at a time, sitting above the tracking rail.
+ * The freed sidebar slot. One state at a time, sitting above the account row.
  *
- * Geometry follows the compact `.tracker-control` below it, with a slightly
- * roomier 8px frame and the copy inset a further 10px.
+ * Geometry follows the sidebar foot rows, with a slightly roomier 8px frame
+ * and the copy inset a further 10px.
  *
  * The reference uses an opaque-enough pastel state surface plus a matching soft
  * shadow. Keeping the card too translucent made the real sidebar canvas show
@@ -141,7 +141,8 @@
  * tint louder, so they run about two points lower. */
 .sidebar-cta-slot[data-tone="ai"],
 .sidebar-cta-slot[data-tone="ended"],
-.sidebar-cta-slot[data-tone="billing"] {
+.sidebar-cta-slot[data-tone="billing"],
+.sidebar-cta-slot[data-tone="tracker"] {
   --cta-tone-fill: var(--warn-soft);
   --cta-tone-glow: var(--warn-wash);
   --cta-tone-strength: 18%;
@@ -155,7 +156,8 @@
   --cta-tone-strength: 20%;
 }
 
-.sidebar-cta-slot[data-tone="device"] {
+.sidebar-cta-slot[data-tone="device"],
+.sidebar-cta-slot[data-tone="paused"] {
   --cta-tone-fill: var(--gold-soft);
   --cta-tone-glow: var(--gold-wash);
   --cta-tone-strength: 18%;
@@ -163,7 +165,8 @@
 
 :root[data-theme="dark"] .sidebar-cta-slot[data-tone="ai"],
 :root[data-theme="dark"] .sidebar-cta-slot[data-tone="ended"],
-:root[data-theme="dark"] .sidebar-cta-slot[data-tone="billing"] {
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="billing"],
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="tracker"] {
   --cta-tone-strength: 15%;
 }
 
@@ -173,7 +176,8 @@
   --cta-tone-strength: 17%;
 }
 
-:root[data-theme="dark"] .sidebar-cta-slot[data-tone="device"] {
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="device"],
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="paused"] {
   --cta-tone-strength: 15%;
 }
 
