@@ -1369,9 +1369,6 @@
   border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
 }
 
-:root[data-platform="windows"] .app-status-notice {
-  top: calc(var(--windows-titlebar-height) + var(--space-3));
-}
 
 .app-status-notice strong {
   color: var(--text);

@@ -1117,3 +1117,9 @@
   color: var(--text-muted);
   font-size: 0.8rem;
 }
+.project-editor-modal__fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}

@@ -164,9 +164,6 @@
   outline-offset: 2px;
 }
 
-:root[data-platform="windows"] .cloud-trial-started-notice {
-  top: calc(var(--windows-titlebar-height) + var(--space-3));
-}
 
 @media (max-width: 680px) {
   .cloud-trial-started-notice {

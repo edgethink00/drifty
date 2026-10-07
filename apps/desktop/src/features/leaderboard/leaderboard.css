@@ -2620,6 +2620,12 @@
    result to stylesheet import order. */
 
 .profile-embeds-modal .profile-modal__header { margin-bottom: var(--space-3); align-items: center; }
+.profile-embeds-modal .profile-note--error {
+  color: var(--warn);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+  margin: 0;
+}
 .profile-embeds-modal .profile-modal__header h2 { font-size: 1.05rem; display: inline; }
 .profile-embeds-modal .profile-modal__header p { display: inline; margin: 0 0 0 0.6rem; font-size: 0.76rem; color: var(--text-soft); }
 .profile-embeds-modal .profile-modal__header > div { line-height: 1.3; min-width: 0; }

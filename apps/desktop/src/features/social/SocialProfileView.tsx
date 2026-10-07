@@ -329,7 +329,6 @@ export function SocialProfileView({
           isProfilePublic={draft.isPublic}
           publicId={publicProfile.publicId}
           onClose={() => setEmbedsOpen(false)}
-          onCopyProfileLink={publicProfile.onCopyProfileLink}
           onEditProfile={publicProfile.onEditProfile}
         />
         ) : null}

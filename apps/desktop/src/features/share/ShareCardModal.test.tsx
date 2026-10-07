@@ -65,6 +65,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   cleanup();
   vi.clearAllMocks();
@@ -120,6 +121,45 @@ function renderModal() {
 }
 
 describe("ShareCardModal feedback", () => {
+  it("keeps a copy failure by its action beyond the success timeout, then clears it on retry", async () => {
+    exportMocks.copyShareCardPng.mockRejectedValueOnce(new Error("Clipboard unavailable"));
+    renderModal();
+    fireEvent.click(screen.getByRole("button", { name: "Copy image" }));
+    const error = await screen.findByRole("alert");
+    expect(error.textContent).toContain("Clipboard unavailable");
+    expect(screen.getByRole("dialog").contains(error)).toBe(true);
+    vi.useFakeTimers();
+    act(() => vi.advanceTimersByTime(8_000));
+    expect(screen.getByRole("alert")).toBe(error);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Copy image" })));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("Image copied");
+    act(() => vi.advanceTimersByTime(3_400));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("drops a failed export message when a different story is selected", async () => {
+    exportMocks.saveShareCardWithDialog.mockRejectedValueOnce(new Error("File unavailable"));
+    renderModal();
+    fireEvent.click(screen.getByRole("button", { name: "Save PNG" }));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("radio", { name: "Focus time" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not carry an old export failure into a different card target", async () => {
+    let reject!: (error: Error) => void;
+    exportMocks.copyShareCardPng.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const { rerender } = render(<ShareCardModal card={card} defaultTheme="light" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy image" }));
+    rerender(<ShareCardModal card={{ ...card, data: { ...card.data, day: "2026-08-07" } }} defaultTheme="light" onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Copying…" })).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Copying…" }));
+    expect(exportMocks.copyShareCardPng).toHaveBeenCalledTimes(1);
+    await act(async () => reject(new Error("Old card clipboard failure")));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy image" })).toHaveProperty("disabled", false);
+  });
   it("retains the custom share panel until its exit completes", async () => {
     const { rerender } = render(<ModalPresence><ShareCardModal card={card} defaultTheme="light" onClose={vi.fn()} /></ModalPresence>);
     const panel = screen.getByRole("dialog");

@@ -186,6 +186,13 @@
   gap: var(--space-2);
 }
 
+.share-card-export-error {
+  color: var(--danger, #c44444);
+  background: color-mix(in srgb, var(--danger, #c44444) 6%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger, #c44444) 22%, var(--line));
+  overflow-wrap: anywhere;
+}
+
 .share-card-destinations {
   padding: 0.2rem 0 0;
 }

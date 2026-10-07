@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
+import { trackerClient } from "../../lib/api/trackerClient";
 import { PrivacySettingsSection } from "./PrivacySettingsSection";
 
 const AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY = "drifty.aiPrivacyRequestSettings.v1";
@@ -50,7 +51,7 @@ function sectionTitled(dialog: HTMLElement, title: string): HTMLElement {
 }
 
 describe("PrivacySettingsSection", () => {
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
   beforeEach(() => {
     window.localStorage.clear();
@@ -94,6 +95,24 @@ describe("PrivacySettingsSection", () => {
     expect(screen.queryByText(/icon cache/i)).toBeNull();
     openAiGroup();
     expect(screen.getByRole("switch", { name: "Page address" })).toBeTruthy();
+  });
+
+  it("closes deletion after refresh, shows floating counts on Privacy and restores its trigger", async () => {
+    vi.spyOn(trackerClient, "deleteHistoryRange").mockResolvedValue({ activitySegments: 1, classifications: 0, youtubeMetadata: 2, dryRun: false });
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    render(<LocalizationTestProvider language="en"><PrivacySettingsSection onHistoryDeleted={refresh} /></LocalizationTestProvider>);
+    const trigger = screen.getByRole("button", { name: "Delete history…" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Delete history" })).getByRole("button", { name: "Delete permanently" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status", { name: "History deleted" }).textContent).toContain("1 activity segment · 2 YouTube metadata entries");
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss deletion result" }));
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Delete history" })).toBeTruthy();
   });
 
   describe("AI data sending", () => {

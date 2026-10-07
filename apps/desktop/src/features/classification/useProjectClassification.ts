@@ -123,7 +123,7 @@ export interface UseProjectClassificationResult {
   readonly lastRunSummary: ProjectPassSummary | null;
   readonly runError: string | null;
   readonly revertReviewEvent: (id: number) => Promise<void>;
-  readonly saveProject: (input: ProjectInput) => Promise<Project | null>;
+  readonly saveProject: (input: ProjectInput, onError?: (message: string) => void) => Promise<Project | null>;
   readonly deleteProject: (id: string) => Promise<void>;
   readonly addAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
   readonly deleteAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
@@ -505,13 +505,15 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   // tracker call never escapes as an unhandled rejection — the app's global
   // handler replaces the whole UI with an error screen on any such rejection.
   const saveProject = useCallback(
-    async (input: ProjectInput): Promise<Project | null> => {
+    async (input: ProjectInput, onError?: (message: string) => void): Promise<Project | null> => {
       try {
         const saved = await tracker.saveProject(input);
         await loadProjects();
         return saved;
       } catch (error) {
-        setRunError(error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        setRunError(message);
+        onError?.(message);
         return null;
       }
     },

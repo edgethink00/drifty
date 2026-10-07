@@ -3,7 +3,7 @@ import type { Project, ProjectInput, ProjectStatus } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { ModalPresence } from "../../components/ModalPresence";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
-import { ProjectEditorModal } from "./ProjectEditorModal";
+import { ProjectEditorModal, type ProjectSaveResult } from "./ProjectEditorModal";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -22,7 +22,7 @@ export interface ProjectsManagerProps {
   readonly lastActivityByProject: ReadonlyMap<string, string>;
   /** Caption in the per-project time column, e.g. "Latest 7 days". */
   readonly totalCaption: string;
-  readonly onSave: (input: ProjectInput) => Promise<boolean> | boolean;
+  readonly onSave: (input: ProjectInput) => Promise<ProjectSaveResult> | ProjectSaveResult;
   readonly onDelete: (id: string) => void;
   /** Row click → project detail. */
   readonly onOpenProject: (projectId: string) => void;

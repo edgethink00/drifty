@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppExclusionSettingsRows } from "./AppExclusionSettingsRows";
 import { trackerClient } from "../../lib/api/trackerClient";
@@ -162,5 +162,97 @@ describe("AppExclusionSettingsRows", () => {
         source: "user",
       }));
     });
+  });
+
+  it("preserves a failed add, prevents duplicate writes, and retries a later count failure without saving again", async () => {
+    vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue([]);
+    vi.spyOn(trackerClient, "getRecentApps").mockResolvedValue([]);
+    let rejectSave!: (error: Error) => void;
+    const rule = { id: "Vault", name: "Vault", bundleId: null, source: "user" as const };
+    const save = vi.spyOn(trackerClient, "saveExcludedApp")
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectSave = reject; }))
+      .mockResolvedValue(rule);
+    const count = vi.mocked(trackerClient.getExcludedAppHistoryCount)
+      .mockRejectedValueOnce(new Error("count unavailable")).mockResolvedValue({ count: 12 });
+    render(<AppExclusionSettingsRows />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add app" }));
+    const input = screen.getByLabelText("Find an app");
+    fireEvent.change(input, { target: { value: "Vault" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add “Vault”" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add “Vault”" }));
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(input).toHaveProperty("disabled", true);
+    await act(async () => rejectSave(new Error("write unavailable")));
+    expect(screen.getByRole("alert").textContent).toContain("Could not add the app");
+    expect(input).toHaveProperty("value", "Vault");
+    fireEvent.click(screen.getByRole("button", { name: "Add “Vault”" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("The app is excluded");
+    expect(screen.queryByLabelText("Find an app")).toBeNull();
+    expect(screen.getByText("Vault")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await screen.findByRole("button", { name: "Delete 12 records" });
+    expect(count).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("locks only the affected row and keeps a failed unblock available for retry", async () => {
+    vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue([
+      { id: "a", name: "Vault", bundleId: null, source: "user" },
+      { id: "b", name: "Bank", bundleId: null, source: "user" },
+    ]);
+    vi.mocked(trackerClient.getExcludedAppHistoryCount).mockResolvedValue({ count: 8 });
+    let rejectRemove!: (error: Error) => void;
+    const remove = vi.spyOn(trackerClient, "deleteExcludedApp")
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectRemove = reject; }))
+      .mockResolvedValue({ deleted: true });
+    render(<AppExclusionSettingsRows />);
+    const unblock = await screen.findByRole("button", { name: "Unblock Vault" });
+    const row = within(unblock.closest(".settings-row")! as HTMLElement);
+    await row.findByRole("button", { name: "Delete 8 records" });
+    fireEvent.click(unblock);
+    fireEvent.click(unblock);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(row.getByRole("button", { name: "Delete 8 records" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Unblock Bank" })).toHaveProperty("disabled", false);
+    await act(async () => rejectRemove(new Error("storage unavailable")));
+    expect(row.getByRole("alert").textContent).toContain("Could not unblock");
+    expect(unblock).toHaveProperty("disabled", false);
+    fireEvent.click(unblock);
+    await waitFor(() => expect(screen.queryByText("Vault")).toBeNull());
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the count after a failed history deletion and clears it only after a successful retry", async () => {
+    vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue([
+      { id: "a", name: "Vault", bundleId: null, source: "user" },
+    ]);
+    vi.mocked(trackerClient.getExcludedAppHistoryCount).mockResolvedValue({ count: 8 });
+    const remove = vi.spyOn(trackerClient, "deleteExcludedAppHistory")
+      .mockRejectedValueOnce(new Error("storage unavailable")).mockResolvedValue({ deleted: 8 });
+    render(<AppExclusionSettingsRows />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete 8 records" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not delete");
+    fireEvent.click(screen.getByRole("button", { name: "Delete 8 records" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Delete 8 records" })).toBeNull());
+    expect(screen.getByText("Vault")).toBeTruthy();
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
+
+  it("still accepts an initial count arriving during an unblock that fails", async () => {
+    vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue([
+      { id: "a", name: "Vault", bundleId: null, source: "user" },
+    ]);
+    let finishCount!: (result: { count: number }) => void;
+    vi.mocked(trackerClient.getExcludedAppHistoryCount).mockImplementationOnce(() => new Promise((resolve) => { finishCount = resolve; }));
+    let rejectRemove!: (error: Error) => void;
+    vi.spyOn(trackerClient, "deleteExcludedApp").mockImplementationOnce(() => new Promise((_, reject) => { rejectRemove = reject; }));
+    render(<AppExclusionSettingsRows />);
+    fireEvent.click(await screen.findByRole("button", { name: "Unblock Vault" }));
+    await act(async () => finishCount({ count: 8 }));
+    await act(async () => rejectRemove(new Error("storage unavailable")));
+    expect(screen.getByRole("button", { name: "Delete 8 records" })).toHaveProperty("disabled", false);
+    expect(screen.getByRole("alert").textContent).toContain("Could not unblock");
   });
 });

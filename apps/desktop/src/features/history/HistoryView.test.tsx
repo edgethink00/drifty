@@ -367,6 +367,61 @@ describe("HistoryView", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("keeps the confirmation and selection after a failed deletion, then lets the user retry", async () => {
+    const onDeleteSelected = vi.fn().mockRejectedValueOnce(new Error("Storage unavailable")).mockResolvedValue(undefined);
+    render(<HistoryView appIcons={{}} segments={historySegments} deleting={false} onDeleteSelected={onDeleteSelected} />);
+    const checkbox = screen.getByRole("checkbox", { name: /select api reference/i });
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: /delete 1 selected/i }));
+    const dialog = screen.getByRole("dialog", { name: /delete history records/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^delete records$/i }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("Storage unavailable");
+    expect(checkbox).toHaveProperty("checked", true);
+    expect(within(dialog).getByRole("button", { name: /^delete records$/i })).toHaveProperty("disabled", false);
+    fireEvent.click(within(dialog).getByRole("button", { name: /^delete records$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
+    expect(onDeleteSelected).toHaveBeenCalledTimes(2);
+    expect(onDeleteSelected).toHaveBeenLastCalledWith(["1"]);
+    expect(checkbox).toHaveProperty("checked", false);
+  });
+
+  it("shows post-deletion refresh failure and retries the view without another write", async () => {
+    const onDeleteSelected = vi.fn().mockResolvedValue({ refreshFailed: true });
+    const onRefreshAfterDelete = vi.fn().mockRejectedValueOnce(new Error("Still unavailable")).mockResolvedValue(undefined);
+    render(<HistoryView appIcons={{}} segments={historySegments} deleting={false} onDeleteSelected={onDeleteSelected} onRefreshAfterDelete={onRefreshAfterDelete} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /select api reference/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete 1 selected/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^delete records$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
+    expect(screen.getByRole("alert").textContent).toContain("The selected records were deleted");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh view" }));
+    await waitFor(() => expect(onRefreshAfterDelete).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("alert").textContent).toContain("The selected records were deleted");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh view" })).toHaveProperty("disabled", false));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh view" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(onDeleteSelected).toHaveBeenCalledTimes(1);
+    expect(onRefreshAfterDelete).toHaveBeenCalledTimes(2);
+  });
+
+  it("blocks duplicate confirmation and dismissal while the request is pending", async () => {
+    let finish!: () => void;
+    const onDeleteSelected = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<HistoryView appIcons={{}} segments={historySegments} deleting={false} onDeleteSelected={onDeleteSelected} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /select api reference/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete 1 selected/i }));
+    const dialog = screen.getByRole("dialog", { name: /delete history records/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^delete records$/i }));
+    const pending = within(dialog).getByRole("button", { name: "Deleting…" });
+    expect(pending).toHaveProperty("disabled", true);
+    fireEvent.click(pending);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(onDeleteSelected).toHaveBeenCalledTimes(1);
+    expect(within(dialog).getByRole("status").textContent).toBe("Deleting…");
+    await act(async () => finish());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
+  });
+
   it("renders adjacent matching app and window records as one selectable row", async () => {
     const deleteSelected = vi.fn().mockResolvedValue(undefined);
     render(

@@ -8,6 +8,7 @@ import { ProjectDetailView } from "./ProjectDetailView";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
 import { ProjectsManager } from "./ProjectsManager";
+import type { ProjectSaveResult } from "./ProjectEditorModal";
 import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { aggregateProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { formatProjectMatchCooldown, NO_PROJECT_MATCH_COOLDOWN, type ProjectMatchCooldown } from "./projectMatchCooldown";
@@ -67,7 +68,7 @@ export interface ProjectsPageProps {
   readonly onTrendWindowChange: (range: { readonly startDay: string; readonly endDay: string }) => void;
   readonly onConfigureModel: () => void;
   readonly onOpenTrends: () => void;
-  readonly onSaveProject: (input: ProjectInput) => Promise<boolean> | boolean;
+  readonly onSaveProject: (input: ProjectInput) => Promise<ProjectSaveResult> | ProjectSaveResult;
   readonly onDeleteProject: (id: string) => void;
   readonly onRunAnalysis: () => void;
 }

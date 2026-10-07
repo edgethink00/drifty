@@ -1,0 +1,185 @@
+.history-deletion-notice {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--float-card-radius);
+  box-shadow: var(--float-card-shadow);
+  color: var(--text);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  max-width: min(23rem, calc(100vw - var(--space-4) * 2));
+  padding: 12px 14px 12px 16px;
+  position: fixed;
+  right: var(--space-4);
+  top: calc(var(--window-chrome-height) + var(--space-3));
+  transition:
+    box-shadow 140ms ease-out,
+    transform 140ms ease-out;
+  width: max-content;
+  z-index: 950;
+}
+
+.history-deletion-notice.is-entering {
+  animation: floating-notice-enter 480ms var(--ease-float-in) both;
+}
+
+.history-deletion-notice.is-leaving {
+  animation: floating-notice-leave 170ms var(--ease-float-out) forwards;
+}
+
+/* The entrance animation owns the transform while it runs, so the hover lift
+   only arms once the card has landed. */
+.history-deletion-notice.is-settled:hover {
+  box-shadow: var(--float-card-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.history-deletion-notice__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.history-deletion-notice.is-entering .history-deletion-notice__copy {
+  animation: history-deletion-notice-copy-in 380ms 80ms var(--ease-out-quart) both;
+}
+
+@keyframes history-deletion-notice-copy-in {
+  from {
+    opacity: 0;
+    transform: translate3d(6px, 0, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.history-deletion-notice__copy strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 680;
+  letter-spacing: -0.008em;
+  line-height: 1.25;
+  word-break: keep-all;
+}
+
+.history-deletion-notice__copy > span {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+/* The dismiss button doubles as the countdown: the accent ring drains around
+   the x for the 5-second auto-dismiss window. */
+.history-deletion-notice__dismiss {
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  height: 28px;
+  padding: 0;
+  position: relative;
+  width: 28px;
+}
+
+.history-deletion-notice.is-entering .history-deletion-notice__dismiss {
+  animation: history-deletion-notice-dismiss-in 300ms 200ms ease-out both;
+}
+
+@keyframes history-deletion-notice-dismiss-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.history-deletion-notice__ring {
+  display: block;
+  height: 28px;
+  width: 28px;
+}
+
+.history-deletion-notice__ring-track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 16%, transparent);
+  stroke-width: 1.8;
+}
+
+.history-deletion-notice__ring-progress {
+  animation: history-deletion-notice-ring 5s linear forwards;
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 68%, transparent);
+  stroke-dasharray: 69.1;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+.history-deletion-notice.is-paused .history-deletion-notice__ring-progress {
+  animation-play-state: paused;
+}
+
+@keyframes history-deletion-notice-ring {
+  to {
+    stroke-dashoffset: 69.1;
+  }
+}
+
+.history-deletion-notice__dismiss-icon {
+  align-items: center;
+  color: var(--text-soft);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.history-deletion-notice__dismiss-icon svg {
+  fill: none;
+  height: 10px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.7;
+  width: 10px;
+}
+
+.history-deletion-notice__dismiss:hover .history-deletion-notice__dismiss-icon {
+  color: var(--text);
+}
+
+.history-deletion-notice__dismiss:focus-visible {
+  border-radius: 999px;
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 55%, transparent));
+  outline-offset: 2px;
+}
+
+
+@media (max-width: 680px) {
+  .history-deletion-notice {
+    left: var(--space-3);
+    max-width: none;
+    right: var(--space-3);
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history-deletion-notice,
+  .history-deletion-notice__copy,
+  .history-deletion-notice__dismiss,
+  .history-deletion-notice__ring-progress {
+    animation: none !important;
+    transition: none;
+  }
+}

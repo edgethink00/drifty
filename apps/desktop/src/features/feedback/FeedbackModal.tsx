@@ -188,7 +188,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
         aria-labelledby="feedback-modal-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton label={t("feedback.close")} onClick={() => { if (!isSending) onClose(); }} />
+        <ModalCloseButton disabled={isSending} label={t("feedback.close")} onClick={() => { if (!isSending) onClose(); }} />
         <div className="modal-head feedback-modal__header">
           <div className="modal-head__copy">
             <h2 id="feedback-modal-title">{isSent ? t("feedback.sentTitle") : t("feedback.title")}</h2>

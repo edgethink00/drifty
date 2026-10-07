@@ -7,6 +7,7 @@ import { ModalPresence } from "../../components/ModalPresence";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import "./history.css";
 import { useLocalization } from "../localization/LocalizationContext";
+import type { HistoryDeletionResult } from "./historyDeletion";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -16,7 +17,8 @@ type HistoryViewProps = {
   readonly initialLoading?: boolean;
   readonly loadMoreError?: string | null;
   readonly loadingMore?: boolean;
-  readonly onDeleteSelected: (ids: readonly string[]) => Promise<void>;
+  readonly onDeleteSelected: (ids: readonly string[]) => Promise<HistoryDeletionResult | void>;
+  readonly onRefreshAfterDelete?: () => Promise<void>;
   readonly onLoadMore?: () => Promise<void> | void;
   readonly onOpenDeleteHistory?: () => void;
   readonly onSearchQueryChange?: (query: string) => void;
@@ -32,11 +34,12 @@ const EMPTY_HISTORY_ROWS: readonly HistoryRowModel[] = [];
 type HistoryDeleteConfirmationProps = {
   readonly deleting: boolean;
   readonly recordCount: number;
+  readonly error: string | null;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 };
 
-function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm }: HistoryDeleteConfirmationProps) {
+function HistoryDeleteConfirmation({ deleting, recordCount, error, onCancel, onConfirm }: HistoryDeleteConfirmationProps) {
   const { t } = useLocalization();
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-history-confirm-cancel]" });
@@ -47,12 +50,15 @@ function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm 
       className="history-confirm"
       role="dialog"
       aria-modal="true"
+      aria-busy={deleting}
       aria-labelledby="history-confirm-title"
       tabIndex={-1}
     >
       <div className="history-confirm__panel modal-shell" data-modal-variant="compact">
         <h2 id="history-confirm-title">{t("history.deleteConfirmTitle")}</h2>
         <p>{t(recordCount === 1 ? "history.deleteConfirmDetailSingle" : "history.deleteConfirmDetail", { count: recordCount })}</p>
+        {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}
+        {deleting ? <p role="status">{t("settings.deleteHistory.deleting")}</p> : null}
         <div className="history-confirm__actions">
           <button
             type="button"
@@ -64,7 +70,7 @@ function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm 
             {t("common.cancel")}
           </button>
           <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} onClick={onConfirm}>
-            {t("history.deleteRecords")}
+            {t(deleting ? "settings.deleteHistory.deleting" : "history.deleteRecords")}
           </button>
         </div>
       </div>
@@ -81,6 +87,7 @@ export function HistoryView({
   loadMoreError = null,
   loadingMore = false,
   onDeleteSelected,
+  onRefreshAfterDelete,
   onLoadMore,
   onOpenDeleteHistory,
   onSearchQueryChange,
@@ -93,6 +100,13 @@ export function HistoryView({
   const [uncontrolledQuery, setUncontrolledQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmDeleting, setConfirmDeleting] = useState(false);
+  const [pendingRecordCount, setPendingRecordCount] = useState(0);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [retryingRefresh, setRetryingRefresh] = useState(false);
+  const requestInFlight = useRef(false);
+  const isDeleting = deleting || confirmDeleting;
   const [renderLimit, setRenderLimit] = useState(HISTORY_RENDER_STEP);
   const query = searchQuery ?? uncontrolledQuery;
   const normalizedQuery = query.trim().toLowerCase();
@@ -180,14 +194,52 @@ export function HistoryView({
   }, []);
 
   async function confirmDelete() {
+    if (requestInFlight.current || selectedIds.size === 0) return;
+    requestInFlight.current = true;
+    setConfirmDeleting(true);
+    setDeleteError(null);
     const ids = Array.from(selectedIds);
-    await onDeleteSelected(ids);
-    setSelectedIds(new Set());
-    setConfirmOpen(false);
+    setPendingRecordCount(ids.length);
+    try {
+      const result = await onDeleteSelected(ids);
+      setSelectedIds(new Set());
+      setConfirmOpen(false);
+      setRefreshFailed(result?.refreshFailed ?? false);
+    } catch (failure) {
+      setDeleteError(failure instanceof Error ? failure.message : t("history.deleteError"));
+    } finally {
+      setConfirmDeleting(false);
+      requestInFlight.current = false;
+    }
+  }
+
+  async function retryRefreshAfterDelete() {
+    if (!onRefreshAfterDelete || requestInFlight.current) return;
+    requestInFlight.current = true;
+    setRetryingRefresh(true);
+    try {
+      await onRefreshAfterDelete();
+      setRefreshFailed(false);
+    } catch {
+      setRefreshFailed(true);
+    } finally {
+      setRetryingRefresh(false);
+      requestInFlight.current = false;
+    }
   }
 
   return (
-    <section className={`history-view${showToolbar ? "" : " history-view--empty"}`} aria-label={t("history.label")}>
+    <section className={`history-view${showToolbar ? "" : " history-view--empty"}${refreshFailed ? " history-view--refresh-failed" : ""}`} aria-label={t("history.label")}>
+      {refreshFailed ? (
+        <div className="history-refresh-result" aria-busy={retryingRefresh}>
+          <p role="alert">{t("history.deletedRefreshFailed")}</p>
+          {onRefreshAfterDelete ? (
+            <button type="button" className="app-btn app-btn--secondary" disabled={retryingRefresh} onClick={() => void retryRefreshAfterDelete()}>
+              {t(retryingRefresh ? "settings.deleteHistory.refreshing" : "history.refreshView")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {showToolbar ? (
         <div className="history-view__toolbar">
           <label className="history-search">
@@ -209,8 +261,8 @@ export function HistoryView({
             <button
               type="button"
               className="app-btn app-btn--danger"
-              disabled={deleting}
-              onClick={() => setConfirmOpen(true)}
+              disabled={isDeleting || retryingRefresh}
+              onClick={() => { setDeleteError(null); setConfirmOpen(true); }}
             >
               {deleteLabel}
             </button>
@@ -295,12 +347,13 @@ export function HistoryView({
 
       <ModalPresence
         onDismiss={() => setConfirmOpen(false)}
-        dismissDisabled={deleting}
+        dismissDisabled={isDeleting}
       >
         {confirmOpen ? (
           <HistoryDeleteConfirmation
-            deleting={deleting}
-            recordCount={selectedCount}
+            deleting={isDeleting}
+            recordCount={confirmDeleting ? pendingRecordCount : selectedCount}
+            error={deleteError}
             onCancel={() => setConfirmOpen(false)}
             onConfirm={() => void confirmDelete()}
           />

@@ -10,7 +10,8 @@ import type { SettingsSelectOption } from "./SettingsSelect";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import "./DeleteHistoryModal.css";
-import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { useLocalization } from "../localization/LocalizationContext";
+import { summarizeHistoryDeletion } from "./historyDeletionSummary";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 
 type RangePreset = "lastHour" | "today" | "last7" | "last30" | "all" | "custom";
@@ -27,10 +28,11 @@ const DELETE_SCOPES: DeleteHistoryRangeScopes = {
 type DeleteHistoryModalProps = {
   readonly onClose: () => void;
   readonly onDeleted: () => Promise<void> | void;
+  readonly onCompleted: (result: DeleteHistoryRangeResult) => void;
   readonly deviceSyncEnabled?: boolean;
 };
 
-export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = false }: DeleteHistoryModalProps) {
+export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSyncEnabled = false }: DeleteHistoryModalProps) {
   const { effectiveLanguage, t } = useLocalization();
   const rangeOptions: readonly SettingsSelectOption<RangePreset>[] = [
     { value: "lastHour", label: t("settings.deleteHistory.lastHour") },
@@ -44,13 +46,16 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [done, setDone] = useState<DeleteHistoryRangeResult | null>(null);
+  const [deletedResult, setDeletedResult] = useState<DeleteHistoryRangeResult | null>(null);
   const armTimer = useRef<number | null>(null);
-  const doneButtonRef = useRef<HTMLButtonElement | null>(null);
+  const refreshButtonRef = useRef<HTMLButtonElement | null>(null);
+  const requestInFlight = useRef(false);
 
   const bounds = rangeBounds(preset, customStart, customEnd);
+  const dateOrderInvalid = Boolean(customStart && customEnd && customStart > customEnd);
 
   useEffect(() => {
     return () => {
@@ -64,14 +69,12 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
     setArmed(false);
   }, [preset, customStart, customEnd]);
 
-  // The delete button unmounts with the form, so hand focus to the result's
-  // own action (once the post-delete refresh has finished and it is enabled)
-  // instead of dropping it on the page behind the dialog.
+  // A failed refresh replaces the form; put keyboard focus on its recovery action.
   useEffect(() => {
-    if (done && !deleting) doneButtonRef.current?.focus();
-  }, [done, deleting]);
+    if (deletedResult && refreshError && !deleting) refreshButtonRef.current?.focus();
+  }, [deletedResult, refreshError, deleting]);
 
-  const canDelete = Boolean(bounds) && !deleting && !done;
+  const canDelete = Boolean(bounds) && !deleting && !deletedResult;
   const needsArm = preset === "all";
 
   const handleOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -79,7 +82,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
   };
 
   const handleDelete = async () => {
-    if (!bounds || !canDelete) return;
+    if (!bounds || !canDelete || requestInFlight.current) return;
     if (needsArm && !armed) {
       setArmed(true);
       if (armTimer.current !== null) window.clearTimeout(armTimer.current);
@@ -87,22 +90,47 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
       return;
     }
 
+    requestInFlight.current = true;
     setDeleting(true);
     setError(null);
+    setRefreshError(null);
+    let completed: DeleteHistoryRangeResult | null = null;
     try {
       const result = await trackerClient.deleteHistoryRange({ ...bounds, scopes: DELETE_SCOPES, dryRun: false });
-      setDone(result);
+      setDeletedResult(result);
       if (preset === "all") await clearIconCachesBestEffort();
-      await onDeleted();
+      try {
+        await onDeleted();
+        completed = result;
+      } catch (refreshFailure) {
+        setRefreshError(refreshFailure instanceof Error ? refreshFailure.message : String(refreshFailure));
+      }
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
     } finally {
-      // The result stays until the user closes it: this is an irreversible
-      // action, and its counts are the only confirmation of what was removed.
-      // Closing stays locked until the refresh settles so its error, if any,
-      // lands in a dialog that is still open.
+      // A successful write stays successful even if refreshing the views fails.
       setDeleting(false);
+      requestInFlight.current = false;
     }
+    // The caller closes the dialog and keeps the receipt on the originating page.
+    if (completed) onCompleted(completed);
+  };
+
+  const retryRefresh = async () => {
+    if (requestInFlight.current || !deletedResult) return;
+    requestInFlight.current = true;
+    setDeleting(true);
+    let refreshed = false;
+    try {
+      await onDeleted();
+      refreshed = true;
+    } catch (refreshFailure) {
+      setRefreshError(refreshFailure instanceof Error ? refreshFailure.message : String(refreshFailure));
+    } finally {
+      setDeleting(false);
+      requestInFlight.current = false;
+    }
+    if (refreshed) onCompleted(deletedResult);
   };
 
   return (
@@ -110,9 +138,11 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
       <section
         aria-labelledby="delete-history-modal-title"
         aria-modal="true"
+        aria-busy={deleting}
         className="auth-modal modal-shell delete-history-modal"
         data-modal-variant="compact"
         role="dialog"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <ModalCloseButton disabled={deleting} label={t("settings.deleteHistory.cancel")} onClick={onClose} />
@@ -128,14 +158,33 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
 
         {error ? <p className="auth-modal__error" role="alert">{localizeSettingsError(error, effectiveLanguage, t)}</p> : null}
 
-        {done ? (
+        {deletedResult && refreshError ? (
           <>
             <p className="auth-modal__success" role="status">
-              {t("settings.deleteHistory.deleted", { summary: summarizeCounts(done, effectiveLanguage, t) })}
+              {t("settings.deleteHistory.deleted", { summary: summarizeHistoryDeletion(deletedResult, effectiveLanguage, t) })}
+            </p>
+            <p className="auth-modal__error" role="alert">
+              {t("settings.deleteHistory.refreshFailed")} {localizeSettingsError(refreshError, effectiveLanguage, t)}
             </p>
             <div className="modal-foot">
-              <button ref={doneButtonRef} className="modal-btn modal-btn--primary" disabled={deleting} type="button" onClick={onClose}>
-                {t("settings.deleteHistory.done")}
+              <button
+                ref={refreshButtonRef}
+                aria-busy={deleting}
+                className="modal-btn modal-btn--primary delete-history-modal__delete-button"
+                disabled={deleting}
+                type="button"
+                onClick={() => void retryRefresh()}
+              >
+                <span className="delete-history-modal__label-size" aria-hidden="true">{t("history.refreshView")}</span>
+                <span className="delete-history-modal__label-size delete-history-modal__button-label" aria-hidden="true">
+                  <span className="delete-history-modal__spinner" />{t("settings.deleteHistory.processing")}
+                </span>
+                <span className="delete-history-modal__button-label">
+                  {deleting ? <><span className="delete-history-modal__spinner" aria-hidden="true" />{t("settings.deleteHistory.processing")}</> : t("history.refreshView")}
+                </span>
+              </button>
+              <button className="modal-btn modal-btn--ghost" disabled={deleting} type="button" onClick={onClose}>
+                {t("settings.deleteHistory.close")}
               </button>
             </div>
           </>
@@ -149,19 +198,29 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
                 options={rangeOptions}
                 value={preset}
                 onChange={setPreset}
+                disabled={deleting}
               />
             </div>
             {preset === "custom" ? (
               <div className="delete-history-modal__custom-range">
                 <label>
                   <span>{t("settings.deleteHistory.from")}</span>
-                  <input max={localDateKey(new Date())} type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
+                  <input disabled={deleting} aria-invalid={dateOrderInvalid} aria-describedby="delete-history-date-hint" max={localDateKey(new Date())} type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
                 </label>
                 <label>
                   <span>{t("settings.deleteHistory.to")}</span>
-                  <input max={localDateKey(new Date())} type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
+                  <input disabled={deleting} aria-invalid={dateOrderInvalid} aria-describedby="delete-history-date-hint" max={localDateKey(new Date())} type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
                 </label>
+                <p id="delete-history-date-hint" className={`delete-history-modal__date-hint${dateOrderInvalid ? " is-invalid" : ""}`} role={dateOrderInvalid ? "alert" : undefined}>
+                  {dateOrderInvalid ? t("settings.deleteHistory.dateOrderError") : !bounds ? t("settings.deleteHistory.chooseDates") : "\u00a0"}
+                </p>
               </div>
+            ) : null}
+
+            {deleting ? (
+              <span className="delete-history-modal__progress" role="status">
+                {t(deletedResult ? "settings.deleteHistory.refreshing" : "settings.deleteHistory.deleting")}
+              </span>
             ) : null}
 
             <div className="modal-foot">
@@ -170,12 +229,20 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
                 {t("settings.deleteHistory.cancel")}
               </button>
               <button
-                className={`modal-btn modal-btn--danger${armed ? " is-armed" : ""}`}
+                aria-busy={deleting}
+                className={`modal-btn modal-btn--danger delete-history-modal__delete-button${armed && !deleting ? " is-armed" : ""}`}
                 disabled={!canDelete}
                 type="button"
                 onClick={handleDelete}
               >
-                {deleting ? t("settings.deleteHistory.deleting") : armed ? t("settings.deleteHistory.confirmAgain") : t("settings.deleteHistory.deletePermanently")}
+                <span className="delete-history-modal__label-size" aria-hidden="true">{t("settings.deleteHistory.deletePermanently")}</span>
+                {needsArm ? <span className="delete-history-modal__label-size" aria-hidden="true">{t("settings.deleteHistory.confirmAgain")}</span> : null}
+                <span className="delete-history-modal__label-size delete-history-modal__button-label" aria-hidden="true">
+                  <span className="delete-history-modal__spinner" />{t("settings.deleteHistory.processing")}
+                </span>
+                <span className="delete-history-modal__button-label">
+                  {deleting ? <><span className="delete-history-modal__spinner" aria-hidden="true" />{t("settings.deleteHistory.processing")}</> : armed ? t("settings.deleteHistory.confirmAgain") : t("settings.deleteHistory.deletePermanently")}
+                </span>
               </button>
             </div>
           </>
@@ -228,13 +295,4 @@ function rangeBounds(
 function localDateTimeKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
-function summarizeCounts(result: DeleteHistoryRangeResult, language: "en" | "ko", t: LocalizationController["t"]): string {
-  const parts: string[] = [];
-  const locale = language === "ko" ? "ko-KR" : "en-US";
-  if (result.activitySegments > 0) parts.push(t(result.activitySegments === 1 ? "settings.deleteHistory.activitySingle" : "settings.deleteHistory.activityPlural", { count: result.activitySegments.toLocaleString(locale) }));
-  if (result.classifications > 0) parts.push(t(result.classifications === 1 ? "settings.deleteHistory.classificationSingle" : "settings.deleteHistory.classificationPlural", { count: result.classifications.toLocaleString(locale) }));
-  if (result.youtubeMetadata > 0) parts.push(t(result.youtubeMetadata === 1 ? "settings.deleteHistory.youtubeSingle" : "settings.deleteHistory.youtubePlural", { count: result.youtubeMetadata.toLocaleString(locale) }));
-  return parts.length > 0 ? parts.join(" · ") : t("settings.deleteHistory.noRows");
 }

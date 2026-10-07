@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type AnimationEvent } from "react";
+import { useFloatingNotice } from "../../components/useFloatingNotice";
+import { FloatingNoticePortal } from "../../components/FloatingNoticePortal";
 import type { BillingEntitlement } from "./billingService";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { LocalizationController } from "../localization/LocalizationContext";
@@ -57,90 +58,7 @@ export function CloudTrialStartedNotice({
   onDismiss,
 }: CloudTrialStartedNoticeProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const [isTimerPaused, setIsTimerPaused] = useState(false);
-  // The card animates in and out instead of popping: hasEntered gates the
-  // hover lift so it cannot fight the entrance, and isLeaving plays the exit
-  // before the parent unmounts the notice.
-  const [hasEntered, setHasEntered] = useState(isNoticeMotionReduced);
-  const [isLeaving, setIsLeaving] = useState(false);
-  const rootRef = useRef<HTMLElement>(null);
-  // Mirrors isTimerPaused synchronously: hover and focus can both arrive
-  // before React re-renders, and a stale "not paused" read would subtract the
-  // same elapsed time twice from the remaining countdown.
-  const isTimerPausedRef = useRef(false);
-  const timeoutIdRef = useRef<number | null>(null);
-  const timerStartedAtRef = useRef(Date.now());
-  const remainingDismissMsRef = useRef(CLOUD_TRIAL_STARTED_NOTICE_AUTO_DISMISS_MS);
-  // Pointer hover and keyboard focus both hold the notice open; it resumes
-  // only once neither is inside it, so a keyboard user reaching the action
-  // button does not lose the notice mid-read.
-  const pauseSourcesRef = useRef({ hover: false, focus: false });
-
-  const clearDismissTimer = useCallback(() => {
-    if (timeoutIdRef.current === null) return;
-    window.clearTimeout(timeoutIdRef.current);
-    timeoutIdRef.current = null;
-  }, []);
-
-  const pauseDismissTimer = useCallback(() => {
-    if (isTimerPausedRef.current) return;
-
-    isTimerPausedRef.current = true;
-    clearDismissTimer();
-    remainingDismissMsRef.current = Math.max(0, remainingDismissMsRef.current - (Date.now() - timerStartedAtRef.current));
-    setIsTimerPaused(true);
-  }, [clearDismissTimer]);
-
-  const resumeDismissTimer = useCallback(() => {
-    if (!isTimerPausedRef.current) return;
-    isTimerPausedRef.current = false;
-    setIsTimerPaused(false);
-  }, []);
-
-  const requestLeave = useCallback(() => {
-    clearDismissTimer();
-    // Reduced motion removes the exit animation entirely, so there is no exit
-    // to wait for; dismiss immediately instead of holding a static card.
-    if (isNoticeMotionReduced()) {
-      onDismiss();
-      return;
-    }
-    setIsLeaving(true);
-  }, [clearDismissTimer, onDismiss]);
-
-  const setPauseSource = useCallback((source: "hover" | "focus", active: boolean) => {
-    pauseSourcesRef.current = { ...pauseSourcesRef.current, [source]: active };
-    if (active) {
-      pauseDismissTimer();
-      return;
-    }
-    if (!pauseSourcesRef.current.hover && !pauseSourcesRef.current.focus) resumeDismissTimer();
-  }, [pauseDismissTimer, resumeDismissTimer]);
-
-  useEffect(() => {
-    if (isTimerPaused || isLeaving) return undefined;
-
-    timerStartedAtRef.current = Date.now();
-    timeoutIdRef.current = window.setTimeout(requestLeave, remainingDismissMsRef.current);
-    return clearDismissTimer;
-  }, [clearDismissTimer, isLeaving, isTimerPaused, requestLeave]);
-
-  // animationend is the fast path; the timeout covers a DOM that never runs
-  // stylesheet animations (jsdom) or a superseded animation, so dismissal
-  // always lands. CSS owns the budget — see floating-notice-leave.
-  useEffect(() => {
-    if (!isLeaving) return undefined;
-    const timer = window.setTimeout(onDismiss, leaveFallbackMs(rootRef.current));
-    return () => window.clearTimeout(timer);
-  }, [isLeaving, onDismiss]);
-
-  const handleAnimationEnd = (event: AnimationEvent<HTMLElement>) => {
-    if (event.animationName === "floating-notice-enter") {
-      setHasEntered(true);
-      return;
-    }
-    if (event.animationName === "floating-notice-leave") onDismiss();
-  };
+  const { rootRef, hasEntered, isLeaving, isTimerPaused, requestLeave, handlers } = useFloatingNotice(onDismiss, CLOUD_TRIAL_STARTED_NOTICE_AUTO_DISMISS_MS);
 
   const isPromotion = notice.accessSource === "promotion";
   const headline = t(isPromotion ? "billing.trialNotice.promoHeadline" : "billing.trialNotice.trialHeadline");
@@ -152,23 +70,12 @@ export function CloudTrialStartedNotice({
   ].filter(Boolean).join(" ");
 
   return (
-    <section
+    <FloatingNoticePortal><section
       ref={rootRef}
       className={className}
       role="status"
       aria-label={t(isPromotion ? "billing.trialNotice.promoAria" : "billing.trialNotice.trialAria")}
-      onAnimationEnd={handleAnimationEnd}
-      onMouseEnter={() => setPauseSource("hover", true)}
-      onMouseLeave={() => setPauseSource("hover", false)}
-      onFocus={() => setPauseSource("focus", true)}
-      onBlur={(event) => {
-        // Focus moving between the notice's own buttons keeps it held.
-        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-        // Switching to another app blurs the focused button without moving
-        // focus out of the notice; it returns there when the window does.
-        if (!document.hasFocus()) return;
-        setPauseSource("focus", false);
-      }}
+      {...handlers}
     >
       <span className="cloud-trial-started-notice__copy">
         <strong>{headline}</strong>
@@ -195,29 +102,8 @@ export function CloudTrialStartedNotice({
         role="timer"
         aria-label={t("billing.trialNotice.timerAria")}
       />
-    </section>
+    </section></FloatingNoticePortal>
   );
-}
-
-function isNoticeMotionReduced(): boolean {
-  return typeof window !== "undefined"
-    && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-}
-
-// CSS owns the exit timing; read it back rather than duplicating the number,
-// matching AnchoredPresence/ModalPresence.
-function leaveFallbackMs(root: HTMLElement | null): number {
-  if (!root) return 220;
-  const style = window.getComputedStyle(root);
-  const milliseconds = (value: string) =>
-    value.trim().endsWith("ms") ? parseFloat(value) : parseFloat(value) * 1000;
-  const durations = style.animationDuration.split(",").map(milliseconds);
-  const delays = style.animationDelay.split(",").map(milliseconds);
-  const longest = Math.max(0, ...durations
-    .map((duration, index) => duration + (delays[index % delays.length] || 0))
-    .filter(Number.isFinite));
-  // jsdom has no stylesheet timing; browser zero-motion styles remove quickly.
-  return style.animationDuration ? longest + 80 : 220;
 }
 
 export function formatCloudTrialStartedDetail(

@@ -26,9 +26,11 @@ describe("project auto-analysis gating contract", () => {
   });
 
   it("starts matching only after the new project is persisted", () => {
-    const saveBody = appSource.split("const handleSaveProject")[1]?.split("}, [analysisModel.analysisConnected")[0] ?? "";
-    expect(saveBody).toContain("if (!saved) return false;");
-    expect(saveBody.indexOf("if (!saved) return false;")).toBeLessThan(saveBody.indexOf("scheduleProjectAutoAnalysis"));
+    const saveBody = appSource.split("const handleSaveProject")[1]?.split("const lastSuccessfulProjectPassAtMs")[0] ?? "";
+    const failedSaveGuard = "if (!saved) return { saved: false, error:";
+    expect(saveBody).toContain(failedSaveGuard);
+    expect(saveBody.indexOf("await projectClassification.saveProject")).toBeLessThan(saveBody.indexOf(failedSaveGuard));
+    expect(saveBody.indexOf(failedSaveGuard)).toBeLessThan(saveBody.indexOf("scheduleProjectAutoAnalysis(saved.id)"));
   });
 
   it("collects a burst of creations into one debounced pass", () => {

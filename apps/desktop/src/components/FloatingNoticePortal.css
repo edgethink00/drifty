@@ -1,0 +1,36 @@
+.floating-notice-stack {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: calc(100vw - var(--space-4) * 2);
+  pointer-events: none;
+  position: fixed;
+  right: var(--space-4);
+  top: calc(var(--window-chrome-height) + var(--space-3));
+  z-index: 950;
+}
+
+.floating-notice-stack > .cloud-trial-started-notice,
+.floating-notice-stack > .history-deletion-notice,
+.floating-notice-stack > .app-status-notice {
+  bottom: auto;
+  flex-shrink: 0;
+  left: auto;
+  position: relative;
+  right: auto;
+  top: auto;
+}
+
+.floating-notice-stack > .cloud-trial-started-notice,
+.floating-notice-stack > .history-deletion-notice { pointer-events: auto; }
+
+:root[data-platform="windows"] .floating-notice-stack {
+  top: calc(var(--windows-titlebar-height) + var(--space-3));
+}
+
+@media (max-width: 680px) {
+  .floating-notice-stack { left: var(--space-3); max-width: none; right: var(--space-3); }
+  .floating-notice-stack > .cloud-trial-started-notice,
+  .floating-notice-stack > .history-deletion-notice { width: 100%; }
+}

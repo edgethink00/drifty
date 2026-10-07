@@ -1,6 +1,6 @@
 import type { LocalizationController } from "../localization/LocalizationContext";
 import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
-import { createPortal } from "react-dom";
+import { FloatingNoticePortal } from "../../components/FloatingNoticePortal";
 import type { PreReleaseUpdateStatus } from "./useDeveloperPreReleaseUpdateController";
 
 export const MANUAL_UPDATE_CHECK_FAILED_PREFIX = "Update check failed: ";
@@ -116,7 +116,7 @@ export function AppStatusNotice({ notice }: { readonly notice: AppStatusNoticeMo
   const showTitle = !notice.compact;
   if (typeof document === "undefined") return null;
 
-  return createPortal(
+  return <FloatingNoticePortal>
     <section
       className={notice.role === "alert" ? "app-status-notice app-status-notice--error" : "app-status-notice"}
       role={notice.role}
@@ -124,9 +124,8 @@ export function AppStatusNotice({ notice }: { readonly notice: AppStatusNoticeMo
     >
       {showTitle ? <strong>{notice.title}</strong> : null}
       <span>{notice.detail}</span>
-    </section>,
-    document.body,
-  );
+    </section>
+  </FloatingNoticePortal>;
 }
 
 function assertNever(value: never): never {

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { ActivitySegment, Project, ProjectInput } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { ModalPresence } from "../../components/ModalPresence";
-import { ProjectEditorModal } from "./ProjectEditorModal";
+import { ProjectEditorModal, type ProjectSaveResult } from "./ProjectEditorModal";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -35,7 +35,7 @@ export interface ProjectDetailViewProps {
   readonly windowProjectSeconds: number;
   readonly lastActivityLabel: string;
   readonly busy?: boolean;
-  readonly onSave: (input: ProjectInput) => Promise<boolean> | boolean;
+  readonly onSave: (input: ProjectInput) => Promise<ProjectSaveResult> | ProjectSaveResult;
 }
 
 /**

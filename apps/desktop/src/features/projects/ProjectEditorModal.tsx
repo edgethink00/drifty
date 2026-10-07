@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Project, ProjectInput } from "@drifty/domain";
 import { firstUnusedProjectColor } from "../settings/projectPalette";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
+
+export type ProjectSaveResult = boolean | { readonly saved: false; readonly error: string };
 
 export interface ProjectEditorModalProps {
   /** Project being edited, or null to create a new one. */
@@ -13,7 +15,7 @@ export interface ProjectEditorModalProps {
   readonly projects: readonly Project[];
   readonly busy?: boolean;
   /** Resolves true when the project was persisted; the modal stays open on failure. */
-  readonly onSave: (input: ProjectInput) => Promise<boolean> | boolean;
+  readonly onSave: (input: ProjectInput) => Promise<ProjectSaveResult> | ProjectSaveResult;
   readonly onClose: () => void;
 }
 
@@ -31,6 +33,8 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   const [color, setColor] = useState(project?.color || PROJECT_COLOR_SWATCHES[0].color);
   const [colorTouched, setColorTouched] = useState(isEditing);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const requestInFlight = useRef(false);
 
   const usedColors = useMemo(
     () => new Set(
@@ -49,7 +53,7 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
 
   const handleSave = async () => {
     const trimmedName = name.trim();
-    if (!trimmedName || isBusy) return;
+    if (!trimmedName || isBusy || requestInFlight.current) return;
     const input: ProjectInput = {
       name: trimmedName,
       description: description.trim(),
@@ -61,12 +65,18 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
     // automatic matching. Closing before the save resolves would both discard
     // the user's input on failure and start analysis for a project that does
     // not exist yet.
+    requestInFlight.current = true;
     setSaving(true);
+    setSaveError(null);
     try {
       const saved = await onSave(input);
-      if (saved) onClose();
+      if (saved === true) onClose();
+      else setSaveError(typeof saved === "object" ? saved.error : t("projects.editor.saveError"));
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : t("projects.editor.saveError"));
     } finally {
       setSaving(false);
+      requestInFlight.current = false;
     }
   };
 
@@ -86,27 +96,31 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
         role="dialog"
         aria-modal="true"
         aria-labelledby="projects-editor-title"
+        aria-busy={isBusy}
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton label={t("projects.editor.close")} onClick={requestClose} />
+        <ModalCloseButton label={t("projects.editor.close")} onClick={requestClose} disabled={isBusy} />
         <div className="modal-head">
           <div className="modal-head__copy">
             <h2 id="projects-editor-title">{t(isEditing ? "projects.editor.editTitle" : "projects.editor.newTitle")}</h2>
           </div>
         </div>
-        <ProjectEditorFields
-          idPrefix="personal-project"
-          name={name}
-          description={description}
-          color={effectiveColor}
-          usedColors={usedColors}
-          onNameChange={setName}
-          onDescriptionChange={setDescription}
-          onColorChange={(picked) => {
-            setColor(picked);
-            setColorTouched(true);
-          }}
-        />
+        <fieldset className="project-editor-modal__fields" disabled={isBusy}>
+          <ProjectEditorFields
+            idPrefix="personal-project"
+            name={name}
+            description={description}
+            color={effectiveColor}
+            usedColors={usedColors}
+            onNameChange={setName}
+            onDescriptionChange={setDescription}
+            onColorChange={(picked) => {
+              setColor(picked);
+              setColorTouched(true);
+            }}
+          />
+        </fieldset>
+        {saveError ? <p className="auth-modal__error" role="alert">{saveError}</p> : null}
         <div className="modal-foot">
           <button type="button" className="modal-btn modal-btn--ghost" onClick={requestClose} disabled={isBusy}>{t("common.cancel")}</button>
           <button type="button" className="modal-btn modal-btn--primary" onClick={() => void handleSave()} disabled={!canSave}>

@@ -1,8 +1,10 @@
 import { useState } from "react";
+import type { DeleteHistoryRangeResult } from "@drifty/domain";
 
 import { AiPrivacyDetailsModal } from "./AiPrivacyDetailsModal";
 import { AiDataSendingRows } from "./AiPrivacyReview";
 import { AppExclusionSettingsRows } from "./AppExclusionSettingsRows";
+import { HistoryDeletionNotice } from "./HistoryDeletionNotice";
 import { DeleteHistoryModal } from "./DeleteHistoryModal";
 import { DriftySharingRows } from "./DriftySharingRows";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
@@ -35,6 +37,7 @@ export function PrivacySettingsSection({
   todaySessionCount = 0,
 }: PrivacySettingsSectionProps = {}) {
   const { t } = useLocalization();
+  const [deletionResult, setDeletionResult] = useState<DeleteHistoryRangeResult | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [aiDetailsOpen, setAiDetailsOpen] = useState(false);
 
@@ -75,12 +78,13 @@ export function PrivacySettingsSection({
             <div className="desc">{t("settings.privacy.deleteDescription")}</div>
           </div>
           <div className="ctrl">
-            <button className="settings-btn danger" type="button" onClick={() => setDeleteModalOpen(true)}>
+            <button className="settings-btn danger" type="button" onClick={() => { setDeletionResult(null); setDeleteModalOpen(true); }}>
               {t("settings.privacy.deleteAction")}
             </button>
           </div>
         </div>
       </div>
+      {deletionResult ? <HistoryDeletionNotice result={deletionResult} onDismiss={() => setDeletionResult(null)} /> : null}
       <ModalPresence>
         {aiDetailsOpen ? <AiPrivacyDetailsModal onClose={() => setAiDetailsOpen(false)} /> : null}
       </ModalPresence>
@@ -88,6 +92,7 @@ export function PrivacySettingsSection({
         {deleteModalOpen ? (
         <DeleteHistoryModal
           onClose={() => setDeleteModalOpen(false)}
+          onCompleted={(result) => { setDeletionResult(result); setDeleteModalOpen(false); }}
           deviceSyncEnabled={deviceSyncEnabled}
           onDeleted={async () => {
             await onHistoryDeleted?.();

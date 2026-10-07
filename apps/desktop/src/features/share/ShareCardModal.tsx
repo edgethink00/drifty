@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import type { ShareCardData, ShareWeekCardData } from "./shareCard";
@@ -114,6 +114,14 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   const [selectedStoryId, setSelectedStoryId] = useState<UnifiedShareStoryId | null>(null);
   const [exportState, setExportState] = useState<ExportState>({ kind: "idle" });
   const [joiningLeaderboard, setJoiningLeaderboard] = useState(false);
+  const exportGenerationRef = useRef(0);
+  const exportTarget = `${card.kind === "day" ? card.data.day : card.data.startDay + ":" + card.data.endDay}:${defaultTheme}:${accountScope}:${comparisonWindowKey}`;
+  useEffect(() => {
+    exportGenerationRef.current += 1;
+    // Invalidate old feedback, but finish an in-flight export before enabling another.
+    setExportState((current) => current.kind === "working" ? current : { kind: "idle" });
+    return () => { exportGenerationRef.current += 1; };
+  }, [exportTarget]);
   const storyOptions = useMemo(() => storyOptionsForCard(card), [card]);
   const storyOption = storyOptions.find((option) => option.value === selectedStoryId) ?? storyOptions[0] ?? STORY_OPTIONS[0];
   const storyIndex = Math.max(0, storyOptions.findIndex((option) => option.value === storyOption.value));
@@ -164,7 +172,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   const caption = buildShareCardCaption();
 
   useEffect(() => {
-    if (exportState.kind === "idle" || exportState.kind === "working") return;
+    if (exportState.kind === "idle" || exportState.kind === "working" || exportState.kind === "error") return;
     const timeout = window.setTimeout(() => setExportState({ kind: "idle" }), 3_400);
     return () => window.clearTimeout(timeout);
   }, [exportState]);
@@ -179,55 +187,62 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   const handleJoinLeaderboard = () => {
     if (!onJoinLeaderboard || joiningLeaderboard) return;
     setJoiningLeaderboard(true);
+    const generation = exportGenerationRef.current;
     onJoinLeaderboard()
       .then(() => refreshLiveRanks())
-      .catch((error: unknown) => settle({
-        kind: "error",
-        message: error instanceof Error ? error.message : t("share.joinError"),
-      }))
+      .catch((error: unknown) => {
+        if (exportGenerationRef.current !== generation) return;
+        settle({ kind: "error", message: error instanceof Error ? error.message : t("share.joinError") }, generation);
+      })
       .finally(() => setJoiningLeaderboard(false));
   };
 
-  const settle = (state: ExportState) => {
-    setExportState(state);
+  const settle = (state: ExportState, generation: number) => {
+    setExportState((current) => {
+      if (exportGenerationRef.current === generation) return state;
+      return current.kind === "working" ? { kind: "idle" } : current;
+    });
   };
 
   const handleCopy = () => {
     if (actionsDisabled) return;
+    const generation = exportGenerationRef.current;
     setExportState({ kind: "working", action: "copy" });
     // Keep the ClipboardItem creation synchronous within the click gesture —
     // WebKit rejects clipboard writes that start after an intervening await.
     copyShareCardPng(svg, exportSize.width, exportSize.height)
-      .then(() => settle({ kind: "copied" }))
+      .then(() => settle({ kind: "copied" }, generation))
       .catch((error: unknown) => settle({
         kind: "error",
         message: error instanceof Error ? error.message : t("share.copyError"),
-      }));
+      }, generation));
   };
 
   const handleSave = () => {
     if (actionsDisabled) return;
+    const generation = exportGenerationRef.current;
     setExportState({ kind: "working", action: "save" });
     saveShareCardWithDialog(svg, exportSize.width, exportSize.height, `${fileName}-${storyOption.value}.png`)
-      .then((result) => settle(result.cancelled ? { kind: "idle" } : { kind: "saved" }))
+      .then((result) => settle(result.cancelled ? { kind: "idle" } : { kind: "saved" }, generation))
       .catch((error: unknown) => settle({
         kind: "error",
         message: error instanceof Error ? error.message : t("share.saveError"),
-      }));
+      }, generation));
   };
 
   const handleSocialShare = (destination: ShareCardDestination) => {
     if (actionsDisabled) return;
+    const generation = exportGenerationRef.current;
     setExportState({ kind: "working", action: destination });
     // The product handoff is intentional: prepare the PNG first, then reveal the
     // composer with its ready-to-post caption and a clear paste instruction.
     copyShareCardPng(svg, exportSize.width, exportSize.height)
       .then(() => openShareComposer(buildShareComposerUrl(destination, caption, hostPlatform)))
-      .then(() => settle({ kind: "shared", destination }))
+      .then(() => settle({ kind: "shared", destination }, generation))
       .catch((error: unknown) => settle({
         kind: "error",
         message: error instanceof Error ? error.message : t("share.postError"),
-      }));
+      }, generation));
   };
 
   return (
@@ -356,6 +371,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
                   </button>
                 </div>
               </div>
+              {exportState.kind === "error" ? <div className="share-card-rank-gate share-card-export-error" role="alert">{exportState.message}</div> : null}
             </div>
           </div>
         </section>
@@ -367,7 +383,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
 
 function ShareCardToast({ state, hostPlatform }: { readonly state: ExportState; readonly hostPlatform: HostPlatform }) {
   const { t } = useLocalization();
-  if (state.kind === "idle" || state.kind === "working") return null;
+  if (state.kind === "idle" || state.kind === "working" || state.kind === "error") return null;
 
   // Only macOS has the save panel and ⌘; other desktop hosts save to Downloads and paste with Ctrl+V.
   const windows = hostPlatform !== "macos";
@@ -375,12 +391,10 @@ function ShareCardToast({ state, hostPlatform }: { readonly state: ExportState; 
     ? { title: t("share.toast.copied"), detail: t(windows ? "share.toast.pasteWindows" : "share.toast.paste"), tone: "success" }
     : state.kind === "saved"
       ? { title: t("share.toast.saved"), detail: t(windows ? "share.toast.savedDetailWindows" : "share.toast.savedDetail"), tone: "success" }
-      : state.kind === "shared"
-        ? { title: t("share.toast.copied"), detail: t("share.toast.composer", { destination: state.destination === "linkedin" ? "LinkedIn" : "X" }), tone: "success" }
-        : { title: t("share.toast.error"), detail: state.message, tone: "error" };
+      : { title: t("share.toast.copied"), detail: t("share.toast.composer", { destination: state.destination === "linkedin" ? "LinkedIn" : "X" }), tone: "success" };
 
   return (
-    <div className="share-card-toast" data-tone={copy.tone} role={copy.tone === "error" ? "alert" : "status"}>
+    <div className="share-card-toast" data-tone={copy.tone} role="status">
       <strong>{copy.title}</strong>
       <span>{copy.detail}</span>
     </div>

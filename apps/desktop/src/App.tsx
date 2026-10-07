@@ -1,9 +1,12 @@
+import type { DeleteHistoryRangeResult } from "@drifty/domain";
 import { setShareCardRankAccountScope } from "./features/share/shareCardRankCache";
 import { canOfferPromoCode, canStartCloudTrial } from "./features/billing/billingEligibility";
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
 import { SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ModalPresence } from "./components/ModalPresence";
+import { deleteHistorySelection } from "./features/history/historyDeletion";
+import type { ProjectSaveResult } from "./features/projects/ProjectEditorModal";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeveloperDiagnosticsSettings, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
@@ -302,6 +305,7 @@ import { buildSyncStateAfterCloudPurge } from "./features/device-sync/deviceSync
 import { prepareDeviceSyncAccountScope, suspendDeviceSyncAccountScope } from "./features/device-sync/deviceSyncAccountScope";
 import { DeviceSyncPurgeConfirmation } from "./features/device-sync/DeviceSyncPurgeConfirmation";
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
+import { HistoryDeletionNotice } from "./features/settings/HistoryDeletionNotice";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
@@ -8596,10 +8600,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // surface's boundary instead of adding a separate approval step. Missing model
   // setup stays explicit: it becomes a visible state on the new project rather
   // than a silent no-op.
-  const handleSaveProject = useCallback(async (input: ProjectInput): Promise<boolean> => {
+  const handleSaveProject = useCallback(async (input: ProjectInput): Promise<ProjectSaveResult> => {
     const isNewActiveProject = !input.id && (input.status ?? "active") === "active";
-    const saved = await projectClassification.saveProject(input);
-    if (!saved) return false;
+    let saveError: string | null = null;
+    const saved = await projectClassification.saveProject(input, (message) => { saveError = message; });
+    if (!saved) return { saved: false, error: saveError ?? localization.t("projects.editor.saveError") };
     // Archiving is an edit, not a creation: it must also release any queued
     // matching for that project so an archived project cannot pull a provider
     // pass along behind it.
@@ -8615,7 +8620,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     scheduleProjectAutoAnalysis(saved.id);
     return true;
-  }, [dropQueuedProjectAutoAnalysis, projectAnalysisConnected, projectClassification, scheduleProjectAutoAnalysis]);
+  }, [dropQueuedProjectAutoAnalysis, localization, projectAnalysisConnected, projectClassification, scheduleProjectAutoAnalysis]);
   // Keyed on the last pass that actually completed cleanly, not on the newest
   // recorded row: a partially failed pass still records a row (its tokens were
   // spent) but leaves the window stale, and locking the retry behind it would
@@ -8859,25 +8864,34 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
   }, [focusCard.refresh, isPolicySignedIn, clearLocalActivityCaches, isDashboardDemoReplayActive, isPreviewSurface, refresh, shouldBlockLocalTrackerAccess]);
 
+  const refreshAfterHistoryDeletion = useCallback(async () => {
+    if (!await refresh(selectedDayRef.current)) {
+      throw new Error(localization.t("history.refreshError"));
+    }
+    if (isPolicySignedIn) await focusCard.refresh();
+  }, [focusCard.refresh, isPolicySignedIn, localization, refresh]);
+
   const handleDeleteHistorySegments = useCallback(async (ids: readonly string[]) => {
     if (ids.length === 0 || historyDeleting) return;
 
     setHistoryDeleting(true);
     setError(null);
     try {
-      await trackerClient.deleteActivitySegments(ids);
-      clearLocalActivityCaches();
-      const deletedIds = new Set(ids);
-      setHistorySearchSegments((currentSegments) => currentSegments.filter((segment) => !deletedIds.has(segment.id)));
-      await refresh(selectedDayRef.current);
-      if (isPolicySignedIn) await focusCard.refresh();
-    } catch (e) {
-      setError(toErrorMessage(e));
+      return await deleteHistorySelection(ids, {
+        deleteRecords: (recordIds) => trackerClient.deleteActivitySegments(recordIds),
+        onDeleted: (recordIds) => {
+          clearLocalActivityCaches();
+          const deletedIds = new Set(recordIds);
+          setHistorySearchSegments((currentSegments) => currentSegments.filter((segment) => !deletedIds.has(segment.id)));
+        },
+        refresh: refreshAfterHistoryDeletion,
+      });
     } finally {
       setHistoryDeleting(false);
     }
-  }, [focusCard.refresh, isPolicySignedIn, clearLocalActivityCaches, historyDeleting, refresh]);
+  }, [clearLocalActivityCaches, historyDeleting, refreshAfterHistoryDeletion]);
 
+  const [historyDeletionResult, setHistoryDeletionResult] = useState<DeleteHistoryRangeResult | null>(null);
   const [deleteHistoryModalOpen, setDeleteHistoryModalOpen] = useState(false);
 
   const handleHistoryRangeDeleted = useCallback(async () => {
@@ -8888,11 +8902,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     } catch {
       // Metrics refresh is best-effort after a bulk delete; the views below still reload.
     }
-    await refresh(selectedDayRef.current);
-    if (isPolicySignedIn) await focusCard.refresh();
+    await refreshAfterHistoryDeletion();
     await syncLeaderboardPublication("history_deleted", { bypassSlotGate: true });
     await refreshLeaderboardData();
-  }, [focusCard.refresh, isPolicySignedIn, clearLocalActivityCaches, refresh, refreshLeaderboardData, syncLeaderboardPublication]);
+  }, [clearLocalActivityCaches, refreshAfterHistoryDeletion, refreshLeaderboardData, syncLeaderboardPublication]);
 
   useEffect(() => {
     selectedDayRef.current = selectedDay;
@@ -10735,6 +10748,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
         {activeTab === "history" ? (
           <div className="page page--history">
+            {historyDeletionResult ? <HistoryDeletionNotice result={historyDeletionResult} onDismiss={() => setHistoryDeletionResult(null)} /> : null}
             {isDeferredTabBodyReady ? (
               <LazyHistoryView
                 appIcons={appIcons}
@@ -10749,7 +10763,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 segments={displayedHistorySegments}
                 startOfDayMinutes={startOfDayMinutes}
                 onDeleteSelected={handleDeleteHistorySegments}
-                onOpenDeleteHistory={() => setDeleteHistoryModalOpen(true)}
+                onRefreshAfterDelete={refreshAfterHistoryDeletion}
+                onOpenDeleteHistory={() => { setHistoryDeletionResult(null); setDeleteHistoryModalOpen(true); }}
                 onLoadMore={displayedHistoryLoadMore}
                 onSearchQueryChange={setHistorySearchQuery}
               />
@@ -11366,7 +11381,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           <LazyFeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} />
         </Suspense>
       ) : null}</ModalPresence>
-      <ModalPresence>{deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} /> : null}</ModalPresence>
+      <ModalPresence>{deleteHistoryModalOpen ? (
+        <DeleteHistoryModal
+          onClose={() => setDeleteHistoryModalOpen(false)}
+          onDeleted={handleHistoryRangeDeleted}
+          onCompleted={(result) => { setHistoryDeletionResult(result); setDeleteHistoryModalOpen(false); }}
+          deviceSyncEnabled={deviceSyncActive}
+        />
+      ) : null}</ModalPresence>
 
       <ModalPresence>{deviceSyncPurgeConfirmOpen ? (
         <DeviceSyncPurgeConfirmation

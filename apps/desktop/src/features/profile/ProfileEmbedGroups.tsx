@@ -155,6 +155,9 @@ export function SnippetCopyRow({
   rowClassName,
   snippet,
   onCopy,
+  busy = false,
+  disabled = false,
+  busyLabel = "Copying…",
 }: {
   readonly buttonClassName: string;
   readonly cardLocked: boolean;
@@ -163,6 +166,9 @@ export function SnippetCopyRow({
   readonly rowClassName: string;
   readonly snippet: string;
   readonly onCopy: () => void;
+  readonly busy?: boolean;
+  readonly disabled?: boolean;
+  readonly busyLabel?: string;
 }) {
   return (
     <div className={rowClassName}>
@@ -176,11 +182,12 @@ export function SnippetCopyRow({
       <button
         type="button"
         className={`${buttonClassName} profile-copy-row__copy`}
-        disabled={cardLocked}
+        disabled={cardLocked || disabled}
+        aria-busy={busy}
         title={cardLocked ? "Turn on your public focus card first" : undefined}
         onClick={onCopy}
       >
-        {copied ? "Copied" : "Copy"}
+        {busy ? busyLabel : copied ? "Copied" : "Copy"}
       </button>
     </div>
   );

@@ -145,6 +145,18 @@
   color: var(--text);
 }
 
+.excluded-apps-error {
+  color: var(--danger, #c44444);
+  font-size: var(--type-setting-desc-size);
+  margin: 0.35rem 0 0;
+}
+
+.excluded-apps-item__pick:disabled,
+.excluded-apps-item__history:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .excluded-apps-item__history:focus-visible,
 .excluded-apps-item__pick:focus-visible,
 .content--settings .settings-btn.excluded-apps-btn:focus-visible {

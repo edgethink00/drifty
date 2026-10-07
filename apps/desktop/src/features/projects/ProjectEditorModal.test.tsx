@@ -16,7 +16,34 @@ describe("ProjectEditorModal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect((await within(dialog).findByRole("alert")).textContent).toContain("Could not save the project");
     expect(onClose).not.toHaveBeenCalled();
+    expect((within(dialog).getByLabelText("Name") as HTMLInputElement).value).toBe("Launch review");
+  });
+
+  it("shows the request's error inside the editor and clears it on a successful retry", async () => {
+    const onSave = vi.fn()
+      .mockResolvedValueOnce({ saved: false, error: "Project storage unavailable" })
+      .mockResolvedValueOnce(true);
+    const onClose = vi.fn();
+    render(<ProjectEditorModal project={null} projects={[]} onSave={onSave} onClose={onClose} />);
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Launch review" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("Project storage unavailable");
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ name: "Launch review" }));
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+  });
+
+  it("handles a rejected save without losing the draft", async () => {
+    render(<ProjectEditorModal project={null} projects={[]} onSave={async () => { throw new Error("Storage unavailable"); }} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Launch review" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("Storage unavailable");
     expect((within(dialog).getByLabelText("Name") as HTMLInputElement).value).toBe("Launch review");
   });
 
@@ -44,6 +71,8 @@ describe("ProjectEditorModal", () => {
 
     const savingButton = await screen.findByRole("button", { name: "Saving…" });
     expect(savingButton).toHaveProperty("disabled", true);
+    expect(within(dialog).getByLabelText("Name").closest("fieldset")).toHaveProperty("disabled", true);
+    expect(within(dialog).getByRole("button", { name: "Close project editor" })).toHaveProperty("disabled", true);
     fireEvent.click(savingButton);
     expect(onSave).toHaveBeenCalledTimes(1);
 

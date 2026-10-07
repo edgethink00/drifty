@@ -31,6 +31,14 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+.history-view--refresh-failed {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.history-view--empty.history-view--refresh-failed {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .history-view .app-btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -416,4 +424,20 @@
     outline: 2px solid Highlight;
     outline-offset: 2px;
   }
+}
+.history-refresh-result {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.history-refresh-result p {
+  flex: 1;
+  margin: 0;
+  min-width: 12rem;
+  color: var(--text-soft);
 }

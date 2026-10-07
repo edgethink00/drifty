@@ -4,7 +4,7 @@
 //
 // Everything here is wired to real presentation capabilities only: theme (light/dark),
 // card range (7/30), and the four working formats (badge/card/chart/data).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatFocusDuration, renderFocusBadgeSvg, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
 import { buildEmbedSnippets } from "../share/embedSnippets";
 import type { BadgeThemeOption, CardRangeOption } from "../share/embedSnippets";
@@ -15,6 +15,7 @@ import { buildEmbedGroups, SnippetCopyRow, summarizeDailyProductivity } from "./
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useCopyFeedback } from "../../lib/useCopyFeedback";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export type ProfileEmbedFormat = "badge" | "card" | "chart" | "data";
 
@@ -35,7 +36,6 @@ export type ProfileEmbedsModalProps = {
   readonly isProfilePublic: boolean;
   readonly publicId: string | null;
   readonly onClose: () => void;
-  readonly onCopyProfileLink: () => void;
   readonly onEditProfile: () => void;
 };
 
@@ -49,13 +49,24 @@ export function ProfileEmbedsModal({
   isProfilePublic,
   publicId,
   onClose,
-  onCopyProfileLink,
   onEditProfile,
 }: ProfileEmbedsModalProps) {
+  const { t } = useLocalization();
   const [activeFormat, setActiveFormat] = useState<ProfileEmbedFormat>(initialFormat);
   const [embedTheme, setEmbedTheme] = useState<BadgeThemeOption>("light");
   const [cardRange, setCardRange] = useState<CardRangeOption>(7);
   const { copiedKey, showCopied, clearCopied } = useCopyFeedback<string>();
+  const [copyingKey, setCopyingKey] = useState<string | null>(null);
+  const [copyErrorKey, setCopyErrorKey] = useState<string | null>(null);
+  const copyPendingRef = useRef(false);
+  const copyGenerationRef = useRef(0);
+
+  useEffect(() => {
+    copyGenerationRef.current += 1;
+    clearCopied();
+    setCopyErrorKey(null);
+    return () => { copyGenerationRef.current += 1; };
+  }, [activeFormat, embedTheme, cardRange, publicId, isProfilePublic, card.enabled, clearCopied]);
 
   useModalDismiss(onClose);
 
@@ -97,13 +108,20 @@ export function ProfileEmbedsModal({
   );
 
   const copy = async (key: string, text: string) => {
+    if (copyPendingRef.current) return;
+    copyPendingRef.current = true;
+    const generation = copyGenerationRef.current;
+    setCopyingKey(key);
+    setCopyErrorKey(null);
+    clearCopied();
     try {
       await copyTextToClipboard(text);
-      showCopied(key);
+      if (copyGenerationRef.current === generation) showCopied(key);
     } catch {
-      // Clipboard failures are non-fatal and handled locally so this
-      // fire-and-forget path does not emit a noisy global rejection.
-      clearCopied();
+      if (copyGenerationRef.current === generation) setCopyErrorKey(key);
+    } finally {
+      copyPendingRef.current = false;
+      setCopyingKey(null);
     }
   };
 
@@ -166,16 +184,19 @@ export function ProfileEmbedsModal({
                 <div className="embeds-topbar">
                   <span className="label-mono" style={{ flex: "0 0 auto" }}>Public page</span>
                   {isProfilePublic && publicProfileUrl ? (
-                    <div className={copyRowClassName} style={{ flex: 1 }}>
-                      <input
-                        className={copyInputClassName}
-                        readOnly
-                        value={publicProfileUrl}
-                        onFocus={(event) => event.currentTarget.select()}
-                      />
-                      <button type="button" className={copyButtonClassName} aria-label="Copy profile link" onClick={onCopyProfileLink}>
-                        Copy
-                      </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className={copyRowClassName}>
+                        <input
+                          className={copyInputClassName}
+                          readOnly
+                          value={publicProfileUrl}
+                          onFocus={(event) => event.currentTarget.select()}
+                        />
+                        <button type="button" className={copyButtonClassName} disabled={copyingKey !== null} aria-busy={copyingKey === "profile"} aria-label="Copy profile link" onClick={() => void copy("profile", publicProfileUrl)}>
+                          {copyingKey === "profile" ? t("share.copying") : copiedKey === "profile" ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                      {copyErrorKey === "profile" ? <p className="profile-note profile-note--error" role="alert">{t("profile.embeds.copyError")}</p> : null}
                     </div>
                   ) : (
                     <span className="embeds-rail__hint">Off — turn on Public profile to restore this link.</span>
@@ -201,11 +222,15 @@ export function ProfileEmbedsModal({
                           buttonClassName={copyButtonClassName}
                           cardLocked={cardLocked}
                           copied={copiedKey === variant.key}
+                          busy={copyingKey === variant.key}
+                          disabled={copyingKey !== null}
+                          busyLabel={t("share.copying")}
                           inputClassName={copyInputClassName}
                           rowClassName={copyRowClassName}
                           snippet={variant.snippet}
                           onCopy={() => void copy(variant.key, variant.snippet)}
                         />
+                        {copyErrorKey === variant.key ? <p className="profile-note profile-note--error" role="alert">{t("profile.embeds.copyError")}</p> : null}
                       </div>
                     ))}
                   </div>

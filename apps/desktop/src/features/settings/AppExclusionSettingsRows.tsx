@@ -55,6 +55,51 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   const [recentApps, setRecentApps] = useState<RecentAppItem[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState(false);
+  const [rowPending, setRowPending] = useState<Record<string, "remove" | "delete" | "count">>({});
+  const [rowErrors, setRowErrors] = useState<Record<string, "remove" | "delete" | "count">>({});
+  const pendingRef = useRef(new Set<string>());
+  const addingRef = useRef(false);
+  const countVersionsRef = useRef(new Map<string, number>());
+
+  function clearRowError(id: string) {
+    setRowErrors((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function beginRowAction(id: string, action: "remove" | "delete" | "count") {
+    if (pendingRef.current.has(id)) return false;
+    pendingRef.current.add(id);
+    if (action === "count") countVersionsRef.current.set(id, (countVersionsRef.current.get(id) ?? 0) + 1);
+    setRowPending((current) => ({ ...current, [id]: action }));
+    clearRowError(id);
+    return true;
+  }
+
+  function finishRowAction(id: string) {
+    pendingRef.current.delete(id);
+    setRowPending((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
+
+  async function refreshHistoryCount(app: ExcludedAppRule) {
+    if (!beginRowAction(app.id, "count")) return;
+    try {
+      const { count } = await trackerClient.getExcludedAppHistoryCount({ name: app.name, bundleId: app.bundleId });
+      setHistoryCounts((current) => ({ ...current, [app.id]: count }));
+    } catch {
+      setRowErrors((current) => ({ ...current, [app.id]: "count" }));
+    } finally {
+      finishRowAction(app.id);
+    }
+  }
 
   async function loadApps() {
     try {
@@ -70,11 +115,16 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
         }
       }
       for (const app of apps) {
+        const version = countVersionsRef.current.get(app.id) ?? 0;
         trackerClient.getExcludedAppHistoryCount({ name: app.name, bundleId: app.bundleId }).then(({ count }) => {
-          if (count > 0) {
+          if ((countVersionsRef.current.get(app.id) ?? 0) === version) {
             setHistoryCounts((prev) => ({ ...prev, [app.id]: count }));
           }
-        }).catch(() => {});
+        }).catch(() => {
+          if ((countVersionsRef.current.get(app.id) ?? 0) === version) {
+            setRowErrors((current) => ({ ...current, [app.id]: "count" }));
+          }
+        });
       }
     } catch {
       // Keep the empty list if the tracker is unavailable.
@@ -103,6 +153,7 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   }, [excludedApps, recentApps]);
 
   async function handleOpenAddPanel() {
+    setAddError(false);
     setSearch("");
     setAddPanelOpen(true);
     try {
@@ -125,7 +176,10 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
 
   async function handleAddApp(name: string, bundleId?: string | null) {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || addingRef.current) return;
+    addingRef.current = true;
+    setAdding(true);
+    setAddError(false);
     const id = bundleId || trimmed;
     const newRule: ExcludedAppRule = {
       id,
@@ -137,35 +191,44 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
       await trackerClient.saveExcludedApp(newRule);
       setExcludedApps((prev) => [newRule, ...prev.filter((app) => app.id !== id && !sameApp(app, newRule))]);
       handleCloseAddPanel();
-      const { count } = await trackerClient.getExcludedAppHistoryCount({ name: trimmed, bundleId });
-      if (count > 0) {
-        setHistoryCounts((prev) => ({ ...prev, [id]: count }));
-      }
-    } catch (error) {
-      console.error("Failed to exclude app", error);
+      // The rule is already saved. A count-query failure retries only the query.
+      void refreshHistoryCount(newRule);
+    } catch {
+      setAddError(true);
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
     }
   }
 
   async function handleRemoveApp(id: string) {
+    if (!beginRowAction(id, "remove")) return;
     try {
       await trackerClient.deleteExcludedApp(id);
+      countVersionsRef.current.set(id, (countVersionsRef.current.get(id) ?? 0) + 1);
       setExcludedApps((prev) => prev.filter((app) => app.id !== id));
       setHistoryCounts((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
       });
-    } catch (error) {
-      console.error("Failed to unblock app", error);
+    } catch {
+      setRowErrors((current) => ({ ...current, [id]: "remove" }));
+    } finally {
+      finishRowAction(id);
     }
   }
 
   async function handleDeleteHistory(app: ExcludedAppRule) {
+    if (!beginRowAction(app.id, "delete")) return;
     try {
       await trackerClient.deleteExcludedAppHistory({ name: app.name, bundleId: app.bundleId });
+      countVersionsRef.current.set(app.id, (countVersionsRef.current.get(app.id) ?? 0) + 1);
       setHistoryCounts((prev) => ({ ...prev, [app.id]: 0 }));
-    } catch (error) {
-      console.error("Failed to delete excluded app history", error);
+    } catch {
+      setRowErrors((current) => ({ ...current, [app.id]: "delete" }));
+    } finally {
+      finishRowAction(app.id);
     }
   }
 
@@ -212,7 +275,7 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   function handleEscape(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape" && addPanelOpen) {
       event.stopPropagation();
-      handleCloseAddPanel();
+      if (!adding) handleCloseAddPanel();
     }
   }
 
@@ -229,7 +292,7 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
         {!loading ? (
           <div className="ctrl">
             {addPanelOpen ? (
-              <button type="button" className="settings-btn" onClick={handleCloseAddPanel}>
+              <button type="button" className="settings-btn" disabled={adding} onClick={handleCloseAddPanel}>
                 {t("settings.privacy.excludedAppsCancel")}
               </button>
             ) : (
@@ -257,12 +320,13 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
               type="search"
               className="settings-input excluded-apps-find__search"
               value={search}
+              disabled={adding}
               autoComplete="off"
               spellCheck={false}
               placeholder={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
               aria-label={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
               aria-controls={pickerId}
-              onChange={(event) => setSearch(event.currentTarget.value)}
+              onChange={(event) => { setSearch(event.currentTarget.value); setAddError(false); }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
@@ -271,11 +335,13 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
               }}
             />
             {canAddTyped ? (
-              <button type="button" className="settings-btn settings-btn--primary excluded-apps-btn" onClick={submitSearch}>
+              <button type="button" disabled={adding} aria-busy={adding} className="settings-btn settings-btn--primary excluded-apps-btn" onClick={submitSearch}>
                 {t("settings.privacy.excludedAppsCustomSubmit")}
               </button>
             ) : null}
           </div>
+          {adding ? <span className="desc" role="status">{t("settings.privacy.excludedAppsAdding")}</span> : null}
+          {addError ? <p className="excluded-apps-error" role="alert">{t("settings.privacy.excludedAppsAddError")}</p> : null}
           {addPanelOpen ? (
             <div id={pickerId} role="region" aria-label={t("settings.privacy.excludedAppsPickerAria")}>
               {filteredRecent.length > 0 || canAddTyped ? (
@@ -285,6 +351,8 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
                       <button
                         type="button"
                         className="excluded-apps-item__pick"
+                        disabled={adding}
+                        aria-busy={adding}
                         onClick={() => void handleAddApp(item.name, item.bundleId)}
                       >
                         <span className="excluded-apps-item__identity">
@@ -296,7 +364,7 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
                   ))}
                   {canAddTyped ? (
                     <li className="excluded-apps-item">
-                      <button type="button" className="excluded-apps-item__pick" onClick={() => void handleAddApp(query)}>
+                      <button type="button" disabled={adding} aria-busy={adding} className="excluded-apps-item__pick" onClick={() => void handleAddApp(query)}>
                         <span className="excluded-apps-item__identity">
                           <span className="excluded-apps-item__add-glyph" aria-hidden="true">
                             <PlusIcon />
@@ -327,6 +395,11 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
               removeLabel={t("settings.privacy.excludedAppsRemove")}
               removeNamed={t("settings.privacy.excludedAppsRemoveNamed", { name: app.name })}
               deletePastCount={t("settings.privacy.excludedAppsDeletePastCount", { count: historyCounts[app.id] ?? 0 })}
+              pending={rowPending[app.id]}
+              pendingLabel={rowPending[app.id] ? t(`settings.privacy.excludedAppsPending.${rowPending[app.id]}`) : ""}
+              error={rowErrors[app.id] ? t(`settings.privacy.excludedAppsError.${rowErrors[app.id]}`) : null}
+              retryCountLabel={rowErrors[app.id] === "count" ? t("common.retry") : null}
+              onRetryCount={() => void refreshHistoryCount(app)}
               onRemove={() => void handleRemoveApp(app.id)}
               onDeleteHistory={() => void handleDeleteHistory(app)}
             />
@@ -353,6 +426,11 @@ function ExcludedAppRow({
   deletePastCount,
   onRemove,
   onDeleteHistory,
+  pending,
+  pendingLabel,
+  error,
+  retryCountLabel,
+  onRetryCount,
 }: {
   readonly app: ExcludedAppRule;
   readonly count: number;
@@ -362,20 +440,30 @@ function ExcludedAppRow({
   readonly deletePastCount: string;
   readonly onRemove: () => void;
   readonly onDeleteHistory: () => void;
+  readonly pending?: "remove" | "delete" | "count";
+  readonly pendingLabel: string;
+  readonly error: string | null;
+  readonly retryCountLabel: string | null;
+  readonly onRetryCount: () => void;
 }) {
   return (
     <div className="settings-row excluded-apps-row">
-      <div className="excluded-apps-item__identity">
-        <AppGlyph appName={app.name} iconSrc={iconSrc} size="sm" />
-        <span className="excluded-apps-item__name">{app.name}</span>
+      <div>
+        <div className="excluded-apps-item__identity">
+          <AppGlyph appName={app.name} iconSrc={iconSrc} size="sm" />
+          <span className="excluded-apps-item__name">{app.name}</span>
+        </div>
+        {error ? <p className="excluded-apps-error" role="alert">{error}</p> : null}
       </div>
       <div className="ctrl excluded-apps-item__actions">
+        {pending ? <span className="desc" role="status">{pendingLabel}</span> : null}
+        {retryCountLabel ? <button type="button" className="settings-btn excluded-apps-btn" disabled={Boolean(pending)} onClick={onRetryCount}>{retryCountLabel}</button> : null}
         {count > 0 ? (
-          <button type="button" className="excluded-apps-item__history" onClick={onDeleteHistory}>
+          <button type="button" disabled={Boolean(pending)} aria-busy={pending === "delete"} className="excluded-apps-item__history" onClick={onDeleteHistory}>
             {deletePastCount}
           </button>
         ) : null}
-        <button type="button" className="settings-btn excluded-apps-btn" onClick={onRemove} aria-label={removeNamed}>
+        <button type="button" disabled={Boolean(pending)} aria-busy={pending === "remove"} className="settings-btn excluded-apps-btn" onClick={onRemove} aria-label={removeNamed}>
           {removeLabel}
         </button>
       </div>
