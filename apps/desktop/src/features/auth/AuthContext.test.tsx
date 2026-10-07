@@ -1932,6 +1932,54 @@ describe("AuthContext", () => {
     });
   });
 
+  it("keeps empty native callback polls off disk while preserving real callbacks and errors", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const session = createSession();
+    getSession.mockResolvedValue({ data: { session } });
+    exchangeCodeForSession.mockResolvedValue({ data: { session }, error: null });
+    let pendingUrls: string[] = [];
+    let pollError: Error | null = null;
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") {
+        if (pollError) throw pollError;
+        const urls = pendingUrls;
+        pendingUrls = [];
+        return urls;
+      }
+      return undefined;
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { unmount } = render(<AuthProvider><CaptureAuth onReady={() => undefined} /></AuthProvider>);
+    await waitFor(() => expect(onAuthStateChange).toHaveBeenCalled());
+    const storedBeforePolls = window.localStorage.getItem("drifty.auth.diagnostics.v1");
+    const write = vi.spyOn(Storage.prototype, "setItem");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_take_pending_deep_links").length).toBeGreaterThanOrEqual(61);
+      expect(window.localStorage.getItem("drifty.auth.diagnostics.v1")).toBe(storedBeforePolls);
+      expect(write.mock.calls.filter(([key]) => key === "drifty.auth.diagnostics.v1")).toHaveLength(0);
+
+      pendingUrls = ["drifty://auth/callback?code=later-code"];
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(exchangeCodeForSession).toHaveBeenCalledWith("later-code");
+      expect(readAuthDiagnostics()).toEqual(expect.arrayContaining([
+        expect.objectContaining({ event: "auth.pending_deep_links.loaded", payload: { pendingUrlCount: 1 } }),
+      ]));
+
+      pollError = new Error("native callback queue unavailable");
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(readAuthDiagnostics()).toEqual(expect.arrayContaining([
+        expect.objectContaining({ event: "auth.pending_deep_links.error" }),
+      ]));
+    } finally {
+      unmount();
+      write.mockRestore();
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("dispatches pending Tauri team invite URLs cached before the web listener was ready", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const teamInviteListener = vi.fn();
