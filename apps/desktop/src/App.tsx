@@ -15,6 +15,7 @@ import {
   buildFlowBlocksForIntervals,
   filterSegmentsByDevice,
   isFailedForegroundCaptureSegment,
+  isYouTubeShortsSegment,
   buildRollingFocusSeconds,
   buildCategoryDurations,
   buildProductivityDurations,
@@ -6407,11 +6408,24 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         return "system-transient-active";
       }
 
+      // A normal poll can track the next Short while the cat approaches.
+      // Refresh that Shorts episode without carrying an earlier video's
+      // delivery verdict into a different ordinary YouTube video.
+      const currentIsShorts = freshSnapshot !== null && isYouTubeShortsSegment({
+        ...latestDrift.segment,
+        siteDomain: freshSnapshot.siteDomain,
+        siteUrl: freshSnapshot.siteUrl,
+        youtubeIsShorts: freshSnapshot.youtubeIsShorts ?? null,
+      });
+      const freshSegments = currentIsShorts ? mergeDriftAlarmSegments(
+        driftAlarmBaseSegmentsRef.current,
+        liveDriftAlarmSegmentsRef.current,
+      ) : driftAlarmSegments;
       const freshCandidate = resolveFreshDriftAlarmCandidate({
         candidate: latestDrift,
-        segments: driftAlarmSegments,
+        segments: freshSegments,
         currentSnapshot: freshSnapshot,
-        classificationOptions: driftAlarmClassificationOptions,
+        classificationOptions: { ...driftAlarmClassificationOptions, fallbackCandidates: freshSegments },
         minimumDurationSeconds: driftAlertDelaySeconds,
       });
       if (browserReentry && !reminderDelivery) {

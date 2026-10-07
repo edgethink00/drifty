@@ -3,6 +3,7 @@ import type { ActivitySegment, CurrentActivitySnapshot } from "@drifty/domain";
 
 import { buildDriftAlarmCandidates } from "./driftAlarmData";
 import { getUnconfirmedDriftAlarmReason, resolveFreshDriftAlarmCandidate } from "./driftAlarmFreshCandidate";
+import { resolveLiveDriftAlarmAiCandidate } from "./liveDriftAlarmAiCandidate";
 
 function reelSegment(
   id: string,
@@ -83,6 +84,74 @@ describe("resolveFreshDriftAlarmCandidate", () => {
         siteUrl: "https://www.instagram.com/reel/CCC/",
       },
     });
+  });
+
+  it.each([
+    ["instagram.com", "https://www.instagram.com/reel/AAA/", "https://www.instagram.com/direct/inbox/"],
+    ["instagram.com", "https://www.instagram.com/reel/AAA/", "https://www.instagram.com/referenceprofile/"],
+    ["tiktok.com", "https://www.tiktok.com/@creator/video/123", "https://www.tiktok.com/messages"],
+    ["tiktok.com", "https://www.tiktok.com/@creator/video/123", "https://www.tiktok.com/@referenceprofile"],
+  ].flatMap(([siteDomain, siteUrl, nextUrl]) => (["manual", "llm"] as const).map(source => ({ siteDomain, siteUrl, nextUrl, source }))))(
+    "does not carry a captured $source verdict into a different $siteDomain surface: $nextUrl", ({ siteDomain, siteUrl, nextUrl, source }) => {
+      const captured: ActivitySegment = {
+        ...reelSegment("classified-consumption", "2026-06-11T09:00:00.000Z", "2026-06-11T09:01:00.000Z", 60, "AAA"),
+        siteDomain, siteUrl,
+        classification: { category: "social_media", productivity: "drift", source, confidence: 0.95, aiResult: source === "llm" },
+      };
+      const current: CurrentActivitySnapshot = { ...reelSnapshot(captured.endedAt, "AAA"), siteDomain, siteUrl };
+      const candidate = buildDriftAlarmCandidates({ segments: [captured], currentSnapshot: current,
+        classificationOptions: {}, minimumDurationSeconds: 60 })[0]!;
+      expect(candidate).toBeDefined();
+      // A fresh address may arrive before the ordinary timeline poll. One
+      // captured video is insufficient for the four-segment sustained rule.
+      const newSurfaceInput = { segments: [captured],
+        currentSnapshot: { ...current, observedAt: "2026-06-11T09:01:01.000Z", siteUrl: nextUrl },
+        classificationOptions: {}, minimumDurationSeconds: 60 };
+      expect(resolveFreshDriftAlarmCandidate({ ...newSurfaceInput, candidate })).toBeNull();
+      // The close check must not create a live AI request for a new address
+      // under the previous video's persisted record ID.
+      expect(resolveLiveDriftAlarmAiCandidate(newSurfaceInput)).toBeNull();
+    },
+  );
+
+  it.each(["instagram.com", "tiktok.com"])("keeps live user rules authoritative on a new %s address", siteDomain => {
+    const siteUrl = siteDomain === "instagram.com" ? "https://www.instagram.com/reel/AAA/" : "https://www.tiktok.com/@creator/video/123";
+    const nextUrl = siteDomain === "instagram.com" ? "https://www.instagram.com/direct/inbox/" : "https://www.tiktok.com/messages";
+    const captured = { ...reelSegment("ruled-video", "2026-06-11T09:00:00.000Z", "2026-06-11T09:01:00.000Z", 60, "AAA"), siteDomain, siteUrl };
+    const current = { ...reelSnapshot(captured.endedAt, "AAA"), siteDomain, siteUrl };
+    const classificationOptions = { rules: [{ id: `site:${siteDomain}`, targetKind: "site" as const, targetValue: siteDomain,
+      category: "social_media" as const, productivity: "drift" as const, enabled: true, confidence: 1 }] };
+    const candidate = buildDriftAlarmCandidates({ segments: [captured], currentSnapshot: current,
+      classificationOptions, minimumDurationSeconds: 60 })[0]!;
+    const fresh = resolveFreshDriftAlarmCandidate({ candidate, segments: [captured],
+      currentSnapshot: { ...current, siteUrl: nextUrl },
+      classificationOptions, minimumDurationSeconds: 60 });
+    expect(fresh?.classification).toMatchObject({ productivity: "drift", source: "rule" });
+  });
+
+  it.each(["instagram.com", "tiktok.com"])("keeps the sustained dwell rule on %s independent from an earlier stored verdict", siteDomain => {
+    const segments = [0, 1, 2, 3].map(index => ({
+      ...reelSegment(`sustained-${index}`, new Date(Date.UTC(2026, 5, 11, 9, 0, index * 20)).toISOString(),
+        new Date(Date.UTC(2026, 5, 11, 9, 0, (index + 1) * 20)).toISOString(), 20, `video${index}`),
+      classification: index === 3
+        ? { category: "social_media" as const, productivity: "drift" as const, source: "llm" as const, confidence: 0.95, aiResult: true }
+        : undefined,
+      siteDomain, siteUrl: siteDomain === "instagram.com" ? `https://www.instagram.com/reel/video${index}/`
+        : `https://www.tiktok.com/@creator/video/123${index}`,
+    }));
+    const latest = segments[segments.length - 1]!;
+    const current = { ...reelSnapshot(latest.endedAt, "video3"), siteDomain, siteUrl: latest.siteUrl };
+    const candidate = buildDriftAlarmCandidates({ segments, currentSnapshot: current,
+      classificationOptions: {}, minimumDurationSeconds: 60 })[0]!;
+    expect(candidate.classification.source).toBe("llm");
+    const fresh = resolveFreshDriftAlarmCandidate({ candidate, segments,
+      currentSnapshot: { ...current, siteUrl: siteDomain === "instagram.com"
+        ? "https://www.instagram.com/referenceprofile/" : "https://www.tiktok.com/@referenceprofile" },
+      classificationOptions: {}, minimumDurationSeconds: 60 });
+    // The owner-approved four-segment rule can judge the new surface on its
+    // own. Dropping a previous URL's verdict must not change that policy.
+    expect(fresh).toMatchObject({ episodeKey: candidate.episodeKey,
+      classification: { productivity: "drift", source: "sustained-social-dwell" } });
   });
 
   it("fails closed after the current window leaves the episode surface", () => {

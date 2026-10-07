@@ -1,4 +1,4 @@
-import type { ActivitySegment, CurrentActivitySnapshot } from "@drifty/domain";
+import { isSocialSite, type ActivitySegment, type CurrentActivitySnapshot } from "@drifty/domain";
 import { activitySegmentIdentity, currentSnapshotIdentity, getLatestWatcherSegment } from "./watcherData";
 
 export type ActiveDriftAlarmSegment = {
@@ -38,9 +38,16 @@ function extendSegmentToCurrentSnapshot(segment: ActivitySegment, current: Curre
   const siteUrl = isYouTubeActivity(current, segment)
     ? segment.siteUrl ?? current.siteUrl ?? null
     : current.siteUrl ?? segment.siteUrl ?? null;
+  // A fresh social address can arrive before its timeline row. Reclassify
+  // that surface instead of moving the captured video's stored verdict into
+  // a DM, profile, or another video. Live user rules still apply normally.
+  const socialAddressChanged = isSocialSite(current.siteDomain)
+    && Boolean(current.siteUrl?.trim())
+    && current.siteUrl?.trim() !== segment.siteUrl?.trim();
 
   return {
     ...segment,
+    classification: socialAddressChanged ? null : segment.classification,
     endedAt: elapsedSeconds > 0 ? current.observedAt : segment.endedAt,
     durationSeconds: segment.durationSeconds + elapsedSeconds,
     browserName: current.browserName ?? segment.browserName ?? null,

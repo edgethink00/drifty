@@ -32,6 +32,25 @@ const gameSnapshot: CurrentActivitySnapshot = {
 };
 
 describe("resolveLiveDriftAlarmAiCandidate", () => {
+  it.each(["instagram.com", "tiktok.com"])("waits for the new %s page's own captured record before selecting live AI", siteDomain => {
+    const video: ActivitySegment = {
+      ...gameSegment, id: "captured-video", siteDomain,
+      siteUrl: siteDomain === "instagram.com" ? "https://www.instagram.com/reel/AAA/" : "https://www.tiktok.com/@creator/video/123",
+      classification: { category: "social_media", productivity: "drift", source: "llm", confidence: 0.95, aiResult: true },
+    };
+    const reference: ActivitySegment = {
+      ...video, id: "captured-reference", classification: null,
+      startedAt: video.endedAt, endedAt: gameSnapshot.observedAt, durationSeconds: 60,
+      siteUrl: siteDomain === "instagram.com" ? "https://www.instagram.com/referenceprofile/" : "https://www.tiktok.com/@referenceprofile",
+    };
+    const current = { ...gameSnapshot, siteDomain, siteUrl: reference.siteUrl };
+    const input = { currentSnapshot: current, classificationOptions: {}, minimumDurationSeconds: 60 };
+    expect(resolveLiveDriftAlarmAiCandidate({ ...input, segments: [video] })).toBeNull();
+    expect(resolveLiveDriftAlarmAiCandidate({ ...input, segments: [video, reference] })).toMatchObject({
+      sourceSegmentId: reference.id, segment: { id: reference.id, siteUrl: reference.siteUrl },
+    });
+  });
+
   it("selects the current unknown browser game for live AI classification", () => {
     const candidate = resolveLiveDriftAlarmAiCandidate({
       segments: [gameSegment],
