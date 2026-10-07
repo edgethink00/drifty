@@ -581,6 +581,7 @@ export function buildFlowBlocks(
   projectIdBySegment?: ReadonlyMap<string, string>,
   projectSegments?: readonly ActivitySegment[],
 ): FlowBlock[] {
+  segments = aggregateDeviceElapsedTime(segments);
   const context = createFlowBlockBuildContext(segments, options);
   return buildFlowBlocksWithContext(
     segments,
@@ -1728,8 +1729,9 @@ function dominantProjectInWindow(
 
 function classifiedSegmentsInTimeOrder(segments: ActivitySegment[], options?: ClassificationOptions): ClassifiedSegment[] {
   return segments.flatMap((segment): ClassifiedSegment[] => {
-    const startMs = new Date(segment.startedAt).getTime();
-    const endMs = new Date(segment.endedAt).getTime();
+    // Flow buckets include the forward interval of a projected live point
+    // sample. Classify the same bounds so its first render has a matching entry.
+    const { start: startMs, end: endMs } = activityTimeBounds(segment);
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
     return [{
       segment,

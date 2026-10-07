@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "./activity";
 import { filterSegmentsByDevice } from "./activity";
 import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, clipDeviceElapsedTimeSegment } from "./deviceElapsedTime";
-import { buildAppUsageSummaries, buildCategoryDurations, buildDailyTotals, buildFlowBlocks, buildProductivityDurations, buildRollingFocusSeconds, logicalDayStartMs, totalDurationSeconds } from "./aggregation";
+import { buildAppUsageSummaries, buildCategoryDurations, buildDailyTotals, buildFlowBlocks, buildFlowBlocksForIntervals, buildProductivityDurations, buildRollingFocusSeconds, logicalDayStartMs, totalDurationSeconds } from "./aggregation";
 import { buildPersonalProjectSliceProjection } from "./projectWindowAssignments";
 
 function segment(id: string, startMinute: number, durationMinutes: number, deviceId?: string, productivity: "focus" | "drift" = "focus"): ActivitySegment {
@@ -92,6 +92,21 @@ describe("cross-device elapsed time", () => {
     expect(buildDailyTotals(records, "2026-10-04", "2026-10-04")[0].totalSeconds).toBe(60);
     expect(buildRollingFocusSeconds(records, "2026-10-04", "2026-10-04")).toBe(60);
     expect(point.startedAt).toBe(point.endedAt);
+  });
+
+  it("renders a live point sample alongside received history at every Flow density", () => {
+    const point = { ...segment("live-point", 0, 1), endedAt: segment("live-point", 0, 1).startedAt };
+    const records = [point, segment("received", 0, 1, "sender")];
+    const original = JSON.stringify(records);
+    const assertBlocks = (blocks: ReturnType<typeof buildFlowBlocks>) => {
+      expect(sum(blocks.flatMap(block => block.composition ?? []))).toBeCloseTo(60);
+      expect(blocks.flatMap(block => block.composition ?? []).flatMap(contribution => contribution.sourceSegmentIds).sort()).toEqual(["live-point", "received"]);
+    };
+    assertBlocks(buildFlowBlocks(records, "2026-10-04", 5));
+    for (const blocks of buildFlowBlocksForIntervals(records, "2026-10-04", [1, 5, 15]).values()) {
+      assertBlocks(blocks);
+    }
+    expect(JSON.stringify(records)).toBe(original);
   });
 
   it("never inflates sparse recorded duration to its whole timestamp span", () => {
