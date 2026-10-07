@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import Union
 
+from app.tracker.browser_content import normalize_context
 from app.storage.adaptive_context_serialization_rules import (
     ADAPTIVE_CONTEXT_DEPTHS,
     ADAPTIVE_CONTEXT_ITEM_KINDS,
@@ -77,14 +78,18 @@ def sanitized_raw_context_json(raw_context_json: str | None) -> str | None:
 
     has_context_key = any(key in parsed for key in ADAPTIVE_CONTEXT_RAW_KEYS)
     has_body_like_key = any(key in parsed for key in BODY_LIKE_CONTEXT_KEYS)
-    if not has_context_key and not has_body_like_key:
+    has_browser_context = "browser_content_context" in parsed or "browserContentContext" in parsed
+    if not has_context_key and not has_body_like_key and not has_browser_context:
         return raw_context_json
 
     sanitized: dict[str, SerializedValue] = {
         key: value
         for key, value in parsed.items()
-        if isinstance(key, str) and key not in BODY_LIKE_CONTEXT_KEYS and key not in ADAPTIVE_CONTEXT_RAW_KEYS
+        if isinstance(key, str) and key not in BODY_LIKE_CONTEXT_KEYS and key not in ADAPTIVE_CONTEXT_RAW_KEYS and key not in {"browser_content_context", "browserContentContext"}
     }
+    browser_context = normalize_context(parsed.get("browser_content_context", parsed.get("browserContentContext")))
+    if browser_context is not None:
+        sanitized["browser_content_context"] = browser_context
     adaptive_context = adaptive_content_context_from_mapping(parsed)
     if adaptive_context is not None:
         sanitized["adaptive_content_context"] = adaptive_context

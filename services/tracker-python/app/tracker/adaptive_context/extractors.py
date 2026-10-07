@@ -10,7 +10,6 @@ from app.tracker.adaptive_context.markdown import (
 )
 from app.tracker.adaptive_context.normalization import (
     BODY_LIKE_STRUCTURED_KEYS,
-    CALENDAR_DOMAINS,
     AI_CONVERSATION_DOMAINS,
     COMMUNICATION_APPS,
     COMMUNICATION_DOMAINS,
@@ -19,7 +18,10 @@ from app.tracker.adaptive_context.normalization import (
     DOCUMENT_EDITOR_APPS,
     DOCUMENT_EDITOR_DOMAINS,
     ISSUE_DOMAINS,
-    NON_REPO_PATH_SEGMENTS,
+    calendar_surface_matches,
+    atlassian_surface_matches,
+    issue_repository_values,
+    issue_project_values,
     calendar_structured_fields,
     ai_conversation_structured_fields,
     clean_context_values,
@@ -68,11 +70,11 @@ def derived_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveS
         fields = merge_structured_fields(fields, document_structured_fields(capture)) or fields
     if domain_matches(capture.site_domain, ISSUE_DOMAINS):
         fields = merge_structured_fields(fields, issue_structured_fields(capture)) or fields
-    if capture.app_name == "Figma" or domain_matches(capture.site_domain, DESIGN_DOMAINS):
+    if capture.app_name.casefold() == "figma" or domain_matches(capture.site_domain, DESIGN_DOMAINS):
         fields = merge_structured_fields(fields, design_structured_fields(capture)) or fields
-    if capture.app_name == "Calendar" or domain_matches(capture.site_domain, CALENDAR_DOMAINS):
+    if calendar_surface_matches(capture):
         fields = merge_structured_fields(fields, calendar_structured_fields(capture)) or fields
-    if capture.app_name in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS):
+    if capture.app_name.casefold() in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS):
         fields = merge_structured_fields(fields, communication_structured_fields(capture)) or fields
     if domain_exactly_matches(capture.site_domain, AI_CONVERSATION_DOMAINS) or (capture.app_name or "").casefold() == "chatgpt" or (capture.bundle_id or "").casefold() in {"com.openai.codex", "com.openai.chat"}:
         fields = merge_structured_fields(fields, ai_conversation_structured_fields(capture)) or fields
@@ -94,6 +96,7 @@ def capture_with_metadata_fields(capture: AdaptiveContextCaptureInput) -> Adapti
         site_title=capture.site_title,
         site_url=capture.site_url,
         active_file_path=capture.active_file_path or path_markdown_file_from_title(capture.window_title),
+        allow_local_file_read=capture.allow_local_file_read,
         structured_fields=merge_structured_fields(capture.structured_fields, derived_structured_fields(capture)),
     )
 
@@ -181,7 +184,7 @@ def document_knowledge_items(capture: AdaptiveContextCaptureInput) -> list[Adapt
     parent_values = structured_values(fields, "parent_page") or structured_values(fields, "breadcrumb")
     append_adaptive_item(items, adaptive_item("document_knowledge:parentPage", 1, "parentPage", source_family, parent_values, "metadata_only"))
     database_values = structured_values(fields, "database")
-    if not database_values:
+    if not database_values and not atlassian_surface_matches(capture):
         parts = url_path_parts(capture.site_url)
         database_values = [parts[0].replace("-", " ")] if parts else []
     append_adaptive_item(items, adaptive_item("document_knowledge:database", 1, "database", source_family, database_values, "metadata_only"))
@@ -189,11 +192,11 @@ def document_knowledge_items(capture: AdaptiveContextCaptureInput) -> list[Adapt
 
 
 def local_markdown_items(capture: AdaptiveContextCaptureInput) -> list[AdaptiveContextItemPayload]:
-    path = markdown_file_path(capture)
-    if path is None and capture.app_name != "Obsidian":
+    path = markdown_file_path(capture) if capture.allow_local_file_read else None
+    if path is None and capture.app_name.casefold() != "obsidian":
         return []
 
-    markdown_text = bounded_markdown_text(path)
+    markdown_text = bounded_markdown_text(path) if capture.allow_local_file_read else ""
     title_context = title_parts(capture) if path is None else []
     source_family = "local_notes_markdown"
     items: list[AdaptiveContextItemPayload] = []
@@ -216,12 +219,11 @@ def issue_tool_items(capture: AdaptiveContextCaptureInput) -> list[AdaptiveConte
         return []
 
     fields = capture.structured_fields
-    parts = url_path_parts(capture.site_url)
-    # Account/settings-style paths (github.com/settings/..., sentry.io/organizations/...) are not repos.
-    repo_values = [f"{parts[0]}/{parts[1]}"] if len(parts) >= 2 and parts[0].lower() not in NON_REPO_PATH_SEGMENTS else []
+    repo_values = issue_repository_values(capture)
     source_family = "work_tracker_dev_platform"
     items: list[AdaptiveContextItemPayload] = []
     append_adaptive_item(items, adaptive_item("work_tracker_dev_platform:repo", 1, "repo", source_family, repo_values, "metadata_only"))
+    append_adaptive_item(items, adaptive_item("work_tracker_dev_platform:project", 1, "project", source_family, issue_project_values(capture), "metadata_only"))
     for item_spec in (
         ("work_tracker_dev_platform:issueType", 2, "issueType", "issue_type", "metadata_only"),
         ("work_tracker_dev_platform:label", 2, "label", "labels", "metadata_only"),
@@ -294,12 +296,12 @@ def adaptive_content_context_for_capture(capture: AdaptiveContextCaptureInput) -
         items.extend(local_markdown_items(capture))
     if "work_tracker_dev_platform" in enabled_families:
         items.extend(issue_tool_items(capture))
-    if "design_dev_tool" in enabled_families and (capture.app_name == "Figma" or domain_matches(capture.site_domain, DESIGN_DOMAINS)):
+    if "design_dev_tool" in enabled_families and (capture.app_name.casefold() == "figma" or domain_matches(capture.site_domain, DESIGN_DOMAINS)):
         items.extend(metadata_only_items(capture, "design_dev_tool", "metadata_only"))
-    if "calendar_meeting" in enabled_families and (capture.app_name == "Calendar" or domain_matches(capture.site_domain, CALENDAR_DOMAINS)):
+    if "calendar_meeting" in enabled_families and (calendar_surface_matches(capture)):
         items.extend(metadata_only_items(capture, "calendar_meeting", "metadata_only"))
     if "communication_metadata" in enabled_families and (
-        capture.app_name in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS)
+        capture.app_name.casefold() in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS)
     ):
         items.extend(metadata_only_items(capture, "communication_metadata", "metadata_only"))
     if "ai_conversation" in enabled_families and (

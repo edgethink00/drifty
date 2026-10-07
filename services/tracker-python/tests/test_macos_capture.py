@@ -196,6 +196,24 @@ class NativeSnapshotTests(unittest.TestCase):
         self.fallback.assert_not_called()
         self.assertIn('QA', self.memory._entries)
 
+    def test_browser_content_uses_the_sample_command_scope_and_preserves_baseline_on_failure(self):
+        capture = self.mock('capture_browser_content', return_value=None)
+        result = workspace.current_snapshot(False)
+        self.assertEqual(result.site_url, 'https://www.youtube.com/watch?v=qa')
+        self.assertIsNone(result.browser_content_context)
+        self.assertTrue(callable(capture.call_args.kwargs['run_command']))
+        self.assertGreater(capture.call_args.kwargs['timeout'], 0)
+        self.assertLessEqual(capture.call_args.kwargs['timeout'], 0.65)
+        self.assertEqual(capture.call_args.kwargs['pid'], self.native.pid)
+
+    def test_unmatched_or_history_browser_metadata_cannot_start_body_capture(self):
+        capture = self.mock('capture_browser_content', return_value=None)
+        for state in ('front-fallback', 'browser-history-title', 'accessibility-address-bar'):
+            with self.subTest(state=state):
+                self.browser.return_value.match_state = state
+                workspace.current_snapshot(False)
+        capture.assert_not_called()
+
     def test_switched_process_or_window_cannot_attach_metadata(self):
         for changed in [('Notes', 'com.apple.Notes', 'New title', 99),
                         ('Google Chrome', 'com.google.Chrome', 'Other window', 42)]:

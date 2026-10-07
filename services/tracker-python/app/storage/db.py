@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.tracker.browser_content import normalize_context as normalize_browser_context
+
 import json
 import math
 import sqlite3
@@ -1185,10 +1187,16 @@ class TrackerDatabase:
             snapshot_engagement_evidence = snapshot.engagement_evidence
             last_engagement_evidence = last["engagement_evidence"] if last else None
             same_engagement_evidence = last_engagement_evidence == snapshot_engagement_evidence
+            def browser_clues(context):
+                normalized = normalize_browser_context(context)
+                return {k: v for k, v in normalized.items() if k in {"description", "headings", "visibleTopic"}} if normalized else None
+            same_browser_clues = (browser_clues(self._raw_context_dict(last["raw_context_json"]).get("browser_content_context"))
+                                  == browser_clues(snapshot.browser_content_context)) if last else False
             exact_context_match = (
                 last
                 and same_capture_identity
                 and same_engagement_evidence
+                and same_browser_clues
                 and last["app_name"] == snapshot.app_name
                 and last["window_title"] == snapshot.window_title
                 and last["site_domain"] == snapshot.site_domain

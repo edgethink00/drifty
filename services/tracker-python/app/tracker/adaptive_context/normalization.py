@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Final
 from urllib.parse import unquote, urlparse
 
@@ -25,8 +25,8 @@ BODY_LIKE_STRUCTURED_KEYS: Final = frozenset(
         "selected_text",
     }
 )
-DOCUMENT_DOMAINS: Final = ("notion.so", "atlassian.net", "confluence", "coda.io")
-DOCUMENT_APPS: Final = frozenset({"Notion"})
+DOCUMENT_DOMAINS: Final = ("notion.so", "confluence", "coda.io")
+DOCUMENT_APPS: Final = frozenset({"notion"})
 ISSUE_DOMAINS: Final = ("github.com", "gitlab.com", "sentry.io", "atlassian.net", "jira")
 NON_REPO_PATH_SEGMENTS: Final = frozenset(
     {
@@ -60,7 +60,7 @@ AI_CONVERSATION_DOMAINS: Final = (
     "chat.deepseek.com",
 )
 DEVELOPER_WORKSPACE_APPS: Final = frozenset(
-    {"cmux", "terminal", "iterm2", "iterm", "warp", "cursor", "visual studio code", "code"}
+    {"cmux", "terminal", "windows terminal", "windowsterminal", "iterm2", "iterm", "warp", "cursor", "visual studio code", "code"}
 )
 EDITOR_WORKSPACE_APPS: Final = frozenset({"cursor", "visual studio code", "code"})
 DOCUMENT_EDITOR_DOMAINS: Final = (
@@ -74,6 +74,8 @@ DOCUMENT_EDITOR_APPS: Final = frozenset(
     {
         "microsoft powerpoint",
         "powerpoint",
+        "powerpnt",
+        "winword",
         "microsoft word",
         "word",
         "microsoft excel",
@@ -93,7 +95,7 @@ COMMUNICATION_DOMAINS: Final = (
     "mail.google.com",
     "discord.com",
 )
-COMMUNICATION_APPS: Final = frozenset({"Slack", "Discord"})
+COMMUNICATION_APPS: Final = frozenset({"slack", "discord"})
 TITLE_PART_RE: Final = re.compile(r"\s+(?:[-–—|·•])\s+")
 BRACKET_LABEL_RE: Final = re.compile(r"\[([^\]]{1,80})\]")
 TITLE_SUFFIX_VERSION_RE: Final = re.compile(r"\s+v?\d+(?:\.\d+)*$")
@@ -263,8 +265,25 @@ def domain_exactly_matches(domain: str | None, candidates: Sequence[str]) -> boo
     return normalized in candidates
 
 
+def atlassian_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
+    domain = (capture.site_domain or "").casefold().rstrip(".")
+    return domain == "atlassian.net" or domain.endswith(".atlassian.net")
+
+
 def document_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
-    return capture.app_name in DOCUMENT_APPS or domain_matches(capture.site_domain, DOCUMENT_DOMAINS)
+    if atlassian_surface_matches(capture):
+        return url_path_parts(capture.site_url)[:1] == ["wiki"]
+    return capture.app_name.casefold() in DOCUMENT_APPS or domain_matches(capture.site_domain, DOCUMENT_DOMAINS)
+
+
+def calendar_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
+    if capture.app_name.casefold() == "calendar":
+        return True
+    if domain_exactly_matches(capture.site_domain, ("calendar.google.com",)):
+        return True
+    # Outlook shares its origin with mail and account screens. Only its calendar
+    # route can contribute meeting metadata; a mail title can contain an account.
+    return domain_exactly_matches(capture.site_domain, ("outlook.office.com",)) and url_path_parts(capture.site_url)[:1] == ["calendar"]
 
 
 def is_native_chatgpt_capture(capture: AdaptiveContextCaptureInput) -> bool:
@@ -392,13 +411,21 @@ def document_structured_fields(capture: AdaptiveContextCaptureInput) -> Adaptive
     fields: AdaptiveStructuredFields = {}
     parts = title_parts(capture)
     url_parts = url_path_parts(capture.site_url)
+    if atlassian_surface_matches(capture):
+        if "spaces" in url_parts:
+            space_index = url_parts.index("spaces") + 1
+            if space_index < len(url_parts):
+                add_structured_values(fields, "workspace", [humanized_url_part(url_parts[space_index])])
+        if parts:
+            add_structured_values(fields, "headings", [parts[0]])
+        return fields
     if url_parts:
         add_structured_values(fields, "workspace", [humanized_url_part(url_parts[0])])
-    elif capture.app_name in DOCUMENT_APPS and len(parts) >= 2:
+    elif capture.app_name.casefold() in DOCUMENT_APPS and len(parts) >= 2:
         add_structured_values(fields, "workspace", [parts[-1]])
     if parts:
         add_structured_values(fields, "headings", [parts[0]])
-    if capture.app_name in DOCUMENT_APPS and not url_parts:
+    if capture.app_name.casefold() in DOCUMENT_APPS and not url_parts:
         if len(parts) >= 3:
             add_structured_values(fields, "parent_page", [parts[1]])
         if len(parts) >= 4:
@@ -424,6 +451,32 @@ def issue_type_from_url(site_url: str | None) -> str | None:
     if any(part.lower() == "browse" for part in parts):
         return "issue"
     return None
+
+
+def issue_repository_values(capture: AdaptiveContextCaptureInput) -> list[str]:
+    parts = url_path_parts(capture.site_url)
+    if len(parts) < 2 or parts[0].casefold() in NON_REPO_PATH_SEGMENTS:
+        return []
+    if domain_exactly_matches(capture.site_domain, ("github.com",)):
+        return ["/".join(parts[:2])]
+    if domain_exactly_matches(capture.site_domain, ("gitlab.com",)):
+        return ["/".join(parts[:parts.index("-")])] if "-" in parts else ["/".join(parts[:2])]
+    # Jira browse/project and Sentry organization paths do not identify a repo.
+    return []
+
+
+def issue_project_values(capture: AdaptiveContextCaptureInput) -> list[str]:
+    if not (atlassian_surface_matches(capture) or domain_matches(capture.site_domain, ("jira",))):
+        return []
+    parts = url_path_parts(capture.site_url)
+    if len(parts) >= 2 and parts[0] == "browse":
+        match = re.fullmatch(r"([A-Za-z][A-Za-z0-9_]*)-\d+", parts[1])
+        return [match.group(1).upper()] if match else []
+    if "projects" in parts:
+        project_index = parts.index("projects") + 1
+        if project_index < len(parts) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", parts[project_index]):
+            return [parts[project_index].upper()]
+    return []
 
 
 def issue_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveStructuredFields:
@@ -452,7 +505,7 @@ def design_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveSt
         add_structured_values(fields, "workspace", [humanized_url_part(url_parts[-1])])
     if url_parts and url_parts[0] in {"file", "design", "proto", "board"}:
         add_structured_values(fields, "page_type", [url_parts[0]])
-    elif capture.app_name == "Figma":
+    elif capture.app_name.casefold() == "figma":
         add_structured_values(fields, "page_type", ["file"])
     lower_title = title_values_containing(capture).lower()
     add_structured_values(fields, "layer_type", [layer for layer in FIGMA_LAYER_TYPES if layer in lower_title])
@@ -505,6 +558,9 @@ def ai_conversation_structured_fields(capture: AdaptiveContextCaptureInput) -> A
 
 def _path_workspace(title: str) -> str | None:
     expanded = title.strip()
+    if re.fullmatch(r"[A-Za-z]:[\\/][^\n\r\t]+", expanded):
+        candidate = PureWindowsPath(expanded).name
+        return candidate if SAFE_WORKSPACE_RE.fullmatch(candidate) else None
     if not expanded.startswith(("/", "~/")) or any(character in expanded for character in ("\n", "\r", "\t")):
         return None
     candidate = expanded.rstrip("/").rsplit("/", 1)[-1]
@@ -536,13 +592,13 @@ def developer_workspace_structured_fields(capture: AdaptiveContextCaptureInput) 
 def _document_type(capture: AdaptiveContextCaptureInput) -> str | None:
     app = capture.app_name.casefold()
     domain = (capture.site_domain or "").casefold()
-    if app in {"microsoft powerpoint", "powerpoint", "keynote"} or "slides.google.com" in domain:
+    if app in {"microsoft powerpoint", "powerpoint", "powerpnt", "keynote"} or "slides.google.com" in domain:
         return "presentation"
     if app in {"microsoft excel", "excel", "numbers"} or "sheets.google.com" in domain:
         return "spreadsheet"
     if "overleaf.com" in domain:
         return "paper"
-    if app in {"microsoft word", "word", "pages"} or "docs.google.com" in domain:
+    if app in {"microsoft word", "word", "winword", "pages"} or "docs.google.com" in domain:
         return "document"
     return None
 
@@ -570,9 +626,10 @@ def document_editor_structured_fields(capture: AdaptiveContextCaptureInput) -> A
 
 def calendar_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveStructuredFields:
     fields: AdaptiveStructuredFields = {}
-    parts = title_parts(capture)
-    if len(parts) >= 2:
-        add_structured_values(fields, "workspace", [parts[1]])
+    if not calendar_surface_matches(capture):
+        return fields
+    # A calendar title slot may name an attendee/account rather than a workspace.
+    # Only meeting shape is derived until a real container layout is measured.
     lower_title = title_values_containing(capture).lower()
     add_structured_values(fields, "meeting_type", [meeting for meeting in MEETING_TYPES if meeting in lower_title])
     return fields

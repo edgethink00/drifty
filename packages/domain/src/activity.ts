@@ -1,3 +1,4 @@
+import type { BrowserContentContext } from "./browserContentContext";
 import type { AdaptiveContentContext } from "./adaptiveContentContext";
 
 export type TrackerSource = "nsworkspace" | "accessibility" | "win32-foreground" | "win32-foreground-untitled" | "manual" | "browser-history-import" | "unknown";
@@ -113,6 +114,7 @@ export interface ActivitySegment {
   browserHistoryCandidateCount?: number | null;
   browserHistoryErrorCount?: number | null;
   adaptiveContentContext?: AdaptiveContentContext | null;
+  browserContentContext?: BrowserContentContext | null;
   frontmostCaptureSource?: FrontmostCaptureSource | null;
   frontmostCaptureError?: string | null;
   frontmostFallbackError?: string | null;

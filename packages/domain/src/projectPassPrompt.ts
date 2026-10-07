@@ -1,7 +1,8 @@
+import { BROWSER_CONTENT_GUIDANCE, normalizeBrowserContentClues } from "./browserContentContext";
 import type { ProjectAnchor } from "./commands";
 import { formatProjectPassAnalysisWindowLine, type ProjectPassAnalysisWindow } from "./projectPassWindow";
 
-export const PROJECT_PASS_PROMPT_VERSION = "pp-v4-fixed-windows-title-context";
+export const PROJECT_PASS_PROMPT_VERSION = "pp-v5-browser-clues";
 
 export const PROJECT_ASSIGNMENT_MIN_CONFIDENCE = 0.6;
 
@@ -71,6 +72,7 @@ export function buildProjectPassPrompt(input: ProjectPassPromptInput): string {
     "Context after (read-only; do not output these ids):",
     afterContextLines,
     "",
+    ...([...input.beforeContextWindows,...input.coreWindows,...input.afterContextWindows].some(w=>w.contributors.some(c=>c.contexts.some(x=>normalizeBrowserContentClues(x.browserContext)))) ? [BROWSER_CONTENT_GUIDANCE] : []),
     "Rules:",
     "- Treat every core window as an independent decision. A title or task change may",
     "  change the project even when adjacent windows use the same app or domain.",

@@ -86,5 +86,6 @@ class Snapshot:
     frontmost_fallback_error: str | None = None
     window_title_source: WindowTitleSource | None = None
     adaptive_content_context: AdaptiveContentContextPayload | None = None
+    browser_content_context: dict[str, object] | None = None
     engagement_evidence: EngagementEvidence | None = None
     exclusion_source: str | None = None

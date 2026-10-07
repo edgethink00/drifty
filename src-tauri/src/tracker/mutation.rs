@@ -388,6 +388,7 @@ mod tests {
             force_chromium_ax_capture: true,
             force_frontmost_fallback_capture: false,
             force_browser_history_url_fallback: true,
+            browser_content_context_enabled: true,
             enhanced_context_enabled: true,
             enhanced_context_capture_local: false,
             enhanced_context_source_families: vec![
@@ -402,6 +403,7 @@ mod tests {
                 "forceChromiumAxCapture": true,
                 "forceFrontmostFallbackCapture": false,
                 "forceBrowserHistoryUrlFallback": true,
+                "browserContentContextEnabled": true,
                 "enhancedContextEnabled": true,
                 "enhancedContextCaptureLocal": false,
                 "enhancedContextSourceFamilies": ["document_knowledge", "calendar_meeting"],

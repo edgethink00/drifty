@@ -945,6 +945,7 @@ export interface DeveloperDiagnosticsSettings {
   forceChromiumAxCapture: boolean;
   forceFrontmostFallbackCapture: boolean;
   forceBrowserHistoryUrlFallback: boolean;
+  readonly browserContentContextEnabled?: boolean;
   readonly enhancedContextEnabled: boolean;
   readonly enhancedContextCaptureLocal: boolean;
   readonly enhancedContextSourceFamilies: readonly AdaptiveContextSourceFamily[];

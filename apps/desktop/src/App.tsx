@@ -803,6 +803,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   });
   const isLeaderboardPreviewActive = isDevModeActive && leaderboardPreviewEnabled;
   const visibleLeaderboardGraphStyle: LeaderboardGraphStyle = isDevModeActive ? (isLeaderboardPreviewActive && leaderboardGraphStyle === "off" ? "default" : leaderboardGraphStyle) : "off";
+  const [browserContentContextEnabled, setBrowserContentContextEnabled] = useState(() => readAiPrivacyRequestSettings().optional.contentContext);
+  useEffect(() => {
+    const refresh = () => setBrowserContentContextEnabled(readAiPrivacyRequestSettings().optional.contentContext);
+    window.addEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
   const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
@@ -5156,6 +5166,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       forceChromiumAxCapture,
       forceFrontmostFallbackCapture,
       forceBrowserHistoryUrlFallback,
+      browserContentContextEnabled,
       enhancedContextEnabled: effectiveEnhancedContextSettings.enabled,
       enhancedContextCaptureLocal: effectiveEnhancedContextSettings.captureLocal,
       enhancedContextSourceFamilies: ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS

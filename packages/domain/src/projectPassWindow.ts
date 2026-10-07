@@ -1,3 +1,4 @@
+import { browserContentCluesForSegment, normalizeBrowserContentClues, type BrowserContentClues } from "./browserContentContext";
 import { aggregateDeviceElapsedTime, sampledActivityTimeBounds, sampledActivitySecondsWithinInterval, sampledActivityEvidenceSecondsWithinInterval } from "./deviceElapsedTime";
 import type {
   ActivityCategory,
@@ -49,6 +50,7 @@ export type ProjectPassWindowContributorContext = {
   readonly redditCommunity: string | null;
   readonly youtubeChannelName: string | null;
   readonly youtubeCategory: string | null;
+  readonly browserContext?: BrowserContentClues;
   readonly durationSeconds: number;
 };
 
@@ -194,9 +196,10 @@ function contributorContext(
     youtubeCategory: policy.contentContext
       ? cleanText(segment.youtubeCategory)?.slice(0, MAX_YOUTUBE_CATEGORY_LENGTH) ?? null
       : null,
+    ...(policy.contentContext && browserContentCluesForSegment(segment) ? { browserContext: browserContentCluesForSegment(segment) } : {}),
     durationSeconds,
   };
-  return context.siteUrl || context.windowTitle || context.title || context.redditCommunity || context.youtubeChannelName || context.youtubeCategory
+  return context.siteUrl || context.windowTitle || context.title || context.redditCommunity || context.youtubeChannelName || context.youtubeCategory || context.browserContext
     ? context
     : null;
 }
@@ -209,6 +212,7 @@ function contextKey(context: ProjectPassWindowContributorContext): string {
     context.redditCommunity,
     context.youtubeChannelName,
     context.youtubeCategory,
+    context.browserContext ?? null,
   ]);
 }
 
@@ -452,6 +456,8 @@ function formatContributorContext(context: ProjectPassWindowContributorContext):
   if (context.redditCommunity) fields.push(`reddit=${JSON.stringify(context.redditCommunity)}`);
   if (context.youtubeChannelName) fields.push(`channel=${JSON.stringify(context.youtubeChannelName)}`);
   if (context.youtubeCategory) fields.push(`videoCategory=${JSON.stringify(context.youtubeCategory)}`);
+  const browserContext = normalizeBrowserContentClues(context.browserContext);
+  if(browserContext)fields.push(`browserContext=${JSON.stringify(browserContext)}`);
   return `${fields.join(" ")} (${formatRunDuration(context.durationSeconds)})`;
 }
 

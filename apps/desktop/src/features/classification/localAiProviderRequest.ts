@@ -1,3 +1,4 @@
+import { BROWSER_CONTENT_GUIDANCE, browserContentPromptMessages, normalizeBrowserContentClues, type BrowserContentClues } from "@drifty/domain";
 import {
   OPENROUTER_PRIVACY_PROVIDER,
   normalizeOpenRouterFallbackModels,
@@ -89,6 +90,7 @@ export type MinimizedActivityPayload = {
   readonly youtubeCategory: string | null;
   readonly youtubeIsShorts: boolean | null;
   readonly redditCommunity?: string;
+  readonly browserContext?: BrowserContentClues;
 };
 
 export type LocalAiProviderConfig =
@@ -185,10 +187,7 @@ function buildLocalProviderRequest(input: {
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
           },
-          messages: [{
-            role: "user",
-            content: buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null),
-          }],
+          messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null), input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)))),
         },
       };
     }
@@ -296,10 +295,7 @@ function openAiCompatibleProviderRequest(
       ...(apiKey ? { apiKey } : {}),
       model,
       ...options,
-      messages: [{
-        role: "user",
-        content: buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext),
-      }],
+      messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext), input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)))),
     },
   };
 }
@@ -362,6 +358,7 @@ export function buildClassificationPrompt(
       : []),
     ...memoryContextGuidance(memoryContext),
     primaryEvidenceGuidance(payload),
+    ...(payload.some(item => normalizeBrowserContentClues(item.browserContext)) ? [BROWSER_CONTENT_GUIDANCE] : []),
     ...enhancedRetryGuidance(enhancedRetryContext),
     ...redditPromptGuidance(payload),
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
@@ -443,6 +440,7 @@ function promptItem(
     ...(item.youtubeChannelName ? { youtubeChannelName: item.youtubeChannelName } : {}),
     ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
     ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
+    ...(normalizeBrowserContentClues(item.browserContext) ? { browserContext: normalizeBrowserContentClues(item.browserContext) } : {}),
     ...(enhancedContext ? { enhancedContext } : {}),
     durationSeconds: item.durationSeconds,
   };

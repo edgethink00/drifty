@@ -2711,6 +2711,11 @@ def _is_public_cli_invocation(arguments: list[str]) -> bool:
 
 
 def main():
+    # Native framing bypasses CLI output, telemetry and database initialization.
+    if (len(sys.argv) == 3 and sys.argv[1] == "browser-context-host") or (len(sys.argv) == 2 and sys.argv[1].startswith("chrome-extension://")):
+        from app.tracker.browser_content_host import run_native_host
+        raise SystemExit(run_native_host(sys.argv[-1]))
+
     user_cli_args = sys.argv[1:]
     if _is_public_cli_invocation(user_cli_args):
         from app.cli import run_cli

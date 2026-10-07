@@ -72,4 +72,5 @@ class AdaptiveContextCaptureInput:
     site_title: str | None = None
     site_url: str | None = None
     active_file_path: str | None = None
+    allow_local_file_read: bool = True
     structured_fields: AdaptiveStructuredFields | None = None

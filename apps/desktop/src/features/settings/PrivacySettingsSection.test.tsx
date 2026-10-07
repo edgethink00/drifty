@@ -181,12 +181,12 @@ describe("PrivacySettingsSection", () => {
       // Never-sent: the short row names every excluded item, and the details state each claim
       // in receipt-grade wording.
       const neverSentRow = rowOf(screen.getByText("What is never sent as classification data"));
-      expect(neverSentRow.textContent).toContain("Raw timeline rows · Full session history · Raw document and message bodies · YouTube descriptions · Provider API keys");
+      expect(neverSentRow.textContent).toContain("Raw timeline rows · Full session history · Full document and message bodies · YouTube descriptions · Provider API keys");
       const neverSent = sectionTitled(dialog, "What is never sent, explained");
       expect(Array.from(neverSent.querySelectorAll("dt"), (term) => term.textContent)).toEqual([
         "Raw timeline rows",
         "Full session history",
-        "Raw document and message bodies",
+        "Full document and message bodies",
         "YouTube descriptions",
         "Provider API keys",
       ]);

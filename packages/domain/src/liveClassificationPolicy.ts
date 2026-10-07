@@ -89,6 +89,7 @@ export interface LiveClassificationPromptItem {
   readonly youtubeChannelName?: string;
   readonly youtubeCategory?: string;
   readonly redditCommunity?: string;
+  readonly browserContext?: { readonly description?: string; readonly headings?: readonly string[]; readonly visibleTopic?: readonly string[] };
   readonly durationSeconds?: number;
 }
 

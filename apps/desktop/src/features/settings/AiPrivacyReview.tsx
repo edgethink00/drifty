@@ -84,6 +84,7 @@ export const AI_EXCLUDED_FIELDS: readonly ExcludedField[] = [
  * outbound field cannot ship without a matching row, footnote, or glossary sentence.
  */
 export const AI_DISCLOSED_WIRE_FIELDS: Readonly<Record<string, TranslationKey>> = {
+  browserContext: "settings.aiPrivacy.meaningContentContext",
   id: "settings.aiPrivacy.footnote",
   inputFingerprint: "settings.aiPrivacy.footnote",
   appName: "settings.aiPrivacy.rowApp",

@@ -37,6 +37,7 @@ from typing import Callable
 from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
 from app.text_safety import replace_lone_surrogates
 from app.tracker.capture_contract import Snapshot, utc_now_iso
+from app.tracker.adaptive_context import AdaptiveContextCaptureInput, adaptive_content_context_for_capture
 from app.tracker.windows_app_names import exe_display_name, is_windows_browser_app
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
 from app.tracker.windows_browser_capture import _URL_SAMPLE_BUDGET_SECONDS, read_browser_url_with_budget
@@ -471,6 +472,21 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
                                 None, None, observed,
                                 "Foreground capture exceeded time budget.",
                             )
+                        # Derive bounded metadata only after the final HWND/PID/title
+                        # freshness check. No body/UIA text or extra browser read.
+                        enriched.adaptive_content_context = adaptive_content_context_for_capture(
+                            AdaptiveContextCaptureInput(
+                                observed_at=enriched.observed_at,
+                                app_name=enriched.app_name,
+                                bundle_id=enriched.bundle_id,
+                                window_title=enriched.window_title,
+                                browser_name=enriched.browser_name,
+                                site_domain=enriched.site_domain,
+                                site_title=enriched.site_title,
+                                site_url=enriched.site_url,
+                                allow_local_file_read=False,
+                            )
+                        )
                         return enriched
                     failed = build_snapshot(
                         None, None, observed,

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Final, Literal
 
 from app.permissions.accessibility import read_front_window_title
+from app.tracker.browser_content import capture_browser_content
 from app.tracker.capture_contract import (  # re-exported: this module was the
     FrontmostCaptureSource,  # original home of the capture contract, and callers
     Snapshot,  # still import it from here.
@@ -380,6 +381,14 @@ def _capture_snapshot(
     )
 
     check_current()
+    browser_content_context = None
+    if native is not None and site_source == "applescript" and pid is not None:
+        browser_content_context = capture_browser_content(
+            pid=pid, bundle_id=bundle_id, page_url=browser.site_url, page_title=browser.site_title,
+            observed_at=observed_at, timeout=min(0.65, max(0, command_scope.deadline-time.monotonic()-0.7)) if command_scope else 0.65,
+            run_command=checked_command,
+        )
+        check_current()
     if native is not None and window_read_succeeded:
         # Revalidate the raw focused title, before native ChatGPT enrichment.
         # Browser AX metadata must agree with that same window as well. A
@@ -419,6 +428,7 @@ def _capture_snapshot(
         frontmost_fallback_error=frontmost_fallback_error,
         window_title_source=window_title_source,
         adaptive_content_context=adaptive_content_context,
+        browser_content_context=browser_content_context,
     )
 
 

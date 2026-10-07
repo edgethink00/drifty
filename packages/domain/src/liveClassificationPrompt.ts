@@ -1,3 +1,4 @@
+import { BROWSER_CONTENT_GUIDANCE, normalizeBrowserContentClues } from "./browserContentContext";
 /**
  * Canonical builder for the LIVE (first-pass) activity-classification prompt.
  *
@@ -228,6 +229,7 @@ export function buildLiveClassificationPrompt(
       : []),
     ...memoryContextGuidance(memoryContext),
     primaryEvidenceGuidance(items),
+    ...(items.some(item => normalizeBrowserContentClues(item.browserContext)) ? [BROWSER_CONTENT_GUIDANCE] : []),
     ...redditPromptGuidance(items),
     ...(productivityOnly
       ? []
@@ -347,6 +349,7 @@ function promptItem({
   youtubeChannelName,
   youtubeCategory,
   redditCommunity,
+  browserContext,
   durationSeconds,
 }: LiveClassificationPromptItem): Record<string, unknown> {
   return {
@@ -360,6 +363,7 @@ function promptItem({
     ...(youtubeChannelName ? { youtubeChannelName } : {}),
     ...(youtubeCategory ? { youtubeCategory } : {}),
     ...(redditCommunity ? { redditCommunity } : {}),
+    ...(normalizeBrowserContentClues(browserContext) ? { browserContext: normalizeBrowserContentClues(browserContext) } : {}),
     durationSeconds,
   };
 }

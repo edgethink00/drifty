@@ -26,6 +26,7 @@ const PASSWORD_KEY_VALUE_PATTERN = /\b(?:password|pwd|passcode|credentials?)\b(?
 const SHORT_SECRET_KEY_VALUE_PATTERN = /\b(?:pass|token|api[_ -]?key|secret|client[_ -]?secret|access[_ -]?token|refresh[_ -]?token|auth[_ -]?token)\b(?:\s*[:=]\s*|\s+)(?!reset\b|change\b|manager\b|management\b|policy\b|help\b|guidance\b|field\b|form\b|prompt\b|screen\b|page\b|required\b|bucket\b|algorithm\b)["']?[A-Za-z0-9._/+=-]{4,32}["']?/gi;
 const SECRET_PATTERN = /\b(?:api[_ -]?key|authorization|bearer|secret|token)\b\s*[:=]?\s*["']?[A-Za-z0-9._/+=-]{12,}/gi;
 const KNOWN_TOKEN_PATTERN = /\b(?:sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/g;
+const EMAIL_ADDRESS_PATTERN = /[\p{L}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
 const SSN_PATTERN = /\b\d{3}-\d{2}-\d{4}\b/g;
 const ONE_TIME_CODE_PATTERN = /\b(?:otp|one[- ]?time code|2fa|mfa|verification code)\s*[:#-]?\s*\d{4,8}\b/gi;
 const LONG_IDENTIFIER_PATTERN = /\b[A-Za-z0-9_-]{48,}\b|\b[A-Fa-f0-9]{32,}\b/g;
@@ -108,6 +109,11 @@ function sanitizeValue(value: string, item: AdaptiveContextItem): SanitizedValue
   redacted = redacted.replace(KNOWN_TOKEN_PATTERN, () => {
     redactionCount += 1;
     reasons.push("secret_like_value");
+    return "[redacted]";
+  });
+  redacted = redacted.replace(EMAIL_ADDRESS_PATTERN, () => {
+    redactionCount += 1;
+    reasons.push("personal_identifier");
     return "[redacted]";
   });
   redacted = redacted.replace(SSN_PATTERN, () => {

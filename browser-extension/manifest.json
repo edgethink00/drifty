@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Drifty browser context",
+  "version": "0.1.0",
+  "minimum_chrome_version": "106",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyJbUQRmNJg4/1rgJ6fxHHbFkZJeN2aWAp+/fbYfPuyr6FbroEdeMY01kKc8AjlwDxm8dgOYREsiDwo8OpAJr9V2LEETWRBveODwvsOa27QNJTHxBgtGrda2zoCScRsFIzhYeSjirrUpUNV83JpG9t4Gf5qFNgHFAkLViGEND3QyooOAmn/RhPkZo5zEdt6PckJYvIn03YL1DXthj/1CAGGAY6mO6/oGZar90hBnG0924HMMmPzIqcuJLHZObIgIFWRCwjsWEww/Q9Sfuo2GBjApSR2b04zE0WbAFzfLHJTesm/hGPVsWnxSuQBFt8Z1KzHO7OV354fYfjWX1PGRZ5QIDAQAB",
+  "incognito": "not_allowed",
+  "permissions": [
+    "scripting",
+    "tabs",
+    "webNavigation",
+    "nativeMessaging",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  }
+}

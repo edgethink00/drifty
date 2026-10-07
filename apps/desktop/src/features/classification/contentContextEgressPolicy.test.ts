@@ -65,6 +65,20 @@ const notionHeading = {
 } satisfies AdaptiveContextItem;
 
 describe("contentContextEgressPolicy", () => {
+  it("removes account addresses in historical metadata even without sensitivity flags", () => {
+    const result = buildProviderSafeEnhancedContext({
+      mode: "enhanced_retry", settings: enabledSettings,
+      context: context([{ ...notionParentPage, sourceFamily: "calendar_meeting", kind: "workspace",
+        values: ["person@example.test", "Planning for another@example.test", "Work calendar", "학습@예시.한국"] }]),
+    });
+    const sent = JSON.stringify(result.providerContext);
+    expect(sent).not.toContain("@example.test");
+    expect(sent).not.toContain("학습@예시.한국");
+    expect(sent).toContain("Work calendar");
+    expect(result.summary.redactionCount).toBe(3);
+    expect(result.summary.dropReasonCounts.personal_identifier).toBe(3);
+  });
+
   it("returns no enhanced provider context for first-pass mode", () => {
     const result = buildProviderSafeEnhancedContext({
       mode: "first_pass",

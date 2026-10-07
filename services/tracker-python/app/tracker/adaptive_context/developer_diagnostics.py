@@ -14,6 +14,9 @@ from app.tracker.adaptive_context.settings import (
 JsonValue = object
 JsonObject = dict[str, JsonValue]
 
+BROWSER_CONTENT_ENABLED_META_KEY: Final = "browser_content_context_enabled"
+BROWSER_CONTENT_ENABLED_ENV: Final = "DRIFTY_BROWSER_CONTENT_CONTEXT"
+
 FORCE_CHROMIUM_AX_CAPTURE_META_KEY: Final = "developer_diagnostics_force_chromium_ax_capture"
 FORCE_CHROMIUM_AX_CAPTURE_ENV: Final = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
 FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY: Final = "developer_diagnostics_force_frontmost_fallback_capture"
@@ -55,6 +58,7 @@ def apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
             db.get_meta(ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY)
         ),
     )
+    os.environ[BROWSER_CONTENT_ENABLED_ENV] = "1" if db.get_meta(BROWSER_CONTENT_ENABLED_META_KEY) == "true" else "0"
     os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if settings.force_chromium_ax_capture else "0"
     os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "1" if settings.force_frontmost_fallback_capture else "0"
     os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = (
@@ -67,6 +71,7 @@ def apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
 
 
 def apply_developer_diagnostics_defaults() -> None:
+    os.environ[BROWSER_CONTENT_ENABLED_ENV] = "0"
     os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "0"
     os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "0"
     os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = "0"
@@ -76,6 +81,7 @@ def apply_developer_diagnostics_defaults() -> None:
 
 def save_developer_diagnostics(db: TrackerDatabase, payload: JsonObject) -> DeveloperDiagnosticsResponse:
     settings = settings_from_payload(payload)
+    db.set_meta(BROWSER_CONTENT_ENABLED_META_KEY, bool_meta(payload.get("browserContentContextEnabled") is True))
     db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, bool_meta(settings.force_chromium_ax_capture))
     db.set_meta(
         FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,

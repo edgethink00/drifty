@@ -412,7 +412,7 @@ class AdaptiveContextExtractorTests(unittest.TestCase):
         self.assertIn("Design", figma_values)
         self.assertIn("file", figma_values)
         self.assertIn("frame", figma_values)
-        self.assertIn("Drifty", calendar_values)
+        self.assertNotIn("Drifty", calendar_values)
         self.assertIn("planning", calendar_values)
         # "launch - triage - Drifty - Slack": the leading part is the channel and the
         # next one is the containing workspace. Deeper parts are not retained.

@@ -1883,7 +1883,7 @@ describe("runAiClassification cloud contract", () => {
         category: "shopping",
         productivity: "neutral",
         confidence: 0.5,
-        promptVersion: "v8.2-soul-episode-v3-confidence",
+        promptVersion: "v8.3-browser-clues",
       })]);
     } finally {
       cleanupServiceMocks();
@@ -1917,7 +1917,7 @@ describe("runAiClassification cloud contract", () => {
         category: "game",
         productivity: "drift",
         confidence: 0.5,
-        promptVersion: "v8.2-soul-episode-v3-confidence",
+        promptVersion: "v8.3-browser-clues",
       })]);
     } finally {
       cleanupServiceMocks();
@@ -2615,7 +2615,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v8.2-soul-episode-v3-confidence" })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v8.3-browser-clues" })]);
     } finally {
       cleanupServiceMocks();
     }
@@ -2907,6 +2907,33 @@ describe("runAiClassification cloud contract", () => {
           },
         }),
       ]));
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it.each(["network", "http", "invalid_json"])("preserves the first-pass result after enhanced retry %s failure", async (failure) => {
+    const segment = createUnknownSegment(1, {
+      appName: "Notion", siteDomain: "notion.so", siteTitle: "Reddit",
+      adaptiveContentContext: createNotionAdaptiveContext("segment-1"),
+    });
+    enableEnhancedContextRetry();
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke.mockResolvedValueOnce(localAiResponse("segment-1", {
+        category: "utility", productivity: "neutral", confidence: 0.54, reason: "Possibly account setup",
+      }));
+      if (failure === "network") nativeInvoke.mockRejectedValueOnce(new Error("Synthetic transport failure"));
+      else nativeInvoke.mockResolvedValueOnce({ status: failure === "http" ? 503 : 200, body: "invalid JSON" });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledTimes(2);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1", category: "utility", confidence: 0.54,
+      })]);
     } finally {
       cleanupServiceMocks();
     }

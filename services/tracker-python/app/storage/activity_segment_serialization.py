@@ -8,6 +8,7 @@ from app.storage.adaptive_context_serialization import (
     adaptive_content_context_from_mapping,
     sanitized_raw_context_json,
 )
+from app.tracker.browser_content import normalize_context
 from app.tracker.macos_app_names import canonical_macos_app_name
 from app.tracker.windows_app_names import canonical_windows_app_name
 
@@ -92,6 +93,9 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
     if classification is not None:
         serialized["classification"] = classification
     if raw_context is not None:
+        browser_context = normalize_context(raw_context.get("browser_content_context"))
+        if not hide_site_context and not row.get("exclusion_source") and browser_context is not None:
+            serialized["browserContentContext"] = browser_context
         adaptive_context = adaptive_content_context_from_mapping(raw_context)
         if adaptive_context is not None:
             serialized["adaptiveContentContext"] = adaptive_context

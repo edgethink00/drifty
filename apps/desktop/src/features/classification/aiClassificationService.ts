@@ -1,3 +1,5 @@
+import { browserContentCluesForSegment, normalizeBrowserContentClues } from "@drifty/domain";
+import { ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD, enhancedRetryImproves, retryEvidenceForRecord } from "./enhancedContextRetryPolicy";
 import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
 import { isExcludedSegment } from "@drifty/domain";
 import type {
@@ -73,8 +75,7 @@ const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
 const MAX_YOUTUBE_CHANNEL_NAME_LENGTH = 120;
 const MAX_YOUTUBE_CATEGORY_LENGTH = 80;
-export const AI_CLASSIFICATION_PROMPT_VERSION = "v8.2-soul-episode-v3-confidence";
-const ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD = 0.55;
+export const AI_CLASSIFICATION_PROMPT_VERSION = "v8.3-browser-clues";
 const MAX_ENHANCED_CONTEXT_RETRY_FINGERPRINTS = 512;
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
 const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
@@ -179,7 +180,7 @@ type ClassificationCluster = {
 function classificationSignatureKey(payload: MinimizedActivityPayload, level: ClassificationLevel): string {
   const app = (payload.bundleId ?? payload.appName).toLowerCase().trim();
   const domain = (payload.siteDomain ?? hostnameFromUrl(payload.siteUrl) ?? "").toLowerCase().trim();
-  const context = payload.contextFingerprint ?? "";
+  const context = JSON.stringify([payload.contextFingerprint ?? "", payload.browserContext ?? null]);
   if (level === "coarse") return `${app}|${domain}|${context}`;
   const rawTitle = (payload.siteTitle ?? payload.youtubeTitle ?? payload.windowTitle ?? "").toLowerCase().replace(/\s+/g, " ").trim();
   const titleStem = rawTitle.split(" ").slice(0, 3).join(" ");
@@ -845,6 +846,7 @@ export async function toMinimizedPayload(
     ? cleanText(segment.youtubeCategory)?.slice(0, MAX_YOUTUBE_CATEGORY_LENGTH) ?? null
     : null;
   const redditCommunity = redditCommunityForSegment(segment, siteUrl, contentContextEnabled);
+  const browserContext = contentContextEnabled ? browserContentCluesForSegment(segment) : undefined;
   // durationSeconds is intentionally excluded from the fingerprint so repeated
   // visits to the same activity reuse one cached classification; the exact
   // duration is still sent to the provider as evidence.
@@ -859,10 +861,11 @@ export async function toMinimizedPayload(
     ...(youtubeChannelName ? { youtubeChannelName } : {}),
     ...(youtubeCategory ? { youtubeCategory } : {}),
     ...(redditCommunity ? { redditCommunity } : {}),
+    ...(browserContext ? { browserContext } : {}),
     ...(workProfile ? { workProfile } : {}),
     memoryContext: classificationMemoryFingerprintMaterial(memoryContext, segment.id),
   };
-  const contextFingerprint = await fingerprint(JSON.stringify(providerInput.memoryContext));
+  const contextFingerprint = await fingerprint(JSON.stringify({ memory: providerInput.memoryContext, ...(browserContext ? { browserContext } : {}) }));
 
   return {
     segmentId: segment.id,
@@ -883,6 +886,7 @@ export async function toMinimizedPayload(
     youtubeCategory,
     youtubeIsShorts: null,
     ...(redditCommunity ? { redditCommunity } : {}),
+    ...(browserContext ? { browserContext } : {}),
   };
 }
 
@@ -908,6 +912,7 @@ export function toLiveClassificationPromptItem(
     ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
     ...(title ? { title } : {}),
     ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
+    ...(normalizeBrowserContentClues(item.browserContext) ? { browserContext: normalizeBrowserContentClues(item.browserContext) } : {}),
     ...(item.youtubeChannelName ? { youtubeChannelName: item.youtubeChannelName } : {}),
     ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
     durationSeconds: item.durationSeconds,
@@ -1779,9 +1784,7 @@ function localProviderRequestForClassification(
 
 function localProviderPromptBytes(providerRequest: LocalAiProviderRequest | null): number {
   const messages = providerRequest?.request.messages;
-  const firstMessage = Array.isArray(messages) ? messages[0] : null;
-  const content = isRecord(firstMessage) && typeof firstMessage.content === "string" ? firstMessage.content : "";
-  return new TextEncoder().encode(content).byteLength;
+  return Array.isArray(messages) ? messages.reduce((bytes, message) => bytes + new TextEncoder().encode(isRecord(message) && typeof message.content === "string" ? message.content : "").byteLength, 0) : 0;
 }
 
 function localProviderEnhancedRetryRequestForClassification(
@@ -2092,31 +2095,6 @@ function selectPreferredAiRecord(
   if (!enhancedRetryRecord) return firstPassRecord;
   if (enhancedRetryImproves(firstPassRecord, enhancedRetryRecord)) return enhancedRetryRecord;
   return firstPassRecord;
-}
-
-function enhancedRetryImproves(
-  firstPassRecord: ActivityClassificationRecord,
-  enhancedRetryRecord: ActivityClassificationRecord,
-): boolean {
-  if (enhancedRetryRecord.category === "unknown") return false;
-  if (firstPassRecord.category === "unknown") return true;
-  const firstPassConfidence = finiteConfidence(firstPassRecord.confidence);
-  const enhancedConfidence = finiteConfidence(enhancedRetryRecord.confidence);
-  if (retryEvidenceForRecord(firstPassRecord) === "insufficient") {
-    return enhancedConfidence >= firstPassConfidence;
-  }
-  return firstPassConfidence <= ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD
-    && enhancedConfidence > firstPassConfidence;
-}
-
-// Under the v8.2 prompt the model signals insufficient evidence structurally —
-// category "unknown", or a confidence at/below the retry threshold — not through a
-// specific English phrase in the (terse, redacted, non-English-capable) reason.
-// Key the retry gate off that structured signal instead of a brittle regex.
-function retryEvidenceForRecord(record: ActivityClassificationRecord): "normal" | "insufficient" {
-  return record.category === "unknown" || finiteConfidence(record.confidence) <= ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD
-    ? "insufficient"
-    : "normal";
 }
 
 function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model: string): EdgeClassificationResponse {

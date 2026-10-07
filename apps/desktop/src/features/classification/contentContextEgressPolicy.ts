@@ -35,6 +35,7 @@ export const CONTENT_CONTEXT_DROP_REASONS = [
   "provider_policy_blocked",
   "provider_policy_local_only",
   "sensitive_surface",
+  "personal_identifier",
   "raw_collector_output",
   "secret_like_value",
   "private_key",

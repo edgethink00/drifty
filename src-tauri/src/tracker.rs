@@ -69,6 +69,8 @@ pub struct DeveloperDiagnosticsSettings {
     pub force_chromium_ax_capture: bool,
     pub force_frontmost_fallback_capture: bool,
     pub force_browser_history_url_fallback: bool,
+    #[serde(default)]
+    pub browser_content_context_enabled: bool,
     pub enhanced_context_enabled: bool,
     pub enhanced_context_capture_local: bool,
     pub enhanced_context_source_families: Vec<String>,
