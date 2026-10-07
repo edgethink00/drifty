@@ -5,10 +5,39 @@ import Foundation
 import Darwin
 import Carbon
 
+// The frozen tracker must spawn its own reader (the bootloader validates its
+// executable parent). Keep native observers alive while it returns one small D.
+func readDescriptionReply(deadline: TimeInterval, valid: () -> Bool) -> String? {
+    let original = fcntl(STDIN_FILENO, F_GETFL)
+    guard original >= 0, fcntl(STDIN_FILENO, F_SETFL, original | O_NONBLOCK) == 0 else { return nil }
+    defer { _ = fcntl(STDIN_FILENO, F_SETFL, original) }
+    var bytes = [UInt8]()
+    while ProcessInfo.processInfo.systemUptime < deadline, valid() {
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        let count = read(STDIN_FILENO, &buffer, min(buffer.count, 4096-bytes.count))
+        if count == 0 { return nil }
+        if count > 0 {
+            bytes.append(contentsOf: buffer.prefix(count))
+            if let end = bytes.firstIndex(of: 10) {
+                guard bytes.count < 4096,
+                      let payload = (try? JSONSerialization.jsonObject(with: Data(bytes.prefix(end)))) as? [String: Any],
+                      Set(payload.keys) == Set(["description"]), let text = payload["description"] as? String,
+                      !text.isEmpty, text.utf16.count <= 160 else { return nil }
+                return text
+            }
+            if bytes.count >= 4096 { return nil }
+        } else if errno != EAGAIN && errno != EINTR { return nil }
+        CFRunLoopRunInMode(.defaultMode, 0.005, true)
+    }
+    return nil
+}
+
 // Browser-owned scripting metadata admits a normal window before any page text
 // is read. This command never executes browser JavaScript, requests permission,
-// captures pixels, contacts a website or consumes an extension/socket.
-if CommandLine.arguments.count == 7, CommandLine.arguments[1] == "--browser-content" {
+// captures pixels or consumes an extension/socket. With an explicit product
+// stdio handshake, an anonymous public description may be added within the same
+// observation/deadline. Native identity remains authoritative for H/B admission.
+if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--browser-content" {
     final class Changes { var invalidated = false }
     func sample() -> [String: Any]? {
         let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser"]
@@ -149,10 +178,12 @@ if CommandLine.arguments.count == 7, CommandLine.arguments[1] == "--browser-cont
         _ = attribute(application, "AXRole")
         guard let reference = attribute(application, "AXFocusedWindow"), CFGetTypeID(reference) == AXUIElementGetTypeID() else { return nil }
         let window = reference as! AXUIElement
-        // Chromium's AX window title includes the app brand while its scripting
-        // name is the page title. Accept only these exact native title forms.
+        // Chromium can middle-elide the scripting window name even though its
+        // tab name and AX window title are complete. Compare against the exact
+        // tab title already matched to the caller, with the native app brand.
+        // Keep the scripting window name in the before/after identity proof.
         let nativeTitle = string(window, "AXTitle")
-        let titleMatches = nativeTitle == before.title || running.localizedName.map { nativeTitle == before.title + " - " + $0 } == true
+        let titleMatches = nativeTitle == before.tabTitle || running.localizedName.map { nativeTitle == before.tabTitle + " - " + $0 } == true
         guard titleMatches, let windowBounds = rectangle(window),
               sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
         watch(window, ["AXUIElementDestroyed", "AXMoved", "AXResized"])
@@ -321,9 +352,33 @@ if CommandLine.arguments.count == 7, CommandLine.arguments[1] == "--browser-cont
               let finalWindow = attribute(application, "AXFocusedWindow"), CFEqual(finalWindow, window),
               string(window, "AXTitle") == nativeTitle, nativeWindowID(windowBounds) == windowID,
               rectangle(window) == windowBounds, areaURL() == before.url else { return nil }
+        var description: String?
+        let descriptionCap = min(160, max(0, 240-headings.reduce(0) { $0+$1.utf16.count }))
+        let readerUntil = deadline-0.15 // Preserve time for a second native identity check.
+        if CommandLine.arguments.count == 8, CommandLine.arguments[7] == "--description-stdio",
+           descriptionCap > 0, url.scheme == "https", readerUntil-ProcessInfo.processInfo.systemUptime > 0.06 {
+            var baseline: [String: Any] = [:]
+            if !headings.isEmpty { baseline["headings"] = headings }
+            if !topic.isEmpty { baseline["visibleTopic"] = topic }
+            let request: [String: Any] = ["phase": "description", "version": 1, "pid": Int(pid),
+                "bundleId": CommandLine.arguments[3], "pageUrl": before.url, "pageTitle": before.tabTitle,
+                "clues": baseline, "lookupBudgetMs": max(1, Int((readerUntil-ProcessInfo.processInfo.systemUptime)*1000))]
+            guard let data = try? JSONSerialization.data(withJSONObject: request) else { return nil }
+            print(String(decoding: data, as: UTF8.self)); fflush(stdout)
+            if let text = readDescriptionReply(deadline: readerUntil, valid: { !changes.invalidated }) {
+                description = clean(text, descriptionCap)
+            }
+            // Changes during lookup (including ABA) invalidate this whole sample.
+            guard !changes.invalidated, let afterLookup = scriptingIdentity(), afterLookup == before,
+                  NSWorkspace.shared.frontmostApplication?.processIdentifier == pid, birth() == processBirth,
+                  let finalWindow = attribute(application, "AXFocusedWindow"), CFEqual(finalWindow, window),
+                  string(window, "AXTitle") == nativeTitle, rectangle(window) == windowBounds,
+                  nativeWindowID(windowBounds) == windowID, areaURL() == before.url else { return nil }
+        }
         pump()
         guard !changes.invalidated, ProcessInfo.processInfo.systemUptime < deadline else { return nil }
         var clues: [String: Any] = [:]
+        if let description = description, !description.isEmpty { clues["description"] = description }
         if !headings.isEmpty { clues["headings"] = headings }
         if !topic.isEmpty { clues["visibleTopic"] = topic }
         return ["version": 1, "pid": Int(pid), "bundleId": CommandLine.arguments[3], "pageUrl": before.url, "pageTitle": before.tabTitle, "clues": clues]

@@ -27,6 +27,11 @@ PACKAGE_ROOT = APP_DIR.parent
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
+# Disposable metadata reader: dispatch before DB/daemon/telemetry initialization.
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "browser-public-description":
+    from app.tracker.browser_public_description import main as description_reader_main
+    raise SystemExit(description_reader_main(sys.argv[2:]))
+
 from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Final, TypedDict
 
 from app.storage.db import TrackerDatabase
+from app.tracker.browser_content_policy import configure_settings, save_content_setting
 from app.tracker.adaptive_context.settings import (
     ADAPTIVE_CONTEXT_SOURCE_FAMILIES_ENV,
     ENABLE_ADAPTIVE_CONTEXT_CAPTURE_ENV,
@@ -59,6 +60,7 @@ def apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
         ),
     )
     os.environ[BROWSER_CONTENT_ENABLED_ENV] = "1" if db.get_meta(BROWSER_CONTENT_ENABLED_META_KEY) == "true" else "0"
+    configure_settings(db.path)
     os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if settings.force_chromium_ax_capture else "0"
     os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "1" if settings.force_frontmost_fallback_capture else "0"
     os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = (
@@ -71,6 +73,7 @@ def apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
 
 
 def apply_developer_diagnostics_defaults() -> None:
+    configure_settings(None)
     os.environ[BROWSER_CONTENT_ENABLED_ENV] = "0"
     os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "0"
     os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "0"
@@ -81,7 +84,7 @@ def apply_developer_diagnostics_defaults() -> None:
 
 def save_developer_diagnostics(db: TrackerDatabase, payload: JsonObject) -> DeveloperDiagnosticsResponse:
     settings = settings_from_payload(payload)
-    db.set_meta(BROWSER_CONTENT_ENABLED_META_KEY, bool_meta(payload.get("browserContentContextEnabled") is True))
+    save_content_setting(db, payload.get("browserContentContextEnabled") is True)
     db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, bool_meta(settings.force_chromium_ax_capture))
     db.set_meta(
         FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,

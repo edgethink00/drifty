@@ -12,6 +12,7 @@ from typing import Final, Literal
 
 from app.permissions.accessibility import read_front_window_title
 from app.tracker.browser_content import capture_browser_content
+from app.tracker.browser_content_policy import policy_snapshot
 from app.tracker.capture_contract import (  # re-exported: this module was the
     FrontmostCaptureSource,  # original home of the capture contract, and callers
     Snapshot,  # still import it from here.
@@ -171,6 +172,7 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     command_scope = CommandScope(deadline)
 
     def capture(allowed: Callable[[], bool]) -> Snapshot | None:
+        content_policy = policy_snapshot()
         snapshot = _capture_snapshot(
             include_system_transient=include_system_transient, observed_at=observed_at,
             native=native, capture_allowed=allowed, video_memory=video_memory, command_scope=command_scope,
@@ -182,6 +184,8 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         )
         if final_app != native or not allowed():
             return None
+        if policy_snapshot() != content_policy:
+            snapshot.browser_content_context = None
         return snapshot
 
     snapshot = context_worker.read(capture, deadline=deadline, cancel=command_scope.close)
@@ -221,10 +225,18 @@ def _capture_snapshot(
             return command_scope.run(["osascript", "-e", script], timeout=OSASCRIPT_TIMEOUT_SECONDS)
         return _run_osascript(script)
 
-    def checked_command(command: list[str], timeout: float = COMMAND_TIMEOUT_SECONDS) -> str:
+    def checked_command(command: list[str], timeout: float = COMMAND_TIMEOUT_SECONDS, cancelled=None, reply=None) -> str:
         check_current()
         if command_scope is not None:
-            return command_scope.run(command, timeout=timeout)
+            if cancelled is None and reply is None:
+                return command_scope.run(command, timeout=timeout)
+            return command_scope.run(command, timeout=timeout, cancelled=cancelled, reply=reply)
+        if cancelled is not None or reply is not None:
+            scope = CommandScope(time.monotonic()+timeout)
+            try:
+                return scope.run(command, timeout=timeout, cancelled=cancelled, reply=reply)
+            finally:
+                scope.close()
         return _run_command(command, timeout=timeout)
 
     check_current()

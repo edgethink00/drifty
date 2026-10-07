@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import subprocess
 import sys
 import threading
@@ -112,6 +114,35 @@ class WorkerTests(unittest.TestCase):
 
 
 class OwnedHelperTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'posix', 'Owned Mac process-group cancellation')
+    def test_descendant_is_stopped_after_normal_exit_timeout_and_setting_cancellation(self):
+        for mode in ("normal", "timeout", "setting"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                pid_file = Path(directory)/"owned-child.pid"
+                code = ("import subprocess,sys,time; from pathlib import Path; "
+                        "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],"
+                        "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+                        "Path(sys.argv[1]).write_text(str(p.pid)); "
+                        + ("print('complete',flush=True)" if mode == "normal" else "time.sleep(60)"))
+                scope = CommandScope(time.monotonic()+.5)
+                try:
+                    if mode == "normal":
+                        self.assertEqual(scope.run([sys.executable, "-c", code, str(pid_file)], timeout=.5), "complete")
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "setting changed" if mode == "setting" else "timed out"):
+                            scope.run([sys.executable, "-c", code, str(pid_file)], timeout=.1 if mode == "timeout" else .5,
+                                      cancelled=pid_file.exists if mode == "setting" else None)
+                finally:
+                    scope.close()
+                descendant = int(pid_file.read_text())
+                end = time.monotonic()+1
+                while time.monotonic() < end:
+                    status = subprocess.run(["ps", "-o", "stat=", "-p", str(descendant)], capture_output=True, text=True).stdout.strip()
+                    if not status or status.startswith("Z"):
+                        break
+                    time.sleep(.01)
+                self.assertTrue(not status or status.startswith("Z"), f"Owned descendant still running: {descendant}")
+
     def test_deadline_kills_and_reaps_the_owned_child(self):
         scope = CommandScope(time.monotonic() + 0.1)
         children = []
@@ -205,6 +236,16 @@ class NativeSnapshotTests(unittest.TestCase):
         self.assertGreater(capture.call_args.kwargs['timeout'], 0)
         self.assertLessEqual(capture.call_args.kwargs['timeout'], 0.65)
         self.assertEqual(capture.call_args.kwargs['pid'], self.native.pid)
+
+    def test_setting_generation_change_during_final_window_check_drops_clues_preserves_url(self):
+        context = dict(version=1, collectedAt='2026-10-04T00:00:00+00:00',
+                       pageUrl='https://www.youtube.com/watch?v=qa', pageTitle='QA',
+                       headings=['Course overview'], description='Public summary')
+        self.mock('capture_browser_content', return_value=context)
+        self.mock('policy_snapshot', side_effect=[('db', 'before'), ('db', 'after')])
+        result = workspace.current_snapshot(False)
+        self.assertEqual(result.site_url, 'https://www.youtube.com/watch?v=qa')
+        self.assertIsNone(result.browser_content_context)
 
     def test_unmatched_or_history_browser_metadata_cannot_start_body_capture(self):
         capture = self.mock('capture_browser_content', return_value=None)

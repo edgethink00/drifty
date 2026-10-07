@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import atexit
 import json
+import os
+import signal
+import selectors
 import subprocess
 import threading
 import time
@@ -73,42 +76,120 @@ class CommandScope:
         self._lock = threading.Lock()
         self._closed = False
         self._children: set[subprocess.Popen] = set()
+        self._termination_lock = threading.Lock()
+        self._terminated: set[subprocess.Popen] = set()
 
-    def run(self, command: list[str], *, timeout: float) -> str:
+    def _kill(self, child) -> None:
+        # macOS can return EPERM for a second SIGKILL while the first is being
+        # delivered. Serialize cancellation/timeout/exit cleanup for this owner.
+        with self._termination_lock:
+            if child in self._terminated:
+                return
+            try:
+                if os.name == "posix":
+                    os.killpg(child.pid, signal.SIGKILL)
+                else:
+                    child.kill()
+            except ProcessLookupError:
+                pass
+            self._terminated.add(child)
+
+    def run(self, command: list[str], *, timeout: float, cancelled=None, reply=None) -> str:
         with self._lock:
             if self._closed or time.monotonic() >= self.deadline:
                 raise RuntimeError('Optional Mac context sample expired.')
         # Process creation itself cannot be interrupted by a Python timeout.
         # Register immediately afterwards and kill if cancellation raced spawn.
-        with subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              text=True, encoding='utf-8', errors='replace') as child:
+        with subprocess.Popen(command, stdin=subprocess.PIPE if reply else subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              text=reply is None, encoding='utf-8' if reply is None else None,
+                              errors='replace' if reply is None else None, start_new_session=os.name == "posix") as child:
             with self._lock:
                 self._children.add(child)
                 if self._closed:
-                    child.kill()
+                    self._kill(child)
             try:
-                stdout, stderr = child.communicate(timeout=max(0.0, min(timeout, self.deadline - time.monotonic())))
+                until = min(time.monotonic()+timeout, self.deadline)
+                if reply is not None:
+                    return self._exchange(child, until, cancelled, reply)
+                while True:
+                    if cancelled is not None and cancelled():
+                        raise RuntimeError('Optional Mac context setting changed.')
+                    remaining = until-time.monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    try:
+                        stdout, stderr = child.communicate(timeout=min(remaining, 0.02) if cancelled is not None else remaining)
+                        break
+                    except subprocess.TimeoutExpired:
+                        if time.monotonic() >= until:
+                            raise
                 if child.returncode != 0:
                     raise RuntimeError(stderr.strip() or 'Optional Mac context helper failed.')
                 return stdout.strip()
             except subprocess.TimeoutExpired as error:
-                child.kill()
+                self._kill(child)
                 child.wait()
                 raise RuntimeError('Optional Mac context helper timed out.') from error
             except BaseException:
-                child.kill()
+                self._kill(child)
                 child.wait()
                 raise
             finally:
+                self._kill(child)  # Reap descendants even when the native root exited normally.
                 with self._lock:
                     self._children.discard(child)
+                    with self._termination_lock:
+                        self._terminated.discard(child)
+
+    def _exchange(self, child, until, cancelled, reply):
+        """One native preface/reply, then the ordinary final observation.
+
+        The callback executes in the frozen tracker, so its reader is spawned by
+        that same executable. Both commands remain registered in this scope.
+        """
+        chunks = {child.stdout: bytearray(), child.stderr: bytearray()}
+        answered = False
+        with selectors.DefaultSelector() as selector:
+            for stream in chunks:
+                os.set_blocking(stream.fileno(), False)
+                selector.register(stream, selectors.EVENT_READ)
+            while selector.get_map():
+                if cancelled is not None and cancelled():
+                    raise RuntimeError('Optional Mac context setting changed.')
+                remaining = until-time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(child.args, 0)
+                for key, _ in selector.select(min(remaining, .02)):
+                    part = os.read(key.fileobj.fileno(), 4096)
+                    if not part:
+                        selector.unregister(key.fileobj)
+                        continue
+                    chunks[key.fileobj].extend(part)
+                    if len(chunks[key.fileobj]) > 16384:
+                        raise RuntimeError('Optional Mac context reply exceeded its bound.')
+                    if key.fileobj is child.stdout and not answered and b'\n' in chunks[child.stdout]:
+                        line, _, rest = chunks[child.stdout].partition(b'\n')
+                        chunks[child.stdout] = bytearray(rest)
+                        response = reply(line.decode('utf-8', errors='strict'))
+                        answered = True
+                        if response is None:
+                            # A final observation (no lookup) is also the first line.
+                            chunks[child.stdout] = bytearray(line+b'\n'+rest)
+                        else:
+                            child.stdin.write((response+'\n').encode('utf-8'))
+                            child.stdin.flush()
+                        child.stdin.close()
+            child.wait(timeout=max(.001, until-time.monotonic()))
+        if child.returncode != 0:
+            raise RuntimeError('Optional Mac context helper failed.')
+        return chunks[child.stdout].decode('utf-8', errors='strict').strip()
 
     def close(self) -> None:
         with self._lock:
             self._closed = True
             for child in self._children:
                 try:
-                    child.kill()
+                    self._kill(child)
                 except ProcessLookupError:
                     pass
 

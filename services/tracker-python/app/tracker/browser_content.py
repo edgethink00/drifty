@@ -16,6 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from app.tracker.browser_content_policy import policy_snapshot
+from app.tracker.macos_capture import CommandScope
 
 from app.tracker.chatgpt_session import packaged_helper_path
 
@@ -117,11 +119,12 @@ def capture_extension_browser_content(*, pid: int, bundle_id: str | None, page_u
 def capture_browser_content(*, pid: int, bundle_id: str | None, page_url: str | None,
                             page_title: str | None, observed_at: str, timeout: float = 0.65,
                             run_command=None, helper_path: Path | None = None) -> dict[str, Any] | None:
-    """One disposable native observation; no retry, cache or socket fallback.
+    """One disposable native observation; no retry, cache or extension fallback.
 
     The helper checks already-granted Automation permission without prompting,
     verifies normal-window mode and exact browser/window/URL identity, and emits
-    only bounded headings/text. Unavailable optional context preserves tracking.
+    bounded headings/text and optionally an anonymous public description.
+    Unavailable optional context preserves tracking.
     """
     if (os.environ.get("DRIFTY_BROWSER_CONTENT_CONTEXT") != "1" or sys.platform != "darwin"
             or type(pid) is not int or pid <= 0 or bundle_id not in BROWSER_BUNDLES
@@ -130,28 +133,60 @@ def capture_browser_content(*, pid: int, bundle_id: str | None, page_url: str | 
         return None
     try:
         url = urlparse(page_url or "")
+        policy = policy_snapshot()
+        if policy is None:
+            return None
         if url.scheme not in {"http", "https"} or not url.hostname or len(page_url or "") > 4096:
             return None
         helper = helper_path or packaged_helper_path()
         if helper is None:
             return None
         allowance = min(timeout, 0.65)
+        reader = ([sys.executable, "browser-public-description"] if getattr(sys, "frozen", False)
+                  else [sys.executable, str(Path(__file__).with_name("browser_public_description.py"))])
         command = [str(helper), "--browser-content", str(pid), bundle_id,
-                   page_url, page_title, str(max(1, int(allowance * 1000) - 30))]
+                   page_url, page_title, str(max(1, int(allowance * 1000) - 30)), "--description-stdio"]
         started = time.monotonic()
-        if run_command is not None:
-            output = run_command(command, timeout=allowance)
-        else:
-            reply = subprocess.run(command, capture_output=True, text=True, encoding="utf-8",
-                                   errors="replace", timeout=allowance, check=False)
-            if reply.returncode != 0:
+        cancelled = lambda: policy_snapshot() != policy
+        def reply(line):
+            preface = json.loads(line)
+            if not isinstance(preface, dict) or preface.get("phase") != "description":
                 return None
-            output = reply.stdout
-        if time.monotonic() - started > allowance:
+            if (set(preface) != {"phase", "version", "pid", "bundleId", "pageUrl", "pageTitle", "clues", "lookupBudgetMs"}
+                    or type(preface["version"]) is not int or preface["version"] != 1 or type(preface["pid"]) is not int or preface["pid"] != pid
+                    or preface["bundleId"] != bundle_id or preface["pageUrl"] != page_url or preface["pageTitle"] != page_title
+                    or type(preface["lookupBudgetMs"]) is not int or not 0 < preface["lookupBudgetMs"] <= 620
+                    or not normalize_clues(preface["clues"]) or "description" in preface["clues"]):
+                raise ValueError("Invalid native description admission")
+            # End before the native wait does, leaving time to deliver null on
+            # timeout and preserve its already-admitted H/B observation.
+            remaining = min((preface["lookupBudgetMs"]-30)/1000, started+allowance-time.monotonic()-0.20)
+            if cancelled() or remaining <= 0.06:
+                return "null"
+            try:
+                # Spawn directly from this executable, respecting frozen-parent validation.
+                response = run(reader+[page_url, str(max(1, int(remaining*1000)))], timeout=remaining, cancelled=cancelled)
+                data = json.loads(response)
+                if isinstance(data, dict) and set(data) == {"description"} and normalize_clues(data):
+                    return json.dumps(data)
+            except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError, UnicodeError):
+                pass
+            return "null"
+        if run_command is not None:
+            run = run_command
+            output = run(command, timeout=allowance, cancelled=cancelled, reply=reply)
+        else:
+            scope = CommandScope(started+allowance)
+            run = scope.run
+            try:
+                output = run(command, timeout=allowance, cancelled=cancelled, reply=reply)
+            finally:
+                scope.close()
+        if time.monotonic() - started > allowance or policy_snapshot() != policy:
             return None
         result = json.loads(output)
         if (not isinstance(result, dict) or set(result) != {"version", "pid", "bundleId", "pageUrl", "pageTitle", "clues"}
-                or result["version"] != 1 or type(result["pid"]) is not int or result["pid"] != pid
+                or type(result["version"]) is not int or result["version"] != 1 or type(result["pid"]) is not int or result["pid"] != pid
                 or result["bundleId"] != bundle_id or result["pageUrl"] != page_url or result["pageTitle"] != page_title):
             return None
         clues = normalize_clues(result["clues"])

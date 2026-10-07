@@ -176,6 +176,8 @@ describe("PrivacySettingsSection", () => {
       ]);
       // The channel name is a real outbound field; the glossary carries its coverage.
       expect(within(glossary).getByText(/YouTube channel name/i)).toBeTruthy();
+      expect(within(glossary).getByText(/separate anonymous HTTPS request/i)).toBeTruthy();
+      expect(within(glossary).getByText(/without browser cookies or login/i)).toBeTruthy();
       expect(within(glossary).getByText(/only appears on a second attempt|only on a second attempt/i)).toBeTruthy();
 
       // Never-sent: the short row names every excluded item, and the details state each claim
@@ -190,7 +192,8 @@ describe("PrivacySettingsSection", () => {
         "YouTube descriptions",
         "Provider API keys",
       ]);
-      expect(within(neverSent).getByText(/The description never is/i)).toBeTruthy();
+      expect(within(neverSent).getByText(/fetched full video description and keywords are excluded/i)).toBeTruthy();
+      expect(within(neverSent).getByText(/bounded author description from anonymous page metadata may overlap/i)).toBeTruthy();
       expect(within(neverSent).getByText(/operating system's credential store/i)).toBeTruthy();
     });
 
