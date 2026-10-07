@@ -284,7 +284,6 @@ pub fn configure_pet_panel(window: &WebviewWindow) -> tauri::Result<()> {
     use objc2_foundation::NSRect;
     use std::ffi::{c_char, c_void};
     use std::sync::OnceLock;
-    use tauri_nspanel::WebviewWindowExt;
 
     static PET_PANEL_CLASS: OnceLock<&'static AnyClass> = OnceLock::new();
 
@@ -310,7 +309,7 @@ pub fn configure_pet_panel(window: &WebviewWindow) -> tauri::Result<()> {
         ) -> bool;
     }
 
-    let panel = window.to_panel()?;
+    let panel = super::macos_panel::to_panel(window)?;
     panel.set_floating_panel(true);
     panel.set_becomes_key_only_if_needed(true);
     panel.set_hides_on_deactivate(false);

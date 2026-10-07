@@ -71,7 +71,8 @@ smappservice-rs = "0.1.3"
 # clears on Windows), so the Dev A/B blur toggle drives window-vibrancy
 # directly through the existing 0.6 API.
 window-vibrancy = "0.6"
-tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1" }
+# Same pinned 2.0.1 source; only the native destructor ABI/parent call is repaired.
+tauri-nspanel = { path = "vendor/tauri-nspanel" }
 
 [target."cfg(windows)".dependencies]
 webview2-com = "=0.39.1"

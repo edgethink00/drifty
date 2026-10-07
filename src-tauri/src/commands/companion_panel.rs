@@ -499,7 +499,7 @@ use tauri_nspanel::{
     raw_nspanel::object_setClass,
 };
 #[cfg(target_os = "macos")]
-use tauri_nspanel::{ManagerExt as PanelManagerExt, WebviewWindowExt};
+use tauri_nspanel::ManagerExt as PanelManagerExt;
 
 #[cfg(target_os = "macos")]
 static COMPANION_POINTER_TRACKER_KEY: u8 = 0;
@@ -664,7 +664,7 @@ fn emit_pointer_event(app: &AppHandle, event: &str) {
 
 #[cfg(target_os = "macos")]
 pub fn configure_companion_panel(app: &AppHandle, window: &WebviewWindow) -> tauri::Result<()> {
-    let panel = window.to_panel()?;
+    let panel = super::macos_panel::to_panel(window)?;
     panel.set_floating_panel(true);
     panel.set_becomes_key_only_if_needed(true);
     panel.set_hides_on_deactivate(false);

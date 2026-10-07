@@ -13,6 +13,8 @@ mod developer_versions;
 mod extreme_nudge;
 mod google_calendar;
 mod living_soul;
+#[cfg(target_os = "macos")]
+mod macos_panel;
 mod managed_ai;
 mod native_update_dialog;
 #[cfg(target_os = "windows")]
