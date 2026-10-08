@@ -1,6 +1,6 @@
 #define UNICODE
 #define _UNICODE
-// Experimental Windows 11 backdrop for the transparent Tauri main window.
+// Windows 11 backdrop for the transparent Tauri main window.
 // The magnifier samples only windows behind Drifty. Its blurred output is
 // attached to the main HWND below the WebView child so the backdrop moves
 // atomically with the app rather than following it in a sibling window.
@@ -11,9 +11,17 @@
 #include <d2d1effects.h>
 #include <dwmapi.h>
 #include <wrl/client.h>
+#include <roapi.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <new>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
 #include <cstdio>
+#include <mutex>
+#include <optional>
+#include <thread>
 
 using Microsoft::WRL::ComPtr;
 
@@ -278,4 +286,95 @@ extern "C" void drifty_windows_blur_stop() {
     ::uiWindow = nullptr;
     startupSucceeded.store(false, std::memory_order_release);
   }
+}
+
+namespace {
+// One long-lived worker answers the WinRT capability question. It joins the
+// multithreaded apartment once and keeps its UISettings instance. Reading the
+// capability inline had two costs: the first read activated a WinRT object on
+// the WebView2 UI thread during startup, and the appearance poll paired
+// RoInitialize with RoUninitialize every cycle, creating and tearing down the
+// process MTA while WebView2 startup work could still be in flight.
+struct PolicyService {
+  std::mutex mutex;
+  std::condition_variable changed;
+  bool started = false;
+  std::uint64_t requested = 0;
+  std::uint64_t answered = 0;
+  unsigned char answer = 2;
+};
+
+// Never destroyed: the detached worker outlives static destruction at exit.
+PolicyService& policyService() {
+  static PolicyService* service = new PolicyService();
+  return *service;
+}
+
+// C++/WinRT projected objects cannot be heap-allocated with new; the worker
+// keeps its UISettings in an optional that lives as long as the thread.
+unsigned char readAdvancedEffects(std::optional<winrt::Windows::UI::ViewManagement::UISettings>& settings) {
+  try {
+    if (!settings) settings.emplace();
+    return settings->AdvancedEffectsEnabled() ? 0 : 1;
+  } catch (...) {
+    // A failed capability check must never reveal an unverified backdrop.
+    settings.reset();
+    return 2;
+  }
+}
+
+void policyWorkerMain() {
+  PolicyService& service = policyService();
+  const HRESULT initialized = RoInitialize(RO_INIT_MULTITHREADED);
+  const bool apartmentReady = SUCCEEDED(initialized) || initialized == RPC_E_CHANGED_MODE;
+  std::optional<winrt::Windows::UI::ViewManagement::UISettings> settings;
+  std::unique_lock<std::mutex> lock(service.mutex);
+  for (;;) {
+    service.changed.wait(lock, [&] { return service.requested != service.answered; });
+    const std::uint64_t serial = service.requested;
+    lock.unlock();
+    const unsigned char answer = apartmentReady ? readAdvancedEffects(settings) : 2;
+    lock.lock();
+    service.answer = answer;
+    service.answered = serial;
+    service.changed.notify_all();
+  }
+}
+
+unsigned char queryAdvancedEffectsPolicy() {
+  PolicyService& service = policyService();
+  std::unique_lock<std::mutex> lock(service.mutex);
+  if (!service.started) {
+    try {
+      std::thread(policyWorkerMain).detach();
+    } catch (...) {
+      return 2;
+    }
+    service.started = true;
+  }
+  const std::uint64_t serial = ++service.requested;
+  service.changed.notify_all();
+  // The worker normally answers within milliseconds. A stalled answer is
+  // reported as unverifiable, which keeps the opaque shell.
+  if (!service.changed.wait_for(lock, std::chrono::milliseconds(2000),
+                                [&] { return service.answered >= serial; })) {
+    return 2;
+  }
+  return service.answer;
+}
+}  // namespace
+
+// 0 = allowed, 1 = disabled by system preferences, 2 = cannot verify safely.
+// UISettings is the documented authority for custom transparency effects:
+// https://learn.microsoft.com/windows/apps/develop/composition/composition-tailoring
+// The caller's thread only reads Win32 system parameters; COM and WinRT stay on
+// the policy worker, so no apartment is initialized on the calling thread.
+extern "C" unsigned char drifty_windows_blur_system_policy() {
+  HIGHCONTRASTW contrast{};
+  contrast.cbSize = sizeof(contrast);
+  BOOL disableOverlapped = FALSE;
+  if (!SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) ||
+      !SystemParametersInfoW(SPI_GETDISABLEOVERLAPPEDCONTENT, 0, &disableOverlapped, 0)) return 2;
+  if ((contrast.dwFlags & HCF_HIGHCONTRASTON) || disableOverlapped) return 1;
+  return queryAdvancedEffectsPolicy();
 }

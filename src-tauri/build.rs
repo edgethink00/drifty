@@ -4,7 +4,8 @@ fn main() {
         cc::Build::new()
             .cpp(true)
             .file("src/windows_material_blur.cpp")
-            .flag_if_supported("/std:c++17")
+            .flag_if_supported("/std:c++20")
+            .flag_if_supported("/EHsc")
             .compile("drifty_windows_material_blur");
         for library in [
             "dcomp",
@@ -14,6 +15,7 @@ fn main() {
             "magnification",
             "user32",
             "gdi32",
+            "windowsapp",
         ] {
             println!("cargo:rustc-link-lib={library}");
         }

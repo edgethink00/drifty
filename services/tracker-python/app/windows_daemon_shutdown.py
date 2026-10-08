@@ -237,7 +237,9 @@ def stop_windows_tracker_daemon(
             raise TimeoutError("Tracker daemon stop deadline expired before ownership verification.")
         # This command/DB check is deliberately fresh and after native binding.
         # If the original exits during it, only its bound handle is ever used.
+        verification_started = time.monotonic()
         verified = verify_ownership(deadline)
+        verification_seconds = time.monotonic() - verification_started
         if api.wait(process, 0):
             return "exited"
         if time.monotonic() >= deadline:
@@ -246,6 +248,11 @@ def stop_windows_tracker_daemon(
             raise PermissionError("Unable to verify tracker daemon database; refusing to stop it.")
         name = _event_name(db_path, pid, creation)
         reason = "shutdown event unavailable"
+        # An absent event may belong to a legacy daemon. Leave time for its
+        # mandatory fresh ownership recheck and confirmed termination within
+        # the original deadline, allowing for a slower second WMI query.
+        fallback_reserve = verification_seconds * 2 + _POLL_SECONDS
+        missing_event_deadline = min(cooperative_deadline, deadline - fallback_reserve)
         while time.monotonic() < cooperative_deadline:
             event = api.open_event(name)
             if event:
@@ -261,7 +268,10 @@ def stop_windows_tracker_daemon(
                     return "cooperative"
                 reason = "cooperative shutdown timed out"
                 break
-            if api.wait(process, min(_POLL_SECONDS, max(0.0, cooperative_deadline - time.monotonic()))):
+            missing_event_remaining = missing_event_deadline - time.monotonic()
+            if missing_event_remaining <= 0:
+                break
+            if api.wait(process, min(_POLL_SECONDS, missing_event_remaining)):
                 return "exited"
         if api.wait(process, 0):
             return "exited"

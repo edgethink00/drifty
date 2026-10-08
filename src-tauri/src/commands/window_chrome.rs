@@ -3,7 +3,7 @@ use std::sync::{Mutex, OnceLock};
 use serde::Serialize;
 use tauri::{AppHandle, LogicalSize, Manager, State, Theme};
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", test))]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(target_os = "windows")]
 use std::time::Duration;
@@ -16,23 +16,115 @@ unsafe extern "C" {
     fn drifty_windows_blur_sync() -> bool;
     fn drifty_windows_blur_is_healthy() -> bool;
     fn drifty_windows_blur_stop();
+    fn drifty_windows_blur_system_policy() -> u8;
+}
+
+#[cfg(any(target_os = "windows", test))]
+struct WindowsBlurLifecycle {
+    io: Mutex<()>,
+    #[cfg(target_os = "windows")]
+    monitor_started: AtomicBool,
+    generation: AtomicU64,
+    failed: AtomicBool,
+    shutting_down: AtomicBool,
+}
+
+#[cfg(any(target_os = "windows", test))]
+impl WindowsBlurLifecycle {
+    const fn new() -> Self {
+        Self {
+            io: Mutex::new(()),
+            #[cfg(target_os = "windows")]
+            monitor_started: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
+            failed: AtomicBool::new(false),
+            shutting_down: AtomicBool::new(false),
+        }
+    }
+
+    fn can_start(&self) -> bool {
+        !self.failed.load(Ordering::Acquire) && !self.shutting_down.load(Ordering::Acquire)
+    }
+
+    fn poll_health(&self, generation: u64, healthy: impl FnOnce() -> bool) -> bool {
+        let _guard = self.io.lock().expect("Windows blur lock poisoned");
+        // Generation validation and the failure latch must be one transaction.
+        // Once latched, start's check under this same lock prevents replacement
+        // until process exit, so restoring opacity can precede native cleanup.
+        if !self.can_start() || self.generation.load(Ordering::Acquire) != generation {
+            return false;
+        }
+        if healthy() {
+            return false;
+        }
+        self.failed.store(true, Ordering::Release);
+        true
+    }
 }
 
 #[cfg(target_os = "windows")]
-static WINDOWS_NATIVE_BLUR_IO: Mutex<()> = Mutex::new(());
+static WINDOWS_NATIVE_BLUR: WindowsBlurLifecycle = WindowsBlurLifecycle::new();
 #[cfg(target_os = "windows")]
-static WINDOWS_NATIVE_BLUR_MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
+static WINDOWS_BLUR_SYSTEM_MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
+
 #[cfg(target_os = "windows")]
-static WINDOWS_NATIVE_BLUR_GENERATION: AtomicU64 = AtomicU64::new(0);
+fn windows_blur_system_policy() -> u8 {
+    // Safety: this helper reads Win32 system parameters on the calling thread
+    // and asks one long-lived native worker for the WinRT capability. It never
+    // initializes COM on the calling thread and does not touch blur HWNDs.
+    unsafe { drifty_windows_blur_system_policy() }
+}
+
 #[cfg(target_os = "windows")]
-static WINDOWS_NATIVE_BLUR_FAILED: AtomicBool = AtomicBool::new(false);
+fn update_windows_blur_system_policy<R: Runtime>(
+    window: &WebviewWindow<R>,
+    policy: u8,
+    notify: bool,
+) {
+    let blocked = if policy == 1 { "true" } else { "false" };
+    let opaque = if policy != 0 {
+        "document.documentElement.dataset.windowMaterial = 'solid'; document.documentElement.removeAttribute('data-windows-native-blur');"
+    } else {
+        ""
+    };
+    let event = if notify {
+        "window.dispatchEvent(new Event('drifty-windows-blur-system-change'));"
+    } else {
+        ""
+    };
+    let _ = window.eval(format!(
+        "document.documentElement.dataset.windowsBlurSystemBlocked = '{blocked}'; {opaque} {event}"
+    ));
+}
+
 #[cfg(target_os = "windows")]
-static WINDOWS_NATIVE_BLUR_SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+fn monitor_windows_blur_system_policy<R: Runtime>(window: &WebviewWindow<R>, initial_policy: u8) {
+    if WINDOWS_BLUR_SYSTEM_MONITOR_STARTED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let window = (*window).clone();
+    std::thread::spawn(move || {
+        let mut previous = initial_policy;
+        while !WINDOWS_NATIVE_BLUR.shutting_down.load(Ordering::Acquire) {
+            std::thread::sleep(Duration::from_millis(500));
+            if WINDOWS_NATIVE_BLUR.shutting_down.load(Ordering::Acquire) {
+                break;
+            }
+            let policy = windows_blur_system_policy();
+            if policy != previous {
+                previous = policy;
+                // Opacity changes before the renderer reapplies its preference.
+                // A system setting is reversible and never latches a GPU failure.
+                update_windows_blur_system_policy(&window, policy, true);
+            }
+        }
+    });
+}
 
 #[cfg(target_os = "windows")]
 pub(crate) fn start_windows_native_blur<R: Runtime>(window: &WebviewWindow<R>) -> bool {
-    if WINDOWS_NATIVE_BLUR_FAILED.load(Ordering::Acquire)
-        || WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
+    if WINDOWS_NATIVE_BLUR.failed.load(Ordering::Acquire)
+        || WINDOWS_NATIVE_BLUR.shutting_down.load(Ordering::Acquire)
     {
         return false;
     }
@@ -45,60 +137,128 @@ pub(crate) fn start_windows_native_blur<R: Runtime>(window: &WebviewWindow<R>) -
     if is_translucent {
         if let Ok(hwnd) = window.hwnd() {
             // Safety: the revealed Tauri main window owns this live HWND.
-            let started = {
-                let _guard = WINDOWS_NATIVE_BLUR_IO
+            let (started, generation, monitor_generation) = {
+                let _guard = WINDOWS_NATIVE_BLUR
+                    .io
                     .lock()
                     .expect("Windows blur lock poisoned");
-                unsafe { drifty_windows_blur_start(hwnd.0) }
+                // A failure or OFF request may have arrived while start waited
+                // for the native I/O lock. Recheck admission inside that lock.
+                if !WINDOWS_NATIVE_BLUR.can_start()
+                    || window
+                        .app_handle()
+                        .state::<MainWindowMaterialState>()
+                        .read()
+                        .kind
+                        != MainWindowMaterialKind::Translucent
+                {
+                    return false;
+                }
+                let started = unsafe { drifty_windows_blur_start(hwnd.0) };
+                let generation = if started
+                    && !WINDOWS_NATIVE_BLUR
+                        .monitor_started
+                        .swap(true, Ordering::AcqRel)
+                {
+                    Some(
+                        WINDOWS_NATIVE_BLUR
+                            .generation
+                            .fetch_add(1, Ordering::AcqRel)
+                            + 1,
+                    )
+                } else {
+                    None
+                };
+                if !started {
+                    let failure_generation = WINDOWS_NATIVE_BLUR
+                        .generation
+                        .fetch_add(1, Ordering::AcqRel)
+                        + 1;
+                    WINDOWS_NATIVE_BLUR
+                        .monitor_started
+                        .store(false, Ordering::Release);
+                    window
+                        .app_handle()
+                        .state::<MainWindowMaterialState>()
+                        .replace(MainWindowMaterialStatus::windows(
+                            MainWindowMaterialKind::Solid,
+                        ));
+                    let fallback_window = (*window).clone();
+                    // Queue opacity before cleanup without waiting for the UI
+                    // thread under the I/O lock. A later retry invalidates this
+                    // queued fallback, and transient startup failure is not latched.
+                    let _ = window.run_on_main_thread(move || {
+                        if WINDOWS_NATIVE_BLUR.generation.load(Ordering::Acquire)
+                            == failure_generation
+                        {
+                            let _ = fallback_window.eval("document.documentElement.dataset.windowMaterial = 'solid'; document.documentElement.removeAttribute('data-windows-native-blur')");
+                        }
+                    });
+                    // Safety: no replacement can start before this failed
+                    // worker is released under the same native I/O lock.
+                    unsafe { drifty_windows_blur_stop() };
+                }
+                (
+                    started,
+                    WINDOWS_NATIVE_BLUR.generation.load(Ordering::Acquire),
+                    generation,
+                )
             };
             if started {
-                // Only the successful native-blur path may use the lighter tint.
-                // A failed opt-in and the ordinary transparent fallback retain
+                // Only the successful native blur path may use the lighter tint.
+                // A failed blur and the opaque fallback retain
                 // their stronger tint so desktop detail does not show sharply.
-                if let Err(error) =
-                    window.eval("document.documentElement.dataset.windowsNativeBlur = 'active'; document.documentElement.dataset.windowMaterial = 'translucent'")
-                {
-                    eprintln!("could not reveal the experimental Windows blur tint: {error}");
-                }
-                if !WINDOWS_NATIVE_BLUR_MONITOR_STARTED.swap(true, Ordering::AcqRel) {
-                    let generation = WINDOWS_NATIVE_BLUR_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+                let reveal_window = (*window).clone();
+                let _ = window.run_on_main_thread(move || {
+                    // An OFF request or accepted runtime failure can invalidate
+                    // this queued reveal. Check again on the renderer's thread.
+                    if WINDOWS_NATIVE_BLUR.can_start()
+                        && WINDOWS_NATIVE_BLUR.generation.load(Ordering::Acquire) == generation
+                    {
+                        if let Err(error) = reveal_window.eval("if (document.documentElement.dataset.windowsBlurWanted === 'true' && document.documentElement.dataset.windowsBlurSystemBlocked !== 'true') { document.documentElement.dataset.windowsNativeBlur = 'active'; document.documentElement.dataset.windowMaterial = 'translucent'; }") {
+                            eprintln!("could not reveal the Windows blur tint: {error}");
+                        }
+                    }
+                });
+                if let Some(generation) = monitor_generation {
                     let monitored_window = (*window).clone();
                     std::thread::spawn(move || {
-                        while !WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
-                            && WINDOWS_NATIVE_BLUR_GENERATION.load(Ordering::Acquire) == generation
+                        while !WINDOWS_NATIVE_BLUR.shutting_down.load(Ordering::Acquire)
+                            && WINDOWS_NATIVE_BLUR.generation.load(Ordering::Acquire) == generation
                         {
                             std::thread::sleep(Duration::from_millis(100));
-                            if WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
-                                || WINDOWS_NATIVE_BLUR_GENERATION.load(Ordering::Acquire) != generation
+                            if WINDOWS_NATIVE_BLUR.shutting_down.load(Ordering::Acquire)
+                                || WINDOWS_NATIVE_BLUR.generation.load(Ordering::Acquire)
+                                    != generation
                             {
                                 break;
                             }
-                            let healthy = {
-                                let _guard = WINDOWS_NATIVE_BLUR_IO
-                                    .lock()
-                                    .expect("Windows blur lock poisoned");
-                                // Safety: the native health flag is atomic and the FFI lock
-                                // serializes this check with start, sync, and shutdown.
-                                unsafe { drifty_windows_blur_is_healthy() }
-                            };
-                            if healthy || WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
-                                || WINDOWS_NATIVE_BLUR_GENERATION.load(Ordering::Acquire) != generation
-                            {
+                            // Safety: health validation runs under the same lock
+                            // as start, sync, OFF and shutdown. A stale monitor
+                            // never latches failure for a later surface.
+                            if !WINDOWS_NATIVE_BLUR.poll_health(generation, || unsafe {
+                                drifty_windows_blur_is_healthy()
+                            }) {
                                 continue;
                             }
-                            WINDOWS_NATIVE_BLUR_FAILED.store(true, Ordering::Release);
-                            monitored_window.app_handle().state::<MainWindowMaterialState>()
-                                .replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+                            monitored_window
+                                .app_handle()
+                                .state::<MainWindowMaterialState>()
+                                .replace(MainWindowMaterialStatus::windows(
+                                    MainWindowMaterialKind::Solid,
+                                ));
                             if let Err(error) = monitored_window.eval(
                                 "document.documentElement.dataset.windowMaterial = 'solid'; document.documentElement.removeAttribute('data-windows-native-blur')",
                             ) {
                                 eprintln!("could not restore the Windows blur fallback tint: {error}");
                             }
                             eprintln!("Windows blur stopped after startup; restored opaque shell");
-                            let _guard = WINDOWS_NATIVE_BLUR_IO
+                            let _guard = WINDOWS_NATIVE_BLUR
+                                .io
                                 .lock()
                                 .expect("Windows blur lock poisoned");
-                            // Safety: this monitor owns the failed opt-in surface until exit.
+                            // Safety: the latched failure prevents a replacement
+                            // surface from starting before this cleanup.
                             unsafe { drifty_windows_blur_stop() };
                             break;
                         }
@@ -107,12 +267,6 @@ pub(crate) fn start_windows_native_blur<R: Runtime>(window: &WebviewWindow<R>) -
                 return true;
             } else {
                 eprintln!("could not activate Windows native blur; restoring opaque shell");
-                window.app_handle().state::<MainWindowMaterialState>()
-                    .replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
-                let _ = window.eval("document.documentElement.dataset.windowMaterial = 'solid'; document.documentElement.removeAttribute('data-windows-native-blur')");
-                let _guard = WINDOWS_NATIVE_BLUR_IO.lock().expect("Windows blur lock poisoned");
-                // Safety: a failed native start can leave worker handles that must be released.
-                unsafe { drifty_windows_blur_stop() };
             }
         }
     }
@@ -121,12 +275,11 @@ pub(crate) fn start_windows_native_blur<R: Runtime>(window: &WebviewWindow<R>) -
 
 #[cfg(target_os = "windows")]
 pub(crate) fn sync_windows_native_blur() {
-    if !WINDOWS_NATIVE_BLUR_FAILED.load(Ordering::Acquire)
-        && !WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.load(Ordering::Acquire)
-    {
-        let _guard = WINDOWS_NATIVE_BLUR_IO
-            .lock()
-            .expect("Windows blur lock poisoned");
+    let _guard = WINDOWS_NATIVE_BLUR
+        .io
+        .lock()
+        .expect("Windows blur lock poisoned");
+    if WINDOWS_NATIVE_BLUR.can_start() {
         // Safety: the native helper owns its HWNDs and checks their lifetime.
         let _ = unsafe { drifty_windows_blur_sync() };
     }
@@ -134,9 +287,16 @@ pub(crate) fn sync_windows_native_blur() {
 
 #[cfg(target_os = "windows")]
 pub(crate) fn stop_windows_native_blur() {
-    WINDOWS_NATIVE_BLUR_SHUTTING_DOWN.store(true, Ordering::Release);
-    WINDOWS_NATIVE_BLUR_GENERATION.fetch_add(1, Ordering::AcqRel);
-    let _guard = WINDOWS_NATIVE_BLUR_IO.lock().expect("Windows blur lock poisoned");
+    let _guard = WINDOWS_NATIVE_BLUR
+        .io
+        .lock()
+        .expect("Windows blur lock poisoned");
+    WINDOWS_NATIVE_BLUR
+        .shutting_down
+        .store(true, Ordering::Release);
+    WINDOWS_NATIVE_BLUR
+        .generation
+        .fetch_add(1, Ordering::AcqRel);
     // Safety: called by the Tauri event loop before process shutdown.
     unsafe { drifty_windows_blur_stop() };
 }
@@ -228,8 +388,11 @@ fn windows_material_kind_for_build(build: u32) -> MainWindowMaterialKind {
 }
 
 #[cfg(any(target_os = "windows", test))]
-fn windows_blur_preview_requested(build: u32, enabled: bool, failed: bool) -> bool {
-    enabled && !failed && windows_material_kind_for_build(build) == MainWindowMaterialKind::Translucent
+fn windows_blur_requested(build: u32, enabled: bool, failed: bool, system_allowed: bool) -> bool {
+    enabled
+        && !failed
+        && system_allowed
+        && windows_material_kind_for_build(build) == MainWindowMaterialKind::Translucent
 }
 
 #[cfg(any(target_os = "windows", test))]
@@ -283,12 +446,14 @@ fn set_windows_backdrop_theme<R: Runtime>(
 }
 
 /// The native window may be transparent, but the renderer starts with an
-/// opaque CSS shell. Only an explicit per-install Preview opt-in may activate
-/// the blur helper and reveal the translucent tint.
+/// opaque CSS shell. The renderer's stored/default preference may activate the
+/// blur helper; only a healthy native source reveals the translucent tint.
 #[cfg(target_os = "windows")]
 pub(crate) fn configure_main_window_material(app: &AppHandle) {
     app.state::<MainWindowMaterialState>()
-        .replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+        .replace(MainWindowMaterialStatus::windows(
+            MainWindowMaterialKind::Solid,
+        ));
 }
 
 /// Logical size of the v2.1 onboarding card. In compact mode the whole window
@@ -667,33 +832,59 @@ pub fn window_set_theme_appearance(
         let window = app
             .get_webview_window(MAIN_WINDOW_LABEL)
             .ok_or_else(|| "main window is unavailable".to_string())?;
-        let requested = windows_blur_preview_requested(
+        let system_policy = windows_blur_system_policy();
+        update_windows_blur_system_policy(&window, system_policy, false);
+        if windows_material_kind_for_build(windows_version::OsVersion::current().build)
+            == MainWindowMaterialKind::Translucent
+        {
+            monitor_windows_blur_system_policy(&window, system_policy);
+        }
+        let requested = windows_blur_requested(
             windows_version::OsVersion::current().build,
             windows_blur_preview_enabled,
-            WINDOWS_NATIVE_BLUR_FAILED.load(Ordering::Acquire),
+            WINDOWS_NATIVE_BLUR.failed.load(Ordering::Acquire),
+            system_policy == 0,
         );
         if requested {
             if let Err(error) = apply_windows_translucent_shell(&window)
                 .and_then(|_| set_windows_backdrop_theme(&window, dark))
             {
-                eprintln!("could not activate Windows blur Preview; using opaque shell: {error}");
-                material_state.replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+                eprintln!("could not activate Windows blur; using opaque shell: {error}");
+                material_state.replace(MainWindowMaterialStatus::windows(
+                    MainWindowMaterialKind::Solid,
+                ));
             } else {
-                material_state.replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Translucent));
+                material_state.replace(MainWindowMaterialStatus::windows(
+                    MainWindowMaterialKind::Translucent,
+                ));
                 if window.is_visible().unwrap_or(false) && !start_windows_native_blur(&window) {
-                    material_state.replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+                    material_state.replace(MainWindowMaterialStatus::windows(
+                        MainWindowMaterialKind::Solid,
+                    ));
                 }
             }
         } else {
             // The renderer makes the shell opaque synchronously before IPC.
             // Remove native blur only after its replacement is in place.
-            material_state.replace(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
-            WINDOWS_NATIVE_BLUR_GENERATION.fetch_add(1, Ordering::AcqRel);
-            WINDOWS_NATIVE_BLUR_MONITOR_STARTED.store(false, Ordering::Release);
+            {
+                let _guard = WINDOWS_NATIVE_BLUR
+                    .io
+                    .lock()
+                    .expect("Windows blur lock poisoned");
+                material_state.replace(MainWindowMaterialStatus::windows(
+                    MainWindowMaterialKind::Solid,
+                ));
+                WINDOWS_NATIVE_BLUR
+                    .generation
+                    .fetch_add(1, Ordering::AcqRel);
+                WINDOWS_NATIVE_BLUR
+                    .monitor_started
+                    .store(false, Ordering::Release);
+                // Safety: invalidate the old monitor and stop its surface before
+                // allowing a new start to acquire native I/O ownership.
+                unsafe { drifty_windows_blur_stop() };
+            }
             let _ = window.eval("document.documentElement.dataset.windowMaterial = 'solid'; document.documentElement.removeAttribute('data-windows-native-blur')");
-            let _guard = WINDOWS_NATIVE_BLUR_IO.lock().expect("Windows blur lock poisoned");
-            // Safety: the disabled Preview has no remaining native blur owner.
-            unsafe { drifty_windows_blur_stop() };
         }
     }
 
@@ -713,11 +904,14 @@ pub fn window_set_theme_appearance(
     {
         let status = material_state.read();
         if status.kind == MainWindowMaterialKind::Translucent {
-            let visible = app.get_webview_window(MAIN_WINDOW_LABEL)
+            let visible = app
+                .get_webview_window(MAIN_WINDOW_LABEL)
                 .and_then(|window| window.is_visible().ok())
                 .unwrap_or(false);
             if !visible {
-                return Ok(MainWindowMaterialStatus::windows(MainWindowMaterialKind::Solid));
+                return Ok(MainWindowMaterialStatus::windows(
+                    MainWindowMaterialKind::Solid,
+                ));
             }
         }
         Ok(status)
@@ -783,6 +977,50 @@ pub fn window_show_system_menu(app: AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retired_windows_blur_monitor_cannot_fail_a_replacement_surface() {
+        let lifecycle = WindowsBlurLifecycle::new();
+        lifecycle.generation.store(1, Ordering::Release);
+        // The old monitor has already observed generation 1 outside the lock.
+        // OFF and a successful ON then take ownership before its health poll.
+        {
+            let _guard = lifecycle.io.lock().unwrap();
+            lifecycle.generation.store(3, Ordering::Release);
+        }
+        assert!(!lifecycle.poll_health(1, || {
+            panic!("a retired monitor must not inspect the replacement worker")
+        }));
+        assert!(lifecycle.can_start());
+        assert!(!lifecycle.poll_health(3, || true));
+    }
+
+    #[test]
+    fn windows_blur_failure_blocks_start_waiting_for_native_io() {
+        let lifecycle = WindowsBlurLifecycle::new();
+        lifecycle.generation.store(1, Ordering::Release);
+        // This is the admission a pending start saw before waiting for I/O.
+        assert!(lifecycle.can_start());
+        assert!(lifecycle.poll_health(1, || {
+            assert!(lifecycle.io.try_lock().is_err());
+            false
+        }));
+        // Opacity is restored outside the lock before native stop; a queued
+        // start must still reject admission when it acquires the lock.
+        let _guard = lifecycle.io.lock().unwrap();
+        assert!(!lifecycle.can_start());
+    }
+
+    #[test]
+    fn windows_blur_shutdown_does_not_latch_a_gpu_failure() {
+        let lifecycle = WindowsBlurLifecycle::new();
+        lifecycle.generation.store(1, Ordering::Release);
+        lifecycle.shutting_down.store(true, Ordering::Release);
+        assert!(!lifecycle.poll_health(1, || {
+            panic!("shutdown must not inspect a retired native worker")
+        }));
+        assert!(!lifecycle.failed.load(Ordering::Acquire));
+    }
 
     fn assert_size(actual: LogicalSize<f64>, width: f64, height: f64) {
         assert_eq!(actual.width, width);
@@ -892,10 +1130,11 @@ mod tests {
 
     #[test]
     fn translucent_shell_requires_the_documented_windows_11_dwm_api() {
-        assert!(!windows_blur_preview_requested(26_200, false, false));
-        assert!(!windows_blur_preview_requested(22_000, true, false));
-        assert!(!windows_blur_preview_requested(26_200, true, true));
-        assert!(windows_blur_preview_requested(26_200, true, false));
+        assert!(!windows_blur_requested(26_200, false, false, true));
+        assert!(!windows_blur_requested(22_000, true, false, true));
+        assert!(!windows_blur_requested(26_200, true, true, true));
+        assert!(windows_blur_requested(26_200, true, false, true));
+        assert!(!windows_blur_requested(26_200, true, false, false));
         assert_eq!(
             windows_material_kind_for_build(22_000),
             MainWindowMaterialKind::Solid

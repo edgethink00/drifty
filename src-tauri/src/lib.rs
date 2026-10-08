@@ -24,6 +24,8 @@ mod tracker_recovery;
 mod tracking_activation;
 mod tracking_pause;
 mod tray;
+#[cfg(any(target_os = "windows", test))]
+mod windows_previous_instance;
 
 use std::{
     panic::{self, AssertUnwindSafe},
@@ -235,6 +237,125 @@ fn shutdown_app_for_exit(app: &AppHandle) {
             tracker::shutdown_serve_for_app_exit,
         );
     });
+}
+
+// Compile this portable API usage in tests too; production calls stay Windows-only.
+#[cfg(any(target_os = "windows", test))]
+fn close_windows_webviews_for_exit(app: &AppHandle) -> Vec<u32> {
+    // Explicitly release WebView2 event-handler cycles on committed exit.
+    // Tauri calls Exit after LoopDestroyed, before SDK cleanup and relaunch;
+    // controller access must still run on its owner thread.
+    // Close only the webviews: destroying the last native window would send
+    // another ExitRequested event and could interfere with the restart.
+    // The shared browser process keeps shutting down after this process is
+    // gone; its PID is returned so the replacement launch can wait for it.
+    let windows = app.webview_windows();
+    eprintln!("[windows-exit] closing {} controllers", windows.len());
+    let browser_pids = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    for (label, window) in windows {
+        let webview: &tauri::Webview = window.as_ref();
+        let controller_label = label.clone();
+        let collected = std::sync::Arc::clone(&browser_pids);
+        if let Err(error) = webview.with_webview(move |platform| {
+            #[cfg(target_os = "windows")]
+            {
+                // SAFETY: with_webview dispatches onto the controller's owner
+                // thread. Exit is committed and no view will be used again.
+                let controller = platform.controller();
+                let mut browser_pid = 0_u32;
+                let browser_pid_read = unsafe {
+                    controller
+                        .CoreWebView2()
+                        .and_then(|core| core.BrowserProcessId(&mut browser_pid))
+                };
+                if browser_pid_read.is_ok() && browser_pid != 0 {
+                    if let Ok(mut pids) = collected.lock() {
+                        pids.push(browser_pid);
+                    }
+                }
+                // Tauri's close removes the Wry wrapper; its Drop can depend on
+                // other references. WebView2 recommends explicitly closing the
+                // controller to release event-handler cycles before relaunch.
+                match unsafe { controller.Close() } {
+                    Ok(()) => eprintln!("[windows-exit] closed {controller_label} controller"),
+                    Err(error) => eprintln!(
+                        "[windows-exit] could not close {controller_label} controller: {error}"
+                    ),
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            let _ = (platform, controller_label, collected);
+        }) {
+            eprintln!("[windows-exit] could not access {label} controller: {error}");
+        }
+        if let Err(error) = webview.close() {
+            eprintln!("could not close {label} webview during app exit: {error}");
+        }
+    }
+    let pids = browser_pids
+        .lock()
+        .map(|pids| pids.clone())
+        .unwrap_or_default();
+    eprintln!("[windows-exit] browser processes: {pids:?}");
+    pids
+}
+
+/// WebView2 browser process IDs behind the live webviews. Must run on the main
+/// thread so the platform closure executes inline; elsewhere it yields nothing.
+#[cfg(target_os = "windows")]
+pub(crate) fn windows_browser_process_ids(app: &AppHandle) -> Vec<u32> {
+    let collected = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    for (_label, window) in app.webview_windows() {
+        let webview: &tauri::Webview = window.as_ref();
+        let sink = std::sync::Arc::clone(&collected);
+        let _ = webview.with_webview(move |platform| {
+            let mut browser_pid = 0_u32;
+            // SAFETY: with_webview runs this on the controller's owner thread.
+            let read = unsafe {
+                platform
+                    .controller()
+                    .CoreWebView2()
+                    .and_then(|core| core.BrowserProcessId(&mut browser_pid))
+            };
+            if read.is_ok() && browser_pid != 0 {
+                if let Ok(mut pids) = sink.lock() {
+                    pids.push(browser_pid);
+                }
+            }
+        });
+    }
+    let pids = collected.lock().map(|pids| pids.clone()).unwrap_or_default();
+    pids
+}
+
+/// Record this retiring process and its browser processes so the replacement
+/// launch waits for them instead of attaching to a browser that is shutting down.
+#[cfg(target_os = "windows")]
+pub(crate) fn record_windows_previous_instance(app: &AppHandle, browser_pids: Vec<u32>) {
+    let Ok(directory) = app.path().app_local_data_dir() else {
+        eprintln!("[windows-exit] app data directory unavailable; relaunch will not wait");
+        return;
+    };
+    if let Err(error) =
+        windows_previous_instance::record(&directory, std::process::id(), browser_pids)
+    {
+        eprintln!("[windows-exit] could not record the retiring instance: {error}");
+    }
+}
+
+/// Before any WebView exists, wait (bounded) for the previous instance's host
+/// and browser processes recorded at its committed exit to retire.
+#[cfg(target_os = "windows")]
+fn wait_for_windows_previous_instance(app: &AppHandle) {
+    let Ok(directory) = app.path().app_local_data_dir() else {
+        return;
+    };
+    if let Some(outcome) = windows_previous_instance::wait_for_previous_instance(&directory) {
+        eprintln!(
+            "[windows-startup] previous instance retired: waited={:?} skipped={:?} timed_out={:?} elapsed_ms={}",
+            outcome.waited_pids, outcome.skipped_pids, outcome.timed_out_pids, outcome.elapsed_ms
+        );
+    }
 }
 
 pub fn init_native_observability() -> Option<sentry::ClientInitGuard> {
@@ -468,7 +589,18 @@ pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
         }
         let _ = window.set_focus();
         #[cfg(target_os = "windows")]
-        commands::start_windows_native_blur(&window);
+        {
+            commands::start_windows_native_blur(&window);
+            // An appearance request can arrive before creation/reveal finishes.
+            // Reapply the current preference once this native window is visible.
+            if window.is_visible().unwrap_or(false) {
+                if let Err(error) = window
+                    .eval("window.dispatchEvent(new Event('drifty-windows-appearance-ready'))")
+                {
+                    eprintln!("could not notify Windows appearance readiness: {error}");
+                }
+            }
+        }
         #[cfg(target_os = "macos")]
         activate_drifty_application(app);
     }
@@ -525,7 +657,18 @@ fn setup_auxiliary_window<R: Runtime>(
     // Only a runtime error logged while this window was being created explains
     // its failure; drop anything an earlier window left behind.
     let _ = observability::take_last_runtime_error();
-    let Err(error) = setup(app) else {
+    #[cfg(target_os = "windows")]
+    let started = std::time::Instant::now();
+    #[cfg(target_os = "windows")]
+    eprintln!("[windows-startup] preparing {label}");
+    let result = setup(app);
+    #[cfg(target_os = "windows")]
+    eprintln!(
+        "[windows-startup] prepared {label}: success={}, elapsed_ms={}",
+        result.is_ok(),
+        started.elapsed().as_millis()
+    );
+    let Err(error) = result else {
         return Ok(());
     };
     if !recover {
@@ -711,6 +854,11 @@ pub fn run() {
                         #[cfg(target_os = "windows")]
                         commands::stop_windows_native_blur();
                         shutdown_app_for_exit(app);
+                        #[cfg(target_os = "windows")]
+                        {
+                            let browser_pids = close_windows_webviews_for_exit(app);
+                            record_windows_previous_instance(app, browser_pids);
+                        }
                     }
                     tauri::RunEvent::WindowEvent {
                         label,
@@ -808,6 +956,8 @@ pub fn run() {
             // Restoring afterward let those requests erase a user's pause
             // during relaunch (Windows QA attempt 31, 2026-09-07).
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
+            #[cfg(target_os = "windows")]
+            wait_for_windows_previous_instance(app.handle());
             #[cfg(target_os = "windows")]
             main_window_recovery::create_initial_window(app.handle());
             #[cfg(not(target_os = "windows"))]

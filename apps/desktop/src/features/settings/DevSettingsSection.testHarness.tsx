@@ -11,8 +11,6 @@ export function renderProductionDevSettings(
 ) {
   const props = {
     hostPlatform: "macos" as const,
-    windowsBlurPreviewEnabled: false,
-    onWindowsBlurPreviewEnabledChange: vi.fn(),
     activeSubsection: "diagnostics" as const,
     onSubsectionChange: vi.fn(),
     darkPalettePreview: "current" as const,

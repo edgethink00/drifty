@@ -1,3 +1,5 @@
+import { WindowsBlurSettingsRow } from "./WindowsBlurSettingsRow";
+import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import type { ActivityCategory } from "@drifty/domain";
 import { AccentColorControl, CategoryColorControls, ProductivityColorControls, type AppThemeColorKey } from "./SettingsColorControls";
 import type { AppThemeColorOverrides, CategoryColorOverrides, ThemeMode } from "./settingsStorage";
@@ -13,6 +15,9 @@ type AppearanceSettingsSectionProps = {
   readonly appThemeColorOverrides: AppThemeColorOverrides;
   readonly categoryColorOverrides: CategoryColorOverrides;
   readonly theme: ThemeMode;
+  readonly hostPlatform: HostPlatform;
+  readonly windowsBlurEnabled: boolean;
+  readonly onWindowsBlurEnabledChange: (enabled: boolean) => void;
   readonly onAppThemeColorChange: (key: AppThemeColorKey, value: string) => void;
   readonly onAppThemeColorReset: (key: AppThemeColorKey) => void;
   readonly onCategoryColorChange: (key: ActivityCategory, value: string) => void;
@@ -29,6 +34,9 @@ export function AppearanceSettingsSection({
   appThemeColorOverrides,
   categoryColorOverrides,
   theme,
+  hostPlatform,
+  windowsBlurEnabled,
+  onWindowsBlurEnabledChange,
   onAppThemeColorChange,
   onAppThemeColorReset,
   onCategoryColorChange,
@@ -49,6 +57,7 @@ export function AppearanceSettingsSection({
           ]}
           onChange={onThemeChange}
         /></div></div>
+        {hostPlatform === "windows" && <WindowsBlurSettingsRow enabled={windowsBlurEnabled} onEnabledChange={onWindowsBlurEnabledChange} />}
         <AccentColorControl
           accentOptions={APP_THEME_ACCENT_COLOR_OPTIONS}
           overrides={appThemeColorOverrides}

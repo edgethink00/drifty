@@ -207,6 +207,67 @@ class WindowsProcessTableTests(unittest.TestCase):
         with patch.object(wpt.subprocess, "run", return_value=_completed("", returncode=1)):
             self.assertIsNone(wpt.windows_process_command(10))
 
+    def test_cold_command_query_filters_only_the_requested_pid(self) -> None:
+        def query(args, **kwargs):
+            self.assertEqual(args[-1], "501")
+            script = Path(args[-2])
+            self.assertEqual(script.read_text(encoding="ascii"), wpt._SCRIPT_HOST_QUERY)
+            self.assertIn("WHERE ProcessId = ", script.read_text(encoding="ascii"))
+            return _completed('[{"ProcessId":501,"CommandLine":"owned.exe"}]')
+
+        with patch.object(wpt.subprocess, "run", side_effect=query) as run:
+            self.assertEqual(wpt.windows_process_command(501), "owned.exe")
+        run.assert_called_once()
+        self.assertIsNone(wpt._cached_table)
+
+    def test_partial_command_query_does_not_hide_other_daemons_from_discovery(self) -> None:
+        with patch.object(wpt.subprocess, "run", side_effect=[
+            _completed('[{"ProcessId":501,"CommandLine":"first.exe"}]'),
+            _completed('[{"ProcessId":501,"CommandLine":"first.exe"},'
+                       '{"ProcessId":502,"CommandLine":"second.exe"}]'),
+        ]) as run:
+            self.assertEqual(wpt.windows_process_command(501), "first.exe")
+            self.assertEqual(wpt.windows_process_table(), {501: "first.exe", 502: "second.exe"})
+        self.assertEqual(run.call_count, 2)
+
+    def test_filtered_fallback_keeps_the_pid_and_remaining_deadline(self) -> None:
+        clock = [10.0]
+
+        def query(args, **kwargs):
+            if args[0] != "powershell":
+                self.assertEqual(args[-1], "501")
+                self.assertEqual(kwargs["timeout"], 3.0)
+                clock[0] = 11.25
+                return _completed("disabled", returncode=1)
+            self.assertIn("-Filter 'ProcessId = 501'", args[-1])
+            self.assertEqual(kwargs["timeout"], 1.75)
+            return _completed('[{"ProcessId":501,"CommandLine":"owned.exe"}]')
+
+        with patch.object(wpt.time, "monotonic", side_effect=lambda: clock[0]), patch.object(
+            wpt.subprocess, "run", side_effect=query
+        ):
+            self.assertEqual(wpt.windows_process_command(501, deadline=13.0), "owned.exe")
+        self.assertIsNone(wpt._cached_table)
+
+    def test_filtered_query_finishing_after_deadline_is_not_ownership_evidence(self) -> None:
+        clock = [10.0]
+
+        def query(*args, **kwargs):
+            clock[0] = 13.0
+            return _completed('[{"ProcessId":501,"CommandLine":"owned.exe"}]')
+
+        with patch.object(wpt.time, "monotonic", side_effect=lambda: clock[0]), patch.object(
+            wpt.subprocess, "run", side_effect=query
+        ):
+            self.assertIsNone(wpt.windows_process_command(501, deadline=13.0))
+        self.assertIsNone(wpt._cached_table)
+
+    def test_command_query_rejects_noninteger_pid_before_starting_a_process(self) -> None:
+        with patch.object(wpt.subprocess, "run") as run:
+            for pid in (True, 0, -1, 501.0, "501 OR ProcessId = 502"):
+                self.assertIsNone(wpt.windows_process_command(pid))
+        run.assert_not_called()
+
 
 class ProcessTableCacheTests(unittest.TestCase):
     """The cache exists for latency but must not change what callers observe."""

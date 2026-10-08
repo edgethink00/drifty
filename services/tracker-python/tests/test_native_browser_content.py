@@ -28,7 +28,7 @@ class NativeBrowserContentTests(unittest.TestCase):
             result = capture_browser_content(**self.arguments, run_command=run)
         self.assertEqual(result, dict(version=1, collectedAt=self.arguments["observed_at"],
                                      pageUrl=self.arguments["page_url"], pageTitle="Course", **self.reply["clues"]))
-        self.assertEqual(run.call_args.args[0][:7], ["/packaged/helper", "--browser-content", "42", "com.google.Chrome",
+        self.assertEqual(run.call_args.args[0][:7], [str(self.arguments["helper_path"]), "--browser-content", "42", "com.google.Chrome",
                                               "https://example.org/course", "Course", "620"])
         self.assertEqual(run.call_args.args[0][7], "--description-stdio")
         self.assertFalse(run.call_args.kwargs["cancelled"]())

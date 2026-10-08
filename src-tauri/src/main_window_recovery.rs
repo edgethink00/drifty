@@ -58,8 +58,11 @@ fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .ok_or(tauri::Error::WindowNotFound)?;
     // Tauri 2.12 returns a native creation error before attaching the label.
     // Preserve the configured URL, data directory, sizing and window flags.
-    tauri::WebviewWindowBuilder::from_config(app, config)?.build()?;
+    // WebView2 pumps startup messages while building the window, so the
+    // renderer can already submit its appearance preference. Initialize the
+    // opaque shell first and preserve any request handled during creation.
     crate::configure_main_window_material(app);
+    tauri::WebviewWindowBuilder::from_config(app, config)?.build()?;
     if let Err(error) = crate::calibrate_main_window_to_work_area(app) {
         eprintln!("could not calibrate initial main-window size: {error}");
     }
@@ -70,7 +73,15 @@ fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 pub(crate) fn create_initial_window(app: &tauri::AppHandle) {
     // Unlike Tauri's default configured-window setup, a UI failure must not
     // return from app setup before the tray and activated tracker can start.
-    if let Err(error) = create_main_window(app) {
+    let started = std::time::Instant::now();
+    eprintln!("[windows-startup] preparing main");
+    let result = create_main_window(app);
+    eprintln!(
+        "[windows-startup] prepared main: success={}, elapsed_ms={}",
+        result.is_ok(),
+        started.elapsed().as_millis()
+    );
+    if let Err(error) = result {
         let report = format!("Main window setup failed: {error}");
         eprintln!("[startup] {report}");
         sentry::capture_message(&report, sentry::Level::Error);

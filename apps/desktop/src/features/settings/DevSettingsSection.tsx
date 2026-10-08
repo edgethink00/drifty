@@ -27,7 +27,6 @@ import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClass
 import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
-import { WindowsBlurPreviewRow } from "./WindowsBlurPreviewRow";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { LEADERBOARD_GRAPH_STYLE_OPTIONS, parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "../leaderboard/leaderboardGraphStyle";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
@@ -77,8 +76,6 @@ import {
 
 type DevSettingsSectionProps = {
   readonly hostPlatform: HostPlatform;
-  readonly windowsBlurPreviewEnabled: boolean;
-  readonly onWindowsBlurPreviewEnabledChange: (enabled: boolean) => void;
   readonly activeSubsection: DevSettingsSubsection;
   readonly onSubsectionChange: (subsection: DevSettingsSubsection) => void;
   readonly darkPalettePreview: DarkPalettePreview;
@@ -164,9 +161,6 @@ type DevSettingsSectionProps = {
 };
 
 export function DevSettingsSection({
-  hostPlatform,
-  windowsBlurPreviewEnabled,
-  onWindowsBlurPreviewEnabledChange,
   activeSubsection,
   onSubsectionChange,
   darkPalettePreview,
@@ -736,12 +730,6 @@ export function DevSettingsSection({
             <span>Product preview flags</span>
             <span className="settings-beta-badge">Beta</span>
           </h3>
-          {hostPlatform === "windows" ? (
-            <WindowsBlurPreviewRow
-              enabled={windowsBlurPreviewEnabled}
-              onEnabledChange={onWindowsBlurPreviewEnabledChange}
-            />
-          ) : null}
           <DevSettingsWebAccountBlock
             webAccountPreviewEnabled={webAccountPreviewEnabled}
             onWebAccountPreviewEnabledChange={onWebAccountPreviewEnabledChange}

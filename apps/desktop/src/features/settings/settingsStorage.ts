@@ -31,7 +31,8 @@ export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
 export const AGENTS_BETA_STORAGE_KEY = "drifty.dev.agentsBeta";
 export const NAVIGATION_REFRESH_STORAGE_KEY = "drifty.dev.navigationRefresh";
-export const WINDOWS_BLUR_PREVIEW_STORAGE_KEY = "drifty.dev.windowsBlurPreview";
+export const WINDOWS_BLUR_STORAGE_KEY = "drifty.windowsBlur.v1";
+export const LEGACY_WINDOWS_BLUR_PREVIEW_STORAGE_KEY = "drifty.dev.windowsBlurPreview";
 export const FLOATING_COMPANION_DEV_STORAGE_KEY = "drifty.dev.floatingCompanion";
 export const ENHANCED_CONTEXT_ENABLED_STORAGE_KEY = "drifty.dev.enhancedContext.enabled";
 export const ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY = "drifty.dev.enhancedContext.captureLocal";
@@ -566,22 +567,31 @@ export function persistNavigationRefreshEnabled(enabled: boolean): void {
   }
 }
 
-/** Windows blur never inherits the old translucent default; each install opts in explicitly. */
-export function resolveInitialWindowsBlurPreviewEnabled(): boolean {
+/** Default-on independently of Dev mode; preserve every explicit Preview choice. */
+export function resolveInitialWindowsBlurEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(WINDOWS_BLUR_PREVIEW_STORAGE_KEY) === "1";
+    const current = window.localStorage.getItem(WINDOWS_BLUR_STORAGE_KEY);
+    if (current === "0" || current === "1") return current === "1";
+    const legacy = window.localStorage.getItem(LEGACY_WINDOWS_BLUR_PREVIEW_STORAGE_KEY);
+    if (legacy === "0" || legacy === "1") {
+      // A failed migration must still honor the existing preference this session.
+      persistWindowsBlurEnabled(legacy === "1");
+      return legacy === "1";
+    }
+    return true;
   } catch {
     return false;
   }
 }
 
-export function persistWindowsBlurPreviewEnabled(enabled: boolean): void {
+export function persistWindowsBlurEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(WINDOWS_BLUR_PREVIEW_STORAGE_KEY, enabled ? "1" : "0");
+    window.localStorage.setItem(WINDOWS_BLUR_STORAGE_KEY, enabled ? "1" : "0");
+    window.localStorage.removeItem(LEGACY_WINDOWS_BLUR_PREVIEW_STORAGE_KEY);
   } catch {
-    // Storage denial leaves this session usable and the next launch safely off.
+    // A denied write keeps the previous durable preference and this session usable.
   }
 }
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import io
+import os
 import struct
 import subprocess
 import sys
@@ -28,11 +29,14 @@ def fixture():
 
 class BrowserContentTests(unittest.TestCase):
     def test_browser_parent_resolver_passes_own_pid_and_only_frozen_executable(self):
+        helper = Path("/task/helper")
+        executable = str(Path("/task/tracker"))
+        canonical_executable = os.path.realpath(executable)
         for frozen in (False, True):
-            with self.subTest(frozen=frozen), patch.object(sys,"frozen",frozen,create=True), patch("os.getpid",return_value=321), patch("sys.executable","/task/tracker"), patch("subprocess.run",return_value=SimpleNamespace(returncode=0,stdout='{"browserPid":100}')) as run:
-                self.assertEqual(browser_parent_pid(Path("/task/helper")),100)
+            with self.subTest(frozen=frozen), patch.object(sys,"frozen",frozen,create=True), patch("os.getpid",return_value=321), patch("sys.executable",executable), patch("subprocess.run",return_value=SimpleNamespace(returncode=0,stdout='{"browserPid":100}')) as run:
+                self.assertEqual(browser_parent_pid(helper),100)
                 command=run.call_args.args[0]
-                self.assertEqual(command,["/task/helper","--native-browser-parent","321"]+(["/task/tracker"] if frozen else []))
+                self.assertEqual(command,[str(helper),"--native-browser-parent","321"]+([canonical_executable] if frozen else []))
                 self.assertEqual(run.call_args.kwargs["timeout"],1)
 
     def test_unverified_or_unavailable_native_parent_opens_no_bridge(self):
@@ -41,11 +45,21 @@ class BrowserContentTests(unittest.TestCase):
                 self.assertIsNone(browser_parent_pid(Path("helper")))
         for failure in [OSError(),subprocess.TimeoutExpired("helper",1)]:
             with patch("subprocess.run",side_effect=failure):self.assertIsNone(browser_parent_pid(Path("helper")))
-        with patch("sys.platform","darwin"), patch("app.tracker.browser_content_host.private_directory",return_value=True), patch("app.tracker.browser_content_host.browser_parent_pid",return_value=None), patch("os.open") as open_bridge:
+        with patch("sys.platform","darwin"), patch.dict(sys.modules, {"fcntl": SimpleNamespace()}), patch("app.tracker.browser_content_host.private_directory",return_value=True), patch("app.tracker.browser_content_host.browser_parent_pid",return_value=None), patch("os.open") as open_bridge:
             from app.tracker.browser_content import EXTENSION_ORIGIN
             from app.tracker.browser_content_host import run_native_host
             self.assertEqual(run_native_host(EXTENSION_ORIGIN,helper_path=Path("helper")),1)
             open_bridge.assert_not_called()
+
+    def test_unsupported_native_host_opens_no_bridge_or_mac_dependencies(self):
+        from app.tracker.browser_content import EXTENSION_ORIGIN
+        from app.tracker.browser_content_host import run_native_host
+        for platform in ("win32", "linux"):
+            with self.subTest(platform=platform), patch("sys.platform", platform), patch.dict(sys.modules, {"fcntl": None}), patch("app.tracker.browser_content_host.private_directory") as directory, patch("app.tracker.browser_content_host.browser_parent_pid") as parent, patch("os.open") as open_bridge:
+                self.assertEqual(run_native_host(EXTENSION_ORIGIN, helper_path=Path("helper")), 1)
+                directory.assert_not_called()
+                parent.assert_not_called()
+                open_bridge.assert_not_called()
 
     def test_packaged_native_dispatch_bypasses_cli_database_and_telemetry(self):
         from app import main

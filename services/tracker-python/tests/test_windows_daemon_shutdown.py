@@ -143,6 +143,41 @@ class WindowsDaemonShutdownTests(unittest.TestCase):
         self.assertFalse(api.forced)
         self.assertEqual(api.closed, [event, api.original])
 
+    def test_missing_event_reserves_a_slower_fresh_recheck_within_original_deadline(self):
+        api = _FakeNative(event=False)
+        rechecks = []
+
+        def verify(deadline):
+            rechecks.append((api.now, deadline))
+            api.now += 0.7 if len(rechecks) == 1 else 1.1
+            return True
+
+        with patch.object(shutdown.sys, "stderr", io.StringIO()):
+            self.assertEqual(self.stop(api, verify), "forced")
+        self.assertEqual(len(rechecks), 2)
+        self.assertEqual([deadline for _, deadline in rechecks], [3.0, 3.0])
+        self.assertLess(rechecks[1][0], 1.9)
+        self.assertLessEqual(api.now, 3.0)
+        self.assertEqual(api.forced, [api.original])
+        self.assertFalse(api.signaled)
+        self.assertEqual(api.closed, [api.original])
+
+    def test_present_event_keeps_cooperative_interval_after_slow_ownership_query(self):
+        api = _FakeNative()
+        rechecks = []
+
+        def verify(deadline):
+            rechecks.append(deadline)
+            api.now += 0.7
+            return True
+
+        self.assertEqual(self.stop(api, verify), "cooperative")
+        self.assertEqual(rechecks, [3.0])
+        self.assertAlmostEqual(api.now, 2.0)
+        self.assertTrue(api.signaled)
+        self.assertFalse(api.forced)
+        self.assertEqual(api.closed, [api.event, api.original])
+
     def test_busy_daemon_force_wait_uses_remaining_single_deadline(self):
         api = _FakeNative(cooperative=False, force_exits=False)
         with patch.object(shutdown.sys, "stderr", io.StringIO()), self.assertRaisesRegex(TimeoutError, "deadline"):

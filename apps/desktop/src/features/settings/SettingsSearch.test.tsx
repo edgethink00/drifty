@@ -39,6 +39,14 @@ describe("settings search", () => {
     expect(searchSettings("promo", disabled).some((entry) => entry.id === "settings.account.couponTitle")).toBe(false);
   });
 
+  it("finds Window blur in Windows Appearance with Dev mode off", () => {
+    const windows = { ...publicAvailability, windows: true };
+    const result = searchSettings("블러", windows).find((entry) => entry.id === "settings.appearance.windowsBlur");
+    expect(result?.section).toBe("appearance");
+    expect(result?.devSubsection).toBeUndefined();
+    expect(searchSettings("blur", publicAvailability).some((entry) => entry.id === "settings.appearance.windowsBlur")).toBe(false);
+  });
+
   it("provides result/empty states, clear and Escape, without losing the existing navigation", () => {
     render(<LocalizationTestProvider><SettingsSearch><nav aria-label="Existing navigation" /></SettingsSearch></LocalizationTestProvider>);
     const input = screen.getByRole("combobox", { name: "설정 검색" });

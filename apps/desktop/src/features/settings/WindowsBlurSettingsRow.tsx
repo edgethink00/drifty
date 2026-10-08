@@ -2,16 +2,17 @@ import { useEffect, useId, useState } from "react";
 import { Toggle } from "../../components/Toggle";
 import { useLocalization } from "../localization/LocalizationContext";
 
-type BlurMaterial = "active" | "opaque" | "pending";
+type BlurMaterial = "active" | "opaque" | "pending" | "system";
 
 function readBlurMaterial(): BlurMaterial {
-  const { windowMaterial, windowsNativeBlur } = document.documentElement.dataset;
+  const { windowMaterial, windowsNativeBlur, windowsBlurSystemBlocked } = document.documentElement.dataset;
+  if (windowsBlurSystemBlocked === "true") return "system";
   if (windowMaterial === "translucent" && windowsNativeBlur === "active") return "active";
   if (windowMaterial === "solid") return "opaque";
   return "pending";
 }
 
-export function WindowsBlurPreviewRow({
+export function WindowsBlurSettingsRow({
   enabled,
   onEnabledChange,
 }: {
@@ -31,7 +32,7 @@ export function WindowsBlurPreviewRow({
     const observer = new MutationObserver(refresh);
     observer.observe(root, {
       attributes: true,
-      attributeFilter: ["data-window-material", "data-windows-native-blur"],
+      attributeFilter: ["data-window-material", "data-windows-native-blur", "data-windows-blur-system-blocked"],
     });
     refresh();
     return () => observer.disconnect();
@@ -39,14 +40,16 @@ export function WindowsBlurPreviewRow({
 
   const statusKey = !enabled
     ? "settings.windowsBlur.off"
-    : material === "active"
+    : material === "system"
+      ? "settings.windowsBlur.system"
+      : material === "active"
       ? "settings.windowsBlur.active"
       : material === "opaque"
         ? "settings.windowsBlur.opaque"
         : "settings.windowsBlur.pending";
 
   return (
-    <div className="settings-row">
+    <div data-setting-id="settings.appearance.windowsBlur" className="settings-row">
       <div>
         <div className="lbl">{t("settings.windowsBlur.title")}</div>
         <div className="desc" id={descriptionId}>{t("settings.windowsBlur.description")}</div>

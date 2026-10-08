@@ -99,6 +99,10 @@ pub fn windows_install_prepared_stable_update(
     // unconditional exit, a spawn failure is reported so JS can restart this
     // intact WebView and restore normal tracker startup.
     let launch_path = super::windows_update_feed::installer_launch_path(&app, &installer_path)?;
+    // The installer relaunches Drifty while this process's WebView2 browser can
+    // still be retiring. Capture its PID now, while the webviews are alive, so
+    // the relaunch records it and waits for that browser before creating a view.
+    let browser_pids = crate::windows_browser_process_ids(&app);
     crate::shutdown_app_for_exit(&app);
     let mut command = Command::new(&launch_path);
     command.args(["/S", "/R", "/UPDATE", "/ARGS"]);
@@ -106,7 +110,10 @@ pub fn windows_install_prepared_stable_update(
         command.arg("--background");
     }
     match command.spawn() {
-        Ok(_) => std::process::exit(0),
+        Ok(_) => {
+            crate::record_windows_previous_instance(&app, browser_pids);
+            std::process::exit(0)
+        }
         Err(error) => {
             let _ = fs::remove_file(&installer_path);
             Err(format!(

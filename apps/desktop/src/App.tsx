@@ -441,7 +441,7 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, persistLeaderboardPreviewEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialLeaderboardPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, persistLeaderboardGraphStyle, persistLeaderboardPreviewEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialLeaderboardGraphStyle, resolveInitialLeaderboardPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "./features/leaderboard/leaderboardGraphStyle";
@@ -783,7 +783,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
   const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
-  const [windowsBlurPreviewEnabled, setWindowsBlurPreviewEnabled] = useState(resolveInitialWindowsBlurPreviewEnabled);
+  const [windowsBlurEnabled, setWindowsBlurEnabled] = useState(resolveInitialWindowsBlurEnabled);
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
@@ -1510,15 +1510,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [developerPreReleaseUpdateController.checkLatestBuild, devModeEnabled, handleDevSettingsSubsectionChange, navigateToTab]);
 
   const handleDevModeEnabledChange = useCallback((enabled: boolean) => {
-    if (!enabled && hostPlatform === "windows") {
-      // Dev mode gates this Preview too. Close its transparent CSS path before
-      // React and the native IPC catch up with the mode change.
-      document.documentElement.dataset.windowsBlurWanted = "false";
-      document.documentElement.dataset.windowMaterial = "solid";
-      document.documentElement.removeAttribute("data-windows-native-blur");
-    }
     setDevModeEnabled(enabled);
-  }, [hostPlatform]);
+  }, []);
 
   const handleAppMenuToggleDevMode = useCallback(() => {
     handleDevModeEnabledChange(!devModeEnabled);
@@ -4953,25 +4946,41 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       hideBootShell();
     };
     if (hostPlatform === "windows") {
-      document.documentElement.dataset.windowsBlurWanted = String(devModeEnabled && windowsBlurPreviewEnabled);
+      document.documentElement.dataset.windowsBlurWanted = String(windowsBlurEnabled);
       document.documentElement.dataset.windowMaterial = "solid";
       document.documentElement.removeAttribute("data-windows-native-blur");
     }
-    void setMainWindowThemeAppearance(theme === "dark", hostPlatform === "windows" && devModeEnabled && windowsBlurPreviewEnabled).then((materialStatus) => {
-      if (disposed || hostPlatform !== "windows") return;
-      const nativeBlurActive = document.documentElement.dataset.windowsNativeBlur === "active";
-      revealWindowsShell(devModeEnabled && windowsBlurPreviewEnabled && (materialStatus?.kind === "translucent" || nativeBlurActive) ? "translucent" : "solid");
-    }).catch(() => {
-      if (disposed || hostPlatform !== "windows") return;
-      revealWindowsShell("solid");
-    });
+    let appearanceRequest = 0;
+    const applyAppearance = () => {
+      const request = ++appearanceRequest;
+      void setMainWindowThemeAppearance(theme === "dark", hostPlatform === "windows" && windowsBlurEnabled).then((materialStatus) => {
+        if (disposed || request !== appearanceRequest || hostPlatform !== "windows") return;
+        const root = document.documentElement;
+        const nativeBlurActive = root.dataset.windowsNativeBlur === "active";
+        revealWindowsShell(windowsBlurEnabled && root.dataset.windowsBlurSystemBlocked !== "true" && materialStatus?.kind === "translucent" && nativeBlurActive ? "translucent" : "solid");
+      }).catch(() => {
+        if (disposed || request !== appearanceRequest || hostPlatform !== "windows") return;
+        revealWindowsShell("solid");
+      });
+    };
+    // Native Windows settings changes reapply the existing preference without
+    // changing it. The native watcher restores opacity before sending this event.
+    if (hostPlatform === "windows") {
+      window.addEventListener("drifty-windows-blur-system-change", applyAppearance);
+      // WebView2 can mount React before the native main window is ready.
+      // A normal reveal retries the current preference without changing it.
+      window.addEventListener("drifty-windows-appearance-ready", applyAppearance);
+    }
+    applyAppearance();
     return () => {
       disposed = true;
+      window.removeEventListener("drifty-windows-blur-system-change", applyAppearance);
+      window.removeEventListener("drifty-windows-appearance-ready", applyAppearance);
     };
-  }, [devModeEnabled, hostPlatform, theme, windowsBlurPreviewEnabled]);
+  }, [hostPlatform, theme, windowsBlurEnabled]);
 
-  const handleWindowsBlurPreviewEnabledChange = useCallback((enabled: boolean) => {
-    // A disabled preview must never expose an unblurred transparent frame while IPC catches up.
+  const handleWindowsBlurEnabledChange = useCallback((enabled: boolean) => {
+    // Disabled blur must never expose an unblurred transparent frame while IPC catches up.
     if (!enabled) {
       document.documentElement.dataset.windowsBlurWanted = "false";
       document.documentElement.dataset.windowMaterial = "solid";
@@ -4979,8 +4988,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     } else {
       document.documentElement.dataset.windowsBlurWanted = "true";
     }
-    persistWindowsBlurPreviewEnabled(enabled);
-    setWindowsBlurPreviewEnabled(enabled);
+    persistWindowsBlurEnabled(enabled);
+    setWindowsBlurEnabled(enabled);
   }, []);
 
   useLayoutEffect(() => {
@@ -11064,6 +11073,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 )}
                 {settingsSection === "appearance" && (
                   <AppearanceSettingsSection
+                    hostPlatform={hostPlatform}
+                    windowsBlurEnabled={windowsBlurEnabled}
+                    onWindowsBlurEnabledChange={handleWindowsBlurEnabledChange}
                     appThemeColorOverrides={appThemeColorOverrides}
                     categoryColorOverrides={categoryColorOverrides}
                     theme={theme}
@@ -11166,8 +11178,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
                   <DevSettingsSection
                     hostPlatform={hostPlatform}
-                    windowsBlurPreviewEnabled={windowsBlurPreviewEnabled}
-                    onWindowsBlurPreviewEnabledChange={handleWindowsBlurPreviewEnabledChange}
                     activeSubsection={devSettingsSubsection}
                     onSubsectionChange={handleDevSettingsSubsectionChange}
                     darkPalettePreview={darkPalettePreview}

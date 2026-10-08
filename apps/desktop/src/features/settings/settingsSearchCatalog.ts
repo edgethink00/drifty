@@ -97,6 +97,14 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.appearance.themeDescription",
   },
   {
+    id: "settings.appearance.windowsBlur",
+    section: "appearance",
+    titleKey: "settings.windowsBlur.title",
+    descriptionKey: "settings.windowsBlur.description",
+    keywords: "블러 배경 투명 불투명 blur background transparency opaque",
+    gate: "windows",
+  },
+  {
     id: "settings.appearance.categoryColors",
     section: "appearance",
     titleKey: "settings.appearance.categoryColors",

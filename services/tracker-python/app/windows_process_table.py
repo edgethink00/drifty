@@ -53,8 +53,10 @@ function quoted(value) {
     return result + '"';
 }
 var service = GetObject('winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2');
-var cursor = new Enumerator(service.ExecQuery(
-    'SELECT ProcessId,CommandLine FROM Win32_Process', 'WQL', 48));
+var query = 'SELECT ProcessId,CommandLine FROM Win32_Process';
+if (WScript.Arguments.length === 1)
+    query += ' WHERE ProcessId = ' + WScript.Arguments(0);
+var cursor = new Enumerator(service.ExecQuery(query, 'WQL', 48));
 var rows = [];
 for (; !cursor.atEnd(); cursor.moveNext()) {
     var item = cursor.item(), pid = Number(item.ProcessId), command = item.CommandLine;
@@ -114,7 +116,7 @@ def windows_process_table(*, deadline: float | None = None) -> dict | None:
     return dict(processes)
 
 
-def _script_host_process_table(deadline: float) -> dict | None:
+def _script_host_process_table(deadline: float, *, pid: int | None = None) -> dict | None:
     try:
         # A private temporary directory prevents a shared, predictable script
         # path. Only static query code is written; command lines stay in memory.
@@ -126,7 +128,8 @@ def _script_host_process_table(deadline: float) -> dict | None:
                 return None
             host = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "cscript.exe"
             result = subprocess.run(
-                [str(host), "//Nologo", "//U", "//B", str(script)],
+                [str(host), "//Nologo", "//U", "//B", str(script)]
+                + ([str(pid)] if pid is not None else []),
                 capture_output=True,
                 text=True,
                 encoding="utf-16le",
@@ -140,7 +143,7 @@ def _script_host_process_table(deadline: float) -> dict | None:
         return None
 
 
-def _powershell_process_table(deadline: float) -> dict | None:
+def _powershell_process_table(deadline: float, *, pid: int | None = None) -> dict | None:
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         return None
@@ -153,7 +156,10 @@ def _powershell_process_table(deadline: float) -> dict | None:
                 "-ExecutionPolicy",
                 "Bypass",
                 "-Command",
-                _POWERSHELL_QUERY,
+                _POWERSHELL_QUERY if pid is None else _POWERSHELL_QUERY.replace(
+                    "Get-CimInstance Win32_Process",
+                    f"Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}'",
+                ),
             ],
             capture_output=True,
             text=True,
@@ -203,11 +209,24 @@ def _no_window_flag() -> int:
 def windows_process_command(pid: int, *, deadline: float | None = None) -> str | None:
     """The command line for one pid, or ``None`` when it cannot be read.
 
-    Served from the full snapshot rather than a per-pid query: the caller uses
-    this to decide whether a *specific* daemon is ours, and a pid that has
-    exited must read as absent rather than as an error.
+    Reuse a current full snapshot, otherwise query just this PID. Mandatory
+    fresh Stop checks must not enumerate every process on a busy desktop.
+    Never publish a partial result as the global discovery snapshot.
     """
-    processes = windows_process_table(**({"deadline": deadline} if deadline is not None else {}))
+    # Only an integer PID is admitted to the WQL filter and script argument.
+    if type(pid) is not int or pid <= 0:
+        return None
+    now = time.monotonic()
+    query_deadline = now + _QUERY_TIMEOUT_SECONDS
+    if deadline is not None:
+        query_deadline = min(query_deadline, deadline)
+    if query_deadline <= now:
+        return None
+    if _cached_table is not None and now - _cached_at < _CACHE_TTL_SECONDS:
+        return _cached_table.get(pid)
+    processes = _script_host_process_table(query_deadline, pid=pid)
     if processes is None:
+        processes = _powershell_process_table(query_deadline, pid=pid)
+    if processes is None or time.monotonic() >= query_deadline:
         return None
     return processes.get(pid)
