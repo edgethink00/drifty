@@ -299,6 +299,22 @@
   padding-right: var(--space-3);
 }
 
+/* The outcome of the last request sits in the same slot as the note, beside
+   the actions that retry it. A short message shares the footer's row, so it
+   never grows the dialog or moves the button the user is about to press. */
+.modal-foot__note--error {
+  color: var(--warn);
+  min-width: 0;
+  padding-right: var(--space-2);
+  /* Two lines fit beside the actions without growing the row. A longer
+     backend detail clamps visually; the full text stays in the element (and
+     in its title) for assistive technology and hover. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
 /* ── Modal actions ──────────────────────────────────────────────────────
 
    A modal action is an app-surface button that happens to sit in a dialog, so

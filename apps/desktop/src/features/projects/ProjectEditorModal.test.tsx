@@ -16,7 +16,7 @@ describe("ProjectEditorModal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    expect((await within(dialog).findByRole("alert")).textContent).toContain("Could not save the project");
+    expect((await within(dialog).findByRole("alert")).textContent).toContain("Could not save.");
     expect(onClose).not.toHaveBeenCalled();
     expect((within(dialog).getByLabelText("Name") as HTMLInputElement).value).toBe("Launch review");
   });

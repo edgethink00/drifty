@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ActionLabel } from "../../components/ActionLabel";
 import { formatFocusDuration } from "../share/badgeSvg";
 import type { BadgeThemeOption, CardRangeOption, EmbedSnippets } from "../share/embedSnippets";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
@@ -151,34 +152,38 @@ export function SnippetCopyRow({
   buttonClassName,
   cardLocked,
   copied,
+  error = null,
   inputClassName,
   rowClassName,
   snippet,
   onCopy,
   busy = false,
   disabled = false,
-  busyLabel = "Copying…",
 }: {
   readonly buttonClassName: string;
   readonly cardLocked: boolean;
   readonly copied: boolean;
+  /** The last copy attempt failed; shown at the end of the row until the next attempt. */
+  readonly error?: string | null;
   readonly inputClassName: string;
   readonly rowClassName: string;
   readonly snippet: string;
   readonly onCopy: () => void;
   readonly busy?: boolean;
   readonly disabled?: boolean;
-  readonly busyLabel?: string;
 }) {
   return (
     <div className={rowClassName}>
-      <input
-        className={inputClassName}
-        readOnly
-        disabled={cardLocked}
-        value={snippet}
-        onFocus={(event) => event.currentTarget.select()}
-      />
+      <span className="profile-copy-row__field">
+        <input
+          className={inputClassName}
+          readOnly
+          disabled={cardLocked}
+          value={snippet}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+        {error ? <span className="profile-copy-row__note profile-copy-row__note--error" role="alert">{error}</span> : null}
+      </span>
       <button
         type="button"
         className={`${buttonClassName} profile-copy-row__copy`}
@@ -187,7 +192,7 @@ export function SnippetCopyRow({
         title={cardLocked ? "Turn on your public focus card first" : undefined}
         onClick={onCopy}
       >
-        {busy ? busyLabel : copied ? "Copied" : "Copy"}
+        <ActionLabel busy={busy} reserve={["Copy", "Copied"]}>{copied ? "Copied" : "Copy"}</ActionLabel>
       </button>
     </div>
   );

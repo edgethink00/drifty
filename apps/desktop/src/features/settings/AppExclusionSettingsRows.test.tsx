@@ -184,10 +184,10 @@ describe("AppExclusionSettingsRows", () => {
     expect(save).toHaveBeenCalledTimes(1);
     expect(input).toHaveProperty("disabled", true);
     await act(async () => rejectSave(new Error("write unavailable")));
-    expect(screen.getByRole("alert").textContent).toContain("Could not add the app");
+    expect(screen.getByRole("alert").textContent).toContain("Could not add");
     expect(input).toHaveProperty("value", "Vault");
     fireEvent.click(screen.getByRole("button", { name: "Add “Vault”" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("The app is excluded");
+    expect((await screen.findByRole("alert")).textContent).toContain("Record count unavailable");
     expect(screen.queryByLabelText("Find an app")).toBeNull();
     expect(screen.getByText("Vault")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));

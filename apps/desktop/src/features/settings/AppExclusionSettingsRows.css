@@ -71,9 +71,20 @@
 
 .excluded-apps-item {
   align-items: center;
-  display: grid;
+  display: flex;
+  gap: var(--space-2);
   min-height: 2.45rem;
   position: relative;
+}
+
+.excluded-apps-item > .excluded-apps-item__pick {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.excluded-apps-item > .excluded-apps-item__note {
+  flex: 0 1 auto;
+  margin-right: 0.35rem;
 }
 
 .excluded-apps-item:not(:last-child)::after {
@@ -125,6 +136,32 @@
   align-items: center;
   display: flex;
   gap: 0.15rem;
+  min-width: 0;
+}
+
+/* A failed row action reports in the actions slot, beside the control that
+   retries it, so the row keeps its height. */
+.excluded-apps-item__note {
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  line-height: 1.25;
+  margin-right: 0.4rem;
+  min-width: 0;
+  text-align: right;
+}
+
+.excluded-apps-item__note--error {
+  color: var(--warn);
+}
+
+/* The picker entry shows its own request state at the end of its row. */
+.excluded-apps-item__pick > .excluded-apps-item__identity {
+  flex: 1 1 auto;
+}
+
+.excluded-apps-item__pick > .excluded-apps-item__spinner {
+  flex: 0 0 auto;
+  margin-right: 0.35rem;
 }
 
 .excluded-apps-item__history {
@@ -145,16 +182,15 @@
   color: var(--text);
 }
 
-.excluded-apps-error {
-  color: var(--danger, #c44444);
-  font-size: var(--type-setting-desc-size);
-  margin: 0.35rem 0 0;
-}
-
 .excluded-apps-item__pick:disabled,
 .excluded-apps-item__history:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+.excluded-apps-item__pick[aria-busy="true"]:disabled {
+  cursor: wait;
+  opacity: 1;
 }
 
 .excluded-apps-item__history:focus-visible,
@@ -172,6 +208,7 @@
   color: inherit;
   cursor: pointer;
   display: flex;
+  gap: var(--space-2);
   min-height: 2.45rem;
   min-width: 0;
   padding: 0;

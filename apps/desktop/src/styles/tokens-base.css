@@ -650,8 +650,12 @@ button {
   cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
-button:hover { transform: translateY(-1px); }
-button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+/* The hover lift skips disabled buttons here instead of being undone with
+   transform: none on :disabled. A blanket reset also dropped the translate
+   that positions some buttons (the share card's stage arrows moved 19px
+   while an export was pending). */
+button:hover:not(:disabled) { transform: translateY(-1px); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
 input, textarea { color: inherit; }
 
 /* Keep the original usable width in compact desktop windows. */

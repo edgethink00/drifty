@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import type { ShareCardData, ShareWeekCardData } from "./shareCard";
 import {
   SHARE_CARD_EXPORT_SIZES,
@@ -139,6 +141,8 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   }), [card, liveRankState.daily, liveRankState.weekly]);
 
   useModalDismiss(onClose);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  useAnchoredDialog(dialogRef);
 
   const svg = useMemo(() => {
     if (lockedRankPeriod) {
@@ -249,6 +253,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
     <>
       <div className="auth-modal__overlay" onClick={onClose}>
         <section
+          ref={dialogRef}
           className="auth-modal share-card-modal"
           role="dialog"
           data-modal-motion-panel
@@ -333,7 +338,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
                     aria-busy={working}
                     onClick={handleCopy}
                   >
-                    <span>{exportState.kind === "working" && exportState.action === "copy" ? t("share.copying") : t("share.copyImage")}</span>
+                    <ActionLabel busy={exportState.kind === "working" && exportState.action === "copy"} busyLabel={t("share.copying")}>{t("share.copyImage")}</ActionLabel>
                     <CopyIcon />
                   </button>
                   <button
@@ -345,7 +350,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
                     title={t("share.savePng")}
                     onClick={handleSave}
                   >
-                    <DownloadIcon />
+                    <ActionLabel busy={exportState.kind === "working" && exportState.action === "save"}><DownloadIcon /></ActionLabel>
                   </button>
                   <button
                     type="button"
@@ -356,7 +361,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
                     title={t("share.openDestination", { destination: "X" })}
                     onClick={() => handleSocialShare("x")}
                   >
-                    <XIcon />
+                    <ActionLabel busy={exportState.kind === "working" && exportState.action === "x"}><XIcon /></ActionLabel>
                   </button>
                   <button
                     type="button"
@@ -367,11 +372,13 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
                     title={t("share.openDestination", { destination: "LinkedIn" })}
                     onClick={() => handleSocialShare("linkedin")}
                   >
-                    <LinkedInIcon />
+                    <ActionLabel busy={exportState.kind === "working" && exportState.action === "linkedin"}><LinkedInIcon /></ActionLabel>
                   </button>
                 </div>
               </div>
-              {exportState.kind === "error" ? <div className="share-card-rank-gate share-card-export-error" role="alert">{exportState.message}</div> : null}
+              {/* A failed export reports under the buttons that retry it. The
+                  dialog's top is anchored, so the line only extends the bottom edge. */}
+              {exportState.kind === "error" ? <p className="share-card-outcome" role="alert">{exportState.message}</p> : null}
             </div>
           </div>
         </section>

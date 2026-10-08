@@ -3,8 +3,10 @@ import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
+import { ActionLabel } from "../../components/ActionLabel";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import "./history.css";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { HistoryDeletionResult } from "./historyDeletion";
@@ -42,7 +44,9 @@ type HistoryDeleteConfirmationProps = {
 function HistoryDeleteConfirmation({ deleting, recordCount, error, onCancel, onConfirm }: HistoryDeleteConfirmationProps) {
   const { t } = useLocalization();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-history-confirm-cancel]" });
+  useAnchoredDialog(panelRef);
 
   return (
     <div
@@ -54,11 +58,16 @@ function HistoryDeleteConfirmation({ deleting, recordCount, error, onCancel, onC
       aria-labelledby="history-confirm-title"
       tabIndex={-1}
     >
-      <div className="history-confirm__panel modal-shell" data-modal-variant="compact">
+      <div ref={panelRef} className="history-confirm__panel modal-shell" data-modal-variant="compact">
         <h2 id="history-confirm-title">{t("history.deleteConfirmTitle")}</h2>
-        <p>{t(recordCount === 1 ? "history.deleteConfirmDetailSingle" : "history.deleteConfirmDetail", { count: recordCount })}</p>
-        {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}
-        {deleting ? <p role="status">{t("settings.deleteHistory.deleting")}</p> : null}
+        {/* The outcome of a failed request takes the body line's place. Both are
+            laid out in one cell, so the panel keeps the taller of the two and
+            nothing below moves. */}
+        <div className={`history-confirm__body${error ? " has-error" : ""}`}>
+          <p>{t(recordCount === 1 ? "history.deleteConfirmDetailSingle" : "history.deleteConfirmDetail", { count: recordCount })}</p>
+          {error ? <p className="history-confirm__error" role="alert">{error}</p> : null}
+        </div>
+        {deleting ? <span className="action-status" role="status">{t("settings.deleteHistory.deleting")}</span> : null}
         <div className="history-confirm__actions">
           <button
             type="button"
@@ -69,8 +78,8 @@ function HistoryDeleteConfirmation({ deleting, recordCount, error, onCancel, onC
           >
             {t("common.cancel")}
           </button>
-          <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} onClick={onConfirm}>
-            {t(deleting ? "settings.deleteHistory.deleting" : "history.deleteRecords")}
+          <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} aria-busy={deleting} onClick={onConfirm}>
+            <ActionLabel busy={deleting} busyLabel={t("settings.deleteHistory.deleting")}>{t("history.deleteRecords")}</ActionLabel>
           </button>
         </div>
       </div>

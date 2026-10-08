@@ -1,0 +1,93 @@
+/* A button label that keeps its footprint while the button is busy.
+   Every state is stacked in one grid cell: hidden copies reserve the widest
+   width, and the live copy swaps between the idle label and a spinner. */
+
+.action-label {
+  display: inline-grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.action-label > * {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+
+.action-label__size {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.action-label__size,
+.action-label__live {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+/* Spinner-only mode: the idle label stays in the accessibility tree (an
+   accessible name must remain) but fades under the centered spinner. */
+.action-label__live--quiet {
+  display: inline-grid;
+  place-items: center;
+}
+
+.action-label__live--quiet > * {
+  grid-area: 1 / 1;
+}
+
+.action-label__live--quiet .action-label__idle {
+  opacity: 0;
+}
+
+.action-label__spinner {
+  animation:
+    action-label-spin 700ms linear infinite,
+    action-label-appear 120ms 150ms linear both;
+  border: 1.5px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 50%;
+  border-top-color: currentColor;
+  flex: 0 0 12px;
+  height: 12px;
+  width: 12px;
+}
+
+.action-label__spinner--size {
+  animation: none;
+}
+
+@keyframes action-label-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes action-label-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* A busy button is working, not unavailable: keep it at full strength while
+   its disabled state only guards against a second click. */
+.modal-btn[aria-busy="true"]:disabled,
+.app-btn[aria-busy="true"]:disabled,
+.settings-btn[aria-busy="true"]:disabled,
+.excluded-apps-item__history[aria-busy="true"]:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
+/* Live text for assistive technology without a visual footprint. */
+.action-status {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-label__spinner {
+    animation: action-label-appear 120ms 150ms linear both;
+  }
+}

@@ -367,8 +367,25 @@
 
 .history-confirm__actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+.history-confirm__body {
+  display: grid;
+}
+
+.history-confirm__body > p {
+  grid-area: 1 / 1;
+}
+
+.history-confirm__body.has-error > p:first-child {
+  visibility: hidden;
+}
+
+.history-confirm__panel .history-confirm__error {
+  color: var(--warn);
 }
 
 @media (max-width: 760px) {

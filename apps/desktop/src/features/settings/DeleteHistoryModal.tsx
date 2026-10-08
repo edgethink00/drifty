@@ -7,8 +7,10 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { localDateKey } from "../../lib/formatting";
 import { SettingsSelect } from "./SettingsSelect";
 import type { SettingsSelectOption } from "./SettingsSelect";
+import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import "./DeleteHistoryModal.css";
 import { useLocalization } from "../localization/LocalizationContext";
 import { summarizeHistoryDeletion } from "./historyDeletionSummary";
@@ -52,6 +54,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
   const [deletedResult, setDeletedResult] = useState<DeleteHistoryRangeResult | null>(null);
   const armTimer = useRef<number | null>(null);
   const refreshButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
   const requestInFlight = useRef(false);
 
   const bounds = rangeBounds(preset, customStart, customEnd);
@@ -64,6 +67,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
   }, []);
 
   useModalDismiss(onClose, { disabled: deleting });
+  useAnchoredDialog(dialogRef);
 
   useEffect(() => {
     setArmed(false);
@@ -136,6 +140,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
   return (
     <div className="auth-modal__overlay" onClick={handleOverlayClick}>
       <section
+        ref={dialogRef}
         aria-labelledby="delete-history-modal-title"
         aria-modal="true"
         aria-busy={deleting}
@@ -156,8 +161,6 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
           </div>
         </div>
 
-        {error ? <p className="auth-modal__error" role="alert">{localizeSettingsError(error, effectiveLanguage, t)}</p> : null}
-
         {deletedResult && refreshError ? (
           <>
             <p className="auth-modal__success" role="status">
@@ -170,18 +173,12 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
               <button
                 ref={refreshButtonRef}
                 aria-busy={deleting}
-                className="modal-btn modal-btn--primary delete-history-modal__delete-button"
+                className="modal-btn modal-btn--primary"
                 disabled={deleting}
                 type="button"
                 onClick={() => void retryRefresh()}
               >
-                <span className="delete-history-modal__label-size" aria-hidden="true">{t("history.refreshView")}</span>
-                <span className="delete-history-modal__label-size delete-history-modal__button-label" aria-hidden="true">
-                  <span className="delete-history-modal__spinner" />{t("settings.deleteHistory.processing")}
-                </span>
-                <span className="delete-history-modal__button-label">
-                  {deleting ? <><span className="delete-history-modal__spinner" aria-hidden="true" />{t("settings.deleteHistory.processing")}</> : t("history.refreshView")}
-                </span>
+                <ActionLabel busy={deleting} busyLabel={t("settings.deleteHistory.processing")}>{t("history.refreshView")}</ActionLabel>
               </button>
               <button className="modal-btn modal-btn--ghost" disabled={deleting} type="button" onClick={onClose}>
                 {t("settings.deleteHistory.close")}
@@ -218,31 +215,39 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
             ) : null}
 
             {deleting ? (
-              <span className="delete-history-modal__progress" role="status">
+              <span className="action-status" role="status">
                 {t(deletedResult ? "settings.deleteHistory.refreshing" : "settings.deleteHistory.deleting")}
               </span>
             ) : null}
 
             <div className="modal-foot">
-              <span className="modal-foot__note">{t("settings.deleteHistory.note")}</span>
+              {error ? (
+                // The request's detail stays in the alert for assistive technology
+                // and shows on hover; the visible line keeps to what fits beside
+                // the actions.
+                <p className="modal-foot__note modal-foot__note--error" role="alert" title={error}>
+                  {t("settings.deleteHistory.deleteFailed")}<span className="action-status"> {error}</span>
+                </p>
+              ) : (
+                <span className="modal-foot__note">{t("settings.deleteHistory.note")}</span>
+              )}
               <button className="modal-btn modal-btn--ghost" disabled={deleting} type="button" onClick={onClose}>
                 {t("settings.deleteHistory.cancel")}
               </button>
               <button
                 aria-busy={deleting}
-                className={`modal-btn modal-btn--danger delete-history-modal__delete-button${armed && !deleting ? " is-armed" : ""}`}
+                className={`modal-btn modal-btn--danger${armed && !deleting ? " is-armed" : ""}`}
                 disabled={!canDelete}
                 type="button"
                 onClick={handleDelete}
               >
-                <span className="delete-history-modal__label-size" aria-hidden="true">{t("settings.deleteHistory.deletePermanently")}</span>
-                {needsArm ? <span className="delete-history-modal__label-size" aria-hidden="true">{t("settings.deleteHistory.confirmAgain")}</span> : null}
-                <span className="delete-history-modal__label-size delete-history-modal__button-label" aria-hidden="true">
-                  <span className="delete-history-modal__spinner" />{t("settings.deleteHistory.processing")}
-                </span>
-                <span className="delete-history-modal__button-label">
-                  {deleting ? <><span className="delete-history-modal__spinner" aria-hidden="true" />{t("settings.deleteHistory.processing")}</> : armed ? t("settings.deleteHistory.confirmAgain") : t("settings.deleteHistory.deletePermanently")}
-                </span>
+                <ActionLabel
+                  busy={deleting}
+                  busyLabel={t("settings.deleteHistory.processing")}
+                  reserve={needsArm ? [t("settings.deleteHistory.deletePermanently"), t("settings.deleteHistory.confirmAgain")] : [t("settings.deleteHistory.deletePermanently")]}
+                >
+                  {armed ? t("settings.deleteHistory.confirmAgain") : t("settings.deleteHistory.deletePermanently")}
+                </ActionLabel>
               </button>
             </div>
           </>

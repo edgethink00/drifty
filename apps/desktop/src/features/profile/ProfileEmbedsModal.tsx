@@ -12,8 +12,10 @@ import type { DailyProductivityPoint } from "../share/dailyProductivity";
 import type { FocusCardControls } from "../share/useFocusCard";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "./ProfileModals";
 import { buildEmbedGroups, SnippetCopyRow, summarizeDailyProductivity } from "./ProfileEmbedGroups";
+import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -60,6 +62,7 @@ export function ProfileEmbedsModal({
   const [copyErrorKey, setCopyErrorKey] = useState<string | null>(null);
   const copyPendingRef = useRef(false);
   const copyGenerationRef = useRef(0);
+  const dialogRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     copyGenerationRef.current += 1;
@@ -69,6 +72,7 @@ export function ProfileEmbedsModal({
   }, [activeFormat, embedTheme, cardRange, publicId, isProfilePublic, card.enabled, clearCopied]);
 
   useModalDismiss(onClose);
+  useAnchoredDialog(dialogRef);
 
   const cardLocked = card.enabled !== true || !isProfilePublic;
   const chartStats = useMemo(() => summarizeDailyProductivity(dailyProductivity), [dailyProductivity]);
@@ -144,6 +148,7 @@ export function ProfileEmbedsModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="auth-modal modal-shell profile-modal profile-embeds-modal"
         data-modal-variant="workspace"
         role="dialog"
@@ -186,17 +191,19 @@ export function ProfileEmbedsModal({
                   {isProfilePublic && publicProfileUrl ? (
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className={copyRowClassName}>
-                        <input
-                          className={copyInputClassName}
-                          readOnly
-                          value={publicProfileUrl}
-                          onFocus={(event) => event.currentTarget.select()}
-                        />
-                        <button type="button" className={copyButtonClassName} disabled={copyingKey !== null} aria-busy={copyingKey === "profile"} aria-label="Copy profile link" onClick={() => void copy("profile", publicProfileUrl)}>
-                          {copyingKey === "profile" ? t("share.copying") : copiedKey === "profile" ? "Copied" : "Copy"}
+                        <span className="profile-copy-row__field">
+                          <input
+                            className={copyInputClassName}
+                            readOnly
+                            value={publicProfileUrl}
+                            onFocus={(event) => event.currentTarget.select()}
+                          />
+                          {copyErrorKey === "profile" ? <span className="profile-copy-row__note profile-copy-row__note--error" role="alert">{t("profile.embeds.copyError")}</span> : null}
+                        </span>
+                        <button type="button" className={`${copyButtonClassName} profile-copy-row__copy`} disabled={copyingKey !== null} aria-busy={copyingKey === "profile"} aria-label="Copy profile link" onClick={() => void copy("profile", publicProfileUrl)}>
+                          <ActionLabel busy={copyingKey === "profile"} reserve={["Copy", "Copied"]}>{copiedKey === "profile" ? "Copied" : "Copy"}</ActionLabel>
                         </button>
                       </div>
-                      {copyErrorKey === "profile" ? <p className="profile-note profile-note--error" role="alert">{t("profile.embeds.copyError")}</p> : null}
                     </div>
                   ) : (
                     <span className="embeds-rail__hint">Off — turn on Public profile to restore this link.</span>
@@ -224,13 +231,12 @@ export function ProfileEmbedsModal({
                           copied={copiedKey === variant.key}
                           busy={copyingKey === variant.key}
                           disabled={copyingKey !== null}
-                          busyLabel={t("share.copying")}
+                          error={copyErrorKey === variant.key ? t("profile.embeds.copyError") : null}
                           inputClassName={copyInputClassName}
                           rowClassName={copyRowClassName}
                           snippet={variant.snippet}
                           onCopy={() => void copy(variant.key, variant.snippet)}
                         />
-                        {copyErrorKey === variant.key ? <p className="profile-note profile-note--error" role="alert">{t("profile.embeds.copyError")}</p> : null}
                       </div>
                     ))}
                   </div>

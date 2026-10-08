@@ -2785,10 +2785,40 @@
 .embeds-rail__hint { margin: 0; font-size: 0.75rem; line-height: 1.5; color: var(--text-soft); }
 
 .profile-copy-row .app-btn { min-width: 4.9rem; white-space: nowrap; }
-/* A copy button whose label swaps to "Copied" keeps one width through the
-   swap so the snippet field beside it does not shrink while the confirmation
-   shows. Buttons that always read "Copy" keep their natural width. */
-.profile-copy-row > .profile-copy-row__copy { min-width: 5rem; }
+/* A copy button reserves its "Copied" width (components/ActionLabel), so the
+   field beside it never shrinks. A failed copy reports inside the field's
+   trailing end until the next attempt, over the tail of a snippet that
+   overflows anyway: nothing in the row changes size or position. */
+.profile-copy-row > .profile-copy-row__copy { flex: 0 0 auto; }
+.profile-copy-row__field {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+.profile-copy-row__field > .settings-input,
+.profile-copy-row__field > .profile-field {
+  flex: 1;
+  min-width: 0;
+}
+.profile-copy-row__note {
+  background: linear-gradient(90deg, transparent, var(--field-bg, var(--surface)) 0.6rem);
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  max-width: calc(100% - 1.5rem);
+  overflow: hidden;
+  padding: 0 0.6rem 0 0.9rem;
+  pointer-events: none;
+  position: absolute;
+  right: 1px;
+  text-overflow: ellipsis;
+  text-align: right;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+.profile-copy-row__note--error { color: var(--warn); }
 
 @media (max-width: 760px) {
   .embeds-layout { grid-template-columns: 1fr; }

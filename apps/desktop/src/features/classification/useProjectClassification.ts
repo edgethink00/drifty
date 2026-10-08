@@ -512,8 +512,11 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         return saved;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setRunError(message);
-        onError?.(message);
+        // The editor that asked owns the message: it keeps the draft and retries
+        // in place, so the page banner would only duplicate it and then outlive
+        // the retry. An unattended save still reports on the page.
+        if (onError) onError(message);
+        else setRunError(message);
         return null;
       }
     },

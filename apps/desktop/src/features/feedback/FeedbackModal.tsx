@@ -1,6 +1,8 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
+import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { DisplayLanguage } from "../localization/languagePreference";
 import { submitFeedback, type FeedbackAttachment } from "./feedbackService";
@@ -47,6 +49,8 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const previewUrlsRef = useRef<string[]>([]);
   useModalDismiss(onClose, { disabled: isSending });
+  const dialogRef = useRef<HTMLElement | null>(null);
+  useAnchoredDialog(dialogRef);
   const emailPrefilled = Boolean(initialEmail?.trim());
 
   useEffect(() => {
@@ -181,6 +185,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
   return (
     <div className="auth-modal__overlay" onClick={handleOverlayClick}>
       <section
+        ref={dialogRef}
         className="auth-modal modal-shell feedback-modal"
         data-modal-variant="standard"
         role="dialog"
@@ -285,8 +290,6 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
               <p className="feedback-modal__field-error feedback-modal__attachment-error" role="alert">{attachmentError}</p>
             ) : null}
 
-            {formError ? <p className="feedback-modal__field-error feedback-modal__form-error" role="alert">{formError}</p> : null}
-
             <div className="modal-foot feedback-modal__actions">
               <div className="feedback-modal__attach-group">
                 <label
@@ -305,11 +308,16 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
                   />
                 </label>
               </div>
+              {formError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={formError}>{formError}</p> : null}
               <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose} disabled={isSending}>
                 {t("common.cancel")}
               </button>
-              <button type="submit" className="modal-btn modal-btn--primary" disabled={isSending}>
-                {isSending ? t("feedback.sending") : t("feedback.send")}
+              {/* "Sending…" is far wider than "Send": the spinner takes the
+                  button over instead, and the progress text goes to assistive
+                  technology only. */}
+              {isSending ? <span className="action-status" role="status">{t("feedback.sending")}</span> : null}
+              <button type="submit" className="modal-btn modal-btn--primary" disabled={isSending} aria-busy={isSending}>
+                <ActionLabel busy={isSending}>{t("feedback.send")}</ActionLabel>
               </button>
             </div>
           </form>

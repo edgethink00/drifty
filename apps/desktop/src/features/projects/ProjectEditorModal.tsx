@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import type { Project, ProjectInput } from "@drifty/domain";
 import { firstUnusedProjectColor } from "../settings/projectPalette";
+import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export type ProjectSaveResult = boolean | { readonly saved: false; readonly error: string };
@@ -35,6 +37,7 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const requestInFlight = useRef(false);
+  const dialogRef = useRef<HTMLElement | null>(null);
 
   const usedColors = useMemo(
     () => new Set(
@@ -50,6 +53,7 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   const canSave = name.trim().length > 0 && !isBusy;
 
   useModalDismiss(onClose, { disabled: isBusy });
+  useAnchoredDialog(dialogRef);
 
   const handleSave = async () => {
     const trimmedName = name.trim();
@@ -91,6 +95,7 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   return (
     <div className="auth-modal__overlay" onClick={requestClose}>
       <section
+        ref={dialogRef}
         className="auth-modal modal-shell project-editor-modal"
         data-modal-variant="standard"
         role="dialog"
@@ -120,11 +125,11 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
             }}
           />
         </fieldset>
-        {saveError ? <p className="auth-modal__error" role="alert">{saveError}</p> : null}
         <div className="modal-foot">
+          {saveError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={saveError}>{saveError}</p> : null}
           <button type="button" className="modal-btn modal-btn--ghost" onClick={requestClose} disabled={isBusy}>{t("common.cancel")}</button>
-          <button type="button" className="modal-btn modal-btn--primary" onClick={() => void handleSave()} disabled={!canSave}>
-            {saving ? t("common.saving") : isEditing ? t("projects.editor.saveChanges") : t("projects.create")}
+          <button type="button" className="modal-btn modal-btn--primary" onClick={() => void handleSave()} disabled={!canSave} aria-busy={saving}>
+            <ActionLabel busy={saving} busyLabel={t("common.saving")}>{t(isEditing ? "projects.editor.saveChanges" : "projects.create")}</ActionLabel>
           </button>
         </div>
       </section>

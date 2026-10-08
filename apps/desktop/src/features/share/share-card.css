@@ -186,11 +186,13 @@
   gap: var(--space-2);
 }
 
-.share-card-export-error {
-  color: var(--danger, #c44444);
-  background: color-mix(in srgb, var(--danger, #c44444) 6%, var(--surface));
-  border-color: color-mix(in srgb, var(--danger, #c44444) 22%, var(--line));
+.share-card-outcome {
+  color: var(--warn);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  margin: 0;
   overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .share-card-destinations {
@@ -240,6 +242,12 @@
 .share-card-destination[aria-busy="true"] {
   cursor: wait;
   opacity: 0.62;
+}
+
+/* The pressed destination stays at full strength with its spinner; the other
+   destinations dim while it works. */
+.share-card-destination[aria-busy="true"]:has(.action-label__spinner) {
+  opacity: 1;
 }
 
 .share-card-destination svg {

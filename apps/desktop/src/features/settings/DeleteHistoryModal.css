@@ -29,60 +29,10 @@
   min-width: 12rem;
 }
 
-/* Reserve the widest label before submitting so progress never moves the
-   button, wraps the footer, or changes the dialog's height. */
-.delete-history-modal .delete-history-modal__delete-button {
-  display: inline-grid;
-  place-items: center;
+/* The action buttons keep their footprint through every state: see
+   components/ActionLabel. The footer note slot carries a failed request. */
+.delete-history-modal .modal-foot .modal-btn {
   flex-shrink: 0;
-}
-
-.delete-history-modal__label-size,
-.delete-history-modal__button-label {
-  grid-area: 1 / 1;
-}
-
-.delete-history-modal__label-size {
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.delete-history-modal__button-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.delete-history-modal .delete-history-modal__delete-button[aria-busy="true"] {
-  opacity: 1;
-  cursor: wait;
-}
-
-.delete-history-modal__spinner {
-  width: 12px;
-  height: 12px;
-  flex: 0 0 12px;
-  border: 1.5px solid color-mix(in srgb, currentColor 28%, transparent);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: delete-history-spin 700ms linear infinite;
-}
-
-@keyframes delete-history-spin {
-  to { transform: rotate(360deg); }
-}
-
-.delete-history-modal__progress {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .delete-history-modal__spinner { animation: none; }
 }
 
 .delete-history-modal__custom-range {

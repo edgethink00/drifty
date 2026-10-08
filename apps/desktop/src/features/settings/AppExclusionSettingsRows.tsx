@@ -1,5 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { AppIconMap, ExcludedAppRule } from "@drifty/domain";
+import { ActionLabel } from "../../components/ActionLabel";
 import { AppGlyph } from "../../components/AppGlyph";
 import { mergeAppIconResults } from "../app-icons/appIconRequests";
 import { trackerClient } from "../../lib/api/trackerClient";
@@ -55,13 +56,17 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   const [recentApps, setRecentApps] = useState<RecentAppItem[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [addError, setAddError] = useState(false);
+  // The picker entry whose add request is in flight, and the one whose last
+  // request failed. Both are keyed like the entries so the state shows on the
+  // row the user pressed.
+  const [addingKey, setAddingKey] = useState<string | null>(null);
+  const [addErrorKey, setAddErrorKey] = useState<string | null>(null);
   const [rowPending, setRowPending] = useState<Record<string, "remove" | "delete" | "count">>({});
   const [rowErrors, setRowErrors] = useState<Record<string, "remove" | "delete" | "count">>({});
   const pendingRef = useRef(new Set<string>());
   const addingRef = useRef(false);
   const countVersionsRef = useRef(new Map<string, number>());
+  const adding = addingKey !== null;
 
   function clearRowError(id: string) {
     setRowErrors((current) => {
@@ -153,7 +158,7 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   }, [excludedApps, recentApps]);
 
   async function handleOpenAddPanel() {
-    setAddError(false);
+    setAddErrorKey(null);
     setSearch("");
     setAddPanelOpen(true);
     try {
@@ -174,12 +179,13 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
     if (addPanelOpen) searchRef.current?.focus();
   }, [addPanelOpen]);
 
-  async function handleAddApp(name: string, bundleId?: string | null) {
+  async function handleAddApp(name: string, bundleId?: string | null, entryKey?: string) {
     const trimmed = name.trim();
     if (!trimmed || addingRef.current) return;
     addingRef.current = true;
-    setAdding(true);
-    setAddError(false);
+    const key = entryKey ?? pickerKey({ name: trimmed, bundleId });
+    setAddingKey(key);
+    setAddErrorKey(null);
     const id = bundleId || trimmed;
     const newRule: ExcludedAppRule = {
       id,
@@ -194,10 +200,10 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
       // The rule is already saved. A count-query failure retries only the query.
       void refreshHistoryCount(newRule);
     } catch {
-      setAddError(true);
+      setAddErrorKey(key);
     } finally {
       addingRef.current = false;
-      setAdding(false);
+      setAddingKey(null);
     }
   }
 
@@ -256,20 +262,21 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
     || excludedApps.some((app) => app.name.toLocaleLowerCase() === queryLower);
   const canAddTyped = addPanelOpen && query.length > 0 && !exactMatch;
   const showSearch = addPanelOpen || sortedApps.length > 8 || query.length > 0;
+  const typedKey = `typed:${queryLower}`;
 
   function submitSearch() {
     if (!addPanelOpen) return;
     if (filteredRecent.length === 1 && !canAddTyped) {
       const only = filteredRecent[0];
-      if (only) void handleAddApp(only.name, only.bundleId);
+      if (only) void handleAddApp(only.name, only.bundleId, pickerKey(only));
       return;
     }
     const exactRecent = filteredRecent.find((item) => item.name.toLocaleLowerCase() === queryLower);
     if (exactRecent) {
-      void handleAddApp(exactRecent.name, exactRecent.bundleId);
+      void handleAddApp(exactRecent.name, exactRecent.bundleId, pickerKey(exactRecent));
       return;
     }
-    if (canAddTyped) void handleAddApp(query);
+    if (canAddTyped) void handleAddApp(query, null, typedKey);
   }
 
   function handleEscape(event: KeyboardEvent<HTMLDivElement>) {
@@ -326,7 +333,7 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
               placeholder={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
               aria-label={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
               aria-controls={pickerId}
-              onChange={(event) => { setSearch(event.currentTarget.value); setAddError(false); }}
+              onChange={(event) => { setSearch(event.currentTarget.value); setAddErrorKey(null); }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
@@ -335,43 +342,44 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
               }}
             />
             {canAddTyped ? (
-              <button type="button" disabled={adding} aria-busy={adding} className="settings-btn settings-btn--primary excluded-apps-btn" onClick={submitSearch}>
-                {t("settings.privacy.excludedAppsCustomSubmit")}
+              <button type="button" disabled={adding} aria-busy={addingKey === typedKey} className="settings-btn settings-btn--primary excluded-apps-btn" onClick={submitSearch}>
+                <ActionLabel busy={addingKey === typedKey}>{t("settings.privacy.excludedAppsCustomSubmit")}</ActionLabel>
               </button>
             ) : null}
           </div>
-          {adding ? <span className="desc" role="status">{t("settings.privacy.excludedAppsAdding")}</span> : null}
-          {addError ? <p className="excluded-apps-error" role="alert">{t("settings.privacy.excludedAppsAddError")}</p> : null}
           {addPanelOpen ? (
             <div id={pickerId} role="region" aria-label={t("settings.privacy.excludedAppsPickerAria")}>
               {filteredRecent.length > 0 || canAddTyped ? (
                 <ul className="excluded-apps-list">
-                  {filteredRecent.slice(0, 15).map((item) => (
-                    <li key={item.bundleId || item.name} className="excluded-apps-item">
-                      <button
-                        type="button"
-                        className="excluded-apps-item__pick"
-                        disabled={adding}
-                        aria-busy={adding}
-                        onClick={() => void handleAddApp(item.name, item.bundleId)}
-                      >
-                        <span className="excluded-apps-item__identity">
+                  {filteredRecent.slice(0, 15).map((item) => {
+                    const key = pickerKey(item);
+                    return (
+                      <li key={key} className="excluded-apps-item">
+                        <PickerEntry
+                          busy={addingKey === key}
+                          disabled={adding}
+                          error={addErrorKey === key ? t("settings.privacy.excludedAppsAddError") : null}
+                          onPick={() => void handleAddApp(item.name, item.bundleId, key)}
+                        >
                           <AppGlyph appName={item.name} iconSrc={iconSrcFor(item, appIcons)} size="sm" />
                           <span className="excluded-apps-item__name">{item.name}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                        </PickerEntry>
+                      </li>
+                    );
+                  })}
                   {canAddTyped ? (
                     <li className="excluded-apps-item">
-                      <button type="button" disabled={adding} aria-busy={adding} className="excluded-apps-item__pick" onClick={() => void handleAddApp(query)}>
-                        <span className="excluded-apps-item__identity">
-                          <span className="excluded-apps-item__add-glyph" aria-hidden="true">
-                            <PlusIcon />
-                          </span>
-                          <span className="excluded-apps-item__name">{t("settings.privacy.excludedAppsAddNamed", { name: query })}</span>
+                      <PickerEntry
+                        busy={addingKey === typedKey}
+                        disabled={adding}
+                        error={addErrorKey === typedKey ? t("settings.privacy.excludedAppsAddError") : null}
+                        onPick={() => void handleAddApp(query, null, typedKey)}
+                      >
+                        <span className="excluded-apps-item__add-glyph" aria-hidden="true">
+                          <PlusIcon />
                         </span>
-                      </button>
+                        <span className="excluded-apps-item__name">{t("settings.privacy.excludedAppsAddNamed", { name: query })}</span>
+                      </PickerEntry>
                     </li>
                   ) : null}
                 </ul>
@@ -396,7 +404,6 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
               removeNamed={t("settings.privacy.excludedAppsRemoveNamed", { name: app.name })}
               deletePastCount={t("settings.privacy.excludedAppsDeletePastCount", { count: historyCounts[app.id] ?? 0 })}
               pending={rowPending[app.id]}
-              pendingLabel={rowPending[app.id] ? t(`settings.privacy.excludedAppsPending.${rowPending[app.id]}`) : ""}
               error={rowErrors[app.id] ? t(`settings.privacy.excludedAppsError.${rowErrors[app.id]}`) : null}
               retryCountLabel={rowErrors[app.id] === "count" ? t("common.retry") : null}
               onRetryCount={() => void refreshHistoryCount(app)}
@@ -417,6 +424,39 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   );
 }
 
+function pickerKey(item: { name: string; bundleId?: string | null }): string {
+  return item.bundleId || item.name;
+}
+
+/**
+ * One candidate in the add picker. Its request state shows on the entry the
+ * user pressed: a spinner at the end while saving, and the failure text in the
+ * same place afterwards, so the list keeps its height either way.
+ */
+function PickerEntry({
+  busy,
+  disabled,
+  error,
+  onPick,
+  children,
+}: {
+  readonly busy: boolean;
+  readonly disabled: boolean;
+  readonly error: string | null;
+  readonly onPick: () => void;
+  readonly children: ReactNode;
+}) {
+  return (
+    <>
+      <button type="button" className="excluded-apps-item__pick" disabled={disabled} aria-busy={busy} onClick={onPick}>
+        <span className="excluded-apps-item__identity">{children}</span>
+        {busy ? <span className="action-label__spinner excluded-apps-item__spinner" aria-hidden="true" /> : null}
+      </button>
+      {error ? <span className="excluded-apps-item__note excluded-apps-item__note--error" role="alert">{error}</span> : null}
+    </>
+  );
+}
+
 function ExcludedAppRow({
   app,
   count,
@@ -427,7 +467,6 @@ function ExcludedAppRow({
   onRemove,
   onDeleteHistory,
   pending,
-  pendingLabel,
   error,
   retryCountLabel,
   onRetryCount,
@@ -441,7 +480,6 @@ function ExcludedAppRow({
   readonly onRemove: () => void;
   readonly onDeleteHistory: () => void;
   readonly pending?: "remove" | "delete" | "count";
-  readonly pendingLabel: string;
   readonly error: string | null;
   readonly retryCountLabel: string | null;
   readonly onRetryCount: () => void;
@@ -453,18 +491,21 @@ function ExcludedAppRow({
           <AppGlyph appName={app.name} iconSrc={iconSrc} size="sm" />
           <span className="excluded-apps-item__name">{app.name}</span>
         </div>
-        {error ? <p className="excluded-apps-error" role="alert">{error}</p> : null}
       </div>
       <div className="ctrl excluded-apps-item__actions">
-        {pending ? <span className="desc" role="status">{pendingLabel}</span> : null}
-        {retryCountLabel ? <button type="button" className="settings-btn excluded-apps-btn" disabled={Boolean(pending)} onClick={onRetryCount}>{retryCountLabel}</button> : null}
+        {error ? <span className="excluded-apps-item__note excluded-apps-item__note--error" role="alert">{error}</span> : null}
+        {retryCountLabel ? (
+          <button type="button" className="settings-btn excluded-apps-btn" disabled={Boolean(pending)} aria-busy={pending === "count"} onClick={onRetryCount}>
+            <ActionLabel busy={pending === "count"}>{retryCountLabel}</ActionLabel>
+          </button>
+        ) : null}
         {count > 0 ? (
           <button type="button" disabled={Boolean(pending)} aria-busy={pending === "delete"} className="excluded-apps-item__history" onClick={onDeleteHistory}>
-            {deletePastCount}
+            <ActionLabel busy={pending === "delete"}>{deletePastCount}</ActionLabel>
           </button>
         ) : null}
         <button type="button" disabled={Boolean(pending)} aria-busy={pending === "remove"} className="settings-btn excluded-apps-btn" onClick={onRemove} aria-label={removeNamed}>
-          {removeLabel}
+          <ActionLabel busy={pending === "remove"}>{removeLabel}</ActionLabel>
         </button>
       </div>
     </div>
