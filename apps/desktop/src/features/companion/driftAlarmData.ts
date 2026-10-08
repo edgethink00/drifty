@@ -10,6 +10,7 @@ import { segmentForLiveDriftAlarmClassification } from "./liveDriftAlarmClassifi
 import { calibrateAppLlmClassificationWithHistory } from "./driftAlarmClassificationCalibration";
 import { isBrowserHistoryContextPendingForDriftAlarm } from "./driftAlarmHistoryPending";
 import { buildContinuousDriftAlarmEpisode, type DriftAlarmEpisode } from "./driftAlarmEpisode";
+import { buildExplicitVideoDwellCandidate } from "./explicitVideoDwell";
 export { EXTREME_NUDGE_STORAGE_KEY, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent } from "./extremeNudgeData";
 
 export type DriftAlarmBreakSnooze = {
@@ -181,6 +182,19 @@ export function buildDriftAlarmCandidates({
       minimumDurationSeconds,
     });
     if (sustainedSocialCandidate) return [sustainedSocialCandidate];
+
+    // Owner decision 2026-10-08: an identified, unclassified video/feed may
+    // meet the dwell threshold without producing four tracker rows. Keep the
+    // existing hard rule first, and require a live snapshot for this exception.
+    const explicitVideoCandidate = buildExplicitVideoDwellCandidate({
+      segment: currentSegment,
+      sourceSegmentId,
+      classification: currentClassification,
+      segments,
+      classificationOptions: currentClassificationOptions,
+      minimumDurationSeconds,
+    });
+    if (explicitVideoCandidate) return [explicitVideoCandidate];
 
     return [];
   }
