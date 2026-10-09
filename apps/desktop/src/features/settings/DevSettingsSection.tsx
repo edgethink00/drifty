@@ -28,7 +28,6 @@ import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
-import { LEADERBOARD_GRAPH_STYLE_OPTIONS, parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "../leaderboard/leaderboardGraphStyle";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, previewNativePetModeFacing, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
@@ -151,10 +150,6 @@ type DevSettingsSectionProps = {
   readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onAgentsBetaChange: (enabled: boolean) => void;
   readonly onNavigationRefreshChange: (enabled: boolean) => void;
-  readonly leaderboardPreviewEnabled: boolean;
-  readonly onLeaderboardPreviewChange: (enabled: boolean) => void;
-  readonly leaderboardGraphStyle: LeaderboardGraphStyle;
-  readonly onLeaderboardGraphStyleChange: (style: LeaderboardGraphStyle) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
   readonly onResetDemoDashboardReplaySettings?: () => void;
@@ -236,10 +231,6 @@ export function DevSettingsSection({
   onProfileBetaChange,
   onAgentsBetaChange,
   onNavigationRefreshChange,
-  leaderboardPreviewEnabled,
-  onLeaderboardPreviewChange,
-  leaderboardGraphStyle,
-  onLeaderboardGraphStyleChange,
   onPreviewDashboardAiUnavailableCase,
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
@@ -768,33 +759,6 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={profileBetaEnabled} onChange={onProfileBetaChange} ariaLabel="Toggle Profile beta" />
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Leaderboard preview</div>
-            <div className="desc">Preview the redesigned 2-column split layout with the expanded profile rail. Uses your live focus totals and rank; off leaves the shipping stacked layout unchanged.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={leaderboardPreviewEnabled} onChange={onLeaderboardPreviewChange} ariaLabel="Toggle Leaderboard preview" />
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Leaderboard week graph</div>
-            <div className="desc">Preview a 7-day focus sparkline under this week's total. Off leaves the production rail unchanged.</div>
-          </div>
-          <div className="ctrl">
-            <select
-              className="settings-select dev-preview-select"
-              aria-label="Leaderboard week graph style"
-              value={leaderboardGraphStyle}
-              onChange={(event) => onLeaderboardGraphStyleChange(parseLeaderboardGraphStyle(event.target.value))}
-            >
-              {LEADERBOARD_GRAPH_STYLE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
           </div>
         </div>
         <div className="settings-row">

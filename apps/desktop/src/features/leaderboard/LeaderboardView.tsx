@@ -11,7 +11,6 @@ import { RankEmbedsModal } from "./RankEmbedsModal";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { LeaderboardSparkline } from "./LeaderboardSparkline";
-import { DEFAULT_LEADERBOARD_GRAPH_STYLE, type LeaderboardGraphStyle } from "./leaderboardGraphStyle";
 import { formatPreciseTopPercentile, getPreciseTopPercentile } from "./leaderboardStanding";
 import { trailingFocusStreakDays, weekOverWeekDeltaPercent } from "./leaderboardRailMetrics";
 
@@ -65,8 +64,6 @@ export type LeaderboardViewProps = {
   onPeriodChange?: (period: LeaderboardPeriod) => void;
   onSelectProfile?: (row: LeaderboardRow) => void;
   /** Dev-only sparkline. Production callers leave this unset / "off". */
-  graphStyle?: LeaderboardGraphStyle;
-  previewLayout?: "stack" | "split-v2";
 };
 
 export function LeaderboardView({
@@ -96,8 +93,6 @@ export function LeaderboardView({
   onOptOut,
   onPeriodChange,
   onSelectProfile,
-  graphStyle = DEFAULT_LEADERBOARD_GRAPH_STYLE,
-  previewLayout = "stack",
 }: LeaderboardViewProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [searchQuery, setSearchQuery] = useState("");
@@ -121,15 +116,14 @@ export function LeaderboardView({
     () => (dailyProductivity ?? []).slice(-7).map((point) => ({ day: point.day, focus: point.focus })),
     [dailyProductivity],
   );
-  const showSparkline = (previewLayout === "split-v2" || graphStyle !== "off") && sparklinePoints.length >= 2;
+  const showSparkline = sparklinePoints.length >= 2;
   // A failed join/leave reads in the privacy line beside the button, so the board below never moves.
   const showActionError = !isLoading && Boolean(actionError);
-  const sparklineVariant: Exclude<LeaderboardGraphStyle, "off"> = graphStyle === "off" ? "default" : graphStyle;
   const last30FocusSeconds = (dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
   const localMetricsStatus = publicProfile?.localMetricsStatus ?? "ready";
   // The 30-day series arrives after the tab opens. The split rail keeps the chart's
   // footprint until then so the rows below do not slide down when it lands.
-  const sparklinePending = previewLayout === "split-v2" && dailyProductivity === null && localMetricsStatus !== "error";
+  const sparklinePending = dailyProductivity === null && localMetricsStatus !== "error";
   const localMetricsStatusMessage = localMetricsStatus === "loading"
     ? t("leaderboard.calculatingLocal")
     : localMetricsStatus === "error"
@@ -203,387 +197,71 @@ export function LeaderboardView({
   return (
     <section className="leaderboard-panel" aria-label={t("leaderboard.title")} aria-busy={isLoading || undefined}>
       <div className={`leaderboard-panel__stack${isLoading ? " leaderboard-loading-shell" : ""}`}>
-        {previewLayout === "split-v2" ? (
-          <div className="leaderboard-split lb-v2">
-            <section className="leaderboard-profile-block" aria-label={t("leaderboard.participationAria")} aria-hidden={isLoading || undefined}>
-              <section className="leaderboard-hero" aria-label={t("leaderboard.yourParticipationAria")}>
-                <div className="leaderboard-hero__identity-row">
-                  <ProfileAvatar
-                    className="leaderboard-hero__avatar"
-                    name={previewName}
-                    src={profileAvatarUrl || null}
-                    style={{ width: 96, height: 96, borderRadius: "50%", fontSize: "2rem" }}
-                  />
-                  <div className="leaderboard-hero__identity-copy">
-                    <h3 title={previewName}>{previewName}</h3>
-                    <span
-                      className={`leaderboard-hero__status${isOptedIn && publiclyValid !== false ? " leaderboard-hero__status--live" : ""}${isOptedIn && publiclyValid === false ? " leaderboard-hero__status--fail" : ""}${isParticipationResolved ? "" : " leaderboard-hero__status--pending"}`}
-                    >
-                      {participationStatus}
-                    </span>
-                  </div>
-                  {editProfile ? (
-                    <button
-                      type="button"
-                      className="leaderboard-profile-edit-button"
-                      aria-label={t("leaderboard.editProfileAria")}
-                      onClick={editProfile}
-                    >
-                      <PencilIcon />
-                    </button>
-                  ) : null}
-                </div>
-
-                {previewBio || railLinks.length > 0 ? (
-                  <div className="leaderboard-v5-profile-details">
-                    {previewBio ? (
-                      <p className="leaderboard-v5-profile-details__bio">
-                        {previewBio}
-                      </p>
-                    ) : null}
-                    {railLinks.length > 0 ? (
-                      <div className="leaderboard-v5-profile-details__links">
-                        {railLinks.map((link) => (
-                          <a
-                            key={link.key}
-                            className="leaderboard-v5-profile-details__link"
-                            href={link.href}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label={link.label}
-                          >
-                            {link.icon}
-                            <span>{link.label}</span>
-                          </a>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <div className="leaderboard-hero__rail-actions">
-                  <div className="leaderboard-hero__participation-slot">
-                    {!isParticipationResolved ? (
-                      <span
-                        className="leaderboard-hero__participation-placeholder"
-                        role="status"
-                        aria-label={t("leaderboard.checkingParticipationAria")}
-                      />
-                    ) : isOptedIn ? (
-                      <button
-                        type="button"
-                        className="app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
-                        aria-describedby="leaderboard-participation-privacy"
-                        onClick={() => {
-                          onOptOut?.();
-                        }}
-                        disabled={isActionLoading || isLoading || !onOptOut}
-                      >
-                        <ActionLabel busy={isActionLoading} busyLabel={t("leaderboard.leaving")}>{t("leaderboard.leave")}</ActionLabel>
-                      </button>
-                    ) : isCatchingUp ? (
-                      <button
-                        type="button"
-                        className="app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
-                        aria-describedby="leaderboard-participation-privacy"
-                        title={t("leaderboard.catchingUpTitle")}
-                        disabled
-                      >
-                        {t("leaderboard.catchingUp")}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
-                        aria-describedby="leaderboard-participation-privacy"
-                        title={t("leaderboard.joinTitle")}
-                        onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
-                        disabled={isActionLoading || isLoading || (isSignedIn ? !onOptIn : !onSignIn)}
-                      >
-                        <ActionLabel busy={isActionLoading} busyLabel={t("leaderboard.joining")}>{t("leaderboard.join")}</ActionLabel>
-                      </button>
-                    )}
-                  </div>
-                  <div className="leaderboard-hero__share-actions">
-                    <button
-                      type="button"
-                      className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono"
-                      onClick={() => setRankEmbedOpen(true)}
-                      title={!publicRankReady ? t("leaderboard.embedDisabledTitle") : undefined}
-                    >
-                      <EmbedIcon />
-                      {t("leaderboard.embed")}
-                    </button>
-                    {isOptedIn ? (
-                      <button
-                        type="button"
-                        className="app-btn app-btn--quiet profile-btn hero-action-btn"
-                        onClick={publicProfile?.onCopyProfileLink}
-                        disabled={!publicProfile?.onCopyProfileLink}
-                      >
-                        <ShareIcon />
-                        {t("leaderboard.share")}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-                {showActionError ? (
-                  <p key="error" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note leaderboard-hero__privacy-note--error" role="alert">
-                    {actionError}
-                  </p>
-                ) : (
-                  <p key="privacy" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
-                    {t("leaderboard.privacy")}
-                  </p>
-                )}
-                {!isLoading && !isOptedIn && isCatchingUp && !actionError ? (
-                  <p className="capture-recency" role="status">{t("leaderboard.catchingUpNotice")}</p>
-                ) : null}
-                {!isLoading && (publicProfile?.profileError || publicProfile?.profileMessage) ? (
-                  <div className="leaderboard-public-profile__messages">
-                    {publicProfile.profileError ? <p className="capture-recency capture-recency--error">{publicProfile.profileError}</p> : null}
-                    {publicProfile.profileMessage ? <p className="capture-recency">{publicProfile.profileMessage}</p> : null}
-                  </div>
-                ) : null}
-
-                <div className="leaderboard-hero__insights">
-                  <div
-                    aria-label={t("leaderboard.focusTotalsAria")}
-                    className="leaderboard-hero__totals-row"
+        <div className="leaderboard-split lb-v2">
+          <section className="leaderboard-profile-block" aria-label={t("leaderboard.participationAria")} aria-hidden={isLoading || undefined}>
+            <section className="leaderboard-hero" aria-label={t("leaderboard.yourParticipationAria")}>
+              <div className="leaderboard-hero__identity-row">
+                <ProfileAvatar
+                  className="leaderboard-hero__avatar"
+                  name={previewName}
+                  src={profileAvatarUrl || null}
+                  style={{ width: 96, height: 96, borderRadius: "50%", fontSize: "2rem" }}
+                />
+                <div className="leaderboard-hero__identity-copy">
+                  <h3 title={previewName}>{previewName}</h3>
+                  <span
+                    className={`leaderboard-hero__status${isOptedIn && publiclyValid !== false ? " leaderboard-hero__status--live" : ""}${isOptedIn && publiclyValid === false ? " leaderboard-hero__status--fail" : ""}${isParticipationResolved ? "" : " leaderboard-hero__status--pending"}`}
                   >
-                    <div className="leaderboard-hero__focus-stat">
-                      <div className="focus-stat__header">
-                        <span className="label-mono">{t("leaderboard.focusThisWeek")}</span>
-                        {weekDeltaLabel ? (
-                          <span className={`focus-stat__subtrend${weekDeltaPercent !== null && weekDeltaPercent < 0 ? " focus-stat__subtrend--down" : ""}`}>
-                            {t("leaderboard.vsLastWeek", { delta: weekDeltaLabel })}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="focus-stat__num-wrap">
-                        <strong>{weekFocusLabel}</strong>
-                      </div>
-                      {showSparkline ? (
-                        <div className="focus-stat__chart-full" aria-label={t("leaderboard.weekSparklineAria")}>
-                          <LeaderboardSparkline
-                            points={sparklinePoints}
-                            variant={sparklineVariant}
-                            language={effectiveLanguage}
-                            ariaLabel={t("leaderboard.weekSparklineAria")}
-                          />
-                        </div>
-                      ) : sparklinePending ? (
-                        <div className="focus-stat__chart-full" aria-hidden="true">
-                          <div className="leaderboard-sparkline">
-                            <span className="leaderboard-sparkline__plot leaderboard-sparkline__plot--pending" />
-                            <span className="leaderboard-sparkline__axis">{"\u00A0"}</span>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {topPercent !== null && currentUserRank !== null ? (
-                      <section
-                        className="leaderboard-v5-achievement"
-                        aria-label={`${t("leaderboard.communityStanding")} ${t("leaderboard.topPercent", { percent: formatPreciseTopPercentile(topPercent) })}, ${t(periodRankKey, { rank: String(currentUserRank) })}`}
-                      >
-                        <span className="leaderboard-v5-achievement__eyebrow">{t("leaderboard.communityStanding")}</span>
-                        <strong>{t("leaderboard.topPercent", { percent: formatPreciseTopPercentile(topPercent) })}</strong>
-                        <span className="leaderboard-v5-achievement__meta">
-                          <b>{t(periodRankKey, { rank: String(currentUserRank) })}</b>
-                          {participantCount !== null ? (
-                            <>
-                              <i aria-hidden="true" />
-                              <span>{t("leaderboard.participantCount", { count: participantCountLabel ?? "" })}</span>
-                            </>
-                          ) : null}
-                        </span>
-                      </section>
-                    ) : isOptedIn && isLoading ? (
-                      <section className="leaderboard-v5-achievement" aria-hidden="true">
-                        <span className="leaderboard-v5-achievement__eyebrow">{t("leaderboard.communityStanding")}</span>
-                        <strong>{"\u00A0"}</strong>
-                        <span className="leaderboard-v5-achievement__meta">{"\u00A0"}</span>
-                      </section>
-                    ) : isOptedIn ? (
-                      <section className="leaderboard-v5-achievement" aria-label={t("leaderboard.notRanked")}>
-                        <span className="leaderboard-v5-achievement__eyebrow">{t("leaderboard.communityStanding")}</span>
-                        <strong>{t("leaderboard.notRanked")}</strong>
-                      </section>
-                    ) : null}
-
-                    <div className="leaderboard-hero__focus-stat">
-                      <span className="label-mono">{t("leaderboard.dailyAverage")}</span>
-                      <strong>{dailyAverageLabel}</strong>
-                    </div>
-
-                    <div className="leaderboard-hero__focus-stat">
-                      <span className="label-mono">{t("leaderboard.lastThirtyDays")}</span>
-                      <strong>{last30Label}</strong>
-                    </div>
-
-                    {streakDays > 0 ? (
-                      <div className="leaderboard-hero__focus-stat leaderboard-v5-streak">
-                        <span className="label-mono">{t("leaderboard.focusStreak")}</span>
-                        <strong>{t("leaderboard.streakDays", { count: String(streakDays) })}</strong>
-                      </div>
-                    ) : null}
-                    {localMetricsStatusMessage ? (
-                      <p className="leaderboard-hero__metrics-status" role="status">{localMetricsStatusMessage}</p>
-                    ) : null}
-                  </div>
+                    {participationStatus}
+                  </span>
                 </div>
-              </section>
-            </section>
-
-            <LeaderboardBoard
-              activePeriod={activePeriod}
-              isSplitPreview
-              currentUserRank={currentUserRank}
-              filteredLeaderboard={filteredLeaderboard}
-              isLoading={isLoading}
-              isOptedIn={isOptedIn}
-              leaderboard={leaderboard}
-              participantCount={participantCount}
-              searchQuery={searchQuery}
-              statusMessage={statusMessage}
-              statusTone={statusTone}
-              topScopeFocusSeconds={totalFocusSeconds7d}
-              onPeriodChange={onPeriodChange}
-              onSearchQueryChange={setSearchQuery}
-              onSelectProfile={onSelectProfile}
-            />
-          </div>
-        ) : (
-          <>
-        <section className="leaderboard-profile-block" aria-label={t("leaderboard.participationAria")} aria-hidden={isLoading || undefined}>
-          <section
-            className="leaderboard-hero"
-            aria-label={t("leaderboard.yourParticipationAria")}
-            style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", alignItems: "stretch" }}
-          >
-            <div className="leaderboard-hero__summary-row">
-              <div
-                className="leaderboard-hero__identity-row"
-              >
-                {isLoading ? (
-                  <>
-                    <span
-                      className="leaderboard-hero__avatar leaderboard-loading-shell__bone"
-                      style={{ width: 69, height: 69, borderRadius: 16, flex: "0 0 auto" }}
-                    />
-                    <span className="leaderboard-loading-shell__identity-copy">
-                      <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__rank" />
-                      <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__name" />
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <ProfileAvatar
-                      className="leaderboard-hero__avatar"
-                      name={previewName}
-                      src={profileAvatarUrl || null}
-                      style={{ width: 69, height: 69, borderRadius: 16, fontSize: "1.5rem", flex: "0 0 auto" }}
-                    />
-                    <div style={{ display: "grid", gap: "0.28rem", minWidth: 0 }}>
-                      <span
-                        className={`leaderboard-hero__status${isOptedIn && publiclyValid !== false ? " leaderboard-hero__status--live" : ""}${isOptedIn && publiclyValid === false ? " leaderboard-hero__status--fail" : ""}${isParticipationResolved ? "" : " leaderboard-hero__status--pending"}`}
-                        style={{ justifySelf: "start" }}
-                      >
-                        {!isParticipationResolved
-                          ? t("leaderboard.checkingStatus")
-                          : isOptedIn
-                            ? publiclyValid === false
-                              ? t("leaderboard.validationFailed")
-                              : currentUserRank !== null
-                                ? `#${currentUserRank}`
-                                : t("leaderboard.onBoard")
-                            : t("leaderboard.notOnBoard")}
-                      </span>
-                      <h3 style={{ margin: 0, lineHeight: 1.15, fontSize: "1.15rem", whiteSpace: "normal" }}>{previewName}</h3>
-                    </div>
-                    {editProfile ? (
-                      <button
-                        type="button"
-                        className="leaderboard-profile-edit-button"
-                        aria-label={t("leaderboard.editProfileAria")}
-                        onClick={editProfile}
-                        style={{ margin: 0, flex: "0 0 auto" }}
-                      >
-                        <PencilIcon />
-                      </button>
-                    ) : null}
-                  </>
-                )}
+                {editProfile ? (
+                  <button
+                    type="button"
+                    className="leaderboard-profile-edit-button"
+                    aria-label={t("leaderboard.editProfileAria")}
+                    onClick={editProfile}
+                  >
+                    <PencilIcon />
+                  </button>
+                ) : null}
               </div>
-              {publicProfile || isLoading ? (
-                <>
-                  <div
-                    aria-label={t("leaderboard.focusTotalsAria")}
-                    className={!isLoading && showSparkline ? "leaderboard-hero__totals-row leaderboard-hero__totals-row--sparkline" : "leaderboard-hero__totals-row"}
-                  >
-                    {isLoading ? (
-                      <>
-                        <HeroStat label={t("leaderboard.focusThisWeek")} value="" accent loading />
-                        <HeroStat label={t("leaderboard.dailyAverage")} value="" loading />
-                        <HeroStat label={t("leaderboard.lastThirtyDays")} value="" loading />
-                      </>
-                    ) : (
-                      <>
-                        <HeroStat
-                          label={t("leaderboard.focusThisWeek")}
-                          value={localMetricsStatus === "ready" ? formatLocalizedDuration(weekFocusSeconds, effectiveLanguage) : "—"}
-                          accent
-                          className={showSparkline ? "leaderboard-hero__focus-stat--sparkline" : undefined}
-                        >
-                          {showSparkline ? (
-                            <LeaderboardSparkline
-                              points={sparklinePoints}
-                              variant={sparklineVariant}
-                              language={effectiveLanguage}
-                              ariaLabel={t("leaderboard.weekSparklineAria")}
-                            />
-                          ) : null}
-                        </HeroStat>
-                        <HeroStat label={t("leaderboard.dailyAverage")} value={localMetricsStatus === "ready" ? formatLocalizedDuration(dailyAverageSeconds, effectiveLanguage) : "—"} />
-                        <HeroStat label={t("leaderboard.lastThirtyDays")} value={dailyProductivity !== null ? formatLocalizedDuration(last30FocusSeconds, effectiveLanguage) : "—"} />
-                      </>
-                    )}
-                  </div>
-                  {!isLoading && localMetricsStatusMessage ? (
-                    <p className="sr-only" role="status" aria-live="polite">{localMetricsStatusMessage}</p>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
 
-            <div
-              className="leaderboard-hero__action-row"
-              style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" }}
-            >
-              <div className="leaderboard-hero__participation-group">
-                <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
+              {previewBio || railLinks.length > 0 ? (
+                <div className="leaderboard-v5-profile-details">
+                  {previewBio ? (
+                    <p className="leaderboard-v5-profile-details__bio">
+                      {previewBio}
+                    </p>
+                  ) : null}
+                  {railLinks.length > 0 ? (
+                    <div className="leaderboard-v5-profile-details__links">
+                      {railLinks.map((link) => (
+                        <a
+                          key={link.key}
+                          className="leaderboard-v5-profile-details__link"
+                          href={link.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={link.label}
+                        >
+                          {link.icon}
+                          <span>{link.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="leaderboard-hero__rail-actions">
+                <div className="leaderboard-hero__participation-slot">
                   {!isParticipationResolved ? (
-                    // Participation is still unknown, so the slot holds its footprint
-                    // rather than naming an action that may be the wrong one.
                     <span
                       className="leaderboard-hero__participation-placeholder"
                       role="status"
                       aria-label={t("leaderboard.checkingParticipationAria")}
                     />
-                  ) : isLoading ? (
-                    <button
-                      type="button"
-                      className={isOptedIn
-                        ? "app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
-                        : "app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"}
-                      aria-describedby="leaderboard-participation-privacy"
-                      disabled
-                    >
-                      {isOptedIn
-                        ? <ActionLabel busy={false} busyLabel={t("leaderboard.leaving")}>{t("leaderboard.leave")}</ActionLabel>
-                        : <ActionLabel busy={false} busyLabel={t("leaderboard.joining")}>{t("leaderboard.join")}</ActionLabel>}
-                    </button>
                   ) : isOptedIn ? (
                     <button
                       type="button"
@@ -592,7 +270,7 @@ export function LeaderboardView({
                       onClick={() => {
                         onOptOut?.();
                       }}
-                      disabled={isActionLoading || !onOptOut}
+                      disabled={isActionLoading || isLoading || !onOptOut}
                     >
                       <ActionLabel busy={isActionLoading} busyLabel={t("leaderboard.leaving")}>{t("leaderboard.leave")}</ActionLabel>
                     </button>
@@ -613,105 +291,163 @@ export function LeaderboardView({
                       aria-describedby="leaderboard-participation-privacy"
                       title={t("leaderboard.joinTitle")}
                       onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
-                      disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
+                      disabled={isActionLoading || isLoading || (isSignedIn ? !onOptIn : !onSignIn)}
                     >
                       <ActionLabel busy={isActionLoading} busyLabel={t("leaderboard.joining")}>{t("leaderboard.join")}</ActionLabel>
                     </button>
                   )}
                 </div>
-                {showActionError ? (
-                  <p key="error" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note leaderboard-hero__privacy-note--error" role="alert">
-                    {actionError}
-                  </p>
-                ) : (
-                  <p key="privacy" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
-                    {t("leaderboard.privacy")}
-                  </p>
-                )}
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
-                {isLoading ? (
-                  publicProfile ? (
-                    <>
-                      <button type="button" className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono" disabled>
-                        <EmbedIcon />
-                        {t("leaderboard.embed")}
-                      </button>
-                      {!isParticipationResolved ? (
-                        <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
-                      ) : isOptedIn ? (
-                        <button type="button" className="app-btn app-btn--quiet profile-btn hero-action-btn" disabled>
-                          <ShareIcon />
-                          {t("leaderboard.share")}
-                        </button>
-                      ) : null}
-                      {socialPills.map((pill) => (
-                        <span key={pill.key} className="app-btn app-btn--quiet profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
-                          {pill.icon}
-                          {pill.label}
-                        </span>
-                      ))}
-                    </>
-                  ) : null
-                ) : publicProfile ? (
-                  <>
+                <div className="leaderboard-hero__share-actions">
+                  <button
+                    type="button"
+                    className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono"
+                    onClick={() => setRankEmbedOpen(true)}
+                    title={!publicRankReady ? t("leaderboard.embedDisabledTitle") : undefined}
+                  >
+                    <EmbedIcon />
+                    {t("leaderboard.embed")}
+                  </button>
+                  {!isParticipationResolved ? (
+                    <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
+                  ) : isOptedIn ? (
                     <button
                       type="button"
-                      className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono"
-                      onClick={() => setRankEmbedOpen(true)}
-                      title={!publicRankReady ? t("leaderboard.embedDisabledTitle") : undefined}
+                      className="app-btn app-btn--quiet profile-btn hero-action-btn"
+                      onClick={publicProfile?.onCopyProfileLink}
+                      disabled={!publicProfile?.onCopyProfileLink}
                     >
-                      <EmbedIcon />
-                      {t("leaderboard.embed")}
+                      <ShareIcon />
+                      {t("leaderboard.share")}
                     </button>
-                    {!isParticipationResolved ? (
-                      <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
-                    ) : isOptedIn ? (
-                      <button type="button" className="app-btn app-btn--quiet profile-btn hero-action-btn" onClick={publicProfile.onCopyProfileLink}>
-                        <ShareIcon />
-                        {t("leaderboard.share")}
-                      </button>
-                    ) : null}
-                  </>
-                ) : null}
-                {!isLoading && socialPills.map((pill) => (
-                  <a key={pill.key} href={pill.href} target="_blank" rel="noreferrer" className="app-btn app-btn--quiet profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
-                    {pill.icon}
-                    {pill.label}
-                  </a>
-                ))}
+                  ) : null}
+                </div>
               </div>
-            </div>
-          </section>
-          {!isLoading && !isOptedIn && isCatchingUp && !actionError ? (
-            <p className="capture-recency" role="status">{t("leaderboard.catchingUpNotice")}</p>
-          ) : null}
-          {!isLoading && (publicProfile?.profileError || publicProfile?.profileMessage) ? (
-            <div className="leaderboard-public-profile__messages">
-              {publicProfile.profileError ? <p className="capture-recency capture-recency--error">{publicProfile.profileError}</p> : null}
-              {publicProfile.profileMessage ? <p className="capture-recency">{publicProfile.profileMessage}</p> : null}
-            </div>
-          ) : null}
-        </section>
+              {showActionError ? (
+                <p key="error" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note leaderboard-hero__privacy-note--error" role="alert">
+                  {actionError}
+                </p>
+              ) : (
+                <p key="privacy" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
+                  {t("leaderboard.privacy")}
+                </p>
+              )}
+              {!isLoading && !isOptedIn && isCatchingUp && !actionError ? (
+                <p className="capture-recency" role="status">{t("leaderboard.catchingUpNotice")}</p>
+              ) : null}
+              {!isLoading && (publicProfile?.profileError || publicProfile?.profileMessage) ? (
+                <div className="leaderboard-public-profile__messages">
+                  {publicProfile.profileError ? <p className="capture-recency capture-recency--error">{publicProfile.profileError}</p> : null}
+                  {publicProfile.profileMessage ? <p className="capture-recency">{publicProfile.profileMessage}</p> : null}
+                </div>
+              ) : null}
 
-        <LeaderboardBoard
-          activePeriod={activePeriod}
-          currentUserRank={currentUserRank}
-          filteredLeaderboard={filteredLeaderboard}
-          isLoading={isLoading}
-          isOptedIn={isOptedIn}
-          leaderboard={leaderboard}
-          participantCount={participantCount}
-          searchQuery={searchQuery}
-          statusMessage={statusMessage}
-          statusTone={statusTone}
-          topScopeFocusSeconds={totalFocusSeconds7d}
-          onPeriodChange={onPeriodChange}
-          onSearchQueryChange={setSearchQuery}
-          onSelectProfile={onSelectProfile}
-        />
-          </>
-        )}
+              <div className="leaderboard-hero__insights">
+                <div
+                  aria-label={t("leaderboard.focusTotalsAria")}
+                  className="leaderboard-hero__totals-row"
+                >
+                  <div className="leaderboard-hero__focus-stat">
+                    <div className="focus-stat__header">
+                      <span className="label-mono">{t("leaderboard.focusThisWeek")}</span>
+                      {weekDeltaLabel ? (
+                        <span className={`focus-stat__subtrend${weekDeltaPercent !== null && weekDeltaPercent < 0 ? " focus-stat__subtrend--down" : ""}`}>
+                          {t("leaderboard.vsLastWeek", { delta: weekDeltaLabel })}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="focus-stat__num-wrap">
+                      <strong>{weekFocusLabel}</strong>
+                    </div>
+                    {showSparkline ? (
+                      <div className="focus-stat__chart-full" aria-label={t("leaderboard.weekSparklineAria")}>
+                        <LeaderboardSparkline
+                          points={sparklinePoints}
+                          variant="default"
+                          language={effectiveLanguage}
+                          ariaLabel={t("leaderboard.weekSparklineAria")}
+                        />
+                      </div>
+                    ) : sparklinePending ? (
+                      <div className="focus-stat__chart-full" aria-hidden="true">
+                        <div className="leaderboard-sparkline">
+                          <span className="leaderboard-sparkline__plot leaderboard-sparkline__plot--pending" />
+                          <span className="leaderboard-sparkline__axis">{"\u00A0"}</span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {topPercent !== null && currentUserRank !== null ? (
+                    <section
+                      className="leaderboard-v5-achievement"
+                      aria-label={`${t("leaderboard.communityStanding")} ${t("leaderboard.topPercent", { percent: formatPreciseTopPercentile(topPercent) })}, ${t(periodRankKey, { rank: String(currentUserRank) })}`}
+                    >
+                      <span className="leaderboard-v5-achievement__eyebrow">{t("leaderboard.communityStanding")}</span>
+                      <strong>{t("leaderboard.topPercent", { percent: formatPreciseTopPercentile(topPercent) })}</strong>
+                      <span className="leaderboard-v5-achievement__meta">
+                        <b>{t(periodRankKey, { rank: String(currentUserRank) })}</b>
+                        {participantCount !== null ? (
+                          <>
+                            <i aria-hidden="true" />
+                            <span>{t("leaderboard.participantCount", { count: participantCountLabel ?? "" })}</span>
+                          </>
+                        ) : null}
+                      </span>
+                    </section>
+                  ) : isOptedIn && isLoading ? (
+                    <section className="leaderboard-v5-achievement" aria-hidden="true">
+                      <span className="leaderboard-v5-achievement__eyebrow">{t("leaderboard.communityStanding")}</span>
+                      <strong>{"\u00A0"}</strong>
+                      <span className="leaderboard-v5-achievement__meta">{"\u00A0"}</span>
+                    </section>
+                  ) : isOptedIn ? (
+                    <section className="leaderboard-v5-achievement" aria-label={t("leaderboard.notRanked")}>
+                      <span className="leaderboard-v5-achievement__eyebrow">{t("leaderboard.communityStanding")}</span>
+                      <strong>{t("leaderboard.notRanked")}</strong>
+                    </section>
+                  ) : null}
+
+                  <div className="leaderboard-hero__focus-stat">
+                    <span className="label-mono">{t("leaderboard.dailyAverage")}</span>
+                    <strong>{dailyAverageLabel}</strong>
+                  </div>
+
+                  <div className="leaderboard-hero__focus-stat">
+                    <span className="label-mono">{t("leaderboard.lastThirtyDays")}</span>
+                    <strong>{last30Label}</strong>
+                  </div>
+
+                  {streakDays > 0 ? (
+                    <div className="leaderboard-hero__focus-stat leaderboard-v5-streak">
+                      <span className="label-mono">{t("leaderboard.focusStreak")}</span>
+                      <strong>{t("leaderboard.streakDays", { count: String(streakDays) })}</strong>
+                    </div>
+                  ) : null}
+                  {localMetricsStatusMessage ? (
+                    <p className="leaderboard-hero__metrics-status" role="status">{localMetricsStatusMessage}</p>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <LeaderboardBoard
+            activePeriod={activePeriod}
+            currentUserRank={currentUserRank}
+            filteredLeaderboard={filteredLeaderboard}
+            isLoading={isLoading}
+            isOptedIn={isOptedIn}
+            leaderboard={leaderboard}
+            participantCount={participantCount}
+            searchQuery={searchQuery}
+            statusMessage={statusMessage}
+            statusTone={statusTone}
+            topScopeFocusSeconds={totalFocusSeconds7d}
+            onPeriodChange={onPeriodChange}
+            onSearchQueryChange={setSearchQuery}
+            onSelectProfile={onSelectProfile}
+          />
+        </div>
         {!isLoading && publicProfile?.shareMessage ? <div className="leaderboard-share-toast" role="status">{publicProfile.shareMessage}</div> : null}
       </div>
 
@@ -776,39 +512,6 @@ function ShareIcon() {
       <circle cx="18" cy="19" r="2.6" />
       <path d="m8.3 10.8 7.4-4.5M8.3 13.2l7.4 4.5" />
     </svg>
-  );
-}
-
-function HeroStat({
-  label,
-  value,
-  accent = false,
-  loading = false,
-  children,
-  className,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly accent?: boolean;
-  readonly loading?: boolean;
-  readonly children?: ReactNode;
-  readonly className?: string;
-}) {
-  const color = accent ? "var(--accent-strong)" : "var(--text)";
-  return (
-    <div className={["leaderboard-hero__focus-stat", className].filter(Boolean).join(" ")} style={{ display: "grid", gap: "0.4rem" }}>
-      <span className="label-mono" style={{ fontSize: "0.56rem", color: accent ? "var(--accent-strong)" : undefined }}>{label}</span>
-      {/* The value scales down with its column (18cqi) instead of overflowing
-          the card at the narrowest window; it never grows past 1.5rem. */}
-      <strong style={{ fontSize: "min(1.5rem, 18cqi)", fontWeight: 700, lineHeight: 1, color, whiteSpace: "nowrap" }}>
-        {loading ? (
-          <span className="leaderboard-loading-shell__stat-value">
-            <span className="leaderboard-loading-shell__bone" />
-          </span>
-        ) : value}
-      </strong>
-      {children}
-    </div>
   );
 }
 

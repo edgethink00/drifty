@@ -3267,7 +3267,7 @@
   }
 }
 
-@container leaderboard-board (min-width: 44rem) {
+@container leaderboard-board (min-width: 40rem) {
   .content--leaderboard .lb-v2 .leaderboard-list-head__status > .leaderboard-refresh-status {
     display: inline-flex;
   }
@@ -3300,6 +3300,28 @@
 .content--leaderboard .lb-v2 .leaderboard-list-head__spacer {
   display: block;
   width: 0.75rem;
+}
+
+/* Below this width two value columns leave names a few letters; keep Focus time only. */
+@container leaderboard-board (max-width: 34rem) {
+  .content--leaderboard .lb-v2 .leaderboard-list-head,
+  .content--leaderboard .lb-v2 .leaderboard-row__profile-button {
+    grid-template-columns: minmax(0, 1fr) 8.25rem 0.75rem;
+  }
+
+  .content--leaderboard .lb-v2 .leaderboard-list-head__metrics,
+  .content--leaderboard .lb-v2 .leaderboard-row__meta--compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .content--leaderboard .lb-v2 .leaderboard-list-head__metrics span {
+    white-space: nowrap;
+  }
+
+  .content--leaderboard .lb-v2 .leaderboard-list-head__metrics > :nth-child(n + 2),
+  .content--leaderboard .lb-v2 .leaderboard-row__meta--compact > :nth-child(n + 2) {
+    display: none;
+  }
 }
 
 .content--leaderboard .lb-v2 .leaderboard-row__chevron {
@@ -3683,7 +3705,7 @@
   align-items: stretch !important;
 }
 
-.lb-v2 .leaderboard-hero__rail-actions .hero-action-btn {
+.lb-v2 .leaderboard-hero__rail-actions .hero-action-btn:not(.leaderboard-hero__participation--join) {
   min-height: 32px !important;
   height: auto !important;
   font-size: 0.76rem !important;
@@ -3694,7 +3716,7 @@
   border: 1px solid color-mix(in srgb, var(--line) 80%, transparent) !important;
 }
 
-.lb-v2 .leaderboard-hero__rail-actions .leaderboard-hero__participation--danger {
+.lb-v2 .leaderboard-hero__rail-actions .hero-action-btn.leaderboard-hero__participation--danger {
   min-height: 0 !important;
   border: 0 !important;
   padding-block: 2px !important;
@@ -3708,6 +3730,9 @@
 .lb-v2 .leaderboard-hero__participation {
   width: 100% !important;
   min-height: 0 !important;
+}
+
+.lb-v2 .leaderboard-hero__participation:not(.leaderboard-hero__participation--join) {
   background: transparent !important;
 }
 
@@ -3717,9 +3742,11 @@
   color: var(--warn) !important;
 }
 
+/* Joining is the one primary action in the rail, so it keeps the filled primary look. */
 .lb-v2 .leaderboard-hero__participation--join {
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)) !important;
-  color: var(--accent-strong) !important;
+  min-height: 36px !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
 }
 
 .lb-v2 .leaderboard-hero__share-actions {
@@ -3735,6 +3762,12 @@
   width: 100% !important;
 }
 
+.lb-v2 .leaderboard-hero__participation-slot .leaderboard-hero__participation-placeholder,
+.lb-v2 .leaderboard-hero__share-actions .leaderboard-hero__participation-placeholder {
+  width: 100%;
+  min-height: 32px;
+}
+
 .lb-v2 .leaderboard-hero__privacy-note {
   padding: 12px 6px 0 !important;
   line-height: 1.5;
@@ -3745,6 +3778,16 @@
   flex: 0 0 auto !important;
   overflow-wrap: anywhere !important;
   text-wrap: balance;
+}
+
+/* The note is a flex row (it holds a failed join or leave beside the button), so centre it
+   explicitly, and keep the failure in the warn colour that the soft-text rule above would hide. */
+.lb-v2 .leaderboard-hero__privacy-note {
+  justify-content: center;
+}
+
+.lb-v2 .leaderboard-hero__privacy-note--error {
+  color: var(--warn) !important;
 }
 
 .lb-v2 .capture-recency,

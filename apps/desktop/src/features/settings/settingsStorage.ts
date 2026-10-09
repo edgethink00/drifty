@@ -47,10 +47,6 @@ export const FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY = "drifty.dev.forceB
 
 export const FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY = "drifty.dev.forceChromiumAxExtremeNudge";
 
-export const LEADERBOARD_GRAPH_STYLE_STORAGE_KEY = "drifty.dev.leaderboardGraphStyle";
-
-export const LEADERBOARD_PREVIEW_STORAGE_KEY = "drifty.dev.leaderboardPreview";
-
 export const DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.preRollSeconds";
 
 export const DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.durationSeconds";
@@ -710,24 +706,3 @@ function writeStoredBoolean(storageKey: string, enabled: boolean): void {
   window.localStorage.setItem(storageKey, enabled ? "1" : "0");
 }
 
-export function resolveInitialLeaderboardGraphStyle(): string {
-  if (typeof window === "undefined") return "off";
-  try {
-    return window.localStorage.getItem(LEADERBOARD_GRAPH_STYLE_STORAGE_KEY) ?? "off";
-  } catch {
-    return "off";
-  }
-}
-
-export function persistLeaderboardGraphStyle(style: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(LEADERBOARD_GRAPH_STYLE_STORAGE_KEY, style);
-}
-
-export function resolveInitialLeaderboardPreviewEnabled(): boolean {
-  return readStoredBoolean(LEADERBOARD_PREVIEW_STORAGE_KEY, false);
-}
-
-export function persistLeaderboardPreviewEnabled(enabled: boolean): void {
-  writeStoredBoolean(LEADERBOARD_PREVIEW_STORAGE_KEY, enabled);
-}

@@ -217,7 +217,7 @@ describe("LeaderboardView", () => {
 
     const participation = screen.getByLabelText(/your leaderboard participation/i);
     fireEvent.click(within(participation).getByRole("button", { name: /edit public profile/i }));
-    expect(within(participation).getByRole("link", { name: /website/i })).toBeTruthy();
+    expect(within(participation).getByRole("link", { name: /drifty\.so/i })).toBeTruthy();
     expect(within(participation).getByRole("button", { name: /^embed$/i })).toBeTruthy();
     expect(onEditProfile).toHaveBeenCalledTimes(1);
   });
@@ -426,15 +426,18 @@ describe("LeaderboardView", () => {
     renderView({ isLoading: true });
 
     const panel = screen.getByLabelText(/^leaderboard$/i);
-    const status = within(panel).getByRole("status");
+    // The list header and the toolbar both carry the status; CSS shows one per width.
+    const statuses = within(panel).getAllByRole("status");
+    const status = statuses[0];
     const loadingHero = panel.querySelector(".leaderboard-hero");
     const loadingList = panel.querySelector(".leaderboard-list-frame");
 
     expect(panel.getAttribute("aria-busy")).toBe("true");
-    expect(status.textContent).toBe("Loading latest rankings…");
+    expect(statuses.every((item) => item.textContent === "Loading latest rankings…")).toBe(true);
     expect(status.getAttribute("aria-live")).toBe("polite");
     expect(loadingHero?.closest('[aria-hidden="true"]')).not.toBeNull();
-    expect(loadingList?.getAttribute("aria-hidden")).toBe("true");
+    // The frame stays readable for the status; only the placeholder rows are hidden.
+    expect(loadingList?.querySelector(".leaderboard-list")?.getAttribute("aria-hidden")).toBe("true");
     expect(panel.querySelector(".leaderboard-toolbar")).not.toBeNull();
     expect(panel.querySelectorAll(".leaderboard-loading-shell__row")).toHaveLength(5);
     expect(within(panel).getByRole("button", { name: "Weekly", hidden: true }).hasAttribute("disabled")).toBe(true);
@@ -511,7 +514,7 @@ describe("LeaderboardView", () => {
   it("keeps the stable loading frame ahead of a stale fetch error", () => {
     renderView({ error: "Previous RPC error", isLoading: true });
 
-    expect(screen.getByRole("status").textContent).toBe("Loading latest rankings…");
+    expect(screen.getAllByRole("status").every((item) => item.textContent === "Loading latest rankings…")).toBe(true);
     expect(screen.queryByText(/unable to load leaderboard/i)).toBeNull();
   });
 
@@ -530,7 +533,7 @@ describe("LeaderboardView", () => {
     expect(screen.queryByText("alex@example.com")).toBeNull();
   });
 
-  it("renders join and leave participation controls in the same compact hero action slot", () => {
+  it("renders join and leave participation controls in the same hero action slot", () => {
     const { rerender } = renderView({
       isOptedIn: false,
       profileDisplayName: "Alex",
@@ -540,15 +543,12 @@ describe("LeaderboardView", () => {
 
     const optedOutHero = screen.getByLabelText(/your leaderboard participation/i);
     const joinButton = within(optedOutHero).getByRole("button", { name: /join leaderboard/i });
-    const joinActions = joinButton.closest(".leaderboard-hero__participation-slot");
-    const joinActionRow = joinActions?.closest(".leaderboard-hero__action-row") as HTMLElement | null;
+    const joinSlot = joinButton.closest(".leaderboard-hero__participation-slot");
+    const joinRail = joinSlot?.closest(".leaderboard-hero__rail-actions");
 
-    expect(joinActions).not.toBeNull();
-    expect(joinActions?.contains(joinButton)).toBe(true);
-    expect(joinActionRow).not.toBeNull();
-    expect(optedOutHero.style.gap).toBe("var(--space-3)");
-    expect(joinActionRow?.style.paddingTop).toBe("");
-    expect(joinActionRow?.style.borderTop).toBe("");
+    expect(joinSlot).not.toBeNull();
+    expect(joinSlot?.contains(joinButton)).toBe(true);
+    expect(joinRail).not.toBeNull();
 
     rerender(
       <LeaderboardView
@@ -570,16 +570,13 @@ describe("LeaderboardView", () => {
 
     const optedInHero = screen.getByLabelText(/your leaderboard participation/i);
     const leaveButton = within(optedInHero).getByRole("button", { name: /leave leaderboard/i });
-    const leaveActions = leaveButton.closest(".leaderboard-hero__participation-slot");
-    const leaveActionRow = leaveActions?.closest(".leaderboard-hero__action-row") as HTMLElement | null;
+    const leaveSlot = leaveButton.closest(".leaderboard-hero__participation-slot");
+    const leaveRail = leaveSlot?.closest(".leaderboard-hero__rail-actions");
 
-    expect(leaveActions).not.toBeNull();
-    expect(leaveActions?.contains(leaveButton)).toBe(true);
-    expect(joinActions?.className).toBe(leaveActions?.className);
-    expect(joinActionRow?.className).toBe(leaveActionRow?.className);
-    expect(optedInHero.style.gap).toBe("var(--space-3)");
-    expect(leaveActionRow?.style.paddingTop).toBe("");
-    expect(leaveActionRow?.style.borderTop).toBe("");
+    expect(leaveSlot).not.toBeNull();
+    expect(leaveSlot?.contains(leaveButton)).toBe(true);
+    expect(joinSlot?.className).toBe(leaveSlot?.className);
+    expect(joinRail?.className).toBe(leaveRail?.className);
   });
 
   it("falls back to the email prefix in the opted-out preview when no profile name is provided", () => {
@@ -658,7 +655,7 @@ describe("LeaderboardView", () => {
       leaderboard: [makeLeaderboardRow({ period: "daily", focus_seconds: 3600, focus_seconds_7d: 3600 })],
     });
 
-    expect(screen.queryByText(/daily avg/i)).toBeNull();
+    expect(within(screen.getByLabelText(/^global leaderboard$/i)).queryByText(/daily avg/i)).toBeNull();
   });
 
   it("renders a populated ranked list with only safe public fields", () => {
@@ -689,7 +686,6 @@ describe("LeaderboardView", () => {
     const rows = within(list).getAllByRole("listitem");
 
     expect(rows).toHaveLength(2);
-    expect(within(boardBlock).getByText("Participant")).toBeTruthy();
     expect(within(boardBlock).getByText("Focus time")).toBeTruthy();
     expect(within(boardBlock).getByText("Daily avg")).toBeTruthy();
     expect(within(rows[0]).getByText("#1")).toBeTruthy();
@@ -745,13 +741,12 @@ describe("LeaderboardView", () => {
     expect(screen.getByText("Try a name or rank number from the ranked participants.")).toBeTruthy();
   });
 
-  it("keeps split-preview refresh status out of the row flow when a list is shown", () => {
+  it("keeps refresh status out of the row flow when a list is shown", () => {
     const { container, rerender } = render(
       <LeaderboardView
         isSupabaseEnabled
         isSignedIn
         isOptedIn={false}
-        previewLayout="split-v2"
         leaderboard={[makeLeaderboardRow({ rank: 1, display_name: "Alex", focus_seconds_7d: 7200 })]}
         statusMessage="Leaderboard update failed: request timed out"
         statusTone="error"
@@ -768,7 +763,6 @@ describe("LeaderboardView", () => {
         isSupabaseEnabled
         isSignedIn
         isOptedIn={false}
-        previewLayout="split-v2"
         leaderboard={[]}
         statusMessage="Refreshing leaderboard"
       />,
@@ -1062,7 +1056,7 @@ describe("LeaderboardView", () => {
     expect(onOptOut).toHaveBeenCalledOnce();
   });
 
-  it("hides the week sparkline unless a graph style is opted in", () => {
+  it("shows the week sparkline in the profile rail", () => {
     const days = [
       { day: "2026-09-14", focus: 3200, drift: 0, neutral: 0 },
       { day: "2026-09-15", focus: 2800, drift: 0, neutral: 0 },
@@ -1072,20 +1066,11 @@ describe("LeaderboardView", () => {
       { day: "2026-09-19", focus: 3000, drift: 0, neutral: 0 },
       { day: "2026-09-20", focus: 3600, drift: 0, neutral: 0 },
     ];
-    const { unmount } = renderView({
-      publicProfile: makePublicProfile({ dailyProductivity: days }),
-    });
-    expect(screen.queryByRole("img", { name: /daily focus for the last 7 days/i })).toBeNull();
-    unmount();
-
-    renderView({
-      graphStyle: "default",
-      publicProfile: makePublicProfile({ dailyProductivity: days }),
-    });
+    renderView({ publicProfile: makePublicProfile({ dailyProductivity: days }) });
     expect(screen.getByRole("img", { name: /daily focus for the last 7 days/i })).toBeTruthy();
   });
 
-  it("renders the 2-column split layout with expanded profile details when previewLayout is split-v2", () => {
+  it("renders the 2-column split layout with expanded profile details", () => {
     const days = [
       { day: "2026-09-14", focus: 3200, drift: 0, neutral: 0 },
       { day: "2026-09-15", focus: 2800, drift: 0, neutral: 0 },
@@ -1096,7 +1081,6 @@ describe("LeaderboardView", () => {
       { day: "2026-09-20", focus: 3600, drift: 0, neutral: 0 },
     ];
     const { container } = renderView({
-      previewLayout: "split-v2",
       isOptedIn: true,
       ownRank: 6,
       ownParticipantCount: 50,
@@ -1127,7 +1111,6 @@ describe("LeaderboardView", () => {
 
   it("does not invent profile copy or rank stats in the split layout", () => {
     renderView({
-      previewLayout: "split-v2",
       isOptedIn: true,
       ownRank: 3,
       ownParticipantCount: 200,
@@ -1157,7 +1140,6 @@ describe("LeaderboardView", () => {
 
   it("keeps split-rail errors, daily rank, and loading totals honest", () => {
     const { unmount } = renderView({
-      previewLayout: "split-v2",
       isOptedIn: true,
       ownRank: 2,
       ownParticipantCount: 2858,
@@ -1185,7 +1167,6 @@ describe("LeaderboardView", () => {
     unmount();
 
     renderView({
-      previewLayout: "split-v2",
       isOptedIn: false,
       isCatchingUp: true,
       publicProfile: makePublicProfile({
@@ -1199,8 +1180,8 @@ describe("LeaderboardView", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
-  it("keeps the split preview free of decorative titles (the page h1 stays screen-reader only)", () => {
-    const { container } = renderView({ previewLayout: "split-v2" });
+  it("keeps the leaderboard free of decorative titles (the page h1 stays screen-reader only)", () => {
+    const { container } = renderView();
     expect(container.querySelector(".lb-v2")).toBeTruthy();
     expect(container.querySelector(".lb-v2__inline-title")).toBeNull();
     expect(container.querySelector(".lb-v2__eyebrow")).toBeNull();
@@ -1208,26 +1189,21 @@ describe("LeaderboardView", () => {
   it("holds the week chart space in the split rail until the 30-day series arrives", () => {
     const series = Array.from({ length: 7 }, (_, index) => ({ day: "2026-04-0" + (index + 1), focus: (index + 1) * 600, drift: 0, neutral: 0 }));
 
-    const pending = renderView({ previewLayout: "split-v2", publicProfile: makePublicProfile({ dailyProductivity: null }) });
+    const pending = renderView({ publicProfile: makePublicProfile({ dailyProductivity: null }) });
     expect(pending.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeTruthy();
     cleanup();
 
-    const loaded = renderView({ previewLayout: "split-v2", publicProfile: makePublicProfile({ dailyProductivity: series }) });
+    const loaded = renderView({ publicProfile: makePublicProfile({ dailyProductivity: series }) });
     expect(loaded.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeNull();
     expect(loaded.container.querySelector("svg.leaderboard-sparkline__plot")).toBeTruthy();
     cleanup();
 
-    const failed = renderView({ previewLayout: "split-v2", publicProfile: makePublicProfile({ dailyProductivity: null, localMetricsStatus: "error" }) });
+    const failed = renderView({ publicProfile: makePublicProfile({ dailyProductivity: null, localMetricsStatus: "error" }) });
     expect(failed.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeNull();
-    cleanup();
-
-    const stacked = renderView({ publicProfile: makePublicProfile({ dailyProductivity: null }) });
-    expect(stacked.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeNull();
   });
 
   it("keeps the standing slot blank instead of saying unranked while a joined board loads", () => {
     const loading = renderView({
-      previewLayout: "split-v2",
       isOptedIn: true,
       isLoading: true,
       ownRank: null,
@@ -1237,7 +1213,7 @@ describe("LeaderboardView", () => {
     expect(loading.container.querySelector(".leaderboard-v5-achievement")).toBeTruthy();
     cleanup();
 
-    renderView({ previewLayout: "split-v2", isOptedIn: true, isLoading: false, ownRank: null, publicProfile: makePublicProfile() });
+    renderView({ isOptedIn: true, isLoading: false, ownRank: null, publicProfile: makePublicProfile() });
     expect(screen.getByText(/not ranked/i)).toBeTruthy();
   });
 });

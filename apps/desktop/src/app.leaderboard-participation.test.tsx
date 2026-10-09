@@ -1333,7 +1333,7 @@ describe("App leaderboard participation", () => {
     const blockingLoading = screen.queryByText(/loading leaderboard/i);
     const profileButtonDuringRefresh = screen.queryByRole("button", { name: /view alex profile/i });
     const profileNameDuringRefresh = screen.queryByText("Alex");
-    const compactRefreshStatus = screen.queryByText(/refreshing leaderboard/i);
+    const compactRefreshStatus = screen.queryAllByText(/refreshing leaderboard/i)[0] ?? null;
     deferredLeaderboard.resolve({ success: true, error: null, data: [makeLeaderboardRow("monthly")] });
     await screen.findByRole("button", { name: /view alex profile/i });
 
@@ -1370,13 +1370,13 @@ describe("App leaderboard participation", () => {
       expect(fetchGlobalLeaderboard).toHaveBeenCalledWith("monthly", 100);
     });
 
-    const refreshStatus = screen.queryByText("리더보드 새로고침 중");
-    const englishStatus = screen.queryByText(/refreshing leaderboard/i);
+    const refreshStatus = screen.queryAllByText("리더보드 새로고침 중")[0] ?? null;
+    const englishStatus = screen.queryAllByText(/refreshing leaderboard/i);
     deferredLeaderboard.resolve({ success: true, error: null, data: [makeLeaderboardRow("monthly")] });
     await screen.findByText("Alex");
 
     expect(refreshStatus).toBeTruthy();
-    expect(englishStatus).toBeNull();
+    expect(englishStatus).toHaveLength(0);
     expect(billingControllerLanguages.length).toBeGreaterThan(0);
     expect(new Set(billingControllerLanguages)).toEqual(new Set(["ko"]));
   });
@@ -1544,7 +1544,7 @@ describe("App leaderboard participation", () => {
     expect(screen.getByRole("button", { name: /^embed$/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
     expect(JSON.parse(window.localStorage.getItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY) ?? "[]")).toEqual([]);
-    expect((await screen.findByRole("status")).textContent).toMatch(/network unavailable/i);
+    expect((await screen.findAllByRole("status")).some((item) => /network unavailable/i.test(item.textContent ?? ""))).toBe(true);
   });
 
   it("keeps joined profile editing available and avoids blocking loading during the save refresh", async () => {

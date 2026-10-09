@@ -18,7 +18,6 @@ export type LeaderboardBoardProps = {
   readonly currentUserRank: number | null;
   readonly filteredLeaderboard: readonly LeaderboardRow[];
   readonly isLoading?: boolean;
-  readonly isSplitPreview?: boolean;
   /** Split-preview variant B shows the page title here instead of in a page header row. */
   readonly isOptedIn: boolean;
   readonly leaderboard: readonly LeaderboardRow[];
@@ -37,7 +36,6 @@ export function LeaderboardBoard({
   currentUserRank,
   filteredLeaderboard,
   isLoading = false,
-  isSplitPreview = false,
   isOptedIn,
   leaderboard,
   participantCount,
@@ -87,7 +85,7 @@ export function LeaderboardBoard({
   const hasPagination = !isLoading && leaderboard.length > 0 && filteredLeaderboard.length > 0;
   // The split preview shows refresh status in the list header on wide boards so
   // the rows never shift when a transient status appears or clears.
-  const statusInListHead = isSplitPreview && (isLoading || hasPagination);
+  const statusInListHead = isLoading || hasPagination;
   const status = isLoading ? (
     <span className="leaderboard-refresh-status leaderboard-loading-shell__status" role="status" aria-live="polite">
       {t("leaderboard.loadingLatest")}
@@ -116,7 +114,7 @@ export function LeaderboardBoard({
       />
 
       {isLoading ? (
-        <LeaderboardLoadingRankList activePeriod={activePeriod} isSplitPreview={isSplitPreview} status={status} />
+        <LeaderboardLoadingRankList activePeriod={activePeriod} status={status} />
       ) : leaderboard.length === 0 ? (
         <div className="leaderboard-board__state">
           <StateBlock
@@ -139,7 +137,6 @@ export function LeaderboardBoard({
             activePeriod={activePeriod}
             currentUserRank={currentUserRank}
             frameRef={listFrameRef}
-            isSplitPreview={isSplitPreview}
             isOptedIn={isOptedIn}
             rows={pageRows}
             status={status}
@@ -268,11 +265,11 @@ function LeaderboardToolbar({
   );
 }
 
-function LeaderboardLoadingRankList({ activePeriod, isSplitPreview, status }: { readonly activePeriod: LeaderboardPeriod; readonly isSplitPreview: boolean; readonly status: ReactNode }) {
+function LeaderboardLoadingRankList({ activePeriod, status }: { readonly activePeriod: LeaderboardPeriod; readonly status: ReactNode }) {
   return (
-    <div className={`leaderboard-list-frame${isSplitPreview && activePeriod === "daily" ? " leaderboard-list-frame--daily" : ""}`} aria-hidden={isSplitPreview ? undefined : "true"}>
-      <LeaderboardListHeader activePeriod={activePeriod} isSplitPreview={isSplitPreview} status={status} />
-      <ol className="leaderboard-list" aria-hidden={isSplitPreview ? "true" : undefined}>
+    <div className={`leaderboard-list-frame${activePeriod === "daily" ? " leaderboard-list-frame--daily" : ""}`}>
+      <LeaderboardListHeader activePeriod={activePeriod} status={status} />
+      <ol className="leaderboard-list" aria-hidden="true">
         {Array.from({ length: 5 }, (_, index) => (
           <li className="leaderboard-row leaderboard-loading-shell__row" key={index}>
             <button className="leaderboard-row__profile-button" type="button" tabIndex={-1}>
@@ -294,32 +291,16 @@ function LeaderboardLoadingRankList({ activePeriod, isSplitPreview, status }: { 
   );
 }
 
-function LeaderboardListHeader({ activePeriod, isSplitPreview, status }: { readonly activePeriod: LeaderboardPeriod; readonly isSplitPreview: boolean; readonly status: ReactNode }) {
+function LeaderboardListHeader({ activePeriod, status }: { readonly activePeriod: LeaderboardPeriod; readonly status: ReactNode }) {
   const { t } = useLocalization();
-  if (isSplitPreview) {
-    return (
-      <div className={`leaderboard-list-head${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`}>
-        <span className="leaderboard-list-head__status">{status}</span>
-        <div className="leaderboard-list-head__metrics" aria-hidden="true">
-          <span>{t("leaderboard.focusTime")}</span>
-          {activePeriod !== "daily" ? <span>{t("leaderboard.dailyAverage")}</span> : null}
-        </div>
-        <span className="leaderboard-list-head__spacer" aria-hidden="true" />
-      </div>
-    );
-  }
   return (
-    // Mirrors a row: name, the two value tracks, and an invisible chevron, so
-    // every title sits over its values. Daily leaves the average track empty
-    // rather than collapsing it, which keeps Focus time in place when the
-    // period changes.
-    <div className={`leaderboard-list-head leaderboard-list-head--aligned${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`} aria-hidden="true">
-      <span>{t("leaderboard.participant")}</span>
-      <span className="leaderboard-list-head__columns">
+    <div className={`leaderboard-list-head${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`}>
+      <span className="leaderboard-list-head__status">{status}</span>
+      <div className="leaderboard-list-head__metrics" aria-hidden="true">
         <span>{t("leaderboard.focusTime")}</span>
-        <span>{activePeriod !== "daily" ? t("leaderboard.dailyAverage") : null}</span>
-      </span>
-      <span className="leaderboard-row__chevron leaderboard-list-head__chevron">›</span>
+        {activePeriod !== "daily" ? <span>{t("leaderboard.dailyAverage")}</span> : null}
+      </div>
+      <span className="leaderboard-list-head__spacer" aria-hidden="true" />
     </div>
   );
 }
@@ -328,7 +309,6 @@ function LeaderboardRankList({
   activePeriod,
   currentUserRank,
   frameRef,
-  isSplitPreview,
   isOptedIn,
   rows,
   status,
@@ -337,7 +317,6 @@ function LeaderboardRankList({
   readonly activePeriod: LeaderboardPeriod;
   readonly currentUserRank: number | null;
   readonly frameRef: React.RefObject<HTMLDivElement>;
-  readonly isSplitPreview: boolean;
   readonly isOptedIn: boolean;
   readonly rows: readonly LeaderboardRow[];
   readonly status: ReactNode;
@@ -345,8 +324,8 @@ function LeaderboardRankList({
 }) {
   const { effectiveLanguage, t } = useLocalization();
   return (
-    <div className={`leaderboard-list-frame${isSplitPreview && activePeriod === "daily" ? " leaderboard-list-frame--daily" : ""}`} ref={frameRef}>
-      <LeaderboardListHeader activePeriod={activePeriod} isSplitPreview={isSplitPreview} status={status} />
+    <div className={`leaderboard-list-frame${activePeriod === "daily" ? " leaderboard-list-frame--daily" : ""}`} ref={frameRef}>
+      <LeaderboardListHeader activePeriod={activePeriod} status={status} />
       <ol className="leaderboard-list" aria-label={t("leaderboard.rankingsAria")}>
         {rows.map((row) => {
           const isCurrentUser = isOptedIn && row.rank === currentUserRank;

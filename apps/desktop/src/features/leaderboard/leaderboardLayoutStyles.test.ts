@@ -62,6 +62,18 @@ describe("leaderboard operate layout styles", () => {
     expect(ruleContaining(shareRow, /grid-auto-columns:/)).toMatch(/grid-auto-columns:\s*minmax\(0, 1fr\);/);
   });
 
+  it("drops the Daily avg column on narrow boards so names keep their room", () => {
+    // The header and the rows share one rule, so the second selector carries the declaration.
+    expect(leaderboardStyles).toContain(".content--leaderboard .lb-v2 .leaderboard-list-head__metrics > :nth-child(n + 2),");
+    expect(ruleContaining(".content--leaderboard .lb-v2 .leaderboard-row__meta--compact > :nth-child(n + 2)", /display:/)).toMatch(/display:\s*none;/);
+    expect(leaderboardStyles).toMatch(/@container leaderboard-board \(max-width: 34rem\)/);
+  });
+
+  it("keeps Join as the filled primary action while Leave and Embed stay quiet", () => {
+    expect(ruleContaining(".lb-v2 .leaderboard-hero__rail-actions .hero-action-btn:not(.leaderboard-hero__participation--join)", /background:/)).toMatch(/background:\s*transparent !important;/);
+    expect(rules(".lb-v2 .leaderboard-hero__participation--join").some((body) => /background:/.test(body))).toBe(false);
+  });
+
   it("starts the split preview at the top of the page once the title row is gone", () => {
     const flushPage = ".content--leaderboard .page.page--lb-flush";
     expect(ruleContaining(flushPage, /grid-template-rows:/)).toMatch(/grid-template-rows:\s*minmax\(0, 1fr\);/);

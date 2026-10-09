@@ -1,7 +1,6 @@
 import { LeaderboardView } from "./LeaderboardView";
 import type { LeaderboardPublicProfileControls } from "./LeaderboardView";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
-import type { LeaderboardGraphStyle } from "./leaderboardGraphStyle";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export type LeaderboardPageProps = {
@@ -31,8 +30,6 @@ export type LeaderboardPageProps = {
   onPeriodChange: (period: LeaderboardPeriod) => void;
   onSelectProfile: (row: LeaderboardRow) => void;
   onSignIn: () => void;
-  graphStyle?: LeaderboardGraphStyle;
-  previewLayout?: "stack" | "split-v2";
 };
 
 export function LeaderboardPage({
@@ -62,23 +59,12 @@ export function LeaderboardPage({
   onPeriodChange,
   onSelectProfile,
   onSignIn,
-  graphStyle,
-  previewLayout,
 }: LeaderboardPageProps) {
   const { t } = useLocalization();
-  // The split preview drops the title row so both panels start at the top.
-  const flushTop = previewLayout === "split-v2";
   return (
-    <div className={flushTop ? "page page--lb-flush" : "page"}>
-      {flushTop ? (
-        <h1 className="sr-only">{t("leaderboard.title")}</h1>
-      ) : (
-        <div className="pg-head">
-          <div>
-            <h1>{t("leaderboard.title")}</h1>
-          </div>
-        </div>
-      )}
+    <div className="page page--lb-flush">
+      {/* Both panels start at the top, so the page title stays available to screen readers only. */}
+      <h1 className="sr-only">{t("leaderboard.title")}</h1>
 
       <div className="leaderboard-page-layout">
         <LeaderboardView
@@ -108,8 +94,6 @@ export function LeaderboardPage({
           onOptOut={onOptOut}
           onPeriodChange={onPeriodChange}
           onSelectProfile={onSelectProfile}
-          graphStyle={graphStyle}
-          previewLayout={previewLayout}
         />
       </div>
     </div>

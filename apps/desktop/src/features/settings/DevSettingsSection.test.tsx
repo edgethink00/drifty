@@ -509,24 +509,6 @@ it("shows the local automatic close ledger in Diagnostics and refreshes it", () 
     expect(props.onNavigationRefreshChange).toHaveBeenCalledWith(true);
   });
 
-  it("changes the leaderboard week graph style from Feature flags", () => {
-    const props = renderProductionDevSettings({ activeSubsection: "flags" });
-
-    fireEvent.change(screen.getByRole("combobox", { name: "Leaderboard week graph style" }), {
-      target: { value: "default" },
-    });
-
-    expect(props.onLeaderboardGraphStyleChange).toHaveBeenCalledWith("default");
-  });
-
-  it("toggles the leaderboard preview layout from Feature flags", () => {
-    const props = renderProductionDevSettings({ activeSubsection: "flags" });
-
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle Leaderboard preview" }));
-
-    expect(props.onLeaderboardPreviewChange).toHaveBeenCalledWith(true);
-  });
-
   it("moves between Dev tabs with standard tablist arrow keys", () => {
     const props = renderProductionDevSettings();
     const diagnosticsTab = screen.getByRole("tab", { name: "Diagnostics" });
