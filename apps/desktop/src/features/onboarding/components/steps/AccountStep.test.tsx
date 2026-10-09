@@ -15,13 +15,15 @@ afterEach(() => {
 const baseProps: ComponentProps<typeof AccountStep> = {
   accountConnected: false,
   accountAccessState: "disconnected" as const,
+  awaitsContinue: false,
   expectsPromotion: false,
   promotionActive: false,
   promotionEndsAt: null,
   authCallbackStatus: null,
   devAuthSkipEnabled: false,
   onSkipAuthForDev: vi.fn(),
-  onStartCloudTrialWithEmail: vi.fn(),
+  onContinue: vi.fn(),
+  onOpenEmail: vi.fn(),
   onStartCloudTrialWithGoogle: vi.fn(),
   onStartCloudTrialWithWebsite: vi.fn(),
 };
@@ -39,8 +41,6 @@ describe("AccountStep", () => {
     const onStartCloudTrialWithWebsite = vi.fn();
     renderAccountStep({ expectsPromotion: true, onStartCloudTrialWithWebsite });
 
-    expect(screen.getByRole("heading", { name: /connect your pro pass/i })).toBeTruthy();
-    expect(screen.getByText(/same account that claimed the pass/i)).toBeTruthy();
     expect(screen.getAllByRole("button").slice(0, 3).map((button) => button.textContent)).toEqual([
       expect.stringMatching(/continue with my drifty\.so account/i),
       expect.stringMatching(/continue with google/i),
@@ -52,12 +52,45 @@ describe("AccountStep", () => {
   });
 
   it("keeps the standard onboarding account path to Google and email", () => {
-    renderAccountStep();
+    const onOpenEmail = vi.fn();
+    renderAccountStep({ onOpenEmail });
 
-    expect(screen.getByRole("heading", { name: /connect your account/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /drifty\.so account/i })).toBeNull();
     expect(screen.getByRole("button", { name: /continue with google/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /continue with email/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /continue with email/i }));
+    expect(onOpenEmail).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("link", { name: /terms/i })).toBeTruthy();
+  });
+
+  it("offers Continue instead of sign-in when the account was already connected", () => {
+    const onContinue = vi.fn();
+    renderAccountStep({ accountConnected: true, accountAccessState: "standard-confirmed", awaitsContinue: true, onContinue });
+
+    expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /continue with google/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /terms/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves without a button after signing in on the screen", () => {
+    renderAccountStep({ accountConnected: true, accountAccessState: "standard-confirmed", awaitsContinue: false });
+
+    expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("keeps the Pro pass end date and its no-card note once the pass is active", () => {
+    renderAccountStep({
+      accountConnected: true,
+      accountAccessState: "promotion-confirmed",
+      awaitsContinue: true,
+      promotionActive: true,
+      promotionEndsAt: "2026-11-06T00:00:00.000Z",
+    });
+
+    expect(within(screen.getByRole("status")).getByText(/pro access is active/i)).toBeTruthy();
+    expect(screen.getByText(/no card required and no automatic renewal/i)).toBeTruthy();
   });
 
   it("leaves Calendar consent to Google's own permission screen instead of restating it in onboarding", () => {
@@ -103,14 +136,14 @@ describe("AccountStep", () => {
   it("keeps required onboarding auth in place while offline and offers a retry", async () => {
     const onStartCloudTrialWithWebsite = vi.fn();
     const onStartCloudTrialWithGoogle = vi.fn();
-    const onStartCloudTrialWithEmail = vi.fn();
+    const onOpenEmail = vi.fn();
     const onRetryCloudConnection = vi.fn().mockResolvedValue({ error: null });
     renderAccountStep({
       expectsPromotion: true,
       cloudConnectionStatusOverride: "offline",
       onStartCloudTrialWithWebsite,
       onStartCloudTrialWithGoogle,
-      onStartCloudTrialWithEmail,
+      onOpenEmail,
       onRetryCloudConnection,
     });
 
@@ -129,7 +162,7 @@ describe("AccountStep", () => {
     expect(onRetryCloudConnection).toHaveBeenCalledTimes(1);
     expect(onStartCloudTrialWithWebsite).not.toHaveBeenCalled();
     expect(onStartCloudTrialWithGoogle).not.toHaveBeenCalled();
-    expect(onStartCloudTrialWithEmail).not.toHaveBeenCalled();
+    expect(onOpenEmail).not.toHaveBeenCalled();
     expect(screen.queryByText(/continue without signing in/i)).toBeNull();
   });
 });

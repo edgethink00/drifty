@@ -1,0 +1,600 @@
+/*
+ * Onboarding entry screen (step "account", or "welcome" when sign-in is settled).
+ * Left: wordmark, headline, sign-in. Right: an inset stage with the product picture,
+ * a real Drifty window at its 1000x720 compact size drawn at 0.86 scale so it runs off
+ * the stage's right and bottom edges. The onboarding window itself is a fixed 900x580;
+ * the stage takes just over half of it so the picture reads at a legible size.
+ */
+
+.onboarding-card.dc-onb-card.onb-entry {
+  --onb-entry-stage-width: clamp(356px, 52%, 480px);
+  --onb-entry-demo-scale: 0.86;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--onb-entry-stage-width);
+  padding: 0;
+}
+
+/* Smaller browser previews: keep more of the day inside a narrower stage. */
+@media (max-width: 859px) {
+  .onboarding-card.dc-onb-card.onb-entry {
+    --onb-entry-demo-scale: 0.74;
+  }
+}
+
+.onb-entry__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  /* Left and bottom insets match the setup steps' footer (40 / 28). */
+  padding: 34px 30px 28px 40px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.onb-entry__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  flex-shrink: 0;
+}
+
+.onb-entry__wordmark {
+  display: block;
+  width: 74px;
+  height: auto;
+}
+
+:root[data-theme="dark"] .onb-entry__wordmark {
+  filter: invert(1);
+}
+
+.onb-entry__top .dc-onb-language {
+  height: 30px;
+  padding: 2px;
+  border-color: var(--dc-onb-line);
+  background: transparent;
+  animation: none;
+}
+
+.onb-entry__top .dc-onb-language__option {
+  min-height: 24px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
+/* A quiet switch: the selected language reads as a soft fill, without the lifted shadow. */
+.onb-entry__top .dc-onb-language__option[aria-checked="true"] {
+  background: var(--dc-onb-raised);
+  box-shadow: none;
+}
+
+.onb-entry__back {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dc-onb-raised);
+  color: var(--dc-onb-text);
+  cursor: pointer;
+}
+
+.onb-entry__back svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.onb-entry__back:hover {
+  background: var(--dc-onb-inset);
+}
+
+.onb-entry__back:focus-visible {
+  outline: 2px solid var(--dc-onb-accent);
+  outline-offset: 2px;
+}
+
+.onb-entry__pitch {
+  margin-top: 54px;
+  flex-shrink: 0;
+}
+
+.onb-entry__headline {
+  margin: 0;
+  color: var(--dc-onb-text);
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 650;
+  letter-spacing: -0.038em;
+  line-height: 1.1;
+  text-wrap: balance;
+  word-break: keep-all;
+  animation: dcOnbRise 0.55s both;
+}
+
+.onb-entry__body {
+  max-width: 30em;
+  margin: 16px 0 0;
+  color: var(--dc-onb-soft);
+  font-size: 15px;
+  line-height: 1.6;
+  text-wrap: pretty;
+  word-break: keep-all;
+  animation: dcOnbRise 0.55s 0.12s both;
+}
+
+/* The sign-in block sits at the bottom of the column, under the pitch. */
+.dc-onb-account.onb-entry-account {
+  width: 100%;
+  max-width: none;
+  margin: auto 0 0;
+  padding-top: 24px;
+  text-align: left;
+}
+
+.onb-entry-account .dc-onb-account__buttons {
+  gap: 10px;
+}
+
+.onb-entry-account .dc-onb-account__google,
+.onb-entry-account .dc-onb-account__email {
+  min-height: 46px;
+  padding-block: 12px;
+  border-radius: 12px;
+}
+
+/* Dark text on the light button reads heavier than light text on ink; even them out.
+   The system font rounds weights above 500 up to semibold, so this stays at 500. */
+.onb-entry-account .dc-onb-account__email {
+  font-weight: 500;
+}
+
+.onb-entry-account .dc-onb-divider {
+  margin: 2px 0;
+}
+
+.onb-entry-account .dc-onb-account__legal {
+  margin: 14px 0 0;
+  color: var(--dc-onb-soft);
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.onb-entry-account .dc-onb-account__legal a {
+  color: var(--dc-onb-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.onb-entry-account .dc-onb-account__callback,
+.onb-entry-account .dc-onb-account__offline {
+  margin: 0;
+}
+
+.onb-entry-account .dc-onb-account__callback {
+  margin-top: 12px;
+}
+
+.onb-entry-account .dc-onb-account__dev-skip,
+.onb-entry-account .dc-onb-account__delete-guest {
+  align-items: flex-start;
+  justify-items: start;
+  margin-top: 14px;
+  padding-top: 12px;
+  text-align: left;
+}
+
+.onb-entry-account__settled {
+  display: grid;
+  gap: 10px;
+}
+
+.onb-entry-account__note {
+  margin: 0;
+  color: var(--dc-onb-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* In-place email sign-in: the same form and recovery as the auth dialog, in onboarding dress. */
+.onb-entry__email {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  /* Same gap under the top row as the pitch, so the sign-in title starts where the
+     headline starts (120px) and the form ends level with the entry's buttons. */
+  margin-top: 54px;
+}
+
+.onb-entry .auth-inline {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.onb-entry .auth-inline__title {
+  margin: 0;
+  color: var(--dc-onb-text);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.032em;
+  line-height: 1.15;
+}
+
+.onb-entry .auth-inline__description {
+  margin: 8px 0 0;
+  color: var(--dc-onb-muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.onb-entry .auth-inline .auth-modal__error,
+.onb-entry .auth-inline .auth-modal__success,
+.onb-entry .auth-inline .auth-modal__callback-notice,
+.onb-entry .auth-inline .auth-modal__offline {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.onb-entry .auth-inline .auth-modal__form {
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.onb-entry .auth-inline .auth-modal__field {
+  gap: 6px;
+}
+
+.onb-entry .auth-inline .auth-modal__field > span {
+  color: var(--dc-onb-soft);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.onb-entry .auth-inline .auth-modal__field input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(28, 28, 25, 0.18);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--dc-onb-text);
+  font-size: 14px;
+}
+
+.onb-entry .auth-inline .auth-modal__password-control input {
+  padding-right: 2.5rem;
+}
+
+.onb-entry .auth-inline .auth-modal__field input:focus-visible {
+  outline: none;
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+
+:root[data-theme="dark"] .onb-entry .auth-inline .auth-modal__field input {
+  border-color: color-mix(in srgb, var(--dc-onb-text) 16%, transparent);
+  background: var(--dc-onb-raised);
+}
+
+.onb-entry .auth-inline .auth-modal__forgot-row {
+  margin-top: -4px;
+}
+
+.onb-entry .auth-inline .auth-modal__submit,
+.onb-entry .auth-inline .auth-modal__submit:hover:not(:disabled) {
+  min-height: 44px;
+  margin-top: 2px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--dc-onb-accent);
+  color: var(--dc-onb-surface);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.onb-entry .auth-inline .auth-modal__submit:hover:not(:disabled) {
+  background: var(--dc-onb-muted);
+}
+
+.onb-entry .auth-inline .auth-modal__submit:disabled {
+  opacity: 0.5;
+}
+
+.onb-entry .auth-inline .auth-modal__mode-switch {
+  justify-content: flex-start;
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
+.onb-entry .auth-inline .auth-modal__recovery-copy {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.onb-entry .auth-inline__legal {
+  margin: auto 0 0;
+  padding-top: 16px;
+  color: var(--dc-onb-soft);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.onb-entry .auth-inline__legal a {
+  color: var(--dc-onb-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Stage ── */
+.onb-entry__stage {
+  --onb-entry-stage-dot: rgba(28, 28, 25, 0.085);
+  position: relative;
+  min-width: 0;
+  margin: 8px 8px 8px 0;
+  overflow: hidden;
+  border-radius: 14px;
+  background:
+    radial-gradient(90% 60% at 72% 40%, color-mix(in srgb, var(--surface) 75%, transparent), transparent 70%),
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 58%),
+    radial-gradient(90% 70% at 100% 100%, color-mix(in srgb, var(--productivity-drift) 8%, transparent), transparent 70%),
+    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 85%, var(--canvas)), color-mix(in srgb, var(--accent-soft) 30%, var(--canvas)) 45%, var(--canvas));
+  isolation: isolate;
+  animation: onbEntryStageIn 0.7s 0.08s both;
+}
+
+/* A faint dot grid, like graph paper, fading out behind the window. */
+.onb-entry__stage::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(var(--onb-entry-stage-dot) 1px, transparent 1.3px);
+  background-size: 14px 14px;
+  content: "";
+  -webkit-mask-image: linear-gradient(160deg, #000 10%, transparent 60%);
+  mask-image: linear-gradient(160deg, #000 10%, transparent 60%);
+}
+
+:root[data-theme="dark"] .onb-entry__stage {
+  --onb-entry-stage-dot: rgba(232, 230, 223, 0.075);
+  background:
+    radial-gradient(90% 60% at 72% 40%, color-mix(in srgb, var(--surface) 30%, transparent), transparent 70%),
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 58%),
+    radial-gradient(90% 70% at 100% 100%, color-mix(in srgb, var(--productivity-drift) 8%, transparent), transparent 70%),
+    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 80%, var(--canvas)), var(--canvas) 60%);
+}
+
+@keyframes onbEntryStageIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.onb-entry-demo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.onb-entry-demo__window {
+  position: absolute;
+  /* The window keeps a gap on the stage's top and left and runs off its right and bottom.
+     Its top edge lines up with the headline's top in the left column: copy padding 34 +
+     top row 32 + pitch margin 54, less the stage's own 8px inset. */
+  top: var(--onb-entry-demo-top, 112px);
+  left: var(--onb-entry-demo-left, 48px);
+  width: 1000px;
+  height: 720px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: linear-gradient(var(--shell-glass-bg), var(--shell-glass-bg)), var(--canvas);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 60px 110px -24px rgba(40, 52, 25, 0.34),
+    0 26px 52px -26px rgba(28, 28, 25, 0.26);
+  transform: scale(var(--onb-entry-demo-scale));
+  transform-origin: 0 0;
+  animation: onbEntryWindowIn 0.8s 0.12s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes onbEntryWindowIn {
+  from { opacity: 0; transform: translateY(14px) scale(var(--onb-entry-demo-scale)); }
+  to { opacity: 1; transform: scale(var(--onb-entry-demo-scale)); }
+}
+
+:root[data-theme="dark"] .onb-entry-demo__window {
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 34px 90px rgba(0, 0, 0, 0.42),
+    0 10px 26px rgba(0, 0, 0, 0.24);
+}
+
+.onb-entry-demo__chrome {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 32px;
+}
+
+.onb-entry-demo__lights {
+  position: absolute;
+  top: 11px;
+  left: 14px;
+  display: flex;
+  gap: 8px;
+}
+
+.onb-entry-demo__lights i {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #ee6a5f;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+}
+
+.onb-entry-demo__lights i:nth-child(2) { background: #f5be4f; }
+.onb-entry-demo__lights i:nth-child(3) { background: #61c554; }
+
+.onb-entry-demo__tool {
+  position: absolute;
+  top: 7px;
+  width: 18px;
+  height: 18px;
+  color: var(--text-soft);
+}
+
+.onb-entry-demo__tool svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.onb-entry-demo__tool--sidebar { left: 102px; }
+.onb-entry-demo__tool--back { left: 132px; }
+.onb-entry-demo__tool--forward { left: 160px; opacity: 0.45; }
+
+/* Windows: no traffic lights; the title bar starts with the sidebar toggle and history buttons
+   at the left edge (app-shell.css .windows-titlebar-nav), and the caption buttons sit at the far
+   right, beyond the stage's edge. Windows 11 rounds windows less. */
+:root[data-platform="windows"] .onb-entry-demo__window {
+  border-radius: 10px;
+  background: var(--windows-shell-bg, var(--canvas));
+}
+
+:root[data-platform="windows"] .onb-entry-demo__lights { display: none; }
+:root[data-platform="windows"] .onb-entry-demo__tool--sidebar { left: 17px; }
+:root[data-platform="windows"] .onb-entry-demo__tool--back { left: 53px; }
+:root[data-platform="windows"] .onb-entry-demo__tool--forward { left: 87px; }
+
+.onb-entry-demo__rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 54px;
+}
+
+.onb-entry-demo__mark {
+  position: absolute;
+  top: 43px;
+  left: 14px;
+  width: 26px;
+  height: 26px;
+}
+
+:root[data-theme="dark"] .onb-entry-demo__mark {
+  filter: invert(1);
+}
+
+.onb-entry-demo__rail-rule {
+  position: absolute;
+  top: 80px;
+  left: 8px;
+  width: 38px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.onb-entry-demo__nav {
+  position: absolute;
+  left: 8px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-soft);
+}
+
+.onb-entry-demo__nav--active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.onb-entry-demo__card {
+  position: absolute;
+  top: 32px;
+  left: 54px;
+  width: 938px;
+  height: 680px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.onb-entry-demo__page {
+  transition: opacity 420ms ease;
+}
+
+/* The window is drawn at 0.86, so each 12px flow row lands on a fractional device pixel
+   and the anti-aliased edges between the cells of one block let the plot surface show
+   through as a hairline. The dashboard itself draws at 1:1 and has none. Two things close
+   the seam here: each coloured cell runs 1px into the row below, and the cell is painted
+   as one opaque colour. The dashboard tints every cell with a translucent surface overlay
+   (.flow-cell__mark), which re-blends at a sampled edge and leaves a dark line instead; the
+   demo premixes that tint into the tone and drops the overlay, so the colours match exactly. */
+.onb-entry-demo .flow-chart-card {
+  --flow-tone-focus: color-mix(in srgb, var(--surface) 20%, var(--productivity-focus));
+  --flow-tone-neutral: color-mix(in srgb, var(--surface) 20%, var(--productivity-neutral));
+  --flow-tone-drift: color-mix(in srgb, var(--surface) 20%, var(--productivity-drift));
+}
+
+.onb-entry-demo .flow-chart-row .flow-cell:not(.flow-cell--empty) {
+  margin-bottom: -1px;
+  /* The dashboard's cell inset (38%) under the overlay's inset (32%) composes to about 58%. */
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--surface) 58%, transparent);
+}
+
+.onb-entry-demo .flow-cell__mark {
+  display: none;
+}
+
+.onb-entry-demo__page[data-fading="true"] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onb-entry__headline,
+  .onb-entry__body,
+  .onb-entry__stage,
+  .onb-entry-demo__window {
+    animation: none;
+  }
+
+  .onb-entry-demo__page {
+    transition: none;
+  }
+}
+
+/* A window too narrow for two columns keeps sign-in and drops the picture. */
+@media (max-width: 639px) {
+  .onboarding-card.dc-onb-card.onb-entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .onb-entry__stage {
+    display: none;
+  }
+}

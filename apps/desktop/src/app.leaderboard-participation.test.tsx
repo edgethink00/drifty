@@ -1063,8 +1063,6 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /delete guest cloud account/i })).toBeTruthy();
 

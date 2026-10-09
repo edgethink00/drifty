@@ -54,7 +54,6 @@ function OnboardingSession({
   expectsPromotion,
   authCallbackStatus,
   onStartCloudTrialWithGoogle,
-  onStartCloudTrialWithEmail,
   onStartCloudTrialWithWebsite,
   onDeleteAnonymousAccount,
   onAcknowledgeCloudTrialStartedNotice,
@@ -82,7 +81,6 @@ function OnboardingSession({
   expectsPromotion: boolean;
   authCallbackStatus: OAuthCallbackStatus | null;
   onStartCloudTrialWithGoogle: () => void;
-  onStartCloudTrialWithEmail: () => void;
   onStartCloudTrialWithWebsite?: () => void;
   onDeleteAnonymousAccount?: () => void;
   onAcknowledgeCloudTrialStartedNotice: () => void;
@@ -134,7 +132,6 @@ function OnboardingSession({
         <OnboardingDesignCodeContent
           flow={flow}
           authCallbackStatus={authCallbackStatus}
-          onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
           onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
           onStartCloudTrialWithWebsite={onStartCloudTrialWithWebsite}
           onDeleteAnonymousAccount={onDeleteAnonymousAccount}

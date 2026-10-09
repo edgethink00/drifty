@@ -77,6 +77,12 @@ vi.mock("./features/auth/AuthContext", () => ({
   useAuthConnectionStatus: () => ({ cloudConnectionStatus: "online" }),
 }));
 
+// The entry screen's product picture is covered by OnboardingEntryStep.test; these app flows
+// only need the sign-in half, without the picture's animation clock running under jsdom.
+vi.mock("./features/onboarding/components/EntryDayDemo", () => ({
+  EntryDayDemo: () => null,
+}));
+
 vi.mock("./features/profile/profileService", () => ({
   fetchOwnProfile,
   fetchPublicProfile,
@@ -189,17 +195,6 @@ function makeTrackerStatus(overrides: Partial<TrackerStatus> = {}): TrackerStatu
   };
 }
 
-async function clickEnabledAction(name: RegExp = /^continue$/i) {
-  const button = (await screen.findByRole("button", { name })) as HTMLButtonElement;
-  await waitFor(() => {
-    expect(button.disabled).toBe(false);
-    expect(button.getAttribute("aria-disabled")).not.toBe("true");
-  });
-  await act(async () => {
-    fireEvent.click(button);
-  });
-}
-
 async function clickButton(name: RegExp) {
   const button = await screen.findByRole("button", { name });
   await act(async () => {
@@ -208,9 +203,14 @@ async function clickButton(name: RegExp) {
 }
 
 async function advanceToAccountStep() {
-  await screen.findByRole("dialog", { name: /welcome to drifty/i });
-  await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /connect your account/i });
+}
+
+/** Email sign-in opens in place on the entry screen, under its own heading. */
+async function findInlineEmailForm() {
+  const heading = await screen.findByRole("heading", { name: /sign in to drifty/i, level: 2 });
+  expect(screen.queryByRole("dialog", { name: /sign in to drifty/i })).toBeNull();
+  return heading.closest("section") as HTMLElement;
 }
 
 describe("App onboarding cloud login", () => {
@@ -277,7 +277,7 @@ describe("App onboarding cloud login", () => {
     });
 
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /continue with google/i })).toBeNull();
 
     await act(async () => {
       profileResult.resolve({ success: true, error: null, data: null });
@@ -293,17 +293,17 @@ describe("App onboarding cloud login", () => {
 
     await advanceToAccountStep();
     await clickButton(/continue with email/i);
-    const authDialog = await screen.findByRole("dialog", { name: /sign in to drifty/i });
+    const authDialog = await findInlineEmailForm();
     fireEvent.change(within(authDialog).getByLabelText(/^email$/i), { target: { value: "alex@example.com" } });
     fireEvent.change(within(authDialog).getByLabelText(/^password$/i), { target: { value: "incorrect password" } });
     fireEvent.click(within(authDialog).getByRole("button", { name: /^sign in$/i }));
 
     expect((await within(authDialog).findByRole("alert")).textContent).toContain("Invalid email or password.");
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
-    fireEvent.click(within(authDialog).getByRole("button", { name: /^close$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /other sign-in options/i }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /sign in to drifty/i })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
     });
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
   });
@@ -314,7 +314,7 @@ describe("App onboarding cloud login", () => {
 
     await advanceToAccountStep();
     await clickButton(/continue with email/i);
-    const authDialog = await screen.findByRole("dialog", { name: /sign in to drifty/i });
+    const authDialog = await findInlineEmailForm();
     expect(within(authDialog).queryByRole("button", { name: /continue with google/i })).toBeNull();
 
     fireEvent.click(within(authDialog).getByRole("button", { name: /^create account$/i }));
@@ -339,7 +339,7 @@ describe("App onboarding cloud login", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /create your account/i })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /create your account/i })).toBeNull();
     });
     expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
   });
@@ -349,7 +349,7 @@ describe("App onboarding cloud login", () => {
 
     await advanceToAccountStep();
     await clickButton(/continue with email/i);
-    const authDialog = await screen.findByRole("dialog", { name: /sign in to drifty/i });
+    const authDialog = await findInlineEmailForm();
     fireEvent.change(within(authDialog).getByLabelText(/^email$/i), { target: { value: "alex@example.com" } });
     fireEvent.change(within(authDialog).getByLabelText(/^password$/i), { target: { value: "correct horse battery" } });
     fireEvent.click(within(authDialog).getByRole("button", { name: /^sign in$/i }));
@@ -367,7 +367,7 @@ describe("App onboarding cloud login", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /sign in to drifty/i })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
     });
     expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();

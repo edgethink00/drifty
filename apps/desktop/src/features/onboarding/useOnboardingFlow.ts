@@ -18,7 +18,14 @@ import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { persistLocalAiSetup } from "../settings/useAiSetupController";
 import { completeOnboardingAction } from "./onboardingCompleteAction";
 import { prepareOnboardingAccess } from "./prepareOnboardingAccess";
-import { getOnboardingSteps, remapOnboardingStepForSetupChoice, type OnboardingStep, type SetupChoice } from "./onboardingFlow";
+import {
+  getOnboardingSteps,
+  isOnboardingEntryStep,
+  onboardingSetupSteps,
+  remapOnboardingStepForSetupChoice,
+  type OnboardingStep,
+  type SetupChoice,
+} from "./onboardingFlow";
 import {
   blockedHintForStep,
   canAdvanceOnboarding,
@@ -137,7 +144,13 @@ export function useOnboardingFlow({
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(true);
   const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(restoredProgress?.openAtLoginEnabled ?? true);
   const [accountSkippedForDev, setAccountSkippedForDev] = useState(false);
-  const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? restoredProgress?.step ?? "welcome");
+  const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? restoredProgress?.step ?? (skipAccountStep ? "welcome" : "account"));
+  // Signing in on the entry screen moves on by itself after the success state. An account that
+  // was already connected when the screen opened (a restored session, or a resumed run) has
+  // nothing to celebrate, so the screen offers Continue instead of leaving after a moment.
+  const accountConnectedRef = useRef(accountConnected);
+  accountConnectedRef.current = accountConnected;
+  const [entryOpenedConnected, setEntryOpenedConnected] = useState(accountConnected);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
   const completionInFlightRef = useRef(false);
@@ -176,6 +189,9 @@ export function useOnboardingFlow({
     skipAccountStep,
   }), [connection.setupChoice, skipAccountStep]);
   const stepIndex = steps.findIndex((item) => item.id === step);
+  const setupSteps = useMemo(() => onboardingSetupSteps(steps), [steps]);
+  const setupStepIndex = setupSteps.findIndex((item) => item.id === step);
+  const firstSetupStep = setupSteps[0]?.id ?? null;
   const permissionSummaryLabel = permissions.accessibilityRequired && permissions.accessibilityGranted
     ? "Accessibility verified"
     : "Tracking readiness verified";
@@ -240,6 +256,10 @@ export function useOnboardingFlow({
   }, [step]);
 
   useEffect(() => {
+    if (isOnboardingEntryStep(step)) setEntryOpenedConnected(accountConnectedRef.current);
+  }, [step]);
+
+  useEffect(() => {
     if (!shouldClearUnsupportedLocalChoice(
       step,
       connection.setupChoice,
@@ -259,13 +279,16 @@ export function useOnboardingFlow({
   // failure is deferred so setup can continue while Pro access remains gated.
   useEffect(() => {
     if (step !== "account" || !accountConnected) return;
+    if (entryOpenedConnected) return;
     if (waitingForAccountAccess) return;
     const timeoutId = window.setTimeout(() => {
-      const nextStep = skipAccountStep ? "job" : steps[stepIndex + 1]?.id;
-      if (nextStep) setStep(nextStep);
+      if (firstSetupStep) setStep(firstSetupStep);
     }, ACCOUNT_CONNECTED_ADVANCE_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [accountConnected, skipAccountStep, step, stepIndex, steps, waitingForAccountAccess]);
+  }, [accountConnected, entryOpenedConnected, firstSetupStep, step, waitingForAccountAccess]);
+
+  const entryAwaitsContinue = isOnboardingEntryStep(step)
+    && (step === "welcome" || (accountConnected && entryOpenedConnected && !waitingForAccountAccess));
 
   useEffect(() => {
     if (!progressEnabled) return;
@@ -403,7 +426,13 @@ export function useOnboardingFlow({
 
   function goToPreviousStep() {
     const previousStep = steps[stepIndex - 1]?.id;
-    if (previousStep) setStep(previousStep);
+    // The entry screen is sign-in; once past it there is nothing to go back to.
+    if (previousStep && !isOnboardingEntryStep(previousStep)) setStep(previousStep);
+  }
+
+  function continueFromEntry() {
+    if (!entryAwaitsContinue || isCompleting || !firstSetupStep) return;
+    setStep(firstSetupStep);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -470,6 +499,8 @@ export function useOnboardingFlow({
       : footerLabel,
     isCompleting,
     goToPreviousStep,
+    continueFromEntry,
+    entryAwaitsContinue,
     returnToSetupChoice: () => { if (!isCompleting) { setSetupError(null); setStep("choose_setup"); } },
     handleSubmit,
     mainActivities,
@@ -490,6 +521,8 @@ export function useOnboardingFlow({
     stepBodyRef,
     stepIndex,
     steps,
+    setupStepIndex,
+    setupSteps,
     storageError,
     title,
     titleRef,

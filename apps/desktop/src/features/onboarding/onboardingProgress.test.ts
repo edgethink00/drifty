@@ -80,6 +80,23 @@ describe("onboardingProgress", () => {
     }).step).toBe("account");
   });
 
+  it("resumes a run saved on the former Welcome screen at the combined entry screen", () => {
+    expect(clampOnboardingProgressStep(progressSnapshot({
+      step: "welcome",
+      setupChoice: null,
+    }), {
+      accountConnected: false,
+      skipAccountStep: false,
+    }).step).toBe("account");
+    expect(clampOnboardingProgressStep(progressSnapshot({
+      step: "account",
+      setupChoice: null,
+    }), {
+      accountConnected: true,
+      skipAccountStep: true,
+    }).step).toBe("welcome");
+  });
+
   it("resumes a run saved on the retired Nudges step at Ready", () => {
     expect(clampOnboardingProgressStep(progressSnapshot({
       step: "nudges",

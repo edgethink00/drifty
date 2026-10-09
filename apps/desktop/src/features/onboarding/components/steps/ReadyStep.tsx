@@ -8,109 +8,112 @@ import { accessibilityClient } from "../../../../lib/api/accessibilityClient";
 
 export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { effectiveLanguage, t } = useLocalization();
-  const summaryItems = summaryItemsForFlow(flow, t, effectiveLanguage);
+  const cloudSetup = flow.setupChoice === "simple";
+  const cloudUnavailable = cloudSetup && !flow.accountSkippedForDev
+    && !flow.billingEntitlement?.canUseApp && !canStartCloudTrial(flow.billingEntitlement);
+  const readyItems = readyItemsForFlow(flow, t, effectiveLanguage, cloudUnavailable);
   // Windows has no menu bar; tracking is paused from the taskbar icon there.
-  const pauseNoteKey = accessibilityClient.detectHostPlatform() === "macos"
+  const pauseNote = t(accessibilityClient.detectHostPlatform() === "macos"
     ? "onboarding.ready.pauseNote"
-    : "onboarding.ready.pauseNoteWindows";
+    : "onboarding.ready.pauseNoteWindows");
 
   return (
     <>
       <p className="dc-onb-copy dc-onb-ready-copy">{t("onboarding.ready.intro")}</p>
-      {flow.setupChoice === "simple" && !flow.accountSkippedForDev
-        && !flow.billingEntitlement?.canUseApp && !canStartCloudTrial(flow.billingEntitlement) ? (
-          <div className="dc-onb-inline-status" role="status">
-            <p>{t(flow.billingEntitlement?.lockedReason === "device_limit_reached"
-              ? "onboarding.ready.cloudDeviceLimit"
-              : "billing.trialActivation.unavailable")}</p>
-            <button type="button" className="dc-onb-back" disabled={flow.isCompleting} onClick={flow.returnToSetupChoice}>
-              {t("onboarding.title.chooseSetup")}
-            </button>
-          </div>
-        ) : null}
-      <ul className="dc-onb-ready-list">
-        {summaryItems.map((item) => (
-          <li className={item.sub ? "dc-onb-ready-item dc-onb-ready-item--stacked" : "dc-onb-ready-item"} key={item.label}>
-            <CheckMarkIcon />
-            {item.sub ? (
-              <span className="dc-onb-ready-item__stack">
-                <strong>{item.label}</strong>
-                <span>{item.sub}</span>
-                {item.details?.map((detail) => <span key={detail}>{detail}</span>)}
-              </span>
-            ) : (
-              <span className="dc-onb-ready-item__label">{item.label}</span>
-            )}
-          </li>
+      {cloudUnavailable ? (
+        <div className="dc-onb-inline-status" role="status">
+          <p>{t(flow.billingEntitlement?.lockedReason === "device_limit_reached"
+            ? "onboarding.ready.cloudDeviceLimit"
+            : "billing.trialActivation.unavailable")}</p>
+          <button type="button" className="dc-onb-back" disabled={flow.isCompleting} onClick={flow.returnToSetupChoice}>
+            {t("onboarding.title.chooseSetup")}
+          </button>
+        </div>
+      ) : null}
+      {/* What is ready, in one line: the AI choice with its state emphasized, then account and tracking. */}
+      <p className="dc-onb-ready-line">
+        {readyItems.map((item) => (
+          <span className="dc-onb-ready-line__item" key={item.label}>
+            {item.label}
+            {item.state ? <> <strong data-tone={item.tone}>{item.state}</strong></> : null}
+          </span>
         ))}
-      </ul>
-      <div className="dc-onb-login-row">
-        <h2>{t("onboarding.ready.startAtLogin")}</h2>
-        <ToggleButton
-          label={t("onboarding.ready.startAtLogin")}
-          on={flow.openAtLoginEnabled}
-          compact
+      </p>
+      <div className="dc-onb-ready-options">
+        <div className="dc-onb-login-row">
+          <h2>{t("onboarding.ready.startAtLogin")}</h2>
+          <ToggleButton
+            label={t("onboarding.ready.startAtLogin")}
+            on={flow.openAtLoginEnabled}
+            compact
+            disabled={flow.isCompleting}
+            onClick={() => flow.setOpenAtLoginEnabled((current) => !current)}
+          />
+        </div>
+        <BrowserHistoryBootstrapPreference
+          enabled={flow.browserHistoryBootstrapEnabled}
           disabled={flow.isCompleting}
-          onClick={() => flow.setOpenAtLoginEnabled((current) => !current)}
+          onChange={flow.setBrowserHistoryBootstrapEnabled}
         />
       </div>
-      <BrowserHistoryBootstrapPreference
-        enabled={flow.browserHistoryBootstrapEnabled}
-        disabled={flow.isCompleting}
-        onChange={flow.setBrowserHistoryBootstrapEnabled}
-      />
-      <p className="dc-onb-muted-note dc-onb-muted-note--ready">{t(pauseNoteKey)}</p>
+      <p className="dc-onb-muted-note dc-onb-muted-note--ready">
+        {cloudSetup ? `${t("onboarding.ready.cloudData")} ${pauseNote}` : pauseNote}
+      </p>
     </>
   );
 }
 
-function summaryItemsForFlow(
+type ReadyItem = { readonly label: string; readonly state?: string; readonly tone?: "warn" };
+
+function readyItemsForFlow(
   flow: OnboardingFlow,
   t: LocalizationController["t"],
   language: LocalizationController["effectiveLanguage"],
-): ReadonlyArray<{ readonly label: string; readonly sub?: string; readonly details?: readonly string[] }> {
-  const accountSummary = flow.accountSkippedForDev
-    ? t("onboarding.ready.accountSkippedForDev")
-    : t("onboarding.ready.accountConnected");
-  if (flow.setupChoice === "local_ai" || flow.isUserManagedProviderSetup) {
+  cloudUnavailable: boolean,
+): readonly ReadyItem[] {
+  const account: ReadyItem = {
+    label: flow.accountSkippedForDev
+      ? t("onboarding.ready.accountSkippedForDev")
+      : t("onboarding.ready.accountConnected"),
+  };
+  const tracking: ReadyItem = { label: t("onboarding.ready.trackingReady") };
+  if (flow.setupChoice === "local_ai") {
     return [
-      {
-        label: flow.setupChoice === "local_ai" ? t("onboarding.ready.localSelected") : flow.isByokSetup ? t("onboarding.ready.byokSelected") : t("onboarding.ready.customSelected"),
-        sub: flow.setupChoice === "local_ai"
-          ? flow.managedLocalReady ? t("onboarding.ready.localReady") : t("onboarding.ready.localDownloading")
-          : flow.isByokSetup ? t("onboarding.ready.openRouterConnected") : t("onboarding.ready.customConnected"),
-      },
-      { label: accountSummary },
-      { label: t("onboarding.ready.trackingReady") },
+      { label: t(flow.managedLocalReady ? "onboarding.ready.localReady" : "onboarding.ready.localDownloading") },
+      account,
+      tracking,
+    ];
+  }
+  if (flow.isUserManagedProviderSetup) {
+    return [
+      { label: t(flow.isByokSetup ? "onboarding.ready.openRouterConnected" : "onboarding.ready.customConnected") },
+      account,
+      tracking,
     ];
   }
   return [
-    {
-      label: t("onboarding.ready.cloudSelected"),
-      details: [
-        t("onboarding.ready.cloudPricing"),
-        t("onboarding.ready.cloudData"),
-      ],
-      sub: canStartCloudTrial(flow.billingEntitlement)
-        ? t("billing.trialActivation.available")
-        : flow.promotionActive
-        ? t("onboarding.ready.promoAccessUntil", {
-          date: formatBillingAccessEndDate(flow.promotionEndsAt, language)
-            ?? t("onboarding.promo.activePeriod"),
-        })
-        : flow.cloudTrialStartedNotice
-          ? t("onboarding.ready.cloudTrialActive")
-          : t("onboarding.ready.cloudAccountReady"),
-    },
-    { label: accountSummary },
-    { label: t("onboarding.ready.trackingReady") },
+    { label: t("onboarding.setup.cloud"), ...cloudState(flow, t, language, cloudUnavailable) },
+    account,
+    tracking,
   ];
 }
 
-function CheckMarkIcon() {
-  return (
-    <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none">
-      <path d="M4 12.5l4.5 4.5L20 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+function cloudState(
+  flow: OnboardingFlow,
+  t: LocalizationController["t"],
+  language: LocalizationController["effectiveLanguage"],
+  cloudUnavailable: boolean,
+): Pick<ReadyItem, "state" | "tone"> {
+  if (cloudUnavailable) return { state: t("onboarding.ready.cloudUnavailable"), tone: "warn" };
+  if (canStartCloudTrial(flow.billingEntitlement)) return { state: t("billing.trialActivation.available") };
+  if (flow.promotionActive) {
+    return {
+      state: t("onboarding.ready.promoAccessUntil", {
+        date: formatBillingAccessEndDate(flow.promotionEndsAt, language) ?? t("onboarding.promo.activePeriod"),
+      }),
+    };
+  }
+  if (flow.cloudTrialStartedNotice) return { state: t("onboarding.ready.cloudTrialActive") };
+  return { state: t("onboarding.ready.cloudAccountReady") };
 }
+

@@ -39,7 +39,12 @@ export function AuthModal({
   onClose?: () => void;
   showGoogleSignIn?: boolean;
   intent?: "default" | "promo";
-  presentation?: "modal" | "onboarding";
+  /**
+   * "modal" is the standard dialog. "onboarding" is the full-window promotion screen.
+   * "inline" renders only the email form and its notices inside the onboarding entry screen,
+   * which keeps its own product picture beside it; Escape returns to the provider choice.
+   */
+  presentation?: "modal" | "onboarding" | "inline";
 }) {
   const { t } = useLocalization();
   const {
@@ -75,6 +80,7 @@ export function AuthModal({
   const [isConnectionRetrying, setIsConnectionRetrying] = useState(false);
   const [promoEmailOpen, setPromoEmailOpen] = useState(false);
   const promoOnboardingDialogRef = useRef<HTMLElement>(null);
+  const inlineRef = useRef<HTMLElement>(null);
   const isRecoveryAwaiting = passwordRecoveryState?.phase === "awaiting-new-password";
   const isRecoveryView = authView === "forgot-password" || isRecoveryAwaiting;
   useEffect(() => {
@@ -93,8 +99,20 @@ export function AuthModal({
   };
   useModalDismiss(requestClose, { disabled: !onClose || isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || isRecoverySubmitting });
   useModalFocusTrap(promoOnboardingDialogRef, { initialFocusSelector: ".dc-onb-account__google" });
+  useEffect(() => {
+    if (presentation !== "inline") return;
+    inlineRef.current?.querySelector<HTMLInputElement>("input:not([disabled])")?.focus();
+  }, [presentation]);
 
   if (!isEnabled) {
+    if (presentation === "inline") {
+      return (
+        <section ref={inlineRef} className="auth-inline" aria-labelledby="auth-inline-title" data-auth-presentation="inline">
+          <h2 id="auth-inline-title" className="auth-inline__title">{t("auth.modal.disabledTitle")}</h2>
+          <p className="auth-inline__description">{t("auth.modal.disabledDescription")}</p>
+        </section>
+      );
+    }
     return (
       <div className="auth-modal__overlay">
         <div className="auth-modal modal-shell" data-modal-variant="standard">
@@ -524,6 +542,21 @@ export function AuthModal({
       <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("auth.modal.privacy")}</a>.
     </span>
   );
+  if (presentation === "inline") {
+    return (
+      <section ref={inlineRef} className="auth-inline" aria-labelledby="auth-inline-title" data-auth-presentation="inline">
+        <h2 id="auth-inline-title" className="auth-inline__title">{title}</h2>
+        {description ? <p className="auth-inline__description">{description}</p> : null}
+        {errorNotice}
+        {successNotice}
+        {isRecoveryView ? null : callbackNotice}
+        {offlineNotice}
+        {activeEmailForm}
+        <p className="auth-inline__legal">{legal}</p>
+      </section>
+    );
+  }
+
   if (presentation === "onboarding" && intent === "promo") {
     return (
       <section

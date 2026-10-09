@@ -1646,11 +1646,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setAuthModalShowsGoogle(true);
     setAuthModalOpen(true);
   }, []);
-  const openOnboardingEmailAuthModal = useCallback(() => {
-    setAuthModalIntent("default");
-    setAuthModalShowsGoogle(false);
-    setAuthModalOpen(true);
-  }, []);
   // Keep the compact onboarding window chrome through the first-day preparation gate,
   // so the loading screen runs in the small onboarding window rather than the full app
   // window. Only apply when the desired state actually flips to avoid a resize flicker
@@ -10229,7 +10224,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       expectsPromotion={promoHandoffPending}
       authCallbackStatus={callbackStatus}
       onStartCloudTrialWithGoogle={() => void signInWithGoogle({ requestCalendar: true })}
-      onStartCloudTrialWithEmail={openOnboardingEmailAuthModal}
       onStartCloudTrialWithWebsite={promoHandoffPending ? () => void signInWithWebsite() : undefined}
       onDeleteAnonymousAccount={user?.is_anonymous === true
         ? () => setAccountDeletionModalOpen(true)

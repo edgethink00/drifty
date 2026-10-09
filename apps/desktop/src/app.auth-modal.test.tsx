@@ -99,6 +99,12 @@ vi.mock("./features/auth/AuthContext", () => ({
   useAuthConnectionStatus: () => ({ cloudConnectionStatus: "online" }),
 }));
 
+// The entry screen's product picture is covered by OnboardingEntryStep.test; these app flows
+// only need the sign-in half, without the picture's animation clock running under jsdom.
+vi.mock("./features/onboarding/components/EntryDayDemo", () => ({
+  EntryDayDemo: () => null,
+}));
+
 vi.mock("./features/leaderboard/leaderboardService", () => ({
   DEFAULT_LEADERBOARD_PERIOD: "weekly",
   LEADERBOARD_PERIODS: ["daily", "weekly", "monthly"],
@@ -158,8 +164,6 @@ async function openAuthModalFromAccountMenu() {
 }
 
 async function advanceRequiredOnboardingToAccountStep() {
-  expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
   return screen.findByRole("dialog", { name: /connect your account/i });
 }
 
@@ -240,7 +244,7 @@ describe("App auth modal", () => {
     window.localStorage.removeItem(getUserOnboardingStorageKey("local"));
     render(<App />);
 
-    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     fireEvent(window, new CustomEvent("drifty:billing-success", { detail: { source: "promo" } }));
 
     const dialog = await screen.findByRole("dialog", { name: /connect your pro pass/i });
@@ -266,7 +270,7 @@ describe("App auth modal", () => {
     expect(within(dialog).getByLabelText(/^email$/i)).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole("button", { name: /back to welcome/i }));
-    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
   });
 
   it("offers account switching only after a non-promotional entitlement is confirmed", async () => {
@@ -421,7 +425,8 @@ describe("App auth modal", () => {
     render(<App />);
 
     const dialog = await advanceRequiredOnboardingToAccountStep();
-    expect(within(dialog).getByText(/sign in or create an account to get started\. you can use on-device ai for free/i)).toBeTruthy();
+    // The provider buttons speak for themselves; the entry screen carries no separate sign-in prompt.
+    expect(within(dialog).queryByText(/sign in or create an account to get started/i)).toBeNull();
     expect(within(dialog).getByRole("button", { name: /continue with google/i })).toBeTruthy();
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
@@ -456,7 +461,7 @@ describe("App auth modal", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
   });

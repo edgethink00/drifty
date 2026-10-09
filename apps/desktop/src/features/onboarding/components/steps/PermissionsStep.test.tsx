@@ -32,6 +32,8 @@ describe("PermissionsStep settings guidance", () => {
     expect(
       screen.getByText(/시스템 설정 → 개인정보 보호 및 보안/),
     ).toBeTruthy();
+    // Priority sits beside the title as the shared badge, as in Settings > Permissions.
+    expect(screen.getByText("필수").className).toContain("ui-badge--warn");
     fireEvent.click(screen.getByRole("button", { name: "설정에서 허용" }));
     expect(pending.handleRequestAccessibilityClick).toHaveBeenCalledOnce();
     rerender(
@@ -42,9 +44,10 @@ describe("PermissionsStep settings guidance", () => {
     expect(
       screen.queryByText(/시스템 설정 → 개인정보 보호 및 보안/),
     ).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "허용됨" }).hasAttribute("disabled"),
-    ).toBe(true);
+    // Once on, the row shows a status in place of its button and keeps its priority badge.
+    expect(screen.queryByRole("button", { name: "설정에서 허용" })).toBeNull();
+    expect(screen.getByText("허용됨").className).toBe("dc-onb-permission-status");
+    expect(screen.getByText("필수")).toBeTruthy();
   });
 
   it("keeps macOS instructions out of the Windows permission step", () => {
@@ -55,5 +58,6 @@ describe("PermissionsStep settings guidance", () => {
     );
     expect(screen.queryByText("Finish in macOS Settings")).toBeNull();
     expect(screen.getByText("Notifications")).toBeTruthy();
+    expect(screen.getByText("Recommended").className).toBe("ui-badge");
   });
 });

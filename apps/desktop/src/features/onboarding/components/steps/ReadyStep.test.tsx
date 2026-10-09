@@ -42,7 +42,7 @@ describe("ReadyStep", () => {
     vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "windows");
     render(<LocalizationTestProvider language="ko"><ReadyStep flow={cloudFlow(trialing)} /></LocalizationTestProvider>);
 
-    expect(screen.getByText("작업 표시줄의 Drifty 아이콘에서 언제든 일시 정지할 수 있습니다.")).toBeTruthy();
+    expect(screen.getByText(/작업 표시줄의 Drifty 아이콘에서 언제든 일시 정지할 수 있습니다\./)).toBeTruthy();
     expect(screen.queryByText(/메뉴 막대/)).toBeNull();
   });
 
@@ -50,7 +50,39 @@ describe("ReadyStep", () => {
     vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "macos");
     render(<LocalizationTestProvider language="ko"><ReadyStep flow={cloudFlow(trialing)} /></LocalizationTestProvider>);
 
-    expect(screen.getByText("메뉴 막대에서 언제든 Drifty를 일시 정지할 수 있습니다.")).toBeTruthy();
+    expect(screen.getByText(/메뉴 막대에서 언제든 Drifty를 일시 정지할 수 있습니다\./)).toBeTruthy();
+  });
+
+  it("sums up Cloud readiness in one line with the trial state emphasized", () => {
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "macos");
+    render(
+      <LocalizationTestProvider language="ko">
+        <ReadyStep
+          flow={cloudFlow({
+            plan: "individual", status: "locked", canUseApp: false, trialEndsAt: null, currentPeriodEnd: null,
+            lockedReason: "billing_missing", trialActivation: { state: "available", startedAt: null, endsAt: null },
+          })}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    const line = document.querySelector(".dc-onb-ready-line");
+    expect(line?.textContent).toBe("Drifty Cloud 7일 무료 체험 가능계정 연결됨추적 준비됨");
+    expect(line?.querySelector("strong")?.textContent).toBe("7일 무료 체험 가능");
+    expect(screen.queryByRole("status")).toBeNull();
+    // The Cloud data note joins the pause note in the fine print.
+    expect(screen.getByText(/최소 활동 정보를 Cloud에 전송합니다\. 메뉴 막대에서/)).toBeTruthy();
+  });
+
+  it("drops the Cloud data note and names the local model state for Local AI", () => {
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "macos");
+    const flow = { ...cloudFlow(null), setupChoice: "local_ai", managedLocalReady: true } as unknown as OnboardingFlow;
+    render(<LocalizationTestProvider language="ko"><ReadyStep flow={flow} /></LocalizationTestProvider>);
+
+    expect(document.querySelector(".dc-onb-ready-line")?.textContent).toBe("로컬 모델 준비됨계정 연결됨추적 준비됨");
+    expect(document.querySelector(".dc-onb-ready-line strong")).toBeNull();
+    expect(screen.queryByText(/Cloud에 전송합니다/)).toBeNull();
+    expect(screen.getByText(/메뉴 막대에서 언제든/)).toBeTruthy();
   });
 
   it("names the device limit instead of the generic Cloud notice", () => {
@@ -72,5 +104,6 @@ describe("ReadyStep", () => {
     );
 
     expect(screen.getByRole("status").textContent).toContain("Cloud를 이용할 수 없습니다");
+    expect(document.querySelector(".dc-onb-ready-line strong")?.textContent).toBe("이용 불가");
   });
 });

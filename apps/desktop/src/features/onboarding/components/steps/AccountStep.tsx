@@ -7,16 +7,23 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
 import type { OnboardingAccountAccessState } from "../../accountAccessState";
 
+/**
+ * The sign-in half of the onboarding entry screen: provider buttons, the connected state and
+ * its Continue, connection recovery and the legal line. The screen's headline and product
+ * picture live in OnboardingEntryStep.
+ */
 export function AccountStep({
   accountConnected,
   accountAccessState,
+  awaitsContinue,
   expectsPromotion,
   promotionActive,
   promotionEndsAt,
   authCallbackStatus,
   devAuthSkipEnabled,
   onSkipAuthForDev,
-  onStartCloudTrialWithEmail,
+  onContinue,
+  onOpenEmail,
   onStartCloudTrialWithGoogle,
   onStartCloudTrialWithWebsite,
   onDeleteAnonymousAccount,
@@ -25,13 +32,16 @@ export function AccountStep({
 }: {
   readonly accountConnected: boolean;
   readonly accountAccessState: OnboardingAccountAccessState;
+  /** Sign-in is settled and the screen waits for the person to move on. */
+  readonly awaitsContinue: boolean;
   readonly expectsPromotion: boolean;
   readonly promotionActive: boolean;
   readonly promotionEndsAt: string | null;
   readonly authCallbackStatus: OAuthCallbackStatus | null;
   readonly devAuthSkipEnabled: boolean;
   readonly onSkipAuthForDev: () => void;
-  readonly onStartCloudTrialWithEmail: () => void;
+  readonly onContinue: () => void;
+  readonly onOpenEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
   readonly onStartCloudTrialWithWebsite?: () => void;
   readonly onDeleteAnonymousAccount?: () => void;
@@ -66,33 +76,40 @@ export function AccountStep({
   const showPromoEntry = expectsPromotion && !accountConnected && onStartCloudTrialWithWebsite !== undefined;
   const showCheckingState = accountAccessState === "checking";
   const showDeferredState = accountAccessState === "verification-deferred";
+  const signInSettled = accountConnected || awaitsContinue;
   return (
-    <div className="dc-onb-account">
-      <h2 className="dc-onb-account__title">
-        {showPromoEntry ? t("auth.modal.promoTitle") : t("onboarding.title.account")}
-      </h2>
-      <p className="dc-onb-account__copy">
-        {showPromoEntry ? t("auth.modal.promoDescription") : t("onboarding.account.copy")}
-      </p>
-      {accountConnected ? (
-        <div
-          className={`dc-onb-account__connected${showCheckingState || showDeferredState ? " dc-onb-account__connected--neutral" : ""}`}
-          role="status"
-          aria-live="polite"
-          aria-busy={showCheckingState}
-        >
-          {showCheckingState ? <SpinnerIcon /> : showDeferredState ? null : <SuccessIcon />}
-          <span>
-            {showCheckingState
-              ? t("onboarding.account.checkingAccess")
-              : showDeferredState
-                ? t("onboarding.account.verificationDeferred")
-                : promotionActive
-                  ? promotionEndLabel
-                    ? t("onboarding.account.promoConnectedUntil", { date: promotionEndLabel })
-                    : t("onboarding.account.promoConnectedStatus")
-                  : t("onboarding.ready.accountConnected")}
-          </span>
+    <div className="dc-onb-account onb-entry-account">
+      {signInSettled ? (
+        <div className="onb-entry-account__settled">
+          {accountConnected ? (
+            <div
+              className={`dc-onb-account__connected${showCheckingState || showDeferredState ? " dc-onb-account__connected--neutral" : ""}`}
+              role="status"
+              aria-live="polite"
+              aria-busy={showCheckingState}
+            >
+              {showCheckingState ? <SpinnerIcon /> : showDeferredState ? null : <SuccessIcon />}
+              <span>
+                {showCheckingState
+                  ? t("onboarding.account.checkingAccess")
+                  : showDeferredState
+                    ? t("onboarding.account.verificationDeferred")
+                    : promotionActive
+                      ? t("onboarding.account.promoConnectedStatus")
+                      : t("onboarding.ready.accountConnected")}
+              </span>
+            </div>
+          ) : null}
+          {promotionActive && promotionEndLabel ? (
+            <p className="onb-entry-account__note">
+              {t("onboarding.promo.activeThrough", { date: promotionEndLabel })}
+            </p>
+          ) : null}
+          {awaitsContinue ? (
+            <button type="button" className="dc-onb-account__google onb-entry-account__continue" onClick={onContinue}>
+              {t("common.continue")}
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="dc-onb-account__buttons">
@@ -127,6 +144,20 @@ export function AccountStep({
               <p className="promo-auth-screen__browser-hint">
                 {t("auth.modal.promoContinueBrowserHint")}
               </p>
+              <div className="dc-onb-divider" aria-hidden="true">
+                <span />
+                {t("onboarding.account.or")}
+                <span />
+              </div>
+              <button
+                type="button"
+                className="dc-onb-account__email promo-auth-screen__provider"
+                onClick={onStartCloudTrialWithGoogle}
+                disabled={isGoogleHandoffBusy || isCloudUnavailable}
+              >
+                {isGoogleOpening ? <SpinnerIcon /> : <GoogleMark />}
+                <span>{googleButtonLabel}</span>
+              </button>
             </>
           ) : (
             <button
@@ -139,26 +170,10 @@ export function AccountStep({
               <span>{googleButtonLabel}</span>
             </button>
           )}
-          <div className="dc-onb-divider" aria-hidden="true">
-            <span />
-            {t("onboarding.account.or")}
-            <span />
-          </div>
-          {showPromoEntry ? (
-            <button
-              type="button"
-              className="dc-onb-account__email promo-auth-screen__provider"
-              onClick={onStartCloudTrialWithGoogle}
-              disabled={isGoogleHandoffBusy || isCloudUnavailable}
-            >
-              {isGoogleOpening ? <SpinnerIcon /> : <GoogleMark />}
-              <span>{googleButtonLabel}</span>
-            </button>
-          ) : null}
           <button
             type="button"
             className="dc-onb-account__email"
-            onClick={onStartCloudTrialWithEmail}
+            onClick={onOpenEmail}
             disabled={isCloudUnavailable}
           >
             {t("onboarding.account.email")}
@@ -178,7 +193,7 @@ export function AccountStep({
           <p>{t("onboarding.account.deleteGuestHelper")}</p>
         </div>
       ) : null}
-      {!accountConnected && devAuthSkipEnabled ? (
+      {!signInSettled && devAuthSkipEnabled ? (
         <div className="dc-onb-account__dev-skip">
           <button type="button" className="dc-onb-account__dev-skip-button" onClick={onSkipAuthForDev}>
             <span className="dc-onb-account__dev-badge" aria-hidden="true">DEV</span>
@@ -187,14 +202,13 @@ export function AccountStep({
           <p>{t("onboarding.account.devSkipHelper")}</p>
         </div>
       ) : null}
-      <p className="dc-onb-account__helper">
-        {t("onboarding.account.helper")}
-      </p>
-      <p className="dc-onb-account__legal">
-        {t("onboarding.account.legalPrefix")}{" "}
-        <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("onboarding.account.terms")}</a>{" "}
-        &amp; <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
-      </p>
+      {signInSettled ? null : (
+        <p className="dc-onb-account__legal">
+          {t("onboarding.account.legalPrefix")}{" "}
+          <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("onboarding.account.terms")}</a>{" "}
+          &amp; <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
+        </p>
+      )}
     </div>
   );
 }

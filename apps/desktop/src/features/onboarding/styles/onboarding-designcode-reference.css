@@ -63,6 +63,11 @@
 }
 
 .onboarding-card.dc-onb-card {
+  /* The reading column sits inside the card padding; the footer runs out to the window's
+     edge inset, the same 40px the entry screen's left column uses. */
+  --dc-onb-pad-x: clamp(48px, 9vw, 86px);
+  --dc-onb-edge-inset: 40px;
+  --dc-onb-foot-inset: 28px;
   width: 100%;
   max-width: none;
   height: 100%;
@@ -70,7 +75,7 @@
   max-height: none;
   display: flex;
   flex-direction: column;
-  padding: clamp(36px, 6.5vh, 58px) clamp(48px, 9vw, 86px);
+  padding: clamp(36px, 8vh, 58px) var(--dc-onb-pad-x);
   background: var(--dc-onb-surface);
   border: 0;
   border-radius: 0;
@@ -93,7 +98,7 @@
   overflow-x: hidden;
 }
 
-/* The onboarding window is a fixed 720x540 and macOS hides scrollbars, so a
+/* The onboarding window is a fixed 900x580 and macOS hides scrollbars, so a
    fade on the edge that hides content is the only cue that more exists. */
 .dc-onb-scroll[data-overflow="bottom"] {
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
@@ -125,82 +130,39 @@
 .dc-onb-content {
   width: 100%;
   max-width: 640px;
-  margin: 0;
+  /* The window is wider than the reading column; keep the column centered. */
+  margin: 0 auto;
 }
 
 .dc-onb-content--account {
   margin: auto;
 }
 
-.dc-onb-content--welcome {
-  margin: auto;
-}
-
 .dc-onb-title {
   margin: 0 0 6px;
   font-family: var(--font-display);
-  font-size: 27px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  /* Same family as the entry headline, one step down. */
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.18;
   color: var(--dc-onb-text);
   outline: none;
 }
 
 .dc-onb-subtitle {
-  max-width: 54ch;
+  /* Wide enough for one line in the 640px column; when it does wrap, no one-word last line. */
+  max-width: 62ch;
   margin: 0 0 22px;
   font-size: 15px;
   line-height: 1.5;
   color: var(--dc-onb-soft);
+  text-wrap: pretty;
+  word-break: keep-all;
 }
 
 .dc-onb-step {
   min-width: 0;
-}
-
-.dc-onb-welcome {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.dc-onb-welcome__wordmark {
-  display: block;
-  width: 60px;
-  height: auto;
-  margin-bottom: 24px;
-  animation: dcOnbRise 0.55s both;
-}
-
-.dc-onb-welcome__headline {
-  font-family: var(--font-display);
-  font-size: 32px;
-  font-weight: 600;
-  letter-spacing: -0.022em;
-  line-height: 1.15;
-  animation: dcOnbRise 0.55s both;
-}
-
-.dc-onb-welcome__body {
-  margin-top: 14px;
-  font-size: 16px;
-  line-height: 1.55;
-  color: var(--dc-onb-muted);
-  animation: dcOnbRise 0.55s 0.3s both;
-}
-
-.dc-onb-welcome__body > span {
-  display: block;
-}
-
-.dc-onb-welcome__note {
-  margin-top: 10px;
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--dc-onb-soft);
-  animation: dcOnbRise 0.55s 0.48s both;
 }
 
 .dc-onb-language {
@@ -263,8 +225,14 @@
   max-width: 56ch;
 }
 
+/* Ready: the intro reads as a centered caption under the title. */
 .dc-onb-ready-copy {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--dc-onb-soft);
+  word-break: keep-all;
+  text-wrap: balance;
 }
 
 .dc-onb-server-copy {
@@ -531,7 +499,8 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-top: 12px;
+  /* The intro line reads as the step's subtitle, so it sits where other steps' subtitles do. */
+  margin-top: 0;
 }
 
 .dc-onb-job-intro-row {
@@ -885,29 +854,6 @@
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.dc-onb-pill {
-  padding: 4px 9px;
-  border: 1px solid rgba(28, 28, 25, 0.16);
-  border-radius: 999px;
-  background: var(--dc-onb-raised);
-  color: var(--dc-onb-soft);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.dc-onb-pill--success {
-  border-color: rgba(31, 138, 91, 0.3);
-  background: rgba(31, 138, 91, 0.08);
-  color: var(--dc-onb-success);
-}
-
-.dc-onb-pill--required {
-  border-color: rgba(158, 66, 56, 0.3);
-  background: var(--dc-onb-warn-soft);
-  color: var(--dc-onb-warn);
 }
 
 .dc-onb-secondary-button {
@@ -1521,61 +1467,56 @@
   font-size: 13px;
 }
 
+/* The Ready fine print (Cloud data note, pause note) sits centered under the
+   options card, one step lighter than the intro. */
 .dc-onb-muted-note--ready {
-  margin: 14px 2px 0;
+  max-width: 500px;
+  margin: 14px auto 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--dc-onb-pale);
+  word-break: keep-all;
+  text-wrap: balance;
 }
 
-.dc-onb-ready-list {
-  display: flex;
-  flex-direction: column;
+/* What is ready, in one line: "Drifty Cloud 7-day free trial available ·
+   Account connected · Tracking ready". The AI state is the only emphasis. */
+.dc-onb-ready-line {
   margin: 0 0 18px;
-  padding: 0;
-  border: 1px solid rgba(28, 28, 25, 0.09);
-  border-radius: 14px;
-  background: #fff;
-  overflow: hidden;
-  list-style: none;
-}
-
-.dc-onb-ready-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 8px 20px;
-  font-size: 14px;
-}
-
-/* A summary row with detail lines keeps its check on the heading line, the
-   way the single-line rows read, instead of floating mid-paragraph. */
-.dc-onb-ready-item--stacked {
-  align-items: flex-start;
-}
-
-.dc-onb-ready-item--stacked > svg {
-  flex: none;
-  margin-top: 1px;
-}
-
-.dc-onb-ready-item > svg {
   color: var(--dc-onb-text);
+  font-size: 13.5px;
+  font-weight: 560;
+  line-height: 1.55;
+  word-break: keep-all;
+  text-wrap: balance;
 }
 
-.dc-onb-ready-item__label,
-.dc-onb-ready-item__stack strong {
-  color: var(--dc-onb-text);
+.dc-onb-ready-line__item {
+  white-space: nowrap;
+}
+
+.dc-onb-ready-line__item + .dc-onb-ready-line__item::before {
+  margin: 0 0.45em;
+  color: var(--dc-onb-pale);
+  content: "\00b7";
+}
+
+.dc-onb-ready-line strong {
+  color: var(--dc-onb-success);
   font-weight: 600;
 }
 
-.dc-onb-ready-item__stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+.dc-onb-ready-line strong[data-tone="warn"] {
+  color: var(--dc-onb-warn);
 }
 
-.dc-onb-ready-item__stack span {
-  color: var(--dc-onb-pale);
-  font-size: 12.5px;
+/* The two start options share one card; each row is a hairline apart. */
+.dc-onb-ready-options {
+  overflow: hidden;
+  border: 1px solid var(--dc-onb-line);
+  border-radius: 14px;
+  background: #fff;
+  text-align: left;
 }
 
 .dc-onb-login-row,
@@ -1585,23 +1526,24 @@
   justify-content: space-between;
   gap: 16px;
   box-sizing: border-box;
-  min-height: 47px;
-  padding: 0 18px;
-  border: 1px solid var(--dc-onb-line-weak);
-  border-radius: 12px;
-  background: var(--dc-onb-raised);
+  min-height: 46px;
+  margin: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .dc-onb-login-row h2 {
   margin: 0;
   color: var(--dc-onb-text);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 560;
   line-height: 1.2;
 }
 
 .dc-onb-card .onb-browser-history-preference {
-  margin-top: 8px;
+  border-top: 1px solid var(--dc-onb-line);
   color: var(--dc-onb-text);
 }
 
@@ -1612,8 +1554,8 @@
 
 .dc-onb-card .onb-browser-history-preference__title {
   color: var(--dc-onb-text);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 560;
   line-height: 1.2;
 }
 
@@ -1663,31 +1605,71 @@
   text-align: left;
 }
 
+/* Setup steps only (the promotion sign-in screen shares the card): the footer sits 28px
+   above the window edge, level with the entry screen's legal line. */
+form.onboarding-card.dc-onb-card {
+  padding-bottom: var(--dc-onb-foot-inset);
+}
+
 .dc-onb-card .dc-onb-actions {
   position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
-  width: min(100%, 640px);
-  min-height: 41px;
-  margin: auto 0 0;
-  padding-top: 13px;
+  /* Back and Continue sit at the window's lower corners, like the dots' row in Aside's
+     setup steps, while the reading column above stays centred. */
+  align-self: stretch;
+  width: auto;
+  min-height: 40px;
+  margin: auto calc(var(--dc-onb-edge-inset) - var(--dc-onb-pad-x)) 0;
+  padding-top: 16px;
   flex-shrink: 0;
 }
 
 .dc-onb-card .dc-onb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: none;
   min-width: 0;
+  height: 40px;
   min-height: 0;
-  padding: 6px 4px;
+  padding: 0 14px 0 10px;
   border: 0;
-  border-radius: 0;
-  background: none;
-  color: var(--dc-onb-soft);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--dc-onb-text) 6%, transparent);
+  color: var(--dc-onb-muted);
   font-family: inherit;
   font-size: 14px;
   font-weight: 560;
+  line-height: 1;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dc-onb-card .dc-onb-back svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dc-onb-card .dc-onb-back:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dc-onb-text) 10%, transparent);
+  color: var(--dc-onb-text);
+}
+
+/* The legacy .onb-actions__back:active clears the fill; keep the pill pressed instead. */
+.dc-onb-card .dc-onb-back:active:not(:disabled) {
+  background: color-mix(in srgb, var(--dc-onb-text) 13%, transparent);
+}
+
+.dc-onb-card .dc-onb-back:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .dc-onb-card .dc-onb-dots {
@@ -1735,9 +1717,10 @@
 /* Why Continue is off, or what just failed, sits right above the button it
    explains instead of at the end of a step that may be scrolled out of view. */
 .dc-onb-card .dc-onb-footer-status {
-  width: min(100%, 640px);
+  align-self: stretch;
+  width: auto;
   flex-shrink: 0;
-  margin: 0;
+  margin: 0 calc(var(--dc-onb-edge-inset) - var(--dc-onb-pad-x));
   padding-top: 10px;
   /* Same warn tone the inline Permissions hint used before it moved here. */
   color: var(--dc-onb-warn);
@@ -1766,10 +1749,10 @@
 .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:hover:not(:disabled, [aria-disabled="true"]),
 .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:active:not(:disabled, [aria-disabled="true"]) {
   appearance: none;
-  min-width: 0;
+  min-width: 96px;
   min-height: 0;
-  height: 41px;
-  padding: 12px 24px;
+  height: 40px;
+  padding: 0 22px;
   border: 0;
   border-radius: 11px;
   background: var(--dc-onb-accent);
@@ -1781,7 +1764,18 @@
   line-height: 1;
   transform: none;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+/* Filled buttons react along the neutral ink ramp, like .app-btn--primary: one step
+   lighter in light mode and one step darker in dark mode. */
+.onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:hover:not(:disabled, [aria-disabled="true"]),
+.onboarding-card.dc-onb-card .dc-onb-account__google:hover:not(:disabled) {
+  background: var(--dc-onb-muted);
+}
+
+.onboarding-card.dc-onb-card .dc-onb-account__google {
+  transition: background 0.15s;
 }
 
 .dc-onb-card .dc-onb-primary:is(:disabled, [aria-disabled="true"]) {
@@ -1859,8 +1853,10 @@
   }
 
   .onboarding-card.dc-onb-card {
+    --dc-onb-pad-x: 48px;
+    --dc-onb-edge-inset: 48px;
     height: 100%;
-    padding: 36px 48px;
+    padding: 36px var(--dc-onb-pad-x);
   }
 
   .dc-onb-data-grid {
@@ -1906,9 +1902,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dc-onb-welcome__icon,
-  .dc-onb-welcome__headline,
-  .dc-onb-welcome__body,
   .dc-onb-language,
   .dc-onb-advanced-cards,
   .dc-onb-spinner,
@@ -1961,9 +1954,9 @@
   background: var(--dc-onb-raised);
 }
 
-/* The Ready summary and the connection check rows were hard-coded white, so
+/* The Ready options card and the connection check rows were hard-coded white, so
    the dark theme's light text sat on white and all but vanished. */
-:root[data-theme="dark"] .dc-onb-ready-list,
+:root[data-theme="dark"] .dc-onb-ready-options,
 :root[data-theme="dark"] .dc-onb-check-row {
   border-color: color-mix(in srgb, var(--dc-onb-text) 14%, transparent);
   background: var(--dc-onb-raised);
@@ -1980,11 +1973,6 @@
 
 :root[data-theme="dark"] .dc-onb-account__email:hover:not(:disabled) {
   background: color-mix(in srgb, var(--dc-onb-text) 8%, var(--dc-onb-raised));
-}
-
-/* The neutral pill's light-theme border disappears once its row is dark. */
-:root[data-theme="dark"] .dc-onb-pill--neutral {
-  border-color: color-mix(in srgb, var(--dc-onb-text) 20%, transparent);
 }
 
 :root[data-theme="dark"] .dc-onb-pending-dot {

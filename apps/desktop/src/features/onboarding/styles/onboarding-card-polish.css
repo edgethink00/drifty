@@ -35,7 +35,41 @@
 .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row__action {
   margin-left: 46px;
   width: calc(100% - 46px);
-  justify-content: space-between;
+  /* The action sits under the description, aligned with the text it belongs to. */
+  justify-content: flex-start;
+}
+
+/* Priority (Required / Recommended / Optional) never changes, so it sits beside the title as
+   the shared .ui-badge, exactly as in Settings > Permissions. */
+.dc-onb-row__title--with-priority {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dc-onb-row__title--with-priority .ui-badge {
+  position: relative;
+  top: -0.02rem;
+}
+
+/* A permission that is on reads as a status, not as a disabled button: a dot and a label. */
+.dc-onb-permission-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  color: var(--dc-onb-success);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dc-onb-permission-status::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
 }
 .dc-onb-permission-path {
   margin-top: 16px;
@@ -58,32 +92,102 @@
   text-wrap: pretty;
 }
 
+/* Alignment rule (owner decision, 2026-10-08): a step whose copy sits beside a
+   picture (the entry screen, the macOS permissions preview) reads from the left;
+   a step with copy alone centers its heading block. Cards, rows and inputs keep
+   their own shape underneath. */
+.onboarding-card.dc-onb-card:not([data-preview="true"]) .dc-onb-title,
+.onboarding-card.dc-onb-card:not([data-preview="true"]) .dc-onb-subtitle,
+.onboarding-card.dc-onb-card:not([data-preview="true"]) .dc-onb-copy,
+.onboarding-card.dc-onb-card[data-step="job"] .dc-onb-job-intro {
+  text-align: center;
+}
+.onboarding-card.dc-onb-card:not([data-preview="true"]) .dc-onb-subtitle,
+.onboarding-card.dc-onb-card:not([data-preview="true"]) .dc-onb-copy--wide,
+.onboarding-card.dc-onb-card[data-step="job"] .dc-onb-job-intro {
+  margin-left: auto;
+  margin-right: auto;
+}
+/* Work: the chips gather under the centered intro; the selection count keeps
+   its place at the row's right edge. */
+.onboarding-card.dc-onb-card[data-step="job"] .dc-onb-job-intro-row {
+  position: relative;
+  justify-content: center;
+}
+.onboarding-card.dc-onb-card[data-step="job"] .dc-onb-job-intro-row .dc-onb-count {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+.onboarding-card.dc-onb-card[data-step="job"] .dc-onb-choices {
+  justify-content: center;
+}
+
+/* One-column steps also center their block in the window height (the 580px window
+   left 110-130px empty under Work and AI setup). A block taller than the window, such
+   as AI setup with the provider list open, top-aligns and scrolls as before. */
+.onboarding-card.dc-onb-card:not([data-preview="true"]) .dc-onb-content {
+  margin: auto;
+}
+
+/* Ready adds a large check seal above the title and narrows to a 560px column. */
+.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-content {
+  max-width: 560px;
+  padding-top: 10px;
+  text-align: center;
+}
 .dc-onb-ready-seal {
-  float: left;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  margin-right: 12px;
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 18px;
   background: color-mix(
     in srgb,
-    var(--dc-onb-success) 10%,
+    var(--dc-onb-success) 12%,
     var(--dc-onb-surface)
   );
+  box-shadow:
+    0 0 0 8px color-mix(in srgb, var(--dc-onb-success) 5%, transparent),
+    0 18px 40px -18px color-mix(in srgb, var(--dc-onb-success) 60%, transparent);
   color: var(--dc-onb-success);
 }
 .dc-onb-ready-seal svg {
-  width: 23px;
-  height: 23px;
+  width: 30px;
+  height: 30px;
+  stroke-width: 2.4;
 }
 .onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-title {
-  min-height: 38px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+/* The Cloud-unavailable status keeps its own left-aligned reading shape above
+   the summary line, with the way back to the AI choice. */
+.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-inline-status {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 16px;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--dc-onb-line);
+  border-radius: 12px;
+  background: var(--dc-onb-raised);
+  text-align: left;
 }
-.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-ready-item > svg {
-  color: var(--dc-onb-success);
+.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-inline-status p {
+  margin: 0;
+  color: var(--dc-onb-text);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+  text-wrap: pretty;
+}
+.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-inline-status .dc-onb-back {
+  flex: none;
 }
 :root[data-locale="ko"] .dc-onb-permission-path {
   word-break: keep-all;

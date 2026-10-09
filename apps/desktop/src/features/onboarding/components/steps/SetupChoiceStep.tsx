@@ -39,7 +39,7 @@ export function SetupChoiceStep({
     if (advancedWasVisibleRef.current) return;
     const cards = advancedCardsRef.current;
     if (!cards) return;
-    // In the fixed 720x540 onboarding window the expanded cards open below the
+    // In the fixed 900x580 onboarding window the expanded cards open below the
     // fold; bring them into view so the options the user asked for are seen.
     // The cards pop in from a slightly raised, shrunken transform, so measure
     // only after that animation settles or the scroll stops a few pixels short.

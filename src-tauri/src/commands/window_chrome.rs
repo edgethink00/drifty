@@ -456,10 +456,12 @@ pub(crate) fn configure_main_window_material(app: &AppHandle) {
         ));
 }
 
-/// Logical size of the v2.1 onboarding card. In compact mode the whole window
-/// shrinks to this so the card itself reads as the macOS window.
-const ONBOARDING_CARD_WIDTH: f64 = 720.0;
-const ONBOARDING_CARD_HEIGHT: f64 = 540.0;
+/// Logical size of the onboarding window. In compact mode the whole window
+/// shrinks to this so the card itself reads as the macOS window. Wide enough
+/// for the first screen to pair sign-in with a legible product picture, and
+/// small enough to sit well inside a 1280x800 display.
+const ONBOARDING_CARD_WIDTH: f64 = 900.0;
+const ONBOARDING_CARD_HEIGHT: f64 = 580.0;
 /// Minimum window size from tauri.conf.json, restored once onboarding exits.
 #[cfg(not(target_os = "windows"))]
 const DEFAULT_MIN_WIDTH: f64 = 960.0;

@@ -25,9 +25,16 @@ export type ConnectionFailure =
   | { readonly kind: "remote"; readonly message: string };
 export type NotificationPermissionState = "unknown" | "checking" | "granted" | "denied" | "unavailable";
 
-const BASE_STEPS: OnboardingStepDef[] = [
-  { id: "welcome", label: "Welcome" },
-  { id: "account", label: "Account" },
+/**
+ * The first screen pairs the product picture with sign-in. It is the "account" step while an
+ * account is still required, and the "welcome" step when sign-in is already settled for this
+ * run (an active Pro pass on a connected account, or the development auth bypass); both render
+ * the same entry screen. Neither counts as a setup step in the progress dots.
+ */
+const ENTRY_STEP: OnboardingStepDef = { id: "account", label: "Account" };
+const SETTLED_ENTRY_STEP: OnboardingStepDef = { id: "welcome", label: "Welcome" };
+
+const SHARED_STEPS: OnboardingStepDef[] = [
   { id: "job", label: "Work" },
   { id: "choose_setup", label: "Setup" },
 ];
@@ -61,12 +68,21 @@ const CUSTOM_ENDPOINT_STEPS: OnboardingStepDef[] = [
 ];
 
 export function getOnboardingSteps(setupChoice: SetupChoice | null, options: OnboardingStepsOptions = {}): OnboardingStepDef[] {
-  const baseSteps = options.skipAccountStep ? BASE_STEPS.filter((step) => step.id !== "account") : BASE_STEPS;
+  const baseSteps = [options.skipAccountStep ? SETTLED_ENTRY_STEP : ENTRY_STEP, ...SHARED_STEPS];
   if (setupChoice === "simple") return [...baseSteps, ...SIMPLE_SETUP_STEPS];
   if (setupChoice === "local_ai") return [...baseSteps, ...LOCAL_AI_STEPS];
   if (setupChoice === "byok") return [...baseSteps, ...BYOK_STEPS];
   if (setupChoice === "custom_endpoint") return [...baseSteps, ...CUSTOM_ENDPOINT_STEPS];
   return baseSteps;
+}
+
+export function isOnboardingEntryStep(step: OnboardingStep): boolean {
+  return step === "account" || step === "welcome";
+}
+
+/** The setup steps after the entry screen; the progress dots and Back count only these. */
+export function onboardingSetupSteps(steps: readonly OnboardingStepDef[]): OnboardingStepDef[] {
+  return steps.filter((step) => !isOnboardingEntryStep(step.id));
 }
 
 export function remapOnboardingStepForSetupChoice(

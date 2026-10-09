@@ -29,10 +29,10 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
           <PermissionRow
             title={t("settings.permissions.accessibility")}
             description={t("onboarding.permissions.accessibilityDescription")}
-            pill={accessibilityEnabled ? t("onboarding.permissions.allowed") : t("common.required")}
-            tone={accessibilityEnabled ? "success" : "required"}
-            actionLabel={accessibilityEnabled ? t("onboarding.permissions.allowed") : t("onboarding.permissions.allowInSettings")}
-            disabled={accessibilityEnabled}
+            priority="required"
+            done={accessibilityEnabled}
+            actionLabel={t("onboarding.permissions.allowInSettings")}
+            disabled={false}
             onClick={() => void flow.handleRequestAccessibilityClick()}
           />
         ) : null}
@@ -44,9 +44,10 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
           <PermissionRow
             title={t("onboarding.permissions.notifications")}
             description={t("onboarding.permissions.notificationsDescription")}
-            pill={notificationsEnabled ? t("onboarding.permissions.allowed") : t("common.recommended")}
-            tone={notificationsEnabled ? "success" : "neutral"}
-            disabled={notificationsEnabled}
+            priority="recommended"
+            done={notificationsEnabled}
+            actionLabel={t("common.enable")}
+            disabled={false}
             onClick={() => void flow.handleNotificationPermissionClick()}
           />
         )}
@@ -54,10 +55,10 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
           <PermissionRow
             title={t("onboarding.permissions.safariHistory")}
             description={t("onboarding.permissions.safariHistoryDescription")}
-            pill={safariHistory.readable ? t("onboarding.permissions.allowed") : t("common.optional")}
-            tone={safariHistory.readable ? "success" : "neutral"}
-            disabled={safariHistory.opening || safariHistory.readable}
-            actionLabel={safariHistory.readable ? t("onboarding.permissions.allowed") : safariHistory.opening ? t("onboarding.permissions.opening") : t("common.enable")}
+            priority="optional"
+            done={safariHistory.readable}
+            disabled={safariHistory.opening}
+            actionLabel={safariHistory.opening ? t("onboarding.permissions.opening") : t("common.enable")}
             onClick={safariHistory.onEnable}
           />
         ) : null}
@@ -72,40 +73,56 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   );
 }
 
+/** Priority badges follow Settings > Permissions: the shared .ui-badge ladder beside the title. */
+const PRIORITY_BADGE = {
+  required: { className: "ui-badge ui-badge--warn", labelKey: "common.required" },
+  recommended: { className: "ui-badge", labelKey: "common.recommended" },
+  optional: { className: "ui-badge ui-badge--quiet", labelKey: "common.optional" },
+} as const;
+
 function PermissionRow({
   actionLabel,
   description,
   disabled,
+  done,
   onClick,
-  pill,
+  priority,
   title,
-  tone,
 }: {
-  readonly actionLabel?: string;
+  readonly actionLabel: string;
   readonly description: string;
   readonly disabled: boolean;
+  /** Once on, the row shows a status (a dot and "Enabled") in place of its button. */
+  readonly done: boolean;
   readonly onClick: () => void;
-  readonly pill: string;
+  readonly priority: keyof typeof PRIORITY_BADGE;
   readonly title: string;
-  readonly tone: "success" | "required" | "neutral";
 }) {
   const { t } = useLocalization();
+  const badge = PRIORITY_BADGE[priority];
+  const tone = done ? "success" : priority === "required" ? "required" : "neutral";
   return (
     <li className={`dc-onb-row dc-onb-row--${tone}`}>
       <span className="dc-onb-permission-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          {tone === "success" ? <path d="m5 12 4 4L19 6" /> : <><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z" /><path d="M12 8v5m0 3h.01" /></>}
+          {done ? <path d="m5 12 4 4L19 6" /> : <><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z" /><path d="M12 8v5m0 3h.01" /></>}
         </svg>
       </span>
       <div className="dc-onb-row__copy">
-        <span className="dc-onb-row__title">{title}</span>
+        <span className="dc-onb-row__title dc-onb-row__title--with-priority">
+          {title}
+          <span className={badge.className}>{t(badge.labelKey)}</span>
+        </span>
         <span className="dc-onb-row__desc">{description}</span>
       </div>
       <div className="dc-onb-row__action">
-        <span className={`dc-onb-pill dc-onb-pill--${tone}`}>{pill}</span>
-        <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled}>
-          {actionLabel ?? (disabled ? t("onboarding.permissions.allowed") : t("common.enable"))}
-        </button>
+        {done ? (
+          <span className="dc-onb-permission-status">{t("onboarding.permissions.allowed")}</span>
+        ) : (
+          <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled}>
+            {actionLabel}
+          </button>
+        )}
       </div>
     </li>
   );

@@ -35,7 +35,7 @@
   --onb-action-gap: 20px;
   --onb-step-content-baseline: 300px;
   --onb-step-frame-baseline: calc(var(--onb-step-content-baseline) + 44px);
-  --onb-content-width: 720px;
+  --onb-content-width: 900px;
   --onb-card-height: 524px;
   --onb-card-padding-x: 40px;
   --onb-card-padding-y: 34px;

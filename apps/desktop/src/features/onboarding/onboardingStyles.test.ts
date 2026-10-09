@@ -40,15 +40,21 @@ describe("onboarding design-code reference styles", () => {
     expect(styles).not.toContain("dc-onb-card--framed-step");
   });
 
-  it("keeps the design-code continue button static on hover", () => {
+  it("keeps the design-code continue button in place and on the ink ramp on hover", () => {
     const primaryButtonRule = styles.match(
       /\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary,\s*\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:hover:not\(:disabled, \[aria-disabled="true"\]\),\s*\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:active:not\(:disabled, \[aria-disabled="true"\]\)\s*\{(?<body>[^}]*)\}/,
     )?.groups?.body ?? "";
+    // Hover steps one notch along the neutral ink ramp, like the app's .app-btn--primary;
+    // it never jumps to the accent and never moves.
+    const hoverRule = styles.match(
+      /\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:hover:not\(:disabled, \[aria-disabled="true"\]\),\s*\.onboarding-card\.dc-onb-card \.dc-onb-account__google:hover:not\(:disabled\)\s*\{(?<body>[^}]*)\}/,
+    )?.groups?.body ?? "";
 
-    expect(primaryButtonRule).toContain("height: 41px;");
+    expect(primaryButtonRule).toContain("height: 40px;");
     expect(primaryButtonRule).toContain("background: var(--dc-onb-accent);");
     expect(primaryButtonRule).toContain("transform: none;");
-    expect(primaryButtonRule).toContain("transition: opacity 0.15s;");
+    expect(hoverRule).toContain("background: var(--dc-onb-muted);");
+    expect(hoverRule).not.toContain("accent");
   });
 
   it("keeps local model cards in the reference row layout at the 720px card width", () => {

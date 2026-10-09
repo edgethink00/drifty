@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { getOnboardingSteps, remapOnboardingStepForSetupChoice, type SetupChoice } from "./onboardingFlow";
+import {
+  getOnboardingSteps,
+  onboardingSetupSteps,
+  remapOnboardingStepForSetupChoice,
+  type SetupChoice,
+} from "./onboardingFlow";
 
 function stepIds(setupChoice: SetupChoice) {
   return getOnboardingSteps(setupChoice).map((step) => step.id);
 }
 
 describe("getOnboardingSteps", () => {
-  it("keeps Account second and moves Setup before provider work and permissions", () => {
+  it("opens on the sign-in entry screen and moves Setup before provider work and permissions", () => {
     expect(stepIds("simple")).toEqual([
-      "welcome",
       "account",
       "job",
       "choose_setup",
@@ -17,9 +21,25 @@ describe("getOnboardingSteps", () => {
     ]);
   });
 
+  it("opens on the same entry screen as Welcome when sign-in is already settled", () => {
+    const steps = getOnboardingSteps("simple", { skipAccountStep: true }).map((step) => step.id);
+    expect(steps[0]).toBe("welcome");
+    expect(steps).not.toContain("account");
+    expect(steps.slice(1)).toEqual(stepIds("simple").slice(1));
+  });
+
+  it("counts only the setup steps after the entry screen in the progress dots", () => {
+    expect(onboardingSetupSteps(getOnboardingSteps("simple")).map((step) => step.id)).toEqual([
+      "job",
+      "choose_setup",
+      "permissions",
+      "ready",
+    ]);
+    expect(onboardingSetupSteps(getOnboardingSteps("simple", { skipAccountStep: true }))[0]?.id).toBe("job");
+  });
+
   it("keeps provider-specific preparation between Setup and Permissions", () => {
     expect(stepIds("local_ai")).toEqual([
-      "welcome",
       "account",
       "job",
       "choose_setup",
@@ -29,7 +49,6 @@ describe("getOnboardingSteps", () => {
       "ready",
     ]);
     expect(stepIds("byok")).toEqual([
-      "welcome",
       "account",
       "job",
       "choose_setup",
