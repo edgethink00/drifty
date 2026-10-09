@@ -225,16 +225,31 @@ const KNOWN_SHOPPING_HOST_FRAGMENTS = [
   "amazon.",
   "coupang.",
   "ebay.",
+  "etsy.",
   "gmarket.",
+  "kurly.",
+  "lazada.",
+  "lotteon.",
+  "mercari.",
   "musinsa.",
+  "oliveyoung.",
+  "rakuten.",
+  "shopee.",
   "shopping.naver.",
   "smartstore.naver.",
+  "ssg.com",
+  "taobao.",
   "temu.",
+  "walmart.",
   "wconcept.",
 ];
 
+// Explicit retail words only. Title-only records (no domain) are common in
+// production, so the English list must also cover the words real store titles
+// use ("Store", "Prices and Deals", "Shop") and the plural forms; the other
+// languages mirror the Korean set with equally explicit retail vocabulary.
 const EXPLICIT_SHOPPING_TEXT_PATTERN =
-  /(?:가격|특가|할인|구매|상품|쇼핑|장바구니|주문|판매|스토어|마켓|\bprice\b|\bsale\b|\bdiscount\b|\bbuy\b|\bproduct\b|\bshop\b|\bcart\b|\bcheckout\b|\bmarketplace\b)/i;
+  /(?:가격|특가|할인|구매|상품|쇼핑|장바구니|주문|판매|스토어|마켓|価格|購入|セール|カート|注文|ショップ|ストア|送料|价格|购买|购物|购物车|商品|促销|优惠|цена|купить|корзина|магазин|скидк|precio|comprar|carrito|tienda|oferta|preis|kaufen|warenkorb|angebot|prix|acheter|panier|boutique|\d+\s*%\s*off\b|\bprices?\b|\bsales?\b|\bdeals?\b|\bdiscounts?\b|\bbuy\b|\bproducts?\b|\bshop\b|\bshopping\b|\bstore\b|\bcart\b|\bcheckout\b|\bmarketplace\b)/i;
 
 /** High-precision observed evidence for a consumer shopping decision. */
 export function hasExplicitLiveShoppingEvidence(
