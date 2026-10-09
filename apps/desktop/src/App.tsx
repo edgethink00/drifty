@@ -445,6 +445,7 @@ import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY,
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { parseLeaderboardGraphStyle, type LeaderboardGraphStyle } from "./features/leaderboard/leaderboardGraphStyle";
+import { useLeaderboardSeriesPrewarm } from "./features/leaderboard/useLeaderboardSeriesPrewarm";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
@@ -2511,14 +2512,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     includeBuiltInHeuristics: allowBuiltInHeuristics,
     builtInHeuristicsUnavailableSince,
   });
+  // Load the 30-day series shortly after launch for people on the leaderboard, so the
+  // first visit to the tab does not wait on the tracker query. Each visit still refreshes it.
+  const leaderboardSeriesPrewarmReady = useLeaderboardSeriesPrewarm(isLeaderboardOptedIn);
+  const [leaderboardSeriesPrewarmed, setLeaderboardSeriesPrewarmed] = useState(false);
   const profileDailyProductivity = useDailyProductivitySeries({
     windowEndDay: leaderboardWindowEndDay,
     startOfDayMinutes,
     includeAiClassifications: showAiClassificationImpact,
     includeBuiltInHeuristics: allowBuiltInHeuristics,
     builtInHeuristicsUnavailableSince,
-    enabled: activeTab === "leaderboard",
+    enabled: activeTab === "leaderboard" || (leaderboardSeriesPrewarmReady && !leaderboardSeriesPrewarmed),
   });
+  useEffect(() => {
+    if (profileDailyProductivity !== null) setLeaderboardSeriesPrewarmed(true);
+  }, [profileDailyProductivity]);
   const effectiveDailyProductivity = useMemo(() => {
     if (profileDailyProductivity && profileDailyProductivity.length >= 2) return profileDailyProductivity;
     if (!leaderboardUsesPreviewProfile) return profileDailyProductivity;

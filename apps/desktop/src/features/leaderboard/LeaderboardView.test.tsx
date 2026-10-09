@@ -1205,4 +1205,39 @@ describe("LeaderboardView", () => {
     expect(container.querySelector(".lb-v2__inline-title")).toBeNull();
     expect(container.querySelector(".lb-v2__eyebrow")).toBeNull();
   });
+  it("holds the week chart space in the split rail until the 30-day series arrives", () => {
+    const series = Array.from({ length: 7 }, (_, index) => ({ day: "2026-04-0" + (index + 1), focus: (index + 1) * 600, drift: 0, neutral: 0 }));
+
+    const pending = renderView({ previewLayout: "split-v2", publicProfile: makePublicProfile({ dailyProductivity: null }) });
+    expect(pending.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeTruthy();
+    cleanup();
+
+    const loaded = renderView({ previewLayout: "split-v2", publicProfile: makePublicProfile({ dailyProductivity: series }) });
+    expect(loaded.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeNull();
+    expect(loaded.container.querySelector("svg.leaderboard-sparkline__plot")).toBeTruthy();
+    cleanup();
+
+    const failed = renderView({ previewLayout: "split-v2", publicProfile: makePublicProfile({ dailyProductivity: null, localMetricsStatus: "error" }) });
+    expect(failed.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeNull();
+    cleanup();
+
+    const stacked = renderView({ publicProfile: makePublicProfile({ dailyProductivity: null }) });
+    expect(stacked.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeNull();
+  });
+
+  it("keeps the standing slot blank instead of saying unranked while a joined board loads", () => {
+    const loading = renderView({
+      previewLayout: "split-v2",
+      isOptedIn: true,
+      isLoading: true,
+      ownRank: null,
+      publicProfile: makePublicProfile(),
+    });
+    expect(screen.queryByText(/not ranked/i)).toBeNull();
+    expect(loading.container.querySelector(".leaderboard-v5-achievement")).toBeTruthy();
+    cleanup();
+
+    renderView({ previewLayout: "split-v2", isOptedIn: true, isLoading: false, ownRank: null, publicProfile: makePublicProfile() });
+    expect(screen.getByText(/not ranked/i)).toBeTruthy();
+  });
 });

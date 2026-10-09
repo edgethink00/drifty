@@ -73,9 +73,10 @@ export function LeaderboardBoard({
   };
 
   const loadedCount = leaderboard.length;
-  const hasMoreParticipants = participantCount === null
+  // No rows yet (first load) means there is no "Top N" scope to name.
+  const hasMoreParticipants = loadedCount > 0 && (participantCount === null
     ? loadedCount >= LEADERBOARD_PUBLIC_RESULT_LIMIT || (currentUserRank ?? 0) > loadedCount
-    : participantCount > loadedCount;
+    : participantCount > loadedCount);
   const scopeLabel = hasMoreParticipants ? t("leaderboard.topCount", { count: loadedCount }) : t("leaderboard.allRanked");
   // Sentence-safe scope for search copy: "ranked participants" or "top 100".
   const searchScope = hasMoreParticipants

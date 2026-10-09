@@ -3871,6 +3871,13 @@
   gap: 4px !important;
 }
 
+/* Chart footprint held while the 30-day series loads; a faint baseline marks the spot. */
+.lb-v2 .leaderboard-sparkline__plot--pending {
+  background: linear-gradient(color-mix(in srgb, var(--surface-strong) 70%, var(--line)), color-mix(in srgb, var(--surface-strong) 70%, var(--line))) no-repeat left bottom / 100% 2px;
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
 .lb-v2 .leaderboard-v5-achievement {
   min-height: 0 !important;
   padding: 12px 2px !important;

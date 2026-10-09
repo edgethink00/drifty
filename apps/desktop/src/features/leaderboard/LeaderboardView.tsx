@@ -124,6 +124,9 @@ export function LeaderboardView({
   const sparklineVariant: Exclude<LeaderboardGraphStyle, "off"> = graphStyle === "off" ? "default" : graphStyle;
   const last30FocusSeconds = (dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
   const localMetricsStatus = publicProfile?.localMetricsStatus ?? "ready";
+  // The 30-day series arrives after the tab opens. The split rail keeps the chart's
+  // footprint until then so the rows below do not slide down when it lands.
+  const sparklinePending = previewLayout === "split-v2" && dailyProductivity === null && localMetricsStatus !== "error";
   const localMetricsStatusMessage = localMetricsStatus === "loading"
     ? t("leaderboard.calculatingLocal")
     : localMetricsStatus === "error"
@@ -361,6 +364,13 @@ export function LeaderboardView({
                             ariaLabel={t("leaderboard.weekSparklineAria")}
                           />
                         </div>
+                      ) : sparklinePending ? (
+                        <div className="focus-stat__chart-full" aria-hidden="true">
+                          <div className="leaderboard-sparkline">
+                            <span className="leaderboard-sparkline__plot leaderboard-sparkline__plot--pending" />
+                            <span className="leaderboard-sparkline__axis">{"\u00A0"}</span>
+                          </div>
+                        </div>
                       ) : null}
                     </div>
 
@@ -380,6 +390,12 @@ export function LeaderboardView({
                             </>
                           ) : null}
                         </span>
+                      </section>
+                    ) : isOptedIn && isLoading ? (
+                      <section className="leaderboard-v5-achievement" aria-hidden="true">
+                        <span className="leaderboard-v5-achievement__eyebrow">{t("leaderboard.communityStanding")}</span>
+                        <strong>{"\u00A0"}</strong>
+                        <span className="leaderboard-v5-achievement__meta">{"\u00A0"}</span>
                       </section>
                     ) : isOptedIn ? (
                       <section className="leaderboard-v5-achievement" aria-label={t("leaderboard.notRanked")}>
