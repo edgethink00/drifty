@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -35,6 +36,7 @@ function AccountPlanDialog({ busy, children, onClose }: {
   const titleId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   useModalDismiss(onClose);
+  const overlayDismiss = useOverlayDismiss(onClose);
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -51,9 +53,7 @@ function AccountPlanDialog({ busy, children, onClose }: {
   }, []);
 
   return (
-    <div className="account-plan-overlay" onClick={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
+    <div className="account-plan-overlay" {...overlayDismiss}>
       <section className="account-plan-modal modal-shell" data-modal-variant="workspace"
         role="dialog" aria-modal="true" aria-labelledby={titleId}
         ref={dialogRef} tabIndex={-1}>

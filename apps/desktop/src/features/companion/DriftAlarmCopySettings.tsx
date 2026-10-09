@@ -14,6 +14,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import type { DisplayLanguage } from "../localization/languagePreference";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { ModalPresence } from "../../components/ModalPresence";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import driftyIcon from "../../assets/drifty-icon.png";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 
@@ -84,6 +85,9 @@ export function DriftAlarmCopySettings({
     setDraftCopy(value);
     setIsEditorOpen(false);
   };
+  const draftChanged = (Object.keys(draftCopy) as (keyof DriftAlarmCopySettingsValue)[])
+    .some((key) => draftCopy[key] !== value[key]);
+  const overlayDismiss = useOverlayDismiss(cancelEditor, { keepOpen: draftChanged });
 
   const saveEditor = () => {
     onChange(diffDriftAlarmCopyOverrides(draftCopy, defaults));
@@ -109,7 +113,7 @@ export function DriftAlarmCopySettings({
       </div>
       <ModalPresence onDismiss={cancelEditor}>
         {isEditorOpen ? (
-        <div className="auth-modal__overlay drift-copy-modal__overlay" onClick={cancelEditor}>
+        <div className="auth-modal__overlay drift-copy-modal__overlay" {...overlayDismiss}>
           <section
             className="auth-modal modal-shell drift-copy-modal"
             data-modal-variant="workspace"

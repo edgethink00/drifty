@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { MouseEvent } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { AccountDeletionResult } from "./accountDeletionService";
@@ -28,15 +28,12 @@ export function AccountDeletionModal({
   const dialogRef = useRef<HTMLElement>(null);
   const matches = confirmation.trim().toLowerCase() === confirmationTarget.toLowerCase();
   useModalDismiss(onClose, { disabled: deleting });
+  const overlayDismiss = useOverlayDismiss(onClose, { disabled: deleting });
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-account-deletion-confirmation]" });
 
   useEffect(() => {
     if (deleting) dialogRef.current?.focus({ preventScroll: true });
   }, [deleting]);
-
-  const handleOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget && !deleting) onClose();
-  };
 
   const handleDelete = async () => {
     if (!matches || deleting) return;
@@ -56,7 +53,7 @@ export function AccountDeletionModal({
   };
 
   return (
-    <div className="auth-modal__overlay" onClick={handleOverlayClick}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         ref={dialogRef}
         aria-labelledby="account-deletion-modal-title"

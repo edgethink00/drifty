@@ -8,7 +8,8 @@ import { MetricTile } from "../../components/MetricTile";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
-import { useRef, type ChangeEvent, type CSSProperties } from "react";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export type ProfileDraft = {
@@ -20,6 +21,12 @@ export type ProfileDraft = {
   linkedinUrl: string;
   isPublic: boolean;
 };
+
+const EDITABLE_PROFILE_FIELDS = ["displayName", "bio", "avatarUrl", "websiteUrl", "githubUrl", "linkedinUrl"] as const;
+
+function sameEditableProfile(a: ProfileDraft, b: ProfileDraft): boolean {
+  return EDITABLE_PROFILE_FIELDS.every((field) => a[field] === b[field]);
+}
 
 export function ProfileModal({
   row,
@@ -66,9 +73,10 @@ export function ProfileModal({
       : t("profile.standingPercentile", { rank, participants: participantLabel, percent: percentile });
   const profileState = isLoading ? "loading" : error ? "error" : profile ? "ready" : "unavailable";
   useModalDismiss(onClose);
+  const overlayDismiss = useOverlayDismiss(onClose);
 
   return (
-    <div className="auth-modal__overlay" onClick={onClose}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section className="auth-modal modal-shell profile-modal" data-modal-variant="standard" data-profile-state={profileState} role="dialog" aria-modal="true" aria-busy={isLoading || undefined} aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
         <ModalCloseButton label={t("profile.close")} onClick={onClose} />
         <div className="profile-modal__header">
@@ -189,9 +197,22 @@ export function EditProfileModal({
   const avatarInitial = firstGrapheme(profileDraft.displayName.trim() || displayName).toUpperCase();
   useModalDismiss(onClose, { disabled: profileSaving });
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-modal-initial-focus]" });
+  // What the editor showed once the profile loaded, or what was last saved.
+  // Edits beyond it survive a stray outside click; Cancel still discards them.
+  const [savedDraft, setSavedDraft] = useState<ProfileDraft | null>(profileLoading ? null : profileDraft);
+  useEffect(() => {
+    if (!profileLoading && savedDraft === null) setSavedDraft(profileDraft);
+  }, [profileDraft, profileLoading, savedDraft]);
+  const wasSaving = useRef(profileSaving);
+  useEffect(() => {
+    if (wasSaving.current && !profileSaving && !profileError) setSavedDraft(profileDraft);
+    wasSaving.current = profileSaving;
+  }, [profileDraft, profileError, profileSaving]);
+  const hasUnsavedInput = savedDraft !== null && !sameEditableProfile(profileDraft, savedDraft);
+  const overlayDismiss = useOverlayDismiss(onClose, { disabled: profileSaving, keepOpen: hasUnsavedInput });
 
   return (
-    <div className="auth-modal__overlay" onClick={onClose}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section ref={dialogRef} className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace" role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
         <ModalCloseButton label={t("profile.editor.close")} onClick={onClose} />
         <div className="modal-head">

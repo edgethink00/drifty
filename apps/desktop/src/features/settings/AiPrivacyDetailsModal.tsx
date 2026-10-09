@@ -1,7 +1,6 @@
-import type { MouseEvent } from "react";
-
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
 import { AiPrivacyDetails } from "./AiPrivacyReview";
 import "./AiPrivacyDetailsModal.css";
@@ -15,13 +14,10 @@ import "./AiPrivacyDetailsModal.css";
 export function AiPrivacyDetailsModal({ onClose }: { readonly onClose: () => void }) {
   const { t } = useLocalization();
   useModalDismiss(onClose);
-
-  const handleOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) onClose();
-  };
+  const overlayDismiss = useOverlayDismiss(onClose);
 
   return (
-    <div className="auth-modal__overlay" onClick={handleOverlayClick}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         aria-labelledby="ai-privacy-details-title"
         aria-modal="true"

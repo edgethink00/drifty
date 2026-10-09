@@ -5,6 +5,7 @@ import { testLocalAiConnection, testOpenAiCompatibleConnection, type AiConnectio
 import { OpenRouterConnectionFields } from "./OpenRouterSetupPanel";
 import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
 import { ModalPresence } from "../../components/ModalPresence";
+import { ActionLabel } from "../../components/ActionLabel";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { AiSetupConnectionDetails, AiSetupSectionCard } from "./AiSetupSectionCards";
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
@@ -384,7 +385,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
             disabled={connectionTestRunning || !connectionTestable}
             onClick={() => void handleTestConnection()}
           >
-            {connectionTestRunning ? t("settings.ai.testing") : t("settings.ai.testConnection")}
+            <ActionLabel busy={connectionTestRunning} busyLabel={t("settings.ai.testing")}>{t("settings.ai.testConnection")}</ActionLabel>
           </button>
         ) : null}
         tone={summaryTone}

@@ -597,7 +597,7 @@ describe("App leaderboard participation", () => {
     await openSocialLeaderboard();
     fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
 
-    expect(await screen.findByText("Profile network unavailable")).toBeTruthy();
+    expect(await screen.findByText("Couldn't reach the leaderboard. Check your connection.")).toBeTruthy();
     expect(fetchOwnProfile).toHaveBeenCalledTimes(2);
     expect(saveOwnProfile).not.toHaveBeenCalled();
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
@@ -1047,7 +1047,7 @@ describe("App leaderboard participation", () => {
       expect(publishOwnFocusTotal).not.toHaveBeenCalled();
     });
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(screen.getByText(/sign in before joining the beta leaderboard/i)).toBeTruthy();
+    expect(screen.getByText(/sign in, then try again/i)).toBeTruthy();
   });
 
   it("blocks a restored anonymous user from required-mode leaderboard publishing through account onboarding", async () => {

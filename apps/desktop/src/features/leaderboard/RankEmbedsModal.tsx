@@ -14,6 +14,7 @@ import {
 } from "./rankEmbedSnippets";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
 
 type RankEmbedsModalProps = {
@@ -80,6 +81,7 @@ export function RankEmbedsModal({
   const { copiedKey: copied, showCopied } = useCopyFeedback<"html" | "markdown">();
 
   useModalDismiss(onClose);
+  const overlayDismiss = useOverlayDismiss(onClose);
 
   const live = Boolean(publicId && isProfilePublic && isRanked);
   const options = useMemo(() => ({ period, theme, accent, design }), [accent, design, period, theme]);
@@ -101,7 +103,7 @@ export function RankEmbedsModal({
   const accentName = (name: string) => effectiveLanguage === "ko" ? ({ Green: "초록", Indigo: "인디고", Blue: "파랑", Pink: "분홍", Amber: "황금", Teal: "청록" }[name] ?? name) : name;
 
   return (
-    <div className="auth-modal__overlay" onClick={onClose}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         className="auth-modal modal-shell profile-modal rank-embeds-modal"
         data-modal-variant="workspace"

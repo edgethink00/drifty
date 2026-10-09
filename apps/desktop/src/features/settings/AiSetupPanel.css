@@ -144,6 +144,12 @@
   font-size: var(--type-setting-desc-size);
   line-height: 1.4;
   margin: 0;
+  /* The line is always there so a test result fills it instead of pushing the
+     sections below. It sits 4px under the selectors and hangs 12px into the
+     gap before the next section, so an empty line costs about 9px. */
+  min-height: 1.4em;
+  margin-top: calc(var(--space-1) - var(--space-2));
+  margin-bottom: -0.75rem;
 }
 
 .ai-setup-current-model.is-error .ai-setup-current-model__status {

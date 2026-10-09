@@ -9,6 +9,7 @@ import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import type { TeamProject, TeamProjectAnchor, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
 import type { TeamProjectsWindow } from "./useTeamProjects";
 
@@ -72,6 +73,10 @@ function ProjectEditorModal({
   const [color, setColor] = useState(project?.color || PROJECT_COLOR_SWATCHES[0].color);
 
   useModalDismiss(onClose, { disabled: actionLoading });
+  const hasUnsavedInput = name !== (project?.name ?? "")
+    || description !== (project?.description ?? "")
+    || color !== (project?.color || PROJECT_COLOR_SWATCHES[0].color);
+  const overlayDismiss = useOverlayDismiss(onClose, { disabled: actionLoading, keepOpen: hasUnsavedInput });
 
 
   // The editor is deliberately signal-free — the description is the project's
@@ -87,7 +92,7 @@ function ProjectEditorModal({
   };
 
   return (
-    <div className="auth-modal__overlay" onClick={onClose}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         className="auth-modal modal-shell profile-modal team-modal project-editor-modal"
         data-modal-variant="standard"

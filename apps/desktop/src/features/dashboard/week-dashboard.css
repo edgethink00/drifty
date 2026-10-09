@@ -3521,3 +3521,20 @@
   text-wrap: balance;
   word-break: keep-all;
 }
+
+/* In the light theme a block is the mid-tone category color, where the
+   canvas-derived greys read at 1.44-1.84:1. White keeps the name > time >
+   detail hierarchy through opacity. The dark theme keeps its dark text: its
+   category colors are brighter, and dark text already reads better there. */
+:root:not([data-theme="dark"]) .week-v2-calendar__event strong {
+  color: #fff;
+}
+
+:root:not([data-theme="dark"]) .week-v2-calendar__event small {
+  color: rgb(255 255 255 / 0.94);
+}
+
+:root:not([data-theme="dark"]) .week-v2-calendar__event em {
+  color: rgb(255 255 255 / 0.86);
+  opacity: 1;
+}

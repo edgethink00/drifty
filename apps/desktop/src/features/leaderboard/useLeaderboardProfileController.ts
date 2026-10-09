@@ -20,6 +20,7 @@ function captureLeaderboardActionOncePerDay(properties: LeaderboardActionPropert
   capturePostHogDailyEvent("leaderboard_action", toDailyDedupKey(properties), properties);
 }
 import { getLogicalDayRange, logicalTodayIsoDate, toErrorMessage } from "../../lib/formatting";
+import { describeLeaderboardActionError } from "./leaderboardActionErrors";
 import { COPY_FEEDBACK_VISIBLE_MS } from "../../lib/useCopyFeedback";
 import type { AuthState } from "../auth/AuthContext";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "../profile/ProfileModals";
@@ -1180,7 +1181,7 @@ export function useLeaderboardProfileController({
       }
       if (isEffectiveAuthRequired && !hasRequiredAccountAuth) {
         onAuthRequired();
-        setLeaderboardActionError("Sign in with a drifty.so account before joining the beta leaderboard.");
+        setLeaderboardActionError(t("leaderboard.error.signInRequired"));
         capturePostHogEvent("leaderboard_action", {
           action: "publish",
           result: "error",
@@ -1194,7 +1195,7 @@ export function useLeaderboardProfileController({
       if (!user) {
         if (!allowsEffectiveAnonymousAuth) {
           onAuthRequired();
-          setLeaderboardActionError("Sign in before joining the beta leaderboard.");
+          setLeaderboardActionError(t("leaderboard.error.signInRequired"));
           capturePostHogEvent("leaderboard_action", {
             action: "publish",
             result: "error",
@@ -1206,7 +1207,7 @@ export function useLeaderboardProfileController({
 
         const anonymousResult = await signInAnonymously();
         if (anonymousResult.error || !anonymousResult.user) {
-          setLeaderboardActionError(anonymousResult.error?.message ?? "Unable to join leaderboard without a beta session.");
+          setLeaderboardActionError(describeLeaderboardActionError(anonymousResult.error, "join", t));
           capturePostHogEvent("leaderboard_action", {
             action: "publish",
             result: "error",
@@ -1219,7 +1220,7 @@ export function useLeaderboardProfileController({
       }
 
       if (!authenticatedUser) {
-        setLeaderboardActionError("Sign in before joining the beta leaderboard.");
+        setLeaderboardActionError(t("leaderboard.error.signInRequired"));
         onAuthRequired();
         return;
       }
@@ -1231,7 +1232,7 @@ export function useLeaderboardProfileController({
       if (profileReadyUserId !== authenticatedUser.id || profileLoading || profileError) {
         const currentProfileResult = await fetchOwnProfile();
         if (!currentProfileResult.success) {
-          setLeaderboardActionError(currentProfileResult.error ?? "Unable to load your public profile");
+          setLeaderboardActionError(describeLeaderboardActionError(currentProfileResult.error, "join", t));
           if (currentProfileResult.error === "Not authenticated") onAuthRequired();
           capturePostHogEvent("leaderboard_action", {
             action: "publish",
@@ -1257,7 +1258,7 @@ export function useLeaderboardProfileController({
       });
 
       if (!profileResult.success || !profileResult.data) {
-        setLeaderboardActionError(profileResult.error ?? "Unable to prepare public profile");
+        setLeaderboardActionError(describeLeaderboardActionError(profileResult.error, "join", t));
         if (profileResult.error === "Not authenticated") onAuthRequired();
         capturePostHogEvent("leaderboard_action", {
           action: "publish",
@@ -1302,7 +1303,7 @@ export function useLeaderboardProfileController({
 
       if (!result.success) {
         if (result.blockedByAssessment) setLeaderboardAssessmentContext("pre_publish");
-        else setLeaderboardActionError(result.error);
+        else setLeaderboardActionError(describeLeaderboardActionError(result.error, "join", t));
         if (result.error === "Not authenticated") onAuthRequired();
         capturePostHogEvent("leaderboard_action", {
           action: "publish",
@@ -1331,7 +1332,7 @@ export function useLeaderboardProfileController({
         segment_count_bucket: toCountBucket(result.data?.segmentCount ?? 0),
       });
     } catch (nextError) {
-      setLeaderboardActionError(toErrorMessage(nextError));
+      setLeaderboardActionError(describeLeaderboardActionError(nextError, "join", t));
       capturePostHogEvent("leaderboard_action", {
         action: "publish",
         result: "error",
@@ -1354,7 +1355,7 @@ export function useLeaderboardProfileController({
       const optOutResults = await Promise.all(LEADERBOARD_PERIODS.map((period) => optOutLeaderboard(period)));
       const result = optOutResults.find((nextResult) => !nextResult.success) ?? optOutResults[0];
       if (!result.success) {
-        setLeaderboardActionError(result.error ?? "Unable to leave leaderboard");
+        setLeaderboardActionError(describeLeaderboardActionError(result.error, "leave", t));
         capturePostHogEvent("leaderboard_action", {
           action: "opt_out",
           result: "error",
@@ -1396,7 +1397,7 @@ export function useLeaderboardProfileController({
         profile_made_private: hidden.success,
       });
     } catch (nextError) {
-      setLeaderboardActionError(toErrorMessage(nextError));
+      setLeaderboardActionError(describeLeaderboardActionError(nextError, "leave", t));
       capturePostHogEvent("leaderboard_action", {
         action: "opt_out",
         result: "error",

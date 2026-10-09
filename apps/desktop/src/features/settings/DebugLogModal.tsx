@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 
 type DebugLogModalProps = {
   readonly text: string;
@@ -13,8 +14,9 @@ type DebugLogModalProps = {
 
 export function DebugLogModal({ text, note, onClose, onCopy, onDownload }: DebugLogModalProps) {
   useModalDismiss(onClose);
+  const overlayDismiss = useOverlayDismiss(onClose);
   return (
-    <div className="auth-modal__overlay debug-log-modal__overlay" onClick={onClose}>
+    <div className="auth-modal__overlay debug-log-modal__overlay" {...overlayDismiss}>
       <section
         className="auth-modal modal-shell debug-log-modal"
         data-modal-variant="workspace"

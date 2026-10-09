@@ -3,6 +3,7 @@ import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { DisplayLanguage } from "../localization/languagePreference";
 import { submitFeedback, type FeedbackAttachment } from "./feedbackService";
@@ -52,6 +53,13 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
   const dialogRef = useRef<HTMLElement | null>(null);
   useAnchoredDialog(dialogRef);
   const emailPrefilled = Boolean(initialEmail?.trim());
+  // A sent form has nothing left to lose; until then a draft survives a stray click.
+  const hasUnsavedInput = !isSent && (
+    message.trim().length > 0
+    || attachments.length > 0
+    || email.trim() !== (initialEmail?.trim() ?? "")
+  );
+  const overlayDismiss = useOverlayDismiss(onClose, { disabled: isSending, keepOpen: hasUnsavedInput });
 
   useEffect(() => {
     return () => revokeAllPreviewUrls(previewUrlsRef);
@@ -113,10 +121,6 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
     }
 
     setFormError(localizeFeedbackServiceError(result.error, effectiveLanguage, t));
-  }
-
-  function handleOverlayClick() {
-    if (!isSending) onClose();
   }
 
   function handleSendAnother() {
@@ -183,7 +187,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
   }
 
   return (
-    <div className="auth-modal__overlay" onClick={handleOverlayClick}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         ref={dialogRef}
         className="auth-modal modal-shell feedback-modal"

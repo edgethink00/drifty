@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { ActionLabel } from "../../components/ActionLabel";
 import { formatLocalizedDuration } from "../../lib/formatting";
 import { normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
@@ -121,6 +122,8 @@ export function LeaderboardView({
     [dailyProductivity],
   );
   const showSparkline = (previewLayout === "split-v2" || graphStyle !== "off") && sparklinePoints.length >= 2;
+  // A failed join/leave reads in the privacy line beside the button, so the board below never moves.
+  const showActionError = !isLoading && Boolean(actionError);
   const sparklineVariant: Exclude<LeaderboardGraphStyle, "off"> = graphStyle === "off" ? "default" : graphStyle;
   const last30FocusSeconds = (dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
   const localMetricsStatus = publicProfile?.localMetricsStatus ?? "ready";
@@ -276,7 +279,7 @@ export function LeaderboardView({
                         }}
                         disabled={isActionLoading || isLoading || !onOptOut}
                       >
-                        {isActionLoading ? t("leaderboard.leaving") : t("leaderboard.leave")}
+                        <ActionLabel busy={isActionLoading} busyLabel={t("leaderboard.leaving")}>{t("leaderboard.leave")}</ActionLabel>
                       </button>
                     ) : isCatchingUp ? (
                       <button
@@ -297,7 +300,7 @@ export function LeaderboardView({
                         onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
                         disabled={isActionLoading || isLoading || (isSignedIn ? !onOptIn : !onSignIn)}
                       >
-                        {isActionLoading ? t("leaderboard.joining") : t("leaderboard.join")}
+                        <ActionLabel busy={isActionLoading} busyLabel={t("leaderboard.joining")}>{t("leaderboard.join")}</ActionLabel>
                       </button>
                     )}
                   </div>
@@ -324,10 +327,15 @@ export function LeaderboardView({
                     ) : null}
                   </div>
                 </div>
-                <p id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
-                  {t("leaderboard.privacy")}
-                </p>
-                {!isLoading && actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
+                {showActionError ? (
+                  <p key="error" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note leaderboard-hero__privacy-note--error" role="alert">
+                    {actionError}
+                  </p>
+                ) : (
+                  <p key="privacy" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
+                    {t("leaderboard.privacy")}
+                  </p>
+                )}
                 {!isLoading && !isOptedIn && isCatchingUp && !actionError ? (
                   <p className="capture-recency" role="status">{t("leaderboard.catchingUpNotice")}</p>
                 ) : null}
@@ -572,7 +580,9 @@ export function LeaderboardView({
                       aria-describedby="leaderboard-participation-privacy"
                       disabled
                     >
-                      {isOptedIn ? t("leaderboard.leave") : t("leaderboard.join")}
+                      {isOptedIn
+                        ? <ActionLabel busy={false} busyLabel={t("leaderboard.leaving")}>{t("leaderboard.leave")}</ActionLabel>
+                        : <ActionLabel busy={false} busyLabel={t("leaderboard.joining")}>{t("leaderboard.join")}</ActionLabel>}
                     </button>
                   ) : isOptedIn ? (
                     <button
@@ -584,7 +594,7 @@ export function LeaderboardView({
                       }}
                       disabled={isActionLoading || !onOptOut}
                     >
-                      {isActionLoading ? t("leaderboard.leaving") : t("leaderboard.leave")}
+                      <ActionLabel busy={isActionLoading} busyLabel={t("leaderboard.leaving")}>{t("leaderboard.leave")}</ActionLabel>
                     </button>
                   ) : isCatchingUp ? (
                     <button
@@ -605,13 +615,19 @@ export function LeaderboardView({
                       onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
                       disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
                     >
-                      {isActionLoading ? t("leaderboard.joining") : t("leaderboard.join")}
+                      <ActionLabel busy={isActionLoading} busyLabel={t("leaderboard.joining")}>{t("leaderboard.join")}</ActionLabel>
                     </button>
                   )}
                 </div>
-                <p id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
-                  {t("leaderboard.privacy")}
-                </p>
+                {showActionError ? (
+                  <p key="error" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note leaderboard-hero__privacy-note--error" role="alert">
+                    {actionError}
+                  </p>
+                ) : (
+                  <p key="privacy" id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
+                    {t("leaderboard.privacy")}
+                  </p>
+                )}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
                 {isLoading ? (
@@ -667,7 +683,6 @@ export function LeaderboardView({
               </div>
             </div>
           </section>
-          {!isLoading && actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
           {!isLoading && !isOptedIn && isCatchingUp && !actionError ? (
             <p className="capture-recency" role="status">{t("leaderboard.catchingUpNotice")}</p>
           ) : null}
@@ -783,7 +798,9 @@ function HeroStat({
   return (
     <div className={["leaderboard-hero__focus-stat", className].filter(Boolean).join(" ")} style={{ display: "grid", gap: "0.4rem" }}>
       <span className="label-mono" style={{ fontSize: "0.56rem", color: accent ? "var(--accent-strong)" : undefined }}>{label}</span>
-      <strong style={{ fontSize: "1.5rem", fontWeight: 700, lineHeight: 1, color, whiteSpace: "nowrap" }}>
+      {/* The value scales down with its column (18cqi) instead of overflowing
+          the card at the narrowest window; it never grows past 1.5rem. */}
+      <strong style={{ fontSize: "min(1.5rem, 18cqi)", fontWeight: 700, lineHeight: 1, color, whiteSpace: "nowrap" }}>
         {loading ? (
           <span className="leaderboard-loading-shell__stat-value">
             <span className="leaderboard-loading-shell__bone" />

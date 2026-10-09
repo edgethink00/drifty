@@ -106,3 +106,33 @@
   font-size: 0.88rem;
   line-height: 1.5;
 }
+
+/* A request's result reads directly under the button that sent it. The form
+   column's gap is halved so the line belongs to that button, and the dialog
+   keeps its top edge (useAnchoredDialog), so only content below the button
+   moves when the line appears. */
+.auth-modal__feedback {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.auth-modal__feedback--error {
+  color: var(--warn);
+}
+
+.auth-modal__feedback--notice {
+  color: var(--accent-strong);
+}
+
+.auth-modal__form > .auth-modal__feedback {
+  margin-top: calc(var(--space-2) * -1);
+}
+
+.auth-modal__google + .auth-modal__feedback,
+.dc-onb-account__buttons > .auth-modal__feedback,
+.auth-modal > .modal-btn--block + .auth-modal__feedback {
+  margin-top: var(--space-2);
+}

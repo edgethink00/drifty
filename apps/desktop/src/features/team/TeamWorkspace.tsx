@@ -5,6 +5,7 @@ import { PageTabs, pageTabId } from "../../components/PageTabs";
 
 import type { AuthState } from "../auth/AuthContext";
 import { useCopyFeedback } from "../../lib/useCopyFeedback";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import TeamDashboardsView from "./TeamDashboardsView";
 import TeamProjectsView, { type TeamProjectDraft } from "./TeamProjectsView";
 import type { PendingTeamInvite } from "./teamInviteDeepLinks";
@@ -125,6 +126,17 @@ export function TeamWorkspace({
     refreshTeamData,
     selectTeam,
   } = controller;
+
+  // An outside click never closes a dialog mid-request or one holding typed input.
+  const inviteOverlayDismiss = useOverlayDismiss(() => setInviteOpen(false));
+  const settingsOverlayDismiss = useOverlayDismiss(() => setSettingsOpen(false), {
+    disabled: teamActionLoading,
+    keepOpen: deleteOpen && deleteName.trim().length > 0,
+  });
+  const addOverlayDismiss = useOverlayDismiss(() => setAddOpen(false), {
+    disabled: teamActionLoading,
+    keepOpen: (addTab === "create" ? teamName : inviteKey).trim().length > 0,
+  });
 
   // QA mock (dev-server-only): swaps in local fixture data so the surface can be
   // exercised without an account. Both hooks always run to keep hook order stable.
@@ -623,7 +635,7 @@ export function TeamWorkspace({
     const inviteUrl = activeInvite?.invite_url || "";
     const inviteCode = activeInvite?.invite_code || "";
     return (
-      <div className="auth-modal__overlay" onClick={() => setInviteOpen(false)}>
+      <div className="auth-modal__overlay" {...inviteOverlayDismiss}>
         <section
           className="auth-modal modal-shell profile-modal team-modal"
           data-modal-variant="standard"
@@ -695,7 +707,7 @@ export function TeamWorkspace({
 
   function renderSettingsModal() {
     return (
-      <div className="auth-modal__overlay" onClick={() => setSettingsOpen(false)}>
+      <div className="auth-modal__overlay" {...settingsOverlayDismiss}>
         <section
           className="auth-modal modal-shell profile-modal team-modal team-settings-modal"
           data-modal-variant="workspace"
@@ -928,7 +940,7 @@ export function TeamWorkspace({
 
   function renderAddModal() {
     return (
-      <div className="auth-modal__overlay" onClick={() => setAddOpen(false)}>
+      <div className="auth-modal__overlay" {...addOverlayDismiss}>
         <section
           className="auth-modal modal-shell profile-modal team-modal team-editor-modal"
           data-modal-variant="standard"

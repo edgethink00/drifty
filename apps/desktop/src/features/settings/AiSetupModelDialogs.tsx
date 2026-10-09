@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 
 export type AiModelOption = {
   readonly id: string;
@@ -35,8 +36,9 @@ export function OpenRouterModelDialog({
 }: OpenRouterModelDialogProps) {
   const { t } = useLocalization();
   useModalDismiss(onClose);
+  const overlayDismiss = useOverlayDismiss(onClose);
   return (
-    <div className="auth-modal__overlay" onClick={onClose}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="openrouter-model-picker-title" onClick={(event) => event.stopPropagation()}>
         <ModalCloseButton label={t("settings.ai.close")} onClick={onClose} />
         <div className="modal-head">

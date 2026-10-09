@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 
 /** Keep the setting brief; explain the upload before a device opts in. */
 export function DeviceSyncSetupModal({ mode, canEnable, onClose, onEnable }: {
@@ -10,12 +11,11 @@ export function DeviceSyncSetupModal({ mode, canEnable, onClose, onEnable }: {
   readonly onEnable: () => void;
 }) {
   const { t } = useLocalization();
+  const overlayDismiss = useOverlayDismiss(onClose);
   return createPortal(
     <ModalPresence onDismiss={onClose} explicitTabNavigation>
       {mode ? (
-        <div className="auth-modal__overlay" onClick={(event) => {
-          if (event.target === event.currentTarget) onClose();
-        }}>
+        <div className="auth-modal__overlay" {...overlayDismiss}>
           <section className="auth-modal modal-shell device-sync-setup-modal" data-modal-variant="compact"
             role="dialog" aria-modal="true" aria-labelledby="device-sync-setup-title"
             aria-describedby="device-sync-setup-description">

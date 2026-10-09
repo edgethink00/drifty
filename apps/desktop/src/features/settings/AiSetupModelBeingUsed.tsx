@@ -6,6 +6,7 @@ import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar"
 import { DRIFTY_CLOUD_MODEL_ID, driftyModelOptions, isSelectableManagedModel } from "./AiSetupDriftyModelOptions";
 import { DeleteManagedModelModal } from "./DeleteManagedModelModal";
 import { ModalPresence } from "../../components/ModalPresence";
+import { ActionLabel } from "../../components/ActionLabel";
 import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
@@ -226,7 +227,7 @@ export function AiSetupModelBeingUsed({
           disabled={connectionTestDisabled}
           onClick={() => void onTestConnection()}
         >
-          {connectionTestRunning ? t("settings.ai.testing") : t("settings.ai.testConnection")}
+          <ActionLabel busy={connectionTestRunning} busyLabel={t("settings.ai.testing")}>{t("settings.ai.testConnection")}</ActionLabel>
         </button>
       }
       tone={connectionStatus.tone}

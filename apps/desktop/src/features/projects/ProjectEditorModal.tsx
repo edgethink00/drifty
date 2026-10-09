@@ -6,6 +6,7 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export type ProjectSaveResult = boolean | { readonly saved: false; readonly error: string };
@@ -51,6 +52,9 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   const effectiveColor = colorTouched ? color : suggestedColor;
   const isBusy = busy || saving;
   const canSave = name.trim().length > 0 && !isBusy;
+  const hasUnsavedInput = name !== (project?.name ?? "")
+    || description !== (project?.description ?? "")
+    || (isEditing ? color !== (project?.color || PROJECT_COLOR_SWATCHES[0].color) : colorTouched);
 
   useModalDismiss(onClose, { disabled: isBusy });
   useAnchoredDialog(dialogRef);
@@ -91,9 +95,10 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
     if (isBusy) return;
     onClose();
   };
+  const overlayDismiss = useOverlayDismiss(requestClose, { disabled: isBusy, keepOpen: hasUnsavedInput });
 
   return (
-    <div className="auth-modal__overlay" onClick={requestClose}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         ref={dialogRef}
         className="auth-modal modal-shell project-editor-modal"

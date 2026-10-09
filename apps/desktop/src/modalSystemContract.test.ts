@@ -265,3 +265,21 @@ describe("modal system v2 contract", () => {
     expect(planStyles).toMatch(/@media \(max-width: 1080px\)\s*\{[^}]*\.dashboard-ai-recovery__plans \.individual-plan-cards[^}]*grid-template-columns:\s*1fr;/);
   });
 });
+
+describe("modal overlays", () => {
+  /** A click whose press began inside a dialog targets the overlay when the
+   * release lands outside it, so a bare overlay onClick closed dialogs while a
+   * field's text was being selected and dropped what had been typed. */
+  const featuresDir = fileURLToPath(new URL("./features/", import.meta.url));
+  const sources = (readdirSync(featuresDir, { recursive: true }) as string[])
+    .filter((path) => path.endsWith(".tsx") && !path.endsWith(".test.tsx"))
+    .map((path) => ({ path, text: readFileSync(featuresDir + path, "utf8") }));
+
+  it("dismiss through useOverlayDismiss instead of a bare onClick", () => {
+    const bare = sources
+      .filter(({ text }) => /className="(?:auth-modal__overlay|cmd-overlay|account-plan-overlay)[^"]*"[^>]*\bonClick=/.test(text))
+      .map(({ path }) => path);
+    expect(bare).toEqual([]);
+    expect(sources.filter(({ text }) => text.includes("useOverlayDismiss(")).length).toBeGreaterThanOrEqual(19);
+  });
+});

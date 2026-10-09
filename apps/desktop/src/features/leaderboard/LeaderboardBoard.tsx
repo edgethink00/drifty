@@ -309,10 +309,17 @@ function LeaderboardListHeader({ activePeriod, isSplitPreview, status }: { reado
     );
   }
   return (
-    <div className={`leaderboard-list-head${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`} aria-hidden="true">
+    // Mirrors a row: name, the two value tracks, and an invisible chevron, so
+    // every title sits over its values. Daily leaves the average track empty
+    // rather than collapsing it, which keeps Focus time in place when the
+    // period changes.
+    <div className={`leaderboard-list-head leaderboard-list-head--aligned${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`} aria-hidden="true">
       <span>{t("leaderboard.participant")}</span>
-      <span>{t("leaderboard.focusTime")}</span>
-      {activePeriod !== "daily" ? <span>{t("leaderboard.dailyAverage")}</span> : null}
+      <span className="leaderboard-list-head__columns">
+        <span>{t("leaderboard.focusTime")}</span>
+        <span>{activePeriod !== "daily" ? t("leaderboard.dailyAverage") : null}</span>
+      </span>
+      <span className="leaderboard-row__chevron leaderboard-list-head__chevron">›</span>
     </div>
   );
 }

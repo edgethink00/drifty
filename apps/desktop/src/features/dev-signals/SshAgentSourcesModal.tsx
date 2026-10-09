@@ -9,6 +9,7 @@ import type {
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import {
@@ -204,9 +205,10 @@ export function SshAgentSourcesModal({
   const requestClose = () => {
     if (!isBusy) onClose();
   };
+  const overlayDismiss = useOverlayDismiss(requestClose, { disabled: isBusy });
 
   return (
-    <div className="auth-modal__overlay agents-ssh-modal__overlay" onClick={requestClose}>
+    <div className="auth-modal__overlay agents-ssh-modal__overlay" {...overlayDismiss}>
       <section
         ref={dialogRef}
         className="auth-modal modal-shell agents-ssh-modal"

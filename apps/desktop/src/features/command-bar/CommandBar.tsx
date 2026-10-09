@@ -3,6 +3,7 @@ import { type TabId } from "../../app/navigation";
 import { accessibilityClient } from "../../lib/api/accessibilityClient";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export interface CommandBarProps {
@@ -184,6 +185,7 @@ export function CommandBar({
 
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-command-search]" });
   useModalDismiss(onDismiss);
+  const overlayDismiss = useOverlayDismiss(onDismiss);
 
   const allItems = useMemo<readonly CommandItem[]>(() => {
     const items: CommandItem[] = [
@@ -437,7 +439,7 @@ export function CommandBar({
   };
 
   return (
-    <div className="cmd-overlay" onClick={onDismiss}>
+    <div className="cmd-overlay" {...overlayDismiss}>
       <div
         ref={dialogRef}
         aria-label={t("command.palette")}

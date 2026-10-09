@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import type { ShareCardData, ShareWeekCardData } from "./shareCard";
 import {
@@ -141,6 +142,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   }), [card, liveRankState.daily, liveRankState.weekly]);
 
   useModalDismiss(onClose);
+  const overlayDismiss = useOverlayDismiss(onClose);
   const dialogRef = useRef<HTMLElement | null>(null);
   useAnchoredDialog(dialogRef);
 
@@ -251,7 +253,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
 
   return (
     <>
-      <div className="auth-modal__overlay" onClick={onClose}>
+      <div className="auth-modal__overlay" {...overlayDismiss}>
         <section
           ref={dialogRef}
           className="auth-modal share-card-modal"

@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "./AuthContext";
 import { AUTH_PASSWORD_POLICY, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
+import { describeAuthError } from "./authErrorMessages";
 import { GoogleMark } from "../onboarding/components/GoogleMark";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useLocalization } from "../localization/LocalizationContext";
 import "./AuthModal.css";
 
 type AuthMode = "sign-in" | "sign-up";
 type AuthView = "credentials" | "forgot-password";
+/** The control whose request produced the message; the line renders right under it. */
+type AuthFeedbackSource = "email" | "google" | "website" | "recovery" | "reset";
+type AuthFeedback = {
+  readonly tone: "error" | "notice";
+  readonly source: AuthFeedbackSource;
+  readonly message: string;
+  readonly detail?: string | null;
+};
 
 /* The reveal control sits inside the field, so it is drawn rather than
    labelled: a text button there reads as content typed into an empty box, and
@@ -71,8 +81,7 @@ export function AuthModal({
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [recoveryPasswordVisible, setRecoveryPasswordVisible] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<AuthFeedback | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [isWebsiteSubmitting, setIsWebsiteSubmitting] = useState(false);
@@ -80,13 +89,13 @@ export function AuthModal({
   const [isConnectionRetrying, setIsConnectionRetrying] = useState(false);
   const [promoEmailOpen, setPromoEmailOpen] = useState(false);
   const promoOnboardingDialogRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const inlineRef = useRef<HTMLElement>(null);
   const isRecoveryAwaiting = passwordRecoveryState?.phase === "awaiting-new-password";
   const isRecoveryView = authView === "forgot-password" || isRecoveryAwaiting;
   useEffect(() => {
     if (!isRecoveryAwaiting) return;
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
     setPassword("");
     setConfirmPassword("");
     setPasswordVisible(false);
@@ -99,6 +108,11 @@ export function AuthModal({
   };
   useModalDismiss(requestClose, { disabled: !onClose || isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || isRecoverySubmitting });
   useModalFocusTrap(promoOnboardingDialogRef, { initialFocusSelector: ".dc-onb-account__google" });
+  // A failure line under the pressed button grows the dialog downward only.
+  useAnchoredDialog(dialogRef);
+  const fail = (source: AuthFeedbackSource, message: string, detail: string | null = null) => {
+    setFeedback({ tone: "error", source, message, detail });
+  };
   useEffect(() => {
     if (presentation !== "inline") return;
     inlineRef.current?.querySelector<HTMLInputElement>("input:not([disabled])")?.focus();
@@ -130,75 +144,79 @@ export function AuthModal({
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
 
     const nextEmail = email.trim();
     if (!nextEmail) {
-      setError(t("auth.modal.emailRequired"));
+      fail("email", t("auth.modal.emailRequired"));
       return;
     }
 
     if (!password) {
-      setError(t("auth.modal.passwordRequired"));
+      fail("email", t("auth.modal.passwordRequired"));
       return;
     }
 
     if (authMode === "sign-up") {
       const passwordError = validateAuthPasswordForSignUp(password);
       if (passwordError) {
-        setError(passwordError.message);
+        fail("email", t("auth.modal.error.weakPassword", { count: AUTH_PASSWORD_POLICY.minLength }));
         return;
       }
     }
 
     setIsSubmitting(true);
+    const emailFallback = t(authMode === "sign-up" ? "auth.modal.error.signUpFailed" : "auth.modal.error.signInFailed");
     try {
       const result = authMode === "sign-up"
         ? await signUpWithEmail(nextEmail, password)
         : await signInWithEmail(nextEmail, password);
       const { error } = result;
       if (error) {
-        setError(error.message);
+        const described = describeAuthError(error, t, emailFallback);
+        fail("email", described.message, described.detail);
         return;
       }
       if ("needsEmailConfirmation" in result && result.needsEmailConfirmation) {
-        setNotice(t("auth.modal.confirmation"));
+        setFeedback({ tone: "notice", source: "email", message: t("auth.modal.confirmation") });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.modal.unexpectedError"));
+      const described = describeAuthError(err, t, emailFallback);
+      fail("email", described.message, described.detail);
     } finally {
       setIsSubmitting(false);
     }
   }
 
   async function handleGoogleSignIn() {
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
     setIsGoogleSubmitting(true);
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        setError(error.message);
+        const described = describeAuthError(error, t, t("auth.modal.googleStartError"));
+        fail("google", described.message, described.detail);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.modal.googleStartError"));
+      const described = describeAuthError(err, t, t("auth.modal.googleStartError"));
+      fail("google", described.message, described.detail);
     } finally {
       setIsGoogleSubmitting(false);
     }
   }
 
   async function handleWebsiteSignIn() {
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
     setIsWebsiteSubmitting(true);
     try {
       const { error } = await signInWithWebsite();
       if (error) {
-        setError(error.message);
+        const described = describeAuthError(error, t, t("auth.modal.unexpectedError"));
+        fail("website", described.message, described.detail);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.modal.unexpectedError"));
+      const described = describeAuthError(err, t, t("auth.modal.unexpectedError"));
+      fail("website", described.message, described.detail);
     } finally {
       setIsWebsiteSubmitting(false);
     }
@@ -206,15 +224,14 @@ export function AuthModal({
 
   async function handlePasswordRecoveryRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
     const nextEmail = email.trim();
     if (!nextEmail) {
-      setError(t("auth.modal.emailRequired"));
+      fail("recovery", t("auth.modal.emailRequired"));
       return;
     }
     if (!requestPasswordReset) {
-      setError(t("auth.modal.recoverySendError"));
+      fail("recovery", t("auth.modal.recoverySendError"));
       return;
     }
 
@@ -222,12 +239,12 @@ export function AuthModal({
     try {
       const { error: recoveryError } = await requestPasswordReset(nextEmail);
       if (recoveryError) {
-        setError(t("auth.modal.recoverySendError"));
+        fail("recovery", t("auth.modal.recoverySendError"));
         return;
       }
-      setNotice(t("auth.modal.recoveryEmailSent"));
+      setFeedback({ tone: "notice", source: "recovery", message: t("auth.modal.recoveryEmailSent") });
     } catch {
-      setError(t("auth.modal.recoverySendError"));
+      fail("recovery", t("auth.modal.recoverySendError"));
     } finally {
       setIsRecoverySubmitting(false);
     }
@@ -235,27 +252,26 @@ export function AuthModal({
 
   async function handlePasswordUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
     if (!recoveryPassword) {
-      setError(t("auth.modal.passwordRequired"));
+      fail("reset", t("auth.modal.passwordRequired"));
       return;
     }
     if (!confirmPassword) {
-      setError(t("auth.modal.confirmPasswordRequired"));
+      fail("reset", t("auth.modal.confirmPasswordRequired"));
       return;
     }
     if (recoveryPassword !== confirmPassword) {
-      setError(t("auth.modal.passwordMismatch"));
+      fail("reset", t("auth.modal.passwordMismatch"));
       return;
     }
     const passwordError = validateAuthPasswordForSignUp(recoveryPassword);
     if (passwordError) {
-      setError(passwordError.message);
+      fail("reset", t("auth.modal.error.weakPassword", { count: AUTH_PASSWORD_POLICY.minLength }));
       return;
     }
     if (!updatePassword) {
-      setError(t("auth.modal.resetPasswordError"));
+      fail("reset", t("auth.modal.resetPasswordError"));
       return;
     }
 
@@ -263,17 +279,17 @@ export function AuthModal({
     try {
       const { error: updateError } = await updatePassword(recoveryPassword);
       if (updateError) {
-        setError(t("auth.modal.resetPasswordError"));
+        fail("reset", t("auth.modal.resetPasswordError"));
       }
     } catch {
-      setError(t("auth.modal.resetPasswordError"));
+      fail("reset", t("auth.modal.resetPasswordError"));
     } finally {
       setIsRecoverySubmitting(false);
     }
   }
 
   async function handleConnectionRetry() {
-    setError(null);
+    setFeedback(null);
     setIsConnectionRetrying(true);
     try {
       await retryCloudConnection?.();
@@ -315,17 +331,31 @@ export function AuthModal({
     ? t("auth.modal.promoDescription")
     : isSignUp ? t("auth.modal.signUpDescription") : null;
 
-  const displayedError = passwordRecoveryState?.errorKind === "identity-mismatch"
+  const activeFormSource: AuthFeedbackSource = isRecoveryAwaiting ? "reset" : authView === "forgot-password" ? "recovery" : "email";
+  const recoveryStateMessage = passwordRecoveryState?.errorKind === "identity-mismatch"
     ? t("auth.modal.recoveryIdentityMismatch")
     : isRecoveryView && callbackStatus?.errorCode === "password-recovery-cancel-failed"
       ? t("auth.modal.recoveryCancelCleanupError")
-      : error;
-  const errorNotice = displayedError ? (
-    <div className="auth-modal__error" role="alert">{displayedError}</div>
-  ) : null;
-  const successNotice = notice && !isRecoveryAwaiting ? (
-    <div className="auth-modal__success" role="status">{notice}</div>
-  ) : null;
+      : null;
+  const displayedFeedback: AuthFeedback | null = recoveryStateMessage
+    ? { tone: "error", source: activeFormSource, message: recoveryStateMessage }
+    : feedback && !(feedback.tone === "notice" && isRecoveryAwaiting) ? feedback : null;
+  // Results read beside the button that asked for them, so nothing above that
+  // button moves when a request settles.
+  const feedbackLine = (source: AuthFeedbackSource) => {
+    if (displayedFeedback?.source !== source) return null;
+    const { tone, message, detail } = displayedFeedback;
+    return (
+      <p
+        className={`auth-modal__feedback auth-modal__feedback--${tone}`}
+        role={tone === "error" ? "alert" : "status"}
+        title={detail ?? undefined}
+      >
+        {message}
+        {detail ? <span className="sr-only"> {detail}</span> : null}
+      </p>
+    );
+  };
   const callbackNotice = callbackStatus?.phase === "failed" ? (
     <div className="auth-modal__callback-notice" role="status">
       <span>{callbackStatus.errorCode === "password-recovery-cancel-failed"
@@ -431,8 +461,7 @@ export function AuthModal({
               className="auth-modal__text-action"
               onClick={() => {
                 setAuthView("forgot-password");
-                setError(null);
-                setNotice(null);
+                setFeedback(null);
               }}
               disabled={isBusy}
             >
@@ -447,6 +476,7 @@ export function AuthModal({
         >
           {isSubmitting ? (isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")) : submitLabel}
         </button>
+        {feedbackLine("email")}
       </form>
 
       <p className="auth-modal__mode-switch">
@@ -455,8 +485,7 @@ export function AuthModal({
           type="button"
           onClick={() => {
             setAuthMode(isSignUp ? "sign-in" : "sign-up");
-            setError(null);
-            setNotice(null);
+            setFeedback(null);
           }}
           disabled={isBusy}
         >
@@ -488,14 +517,14 @@ export function AuthModal({
         >
           {isRecoverySubmitting ? t("auth.modal.recoverySending") : t("auth.modal.recoverySend")}
         </button>
+        {feedbackLine("recovery")}
       </form>
       <p className="auth-modal__mode-switch">
         <button
           type="button"
           onClick={() => {
             setAuthView("credentials");
-            setError(null);
-            setNotice(null);
+            setFeedback(null);
           }}
           disabled={isBusy}
         >
@@ -527,6 +556,7 @@ export function AuthModal({
       >
         {isRecoverySubmitting ? t("auth.modal.resettingPassword") : t("auth.modal.resetPassword")}
       </button>
+      {feedbackLine("reset")}
     </form>
   );
   const activeEmailForm = isRecoveryAwaiting
@@ -547,8 +577,6 @@ export function AuthModal({
       <section ref={inlineRef} className="auth-inline" aria-labelledby="auth-inline-title" data-auth-presentation="inline">
         <h2 id="auth-inline-title" className="auth-inline__title">{title}</h2>
         {description ? <p className="auth-inline__description">{description}</p> : null}
-        {errorNotice}
-        {successNotice}
         {isRecoveryView ? null : callbackNotice}
         {offlineNotice}
         {activeEmailForm}
@@ -577,8 +605,6 @@ export function AuthModal({
                   <h1 className="dc-onb-account__title" id="promo-auth-title">{title}</h1>
                   <p className="dc-onb-account__copy">{description}</p>
 
-                  {errorNotice}
-                  {successNotice}
                   {isRecoveryView ? null : callbackNotice}
                   {offlineNotice}
 
@@ -591,6 +617,7 @@ export function AuthModal({
                     >
                       {isWebsiteSubmitting ? t("auth.modal.opening") : t("auth.modal.promoContinueBrowser")}
                     </button>
+                    {feedbackLine("website")}
                     <p className="promo-auth-screen__browser-hint">{t("auth.modal.promoContinueBrowserHint")}</p>
 
                     <div className="dc-onb-divider" aria-hidden="true">
@@ -608,6 +635,7 @@ export function AuthModal({
                         {googleButtonLabel}
                       </button>
                     ) : null}
+                    {feedbackLine("google")}
 
                     <button
                       type="button"
@@ -649,7 +677,7 @@ export function AuthModal({
 
   return (
     <div className="auth-modal__overlay">
-      <div className="auth-modal modal-shell" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <div ref={dialogRef} className="auth-modal modal-shell" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
         {onClose ? <ModalCloseButton label={t("auth.modal.close")} onClick={requestClose} /> : null}
         <div className="modal-head">
           <div className="modal-head__copy">
@@ -658,8 +686,6 @@ export function AuthModal({
           </div>
         </div>
 
-        {errorNotice}
-        {successNotice}
         {isRecoveryView ? null : callbackNotice}
         {offlineNotice}
 
@@ -673,6 +699,7 @@ export function AuthModal({
             >
               {isWebsiteSubmitting ? t("auth.modal.opening") : t("auth.modal.promoContinueBrowser")}
             </button>
+            {feedbackLine("website")}
             <p className="auth-modal__mode-switch auth-modal__promo-browser-hint">
               <span>{t("auth.modal.promoContinueBrowserHint")}</span>
             </p>
@@ -695,6 +722,7 @@ export function AuthModal({
               {isGoogleHandoffInFlight ? <span className="dc-onb-spinner" aria-hidden="true" /> : <GoogleMark />}
               {googleButtonLabel}
             </button>
+            {feedbackLine("google")}
           </>
         ) : null}
 

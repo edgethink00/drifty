@@ -3986,3 +3986,56 @@
     padding-block: 8px !important;
   }
 }
+
+/* Column titles share the rows' grid: same tracks, gap and inline padding, and
+   an invisible chevron in the trailing track. The rows are the reference; this
+   rule only mirrors them (.leaderboard-board-block .leaderboard-row__profile-button
+   and the 640px padding step above). */
+.leaderboard-board-block .leaderboard-list-head--aligned,
+.leaderboard-board-block .leaderboard-list-head--aligned.leaderboard-list-head--daily {
+  grid-template-columns: minmax(0, 1fr) minmax(12.5rem, 0.34fr) auto;
+  gap: var(--space-2);
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+
+.leaderboard-list-head--aligned .leaderboard-list-head__columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(5.25rem, 1fr));
+  gap: var(--space-2);
+  text-align: right;
+}
+
+.leaderboard-list-head__chevron {
+  visibility: hidden;
+}
+
+@media (max-width: 640px) {
+  .leaderboard-board-block .leaderboard-list-head--aligned,
+  .leaderboard-board-block .leaderboard-list-head--aligned.leaderboard-list-head--daily {
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+  }
+}
+
+/* A failed join or leave reads in the privacy line beside the button. The line
+   keeps the button's height so one line stays centered on it, and a longer
+   message grows downward without moving the button. */
+.leaderboard-hero__participation-group {
+  align-items: flex-start;
+}
+
+.leaderboard-hero__privacy-note {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+}
+
+/* .leaderboard-hero p sets the soft text colour, so the error needs the extra class. */
+.leaderboard-hero .leaderboard-hero__privacy-note--error {
+  color: var(--warn);
+}
+
+.leaderboard-hero__totals-row > .leaderboard-hero__focus-stat {
+  container-type: inline-size;
+}

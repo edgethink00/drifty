@@ -86,14 +86,19 @@ export function ModelBeingUsedCard({
             onChange={onModelChange}
           />
         </div>
+        {/* The status line always holds one line of space, so a connection
+            test's result fills it instead of pushing the sections below. */}
         {statusMessage ? (
           <p
+            key="message"
             className={`ai-setup-current-model__status${statusMessageKind ? ` is-${statusMessageKind}` : ""}`}
             role={statusMessageKind === "error" ? "alert" : "status"}
           >
             {statusMessage}
           </p>
-        ) : null}
+        ) : (
+          <p key="empty" className="ai-setup-current-model__status" aria-hidden="true" />
+        )}
       </div>
     </section>
   );

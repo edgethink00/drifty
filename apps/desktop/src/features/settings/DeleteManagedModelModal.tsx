@@ -1,4 +1,5 @@
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -24,9 +25,10 @@ export function DeleteManagedModelModal({ modelLabel, deleting, onCancel, onConf
   const { t } = useLocalization();
 
   useModalDismiss(onCancel, { disabled: deleting });
+  const overlayDismiss = useOverlayDismiss(onCancel, { disabled: deleting });
 
   return (
-    <div className="auth-modal__overlay" onClick={() => (deleting ? undefined : onCancel())}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         className="auth-modal modal-shell ai-delete-model-modal"
         data-modal-variant="compact"

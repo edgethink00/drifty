@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { MouseEvent } from "react";
 import { shiftIsoDate } from "@drifty/domain";
 import type { DeleteHistoryRangeResult, DeleteHistoryRangeScopes } from "@drifty/domain";
 
@@ -10,6 +9,7 @@ import type { SettingsSelectOption } from "./SettingsSelect";
 import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import "./DeleteHistoryModal.css";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -67,6 +67,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
   }, []);
 
   useModalDismiss(onClose, { disabled: deleting });
+  const overlayDismiss = useOverlayDismiss(onClose, { disabled: deleting });
   useAnchoredDialog(dialogRef);
 
   useEffect(() => {
@@ -80,10 +81,6 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
 
   const canDelete = Boolean(bounds) && !deleting && !deletedResult;
   const needsArm = preset === "all";
-
-  const handleOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget && !deleting) onClose();
-  };
 
   const handleDelete = async () => {
     if (!bounds || !canDelete || requestInFlight.current) return;
@@ -138,7 +135,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
   };
 
   return (
-    <div className="auth-modal__overlay" onClick={handleOverlayClick}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         ref={dialogRef}
         aria-labelledby="delete-history-modal-title"

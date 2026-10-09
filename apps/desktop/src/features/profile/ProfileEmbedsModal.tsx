@@ -15,6 +15,7 @@ import { buildEmbedGroups, SnippetCopyRow, summarizeDailyProductivity } from "./
 import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -72,6 +73,7 @@ export function ProfileEmbedsModal({
   }, [activeFormat, embedTheme, cardRange, publicId, isProfilePublic, card.enabled, clearCopied]);
 
   useModalDismiss(onClose);
+  const overlayDismiss = useOverlayDismiss(onClose);
   useAnchoredDialog(dialogRef);
 
   const cardLocked = card.enabled !== true || !isProfilePublic;
@@ -146,7 +148,7 @@ export function ProfileEmbedsModal({
   const copyButtonClassName = "modal-btn modal-btn--secondary";
 
   return (
-    <div className="auth-modal__overlay" onClick={onClose}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         ref={dialogRef}
         className="auth-modal modal-shell profile-modal profile-embeds-modal"

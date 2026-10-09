@@ -2,6 +2,7 @@ import { useLocalization, type DisplayLanguage } from "../localization/Localizat
 import { useEffect, useId, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import type { UpdatePolicy } from "./updatePolicy";
 import "./AvailableUpdateDialog.css";
@@ -169,10 +170,11 @@ function WindowsUpdatePrompt({ version, message, error, onDismiss, onInstall }: 
   const titleId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   useModalDismiss(onDismiss);
+  const overlayDismiss = useOverlayDismiss(onDismiss);
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".windows-update-prompt__later" });
 
   return (
-    <div className="auth-modal__overlay" onClick={onDismiss}>
+    <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         ref={dialogRef}
         className="auth-modal modal-shell windows-update-prompt"

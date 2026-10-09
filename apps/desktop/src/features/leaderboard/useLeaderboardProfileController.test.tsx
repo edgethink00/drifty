@@ -352,8 +352,10 @@ describe("useLeaderboardProfileController - assessment and service error separat
   });
 
   it("keeps a real publication failure through quiet waits and assessment recovery", async () => {
-    const message = "Server publication limit reached";
-    vi.mocked(publishOwnFocusTotal).mockResolvedValue({ success: false, error: message });
+    // The service's English wording becomes one translated line; what matters
+    // here is that the failure outlives the quiet waits around it.
+    const message = "Couldn't join the leaderboard. Try again.";
+    vi.mocked(publishOwnFocusTotal).mockResolvedValue({ success: false, error: "Server publication limit reached" });
     const { result, rerender } = renderHook(({ ready }) => useLeaderboardProfileController({
       ...defaultProps(), classificationAssessmentReady: ready,
       classificationAvailabilityState: ready ? "ready" : "cloud_locked",
