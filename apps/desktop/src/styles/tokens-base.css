@@ -653,8 +653,13 @@ button {
 /* The hover lift skips disabled buttons here instead of being undone with
    transform: none on :disabled. A blanket reset also dropped the translate
    that positions some buttons (the share card's stage arrows moved 19px
-   while an export was pending). */
-button:hover:not(:disabled) { transform: translateY(-1px); }
+   while an export was pending).
+   :where() keeps this rule at the specificity of plain button:hover (0,1,1).
+   A bare :not(:disabled) raises it to (0,2,1), which beats every one-class
+   component hover rule: the macOS sidebar toggle then lost the translateX
+   that places it, jumped out from under the cursor and ignored clicks, and
+   rules that opt out of the lift with transform: none stopped working. */
+button:hover:where(:not(:disabled)) { transform: translateY(-1px); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 input, textarea { color: inherit; }
 

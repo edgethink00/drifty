@@ -12,6 +12,7 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf
 const tokens = read("./tokens-base.css");
 const actionLabel = read("../components/action-label.css");
 const shareCard = read("../features/share/share-card.css");
+const appShell = read("./app-shell.css");
 
 function ruleBody(source: string, selector: string): string {
   const start = source.indexOf(selector);
@@ -26,9 +27,22 @@ describe("pending and failed actions keep their place", () => {
     // button:disabled { transform: none } also dropped the translateY(-50%)
     // that centers the share card's stage arrows, so they fell 19px while an
     // export was pending.
-    expect(tokens).toContain("button:hover:not(:disabled) { transform: translateY(-1px); }");
+    expect(tokens).toContain("button:hover:where(:not(:disabled)) { transform: translateY(-1px); }");
     expect(ruleBody(tokens, "button:disabled {")).not.toContain("transform");
     expect(ruleBody(shareCard, ".share-card-stage__arrow {")).toContain("transform: translateY(-50%);");
+  });
+
+  it("keeps the hover lift below one-class component hover rules", () => {
+    // A bare :not(:disabled) made the lift (0,2,1) in 1.12.2. It then beat
+    // one-class hover rules such as .window-sidebar-toggle:hover (0,2,0):
+    // the macOS sidebar toggle lost the translateX that places it and the
+    // share card arrows lost their translateY(-50%), so both slid out from
+    // under the cursor and ignored clicks.
+    const lifts = [...tokens.matchAll(/^([^{}\n]*button[^{}\n]*:hover[^{}\n]*)\{[^}]*translateY\(-1px\)/gm)].map(match => match[1].trim());
+    expect(lifts).toHaveLength(1);
+    expect(lifts[0].replace(/:where\([^)]*\)+/g, "")).toBe("button:hover");
+    expect(ruleBody(appShell, ".window-sidebar-toggle:hover {")).toContain("transform: translateX(var(--window-sidebar-toggle-shift));");
+    expect(ruleBody(shareCard, ".share-card-stage__arrow:hover {")).toContain("transform: translateY(-50%) scale(1.05);");
   });
 
   it("stacks every button label in one grid cell so the busy state cannot resize it", () => {
