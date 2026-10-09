@@ -38,37 +38,46 @@ export type PersistedAnalysisAiSetupState = Omit<
 
 export const ANALYSIS_AI_SETUP_STORAGE_KEY = "drifty.analysisAiSetup.v1";
 
-/** Eval-backed default: GPT-5 mini had 0 false corrections at ~$0.01/day. */
-export const DEFAULT_ANALYSIS_MODEL = "openai/gpt-5-mini";
+/**
+ * Eval-backed default (scripts/eval-project-pass, 2026-10-09): GPT-6 Luna passed
+ * every gate in both runs — 0 false corrections, 100% JSON, 100%/97% assignment —
+ * at about one fifth of GPT-5 mini's cost and one third of its latency.
+ */
+export const DEFAULT_ANALYSIS_MODEL = "openai/gpt-6-luna";
+/** The default persisted by builds before 2026-10; only used to recognise the legacy fingerprint. */
+const LEGACY_DEFAULT_ANALYSIS_MODEL = "openai/gpt-5-mini";
 
 /** Direct-key defaults use the bare (non OpenRouter-prefixed) model ids. */
 export const DEFAULT_ANALYSIS_OPENAI_MODEL = "gpt-5-mini";
 export const DEFAULT_ANALYSIS_ANTHROPIC_MODEL = "claude-sonnet-5";
 
 export const ANALYSIS_RECOMMENDED_MODELS = [
-  { id: "openai/gpt-5-mini", label: "GPT-5 mini", detail: "Recommended — 0 false corrections, ~$0.01/day", supportsZdr: true, badges: ["Default", "ZDR"] },
+  { id: "openai/gpt-6-luna", label: "GPT-6 Luna", detail: "Recommended — 0 false corrections, ~$0.001/day", supportsZdr: true, badges: ["Default", "ZDR"] },
+  { id: "openai/gpt-5-mini", label: "GPT-5 mini", detail: "Previous default — same assignment quality, ~5× the cost", supportsZdr: true, badges: ["ZDR"] },
   { id: "openai/gpt-5", label: "GPT-5", detail: "Stronger corrections — higher cost", supportsZdr: true, badges: ["ZDR"] },
-  { id: "openai/gpt-5-nano", label: "GPT-5 nano", detail: "Smallest/cheapest GPT — verify correction quality", supportsZdr: true, badges: ["ZDR"] },
   { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5", detail: "Premium — same safety, higher cost", supportsZdr: true, badges: ["ZDR"] },
-  { id: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5", detail: "Fast, low-cost Claude", supportsZdr: true, badges: ["ZDR"] },
+  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", detail: "Conservative — 0 false corrections, assigns less time to projects", supportsZdr: true, badges: ["ZDR"] },
   { id: "google/gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", detail: "Cheapest frontier — verify correction quality", supportsZdr: true, badges: ["ZDR"] },
 ] as const satisfies readonly OpenRouterModelMetadata[];
 
 /** Direct-key model suggestions (bare ids) for the OpenAI / Anthropic cards. */
-export const ANALYSIS_OPENAI_MODEL_SUGGESTIONS = ["gpt-5-mini", "gpt-5", "gpt-5-nano"] as const;
+export const ANALYSIS_OPENAI_MODEL_SUGGESTIONS = ["gpt-5-mini", "gpt-5"] as const;
 // Anthropic API aliases use dashes ("claude-haiku-4-5"); the dotted form is
 // OpenRouter's slug convention and is NOT a valid Anthropic API id.
-export const ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS = ["claude-sonnet-5", "claude-haiku-4-5"] as const;
+export const ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS = ["claude-sonnet-5", "claude-haiku-5-5"] as const;
 
 /**
  * Human display names for known model ids (both bare and OpenRouter-prefixed),
  * so the UI shows one consistent casing ("GPT-5 mini") instead of raw ids.
  */
 const ANALYSIS_MODEL_DISPLAY_LABELS: Readonly<Record<string, string>> = {
+  "gpt-6-luna": "GPT-6 Luna",
   "gpt-5-mini": "GPT-5 mini",
   "gpt-5": "GPT-5",
   "gpt-5-nano": "GPT-5 nano",
   "claude-sonnet-5": "Claude Sonnet 5",
+  "claude-haiku-5.5": "Claude Haiku 5.5",
+  "claude-haiku-5-5": "Claude Haiku 5.5",
   "claude-haiku-4.5": "Claude Haiku 4.5",
   "claude-haiku-4-5": "Claude Haiku 4.5",
   "gemini-3.1-flash-lite": "Gemini 3.1 Flash Lite",
@@ -151,7 +160,7 @@ export function isLegacyDefaultAnalysisSetup(setup: AnalysisAiSetupState): boole
   return (
     setup.provider === "openai" &&
     setup.openaiModel === DEFAULT_ANALYSIS_OPENAI_MODEL &&
-    setup.openRouterModel === DEFAULT_ANALYSIS_MODEL &&
+    setup.openRouterModel === LEGACY_DEFAULT_ANALYSIS_MODEL &&
     setup.openRouterFallbackModels.length === 0 &&
     setup.anthropicModel === DEFAULT_ANALYSIS_ANTHROPIC_MODEL &&
     setup.selfHostedModel === DEFAULT_ANALYSIS_AI_SETUP.selfHostedModel &&

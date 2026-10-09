@@ -90,7 +90,7 @@ interface ProjectPassChunkPlan {
   readonly afterContextWindows: ProjectPassAnalysisWindow[];
 }
 
-function planProjectPassChunks(
+export function planProjectPassChunks(
   windows: ProjectPassAnalysisWindow[],
   maxWindows = PROJECT_PASS_MAX_CHUNK_WINDOWS,
   contextWindowOverlap = PROJECT_PASS_CONTEXT_WINDOW_OVERLAP,

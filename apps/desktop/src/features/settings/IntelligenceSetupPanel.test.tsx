@@ -105,11 +105,11 @@ describe("IntelligenceSetupPanel", () => {
     expect(key.type).toBe("password");
     expect(key.value).toBe("shared-sample-key");
     expect(screen.queryByText("shared-sample-key")).toBeNull();
-    expect(within(summaryRegion()).getByRole("combobox", { name: "Analysis model" }).textContent).toContain("GPT-5 mini");
+    expect(within(summaryRegion()).getByRole("combobox", { name: "Analysis model" }).textContent).toContain("GPT-6 Luna");
     fireEvent.click(screen.getByRole("button", { name: "Choose OpenRouter models" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Select openai/gpt-5-mini" })).toHaveProperty("checked", true);
-    expect(screen.getByRole("radio", { name: "Use openai/gpt-5-mini as primary" })).toHaveProperty("checked", true);
+    expect(screen.getByRole("checkbox", { name: "Select openai/gpt-6-luna" })).toHaveProperty("checked", true);
+    expect(screen.getByRole("radio", { name: "Use openai/gpt-6-luna as primary" })).toHaveProperty("checked", true);
   });
 
   it("labels a saved OpenRouter key Configured without claiming verification", () => {
@@ -281,7 +281,7 @@ describe("IntelligenceSetupPanel", () => {
     fireEvent.click(within(summary).getByRole("combobox", { name: "Analysis model" }));
     fireEvent.click(within(summary).getByRole("option", { name: "Claude Sonnet 5" }));
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "anthropic/claude-sonnet-5", openRouterFallbackModels: ["openai/gpt-5-mini"] }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "anthropic/claude-sonnet-5", openRouterFallbackModels: ["openai/gpt-6-luna"] }));
   });
 
   it("offers a custom fallback in the summary and preserves the previous primary when selected", () => {
@@ -290,7 +290,7 @@ describe("IntelligenceSetupPanel", () => {
     fireEvent.click(within(summaryRegion()).getByRole("combobox", { name: "Analysis model" }));
     fireEvent.click(within(summaryRegion()).getByRole("option", { name: "sample/fallback" }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      openRouterModel: "sample/fallback", openRouterFallbackModels: ["openai/gpt-5-mini"],
+      openRouterModel: "sample/fallback", openRouterFallbackModels: ["openai/gpt-6-luna"],
     }));
   });
 
@@ -301,11 +301,11 @@ describe("IntelligenceSetupPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose OpenRouter models" }));
     fireEvent.change(screen.getByLabelText("Other OpenRouter model"), { target: { value: "sample/analysis-model" } });
     fireEvent.click(screen.getByRole("button", { name: "Add model" }));
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ openRouterModel: "openai/gpt-5-mini", openRouterFallbackModels: ["sample/analysis-model"] }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ openRouterModel: "openai/gpt-6-luna", openRouterFallbackModels: ["sample/analysis-model"] }));
     rendered.rerender(<IntelligenceSetupPanel {...rendered.props} setup={onChange.mock.calls[0][0]} />);
     fireEvent.click(screen.getByRole("radio", { name: "Use sample/analysis-model as primary" }));
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "sample/analysis-model" }));
-    expect(setup.openRouterModel).toBe("openai/gpt-5-mini");
+    expect(setup.openRouterModel).toBe("openai/gpt-6-luna");
   });
 
   it("edits the shared OpenRouter key within the existing card", () => {
@@ -314,7 +314,7 @@ describe("IntelligenceSetupPanel", () => {
     renderPanel({ setup: buildSetup({ provider: "openrouter" }), openRouterApiKey: "shared-key", onOpenRouterApiKeyChange, onChange });
     fireEvent.change(screen.getByLabelText("OpenRouter API key"), { target: { value: "replacement-key" } });
     expect(onOpenRouterApiKeyChange).toHaveBeenCalledWith("replacement-key");
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "openai/gpt-5-mini" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "openai/gpt-6-luna" }));
   });
 
   it("no longer renders any Preview mockup chips", () => {

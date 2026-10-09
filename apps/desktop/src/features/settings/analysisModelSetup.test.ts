@@ -24,9 +24,9 @@ function stubLocalStorage(initial: Record<string, string> = {}) {
 }
 
 describe("analysis model setup", () => {
-  it("recommends GPT-5 mini as the eval-backed default", () => {
-    expect(DEFAULT_ANALYSIS_MODEL).toBe("openai/gpt-5-mini");
-    expect(ANALYSIS_RECOMMENDED_MODELS[0].id).toBe("openai/gpt-5-mini");
+  it("recommends GPT-6 Luna as the eval-backed default", () => {
+    expect(DEFAULT_ANALYSIS_MODEL).toBe("openai/gpt-6-luna");
+    expect(ANALYSIS_RECOMMENDED_MODELS[0].id).toBe("openai/gpt-6-luna");
     expect(ANALYSIS_RECOMMENDED_MODELS.every((model) => model.supportsZdr)).toBe(true);
   });
 
