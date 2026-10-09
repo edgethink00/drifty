@@ -423,6 +423,51 @@ class ApplySyncedSegmentsTests(DeviceSyncTestCase):
         self.assertEqual(timeline[0]["classification"]["category"], "Browsing")
         self.assertEqual(timeline[0]["classification"]["productivity"], "neutral")
 
+    def test_timeline_reads_remote_segment_with_postgres_trimmed_fraction(self) -> None:
+        # Sync rows arrive with PostgreSQL's text form, which drops trailing
+        # zeros from fractional seconds. The day's timeline must still load on
+        # the macOS tracker's Python runtime.
+        self.database.apply_synced_segments([
+            self._remote_segment(
+                "99999999-0000-0000-0000-00000000f001",
+                started_at="2026-07-06T09:00:00.65494+00:00",
+                ended_at="2026-07-06T09:01:00.6549+00:00",
+            )
+        ])
+
+        timeline = self.database.fetch_timeline("2026-07-06")
+        self.assertEqual(len(timeline), 1)
+        self.assertEqual(timeline[0]["deviceId"], REMOTE_DEVICE_ID)
+        self.assertEqual(len(self.database.fetch_hourly_summary("2026-07-06")), 1)
+
+    def test_range_deletion_removes_remote_segment_with_postgres_trimmed_fraction(self) -> None:
+        # Range deletion checks each row's end with history_ends_after(). On the
+        # macOS tracker's Python a trimmed fraction used to make that check
+        # false, so the synced row silently survived "Delete history".
+        self.database.apply_synced_segments([
+            self._remote_segment(
+                "99999999-0000-0000-0000-00000000f002",
+                started_at="2026-07-06T09:00:00.654940+00:00",
+                ended_at="2026-07-06T09:01:00.654941+00:00",
+            ),
+            self._remote_segment(
+                "99999999-0000-0000-0000-00000000f003",
+                started_at="2026-07-06T10:00:00.65494+00:00",
+                ended_at="2026-07-06T10:01:00.6549+00:00",
+            ),
+        ])
+
+        result = self.database.delete_history_range(
+            start="2026-07-06T00:00:00+00:00",
+            end="2026-07-06T23:59:59+00:00",
+            scopes={"activity": True},
+        )
+
+        self.assertEqual(result["activitySegments"], 2)
+        with self.database.connect() as conn:
+            remaining = conn.execute("SELECT COUNT(*) FROM activity_segments").fetchone()[0]
+        self.assertEqual(remaining, 0)
+
     def test_apply_preserves_local_manual_or_rule_classification(self) -> None:
         uid = "99999999-0000-0000-0000-00000000000a"
         self.database.apply_synced_segments([
