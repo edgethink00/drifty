@@ -32,6 +32,46 @@ func readDescriptionReply(deadline: TimeInterval, valid: () -> Bool) -> String? 
     return nil
 }
 
+// Chromium's native window title is the exact tab title followed by a browser
+// label and, once several profiles exist, a profile label: "Page - Google
+// Chrome", "Page - Chrome" (Korean UI), "Page - Brave" or "Page - Microsoft
+// Edge - Profile 2". Those labels are neither fixed nor the app's localized
+// name, so accept the exact tab title or that title followed by " - ".
+// Private and guest windows put a parenthesized mode label on the browser
+// label in every observed language ("Chrome (Incognito)", "Chrome (시크릿
+// 모드)", "Microsoft Edge (InPrivate)", "Brave (시크릿)"). Scripting window mode
+// stays the binding private check; rejecting that label is a second,
+// language-independent guard. Bounds, native window ID and the web area's URL
+// remain binding identity checks.
+func chromiumWindowTitleMatches(_ nativeTitle: String, tabTitle: String) -> Bool {
+    guard !tabTitle.isEmpty else { return false }
+    if nativeTitle == tabTitle { return true }
+    guard let prefix = nativeTitle.range(of: tabTitle + " - ", options: [.anchored, .literal]) else { return false }
+    let browserLabel = nativeTitle[prefix.upperBound...].components(separatedBy: " - ")[0]
+    return !browserLabel.isEmpty && !browserLabel.contains("(") && !browserLabel.contains(")")
+}
+
+func chromiumSameBounds(_ a: CGRect, _ b: CGRect) -> Bool {
+    abs(a.minX-b.minX) <= 2 && abs(a.minY-b.minY) <= 2 && abs(a.width-b.width) <= 2 && abs(a.height-b.height) <= 2
+}
+
+// Chromium draws bubbles such as the translate offer shown for a page in
+// another language, permission prompts and the downloads bubble as separate
+// layer-0 windows of the browser process, stacked in front of their browser
+// window. Rows are that process's on-screen layer-0 windows, front to back.
+// The browser window must be the only window with its bounds and the
+// frontmost one apart from windows lying entirely inside it. Page elements
+// such a bubble covers are excluded later by per-element hit testing.
+func chromiumFrontWindowNumber(_ rows: [(number: Int?, bounds: CGRect?)], matching bounds: CGRect) -> Int? {
+    let matches = rows.indices.filter { rows[$0].bounds.map { chromiumSameBounds($0, bounds) } ?? false }
+    guard matches.count == 1, let number = rows[matches[0]].number else { return nil }
+    let container = bounds.insetBy(dx: -2, dy: -2)
+    for row in rows[..<matches[0]] {
+        guard let covering = row.bounds, !covering.isNull, !covering.isEmpty, container.contains(covering) else { return nil }
+    }
+    return number
+}
+
 // Browser-owned scripting metadata admits a normal window before any page text
 // is read. This command never executes browser JavaScript, requests permission,
 // captures pixels or consumes an extension/socket. With an explicit product
@@ -160,18 +200,15 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             guard AXValueGetValue(p as! AXValue, .cgPoint, &point), AXValueGetValue(s as! AXValue, .cgSize, &size), size.width > 0, size.height > 0 else { return nil }
             return CGRect(origin: point, size: size)
         }
-        func sameBounds(_ a: CGRect, _ b: CGRect) -> Bool { abs(a.minX-b.minX) <= 2 && abs(a.minY-b.minY) <= 2 && abs(a.width-b.width) <= 2 && abs(a.height-b.height) <= 2 }
+        func sameBounds(_ a: CGRect, _ b: CGRect) -> Bool { chromiumSameBounds(a, b) }
         func nativeWindowID(_ bounds: CGRect) -> Int? {
             let rows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []).filter {
                 ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid && ($0[kCGWindowLayer as String] as? NSNumber)?.intValue == 0
+            }.map { row -> (number: Int?, bounds: CGRect?) in
+                let rect = (row[kCGWindowBounds as String] as? [String: Any]).flatMap { CGRect(dictionaryRepresentation: $0 as CFDictionary) }
+                return ((row[kCGWindowNumber as String] as? NSNumber)?.intValue, rect)
             }
-            let matches = rows.filter { row in
-                guard let b = row[kCGWindowBounds as String] as? [String: Any], let rect = CGRect(dictionaryRepresentation: b as CFDictionary) else { return false }
-                return sameBounds(rect, bounds)
-            }
-            guard matches.count == 1, let id = matches[0][kCGWindowNumber as String] as? NSNumber,
-                  (rows.first?[kCGWindowNumber as String] as? NSNumber) == id else { return nil }
-            return id.intValue
+            return chromiumFrontWindowNumber(rows, matching: bounds)
         }
         // Reading the application role opens Chromium's native accessibility
         // tree. No AXEnhancedUserInterface preference/permission setter.
@@ -180,11 +217,10 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         let window = reference as! AXUIElement
         // Chromium can middle-elide the scripting window name even though its
         // tab name and AX window title are complete. Compare against the exact
-        // tab title already matched to the caller, with the native app brand.
+        // tab title already matched to the caller, plus any browser/profile labels.
         // Keep the scripting window name in the before/after identity proof.
         let nativeTitle = string(window, "AXTitle")
-        let titleMatches = nativeTitle == before.tabTitle || running.localizedName.map { nativeTitle == before.tabTitle + " - " + $0 } == true
-        guard titleMatches, let windowBounds = rectangle(window),
+        guard chromiumWindowTitleMatches(nativeTitle, tabTitle: before.tabTitle), let windowBounds = rectangle(window),
               sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
         watch(window, ["AXUIElementDestroyed", "AXMoved", "AXResized"])
         var areas: [AXUIElement] = []; var locateCount = 0; var incomplete = false
