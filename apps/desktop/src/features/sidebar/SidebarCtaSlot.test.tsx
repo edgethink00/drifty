@@ -563,7 +563,7 @@ describe("SidebarCtaSlot", () => {
   it.each([
     [
       "download_failed",
-      /Local AI download failed.*Activity tracking continues.*Retry the model download in AI settings.*Open AI settings/i,
+      /Local AI download failed.*Tracking continues.*Retry the model download in AI settings.*Open AI settings/i,
     ],
     [
       "model_artifact_missing",
@@ -591,7 +591,7 @@ describe("SidebarCtaSlot", () => {
     ],
     [
       "runtime_failed",
-      /Local AI couldn’t start.*Activity tracking continues.*Restart Local AI in AI settings.*Open AI settings/i,
+      /Local AI didn’t start.*Activity tracking continues.*Restart Local AI in AI settings.*Open AI settings/i,
     ],
   ] as const)("renders actionable English copy for %s", (errorKind, accessibleName) => {
     const state = resolveSidebarCtaSlot({
