@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountSettingsSection, ORGANIZATION_SEAT_MANAGEMENT_URL, type AccountSettingsSectionProps } from "./AccountSettingsSection";
@@ -28,33 +28,47 @@ function desktopSourcePath(relativePath: string): string {
 }
 
 describe("AccountSettingsSection", () => {
-  it.each(["retained Pro", "retained trial", "checking trial"] as const)("requires plan verification before purchase for %s", async (state) => {
-    const trial = state !== "retained Pro";
-    const checking = state === "checking trial";
+  it.each(["failed check", "checking"] as const)("keeps Upgrade to Pro unavailable until the plan is verified (%s)", (state) => {
     const props = accountProps({
-      billingEntitlement: trial ? {
+      billingEntitlement: {
         ...individualEntitlement, status: "locked", canUseApp: false, lockedReason: "billing_missing",
         trialActivation: { state: "available", startedAt: null, endsAt: null },
-      } : individualEntitlement,
-      billingEntitlementStatus: trial ? "locked" : "active",
-      billingEntitlementLockedReason: trial ? "billing_missing" : null,
-      currentBillingPlan: trial ? "free" : "individual",
-      billingEntitlementError: checking ? null : "Plan check unavailable.",
-      cloudStatusRefreshing: checking,
+      },
+      billingEntitlementStatus: "locked",
+      billingEntitlementLockedReason: "billing_missing",
+      billingEntitlementError: state === "checking" ? null : "Plan check unavailable.",
+      cloudStatusRefreshing: state === "checking",
     });
     render(<AccountSettingsSection {...props} />);
     expect(screen.queryByText("7-day free trial available")).toBeNull();
-    if (!trial) expect(screen.getByText(ENGLISH_TRANSLATIONS["billing.plan.pro"], { selector: ".lbl" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Change plan" }));
-    const dialog = screen.getByRole("dialog", { name: "Change plan" });
-    const paidAction = within(dialog).getByRole("button", { name: trial ? ENGLISH_TRANSLATIONS["billing.plan.proChooseAria"] : "Manage billing" });
-    expect(paidAction).toHaveProperty("disabled", true);
-    fireEvent.click(paidAction);
-    expect(props.onStartCloudSetup).not.toHaveBeenCalled();
-    expect(props.onManageCloudBilling).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Refresh plan" })).toBeNull();
+    const upgrade = screen.getByRole("button", { name: "Upgrade to Pro" });
+    expect(upgrade).toHaveProperty("disabled", true);
+    fireEvent.click(upgrade);
+    expect(props.onUpgradeToPro).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
     expect(screen.queryByText(/Plan check unavailable|subscription status has not been confirmed/i)).toBeNull();
     expect(props.onRefreshCloudStatus).not.toHaveBeenCalled();
+  });
+
+  it("shows one plan action per account state and no plan-change dialog", () => {
+    const trialEnded = accountProps({
+      billingEntitlement: { ...individualEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" },
+      billingEntitlementStatus: "locked",
+      billingEntitlementLockedReason: "trial_expired",
+    });
+    render(<AccountSettingsSection {...trialEnded} />);
+    const actions = screen.getByText("Pro trial ended. Local tracking and on-device AI remain free.")
+      .closest(".account-plan-summary")?.querySelector(".account-plan-summary__actions");
+    expect(Array.from(actions?.querySelectorAll("button") ?? []).map((button) => button.textContent)).toEqual(["Upgrade to Pro"]);
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
+    expect(trialEnded.onUpgradeToPro).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    cleanup();
+
+    render(<AccountSettingsSection {...accountProps()} />);
+    expect(screen.getByRole("button", { name: "Manage billing" }).className).toContain("primary");
+    expect(screen.queryByRole("button", { name: "Upgrade to Pro" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
   });
 
   it("keeps an explicit billing action failure visible while a background read failure stays quiet", () => {
@@ -116,16 +130,14 @@ describe("AccountSettingsSection", () => {
           },
         ]}
         cloudStatusRefreshing={false}
-        currentBillingPlan="individual"
         isSupabaseConfigured={true}
-        shouldShowCloudCheckoutPlans={false}
         userEmail="alex@example.com"
         onManageCloudBilling={vi.fn()}
         onRefreshCloudStatus={onRefreshCloudStatus}
         onRedeemTrialCoupon={vi.fn()}
         onRevokeCloudDevice={onRevokeCloudDevice}
         onSignIn={vi.fn()}
-        onStartCloudSetup={vi.fn()}
+        onUpgradeToPro={vi.fn()}
       />,
     );
 
@@ -186,16 +198,14 @@ describe("AccountSettingsSection", () => {
       cloudDeviceRevokingId: null,
       cloudDevices: [],
       cloudStatusRefreshing: false,
-      currentBillingPlan: "free",
       isSupabaseConfigured: true,
-      shouldShowCloudCheckoutPlans: true,
       userEmail: null,
       onManageCloudBilling: vi.fn(),
       onRefreshCloudStatus: vi.fn(),
       onRedeemTrialCoupon: vi.fn(),
       onRevokeCloudDevice: vi.fn(),
       onSignIn,
-      onStartCloudSetup: vi.fn(),
+      onUpgradeToPro: vi.fn(),
     };
 
     render(<AccountSettingsSection {...props} />);
@@ -223,9 +233,7 @@ describe("AccountSettingsSection", () => {
       cloudDeviceRevokingId: null,
       cloudDevices: [],
       cloudStatusRefreshing: false,
-      currentBillingPlan: "free",
       isSupabaseConfigured: true,
-      shouldShowCloudCheckoutPlans: true,
       userEmail: "alex@example.com",
       onDeleteAccount,
       onManageCloudBilling: vi.fn(),
@@ -233,7 +241,7 @@ describe("AccountSettingsSection", () => {
       onRedeemTrialCoupon: vi.fn(),
       onRevokeCloudDevice: vi.fn(),
       onSignIn: vi.fn(),
-      onStartCloudSetup: vi.fn(),
+      onUpgradeToPro: vi.fn(),
     };
 
     const { rerender } = render(<AccountSettingsSection {...props} />);
@@ -291,16 +299,14 @@ describe("AccountSettingsSection", () => {
       cloudDeviceRevokingId: null,
       cloudDevices: [],
       cloudStatusRefreshing: false,
-      currentBillingPlan: "free",
       isSupabaseConfigured: true,
-      shouldShowCloudCheckoutPlans: true,
       userEmail: "alex@example.com",
       onManageCloudBilling: vi.fn(),
       onRefreshCloudStatus: vi.fn(),
       onRedeemTrialCoupon,
       onRevokeCloudDevice: vi.fn(),
       onSignIn: vi.fn(),
-      onStartCloudSetup: vi.fn(),
+      onUpgradeToPro: vi.fn(),
     };
 
     const { rerender } = render(<AccountSettingsSection {...props} />);
@@ -374,16 +380,14 @@ describe("AccountSettingsSection", () => {
         cloudDeviceRevokingId={null}
         cloudDevices={[]}
         cloudStatusRefreshing={false}
-        currentBillingPlan="individual"
         isSupabaseConfigured={true}
-        shouldShowCloudCheckoutPlans={false}
         userEmail="alex@example.com"
         onManageCloudBilling={onManageCloudBilling}
         onRefreshCloudStatus={vi.fn()}
         onRedeemTrialCoupon={vi.fn()}
         onRevokeCloudDevice={vi.fn()}
         onSignIn={vi.fn()}
-        onStartCloudSetup={vi.fn()}
+        onUpgradeToPro={vi.fn()}
       />,
     );
 
@@ -445,16 +449,14 @@ describe("AccountSettingsSection", () => {
         cloudDeviceRevokingId={null}
         cloudDevices={[]}
         cloudStatusRefreshing={false}
-        currentBillingPlan="individual"
         isSupabaseConfigured={true}
-        shouldShowCloudCheckoutPlans={false}
         userEmail="alex@example.com"
         onManageCloudBilling={vi.fn()}
         onRefreshCloudStatus={vi.fn()}
         onRedeemTrialCoupon={vi.fn()}
         onRevokeCloudDevice={vi.fn()}
         onSignIn={vi.fn()}
-        onStartCloudSetup={vi.fn()}
+        onUpgradeToPro={vi.fn()}
       />,
     );
 
@@ -486,7 +488,7 @@ describe("AccountSettingsSection", () => {
 
   it("recovers a blocked payment from the plan summary instead of starting checkout", async () => {
     const onManageCloudBilling = vi.fn();
-    const onStartCloudSetup = vi.fn();
+    const onUpgradeToPro = vi.fn();
 
     render(
       <AccountSettingsSection
@@ -504,24 +506,22 @@ describe("AccountSettingsSection", () => {
         cloudDeviceRevokingId={null}
         cloudDevices={[]}
         cloudStatusRefreshing={false}
-        currentBillingPlan="individual"
         isSupabaseConfigured={true}
-        shouldShowCloudCheckoutPlans={false}
         userEmail="alex@example.com"
         onManageCloudBilling={onManageCloudBilling}
         onRefreshCloudStatus={vi.fn()}
         onRedeemTrialCoupon={vi.fn()}
         onRevokeCloudDevice={vi.fn()}
         onSignIn={vi.fn()}
-        onStartCloudSetup={onStartCloudSetup}
+        onUpgradeToPro={onUpgradeToPro}
       />,
     );
 
     expect(screen.getByText(/Activity tracking continues. Update payment to resume Cloud AI/i)).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i })); });
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
-    expect(onStartCloudSetup).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /choose drifty pro plan/i })).toBeNull();
+    expect(onUpgradeToPro).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /^Upgrade to Pro$/ })).toBeNull();
   });
 
   it("places Promo code as the plan card row right after the plan summary", () => {
@@ -643,16 +643,14 @@ function couponTestProps(): AccountSettingsSectionProps {
     cloudDeviceRevokingId: null,
     cloudDevices: [],
     cloudStatusRefreshing: false,
-    currentBillingPlan: "free",
     isSupabaseConfigured: true,
-    shouldShowCloudCheckoutPlans: false,
     userEmail: "alex@example.com",
     onManageCloudBilling: vi.fn(),
     onRefreshCloudStatus: vi.fn(),
     onRedeemTrialCoupon: vi.fn(),
     onRevokeCloudDevice: vi.fn(),
     onSignIn: vi.fn(),
-    onStartCloudSetup: vi.fn(),
+    onUpgradeToPro: vi.fn(),
   };
 }
 
@@ -693,16 +691,14 @@ function accountProps(overrides: Partial<AccountSettingsSectionProps> = {}): Acc
     cloudDeviceRevokingId: null,
     cloudDevices: [],
     cloudStatusRefreshing: false,
-    currentBillingPlan: "individual",
     isSupabaseConfigured: true,
-    shouldShowCloudCheckoutPlans: false,
     userEmail: "alex@example.com",
     onManageCloudBilling: vi.fn(),
     onRefreshCloudStatus: vi.fn(),
     onRedeemTrialCoupon: vi.fn(),
     onRevokeCloudDevice: vi.fn(),
     onSignIn: vi.fn(),
-    onStartCloudSetup: vi.fn(),
+    onUpgradeToPro: vi.fn(),
     ...overrides,
   };
 }
@@ -1175,7 +1171,6 @@ describe("AccountSettingsSection friend invite", () => {
     const props = accountProps({
       billingEntitlement: trialEntitlement,
       billingEntitlementStatus: "trialing",
-      currentBillingPlan: null,
       hasSignedInAccount: true,
       userEmail: "shared-redemption@example.com",
       loadFriendInvite: vi.fn(async () => ({ kind: "ready" as const, invite })),
@@ -1221,7 +1216,6 @@ describe("AccountSettingsSection friend invite", () => {
     const props = accountProps({
       billingEntitlement: trialEntitlement,
       billingEntitlementStatus: "trialing",
-      currentBillingPlan: null,
       hasSignedInAccount: true,
       userEmail: "invite-order@example.com",
       loadFriendInvite: vi.fn(async () => ({ kind: "ready" as const, invite })),

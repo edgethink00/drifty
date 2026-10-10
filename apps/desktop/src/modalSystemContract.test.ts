@@ -14,7 +14,7 @@ const animatedModalPanelFiles = [
   "./features/auth/AccountDeletionModal.tsx",
   "./features/auth/AuthModal.tsx",
   "./features/billing/PromoHandoffAccountDialog.tsx",
-  "./features/billing/UpgradePlanModal.tsx",
+  "./features/billing/ProDecisionSheet.tsx",
   "./features/cloud-devices/CloudDeviceManagementPanel.tsx",
   "./features/command-bar/CommandBar.tsx",
   "./features/companion/DriftAlarmCopySettings.tsx",
@@ -30,7 +30,6 @@ const animatedModalPanelFiles = [
   "./features/profile/ProfileModals.tsx",
   "./features/projects/ProjectDeleteConfirmation.tsx",
   "./features/projects/ProjectEditorModal.tsx",
-  "./features/settings/AccountPlanModal.tsx",
   "./features/settings/AiPrivacyDetailsModal.tsx",
   "./features/settings/AiSetupModelDialogs.tsx",
   "./features/settings/DebugLogModal.tsx",
@@ -80,8 +79,7 @@ const sharedModalSurfaces = [
   ["Command palette", "./features/command-bar/CommandBar.tsx", /className="cmd-box modal-shell"\s+data-modal-variant="utility"/],
   ["Edit drift alarm copy", "./features/companion/DriftAlarmCopySettings.tsx", /className="auth-modal modal-shell drift-copy-modal"\s+data-modal-variant="workspace"/],
   ["Restore AI analysis", "./features/dashboard/DashboardAiRecoveryOverlay.tsx", /className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace"/],
-  ["Upgrade to Pro", "./features/billing/UpgradePlanModal.tsx", /className="dashboard-ai-recovery__panel modal-shell"\s+data-modal-variant="workspace"/],
-  ["Change plan", "./features/settings/AccountPlanModal.tsx", /className="account-plan-modal modal-shell" data-modal-variant="workspace"/],
+  ["Pro plan choice", "./features/billing/ProDecisionSheet.tsx", /className="pro-sheet__panel modal-shell"\s+data-modal-variant="workspace"/],
   ["Promo account handoff", "./features/billing/PromoHandoffAccountDialog.tsx", /className="auth-modal modal-shell"\s+data-modal-variant="standard"/],
   ["SSH agent sources", "./features/dev-signals/SshAgentSourcesModal.tsx", /className="auth-modal modal-shell agents-ssh-modal"\s+data-modal-variant="standard"/],
   ["Windows update", "./features/updates/AvailableUpdateDialog.tsx", /className="auth-modal modal-shell windows-update-prompt"\s+data-modal-variant="compact"/],
@@ -177,7 +175,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(30);
+    expect(sharedModalSurfaces).toHaveLength(29);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -279,7 +277,7 @@ describe("modal overlays", () => {
 
   it("dismiss through useOverlayDismiss instead of a bare onClick", () => {
     const bare = sources
-      .filter(({ text }) => /className="(?:auth-modal__overlay|cmd-overlay|account-plan-overlay)[^"]*"[^>]*\bonClick=/.test(text))
+      .filter(({ text }) => /className="(?:auth-modal__overlay[^"]*|cmd-overlay[^"]*|pro-sheet)"[^>]*\bonClick=/.test(text))
       .map(({ path }) => path);
     expect(bare).toEqual([]);
     expect(sources.filter(({ text }) => text.includes("useOverlayDismiss(")).length).toBeGreaterThanOrEqual(19);

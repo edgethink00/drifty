@@ -102,7 +102,6 @@
 /* Use shell-family specificity so independently loaded feature CSS cannot
    silently restore an older 14/16/18px radius later in the cascade. */
 .auth-modal.modal-shell,
-.account-plan-modal.modal-shell,
 .cloud-device-confirm__panel.modal-shell,
 .history-confirm__panel.modal-shell,
 .guide-close-confirm__panel.modal-shell,
@@ -112,7 +111,6 @@
 }
 
 .auth-modal.modal-shell,
-.account-plan-modal.modal-shell,
 .cloud-device-confirm__panel.modal-shell,
 .history-confirm__panel.modal-shell,
 .guide-close-confirm__panel.modal-shell,
@@ -254,7 +252,6 @@
 .modal-shell .auth-modal__header h2,
 .modal-shell .profile-modal__header h2,
 .modal-shell.rank-embeds-modal .rank-embeds-modal__header h2,
-.account-plan-modal.modal-shell .account-plan-modal__heading h2,
 .cloud-device-confirm__panel.modal-shell h2,
 .history-confirm__panel.modal-shell h2,
 .guide-close-confirm__panel.modal-shell h2 {
@@ -263,12 +260,6 @@
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.015em;
-}
-
-/* The plan dialog now shares the shell inset, so its heading clears the close
-   control with the same gutter as every other header. */
-.account-plan-modal.modal-shell .account-plan-modal__heading {
-  padding-inline-end: var(--modal-close-gutter);
 }
 
 .modal-shell .modal-head,

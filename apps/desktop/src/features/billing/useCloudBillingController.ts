@@ -21,6 +21,7 @@ import {
   claimCloudTrialStartedNotice,
   type CloudTrialStartedNoticeModel,
 } from "./CloudTrialStartedNotice";
+import { claimProPurchase, markProCheckoutOpened } from "./proPurchase";
 import { toErrorMessage } from "../../lib/formatting";
 import { capturePostHogDailyEvent, capturePostHogEvent, toAnalyticsErrorKind, toDailyDedupKey, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
 import { canStartIndividualCheckout } from "./billingEligibility";
@@ -58,6 +59,9 @@ type UseCloudBillingControllerResult = {
   readonly activateCloudTrial: () => Promise<BillingEntitlement>;
   readonly cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   readonly dismissCloudTrialStartedNotice: () => void;
+  /** True once after a Pro checkout opened from the app turns into an active subscription. */
+  readonly proPurchaseConfirmed: boolean;
+  readonly acknowledgeProPurchase: () => void;
   readonly handleManageCloudBilling: () => Promise<void>;
   readonly handleRedeemTrialCoupon: (code: string) => Promise<void>;
   readonly handleRevokeCloudDevice: (deviceId: string) => Promise<void>;
@@ -121,6 +125,7 @@ export function useCloudBillingController({
   const [cloudDeviceActionError, setCloudDeviceActionError] = useState<string | null>(null);
   const [cloudDeviceRevokingId, setCloudDeviceRevokingId] = useState<string | null>(null);
   const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
+  const [proPurchaseConfirmed, setProPurchaseConfirmed] = useState(false);
   const [cloudCheckoutAwaitingBrowser, setCloudCheckoutAwaitingBrowser] = useState(false);
   const [billingPortalAwaitingBrowser, setBillingPortalAwaitingBrowser] = useState(false);
   const [cloudTrialStarting, setCloudTrialStarting] = useState(false);
@@ -439,6 +444,8 @@ export function useCloudBillingController({
       // returns and finishes a bounded entitlement confirmation.
       setCloudCheckoutAwaitingBrowser(true);
       openedCheckout = true;
+      // Lets the first active entitlement after this checkout be recognized as the purchase.
+      markProCheckoutOpened(user.id);
       capturePostHogEvent("billing_action", {
         action: "checkout_opened",
         result: "success",
@@ -533,6 +540,10 @@ export function useCloudBillingController({
 
   const dismissCloudTrialStartedNotice = useCallback(() => {
     setCloudTrialStartedNotice(null);
+  }, []);
+
+  const acknowledgeProPurchase = useCallback(() => {
+    setProPurchaseConfirmed(false);
   }, []);
 
   const handleRevokeCloudDevice = useCallback(async (deviceId: string) => {
@@ -639,6 +650,17 @@ export function useCloudBillingController({
   }, [billingEntitlement, user?.id]);
 
   useEffect(() => {
+    const userId = user?.id;
+    if (!userId) {
+      setProPurchaseConfirmed(false);
+      return;
+    }
+    // Only the entitlement read for this account can confirm its purchase.
+    if (billingEntitlementAccountId !== userId) return;
+    if (claimProPurchase(userId, billingEntitlement)) setProPurchaseConfirmed(true);
+  }, [billingEntitlement, billingEntitlementAccountId, user?.id]);
+
+  useEffect(() => {
     couponRedemptionRequestRef.current += 1;
     setCouponRedemption(null);
     setCouponRedemptionErrorCode(null);
@@ -740,6 +762,8 @@ export function useCloudBillingController({
     cloudTrialError,
     activateCloudTrial,
     dismissCloudTrialStartedNotice,
+    proPurchaseConfirmed,
+    acknowledgeProPurchase,
     handleManageCloudBilling,
     handleRedeemTrialCoupon,
     handleRevokeCloudDevice,

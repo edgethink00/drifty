@@ -1,10 +1,8 @@
 import { useRef, useState } from "react";
 import { canOfferPromoCode, canStartCloudTrial } from "../billing/billingEligibility";
-import { AccountPlanModal } from "./AccountPlanModal";
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
 import { DeviceSyncSetupModal } from "../device-sync/DeviceSyncSetupModal";
 import { Toggle } from "../../components/Toggle";
-import { IndividualPlanCards, type BillingPlanId } from "../billing/IndividualPlanCards";
 import { formatOrganizationSeatAccessCopy } from "../billing/billingAccessCopy";
 import {
   dissolveOwnOrganization,
@@ -19,12 +17,10 @@ import { friendInviteAccountKey } from "./friendInviteStore";
 import type {
   BillingEntitlement,
   BillingInterval,
-  CheckoutFailureCode,
   CouponRedemption,
   CouponRedemptionFailureCode,
   FriendInviteResult,
 } from "../billing/billingService";
-import type { IndividualPricingQuote } from "../billing/individualPricing";
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
@@ -36,9 +32,7 @@ export const ORGANIZATION_SEAT_MANAGEMENT_URL = "https://drifty.so/account/organ
 
 export type AccountSettingsSectionProps = {
   readonly billingCheckoutAwaitingConfirmation?: boolean;
-  readonly billingActionErrorCode?: CheckoutFailureCode | null;
   readonly billingActionError?: string | null;
-  readonly onCheckForUpdates?: () => void;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlement?: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
@@ -46,7 +40,6 @@ export type AccountSettingsSectionProps = {
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
   readonly billingPortalLoading: boolean;
-  readonly individualPricingQuote?: IndividualPricingQuote | null;
   readonly couponRedemption: CouponRedemption | null;
   readonly couponRedemptionErrorCode: CouponRedemptionFailureCode | null;
   readonly couponRedemptionLoading: boolean;
@@ -55,13 +48,11 @@ export type AccountSettingsSectionProps = {
   readonly cloudDeviceRevokingId: string | null;
   readonly cloudDevices: BillingEntitlement["cloudDevices"];
   readonly cloudStatusRefreshing: boolean;
-  readonly currentBillingPlan: BillingPlanId | null;
   readonly hasAuthenticatedSession?: boolean;
   readonly hasSignedInAccount?: boolean;
   readonly isSupabaseConfigured: boolean;
   /** Reads the account's friend invite. Without it the gift row is not offered. */
   readonly loadFriendInvite?: () => Promise<FriendInviteResult>;
-  readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
   readonly deviceSyncEnabled?: boolean;
   readonly deviceSyncCanEnable?: boolean;
@@ -80,14 +71,13 @@ export type AccountSettingsSectionProps = {
   readonly onDissolveOrganization?: () => Promise<OrganizationDissolveResult>;
   readonly onRevokeCloudDevice: (deviceId: string) => void | Promise<void>;
   readonly onSignIn: () => void;
-  readonly onStartCloudSetup: (billingInterval: BillingInterval) => void | Promise<void>;
+  /** Opens the one Pro decision sheet (or sign-in first); see ProDecisionSheet. */
+  readonly onUpgradeToPro?: () => void;
 };
 
 export function AccountSettingsSection({
   billingCheckoutAwaitingConfirmation = false,
-  billingActionErrorCode,
   billingActionError = null,
-  onCheckForUpdates,
   billingCheckoutLoadingInterval,
   billingEntitlement = null,
   billingEntitlementError,
@@ -95,7 +85,6 @@ export function AccountSettingsSection({
   billingEntitlementStatus,
   billingPlansDisabled,
   billingPortalLoading,
-  individualPricingQuote = null,
   couponRedemption,
   couponRedemptionErrorCode,
   couponRedemptionLoading,
@@ -104,7 +93,6 @@ export function AccountSettingsSection({
   cloudDeviceRevokingId,
   cloudDevices = [],
   cloudStatusRefreshing,
-  currentBillingPlan,
   hasAuthenticatedSession,
   hasSignedInAccount,
   isSupabaseConfigured,
@@ -127,10 +115,9 @@ export function AccountSettingsSection({
   onDissolveOrganization = dissolveOwnOrganization,
   onRevokeCloudDevice,
   onSignIn,
-  onStartCloudSetup,
+  onUpgradeToPro,
 }: AccountSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const [planModalOpen, setPlanModalOpen] = useState(false);
   const [couponSurface, setCouponSurface] = useState<"plan" | "invite">("plan");
   const [syncSetupMode, setSyncSetupMode] = useState<"info" | "enable" | null>(null);
   const [localActionPending, setLocalActionPending] = useState(false);
@@ -151,7 +138,6 @@ export function AccountSettingsSection({
   const planActionBusy = localActionPending || billingCheckoutLoadingInterval !== null || billingPortalLoading;
   const runBillingAction = async (action: () => void | Promise<void>) => {
     if (actionInFlight.current || planActionBusy || billingPlansDisabled) return;
-    if (!(hasAuthenticatedSession ?? isSignedIn) || !isSignedIn || !isSupabaseConfigured) setPlanModalOpen(false);
     actionInFlight.current = true;
     setLocalActionPending(true);
     setLocalActionError(null);
@@ -245,14 +231,13 @@ export function AccountSettingsSection({
   const isTrialing = planState === "pro_trial";
   const trialAvailable = canStartCloudTrial(billingEntitlement)
     && !billingEntitlementError && !cloudStatusRefreshing;
-  const planCardsCurrentPlan: BillingPlanId | null = isTrialing ? null : billingEntitlementStatus === "locked" && !isDeviceLimitLocked && !isPaymentRequiredLocked ? "free" : currentBillingPlan;
-  // Keep billing recovery directly accessible even when comparison is closed.
+  // A subscription (or one blocked by payment or the device limit) is managed in the billing portal.
   const canManageCurrentPlan = isCurrentCloudPlan || isDeviceLimitLocked || isPaymentRequiredLocked;
   const trimmedUserEmail = userEmail?.trim() ?? "";
   const isSignedIn = hasSignedInAccount ?? trimmedUserEmail.length > 0;
   const planStatusUnknown = isSignedIn && isSupabaseConfigured && billingEntitlementStatus === null;
   const planNeedsRefresh = planStatusUnknown || Boolean(billingEntitlementError);
-  const plansDisabled = billingPlansDisabled || planActionBusy || planNeedsRefresh || cloudStatusRefreshing;
+  const upgradeDisabled = billingPlansDisabled || planActionBusy || planNeedsRefresh || cloudStatusRefreshing;
   const actionError = localActionError ?? billingActionError;
   const billingProgress = billingCheckoutAwaitingConfirmation
     ? t("settings.account.checkoutPending")
@@ -289,35 +274,9 @@ export function AccountSettingsSection({
   });
   const planCouponEntry = couponEntryFor("plan");
 
-  const planCards = (
-    <div className="settings-row settings-row--cloud-pricing">
-      <IndividualPlanCards
-        currentPlan={planCardsCurrentPlan}
-        disabled={plansDisabled}
-        showBillingInterval={!canManageCurrentPlan}
-        freePlanDisabled={planActionBusy}
-        loadingInterval={billingCheckoutLoadingInterval}
-        manageCurrentPlanLabel={isPaymentRequiredLocked ? t("settings.account.fixBilling") : undefined}
-        manageCurrentPlanLoading={billingPortalLoading}
-        mode="display"
-        planState={planState}
-        pricingQuote={individualPricingQuote}
-        onManageCurrentPlan={canManageCurrentPlan ? () => void runBillingAction(onManageCloudBilling) : undefined}
-        onSelectFreePlan={onOpenAiSetup ? () => {
-          setPlanModalOpen(false);
-          onOpenAiSetup();
-        } : undefined}
-        onSelectPlan={(interval) => {
-          if (!(hasAuthenticatedSession ?? isSignedIn) || !isSignedIn || !isSupabaseConfigured) setPlanModalOpen(false);
-          void runBillingAction(() => onStartCloudSetup(interval));
-        }}
-      />
-    </div>
-  );
-
   return (
     <div className="settings-section settings-section--account">
-      {/* Account opens on current access; comparison stays in its own dialog. */}
+      {/* Account shows current access and one action for it: start a trial, upgrade, manage billing, or manage seats. */}
       <div data-setting-id="settings.section.account" className="settings-block settings-block--plans">
         <h3>{t("settings.section.account")}</h3>
         {isDeviceLimitLocked || isPaymentRequiredLocked || actionError ? (
@@ -342,12 +301,13 @@ export function AccountSettingsSection({
           </div>
           <div className="ctrl account-plan-summary__actions">
             {trialAvailable && onOpenAiSetup ? <button type="button" className="settings-btn primary" onClick={onOpenAiSetup}>{t("sidebar.cta.ai.action")}</button> : null}
-            <button type="button" className={trialAvailable ? "settings-btn" : "settings-btn primary"} aria-haspopup="dialog"
-              onClick={(event) => { event.currentTarget.focus(); setPlanModalOpen(true); }}>
-              {t("settings.account.changePlan")}
-            </button>
+            {!trialAvailable && !organizationSeat && !canManageCurrentPlan && onUpgradeToPro ? (
+              <button type="button" className="settings-btn primary" aria-haspopup="dialog" disabled={upgradeDisabled} onClick={onUpgradeToPro}>
+                {t("billing.plan.proCta")}
+              </button>
+            ) : null}
             {canManageCurrentPlan && !organizationSeat ? (
-              <button type="button" className="settings-btn" disabled={planActionBusy || billingPlansDisabled} aria-busy={billingPortalLoading}
+              <button type="button" className="settings-btn primary" disabled={planActionBusy || billingPlansDisabled} aria-busy={billingPortalLoading}
                 onClick={() => void runBillingAction(onManageCloudBilling)}>
                 <ActionLabel busy={billingPortalLoading} busyLabel={t("billing.plan.openingBilling")}>{isPaymentRequiredLocked ? t("settings.account.fixBilling") : t("billing.plan.manageBilling")}</ActionLabel>
               </button>
@@ -475,20 +435,6 @@ export function AccountSettingsSection({
 
       {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
       {organizationOpenError ? <p className="account-plan-progress" role="alert">{t("settings.account.organizationOpenFailed")}</p> : null}
-
-      <AccountPlanModal open={planModalOpen} busy={planActionBusy} onClose={() => setPlanModalOpen(false)}>
-        {canManageCurrentPlan ? <p className="account-plan-progress">{t("settings.account.existingPlanComparison")}</p> : null}
-        {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
-        {planCards}
-        {actionError || billingActionErrorCode === "pricing_revision_mismatch" ? (
-          <div className="account-plan-modal__error" role="alert">
-            <p>{actionError ? localizeSettingsError(actionError, effectiveLanguage, t) : t("billing.checkout.updateRequired")}</p>
-            {billingActionErrorCode === "pricing_revision_mismatch" && onCheckForUpdates ? (
-              <button type="button" className="modal-btn" onClick={() => { setPlanModalOpen(false); onCheckForUpdates(); }}>{t("billing.checkout.checkForUpdates")}</button>
-            ) : null}
-          </div>
-        ) : null}
-      </AccountPlanModal>
 
       <div data-setting-id="settings.account.signedIn" className="settings-block settings-block--cloud-account">
         <h3>{t("settings.account.signedIn")}</h3>

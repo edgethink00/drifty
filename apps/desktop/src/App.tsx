@@ -17,6 +17,7 @@ import {
   aggregateDeviceElapsedTime,
   clipDeviceElapsedTimeSegment,
   logicalDayStartMs,
+  logicalDayIsoDateForDate,
   buildAppUsageSummaries,
   buildFlowBlocksForIntervals,
   filterSegmentsByDevice,
@@ -68,7 +69,9 @@ import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
 import { resolveTrackerCtaSlot } from "./features/sidebar/trackerCtaSlot";
 import { resolveSidebarLiveActivityLabels } from "./features/sidebar/sidebarLiveActivity";
-import { UpgradePlanModal } from "./features/billing/UpgradePlanModal";
+import { ProDecisionSheet, type ProSheetContext } from "./features/billing/ProDecisionSheet";
+import { ProStartedNotice } from "./features/billing/ProStartedNotice";
+import { resolvePlanCardState } from "./features/billing/planCardState";
 import { canStartIndividualCheckout } from "./features/billing/billingEligibility";
 import {
   buildSidebarCtaPreviewInput,
@@ -1760,6 +1763,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     cloudDevices,
     cloudTrialStartedNotice,
     dismissCloudTrialStartedNotice,
+    proPurchaseConfirmed,
+    acknowledgeProPurchase,
     handleManageCloudBilling,
     handleRedeemTrialCoupon,
     handleRevokeCloudDevice,
@@ -1775,6 +1780,18 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     user,
     onAuthRequired: requestCloudBillingAuth,
   });
+  // A Pro purchase made from the app moves classification to Cloud AI once. Only the
+  // route changes, so the Local AI (or own-provider) setup stays in AI settings as the way back.
+  const [proStartedNoticeVisible, setProStartedNoticeVisible] = useState(false);
+  const classificationOnCloudRoute = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud";
+  useEffect(() => {
+    if (!proPurchaseConfirmed) return;
+    acknowledgeProPurchase();
+    if (!classificationOnCloudRoute) {
+      setLocalAiSetup((current) => ({ ...current, provider: "managed_local", driftyRoute: "cloud" }));
+    }
+    setProStartedNoticeVisible(true);
+  }, [acknowledgeProPurchase, classificationOnCloudRoute, proPurchaseConfirmed, setLocalAiSetup]);
   useEffect(() => {
     function handlePromoBillingSuccess(event: Event) {
       const source = event instanceof CustomEvent
@@ -5296,12 +5313,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     };
   }, [openSettingsTab]);
 
-  // The native menu's trial row opens Account, where plans are compared.
+  // The native menu's trial row opens Account. Its expired form reads "View plans",
+  // so it also opens the Pro sheet on top, like every other View plans entry; the
+  // remaining-days form is a status line and opens Account alone.
+  const openTrialRowFromMenuRef = useRef(openAccountSettings);
+  openTrialRowFromMenuRef.current = () => {
+    openAccountSettings();
+    if (billingEntitlement?.status === "locked" && billingEntitlement.lockedReason === "trial_expired") handleOpenUpgradePlanModal();
+  };
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    void listen("tray-open-account-settings", openAccountSettings).then((nextUnlisten) => {
+    void listen("tray-open-account-settings", () => openTrialRowFromMenuRef.current()).then((nextUnlisten) => {
       if (disposed) {
         cleanupTauriEventListener(nextUnlisten);
         return;
@@ -5312,7 +5336,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       disposed = true;
       cleanupTauriEventListener(unlisten);
     };
-  }, [openAccountSettings]);
+  }, []);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
@@ -10094,6 +10118,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const stickyDashboardAppUsage = useStickyDuringLoad(dashboardAppUsage, isDayBreakdownLoading);
   const stickyTotalSeconds = useStickyDuringLoad(totalSeconds, isDayBreakdownLoading);
   const stickyDayBreakdownTiles = useStickyDuringLoad(dayBreakdownTiles, isDayBreakdownLoading);
+  // Today's unclassified time, which the plan sheet names after a trial that ended.
+  const unclassifiedTodaySeconds = dashPeriod === "Today" && selectedDay === logicalTodayIsoDate(startOfDayMinutes)
+    ? stickyDashboardCategoryTotals.find((entry) => entry.category === "unknown")?.totalSeconds ?? 0
+    : null;
+  // Only a trial that ended within today can be the start of today's unclassified time.
+  const trialEndedWithinToday = (trialEndsAt: string | null | undefined) => {
+    const end = trialEndsAt ? new Date(trialEndsAt) : null;
+    return end !== null && Number.isFinite(end.getTime())
+      && logicalDayIsoDateForDate(end, startOfDayMinutes) === logicalTodayIsoDate(startOfDayMinutes);
+  };
 
   if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
     return (
@@ -10147,6 +10181,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const effectiveBillingEntitlement = activeDashboardAiUnavailablePreviewInput?.billingEntitlement ?? billingEntitlement;
   const effectiveBillingEntitlementError = activeDashboardAiUnavailablePreviewInput?.billingEntitlementError ?? billingEntitlementError;
   const effectiveBillingEntitlementLoading = activeDashboardAiUnavailablePreviewInput?.billingEntitlementLoading ?? billingEntitlementLoading;
+  // The sheet's header follows the account state; the Dev sidebar preview feeds its synthetic state.
+  const upgradeSheetEntitlement = sidebarCtaPreviewInput ? sidebarCtaPreviewInput.billingEntitlement : effectiveBillingEntitlement;
+  const upgradeSheetPlanState = resolvePlanCardState(upgradeSheetEntitlement);
+  const upgradeSheetContext: ProSheetContext = upgradeSheetPlanState === "pro_trial"
+    ? "trial-active"
+    : upgradeSheetPlanState === "trial_expired"
+      ? "trial-ended"
+      : (sidebarCtaPreviewInput?.localAiConfigured ?? localAiConnectionFingerprint !== null) ? "upgrade-local" : "upgrade";
   const effectiveIsSupabaseConfigured = activeDashboardAiUnavailablePreviewInput?.isSupabaseConfigured ?? isSupabaseConfigured;
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
   const isDeviceLimitLocked = effectiveBillingEntitlement?.lockedReason === "device_limit_reached";
@@ -10432,6 +10474,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           notice={cloudTrialStartedNotice}
           onDismiss={dismissCloudTrialStartedNotice}
         />
+      ) : null}
+      {proStartedNoticeVisible && !onboardingOpen && !isDashboardDemoReplayActive ? (
+        <ProStartedNotice onDismiss={() => setProStartedNoticeVisible(false)} />
       ) : null}
       {shellStatusNotice ? <AppStatusNotice notice={shellStatusNotice} /> : null}
       {/* ── Sidebar ── */}
@@ -11013,8 +11058,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                   <AccountSettingsSection
                     key={user?.id ?? "signed-out"}
                     billingCheckoutAwaitingConfirmation={billingCheckoutAwaitingConfirmation}
-                    billingActionErrorCode={billingActionErrorCode}
-                    onCheckForUpdates={() => void handleCheckForUpdates()}
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                     billingEntitlementError={effectiveBillingEntitlementError}
                     billingActionError={billingActionError}
@@ -11023,7 +11066,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation || individualPricingQuoteLoading}
                     billingPortalLoading={billingPortalLoading}
-                    individualPricingQuote={individualPricingQuote}
                     couponRedemption={couponRedemption}
                     couponRedemptionErrorCode={couponRedemptionErrorCode}
                     couponRedemptionLoading={couponRedemptionLoading}
@@ -11032,12 +11074,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     cloudDeviceRevokingId={cloudDeviceRevokingId}
                     cloudDevices={effectiveBillingEntitlement?.cloudDevices ?? cloudDevices}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
-	                    currentBillingPlan={currentBillingPlan}
 	                    hasAuthenticatedSession={Boolean(user)}
 	                    hasSignedInAccount={hasRequiredAccountAuth}
 	                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
 	                    loadFriendInvite={fetchFriendInvite}
-	                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
 	                    userEmail={user?.email ?? null}
 	                    deviceSyncEnabled={deviceSyncEnabled}
 	                    deviceSyncCanEnable={deviceSyncCanEnable}
@@ -11054,7 +11094,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onRedeemTrialCoupon={handleRedeemTrialCoupon}
                     onRevokeCloudDevice={handleRevokeCloudDevice}
                     onSignIn={openDefaultAuthModal}
-                    onStartCloudSetup={startCloudCheckout}
+                    onUpgradeToPro={handleOpenUpgradePlanModal}
                   />
                 )}
                 {settingsSection === "general" && (
@@ -11365,28 +11405,25 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       <ModalPresence>{authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}</ModalPresence>
       <ModalPresence>{promoHandoffAccountDialog}</ModalPresence>
 
-      <ModalPresence>{shouldRenderUpgradePlanModal ? (
-        <UpgradePlanModal
-          funnelEnabled={funnelEnabled}
-          billingActionError={billingActionError}
-          billingActionErrorCode={billingActionErrorCode}
-          billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-          billingEntitlement={effectiveBillingEntitlement}
-          billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || individualPricingQuoteLoading || isSidebarCtaPreviewActive}
-          individualPricingQuote={individualPricingQuote}
-          localAiConfigured={sidebarCtaPreviewInput?.localAiConfigured ?? localAiConnectionFingerprint !== null}
-          onClose={() => setUpgradePlanModalOpen(false)}
-          onContinueLocal={() => {
-            setUpgradePlanModalOpen(false);
-            openAiSetupSettings();
-          }}
-          onCheckForUpdates={handleManualCheckForUpdates}
-          onSelectBillingPlan={(billingInterval) => {
-            if (isSidebarCtaPreviewActive) return;
-            void startCloudCheckout(billingInterval);
-          }}
-        />
-      ) : null}</ModalPresence>
+      <ProDecisionSheet
+        open={shouldRenderUpgradePlanModal}
+        context={upgradeSheetContext}
+        funnelEnabled={funnelEnabled}
+        trialEndsAt={upgradeSheetEntitlement?.trialEndsAt ?? null}
+        trialEndedToday={trialEndedWithinToday(upgradeSheetEntitlement?.trialEndsAt)}
+        unclassifiedSeconds={upgradeSheetContext === "trial-ended" ? unclassifiedTodaySeconds : null}
+        billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+        billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || individualPricingQuoteLoading || isSidebarCtaPreviewActive}
+        individualPricingQuote={individualPricingQuote}
+        billingActionError={billingActionError}
+        billingActionErrorCode={billingActionErrorCode}
+        onCheckForUpdates={handleManualCheckForUpdates}
+        onSelectBillingPlan={(billingInterval) => {
+          if (isSidebarCtaPreviewActive) return;
+          void startCloudCheckout(billingInterval);
+        }}
+        onDismiss={() => setUpgradePlanModalOpen(false)}
+      />
 
       <ModalPresence>{accountDeletionModalOpen ? (
         <AccountDeletionModal
