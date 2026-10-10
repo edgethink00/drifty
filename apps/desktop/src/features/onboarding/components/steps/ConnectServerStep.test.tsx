@@ -50,6 +50,44 @@ describe("onboarding local model choice", () => {
   });
 });
 
+describe("onboarding local model memory explanation", () => {
+  const GIB = 1024 ** 3;
+  const minimums = [8, 8, 16, 36];
+
+  function renderMeasured(machineGb: number) {
+    const catalog = MANAGED_LOCAL_AI_FALLBACK_CATALOG.map((model, index) => ({
+      ...model,
+      recommended: index === 0,
+      fit: machineGb < minimums[index] ? "insufficient" as const : "good" as const,
+      minMemoryBytes: minimums[index] * GIB,
+      machineMemoryBytes: machineGb * GIB,
+    }));
+    const flow = {
+      setupChoice: "local_ai",
+      handleSetupChoice: vi.fn(),
+      managedLocalAi: { catalog, loading: false, actionModelId: null, installModel: vi.fn(), status: null },
+    } as unknown as OnboardingFlow;
+    render(<ConnectServerStep flow={flow} />);
+  }
+
+  it("tags a blocked model with the least memory it needs, once and without a second note", () => {
+    renderMeasured(8);
+    const blocked = screen.getByRole("article", { name: "Qwen 3.6 27B local AI model" });
+    const tag = within(blocked).getByText("Not enough memory · needs 36 GB+");
+    expect(tag.getAttribute("title")).toBe("This computer has 8 GB of total memory, and this model needs at least 36 GB.");
+    expect(blocked.querySelector(".dc-onb-local-card__fit-note")).toBeNull();
+    const fitting = screen.getByRole("article", { name: "Qwen 3.5 2B local AI model" });
+    expect(within(fitting).queryByText(/Not enough memory/)).toBeNull();
+  });
+
+  it("names the lightest model's requirement when nothing can run", () => {
+    renderMeasured(4);
+    expect(screen.getByText(
+      "The smallest local model needs 8 GB of memory, and this computer has 4 GB. Switch to Cloud AI to continue setup.",
+    )).toBeTruthy();
+  });
+});
+
 describe("onboarding local model unsupported Mac", () => {
   function renderLocalCatalog(options: {
     readonly fit: "good" | "insufficient";

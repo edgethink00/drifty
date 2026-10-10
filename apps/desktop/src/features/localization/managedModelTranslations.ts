@@ -1,4 +1,5 @@
 import type { ManagedLocalAiModel } from "../settings/managedLocalAiClient";
+import { managedModelInsufficientReason } from "../settings/managedModelFitCopy";
 import type { DisplayLanguage, LocalizationController } from "./LocalizationContext";
 
 export function localizedManagedModelDetail(
@@ -21,8 +22,10 @@ export function localizedManagedModelFitDetail(
   language: DisplayLanguage,
   t: LocalizationController["t"],
 ): string {
+  // Both languages state the same measured numbers, so one builder owns this copy
+  // instead of the backend's English-only sentence.
+  if (model.fit === "insufficient") return managedModelInsufficientReason(model, t);
   if (language === "en") return model.fitDetail ?? "";
-  if (model.fit === "insufficient") return t("settings.ai.fitInsufficient");
   if (model.fit === "tight") return t("settings.ai.fitTight");
   return model.fitDetail ?? "";
 }

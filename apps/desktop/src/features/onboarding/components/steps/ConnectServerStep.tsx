@@ -12,6 +12,7 @@ import { SpinnerIcon, SuccessIcon } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
 import { localizedManagedModelDetail, localizedManagedModelFitDetail, localizedManagedModelTier } from "../../../localization/managedModelTranslations";
 import { AiResourceNote } from "../../../settings/AiResourceNote";
+import { formatMemoryGigabytes, managedModelInsufficientReason, managedModelMemoryTag, smallestModelMemoryGap } from "../../../settings/managedModelFitCopy";
 
 const DEFAULT_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
 
@@ -55,7 +56,7 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
       <div className="dc-onb-local">
         <div className="dc-onb-local-unsupported" role="status">
           <strong>{t("onboarding.connection.localModelUnsupportedTitle")}</strong>
-          <p>{t("onboarding.connection.localModelUnsupportedBody")}</p>
+          <p>{localModelUnsupportedBody(flow.managedLocalAi.catalog, t)}</p>
           <button
             type="button"
             className="dc-onb-secondary-button"
@@ -144,12 +145,17 @@ function LocalModelCard({
       <div className="dc-onb-local-card__copy">
         <div className="dc-onb-local-card__title-line">
           <strong>{model.label}</strong>
-          <span className={model.recommended ? "dc-onb-local-card__tier dc-onb-local-card__tier--recommended" : "dc-onb-local-card__tier"}>
-            {model.recommended ? (model.fit ? t("onboarding.connection.recommendedForMac") : t("common.recommended")) : localizedManagedModelTier(model.tier, effectiveLanguage, t)}
+          <span
+            className={unsupported ? "dc-onb-local-card__tier dc-onb-local-card__tier--blocked" : model.recommended ? "dc-onb-local-card__tier dc-onb-local-card__tier--recommended" : "dc-onb-local-card__tier"}
+            title={unsupported ? managedModelInsufficientReason(model, t) : undefined}
+          >
+            {unsupported
+              ? managedModelMemoryTag(model, t)
+              : model.recommended ? (model.fit ? t("onboarding.connection.recommendedForMac") : t("common.recommended")) : localizedManagedModelTier(model.tier, effectiveLanguage, t)}
           </span>
         </div>
         <p>{description}</p>
-        {!ready && model.fitDetail && model.fit !== "good" ? <p className="dc-onb-local-card__fit-note">{localizedManagedModelFitDetail(model, effectiveLanguage, t)}</p> : null}
+        {!ready && !unsupported && model.fitDetail && model.fit !== "good" ? <p className="dc-onb-local-card__fit-note">{localizedManagedModelFitDetail(model, effectiveLanguage, t)}</p> : null}
       </div>
       <dl className="dc-onb-local-card__meta">
         <div>
@@ -316,6 +322,15 @@ function ByokSetup({ flow }: { readonly flow: OnboardingFlow }) {
       </label>
     </div>
   );
+}
+
+function localModelUnsupportedBody(catalog: readonly ManagedLocalAiModel[], t: LocalizationController["t"]): string {
+  const gap = smallestModelMemoryGap(catalog);
+  if (!gap) return t("onboarding.connection.localModelUnsupportedBody");
+  return t("onboarding.connection.localModelUnsupportedBodyMeasured", {
+    required: formatMemoryGigabytes(gap.requiredBytes),
+    available: formatMemoryGigabytes(gap.availableBytes),
+  });
 }
 
 function showLocalModelUnsupportedNotice(flow: OnboardingFlow): boolean {

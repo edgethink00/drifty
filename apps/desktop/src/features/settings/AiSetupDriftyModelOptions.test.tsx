@@ -162,13 +162,18 @@ describe("managed model requirements in settings", () => {
     expect(driftyModelOptions({ ...base, status: null })[1].description)
       .toBe(managedModelResourceDescription(model, t));
   });
-  it("exposes requirements and prevents unsupported downloads while allowing a fitting model", () => {
+  it("tags a model this computer cannot run instead of offering a dead download", () => {
     const install = vi.fn();
+    const GIB = 1024 ** 3;
     function Harness() {
       const { t } = useLocalization();
       const options = driftyModelOptions({
         catalog: MANAGED_LOCAL_AI_FALLBACK_CATALOG.map((model, index) => ({
-          ...model, fit: index === 3 ? "insufficient" : "good",
+          ...model,
+          recommended: index === 0,
+          fit: index === 3 ? "insufficient" : "good",
+          minMemoryBytes: index === 3 ? 36 * GIB : 8 * GIB,
+          machineMemoryBytes: 8 * GIB,
         })),
         status: null, actionModelId: null,
         cloudSubscribeActionDisabled: false, cloudSubscribeActionLabel: null,
@@ -181,14 +186,45 @@ describe("managed model requirements in settings", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("combobox", { name: "AI model" }));
     const unsupported = screen.getByRole("option", { name: "Qwen 3.6 27B · Maximum" });
-    const description = document.getElementById(unsupported.getAttribute("aria-describedby") ?? "");
-    expect(description?.textContent).toContain("Not enough memory on this device");
-    expect(description?.textContent).toContain("Estimated memory");
-    const blocked = screen.getByRole("button", { name: "Download Qwen 3.6 27B managed local model" });
-    expect(blocked).toHaveProperty("disabled", true);
-    fireEvent.click(blocked);
-    expect(install).not.toHaveBeenCalled();
+    const describedBy = (unsupported.getAttribute("aria-describedby") ?? "").split(" ");
+    const text = describedBy.map((id) => document.getElementById(id)?.textContent ?? "").join(" | ");
+    // One short tag carries the state and the requirement; nothing else repeats it.
+    expect(text).toContain("Not enough memory · needs 36 GB+");
+    expect(text).toContain("Estimated memory");
+    expect(text).not.toContain("48 GB+ memory recommended");
+    expect(text).not.toContain("Not enough memory on this device");
+    expect(text).not.toContain("recommended for this computer instead");
+    // The full reason, including that it compares total memory, is the tag's hover text.
+    expect(screen.getByText("Not enough memory · needs 36 GB+").getAttribute("title"))
+      .toBe("This computer has 8 GB of total memory, and this model needs at least 36 GB.");
+    // A blocked row has nothing to download, so it shows no action to hide the reason behind.
+    expect(screen.queryByRole("button", { name: "Download Qwen 3.6 27B managed local model" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Download Qwen 3.5 2B managed local model" }));
     expect(install).toHaveBeenCalledWith("drifty-qwen3-5-2b-economy");
+  });
+
+  it("falls back to the bare state when the backend sends no memory numbers", () => {
+    function Harness() {
+      const { t } = useLocalization();
+      const options = driftyModelOptions({
+        catalog: MANAGED_LOCAL_AI_FALLBACK_CATALOG.map((model, index) => ({
+          ...model, fit: index === 3 ? "insufficient" : "good",
+        })),
+        status: null, actionModelId: null,
+        cloudSubscribeActionDisabled: false, cloudSubscribeActionLabel: null,
+        cloudSelectable: true, canManageBilling: false,
+        onInstallModel: vi.fn(), onStartModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
+        onDeleteModel: vi.fn(), onRevealArtifact: vi.fn(), t,
+      });
+      return <SettingsSelect ariaLabel="AI model" value="drifty_cloud" options={options} onChange={vi.fn()} />;
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("combobox", { name: "AI model" }));
+    const unsupported = screen.getByRole("option", { name: "Qwen 3.6 27B · Maximum" });
+    const text = (unsupported.getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "").join(" | ");
+    expect(text).toContain("Not enough memory");
+    expect(text).not.toContain("needs");
+    expect(screen.getByText("Not enough memory").getAttribute("title"))
+      .toBe("This model needs more memory than this computer has available.");
   });
 });

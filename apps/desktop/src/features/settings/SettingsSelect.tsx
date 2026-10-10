@@ -29,6 +29,10 @@ export type SettingsSelectOption<TValue extends string> = {
   readonly description?: string;
   /** Persistent state text beside the option title, separate from hover actions. */
   readonly statusLabel?: string;
+  /** Draws the status label as a warning, e.g. a model this computer cannot run. */
+  readonly statusTone?: "warning";
+  /** Hover text for the status label, e.g. the full reason behind a short tag. */
+  readonly statusTitle?: string;
   readonly accentColor?: string;
   readonly disabled?: boolean;
   /** Greyed as "not ready" but still clickable (e.g. a provider that needs API keys). */
@@ -452,7 +456,11 @@ export function SettingsSelect<TValue extends string>({
                     <span className={option.statusLabel ? "settings-select-control__option-title-with-status" : undefined}>
                       <span data-select-label>{option.displayLabel ?? option.label}</span>
                       {option.statusLabel ? (
-                        <span className="settings-select-control__option-status" id={`${optionId(option.value)}-status`}>
+                        <span
+                          className={`settings-select-control__option-status${option.statusTone ? ` settings-select-control__option-status--${option.statusTone}` : ""}`}
+                          id={`${optionId(option.value)}-status`}
+                          title={option.statusTitle}
+                        >
                           {option.statusLabel}
                         </span>
                       ) : null}

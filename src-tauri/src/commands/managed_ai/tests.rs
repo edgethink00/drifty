@@ -309,6 +309,24 @@ fn catalog_fit_detail_explains_tight_and_insufficient_models() {
 }
 
 #[test]
+fn catalog_reports_exact_memory_requirement_and_machine_memory() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let models = super::catalog_for_machine(Some(8 * GIB));
+    let smart = models
+        .iter()
+        .find(|model| model.id == "drifty-qwen3-6-27b-smart")
+        .expect("smart");
+
+    assert_eq!(smart.min_memory_bytes, 36 * GIB);
+    assert_eq!(smart.machine_memory_bytes, Some(8 * GIB));
+
+    let unknown = super::catalog_for_machine(None);
+    assert!(unknown
+        .iter()
+        .all(|model| model.machine_memory_bytes.is_none() && model.min_memory_bytes > 0));
+}
+
+#[test]
 fn catalog_reports_runtime_memory_estimate_above_artifact_size() {
     for model in managed_ai_catalog() {
         let spec = require_model(&model.id).expect("catalog model has spec");

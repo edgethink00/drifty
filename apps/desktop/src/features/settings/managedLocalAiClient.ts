@@ -98,6 +98,8 @@ function parseManagedModel(value: unknown): ManagedLocalAiModel[] {
     downloadSize: stringValue(value.downloadSize),
     diskRequired: stringValue(value.diskRequired),
     minimumMemory: stringValue(value.minimumMemory),
+    minMemoryBytes: parseResourceBytes(value.minMemoryBytes),
+    machineMemoryBytes: parseResourceBytes(value.machineMemoryBytes),
     estimatedRuntimeMemoryBytes: parseMemoryUsageBytes(value.estimatedRuntimeMemoryBytes),
     recommended: value.recommended === true,
     fit: parseFit(value.fit),

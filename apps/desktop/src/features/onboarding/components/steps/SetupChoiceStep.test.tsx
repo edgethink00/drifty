@@ -48,6 +48,20 @@ describe("onboarding setup local choice", () => {
     expect(handleSetupChoice).not.toHaveBeenCalled();
   });
 
+  it("tags Local AI with the least memory the lightest local model needs", () => {
+    const GIB = 1024 ** 3;
+    const catalog = MANAGED_LOCAL_AI_FALLBACK_CATALOG.map((model) => ({
+      ...model, fit: "insufficient" as const, minMemoryBytes: 8 * GIB, machineMemoryBytes: 4 * GIB,
+    }));
+    const flow = {
+      setupChoice: "simple", promotionActive: false, promotionEndsAt: null, handleSetupChoice: vi.fn(),
+      managedLocalAi: { catalog, loading: false },
+    } as unknown as OnboardingFlow;
+    render(<SetupChoiceStep advancedVisible={false} flow={flow} onToggleAdvanced={() => undefined} />);
+    expect(screen.getByText("Not enough memory · needs 8 GB+")).toBeTruthy();
+    expect(screen.getByText(/no local model can run on this device/i)).toBeTruthy();
+  });
+
   it("keeps Local AI enabled while the catalog is loading", () => {
     renderSetup({ fit: "insufficient", loading: true });
     const local = screen.getByRole("button", { name: /local ai/i });

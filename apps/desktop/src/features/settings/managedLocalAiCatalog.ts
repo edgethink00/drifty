@@ -8,6 +8,10 @@ export type ManagedLocalAiModel = {
   readonly downloadSize: string;
   readonly diskRequired: string;
   readonly minimumMemory: string;
+  /** Total memory the model needs; absent from older backends and the fallback catalog. */
+  readonly minMemoryBytes?: number | null;
+  /** Total memory installed on this computer, when the backend could read it. */
+  readonly machineMemoryBytes?: number | null;
   readonly estimatedRuntimeMemoryBytes: number | null;
   readonly recommended: boolean;
   readonly fit: ManagedLocalAiModelFit | null;

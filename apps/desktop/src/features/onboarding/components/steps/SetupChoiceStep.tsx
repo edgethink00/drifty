@@ -4,10 +4,11 @@ import { TRIAL_DAYS } from "./shared";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
 import { isLocalModelUnsupported } from "../../localModelSetupAnalytics";
+import { memoryTagFromGap, smallestModelMemoryGap } from "../../../settings/managedModelFitCopy";
 
 type SetupCardProps = {
   readonly badge?: string;
-  readonly badgeTone?: "accent" | "muted";
+  readonly badgeTone?: "accent" | "muted" | "warn";
   readonly description: string;
   readonly disabled?: boolean;
   readonly icon: ReactNode;
@@ -29,6 +30,7 @@ export function SetupChoiceStep({
   const promotionEndLabel = formatBillingAccessEndDate(flow.promotionEndsAt, effectiveLanguage)
     ?? t("onboarding.promo.activePeriod");
   const localUnsupported = isLocalModelUnsupported(flow.managedLocalAi.catalog, flow.managedLocalAi.loading);
+  const memoryGap = localUnsupported ? smallestModelMemoryGap(flow.managedLocalAi.catalog) : null;
   const advancedCardsRef = useRef<HTMLDivElement | null>(null);
   const advancedWasVisibleRef = useRef(advancedVisible);
   useEffect(() => {
@@ -72,8 +74,8 @@ export function SetupChoiceStep({
         onClick={() => flow.handleSetupChoice("simple")}
       />
       <SetupCard
-        badge={localUnsupported ? t("onboarding.setup.localUnavailable") : undefined}
-        badgeTone={localUnsupported ? "muted" : undefined}
+        badge={localUnsupported ? memoryTagFromGap(memoryGap, t) : undefined}
+        badgeTone={localUnsupported ? "warn" : undefined}
         description={localUnsupported ? t("onboarding.setup.localUnavailableDescription") : t("onboarding.setup.localDescription")}
         disabled={localUnsupported}
         icon={<LocalIcon />}
@@ -125,7 +127,7 @@ function SetupCard({ badge, badgeTone = "accent", description, disabled, icon, l
       <span className="dc-onb-setup-card__copy">
         <span className="dc-onb-setup-card__title-line">
           <span className="dc-onb-setup-card__title">{label}</span>
-          {badge ? <span className={`dc-onb-setup-card__badge${badgeTone === "muted" ? " dc-onb-setup-card__badge--muted" : ""}`}>{badge}</span> : null}
+          {badge ? <span className={`dc-onb-setup-card__badge${badgeTone === "muted" ? " dc-onb-setup-card__badge--muted" : badgeTone === "warn" ? " dc-onb-setup-card__badge--warn" : ""}`}>{badge}</span> : null}
         </span>
         <span className="dc-onb-setup-card__desc">{description}</span>
       </span>

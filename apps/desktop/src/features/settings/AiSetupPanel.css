@@ -304,6 +304,10 @@
   white-space: nowrap;
 }
 
+.ai-setup-select-control--model .settings-select-control__option-status--warning {
+  color: var(--warn);
+}
+
 .ai-setup-select-control--model .settings-select-control__option:has(.settings-select-control__option-description) {
   padding-top: var(--space-1);
   padding-bottom: var(--space-1);

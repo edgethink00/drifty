@@ -3,6 +3,7 @@ import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAi
 import { isRetryableManagedModelError } from "./managedLocalAiLabels";
 import { managedLocalAiProgressText } from "./managedLocalAiProgressText";
 import type { LocalizationController } from "../localization/LocalizationContext";
+import { managedModelInsufficientReason, managedModelMemoryTag } from "./managedModelFitCopy";
 import { managedModelChoiceTitle, managedModelResourceDescription } from "./managedModelPresentation";
 import { accessibilityClient } from "../../lib/api/accessibilityClient";
 
@@ -108,11 +109,13 @@ export function driftyModelOptions({
   return [
     { ...cloudOption, description: t("ai.resources.cloudModelSummary") },
     ...catalog.map((model) => {
+      const selectable = isSelectableManagedModel(model.id, status);
+      // A model this computer cannot run says so in its status tag, so the
+      // description keeps only the facts and the verdict is not repeated in it.
       const presentation = {
         displayLabel: `${model.label} · ${managedModelChoiceTitle(model, t)}`,
-        description: managedModelResourceDescription(model, t),
+        description: managedModelResourceDescription(model, t, { fitInStatus: !selectable }),
       };
-      const selectable = isSelectableManagedModel(model.id, status);
       if (selectable) {
         const busy = Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
         const preparingRuntime = status?.selectedModelId === model.id
@@ -184,6 +187,19 @@ export function driftyModelOptions({
       const busy = actionModelId === model.id || installing;
       // While the transfer runs, the row's static memory-and-size blurb is the
       // least useful thing it could say. Spend the line on live progress.
+      if (model.fit === "insufficient") {
+        // Nothing here can be downloaded, so the row carries no action at all;
+        // a dimmed button that only appears on hover would hide the reason.
+        return {
+          value: model.id,
+          label: model.label,
+          ...presentation,
+          disabled: true,
+          statusLabel: managedModelMemoryTag(model, t),
+          statusTone: "warning",
+          statusTitle: managedModelInsufficientReason(model, t),
+        } satisfies SettingsSelectOption<string>;
+      }
       const downloadingDescription = installing
         ? [managedLocalAiProgressText(status?.progress ?? null), downloadRemainingLabel].filter(Boolean).join(" · ")
         : "";
@@ -198,7 +214,7 @@ export function driftyModelOptions({
         // Keep idle setup actions quiet; progress and errors stay visible.
         actionOnHover: !busy && !failed,
         actionBusy: busy,
-        actionDisabled: model.fit === "insufficient" || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
+        actionDisabled: Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
         onAction: (modelId: string) => {
           void onInstallModel(modelId);
         },

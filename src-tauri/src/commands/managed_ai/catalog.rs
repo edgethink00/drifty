@@ -112,6 +112,11 @@ pub struct ManagedAiCatalogModel {
     pub(super) download_size: String,
     pub(super) disk_required: String,
     pub(super) minimum_memory: String,
+    /// Smallest total memory the model can run on; the same bar `fit` uses to
+    /// report `insufficient`, so the UI can state the exact requirement.
+    pub(super) min_memory_bytes: u64,
+    /// Total memory installed on this computer, when it could be read.
+    pub(super) machine_memory_bytes: Option<u64>,
     pub(super) estimated_runtime_memory_bytes: u64,
     pub(super) recommended: bool,
     pub(super) fit: Option<String>,
@@ -127,6 +132,8 @@ pub(super) fn catalog_model(spec: ManagedAiModelSpec) -> ManagedAiCatalogModel {
         download_size: spec.download_size.to_string(),
         disk_required: spec.disk_required.to_string(),
         minimum_memory: spec.minimum_memory.to_string(),
+        min_memory_bytes: spec.min_memory_bytes,
+        machine_memory_bytes: None,
         estimated_runtime_memory_bytes: spec.estimated_runtime_memory_bytes,
         recommended: spec.recommended,
         fit: None,
@@ -171,6 +178,7 @@ pub(super) fn catalog_model_for_machine(
         return model;
     };
     let fit = model_fit(spec, machine);
+    model.machine_memory_bytes = Some(machine);
     model.fit = Some(fit.as_str().to_string());
     model.fit_detail = fit_detail(spec, fit, machine);
     model.recommended = recommended_id == Some(spec.id);
