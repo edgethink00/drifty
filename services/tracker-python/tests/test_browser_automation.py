@@ -360,19 +360,32 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertIn('process "firefox"', script)
         self.assertNotIn('process "Firefox Developer Edition"', script)
 
-    def test_whale_uses_ax_address_bar_capture_directly(self) -> None:
+    def test_whale_reads_the_scriptable_active_tab_first(self) -> None:
+        # Whale 5.39 answered 400/400 tab scripting calls without a hang
+        # (macOS 26, 2026-10-10); the exact URL and tab title it returns
+        # are what page-content capture binds to.
         with patch(
             "app.tracker.macos_workspace._run_osascript",
-            return_value="example.com/whale\nExample - NAVER Whale",
+            return_value="https://example.com/whale\nExample\nmatched\nExample - NAVER Whale",
         ) as mock_run:
             result = _browser_metadata("Whale")
 
         self.assertEqual(result.browser_name, "Whale")
         self.assertEqual(result.site_url, "https://example.com/whale")
+        self.assertEqual(result.site_title, "Example")
+        self.assertEqual(result.match_state, "matched")
+        self.assertIn('tell application "Whale"', mock_run.call_args.args[0])
+
+    def test_whale_falls_back_to_its_address_bar_when_tab_scripting_fails(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            side_effect=[RuntimeError("execution error: timed out (-1712)"), "example.com/whale\nExample - NAVER Whale"],
+        ) as mock_run:
+            result = _browser_metadata("Whale")
+
+        self.assertEqual(result.site_url, "https://example.com/whale")
         self.assertEqual(result.match_state, "accessibility-address-bar-schemaless")
-        script = mock_run.call_args.args[0]
-        self.assertIn('process "Whale"', script)
-        self.assertNotIn('tell application "Whale"', script)
+        self.assertIn('process "Whale"', mock_run.call_args.args[0])
 
     def test_browser_metadata_marks_missing_scriptable_window_unavailable(self) -> None:
         with patch(

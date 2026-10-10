@@ -22,7 +22,7 @@ from app.tracker.macos_capture import CommandScope
 from app.tracker.chatgpt_session import packaged_helper_path
 
 EXTENSION_ORIGIN = "chrome-extension://neihkehcijfcfplmfomahlimejiiledi/"
-BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser"})
+BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi"})
 MAX_MESSAGE_BYTES = 32768
 
 

@@ -94,7 +94,7 @@ func chromiumFrontWindowNumber(_ rows: [(number: Int?, bounds: CGRect?)], matchi
 if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--browser-content" {
     final class Changes { var invalidated = false }
     func sample() -> [String: Any]? {
-        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser"]
+        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi"]
         guard let pid = Int32(CommandLine.arguments[2]), pid > 0,
               let milliseconds = Double(CommandLine.arguments[6]), milliseconds > 0,
               AXIsProcessTrusted(),
@@ -250,16 +250,31 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
               sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
         watch(window, ["AXUIElementDestroyed", "AXMoved", "AXResized"])
         var areas: [AXUIElement] = []; var locateCount = 0; var incomplete = false
+        // Vivaldi draws its own interface as one web document and nests each
+        // tab's page inside it. Search through only that built-in document;
+        // the page must still be the single other web area with the tab's URL.
+        // Vivaldi's private window title has no mode label, so its interface's
+        // language-independent private indicator class is the second guard.
+        let interfaceDocument = CommandLine.arguments[3] == "com.vivaldi.Vivaldi" ? "chrome-extension://mpognobbkildjkofajifpdfhcoklimli/window.html" : nil
+        let locateDepth = interfaceDocument == nil ? 14 : 24, locateLimit = interfaceDocument == nil ? 120 : 400
+        var privateIndicator = false
         func locate(_ element: AXUIElement, _ depth: Int) {
-            guard depth < 14, locateCount < 120 else { incomplete = true; return }
+            guard depth < locateDepth, locateCount < locateLimit else { incomplete = true; return }
             locateCount += 1
             let role = string(element, "AXRole")
-            if role == "AXWebArea" { areas.append(element); return }
+            if role == "AXWebArea" {
+                let value = attribute(element, "AXURL")
+                let address = (value as? URL)?.absoluteString ?? value as? String
+                if interfaceDocument == nil || address != interfaceDocument { areas.append(element); return }
+            }
+            if interfaceDocument != nil, (attribute(element, "AXDOMClassList") as? [String])?.contains("UrlBar-PrivateWindowIndicator") == true {
+                privateIndicator = true; return
+            }
             guard let children = attribute(element, "AXChildren") as? [AXUIElement] else { return }
             for child in children { locate(child, depth + 1) }
         }
         locate(window, 0)
-        guard !incomplete, areas.count == 1 else { return nil }
+        guard !incomplete, !privateIndicator, areas.count == 1 else { return nil }
         let area = areas[0]
         func areaURL() -> String? { let v = attribute(area, "AXURL"); return (v as? URL)?.absoluteString ?? v as? String }
         guard areaURL() == before.url, let areaBounds = rectangle(area) else { return nil }

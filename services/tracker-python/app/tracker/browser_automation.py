@@ -285,7 +285,6 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
         "Google Chrome Canary",
         "Safari",
         "Safari Technology Preview",
-        "Whale",
         "Zen",
     }:
         fallback = _accessibility_address_bar_metadata(app_name, run_osascript)

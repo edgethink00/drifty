@@ -157,7 +157,7 @@ class MacosWorkspaceTests(unittest.TestCase):
                 ) as mock_run:
                     result = _browser_metadata(app_name)
 
-                if app_name in {'Safari', 'Firefox', 'Firefox Developer Edition', 'Floorp', 'Whale', 'Zen'}:
+                if app_name in {'Safari', 'Firefox', 'Firefox Developer Edition', 'Floorp', 'Zen'}:
                     expected = BrowserMetadata(
                         browser_name=app_name,
                         site_domain='example.com',
