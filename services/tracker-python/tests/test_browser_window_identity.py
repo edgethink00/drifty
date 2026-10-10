@@ -1,4 +1,4 @@
-"""Chromium native window identity observed in Chrome, Edge and Brave on macOS 14 (English and Korean UI)."""
+"""Chromium native window identity observed in Chrome, Edge and Brave on macOS 14 (English and Korean UI, zoomed and full-screen windows)."""
 import json
 import shutil
 import subprocess
@@ -9,6 +9,10 @@ from pathlib import Path
 
 TAB = 'Introduction to Algorithms | Electrical Engineering and Computer Science | MIT OpenCourseWare'
 WINDOW = [44, 69, 1200, 910]
+
+
+def other_window():
+    return [66, 25, 1200, 910]
 
 
 @unittest.skipUnless(sys.platform == 'darwin' and shutil.which('xcrun'), 'macOS Swift helper')
@@ -27,11 +31,14 @@ func rect(_ value: Any?) -> CGRect? {
     return CGRect(x: v[0], y: v[1], width: v[2], height: v[3])
 }
 var output: [Any] = []
+var listReads = 0
 for title in request["titles"] as? [[String]] ?? [] { output.append(chromiumWindowTitleMatches(title[0], tabTitle: title[1])) }
 for stack in request["stacks"] as? [[String: Any]] ?? [] {
     let rows = (stack["rows"] as! [[String: Any]]).map { (number: $0["n"] as? Int, bounds: rect($0["b"])) }
-    output.append(chromiumFrontWindowNumber(rows, matching: rect(stack["target"])!) ?? -1)
+    let standards = (stack["standard"] as? [Any]).map { $0.compactMap { rect($0) } }
+    output.append(chromiumFrontWindowNumber(rows, matching: rect(stack["target"])!, standardWindows: { listReads += 1; return standards }) ?? -1)
 }
+if request["countListReads"] as? Bool == true { output.append(listReads) }
 print(String(decoding: try! JSONSerialization.data(withJSONObject: output), as: UTF8.self))
 ''')
         cls.helper = root / 'identity'
@@ -41,8 +48,8 @@ print(String(decoding: try! JSONSerialization.data(withJSONObject: output), as: 
     def tearDownClass(cls):
         cls.temp.cleanup()
 
-    def run_helper(self, titles=(), stacks=()):
-        request = json.dumps({'titles': list(titles), 'stacks': list(stacks)})
+    def run_helper(self, titles=(), stacks=(), count_list_reads=False):
+        request = json.dumps({'titles': list(titles), 'stacks': list(stacks), 'countListReads': count_list_reads})
         output = subprocess.run([str(self.helper)], input=request, capture_output=True, text=True, check=True, timeout=10).stdout
         return json.loads(output)
 
@@ -82,6 +89,40 @@ print(String(decoding: try! JSONSerialization.data(withJSONObject: output), as: 
         ]
         self.assertEqual(self.run_helper(titles=cases), [False] * len(cases))
 
+    def test_window_stack_picks_the_front_browser_window_past_bubbles_and_toolbars(self):
+        zoomed = [0, 25, 1440, 954]
+        full_screen = [0, 88, 1440, 962]
+        stacks = [
+            # Two Chrome windows zoomed to fill the screen share bounds (observed).
+            {'target': zoomed, 'standard': [zoomed, zoomed], 'rows': [{'n': 77, 'b': zoomed}, {'n': 67, 'b': zoomed}]},
+            # Three Brave windows zoomed with a restore-pages bubble in front (observed shapes).
+            {'target': zoomed, 'standard': [zoomed, zoomed, zoomed],
+             'rows': [{'n': 95, 'b': [1041, 101, 320, 152]}, {'n': 108, 'b': zoomed}, {'n': 104, 'b': zoomed}, {'n': 101, 'b': zoomed}]},
+            # Immersive full screen: tab strip and toolbar windows above the browser window (observed).
+            {'target': full_screen, 'standard': [full_screen],
+             'rows': [{'n': 81, 'b': [0, 24, 1440, 41]}, {'n': 80, 'b': [0, 65, 1440, 47]}, {'n': 115, 'b': [0, 24, 1440, 132]}, {'n': 77, 'b': full_screen}]},
+            # Translate offer in front, standard windows known.
+            {'target': WINDOW, 'standard': [WINDOW, [22, 47, 1200, 910]],
+             'rows': [{'n': 114, 'b': [922, 149, 237, 87]}, {'n': 109, 'b': WINDOW}, {'n': 99, 'b': [22, 47, 1200, 910]}]},
+        ]
+        self.assertEqual(self.run_helper(stacks=stacks), [77, 108, 77, 109])
+
+    def test_window_stack_rejects_another_browser_window_in_front(self):
+        small = [300, 200, 600, 400]
+        stacks = [
+            {'target': WINDOW, 'standard': [WINDOW, other_window()], 'rows': [{'n': 2, 'b': other_window()}, {'n': 109, 'b': WINDOW}]},
+            # Even a smaller browser window lying inside it.
+            {'target': WINDOW, 'standard': [WINDOW, small], 'rows': [{'n': 3, 'b': small}, {'n': 109, 'b': WINDOW}]},
+            # A covering row without bounds.
+            {'target': WINDOW, 'standard': [WINDOW], 'rows': [{'n': 7}, {'n': 109, 'b': WINDOW}]},
+            # A standard-window list without the browser window is not usable: strict rule.
+            {'target': [0, 88, 1440, 962], 'standard': [[5, 5, 10, 10]],
+             'rows': [{'n': 81, 'b': [0, 24, 1440, 41]}, {'n': 77, 'b': [0, 88, 1440, 962]}]},
+            # Without a list, identical bounds stay ambiguous.
+            {'target': [0, 25, 1440, 954], 'rows': [{'n': 77, 'b': [0, 25, 1440, 954]}, {'n': 67, 'b': [0, 25, 1440, 954]}]},
+        ]
+        self.assertEqual(self.run_helper(stacks=stacks), [-1, -1, -1, -1, -1])
+
     def test_window_stack_allows_bubbles_inside_the_browser_window_only(self):
         translate_front = {'n': 114, 'b': [922, 149, 237, 87]}
         older_bubble = {'n': 108, 'b': [900, 127, 237, 87]}
@@ -100,6 +141,18 @@ print(String(decoding: try! JSONSerialization.data(withJSONObject: output), as: 
             {'target': WINDOW, 'rows': [older_window]},
         ]
         self.assertEqual(self.run_helper(stacks=stacks), [109, 109, -1, -1, -1, -1, -1])
+
+    def test_window_list_is_read_only_when_rows_share_bounds_or_lie_in_front(self):
+        zoomed = [0, 25, 1440, 954]
+        stacks = [
+            # A lone frontmost window, with or without older windows behind it.
+            {'target': WINDOW, 'standard': [WINDOW], 'rows': [{'n': 109, 'b': WINDOW}]},
+            {'target': WINDOW, 'standard': [WINDOW, other_window()], 'rows': [{'n': 109, 'b': WINDOW}, {'n': 2, 'b': other_window()}]},
+            # Shared bounds and a bubble in front need the list.
+            {'target': zoomed, 'standard': [zoomed, zoomed], 'rows': [{'n': 77, 'b': zoomed}, {'n': 67, 'b': zoomed}]},
+            {'target': WINDOW, 'standard': [WINDOW], 'rows': [{'n': 114, 'b': [922, 149, 237, 87]}, {'n': 109, 'b': WINDOW}]},
+        ]
+        self.assertEqual(self.run_helper(stacks=stacks, count_list_reads=True), [109, 109, 77, 109, 2])
 
 
 if __name__ == '__main__':
