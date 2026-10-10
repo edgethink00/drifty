@@ -24,6 +24,15 @@ pub struct AiClassificationChatRequest {
     pub max_tokens: Option<u32>,
     pub timeout_ms: Option<u64>,
     pub temperature: Option<f64>,
+    /// Leave `temperature` out of the body. OpenAI reasoning models (GPT-5 and
+    /// later, o-series) and Claude 5-generation models reject it on their
+    /// direct APIs; without this flag the body falls back to 0.1.
+    #[serde(default)]
+    pub omit_temperature: bool,
+    /// Send the token limit as `max_completion_tokens`. OpenAI reasoning models
+    /// reject `max_tokens` on the direct API.
+    #[serde(default)]
+    pub use_max_completion_tokens: bool,
     pub response_format: Option<serde_json::Value>,
     pub reasoning_format: Option<String>,
     #[serde(default)]
@@ -167,19 +176,26 @@ pub fn post_openai_chat(
     let started_at = Instant::now();
     let mut body = serde_json::Map::from_iter([
         ("messages".to_string(), json!(request.messages)),
-        (
-            "temperature".to_string(),
-            json!(request.temperature.unwrap_or(0.1)),
-        ),
         ("stream".to_string(), json!(false)),
     ]);
+    if !request.omit_temperature {
+        body.insert(
+            "temperature".to_string(),
+            json!(request.temperature.unwrap_or(0.1)),
+        );
+    }
     if models.len() == 1 {
         body.insert("model".to_string(), json!(models[0]));
     } else {
         body.insert("models".to_string(), json!(models));
     }
     if let Some(max_tokens) = request.max_tokens.filter(|value| *value > 0) {
-        body.insert("max_tokens".to_string(), json!(max_tokens));
+        let field = if request.use_max_completion_tokens {
+            "max_completion_tokens"
+        } else {
+            "max_tokens"
+        };
+        body.insert(field.to_string(), json!(max_tokens));
     }
     if let Some(response_format) = request.response_format {
         body.insert("response_format".to_string(), response_format);

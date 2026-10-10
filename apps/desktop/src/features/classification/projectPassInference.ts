@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { modelRejectsTemperature, openAiCompatibleParameterFlags } from "./modelParameterSupport";
 import type { ProjectPassAnalysisWindow, ProjectPassPromptInput } from "@drifty/domain";
 import {
   OPENROUTER_PRIVACY_PROVIDER,
@@ -53,6 +54,9 @@ function openRouterModels(setup: AnalysisAiSetupState): string[] {
 
 function buildOpenAiCompatibleRequest(baseUrl: string, apiKey: string | null, models: string[], prompt: string, privacy: boolean): Record<string, unknown> {
   const modelShape = models.length === 1 ? { model: models[0] } : { models };
+  // `privacy` marks the OpenRouter route; direct OpenAI and custom endpoints
+  // also need the reasoning-model token-limit field.
+  const parameterFlags = openAiCompatibleParameterFlags(models, { viaOpenRouter: privacy });
   return {
     baseUrl,
     ...(apiKey ? { apiKey } : {}),
@@ -60,7 +64,7 @@ function buildOpenAiCompatibleRequest(baseUrl: string, apiKey: string | null, mo
     ...(privacy ? { provider: OPENROUTER_PRIVACY_PROVIDER, headers: { "HTTP-Referer": "https://drifty.so", "X-OpenRouter-Title": "Drifty" } } : {}),
     messages: [{ role: "user", content: prompt }],
     maxTokens: PROJECT_PASS_MAX_TOKENS,
-    temperature: 0,
+    ...(parameterFlags.omitTemperature ? parameterFlags : { ...parameterFlags, temperature: 0 }),
     timeoutMs: PROJECT_PASS_TIMEOUT_MS,
   };
 }
@@ -71,7 +75,8 @@ function buildAnthropicRequest(apiKey: string, model: string, prompt: string): R
     model,
     messages: [{ role: "user", content: prompt }],
     maxTokens: PROJECT_PASS_MAX_TOKENS,
-    temperature: 0,
+    // Claude 5-generation models reject temperature on the Messages API.
+    ...(modelRejectsTemperature(model) ? {} : { temperature: 0 }),
     timeoutMs: PROJECT_PASS_TIMEOUT_MS,
   };
 }

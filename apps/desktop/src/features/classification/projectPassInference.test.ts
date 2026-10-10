@@ -80,6 +80,19 @@ describe("createProjectPassInference", () => {
     expect(request).toMatchObject({ baseUrl: "https://api.openai.com/v1", apiKey: "sk-openai", model: "gpt-5-mini" });
     // Direct OpenAI carries no OpenRouter privacy provider preferences.
     expect(request).not.toHaveProperty("provider");
+    // GPT-5-family models answer HTTP 400 to temperature and max_tokens on the direct API.
+    expect(request).not.toHaveProperty("temperature");
+    expect(request).toMatchObject({ omitTemperature: true, useMaxCompletionTokens: true });
+  });
+
+  it("keeps temperature 0 and max_tokens for an older model on a custom endpoint", async () => {
+    const invokeChat = vi.fn(async (_request: Record<string, unknown>) => chatBody(OUTPUT_JSON));
+    const inference = createProjectPassInference({ ...DEFAULT_ANALYSIS_AI_SETUP, provider: "self_hosted", selfHostedBaseUrl: "http://localhost:11434/v1", selfHostedModel: "llama3.1:8b" }, { invokeChat });
+    await inference("prompt");
+    const request = invokeChat.mock.calls[0][0];
+    expect(request).toMatchObject({ model: "llama3.1:8b", temperature: 0 });
+    expect(request).not.toHaveProperty("omitTemperature");
+    expect(request).not.toHaveProperty("useMaxCompletionTokens");
   });
 
   it("returns null output without an OpenAI key", async () => {
@@ -102,6 +115,8 @@ describe("createProjectPassInference", () => {
     const request = invokeAnthropicChat.mock.calls[0][0];
     expect(request).toMatchObject({ apiKey: "sk-ant", model: "claude-sonnet-5" });
     expect(request.messages).toEqual([{ role: "user", content: "prompt" }]);
+    // Claude 5-generation models reject temperature on the Messages API.
+    expect(request).not.toHaveProperty("temperature");
   });
 
   it("returns null output without an Anthropic key and never calls the native command", async () => {

@@ -330,7 +330,7 @@ describe("IntelligenceSetupPanel", () => {
     const keyInput = screen.getByLabelText("OpenAI API key") as HTMLInputElement;
     expect(keyInput.type).toBe("password");
     const modelInput = screen.getByLabelText("OpenAI model id") as HTMLInputElement;
-    expect(modelInput.value).toBe("gpt-5-mini");
+    expect(modelInput.value).toBe("gpt-6-luna");
     // Shares the unified "API key" label with the other direct-key providers.
     expect(within(summaryRegion()).getAllByText("OpenAI").length).toBeGreaterThan(0);
   });

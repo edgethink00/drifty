@@ -48,7 +48,8 @@ export const DEFAULT_ANALYSIS_MODEL = "openai/gpt-6-luna";
 const LEGACY_DEFAULT_ANALYSIS_MODEL = "openai/gpt-5-mini";
 
 /** Direct-key defaults use the bare (non OpenRouter-prefixed) model ids. */
-export const DEFAULT_ANALYSIS_OPENAI_MODEL = "gpt-5-mini";
+// Matches the OpenRouter/Cloud default (GPT-6 Luna, eval-backed 2026-10-09).
+export const DEFAULT_ANALYSIS_OPENAI_MODEL = "gpt-6-luna";
 export const DEFAULT_ANALYSIS_ANTHROPIC_MODEL = "claude-sonnet-5";
 
 export const ANALYSIS_RECOMMENDED_MODELS = [
@@ -61,7 +62,8 @@ export const ANALYSIS_RECOMMENDED_MODELS = [
 ] as const satisfies readonly OpenRouterModelMetadata[];
 
 /** Direct-key model suggestions (bare ids) for the OpenAI / Anthropic cards. */
-export const ANALYSIS_OPENAI_MODEL_SUGGESTIONS = ["gpt-5-mini", "gpt-5"] as const;
+// Keep this list short: only evaluated models are suggested; any other id can still be typed.
+export const ANALYSIS_OPENAI_MODEL_SUGGESTIONS = ["gpt-6-luna", "gpt-5-mini"] as const;
 // Anthropic API aliases use dashes ("claude-haiku-4-5"); the dotted form is
 // OpenRouter's slug convention and is NOT a valid Anthropic API id.
 export const ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS = ["claude-sonnet-5", "claude-haiku-5-5"] as const;

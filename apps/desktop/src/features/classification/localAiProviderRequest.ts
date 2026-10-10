@@ -1,4 +1,5 @@
 import { BROWSER_CONTENT_GUIDANCE, browserContentPromptMessages, normalizeBrowserContentClues, type BrowserContentClues } from "@drifty/domain";
+import { openAiCompatibleParameterFlags } from "./modelParameterSupport";
 import {
   OPENROUTER_PRIVACY_PROVIDER,
   normalizeOpenRouterFallbackModels,
@@ -181,6 +182,7 @@ function buildLocalProviderRequest(input: {
           baseUrl: OPENROUTER_BASE_URL,
           apiKey,
           ...modelRequestShape,
+          ...openAiCompatibleParameterFlags(models, { viaOpenRouter: true }),
           provider: OPENROUTER_PRIVACY_PROVIDER,
           responseFormat: OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT,
           headers: {
@@ -295,6 +297,7 @@ function openAiCompatibleProviderRequest(
       ...(apiKey ? { apiKey } : {}),
       model,
       ...options,
+      ...openAiCompatibleParameterFlags([model], { viaOpenRouter: false }),
       messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext), input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)))),
     },
   };

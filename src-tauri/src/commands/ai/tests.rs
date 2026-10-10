@@ -239,6 +239,37 @@ fn posts_optional_generation_controls_for_managed_local_runtime() {
 }
 
 #[test]
+fn omits_temperature_and_renames_token_limit_for_direct_reasoning_models() {
+    let (address, server) = capture_one_chat_request();
+    let mut request = chat_request(format!("http://{address}"));
+    request.model = Some("gpt-6-luna".to_string());
+    request.max_tokens = Some(8192);
+    request.temperature = Some(0.0);
+    request.omit_temperature = true;
+    request.use_max_completion_tokens = true;
+
+    post_openai_chat(request).expect("chat request succeeds");
+
+    let request = server.join().expect("join server");
+    let body = request_body_json(&request);
+    assert!(body.get("temperature").is_none());
+    assert!(body.get("max_tokens").is_none());
+    assert_eq!(body.get("max_completion_tokens"), Some(&json!(8192)));
+}
+
+#[test]
+fn keeps_the_default_temperature_when_no_override_is_requested() {
+    let (address, server) = capture_one_chat_request();
+    let request = chat_request(format!("http://{address}"));
+
+    post_openai_chat(request).expect("chat request succeeds");
+
+    let request = server.join().expect("join server");
+    let body = request_body_json(&request);
+    assert_eq!(body.get("temperature"), Some(&json!(0.1)));
+}
+
+#[test]
 fn posts_optional_structured_response_format() {
     let (address, server) = capture_one_chat_request();
     let mut request = chat_request(format!("http://{address}"));
@@ -410,6 +441,8 @@ fn chat_request(base_url: String) -> AiClassificationChatRequest {
         max_tokens: None,
         timeout_ms: None,
         temperature: None,
+        omit_temperature: false,
+        use_max_completion_tokens: false,
         response_format: None,
         chat_template_kwargs: serde_json::Map::new(),
         reasoning_format: None,

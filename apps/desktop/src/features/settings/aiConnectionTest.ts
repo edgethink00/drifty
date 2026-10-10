@@ -1,3 +1,4 @@
+import { openAiCompatibleParameterFlags } from "../classification/modelParameterSupport";
 import {
   MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS,
   managedLocalRuntimeRequestOptions,
@@ -134,6 +135,7 @@ function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unkn
         baseUrl: "https://openrouter.ai/api/v1",
         apiKey,
         ...(models.length === 1 ? { model } : { models }),
+        ...openAiCompatibleParameterFlags(models, { viaOpenRouter: true }),
         provider: OPENROUTER_PRIVACY_PROVIDER,
         messages: testMessages(),
         headers: {
@@ -165,6 +167,7 @@ function openAiCompatibleConnectionRequest(
     baseUrl,
     model,
     ...options,
+    ...openAiCompatibleParameterFlags([model], { viaOpenRouter: false }),
     messages: testMessages(),
     headers: {},
   };
