@@ -92,6 +92,13 @@ class CommandScope:
                     child.kill()
             except ProcessLookupError:
                 pass
+            except PermissionError:
+                # macOS answers EPERM for the group of a child that has exited
+                # but is not yet reaped once no live member remains (a live
+                # descendant still receives the signal). Accept that race only
+                # after confirming the child itself is gone.
+                if child.poll() is None:
+                    child.kill()
             self._terminated.add(child)
 
     def run(self, command: list[str], *, timeout: float, cancelled=None, reply=None) -> str:

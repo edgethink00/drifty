@@ -143,6 +143,41 @@ class OwnedHelperTests(unittest.TestCase):
                     time.sleep(.01)
                 self.assertTrue(not status or status.startswith("Z"), f"Owned descendant still running: {descendant}")
 
+    @unittest.skipUnless(os.name == 'posix', 'Owned Mac process-group cancellation')
+    def test_close_accepts_the_group_permission_race_of_an_exited_unreaped_child(self):
+        # A worker deadline closes the scope from another thread just after the
+        # helper exits. macOS then answers killpg with EPERM for the zombie's
+        # group; that used to fail the whole current-snapshot request.
+        child = subprocess.Popen(['/usr/bin/true'], start_new_session=True)
+        self.addCleanup(child.wait)
+        end = time.monotonic() + 2
+        while time.monotonic() < end:
+            status = subprocess.run(['ps', '-o', 'stat=', '-p', str(child.pid)], capture_output=True, text=True).stdout.strip()
+            if status.startswith('Z'):
+                break
+            time.sleep(.01)
+        scope = CommandScope(time.monotonic() + 60)
+        scope._children.add(child)
+        scope.close()
+        self.assertEqual(child.returncode, 0)
+        self.assertIn(child, scope._terminated)
+
+    @unittest.skipUnless(os.name == 'posix', 'Owned Mac process-group cancellation')
+    def test_group_permission_failure_signals_a_live_child_and_keeps_a_real_denial(self):
+        scope = CommandScope(time.monotonic() + 60)
+        live = Mock(pid=4243)
+        live.poll.return_value = None
+        denied = Mock(pid=4244)
+        denied.poll.return_value = None
+        denied.kill.side_effect = PermissionError(1, 'Operation not permitted')
+        with patch('app.tracker.macos_capture.os.killpg', side_effect=PermissionError(1, 'Operation not permitted')):
+            scope._kill(live)
+            with self.assertRaises(PermissionError):
+                scope._kill(denied)
+        live.kill.assert_called_once_with()
+        self.assertIn(live, scope._terminated)
+        self.assertNotIn(denied, scope._terminated)
+
     def test_deadline_kills_and_reaps_the_owned_child(self):
         scope = CommandScope(time.monotonic() + 0.1)
         children = []
