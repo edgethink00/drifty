@@ -920,3 +920,29 @@ describe("Windows unattended stable update", () => {
     expect(localStorage.getItem(WINDOWS_INSTALL_ATTEMPT_STORAGE_KEY)).toBeNull();
   });
 });
+describe("automatic prompt after an answer", () => {
+  it("asks again in the same long session a week after Later", async () => {
+    vi.useFakeTimers();
+    try {
+      checkMock.mockResolvedValue(update());
+      const { result, unmount } = renderHook(() => useUpdateController({ backgroundPreparationSupported: false }));
+      await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(false);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(72 * 60 * 60 * 1000); });
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(true);
+
+      act(() => result.current.dismissAvailableUpdate());
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(false);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(7 * 24 * 60 * 60 * 1000 - 60_000); });
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(false);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(result.current.shouldShowAvailableUpdateDialog).toBe(true);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

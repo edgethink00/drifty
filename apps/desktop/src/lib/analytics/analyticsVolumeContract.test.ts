@@ -36,6 +36,7 @@ const MACHINE_DRIVEN_EVENTS = [
   "ai_classification_run",
   "project_classification_run",
   "memory_suggestion_run",
+  "app_update",
 ] as const;
 
 describe("analytics volume contract", () => {

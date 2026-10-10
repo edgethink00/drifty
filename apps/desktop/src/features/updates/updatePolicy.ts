@@ -28,6 +28,11 @@ export const UPDATE_BACKGROUND_APPLY_STORAGE_KEY = "drifty.updates.backgroundApp
 export const UPDATE_INTERACTION_STORAGE_KEY = "drifty.updates.interactions.v1";
 export const POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY = "drifty.updates.focusAfterRelaunch";
 export const DEFAULT_GENERAL_PROMPT_AFTER_MS = 72 * 60 * 60 * 1000;
+/**
+ * After "Later" (or any other answer to the prompt), wait this long before the
+ * automatic prompt may ask again about a still-pending update.
+ */
+export const UPDATE_REPROMPT_AFTER_ANSWER_MS = 7 * 24 * 60 * 60 * 1000;
 const UPDATE_POLICY_FETCH_TIMEOUT_MS = 4000;
 const MAX_BACKGROUND_PREPARATION_FAILURES = 3;
 
@@ -225,15 +230,56 @@ export function consumePostUpdateRelaunchFocusPending(): boolean {
   }
 }
 
-export function upsertUpdateSeen(interactions: UpdateInteractionMap, version: string, nowMs: number): UpdateInteractionMap {
+/**
+ * Orders numeric release versions such as `1.12.2`. A suffix after a hyphen is
+ * ignored, and a missing or non-numeric part counts as 0.
+ */
+export function compareReleaseVersions(left: string, right: string): number {
+  const parts = (value: string) => value.split("-")[0].split(".").map((part) => {
+    const parsed = Number.parseInt(part, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+  const leftParts = parts(left);
+  const rightParts = parts(right);
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (difference !== 0) return difference < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ * Records the first time this install saw `version`.
+ *
+ * A release that supersedes a still-pending one (newer than `runningVersion`)
+ * inherits the earliest pending first-seen time and the latest answer to the
+ * prompt. Otherwise every new release would restart the 72-hour wait, and with
+ * releases a few days apart the prompt would rarely appear for anyone whose
+ * background update is off or failing.
+ */
+export function upsertUpdateSeen(
+  interactions: UpdateInteractionMap,
+  version: string,
+  nowMs: number,
+  runningVersion: string,
+): UpdateInteractionMap {
   const current = interactions[version];
   if (current) return interactions;
+
+  const pending = Object.entries(interactions)
+    .filter(([pendingVersion]) => compareReleaseVersions(pendingVersion, runningVersion) > 0
+      && compareReleaseVersions(pendingVersion, version) < 0)
+    .map(([, interaction]) => interaction);
+  const firstSeenAtMs = Math.min(nowMs, ...pending.map((interaction) => interaction.firstSeenAtMs));
+  const answeredAt = pending
+    .map((interaction) => interaction.interactedAtMs)
+    .filter((value): value is number => value !== null);
 
   return {
     ...interactions,
     [version]: {
-      firstSeenAtMs: nowMs,
-      interactedAtMs: null,
+      firstSeenAtMs,
+      interactedAtMs: answeredAt.length > 0 ? Math.max(...answeredAt) : null,
       backgroundPreparationAttemptedAtMs: null,
       backgroundPreparationFailureCount: 0,
     },
@@ -289,16 +335,26 @@ export function markUpdateBackgroundPreparationFailed(
   };
 }
 
+function automaticDialogDueAtMs(input: {
+  readonly policy: UpdatePolicy;
+  readonly interaction: UpdateInteraction | null;
+  readonly nowMs: number;
+}): number {
+  const firstSeenAtMs = input.interaction?.firstSeenAtMs ?? input.nowMs;
+  const answeredAtMs = input.interaction?.interactedAtMs;
+  const promptDueAtMs = firstSeenAtMs + input.policy.promptAfterMs;
+  return answeredAtMs === null || answeredAtMs === undefined
+    ? promptDueAtMs
+    : Math.max(promptDueAtMs, answeredAtMs + UPDATE_REPROMPT_AFTER_ANSWER_MS);
+}
+
 export function shouldShowAutomaticUpdateDialog(input: {
   readonly policy: UpdatePolicy;
   readonly interaction: UpdateInteraction | null;
   readonly nowMs: number;
 }): boolean {
   if (input.policy.urgency === "urgent") return true;
-  if (input.interaction?.interactedAtMs !== null && input.interaction?.interactedAtMs !== undefined) return false;
-
-  const firstSeenAtMs = input.interaction?.firstSeenAtMs ?? input.nowMs;
-  return input.nowMs - firstSeenAtMs >= input.policy.promptAfterMs;
+  return input.nowMs >= automaticDialogDueAtMs(input);
 }
 
 export function shouldPrepareUpdateInBackground(input: {
@@ -323,10 +379,7 @@ export function msUntilAutomaticDialog(input: {
   readonly nowMs: number;
 }): number | null {
   if (input.policy.urgency === "urgent") return null;
-  if (input.interaction?.interactedAtMs !== null && input.interaction?.interactedAtMs !== undefined) return null;
-
-  const firstSeenAtMs = input.interaction?.firstSeenAtMs ?? input.nowMs;
-  return Math.max(0, input.policy.promptAfterMs - (input.nowMs - firstSeenAtMs));
+  return Math.max(0, automaticDialogDueAtMs(input) - input.nowMs);
 }
 
 function normalizeUrgency(value: unknown): UpdateUrgency | null {

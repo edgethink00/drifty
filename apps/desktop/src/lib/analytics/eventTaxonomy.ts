@@ -25,6 +25,7 @@ export const POSTHOG_EVENT_NAMES = [
   "memory_suggestion_action",
   "memory_pattern_feedback",
   "app_error",
+  "app_update",
 ] as const;
 
 export type PostHogEventName = (typeof POSTHOG_EVENT_NAMES)[number];
@@ -164,6 +165,18 @@ export const ERROR_KINDS = [
   "not_found",
   "unavailable",
 ] as const;
+
+export const UPDATE_STEPS = [
+  "detected",
+  "prepared",
+  "prepare_failed",
+  "prompt_shown",
+  "prompt_later",
+  "install_requested",
+  "install_failed",
+  "applied",
+] as const;
+export const UPDATE_SOURCES = ["automatic", "manual"] as const;
 
 export type PostHogPropertyRule = readonly string[] | "boolean";
 
@@ -344,6 +357,13 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
   app_error: {
     surface: APP_SURFACES,
     action: APP_ERROR_ACTIONS,
+    error_kind: ERROR_KINDS,
+  },
+  app_update: {
+    update_step: UPDATE_STEPS,
+    update_source: UPDATE_SOURCES,
+    background_updates_enabled: "boolean",
+    background_eligible: "boolean",
     error_kind: ERROR_KINDS,
   },
 } as const;

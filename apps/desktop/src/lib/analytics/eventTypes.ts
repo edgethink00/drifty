@@ -57,6 +57,8 @@ import type {
   STARTUP_REGISTRATION_PHASES,
   TRACKER_ACTIONS,
   TRACKER_MODES,
+  UPDATE_SOURCES,
+  UPDATE_STEPS,
   PostHogEventName,
 } from "./eventTaxonomy";
 
@@ -233,6 +235,13 @@ export type PostHogEventPropertiesByName = {
     readonly surface?: (typeof APP_SURFACES)[number];
     readonly action?: (typeof APP_ERROR_ACTIONS)[number];
     readonly error_kind: (typeof ERROR_KINDS)[number];
+  };
+  readonly app_update: {
+    readonly update_step: (typeof UPDATE_STEPS)[number];
+    readonly update_source?: (typeof UPDATE_SOURCES)[number];
+    readonly background_updates_enabled?: boolean;
+    readonly background_eligible?: boolean;
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
   };
 };
 

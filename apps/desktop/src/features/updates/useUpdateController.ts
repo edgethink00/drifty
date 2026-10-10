@@ -25,6 +25,7 @@ import {
 import { resolveUpdatePolicyFetch } from "./updatePolicyFetch";
 import { WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY } from "./useAutomaticUpdateScheduler";
 import { BUILD_INFO } from "../../buildInfo";
+import { reportUpdateAppliedSinceLastRun, reportUpdateStep } from "./updateAnalytics";
 
 type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 export type UpdateCheckMode = "manual" | "automatic";
@@ -266,6 +267,7 @@ export function useUpdateController({
       }
     } catch (nextError) {
       clearPostUpdateRelaunchFocusPending();
+      reportUpdateStep("install_failed", { source: "manual", error: nextError });
       setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
     } finally {
       releaseOperation();
@@ -306,12 +308,14 @@ export function useUpdateController({
         }
         window.localStorage.setItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY, version);
         rememberPreparedUpdate(version);
+        reportUpdateStep("prepared", { source: "automatic" });
         setUpdaterMessage(`Drifty ${version} will install when you're away.`);
         return true;
       }
       setUpdaterInstalling(true);
       await updateToPrepare.install();
       rememberPreparedUpdate(version);
+      reportUpdateStep("prepared", { source: "automatic" });
       setUpdaterMessage(`Drifty ${version} is ready for the next launch.`);
       replaceAvailableUpdate(null);
       return true;
@@ -319,6 +323,7 @@ export function useUpdateController({
       updateStoredInteractions((currentInteractions) => (
         markUpdateBackgroundPreparationFailed(currentInteractions, version)
       ));
+      reportUpdateStep("prepare_failed", { source: "automatic", error: nextError });
       setUpdaterError(`Update preparation failed: ${toErrorMessage(nextError)}`);
       return false;
     } finally {
@@ -395,10 +400,18 @@ export function useUpdateController({
           return;
         }
         const nextInteractions = updateStoredInteractions((currentInteractions) => {
-          const seenInteractions = upsertUpdateSeen(currentInteractions, nextUpdate.version, nowMs);
+          const seenInteractions = upsertUpdateSeen(currentInteractions, nextUpdate.version, nowMs, BUILD_INFO.version);
           return manualCheckRequestedRef.current ? markUpdateInteracted(seenInteractions, nextUpdate.version, nowMs) : seenInteractions;
         });
         const nextInteraction = nextInteractions[nextUpdate.version] ?? null;
+        reportUpdateStep("detected", {
+          source: manualCheckRequestedRef.current ? "manual" : "automatic",
+          backgroundUpdatesEnabled,
+          backgroundEligible: backgroundPreparationSupported
+            && nextPolicy.urgency === "general"
+            && nextPolicy.installBehavior === (hostPlatform === "windows" ? "idle" : "next-launch")
+            && nextPolicy.backgroundDownloadEligible,
+        });
         replaceAvailableUpdate(nextUpdate);
         setAvailableUpdatePolicy(nextPolicy);
         const needsWindowsManualRecovery = hostPlatform === "windows"
@@ -479,6 +492,7 @@ export function useUpdateController({
   ]);
 
   const handleInstallUpdate = useCallback(async () => {
+    reportUpdateStep("install_requested", { source: availableUpdateSource ?? "manual" });
     if (preparedUpdateVersionRef.current) {
       if (hostPlatform === "windows") {
         const preparedVersion = preparedUpdateVersionRef.current;
@@ -490,6 +504,7 @@ export function useUpdateController({
           await installPreparedWindowsUpdate(preparedVersion, false);
         } catch (error) {
           setUpdaterError(`Update install failed: ${toErrorMessage(error)}`);
+          reportUpdateStep("install_failed", { source: "manual", error });
           rememberPreparedUpdate(null);
           setAvailableUpdateSource("manual");
         } finally {
@@ -531,7 +546,7 @@ export function useUpdateController({
       setDismissedPromptVersion(latestUpdate.version);
       setUpdatePromptNowMs(nowMs);
       updateStoredInteractions((currentInteractions) => markUpdateInteracted(
-        upsertUpdateSeen(currentInteractions, latestUpdate.version, nowMs),
+        upsertUpdateSeen(currentInteractions, latestUpdate.version, nowMs, BUILD_INFO.version),
         latestUpdate.version,
         nowMs,
       ));
@@ -540,6 +555,7 @@ export function useUpdateController({
     });
   }, [
     availableUpdatePolicy,
+    availableUpdateSource,
     hostPlatform,
     installUpdateAndRestart,
     installPreparedWindowsUpdate,
@@ -558,7 +574,8 @@ export function useUpdateController({
     ));
     setDismissedPromptVersion(updateToDismiss.version);
     setAvailableUpdateSource("automatic");
-  }, [updateStoredInteractions]);
+    reportUpdateStep("prompt_later", { source: availableUpdateSource ?? "automatic" });
+  }, [availableUpdateSource, updateStoredInteractions]);
 
   const offeredUpdateVersion = availableUpdate?.version ?? null;
   const currentUpdatePolicy = offeredUpdateVersion
@@ -605,14 +622,30 @@ export function useUpdateController({
       nowMs: Date.now(),
     });
     if (remainingMs === null) return undefined;
-    if (remainingMs <= 0) {
+    const promptDue = () => {
       setUpdatePromptNowMs(Date.now());
+      // An answer hides the prompt for the rest of the session. Drifty often
+      // stays open for weeks, so once the reprompt wait has passed the same
+      // session may ask again.
+      setDismissedPromptVersion((dismissed) => (dismissed === offeredUpdateVersion ? null : dismissed));
+    };
+    if (remainingMs <= 0) {
+      promptDue();
       return undefined;
     }
 
-    const timeoutId = window.setTimeout(() => setUpdatePromptNowMs(Date.now()), remainingMs);
+    const timeoutId = window.setTimeout(promptDue, remainingMs);
     return () => window.clearTimeout(timeoutId);
   }, [availableUpdateInteraction, availableUpdateSource, currentUpdatePolicy, offeredUpdateVersion]);
+
+  useEffect(() => {
+    if (!shouldShowAvailableUpdateDialog) return;
+    reportUpdateStep("prompt_shown", { source: availableUpdateSource ?? "automatic" });
+  }, [availableUpdateSource, offeredUpdateVersion, shouldShowAvailableUpdateDialog]);
+
+  useEffect(() => {
+    reportUpdateAppliedSinceLastRun();
+  }, []);
 
   const updateLifecycleStatus: UpdateLifecycleStatus = updaterDownloading
     ? "downloading"
@@ -683,6 +716,7 @@ export function useUpdateController({
             }
           } catch (error) {
             console.warn("Failed to restart app after background update:", toErrorMessage(error));
+            reportUpdateStep("install_failed", { source: "automatic", error });
             if (hostPlatform === "windows") {
               window.localStorage.removeItem(WINDOWS_PENDING_AUTO_UPDATE_STORAGE_KEY);
               rememberPreparedUpdate(null);

@@ -4,6 +4,8 @@ import {
   POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY,
   UPDATE_AUTO_INSTALL_STORAGE_KEY,
   UPDATE_BACKGROUND_APPLY_STORAGE_KEY,
+  UPDATE_REPROMPT_AFTER_ANSWER_MS,
+  compareReleaseVersions,
   fallbackUpdatePolicy,
   clearPostUpdateRelaunchFocusPending,
   consumePostUpdateRelaunchFocusPending,
@@ -12,6 +14,7 @@ import {
   markUpdateBackgroundPreparationFailed,
   markUpdateInteracted,
   markPostUpdateRelaunchFocusPending,
+  msUntilAutomaticDialog,
   normalizeUpdatePolicyMetadata,
   parseUpdateInteractionMap,
   persistBackgroundUpdatesEnabled,
@@ -24,6 +27,8 @@ import {
 } from "./updatePolicy";
 
 const VERSION = "1.0.12";
+const RUNNING_VERSION = "1.0.11";
+const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW_MS = Date.UTC(2026, 5, 22, 0, 0, 0, 0);
 
 function requireInteraction(map: ReturnType<typeof upsertUpdateSeen>) {
@@ -182,9 +187,9 @@ describe("updatePolicy", () => {
     expect(policy).toEqual(fallbackUpdatePolicy(VERSION));
   });
 
-  it("opens the existing native dialog after 72 hours, unless the release was handled", () => {
+  it("opens the existing native dialog after 72 hours, and not right after the release was handled", () => {
     const policy = fallbackUpdatePolicy(VERSION);
-    const seen = upsertUpdateSeen({}, VERSION, NOW_MS);
+    const seen = upsertUpdateSeen({}, VERSION, NOW_MS, RUNNING_VERSION);
     const interaction = requireInteraction(seen);
 
     expect(shouldShowAutomaticUpdateDialog({
@@ -214,6 +219,65 @@ describe("updatePolicy", () => {
     expect(shouldShowAutomaticUpdateDialog({ policy: urgent, interaction, nowMs: NOW_MS })).toBe(true);
   });
 
+  it("asks again a week after the prompt was answered", () => {
+    const policy = fallbackUpdatePolicy(VERSION);
+    const answeredAtMs = NOW_MS + DEFAULT_GENERAL_PROMPT_AFTER_MS;
+    const answered = requireInteraction(markUpdateInteracted(
+      upsertUpdateSeen({}, VERSION, NOW_MS, RUNNING_VERSION),
+      VERSION,
+      answeredAtMs,
+    ));
+
+    expect(msUntilAutomaticDialog({ policy, interaction: answered, nowMs: answeredAtMs }))
+      .toBe(UPDATE_REPROMPT_AFTER_ANSWER_MS);
+    expect(shouldShowAutomaticUpdateDialog({
+      policy,
+      interaction: answered,
+      nowMs: answeredAtMs + UPDATE_REPROMPT_AFTER_ANSWER_MS - 1,
+    })).toBe(false);
+    expect(shouldShowAutomaticUpdateDialog({
+      policy,
+      interaction: answered,
+      nowMs: answeredAtMs + UPDATE_REPROMPT_AFTER_ANSWER_MS,
+    })).toBe(true);
+  });
+
+  it("keeps the 72-hour clock and the last answer when a newer release supersedes a pending one", () => {
+    const NEWER = "1.0.13";
+    const policy = fallbackUpdatePolicy(NEWER);
+    const pending = upsertUpdateSeen({}, VERSION, NOW_MS, RUNNING_VERSION);
+
+    // Two days later a newer release appears before the first prompt was due.
+    const superseded = upsertUpdateSeen(pending, NEWER, NOW_MS + 2 * DAY_MS, RUNNING_VERSION);
+    expect(superseded[NEWER]?.firstSeenAtMs).toBe(NOW_MS);
+    expect(shouldShowAutomaticUpdateDialog({
+      policy,
+      interaction: superseded[NEWER] ?? null,
+      nowMs: NOW_MS + DEFAULT_GENERAL_PROMPT_AFTER_MS,
+    })).toBe(true);
+
+    // A "Later" on the superseded release still holds for the newer one.
+    const answered = markUpdateInteracted(pending, VERSION, NOW_MS + 3 * DAY_MS);
+    const afterAnswer = upsertUpdateSeen(answered, NEWER, NOW_MS + 4 * DAY_MS, RUNNING_VERSION);
+    expect(afterAnswer[NEWER]?.interactedAtMs).toBe(NOW_MS + 3 * DAY_MS);
+    expect(shouldShowAutomaticUpdateDialog({
+      policy,
+      interaction: afterAnswer[NEWER] ?? null,
+      nowMs: NOW_MS + 4 * DAY_MS,
+    })).toBe(false);
+
+    // A release that is already installed is no longer pending.
+    const installed = upsertUpdateSeen(pending, NEWER, NOW_MS + 2 * DAY_MS, VERSION);
+    expect(installed[NEWER]?.firstSeenAtMs).toBe(NOW_MS + 2 * DAY_MS);
+  });
+
+  it("orders release versions numerically", () => {
+    expect(compareReleaseVersions("1.12.2", "1.11.25")).toBe(1);
+    expect(compareReleaseVersions("1.9.4", "1.10.0")).toBe(-1);
+    expect(compareReleaseVersions("1.12.2", "1.12.2")).toBe(0);
+    expect(compareReleaseVersions("1.12.2-win", "1.12.2")).toBe(0);
+  });
+
   it("prepares only opted-in v2 releases and stops after three failures", () => {
     const policy = normalizeUpdatePolicyMetadata({
       version: VERSION,
@@ -224,7 +288,7 @@ describe("updatePolicy", () => {
     }, VERSION);
     if (!policy) throw new Error("Expected metadata to normalize");
 
-    const seen = upsertUpdateSeen({}, VERSION, NOW_MS);
+    const seen = upsertUpdateSeen({}, VERSION, NOW_MS, RUNNING_VERSION);
     expect(shouldPrepareUpdateInBackground({
       backgroundPreparationSupported: true,
       backgroundUpdatesEnabled: true,
