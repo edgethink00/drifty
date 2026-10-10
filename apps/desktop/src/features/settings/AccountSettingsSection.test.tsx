@@ -200,11 +200,6 @@ describe("AccountSettingsSection", () => {
 
     render(<AccountSettingsSection {...props} />);
 
-    expect(screen.getByText("Not signed in")).toBeTruthy();
-    const publicProfileHeading = screen.getByRole("heading", { name: /^Public profile$/i });
-    expect(within(publicProfileHeading).getByText("Beta").className).toContain("settings-beta-badge");
-    expect(screen.queryByRole("heading", { name: /Public profile Beta/i })).toBeNull();
-
     const signedInBlock = screen.getByText("Not signed in").closest(".settings-block") as HTMLElement;
     fireEvent.click(within(signedInBlock).getByRole("button", { name: /^Sign in$/i }));
 
@@ -1152,5 +1147,92 @@ describe("AccountSettingsSection organization dissolution", () => {
     });
 
     expect(screen.getByRole("alert").textContent).toMatch(/may already be cancelled/);
+  });
+});
+
+describe("AccountSettingsSection friend invite", () => {
+  const invite = {
+    code: "DRIFTY-3F9A2C7B1D",
+    codeEntryUntil: "2099-01-01T00:00:00.000Z",
+    durationDays: 30,
+    claimedCount: 0,
+    maxClaims: 10,
+    expiresAt: "2027-10-08T00:00:00.000Z",
+    status: "active" as const,
+    claims: [],
+  };
+  const trialEntitlement = {
+    plan: "individual",
+    status: "trialing",
+    canUseApp: true,
+    trialEndsAt: "2026-10-15T00:00:00.000Z",
+    currentPeriodEnd: null,
+    accessSource: "standard_trial",
+  } as const satisfies BillingEntitlement;
+
+  it("shares one redemption between Promo code and the invite card's code tab", async () => {
+    const onRedeemTrialCoupon = vi.fn();
+    const props = accountProps({
+      billingEntitlement: trialEntitlement,
+      billingEntitlementStatus: "trialing",
+      currentBillingPlan: null,
+      hasSignedInAccount: true,
+      userEmail: "shared-redemption@example.com",
+      loadFriendInvite: vi.fn(async () => ({ kind: "ready" as const, invite })),
+      onRedeemTrialCoupon,
+    });
+    const view = render(<AccountSettingsSection {...props} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Enter code" }));
+    const panel = screen.getByRole("tabpanel");
+    fireEvent.change(within(panel).getByRole("textbox", { name: "Drifty promo code" }), { target: { value: "DRIFTY-3F9A2C7B1D" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Apply" }));
+    expect(onRedeemTrialCoupon).toHaveBeenCalledWith("DRIFTY-3F9A2C7B1D");
+
+    // The error belongs to the control the code was typed into.
+    view.rerender(<AccountSettingsSection {...props} couponRedemptionErrorCode="coupon_own_invite" />);
+    expect(screen.getAllByText(ENGLISH_TRANSLATIONS["settings.account.couponOwnInvite"])).toHaveLength(1);
+    expect(within(screen.getByRole("tabpanel")).getByText(ENGLISH_TRANSLATIONS["settings.account.couponOwnInvite"])).toBeTruthy();
+
+    // An applied code is the account's state, so both places report it.
+    view.rerender(<AccountSettingsSection {...props} couponRedemption={{
+      status: "redeemed",
+      grantedDays: 30,
+      trialEndsAt: "2026-11-14T00:00:00.000Z",
+      redeemedAt: "2026-10-08T00:00:00.000Z",
+    }} />);
+    expect(screen.getAllByText(/30 days added/)).toHaveLength(2);
+    view.unmount();
+  });
+
+  it("keeps code entry out of the invite card where codes cannot be redeemed", async () => {
+    const props = accountProps({
+      hasSignedInAccount: true,
+      userEmail: "paid-invite@example.com",
+      loadFriendInvite: vi.fn(async () => ({ kind: "ready" as const, invite })),
+    });
+    const view = render(<AccountSettingsSection {...props} />);
+    expect(await screen.findByRole("tab", { name: "Invite" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Enter code" })).toBeNull();
+    view.unmount();
+  });
+
+  it("places the invite card after the signed-in account, with no public profile block", async () => {
+    const props = accountProps({
+      billingEntitlement: trialEntitlement,
+      billingEntitlementStatus: "trialing",
+      currentBillingPlan: null,
+      hasSignedInAccount: true,
+      userEmail: "invite-order@example.com",
+      loadFriendInvite: vi.fn(async () => ({ kind: "ready" as const, invite })),
+    });
+    const view = render(<AccountSettingsSection {...props} />);
+    await screen.findByRole("tab", { name: "Invite" });
+    const signedIn = view.container.querySelector('[data-setting-id="settings.account.signedIn"]')!;
+    const card = view.container.querySelector(".settings-block--friend-invite")!;
+    expect(signedIn.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(view.container.querySelector('[data-setting-id="settings.account.publicProfile"]')).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Public profile$/i })).toBeNull();
+    view.unmount();
   });
 });

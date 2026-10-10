@@ -89,6 +89,7 @@ vi.mock("./features/account-stats/useAccountStatsPublisher", () => ({
   useAccountStatsPublisher: accountStatsPublisherMock,
 }));
 vi.mock("./features/billing/billingService", () => ({
+  fetchFriendInvite: vi.fn().mockResolvedValue({ kind: "disabled" }),
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,

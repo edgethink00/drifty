@@ -24,9 +24,10 @@ type RenderAccountMenuOptions = {
   readonly userEmail?: string | null;
   readonly language?: DisplayLanguage;
   readonly tracker?: AccountMenuTrackerSummary | null;
+  readonly onInviteFriends?: () => void;
 };
 
-function renderAccountMenu({ userAvatarUrl = null, userEmail = null, language = "en", tracker = null }: RenderAccountMenuOptions = {}) {
+function renderAccountMenu({ userAvatarUrl = null, userEmail = null, language = "en", tracker = null, onInviteFriends }: RenderAccountMenuOptions = {}) {
   const handlers = {
     onProfile: vi.fn(),
     onAiSetting: vi.fn(),
@@ -52,6 +53,7 @@ function renderAccountMenu({ userAvatarUrl = null, userEmail = null, language = 
           onTogglePet={() => {}}
           onToggle={() => setIsOpen((open) => !open)}
           tracker={tracker}
+          onInviteFriends={onInviteFriends}
           {...handlers}
         />
       </LocalizationTestProvider>
@@ -260,6 +262,24 @@ describe("AccountMenu", () => {
     expect(themeToggle.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(themeToggle);
     expect(handlers.onToggleTheme).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Invite friends only to a signed-in account while invites are open", () => {
+    const onInviteFriends = vi.fn();
+    const open = renderAccountMenu({ userEmail: "alex@example.com", onInviteFriends });
+    fireEvent.click(screen.getByRole("button", { name: /^alex$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Invite friends$/ }));
+    expect(onInviteFriends).toHaveBeenCalledTimes(1);
+    open.unmount();
+
+    const closed = renderAccountMenu({ userEmail: "alex@example.com" });
+    fireEvent.click(screen.getByRole("button", { name: /^alex$/i }));
+    expect(screen.queryByRole("menuitem", { name: /^Invite friends$/ })).toBeNull();
+    closed.unmount();
+
+    renderAccountMenu({ onInviteFriends });
+    fireEvent.click(screen.getByRole("button", { name: /^unknown$/i }));
+    expect(screen.queryByRole("menuitem", { name: /^Invite friends$/ })).toBeNull();
   });
 
   it("routes account settings", () => {

@@ -64,6 +64,8 @@ export type CouponRedemptionFailureCode =
   | "coupon_exhausted"
   | "coupon_rate_limited"
   | "coupon_already_subscribed"
+  | "coupon_own_invite"
+  | "coupon_invite_new_accounts_only"
   | "full_account_required"
   | "sign_in_required"
   | "coupon_unavailable";
@@ -71,6 +73,31 @@ export type CouponRedemptionFailureCode =
 export type CouponRedemptionResult =
   | { readonly success: true; readonly data: CouponRedemption }
   | { readonly success: false; readonly code: CouponRedemptionFailureCode; readonly error: string };
+
+export type FriendInviteStatus = "active" | "exhausted" | "expired" | "inactive";
+
+export type FriendInviteClaim = {
+  readonly claimedAt: string;
+};
+
+export type FriendInvite = {
+  readonly code: string;
+  /** End of this account's own 14-day window for entering a friend's code; null hides code entry. */
+  readonly codeEntryUntil: string | null;
+  readonly durationDays: number;
+  readonly claimedCount: number;
+  readonly maxClaims: number;
+  readonly expiresAt: string;
+  readonly status: FriendInviteStatus;
+  /** Newest first. Only when a friend claimed the gift, never who. */
+  readonly claims: readonly FriendInviteClaim[];
+};
+
+/** `disabled` means the owner has not opened friend invites; the row stays hidden. */
+export type FriendInviteResult =
+  | { readonly kind: "ready"; readonly invite: FriendInvite }
+  | { readonly kind: "disabled" }
+  | { readonly kind: "unavailable" };
 
 export type BillingInterval = "monthly" | "quarterly" | "yearly";
 
@@ -121,6 +148,7 @@ const GENERIC_BILLING_ERROR = "Unable to check billing status.";
 // is not routinely reported as a client timeout.
 export const COUPON_REDEMPTION_TIMEOUT_MS = 20_000;
 export const BILLING_ENTITLEMENT_TIMEOUT_MS = 20_000;
+export const FRIEND_INVITE_TIMEOUT_MS = 20_000;
 
 async function invokeEntitlementRead(
   client: NonNullable<BillingClient>,
@@ -455,6 +483,8 @@ function readCouponFailureCode(value: unknown): CouponRedemptionFailureCode {
     case "coupon_exhausted":
     case "coupon_rate_limited":
     case "coupon_already_subscribed":
+    case "coupon_own_invite":
+    case "coupon_invite_new_accounts_only":
     case "full_account_required":
     case "sign_in_required":
     case "coupon_unavailable":
@@ -613,4 +643,69 @@ function toCloudDeviceRecord(value: unknown): CloudDeviceRecord[] {
     isCurrent: value.isCurrent,
     isActive: value.isActive,
   }];
+}
+
+/**
+ * Reads the signed-in account's personal friend invite. The Edge Function
+ * creates the code on first use and reports `enabled: false` until the owner
+ * turns friend invites on, so a disabled or failed read simply hides the row.
+ */
+export async function fetchFriendInvite(client: BillingClient = supabase): Promise<FriendInviteResult> {
+  if (!client) return { kind: "unavailable" };
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error("Friend invite read timed out."));
+    }, FRIEND_INVITE_TIMEOUT_MS);
+  });
+  try {
+    const { data, error } = await Promise.race([
+      client.functions.invoke<unknown>("friend-invite", {
+        body: {},
+        signal: controller.signal,
+        timeout: FRIEND_INVITE_TIMEOUT_MS,
+      }),
+      timeout,
+    ]);
+    if (error || !isRecord(data)) return { kind: "unavailable" };
+    if (data.enabled === false) return { kind: "disabled" };
+    const invite = readFriendInvite(data.invite);
+    return data.enabled === true && invite ? { kind: "ready", invite } : { kind: "unavailable" };
+  } catch {
+    return { kind: "unavailable" };
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
+function readFriendInvite(value: unknown): FriendInvite | null {
+  if (!isRecord(value)) return null;
+  const { code, codeEntryUntil, durationDays, claimedCount, maxClaims, expiresAt, status, claims } = value;
+  if (
+    typeof code !== "string" || !/^[A-Z0-9][A-Z0-9-]{7,63}$/u.test(code)
+    || typeof durationDays !== "number" || !Number.isInteger(durationDays) || durationDays < 1
+    || typeof claimedCount !== "number" || !Number.isInteger(claimedCount) || claimedCount < 0
+    || typeof maxClaims !== "number" || !Number.isInteger(maxClaims) || maxClaims < 1
+    || typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt))
+    || (status !== "active" && status !== "exhausted" && status !== "expired" && status !== "inactive")
+  ) {
+    return null;
+  }
+  const readClaims = Array.isArray(claims) ? claims.flatMap((claim): FriendInviteClaim[] => (
+    isRecord(claim) && typeof claim.claimedAt === "string" && Number.isFinite(Date.parse(claim.claimedAt))
+      ? [{ claimedAt: claim.claimedAt }]
+      : []
+  )) : [];
+  return {
+    code,
+    codeEntryUntil: typeof codeEntryUntil === "string" && Number.isFinite(Date.parse(codeEntryUntil)) ? codeEntryUntil : null,
+    durationDays,
+    claimedCount,
+    maxClaims,
+    expiresAt,
+    status,
+    claims: readClaims,
+  };
 }

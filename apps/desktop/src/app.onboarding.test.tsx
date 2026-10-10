@@ -265,6 +265,7 @@ vi.mock("./lib/api/trackerClient", () => ({
 }));
 
 vi.mock("./features/billing/billingService", () => ({
+  fetchFriendInvite: vi.fn().mockResolvedValue({ kind: "disabled" }),
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   startCloudTrial: billingMocks.startCloudTrial,
   fetchIndividualPricingQuote: vi.fn().mockResolvedValue({ success: false, error: "Pricing unavailable in this test." }),

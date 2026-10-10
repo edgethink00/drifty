@@ -21,6 +21,8 @@ import type {
   CLASSIFICATION_FAILURE_KINDS,
   CLASSIFICATION_TRIGGERS,
   FIRST_DAY_BACKLOG_SOURCES,
+  USAGE_MILESTONE_DAY_BUCKETS,
+  USAGE_MILESTONE_IDS,
   CLOUD_AUTH_ACTIONS,
   CLOUD_AUTH_METHODS,
   COUNT_BUCKETS,
@@ -142,6 +144,10 @@ export type PostHogEventPropertiesByName = {
   };
   readonly first_day_backlog: {
     readonly source: (typeof FIRST_DAY_BACKLOG_SOURCES)[number];
+  };
+  readonly usage_milestone: {
+    readonly milestone: (typeof USAGE_MILESTONE_IDS)[number];
+    readonly days_since_start_bucket: (typeof USAGE_MILESTONE_DAY_BUCKETS)[number];
   };
   readonly permission_action: {
     readonly permission: (typeof PERMISSIONS)[number];

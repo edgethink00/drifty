@@ -11,6 +11,7 @@ export const POSTHOG_EVENT_NAMES = [
   "onboarding_intro",
   "first_day_preparation",
   "first_day_backlog",
+  "usage_milestone",
   "permission_action",
   "tracker_action",
   "auth_state_changed",
@@ -112,6 +113,8 @@ export const BILLING_ACTIONS = [
   "portal_created",
   "portal_opened",
   "coupon_redeemed",
+  "friend_invite_copied",
+  "friend_invite_menu_opened",
 ] as const;
 export const BILLING_INTERVALS = ["monthly", "quarterly", "yearly", "unknown"] as const;
 export const ENTITLEMENT_STATUSES = ["active", "trialing", "locked", "unknown"] as const;
@@ -130,6 +133,9 @@ export const FIRST_DAY_PREPARATION_DURATION_BUCKETS = ["under_30s", "30_90s", "9
 export const FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS = ["under_5s", "5_15s", "15_30s", "30_60s", "60s_plus"] as const;
 export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_50", "51_100", "100_plus"] as const;
 export const FIRST_DAY_BACKLOG_SOURCES = ["foreground", "background", "resume"] as const;
+/** Once per new install: how many days it took to reach 10 and 30 tracked hours. */
+export const USAGE_MILESTONE_IDS = ["tracked_10h", "tracked_30h"] as const;
+export const USAGE_MILESTONE_DAY_BUCKETS = ["0_7", "8_14", "15_30", "31_60", "61_90"] as const;
 export const CLASSIFICATION_TRIGGERS = ["manual", "background_threshold", "focused_idle", "first_day_resume", "live", "drift_alarm"] as const;
 export const CLASSIFICATION_FAILURE_KINDS = ["transport", "quota", "content"] as const;
 // Mirrors AiConnectionIssueKind. Kept as a local literal list so the analytics
@@ -261,6 +267,10 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
   },
   first_day_backlog: {
     source: FIRST_DAY_BACKLOG_SOURCES,
+  },
+  usage_milestone: {
+    milestone: USAGE_MILESTONE_IDS,
+    days_since_start_bucket: USAGE_MILESTONE_DAY_BUCKETS,
   },
   permission_action: {
     permission: PERMISSIONS,

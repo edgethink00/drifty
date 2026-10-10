@@ -128,6 +128,7 @@ vi.mock("./features/feedback/feedbackService", () => ({
 }));
 
 vi.mock("./features/billing/billingService", () => ({
+  fetchFriendInvite: vi.fn().mockResolvedValue({ kind: "disabled" }),
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   fetchIndividualPricingQuote: vi.fn().mockResolvedValue({ success: false, error: "Pricing unavailable in this test." }),
   createIndividualCheckout: billingMocks.createIndividualCheckout,

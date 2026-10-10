@@ -3,7 +3,8 @@ import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsSearch } from "./SettingsSearch";
-import { SettingsSearchDestination, SettingsSearchProvider } from "./SettingsSearchContext";
+import { SettingsSearchDestination, SettingsSearchNavigatorBridge, SettingsSearchProvider } from "./SettingsSearchContext";
+import { FRIEND_INVITE_SETTING_ID, SETTINGS_SEARCH_ENTRIES, type SettingsSearchEntry } from "./settingsSearchCatalog";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { PrivacySettingsSection } from "./PrivacySettingsSection";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -106,6 +107,33 @@ describe("settings search", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("lands a shortcut from outside Settings on the friend invite card only while invites are open", async () => {
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
+    const entry = SETTINGS_SEARCH_ENTRIES.find((candidate) => candidate.id === FRIEND_INVITE_SETTING_ID);
+    if (!entry) throw new Error("friend invite entry missing");
+    const navigateRef: { current: ((target: SettingsSearchEntry) => void) | null } = { current: null };
+    function Harness({ invitesOpen }: { readonly invitesOpen: boolean }) {
+      const [section, setSection] = useState<SettingsSection | null>(null);
+      return <SettingsSearchProvider activeSection={section} availability={{ ...publicAvailability, friendInvite: invitesOpen }} onNavigate={(target) => setSection(target.section)}>
+        <SettingsSearchNavigatorBridge navigateRef={navigateRef} />
+        <SettingsSearchDestination>
+          {section === "account" ? <div data-setting-id={FRIEND_INVITE_SETTING_ID}>Invite friends</div> : <div>Elsewhere</div>}
+        </SettingsSearchDestination>
+      </SettingsSearchProvider>;
+    }
+    const closed = render(<Harness invitesOpen={false} />);
+    navigateRef.current?.(entry);
+    expect(screen.getByText("Elsewhere")).toBeTruthy();
+    closed.unmount();
+
+    render(<Harness invitesOpen />);
+    navigateRef.current?.(entry);
+    await waitFor(() => expect(document.activeElement?.getAttribute("data-setting-id")).toBe(FRIEND_INVITE_SETTING_ID));
+    expect(searchSettings("친구 초대", { ...publicAvailability, friendInvite: true }).some((found) => found.id === FRIEND_INVITE_SETTING_ID)).toBe(true);
+    expect(searchSettings("referral", publicAvailability).some((found) => found.id === FRIEND_INVITE_SETTING_ID)).toBe(false);
   });
 
   it("mounts a destination, unfolds it and focuses the row without activating its control; repeat navigation works", async () => {

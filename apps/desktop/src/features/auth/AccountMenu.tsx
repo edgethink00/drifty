@@ -103,6 +103,17 @@ function UpdateIcon() {
   );
 }
 
+function InviteFriendsIcon() {
+  return (
+    <svg {...menuIconProps}>
+      <rect x="3.6" y="8.2" width="16.8" height="4" rx="1" />
+      <path d="M12 8.2V20.4" />
+      <path d="M18.8 12.2v6.2a2 2 0 0 1-2 2H7.2a2 2 0 0 1-2-2v-6.2" />
+      <path d="M7.6 8.2a2.4 2.4 0 0 1 0-4.8C10.1 3.4 12 8.2 12 8.2s1.9-4.8 4.4-4.8a2.4 2.4 0 0 1 0 4.8" />
+    </svg>
+  );
+}
+
 function FeedbackIcon() {
   return (
     <svg {...menuIconProps}>
@@ -277,6 +288,8 @@ type AccountMenuProps = {
   readonly onTogglePet: () => void;
   readonly onCheckForUpdates: () => void;
   readonly onFeedback: () => void;
+  /** Present only while friend invites are open for this account. */
+  readonly onInviteFriends?: () => void;
   readonly onSignIn: () => void;
   readonly onSignOut: () => void;
   readonly tracker?: AccountMenuTrackerSummary | null;
@@ -299,6 +312,7 @@ export function AccountMenu({
   onTogglePet,
   onCheckForUpdates,
   onFeedback,
+  onInviteFriends,
   onSignIn,
   onSignOut,
   tracker = null,
@@ -599,6 +613,12 @@ export function AccountMenu({
         <button type="button" className="account-menu-item" onClick={onProfile} role="menuitem">
           <span className="account-menu-icon"><ProfileIcon /></span>
           <span>{t("account.myProfile")}</span>
+        </button>
+      ) : null}
+      {isSignedIn && onInviteFriends ? (
+        <button type="button" className="account-menu-item" onClick={onInviteFriends} role="menuitem">
+          <span className="account-menu-icon"><InviteFriendsIcon /></span>
+          <span>{t("account.inviteFriends")}</span>
         </button>
       ) : null}
       <button type="button" className="account-menu-item" onClick={onCheckForUpdates} role="menuitem">

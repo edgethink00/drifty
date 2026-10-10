@@ -2,7 +2,9 @@ import type { DeleteHistoryRangeResult } from "@drifty/domain";
 import { setShareCardRankAccountScope } from "./features/share/shareCardRankCache";
 import { canOfferPromoCode, canStartCloudTrial } from "./features/billing/billingEligibility";
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
-import { SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
+import { SettingsSearchNavigatorBridge, SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
+import { FRIEND_INVITE_SETTING_ID, SETTINGS_SEARCH_ENTRIES, type SettingsSearchEntry } from "./features/settings/settingsSearchCatalog";
+import { friendInviteAccountKey, useFriendInvite } from "./features/settings/friendInviteStore";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ModalPresence } from "./components/ModalPresence";
 import { deleteHistorySelection } from "./features/history/historyDeletion";
@@ -279,6 +281,7 @@ import {
   CloudTrialStartedNotice,
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
+import { fetchFriendInvite } from "./features/billing/billingService";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
 import { buildRemoteDeviceLabels } from "./features/device-sync/deviceTimelineLabels";
 import { fetchSyncDevices, purgeCloudSyncData, resumeCloudSyncData } from "./features/device-sync/deviceSyncApi";
@@ -447,7 +450,8 @@ import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings,
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { useLeaderboardSeriesPrewarm } from "./features/leaderboard/useLeaderboardSeriesPrewarm";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
-import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
+import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
+import { useUsageMilestones } from "./lib/analytics/useUsageMilestones";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
 import { replaceNavigationHistoryTab, type NavigationHistoryState, type TabId } from "./app/navigation";
@@ -1725,6 +1729,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     ?? (isSupabaseConfigured ? (authStatus === "loading" ? "checking" : "online") : "disabled");
   const isCloudOnline = cloudConnectionStatus === "online";
   const shouldCheckBillingEntitlement = isCloudOnline && isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
+  // The account menu shortcut and the Settings card share one friend-invite
+  // read; the shortcut appears only while invites are open for this account.
+  const friendInviteLoader = isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth && Boolean(user)
+    ? fetchFriendInvite
+    : null;
+  const friendInvite = useFriendInvite(friendInviteLoader ? friendInviteAccountKey(user?.email) : null, friendInviteLoader);
+  const settingsSearchNavigateRef = useRef<((entry: SettingsSearchEntry) => void) | null>(null);
   const shouldBlockLocalTrackerAccess = isEffectiveAuthRequired && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const shareAccountScope = isPolicySignedIn ? user?.id ?? null : null;
@@ -7761,6 +7772,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     && !quietHoursActive
     && !isInitialDailyFocusQuietPeriod(onboardingCompletedAt);
 
+  // How fast new installs reach 10 and 30 tracked hours, the bar proposed for
+  // friend-invite rewards. Reads the local tracker's total (idle excluded);
+  // only a milestone id and a days-since-start bucket are reported.
+  const loadTrackedSecondsTotal = useCallback(async () => {
+    const buckets = await trackerClient.getHourlySummary({
+      start: "2000-01-01T00:00:00",
+      end: formatLocalDateTime(Date.now()),
+    });
+    return buckets.reduce((total, bucket) => total + (Number.isFinite(bucket.totalSeconds) ? bucket.totalSeconds : 0), 0);
+  }, []);
+  useUsageMilestones({
+    enabled: hasLoadedOnce && isTauriRuntime() && !shouldUsePreviewData(),
+    loadTrackedSeconds: loadTrackedSecondsTotal,
+  });
+
   useCompanionCommunityMilestones({
     ready: classificationAssessmentReady && companionDailyFocusEvaluable && isSupabaseConfigured && !shouldUsePreviewData(),
     recoveryPending: classificationAvailabilityGateEnabled && (
@@ -10324,12 +10350,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       activeSection={activeTab === "settings" ? settingsSection : null}
       availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows",
         backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired,
-        promoCode: canOfferPromoCode(effectiveBillingEntitlement) }}
+        promoCode: canOfferPromoCode(effectiveBillingEntitlement), friendInvite: Boolean(friendInvite) }}
       onNavigate={(entry) => {
         setSettingsSection(entry.section);
         if (entry.devSubsection) handleDevSettingsSubsectionChange(entry.devSubsection);
       }}
     >
+      <SettingsSearchNavigatorBridge navigateRef={settingsSearchNavigateRef} />
       {/* Keep native window controls outside the narrow Settings scroll container. */}
       {hostPlatform === "windows" ? (
         <WindowsTitlebar
@@ -10555,6 +10582,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               setFeedbackModalOpen(true);
               setAccountMenuOpen(false);
             }}
+            onInviteFriends={friendInvite ? () => {
+              const entry = SETTINGS_SEARCH_ENTRIES.find((candidate) => candidate.id === FRIEND_INVITE_SETTING_ID);
+              navigateToTab("settings");
+              setSettingsSection("account");
+              if (entry) settingsSearchNavigateRef.current?.(entry);
+              setAccountMenuOpen(false);
+              capturePostHogEvent("billing_action", { action: "friend_invite_menu_opened", result: "success" });
+            } : undefined}
             onSignIn={() => {
               openDefaultAuthModal();
               setAccountMenuOpen(false);
@@ -11001,14 +11036,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 	                    hasAuthenticatedSession={Boolean(user)}
 	                    hasSignedInAccount={hasRequiredAccountAuth}
 	                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
-	                    publicProfileDisplayName={leaderboardProfileDisplayName}
-	                    publicProfileStatus={
-	                      isLeaderboardOptedIn
-	                        ? ownLeaderboardEntry?.rank
-	                          ? localization.t("leaderboard.onBoardAs", { rank: ownLeaderboardEntry.rank })
-	                          : localization.t("leaderboard.onBoard")
-	                        : localization.t("leaderboard.notOnBoard")
-	                    }
+	                    loadFriendInvite={fetchFriendInvite}
 	                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
 	                    userEmail={user?.email ?? null}
 	                    deviceSyncEnabled={deviceSyncEnabled}
@@ -11020,12 +11048,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 	                    onDeviceSyncNow={deviceSyncNow}
 	                    onPurgeDeviceSyncData={handlePurgeDeviceSyncData}
 	                    onDeleteAccount={() => setAccountDeletionModalOpen(true)}
-	                    onEditPublicProfile={openProfileEditor}
 	                    onManageCloudBilling={handleManageCloudBilling}
 	                    onOpenAiSetup={openAiSetupSettings}
-	                    onOpenLeaderboard={() => {
-                          navigateToTab("leaderboard");
-                        }}
 	                    onRefreshCloudStatus={refreshBillingEntitlement}
                     onRedeemTrialCoupon={handleRedeemTrialCoupon}
                     onRevokeCloudDevice={handleRevokeCloudDevice}

@@ -16,6 +16,21 @@ const SettingsSearchContext = createContext({
 });
 export const useSettingsSearch = () => useContext(SettingsSearchContext);
 
+/** Hands the provider's navigate to code outside it (the account menu lives
+ *  above Settings), so a shortcut lands on a setting the same way search does. */
+export function SettingsSearchNavigatorBridge({ navigateRef }: {
+  readonly navigateRef: { current: ((entry: SettingsSearchEntry) => void) | null };
+}) {
+  const { navigate } = useSettingsSearch();
+  useEffect(() => {
+    navigateRef.current = navigate;
+  });
+  useEffect(() => () => {
+    navigateRef.current = null;
+  }, [navigateRef]);
+  return null;
+}
+
 export function SettingsSearchProvider({ activeSection, availability, onNavigate, children }: {
   readonly activeSection: SettingsSection | null;
   readonly availability: SettingsSearchAvailability;

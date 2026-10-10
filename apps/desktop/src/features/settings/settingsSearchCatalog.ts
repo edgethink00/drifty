@@ -12,7 +12,7 @@ export type SettingsSearchEntry = {
   readonly aiTab?: "providers" | "intelligence" | "profile";
   readonly aiProvider?: "openrouter" | "custom";
   readonly devSubsection?: DevSettingsSubsection;
-  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "promoCode";
+  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "promoCode" | "friendInvite";
 };
 
 // Reuse visible labels and descriptions; aliases contain vocabulary only.
@@ -29,6 +29,9 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, TranslationKey> = 
   "developer": "settings.section.developer",
   "dev": "common.dev"
 };
+
+/** The friend invite card's block; the account menu shortcut lands here too. */
+export const FRIEND_INVITE_SETTING_ID = "settings.account.friendInviteSection";
 
 export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   {
@@ -251,13 +254,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "로그인 계정 이메일 login sign in email account",
   },
   {
-    id: "settings.account.publicProfile",
-    section: "account",
-    titleKey: "settings.account.publicProfile",
-    keywords: "공개 프로필 리더보드 이름 profile leaderboard display name",
-    descriptionKey: "settings.account.profileDescription",
-  },
-  {
     id: "settings.account.syncMacs",
     section: "account",
     titleKey: "settings.account.syncMacs",
@@ -279,6 +275,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.account.couponTitle",
     keywords: "프로모션 할인 쿠폰 코드 promo coupon discount",
     gate: "promoCode",
+  },
+  {
+    id: FRIEND_INVITE_SETTING_ID,
+    section: "account",
+    titleKey: "settings.account.friendInviteSection",
+    keywords: "친구 초대 추천 선물 초대 코드 무료 refer referral invite friend gift free month code",
+    gate: "friendInvite",
   },
   {
     id: "settings.privacy.aiSending",

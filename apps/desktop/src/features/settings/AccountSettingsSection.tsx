@@ -14,12 +14,15 @@ import {
 } from "../billing/organizationSeatService";
 import { resolveOrganizationSeatDisplay, resolvePlanCardState, type OrganizationSeatDisplay } from "../billing/planCardState";
 import { TrialCouponRedemption } from "./TrialCouponRedemption";
+import { FriendInviteCard } from "./FriendInviteCard";
+import { friendInviteAccountKey } from "./friendInviteStore";
 import type {
   BillingEntitlement,
   BillingInterval,
   CheckoutFailureCode,
   CouponRedemption,
   CouponRedemptionFailureCode,
+  FriendInviteResult,
 } from "../billing/billingService";
 import type { IndividualPricingQuote } from "../billing/individualPricing";
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
@@ -56,8 +59,8 @@ export type AccountSettingsSectionProps = {
   readonly hasAuthenticatedSession?: boolean;
   readonly hasSignedInAccount?: boolean;
   readonly isSupabaseConfigured: boolean;
-  readonly publicProfileDisplayName?: string | null;
-  readonly publicProfileStatus?: string | null;
+  /** Reads the account's friend invite. Without it the gift row is not offered. */
+  readonly loadFriendInvite?: () => Promise<FriendInviteResult>;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
   readonly deviceSyncEnabled?: boolean;
@@ -69,10 +72,8 @@ export type AccountSettingsSectionProps = {
   readonly onDeviceSyncNow?: () => void | Promise<void>;
   readonly onPurgeDeviceSyncData?: () => void | Promise<void>;
   readonly onDeleteAccount?: () => void;
-  readonly onEditPublicProfile?: () => void;
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onOpenAiSetup?: () => void;
-  readonly onOpenLeaderboard?: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onRedeemTrialCoupon: (code: string) => void | Promise<void>;
   readonly onReleaseOrganizationSeat?: (seatId: string) => Promise<OrganizationSeatReleaseResult>;
@@ -107,8 +108,7 @@ export function AccountSettingsSection({
   hasAuthenticatedSession,
   hasSignedInAccount,
   isSupabaseConfigured,
-  publicProfileDisplayName,
-  publicProfileStatus,
+  loadFriendInvite,
   userEmail,
   deviceSyncEnabled = false,
   deviceSyncCanEnable = false,
@@ -119,10 +119,8 @@ export function AccountSettingsSection({
   onDeviceSyncNow,
   onPurgeDeviceSyncData,
   onDeleteAccount,
-  onEditPublicProfile,
   onManageCloudBilling,
   onOpenAiSetup,
-  onOpenLeaderboard,
   onRefreshCloudStatus,
   onRedeemTrialCoupon,
   onReleaseOrganizationSeat = releaseOwnOrganizationSeat,
@@ -133,6 +131,7 @@ export function AccountSettingsSection({
 }: AccountSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [couponSurface, setCouponSurface] = useState<"plan" | "invite">("plan");
   const [syncSetupMode, setSyncSetupMode] = useState<"info" | "enable" | null>(null);
   const [localActionPending, setLocalActionPending] = useState(false);
   const [localActionError, setLocalActionError] = useState<string | null>(null);
@@ -271,6 +270,24 @@ export function AccountSettingsSection({
   const activePromotionEndsAt = billingEntitlement?.status === "trialing" && billingEntitlement.accessSource === "promotion"
     ? billingEntitlement.trialEndsAt
     : null;
+  // Promo code and the friend invite's code tab share one redemption. The
+  // applied result shows in both; an attempt's progress and error stay with
+  // the control the user typed into.
+  const redeemFrom = (surface: "plan" | "invite") => (code: string) => {
+    setCouponSurface(surface);
+    return onRedeemTrialCoupon(code);
+  };
+  const couponEntryFor = (surface: "plan" | "invite") => ({
+    activePromotionEndsAt,
+    disabled: billingPlansDisabled || !isSupabaseConfigured || !isSignedIn,
+    errorCode: couponSurface === surface ? couponRedemptionErrorCode : null,
+    isSignedIn,
+    loading: couponSurface === surface && couponRedemptionLoading,
+    redemption: couponRedemption,
+    onRedeem: redeemFrom(surface),
+    onSignIn,
+  });
+  const planCouponEntry = couponEntryFor("plan");
 
   const planCards = (
     <div className="settings-row settings-row--cloud-pricing">
@@ -346,14 +363,14 @@ export function AccountSettingsSection({
         </div>
         {showPromoCode ? (
           <TrialCouponRedemption
-            activePromotionEndsAt={activePromotionEndsAt}
-            disabled={billingPlansDisabled || !isSupabaseConfigured || !isSignedIn}
-            errorCode={couponRedemptionErrorCode}
-            isSignedIn={isSignedIn}
-            loading={couponRedemptionLoading}
-            redemption={couponRedemption}
-            onRedeem={onRedeemTrialCoupon}
-            onSignIn={onSignIn}
+            activePromotionEndsAt={planCouponEntry.activePromotionEndsAt}
+            disabled={planCouponEntry.disabled}
+            errorCode={planCouponEntry.errorCode}
+            isSignedIn={planCouponEntry.isSignedIn}
+            loading={planCouponEntry.loading}
+            redemption={planCouponEntry.redemption}
+            onRedeem={planCouponEntry.onRedeem}
+            onSignIn={planCouponEntry.onSignIn}
           />
         ) : null}
         {organizationSeat && organizationSeat.role !== "owner" ? (
@@ -581,27 +598,15 @@ export function AccountSettingsSection({
         ) : null}
       </div>
 
-      <div data-setting-id="settings.account.publicProfile" className="settings-block">
-        <h3 className="settings-block__title-with-badge" aria-label={t("settings.account.publicProfile")}>
-          <span>{t("settings.account.publicProfile")}</span>
-          <span className="settings-beta-badge">{t("common.beta")}</span>
-        </h3>
-        <div className="settings-row settings-row--stacked-action">
-          <div>
-            <div className="lbl">{publicProfileDisplayName?.trim() || t("settings.account.leaderboardProfile")}</div>
-            <div className="desc">{publicProfileStatus?.trim() || t("settings.account.profileDescription")}</div>
-          </div>
-          <div className="ctrl account-public-profile-actions">
-            <button type="button" className="settings-btn" onClick={onEditPublicProfile} disabled={!onEditPublicProfile}>
-              {t("settings.account.editProfile")}
-            </button>
-            <button type="button" className="settings-btn" onClick={onOpenLeaderboard} disabled={!onOpenLeaderboard}>
-              {t("settings.account.openLeaderboard")}
-            </button>
-          </div>
-        </div>
-      </div>
-
+      {/* Plan and account controls come first; the account menu and settings
+          search land on the invite card wherever it sits. */}
+      {loadFriendInvite && isSignedIn && isSupabaseConfigured && (hasAuthenticatedSession ?? isSignedIn) ? (
+        <FriendInviteCard
+          accountKey={friendInviteAccountKey(trimmedUserEmail)}
+          loadInvite={loadFriendInvite}
+          codeEntry={showPromoCode ? couponEntryFor("invite") : null}
+        />
+      ) : null}
 
       <DeviceSyncSetupModal mode={syncSetupMode} canEnable={deviceSyncCanEnable}
         onClose={() => setSyncSetupMode(null)} onEnable={() => {

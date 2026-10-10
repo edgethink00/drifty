@@ -15,6 +15,12 @@ type TrialCouponRedemptionProps = {
   readonly errorCode: CouponRedemptionFailureCode | null;
   readonly onRedeem: (code: string) => void | Promise<void>;
   readonly onSignIn?: () => void;
+  /**
+   * "row" is the Account plan card row. "panel" is the same control stacked
+   * inside the friend invite card's code tab: identical normalisation,
+   * validation, errors and applied state, only the wording and layout differ.
+   */
+  readonly variant?: "row" | "panel";
 };
 
 /**
@@ -30,8 +36,15 @@ export function TrialCouponRedemption({
   errorCode,
   onRedeem,
   onSignIn,
+  variant = "row",
 }: TrialCouponRedemptionProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const isPanel = variant === "panel";
+  const settingId = isPanel ? "settings.account.friendInviteCodeTitle" : "settings.account.couponTitle";
+  const titleText = t(isPanel ? "settings.account.friendInviteCodeTitle" : "settings.account.couponTitle");
+  const descriptionText = t(isPanel ? "settings.account.friendInviteCodeDescription" : "settings.account.couponDescription");
+  const placeholderText = t(isPanel ? "settings.account.friendInviteCodePlaceholder" : "settings.account.couponPlaceholder");
+  const rowClass = isPanel ? "trial-coupon trial-coupon--panel" : "settings-row trial-coupon";
   const inputId = useId();
   const statusId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -97,8 +110,8 @@ export function TrialCouponRedemption({
       {/* Only the open field has a control to label; other states show the
           title as plain text so no label points at a missing input. */}
       {options.labelsField
-        ? <label className="lbl" htmlFor={inputId}>{t("settings.account.couponTitle")}</label>
-        : <div className="lbl">{t("settings.account.couponTitle")}</div>}
+        ? <label className="lbl" htmlFor={inputId}>{titleText}</label>
+        : <div className="lbl">{titleText}</div>}
       <p
         ref={options.focusTarget}
         id={statusId}
@@ -113,7 +126,7 @@ export function TrialCouponRedemption({
 
   if (!isSignedIn) {
     return (
-      <div data-setting-id="settings.account.couponTitle" className="settings-row trial-coupon">
+      <div data-setting-id={settingId} className={rowClass}>
         {renderCopy(t("settings.account.couponSignIn"), "default")}
         {onSignIn ? (
           <div className="ctrl">
@@ -136,7 +149,7 @@ export function TrialCouponRedemption({
   if (applied) {
     const alreadyUsed = redemption?.status === "already_redeemed";
     return (
-      <div data-setting-id="settings.account.couponTitle" className="settings-row trial-coupon trial-coupon--applied">
+      <div data-setting-id={settingId} className={rowClass + " trial-coupon--applied"}>
         {renderCopy(applied, alreadyUsed ? "default" : "success", { live: redemption ? "status" : undefined, focusTarget: statusRef })}
         {alreadyUsed ? null : (
           <div className="ctrl">
@@ -152,13 +165,13 @@ export function TrialCouponRedemption({
       : null;
   return (
     <form
-      data-setting-id="settings.account.couponTitle"
-      className="settings-row trial-coupon"
+      data-setting-id={settingId}
+      className={rowClass}
       onSubmit={handleSubmit}
       aria-busy={loading}
       noValidate
     >
-      {renderCopy(failure ?? t("settings.account.couponDescription"), failure ? "error" : "default", { live: failure ? "alert" : undefined, labelsField: true })}
+      {renderCopy(failure ?? descriptionText, failure ? "error" : "default", { live: failure ? "alert" : undefined, labelsField: true })}
       <div className={"trial-coupon__field" + (failure ? " is-invalid" : "")}>
         <input
           ref={inputRef}
@@ -171,7 +184,7 @@ export function TrialCouponRedemption({
             setLocalInvalid(false);
             setEditedSinceAttempt(true);
           }}
-          placeholder={t("settings.account.couponPlaceholder")}
+          placeholder={placeholderText}
           aria-label={t("settings.account.couponInputAria")}
           aria-describedby={statusId}
           aria-invalid={failure ? true : undefined}
@@ -239,6 +252,8 @@ function describeCouponError(
     case "coupon_exhausted": return { error: true, message: t("settings.account.couponExhausted") };
     case "coupon_rate_limited": return { error: true, message: t("settings.account.couponRateLimited") };
     case "coupon_already_subscribed": return { error: true, message: t("settings.account.couponSubscribed") };
+    case "coupon_own_invite": return { error: true, message: t("settings.account.couponOwnInvite") };
+    case "coupon_invite_new_accounts_only": return { error: true, message: t("settings.account.couponInviteNewAccountsOnly") };
     case "full_account_required":
     case "sign_in_required":
       return { error: true, message: t("settings.account.couponSignIn") };

@@ -11,6 +11,7 @@ export type SettingsSearchAvailability = {
   readonly accessibility?: boolean;
   readonly deviceSync: boolean;
   readonly promoCode?: boolean;
+  readonly friendInvite?: boolean;
 };
 
 export function isSettingsSearchEntryVisible(entry: SettingsSearchEntry, availability: SettingsSearchAvailability): boolean {

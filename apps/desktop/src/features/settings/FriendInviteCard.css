@@ -1,0 +1,560 @@
+/* Friend invite: the common refer-a-friend card in the Account section's
+   grammar. Soft block title above one card; inside, a headline, underlined
+   tabs and a white inset panel. As in the references, only the pass is
+   centred; the steps and the link run left-aligned across the panel. */
+.content--settings .settings-block--friend-invite .friend-invite {
+  background: var(--settings-row-card-bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem 1.25rem 1.05rem;
+}
+
+.content--settings .friend-invite__header {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.content--settings .friend-invite__headline {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.06rem;
+  font-weight: 680;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.content--settings .friend-invite__lede {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.content--settings .friend-invite__tabs {
+  border-bottom: 1px solid var(--line);
+}
+
+.content--settings .friend-invite__tabs .page-tab {
+  font-size: 0.875rem;
+}
+
+/* Inset panel: one step lighter than the card, so the stage reads as a clean
+   sheet rather than a muddier layer under the gray block. */
+.content--settings .friend-invite__panel {
+  background: #ffffff;
+  border: 1px solid rgba(28, 28, 25, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  padding: 1.6rem 1.5rem 1.5rem;
+}
+
+:root[data-theme="dark"] .content--settings .friend-invite__panel {
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+.content--settings .friend-invite__column {
+  display: grid;
+  gap: 1.35rem;
+  width: 100%;
+}
+
+/* ── Gift pass ──
+   The pass the friend receives, made like a printed gift card: warm cream
+   flowing into a clear sage corner under fine grain. Everything sits on the
+   centre line: the brand wordmark locked up with a Pro badge, the duration in
+   the wordmark's serif and what it includes. On the white panel it reads warm
+   rather than dull; in dark it is a deep olive with the same light. */
+.content--settings .friend-invite__pass {
+  --pass-ink: #1e2216;
+  --pass-soft: #5d6450;
+  --pass-badge-bg: #3d4a1e;
+  --pass-badge-ink: #f4f1e2;
+  --pass-grain: 0.06;
+  --pass-edge: inset 0 0 0 1px rgba(60, 70, 30, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --pass-shadow: 0 1px 2px rgba(40, 50, 20, 0.05), 0 18px 36px -20px rgba(80, 100, 40, 0.34);
+  align-content: center;
+  aspect-ratio: 1.75;
+  background:
+    radial-gradient(90% 80% at 0% 0%, #fdf6ea 0%, rgba(253, 246, 234, 0) 60%),
+    radial-gradient(85% 95% at 100% 100%, #c6dc96 0%, rgba(198, 220, 150, 0) 66%),
+    linear-gradient(135deg, #f8f1e3 0%, #ebeed2 52%, #dde8bf 100%);
+  border-radius: 14px;
+  box-shadow: var(--pass-edge), var(--pass-shadow);
+  color: var(--pass-ink);
+  display: grid;
+  gap: 0.931rem;
+  isolation: isolate;
+  justify-items: center;
+  justify-self: center;
+  max-width: 20.591rem;
+  overflow: hidden;
+  padding: 1.131rem 1.211rem;
+  text-align: center;
+  position: relative;
+  transition: transform 420ms var(--ease-out-quart, cubic-bezier(.25, 1, .5, 1));
+  width: 100%;
+}
+
+:root[data-theme="dark"] .content--settings .friend-invite__pass {
+  --pass-ink: #f3f2e8;
+  --pass-soft: rgba(236, 238, 222, 0.64);
+  --pass-badge-bg: #dfe9bd;
+  --pass-badge-ink: #2b3514;
+  --pass-grain: 0.16;
+  --pass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --pass-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.65);
+  background:
+    radial-gradient(90% 80% at 0% 0%, rgba(222, 196, 140, 0.16) 0%, rgba(222, 196, 140, 0) 60%),
+    radial-gradient(85% 95% at 100% 100%, rgba(160, 196, 96, 0.3) 0%, rgba(160, 196, 96, 0) 66%),
+    linear-gradient(135deg, #36352c 0%, #30352a 52%, #2b3524 100%);
+}
+
+/* Film grain, so the gradient reads as card stock rather than a flat fill. */
+.content--settings .friend-invite__pass::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  content: "";
+  inset: 0;
+  opacity: var(--pass-grain);
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.content--settings .friend-invite__pass:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content--settings .friend-invite__pass,
+  .content--settings .friend-invite__pass:hover {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Wordmark and Pro badge as one lockup, like "Flow [Pro]" in the references.
+   The badge centres on the wordmark's ink band (hourglass and letters), which
+   sits in the top ~76% of the trimmed image, not on its box. */
+.content--settings .friend-invite__pass-top {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+/* The trimmed brand wordmark (hourglass + serif drifty), painted in ink. */
+.content--settings .friend-invite__pass-wordmark {
+  aspect-ratio: 1680 / 471;
+  background: var(--pass-ink);
+  display: block;
+  height: 1.292rem;
+  -webkit-mask: var(--friend-invite-wordmark) center / contain no-repeat;
+  mask: var(--friend-invite-wordmark) center / contain no-repeat;
+}
+
+.content--settings .friend-invite__pass-chip {
+  align-items: center;
+  background: var(--pass-badge-bg);
+  border-radius: var(--radius-pill);
+  box-sizing: border-box;
+  color: var(--pass-badge-ink);
+  display: inline-flex;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  height: 0.988rem;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  margin-top: 0.03rem;
+  /* One pixel more at the bottom so the capitals' optical centre, not the
+     line box, sits on the badge's centre line. */
+  padding: 0 0.4rem 1px;
+}
+
+.content--settings .friend-invite__pass-hero {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+}
+
+.content--settings .friend-invite__pass-caption {
+  color: var(--pass-soft);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* The unit hangs off the number, so the number itself is what centres. */
+.content--settings .friend-invite__pass-value {
+  margin: 0;
+  position: relative;
+}
+
+.content--settings .friend-invite__pass-value strong {
+  font-family: var(--font-serif);
+  font-size: 3.634rem;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 0.92;
+}
+
+.content--settings .friend-invite__pass-value span {
+  bottom: 0.1rem;
+  color: var(--pass-soft);
+  font-size: 0.931rem;
+  font-weight: 600;
+  left: calc(100% + 0.3rem);
+  position: absolute;
+  white-space: nowrap;
+}
+
+/* ── How it works ──
+   The common referral grammar: one quiet line per step with the key phrase in
+   bold, led by a bare line icon (no tile, ring or fill) in the pass's olive.
+   The cream-to-sage marker numbers the claimed gifts and holds the empty
+   state. The block is its own size container so the panel and pass tighten
+   by the card's width, not the window's. */
+.content--settings .settings-block--friend-invite {
+  --friend-invite-accent: #6f8a35;
+  --friend-invite-ink: #55692a;
+  --friend-invite-marker-bg: linear-gradient(135deg, #fbf4e6 0%, #dfe9c2 100%);
+  --friend-invite-marker-ring: rgba(98, 120, 46, 0.22);
+  --friend-invite-marker-ink: #46561f;
+  container: friend-invite / inline-size;
+}
+
+:root[data-theme="dark"] .content--settings .settings-block--friend-invite {
+  --friend-invite-accent: #c5da8a;
+  --friend-invite-ink: #c9dc95;
+  --friend-invite-marker-bg: linear-gradient(135deg, rgba(222, 196, 140, 0.16) 0%, rgba(160, 196, 96, 0.26) 100%);
+  --friend-invite-marker-ring: rgba(197, 218, 138, 0.26);
+  --friend-invite-marker-ink: #dfe9b8;
+}
+
+.content--settings .friend-invite__how h5,
+.content--settings .friend-invite__label {
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 650;
+  margin: 0;
+}
+
+.content--settings .friend-invite__how h5 {
+  margin-bottom: 0.7rem;
+}
+
+.content--settings .friend-invite__steps {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.content--settings .friend-invite__step {
+  align-items: center;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.content--settings .friend-invite__step-icon {
+  color: var(--friend-invite-ink);
+  display: inline-flex;
+}
+
+.content--settings .friend-invite__step-icon .friend-invite__icon {
+  height: 1rem;
+  width: 1rem;
+}
+
+.content--settings .friend-invite__marker {
+  align-items: center;
+  background: var(--friend-invite-marker-bg);
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px var(--friend-invite-marker-ring);
+  color: var(--friend-invite-marker-ink);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  height: 1.375rem;
+  justify-content: center;
+  line-height: 1;
+  width: 1.375rem;
+}
+
+.content--settings .friend-invite__step-text {
+  color: color-mix(in srgb, var(--text) 82%, var(--text-muted));
+  font-size: var(--type-setting-label-size);
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.content--settings .friend-invite__step-text strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.content--settings .friend-invite__icon {
+  height: 1.2rem;
+  width: 1.2rem;
+}
+
+/* ── Invite link ── */
+.content--settings .friend-invite__link {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.content--settings .friend-invite__link-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.content--settings .friend-invite__link-field {
+  align-items: center;
+  background: var(--settings-control-bg);
+  border: 1px solid var(--settings-control-border);
+  border-radius: var(--settings-control-radius);
+  display: flex;
+  gap: 0.5rem;
+  height: var(--settings-action-height);
+  min-width: 0;
+  padding: 0 0.7rem;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content--settings .friend-invite__link-field:has(> .friend-invite__link-input:focus-visible) {
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+
+.content--settings .friend-invite__link-field.is-invalid {
+  border-color: color-mix(in srgb, var(--warn) 46%, var(--line));
+}
+
+.content--settings .friend-invite__link-icon {
+  color: var(--text-soft);
+  flex: 0 0 auto;
+  height: 0.95rem;
+  width: 0.95rem;
+}
+
+.content--settings .friend-invite__link-input {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  flex: 1 1 auto;
+  font-family: var(--font-ui);
+  font-size: var(--type-input-size);
+  min-width: 0;
+  outline: none;
+  padding: 0;
+  text-overflow: ellipsis;
+}
+
+.content--settings .friend-invite__copy {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: center;
+  min-width: 6.5rem;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+/* Copied: a brief olive confirmation in place, the same width as Copy. */
+.content--settings .friend-invite__copy[data-copied] {
+  background: color-mix(in srgb, var(--friend-invite-accent) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--friend-invite-accent) 40%, transparent);
+  color: var(--friend-invite-ink);
+}
+
+.content--settings .friend-invite__button-icon {
+  height: 0.9rem;
+  width: 0.9rem;
+}
+
+.content--settings .friend-invite__link-hint {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.content--settings .friend-invite__error {
+  color: var(--warn);
+  font-size: var(--type-setting-desc-size);
+  margin: 0;
+}
+
+.content--settings .friend-invite__closed {
+  background: var(--settings-control-bg);
+  border: 1px solid var(--settings-control-border);
+  border-radius: var(--settings-control-radius);
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+}
+
+/* ── Friends ── */
+.content--settings .friend-invite__progress {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.content--settings .friend-invite__progress-copy {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+}
+
+.content--settings .friend-invite__progress-count {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.content--settings .friend-invite__meter {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border-radius: var(--radius-pill);
+  height: 0.4rem;
+  overflow: hidden;
+}
+
+.content--settings .friend-invite__meter > span {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--friend-invite-accent) 70%, transparent), var(--friend-invite-accent));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transform: scaleX(var(--friend-invite-fill, 0));
+  transform-origin: left center;
+  transition: transform var(--transition-base);
+}
+
+.content--settings .friend-invite__claims {
+  border-top: 1px solid var(--line);
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.content--settings .friend-invite__claim {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.7rem 0;
+}
+
+.content--settings .friend-invite__claim:last-child {
+  border-bottom: 0;
+}
+
+.content--settings .friend-invite__claim-name {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+}
+
+.content--settings .friend-invite__claim-date {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+.content--settings .friend-invite__empty {
+  align-content: center;
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+  padding: 1rem 0 0.4rem;
+  text-align: center;
+}
+
+.content--settings .friend-invite__empty-mark {
+  align-items: center;
+  background: var(--friend-invite-marker-bg);
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px var(--friend-invite-marker-ring);
+  color: var(--friend-invite-marker-ink);
+  display: inline-flex;
+  height: 3rem;
+  justify-content: center;
+  margin-bottom: 0.45rem;
+  width: 3rem;
+}
+
+.content--settings .friend-invite__empty-mark .friend-invite__icon {
+  height: 1.35rem;
+  width: 1.35rem;
+}
+
+.content--settings .friend-invite__empty-title {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+  margin: 0;
+}
+
+.content--settings .friend-invite__empty-body {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  margin: 0 0 0.6rem;
+}
+
+/* ── Code ──
+   The shared Promo code control, stacked: label and status line above the
+   same joined code + Apply field. */
+.content--settings .trial-coupon--panel {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.content--settings .trial-coupon--panel .lbl {
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.content--settings .trial-coupon--panel .trial-coupon__field {
+  height: var(--settings-action-height);
+}
+
+.content--settings .trial-coupon--panel.trial-coupon--applied {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+
+@container friend-invite (max-width: 34rem) {
+  .content--settings .friend-invite__panel {
+    padding: 1.1rem 1rem 1.05rem;
+  }
+
+  .content--settings .friend-invite__pass {
+    gap: 0.855rem;
+    padding: 0.893rem 0.969rem;
+  }
+
+  .content--settings .friend-invite__pass-value strong {
+    font-size: 2.907rem;
+  }
+}
+
+@container friend-invite (max-width: 26rem) {
+  .content--settings .friend-invite__link-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
