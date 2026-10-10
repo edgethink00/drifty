@@ -49,16 +49,23 @@ export function normalizeBrowserContentClues(value: unknown): BrowserContentClue
   };
 }
 
+const ADDRESS_BAR_CONTENT_BUNDLES: ReadonlySet<string> = new Set(["com.apple.Safari", "org.mozilla.firefox"]);
+
 /** A historical observation must belong to this segment, never a reused page cache. */
 export function browserContentCluesForSegment(segment: {
   readonly browserContentContext?: BrowserContentContext | null;
   readonly siteUrl?: string | null; readonly siteTitle?: string | null;
   readonly startedAt: string; readonly endedAt: string;
   readonly siteSource?: string | null; readonly exclusionSource?: string | null;
+  readonly bundleId?: string | null; readonly windowTitle?: string | null;
 }): BrowserContentClues | undefined {
   const c = segment.browserContentContext;
-  if (!c || c.version !== 1 || segment.exclusionSource || segment.siteSource !== "applescript"
-    || c.pageUrl !== segment.siteUrl || c.pageTitle !== segment.siteTitle) return undefined;
+  // Safari and Firefox are read from their address bars, never scripted; the
+  // native helper binds the clues to the exact focused window title instead.
+  const addressBar = segment.siteSource === "accessibility-address-bar" && ADDRESS_BAR_CONTENT_BUNDLES.has(segment.bundleId ?? "");
+  const pageTitle = addressBar ? segment.windowTitle : segment.siteTitle;
+  if (!c || c.version !== 1 || segment.exclusionSource || (segment.siteSource !== "applescript" && !addressBar)
+    || c.pageUrl !== segment.siteUrl || !pageTitle || c.pageTitle !== pageTitle) return undefined;
   const at = Date.parse(c.collectedAt), start = Date.parse(segment.startedAt), end = Date.parse(segment.endedAt);
   if (![at, start, end].every(Number.isFinite) || end < start || at < start || at > end) return undefined;
   return normalizeBrowserContentClues({

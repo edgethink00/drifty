@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Final, Literal
 
 from app.permissions.accessibility import read_front_window_title
-from app.tracker.browser_content import capture_browser_content
+from app.tracker.browser_content import ADDRESS_BAR_CONTENT_BUNDLES, capture_browser_content
 from app.tracker.browser_content_policy import policy_snapshot
 from app.tracker.capture_contract import (  # re-exported: this module was the
     FrontmostCaptureSource,  # original home of the capture contract, and callers
@@ -394,9 +394,15 @@ def _capture_snapshot(
 
     check_current()
     browser_content_context = None
-    if native is not None and site_source == "applescript" and pid is not None:
+    # Safari's and Firefox's address bar paths never script the browser; the
+    # native helper binds the focused window's exact title and page URL
+    # through accessibility instead of a scripted tab.
+    address_bar_content = (bundle_id in ADDRESS_BAR_CONTENT_BUNDLES and site_source == "accessibility-address-bar"
+                           and bool(browser.ax_window_title) and (browser.site_url or "").startswith(("http://", "https://")))
+    if native is not None and (site_source == "applescript" or address_bar_content) and pid is not None:
         browser_content_context = capture_browser_content(
-            pid=pid, bundle_id=bundle_id, page_url=browser.site_url, page_title=browser.site_title,
+            pid=pid, bundle_id=bundle_id, page_url=browser.site_url,
+            page_title=browser.ax_window_title if address_bar_content else browser.site_title,
             observed_at=observed_at, timeout=min(0.65, max(0, command_scope.deadline-time.monotonic()-0.7)) if command_scope else 0.65,
             run_command=checked_command,
         )

@@ -94,7 +94,12 @@ func chromiumFrontWindowNumber(_ rows: [(number: Int?, bounds: CGRect?)], matchi
 if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--browser-content" {
     final class Changes { var invalidated = false }
     func sample() -> [String: Any]? {
-        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi"]
+        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "com.apple.Safari", "org.mozilla.firefox"]
+        // Safari and Firefox expose no scripting window mode; they are admitted
+        // through their own accessibility identity below and never receive
+        // Apple Events.
+        let safari = CommandLine.arguments[3] == "com.apple.Safari", gecko = CommandLine.arguments[3] == "org.mozilla.firefox"
+        let addressBar = safari || gecko
         guard let pid = Int32(CommandLine.arguments[2]), pid > 0,
               let milliseconds = Double(CommandLine.arguments[6]), milliseconds > 0,
               AXIsProcessTrusted(),
@@ -113,7 +118,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         let deadline = ProcessInfo.processInfo.systemUptime + min(milliseconds / 1000, 0.62)
         func code(_ text: String) -> UInt32 { text.utf8.reduce(0) { ($0 << 8) | UInt32($1) } }
         let target = NSAppleEventDescriptor(processIdentifier: pid)
-        guard AEDeterminePermissionToAutomateTarget(target.aeDesc, code("core"), code("getd"), false) == noErr else { return nil }
+        guard addressBar || AEDeterminePermissionToAutomateTarget(target.aeDesc, code("core"), code("getd"), false) == noErr else { return nil }
         func specifier(_ desired: String, _ form: String, _ key: NSAppleEventDescriptor, _ container: NSAppleEventDescriptor) -> NSAppleEventDescriptor? {
             let record = NSAppleEventDescriptor.record()
             record.setDescriptor(NSAppleEventDescriptor(typeCode: code(desired)), forKeyword: code("want"))
@@ -160,7 +165,8 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             guard rect.width > 0, rect.height > 0 else { return nil }
             return Identity(mode: mode, windowID: windowID, title: title, tabID: tabID, url: currentURL, tabTitle: tabTitle, bounds: rect)
         }
-        guard let before = scriptingIdentity() else { return nil }
+        let scriptedBefore = addressBar ? nil : scriptingIdentity()
+        guard addressBar || scriptedBefore != nil else { return nil }
         func birth() -> String? {
             var info = proc_bsdinfo()
             let size = Int32(MemoryLayout<proc_bsdinfo>.size)
@@ -239,6 +245,77 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // Reading the application role opens Chromium's native accessibility
         // tree. No AXEnhancedUserInterface preference/permission setter.
         _ = attribute(application, "AXRole")
+        // Safari and Firefox drop the root slash in their address fields; only
+        // that representation difference is equal. Others compare exactly.
+        func sameAddress(_ observed: String?, _ expected: String) -> Bool {
+            guard let observed else { return false }
+            if observed == expected { return true }
+            guard addressBar, let a = URLComponents(string: observed), let b = URLComponents(string: expected),
+                  a.user == nil, a.password == nil, b.user == nil, b.password == nil else { return false }
+            return a.scheme == b.scheme && a.host == b.host && a.port == b.port
+                && (a.percentEncodedPath.isEmpty ? "/" : a.percentEncodedPath) == (b.percentEncodedPath.isEmpty ? "/" : b.percentEncodedPath)
+                && a.percentEncodedQuery == b.percentEncodedQuery && a.percentEncodedFragment == b.percentEncodedFragment
+        }
+        // Safari proves a normal window with its own language-independent
+        // identifiers: the toolbar's tab group picker, or a sidebar tab group
+        // marked isPrivate=false, and never an isPrivate=true group. Private
+        // windows also append a localized label to the title, which the exact
+        // title comparison rejects. The window UUID binds before/after reads.
+        func safariIdentity() -> Identity? {
+            guard let reference = attribute(application, "AXFocusedWindow"), CFGetTypeID(reference) == AXUIElementGetTypeID() else { return nil }
+            let window = reference as! AXUIElement
+            let identifier = string(window, "AXIdentifier"), title = string(window, "AXTitle")
+            guard identifier.hasPrefix("SafariWindow?"), identifier.contains("UUID="), string(window, "AXSubrole") == "AXStandardWindow",
+                  title == CommandLine.arguments[5], let bounds = rectangle(window) else { return nil }
+            var normal = false, privateGroup = false, pages: [String?] = [], visited = 0, incomplete = false
+            func scan(_ element: AXUIElement, _ depth: Int) {
+                guard depth < 12, visited < 400 else { incomplete = true; return }
+                visited += 1
+                let id = string(element, "AXIdentifier")
+                if id.hasPrefix("TabGroupPickerButton?") || id.hasPrefix("SidebarLibraryItemTabGroup?isPrivate=false") { normal = true }
+                if id.hasPrefix("SidebarLibraryItemTabGroup?"), id.contains("isPrivate=true") { privateGroup = true }
+                if id == "SidebarLibraryItemTab" { return }
+                if string(element, "AXRole") == "AXWebArea" {
+                    let value = attribute(element, "AXURL")
+                    pages.append((value as? URL)?.absoluteString ?? value as? String); return
+                }
+                guard let children = attribute(element, "AXChildren") as? [AXUIElement] else { return }
+                for child in children { scan(child, depth + 1) }
+            }
+            scan(window, 0)
+            guard !incomplete, normal, !privateGroup, pages.count == 1, sameAddress(pages[0], CommandLine.arguments[4]) else { return nil }
+            return Identity(mode: "normal", windowID: identifier, title: title, tabID: "", url: CommandLine.arguments[4], tabTitle: title, bounds: bounds)
+        }
+        // Firefox appends a localized mode label to a private window's title,
+        // while the page's own document title (its web area description) never
+        // carries it. Requiring the window title to equal the document title
+        // rejects private windows in any language. Its private-session button
+        // is a second, removable signal. Permanent private browsing, which adds
+        // no title label, is not detected.
+        func geckoIdentity() -> Identity? {
+            guard let reference = attribute(application, "AXFocusedWindow"), CFGetTypeID(reference) == AXUIElementGetTypeID() else { return nil }
+            let window = reference as! AXUIElement
+            let title = string(window, "AXTitle")
+            guard string(window, "AXSubrole") == "AXStandardWindow", title == CommandLine.arguments[5], let bounds = rectangle(window) else { return nil }
+            var privateButton = false, pages: [(url: String?, title: String)] = [], visited = 0, incomplete = false
+            func scan(_ element: AXUIElement, _ depth: Int) {
+                guard depth < 14, visited < 300 else { incomplete = true; return }
+                visited += 1
+                if string(element, "AXDOMIdentifier") == "reset-pbm-toolbar-button" { privateButton = true }
+                if string(element, "AXRole") == "AXWebArea" {
+                    let value = attribute(element, "AXURL")
+                    pages.append(((value as? URL)?.absoluteString ?? value as? String, string(element, "AXDescription"))); return
+                }
+                guard let children = attribute(element, "AXChildren") as? [AXUIElement] else { return }
+                for child in children { scan(child, depth + 1) }
+            }
+            scan(window, 0)
+            guard !incomplete, !privateButton, pages.count == 1, pages[0].title == title,
+                  sameAddress(pages[0].url, CommandLine.arguments[4]) else { return nil }
+            return Identity(mode: "normal", windowID: "", title: title, tabID: "", url: CommandLine.arguments[4], tabTitle: title, bounds: bounds)
+        }
+        func currentIdentity() -> Identity? { safari ? safariIdentity() : gecko ? geckoIdentity() : scriptingIdentity() }
+        guard let before = safari ? safariIdentity() : gecko ? geckoIdentity() : scriptedBefore else { return nil }
         guard let reference = attribute(application, "AXFocusedWindow"), CFGetTypeID(reference) == AXUIElementGetTypeID() else { return nil }
         let window = reference as! AXUIElement
         // Chromium can middle-elide the scripting window name even though its
@@ -277,7 +354,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         guard !incomplete, !privateIndicator, areas.count == 1 else { return nil }
         let area = areas[0]
         func areaURL() -> String? { let v = attribute(area, "AXURL"); return (v as? URL)?.absoluteString ?? v as? String }
-        guard areaURL() == before.url, let areaBounds = rectangle(area) else { return nil }
+        guard sameAddress(areaURL(), before.url), let areaBounds = rectangle(area) else { return nil }
         watch(area, ["AXUIElementDestroyed", "AXLoadComplete", "AXLayoutComplete", "AXSelectedChildrenChanged", "AXValueChanged"])
         let viewport = areaBounds.intersection(windowBounds)
         guard !viewport.isNull, !viewport.isEmpty else { return nil }
@@ -424,11 +501,11 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             }
         }
         guard !incomplete, !changes.invalidated, !headings.isEmpty || !topic.isEmpty,
-              let after = scriptingIdentity(), after == before,
+              let after = currentIdentity(), after == before,
               NSWorkspace.shared.frontmostApplication?.processIdentifier == pid, birth() == processBirth,
               let finalWindow = attribute(application, "AXFocusedWindow"), CFEqual(finalWindow, window),
               string(window, "AXTitle") == nativeTitle, nativeWindowID(windowBounds) == windowID,
-              rectangle(window) == windowBounds, areaURL() == before.url else { return nil }
+              rectangle(window) == windowBounds, sameAddress(areaURL(), before.url) else { return nil }
         var description: String?
         let descriptionCap = min(160, max(0, 240-headings.reduce(0) { $0+$1.utf16.count }))
         let readerUntil = deadline-0.15 // Preserve time for a second native identity check.
@@ -446,11 +523,11 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
                 description = clean(text, descriptionCap)
             }
             // Changes during lookup (including ABA) invalidate this whole sample.
-            guard !changes.invalidated, let afterLookup = scriptingIdentity(), afterLookup == before,
+            guard !changes.invalidated, let afterLookup = currentIdentity(), afterLookup == before,
                   NSWorkspace.shared.frontmostApplication?.processIdentifier == pid, birth() == processBirth,
                   let finalWindow = attribute(application, "AXFocusedWindow"), CFEqual(finalWindow, window),
                   string(window, "AXTitle") == nativeTitle, rectangle(window) == windowBounds,
-                  nativeWindowID(windowBounds) == windowID, areaURL() == before.url else { return nil }
+                  nativeWindowID(windowBounds) == windowID, sameAddress(areaURL(), before.url) else { return nil }
         }
         pump()
         guard !changes.invalidated, ProcessInfo.processInfo.systemUptime < deadline else { return nil }

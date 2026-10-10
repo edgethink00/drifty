@@ -22,7 +22,10 @@ from app.tracker.macos_capture import CommandScope
 from app.tracker.chatgpt_session import packaged_helper_path
 
 EXTENSION_ORIGIN = "chrome-extension://neihkehcijfcfplmfomahlimejiiledi/"
-BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi"})
+# Read from the address bar instead of scripting; the helper binds their page
+# clues to the focused window's exact title through accessibility.
+ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari", "org.mozilla.firefox"})
+BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi"}) | ADDRESS_BAR_CONTENT_BUNDLES
 MAX_MESSAGE_BYTES = 32768
 
 

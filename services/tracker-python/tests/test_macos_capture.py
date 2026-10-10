@@ -290,6 +290,37 @@ class NativeSnapshotTests(unittest.TestCase):
                 workspace.current_snapshot(False)
         capture.assert_not_called()
 
+    def test_safari_and_firefox_address_bar_capture_binds_page_clues_to_the_window_title(self):
+        self.mock('refine_safari_url', side_effect=lambda browser, *args: browser)
+        for app, bundle in (('Safari', 'com.apple.Safari'), ('Firefox', 'org.mozilla.firefox')):
+            with self.subTest(app=app):
+                self.identity.return_value = FrontmostApplication(app, bundle, 42)
+                self.title.return_value = (app, bundle, 'Course page', 42)
+                self.browser.return_value = BrowserMetadata(
+                    browser_name=app, site_domain='example.org', site_url='https://example.org/course/',
+                    ax_window_title='Course page', match_state='accessibility-address-bar-schemaless',
+                    browser_automation_status='granted',
+                )
+                capture = self.mock('capture_browser_content', return_value=None)
+                workspace.current_snapshot(False)
+                self.assertEqual(capture.call_args.kwargs['bundle_id'], bundle)
+                self.assertEqual(capture.call_args.kwargs['page_url'], 'https://example.org/course/')
+                self.assertEqual(capture.call_args.kwargs['page_title'], 'Course page')
+
+    def test_other_address_bar_browsers_and_titleless_windows_cannot_start_body_capture(self):
+        capture = self.mock('capture_browser_content', return_value=None)
+        self.mock('refine_safari_url', side_effect=lambda browser, *args: browser)
+        for app, bundle, title in (('Zen', 'app.zen-browser.zen', 'Course page'), ('Safari', 'com.apple.Safari', None)):
+            with self.subTest(app=app):
+                self.identity.return_value = FrontmostApplication(app, bundle, 42)
+                self.title.return_value = (app, bundle, 'Course page', 42)
+                self.browser.return_value = BrowserMetadata(
+                    browser_name=app, site_domain='example.org', site_url='https://example.org/course/',
+                    ax_window_title=title, match_state='accessibility-address-bar', browser_automation_status='granted',
+                )
+                workspace.current_snapshot(False)
+        capture.assert_not_called()
+
     def test_switched_process_or_window_cannot_attach_metadata(self):
         for changed in [('Notes', 'com.apple.Notes', 'New title', 99),
                         ('Google Chrome', 'com.google.Chrome', 'Other window', 42)]:
