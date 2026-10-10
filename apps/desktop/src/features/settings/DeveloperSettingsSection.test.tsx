@@ -153,6 +153,46 @@ describe("DeveloperSettingsSection", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("moves through the available agents with arrow keys and closes on Tab", async () => {
+    render(<DeveloperSettingsSection client={mockClient(status({ cursorSkill: artifact({ canInstall: false }) }))} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
+    const menu = screen.getByRole("menu", { name: "All agents" });
+    const codex = screen.getByRole("menuitem", { name: /Codex/ });
+    await waitFor(() => expect(document.activeElement).toBe(codex));
+
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /Claude Code/ }));
+    // Cursor cannot be installed here, so keyboard focus skips it.
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /OpenCode/ }));
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(codex);
+    fireEvent.keyDown(menu, { key: "End" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /OpenCode/ }));
+
+    fireEvent.keyDown(menu, { key: "Tab" });
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "All agents" })).toBeNull());
+  });
+
+  it("opens the agent picker upward when the page leaves too little room below the trigger", async () => {
+    const rect = (top: number, height: number) => ({ top, bottom: top + height, left: 0, right: 0, width: 0, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("developer-skill-picker__trigger") ? rect(window.innerHeight - 80, 30) : rect(0, 0);
+    });
+    const heightSpy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("developer-skill-picker__menu") ? 187 : 0;
+    });
+    try {
+      render(<DeveloperSettingsSection client={mockClient(status())} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
+      expect(screen.getByRole("menu", { name: "All agents" }).className).toContain("developer-skill-picker__menu--above");
+    } finally {
+      rectSpy.mockRestore();
+      heightSpy.mockRestore();
+    }
+  });
+
   it("removes only the selected installed agent skill", async () => {
     const client = mockClient(status({
       cursorSkill: artifact({

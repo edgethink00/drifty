@@ -916,21 +916,42 @@
   align-items: center;
   gap: 0.35rem;
   margin-right: auto;
+  flex: 1 1 0;
   min-width: 0;
+  overflow: hidden;
+  /* The hovered swatch's name and owner change this caption's length. Keeping
+     it out of the popover's intrinsic width stops an end-anchored palette
+     from widening and sliding its swatches out from under the pointer. The
+     fixed two-line height gives the owner ("used by Communication") its own
+     second line under the color name, so the footer never moves on hover. */
+  contain: inline-size;
+  height: calc(2 * 1.35em);
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.04em;
+  line-height: 1.35;
+}
+
+.content--settings .settings-section--appearance .settings-color-current__text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.content--settings .settings-section--appearance .settings-color-current__name,
+.content--settings .settings-section--appearance .settings-color-current__owner {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .content--settings .settings-section--appearance .settings-color-current__owner {
   font-family: var(--font-sans);
   letter-spacing: 0;
-}
-
-.content--settings .settings-section--appearance .settings-color-current__owner::before {
-  content: "·";
-  margin-right: 0.35rem;
 }
 
 .content--settings .settings-section--appearance .settings-color-more:hover,

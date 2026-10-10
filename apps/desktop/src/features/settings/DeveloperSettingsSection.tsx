@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 
 import {
@@ -389,8 +389,35 @@ type SkillTargetPickerProps = {
 
 function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onInstall, t }: SkillTargetPickerProps) {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<"below" | "above">("below");
   const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // The trigger sits low on the Agents page, so a menu that always opened
+  // downward left three of the four agents below the window at the default
+  // size. Open upward when the room below is short and there is more above;
+  // offsetHeight ignores the entry animation's transform.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlacement("below");
+      return;
+    }
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+    const anchor = trigger.getBoundingClientRect();
+    const gap = 8;
+    const roomBelow = window.innerHeight - anchor.bottom - gap;
+    const roomAbove = anchor.top - gap;
+    setPlacement(menu.offsetHeight > roomBelow && roomAbove > roomBelow ? "above" : "below");
+  }, [open]);
+
+  // Keyboard users land on the first available agent, as in the account menu.
+  useEffect(() => {
+    if (!open) return;
+    enabledSkillMenuItems(menuRef.current)[0]?.focus();
+  }, [open, placement]);
 
   // Matches the AccountMenu popover contract: listeners only exist while the menu
   // is open, and Escape returns focus to the trigger instead of stranding it.
@@ -429,6 +456,32 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
     triggerRef.current?.focus();
   };
 
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Tab") {
+      setOpen(false);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const items = enabledSkillMenuItems(menuRef.current);
+    if (items.length === 0) return;
+    event.preventDefault();
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : event.key === "ArrowDown"
+          ? (index + 1) % items.length
+          : (index - 1 + items.length) % items.length;
+    items[next]?.focus();
+  };
+
+  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (open || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
+    event.preventDefault();
+    setOpen(true);
+  };
+
   return (
     <div className="developer-skill-picker" ref={pickerRef}>
       <button
@@ -439,12 +492,19 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
         aria-haspopup="menu"
         disabled={busy !== null}
         onClick={() => setOpen((current) => !current)}
+        onKeyDown={handleTriggerKeyDown}
       >
         <span>{t("settings.developer.addSkillTo")}</span>
         <ChevronIcon />
       </button>
       <AnchoredPresence>{open ? (
-        <div className="developer-skill-picker__menu" role="menu" aria-label={t("settings.developer.skillTargetsLabel")}>
+        <div
+          ref={menuRef}
+          className={`developer-skill-picker__menu${placement === "above" ? " developer-skill-picker__menu--above" : ""}`}
+          role="menu"
+          aria-label={t("settings.developer.skillTargetsLabel")}
+          onKeyDown={handleMenuKeyDown}
+        >
           <p>{t("settings.developer.skillTargetsLabel")}</p>
           <div className="developer-skill-picker__options">
             {SKILL_TARGETS.map((target) => {
@@ -482,6 +542,10 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
       ) : null}</AnchoredPresence>
     </div>
   );
+}
+
+function enabledSkillMenuItems(menu: HTMLElement | null): HTMLButtonElement[] {
+  return Array.from(menu?.querySelectorAll<HTMLButtonElement>("[role='menuitem']:not(:disabled)") ?? []);
 }
 
 function Icon({ children }: { readonly children: ReactNode }) {

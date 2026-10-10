@@ -48,6 +48,11 @@
   transform-origin: top right;
 }
 
+/* The agent picker opens upward when the page leaves no room below it. */
+[data-anchored-presence] > .developer-skill-picker__menu--above {
+  transform-origin: bottom right;
+}
+
 /* Entry only. The hover preview has to vanish the instant the pointer leaves,
    and the week inspector still owns its own portal, focus restore, and delete
    flow, so giving it an exit needs the host/dialog split the plan dialog got. */

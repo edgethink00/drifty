@@ -92,6 +92,22 @@ function ColorRoleChip<TKey extends string>({
   const { t } = useLocalization();
   const [hovered, setHovered] = useState<SwatchItem | null>(null);
   const roleRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  // The palette is a non-modal popover: once focus lands anywhere else on the
+  // page (Tab past its last control, or a click on another field) it closes
+  // instead of staying open behind the focused control. Listening for where
+  // focus arrives, rather than where it left, keeps it open while the native
+  // color panel holds focus outside the window and while the pointer presses
+  // the palette's own padding.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof Node && !roleRef.current?.contains(event.target)) onCloseRef.current();
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, [isOpen]);
   // A chip near the right edge anchors its palette to its own right edge, so
   // the last categories in a row never push the page sideways.
   const [flipToEnd, setFlipToEnd] = useState(false);
@@ -147,10 +163,12 @@ function ColorRoleChip<TKey extends string>({
             }}
           />
           <div className="settings-color-popover__footer">
-            <span className="settings-color-current">
+            <span className="settings-color-current" title={hovered?.usedBy ? `${shownName} · ${hovered.usedBy}` : shownName}>
               <span className="settings-color-chip__dot" style={swatchStyle(shownColor)} aria-hidden="true" />
-              <span>{shownName}</span>
-              {hovered?.usedBy ? <span className="settings-color-current__owner">{hovered.usedBy}</span> : null}
+              <span className="settings-color-current__text">
+                <span className="settings-color-current__name">{shownName}</span>
+                {hovered?.usedBy ? <span className="settings-color-current__owner">{hovered.usedBy}</span> : null}
+              </span>
             </span>
             <label className="settings-color-more">
               <input

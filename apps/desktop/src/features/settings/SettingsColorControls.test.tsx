@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { AccentColorControl, CategoryColorControls } from "./SettingsColorControls";
@@ -57,6 +57,33 @@ describe("CategoryColorControls", () => {
     fireEvent.click(within(group).getByRole("button", { name: "학습" }));
     fireEvent.click(within(group).getByRole("radio", { name: "학습 인디고 색상" }));
     expect(onColorChange).toHaveBeenCalledWith("learning", "#5366a3");
+    expect(within(group).queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes the palette when focus lands elsewhere on the page, but not while focus is outside the window", () => {
+    render(
+      <LocalizationTestProvider language="en">
+        <button type="button">After the row</button>
+        <CategoryColorControls options={CATEGORY_COLOR_OPTIONS} overrides={{}} onColorChange={vi.fn()} onColorReset={vi.fn()} />
+      </LocalizationTestProvider>,
+    );
+    const group = screen.getByRole("group", { name: "Category colors" });
+    fireEvent.click(within(group).getByRole("button", { name: "Learning" }));
+    const more = within(group).getByLabelText("Learning category color");
+
+    // "More colors" opens the native panel: focus leaves the page entirely.
+    act(() => {
+      more.focus();
+      more.blur();
+    });
+    expect(within(group).getByRole("dialog", { name: "Learning color palette" })).toBeTruthy();
+
+    // Tabbing onto another chip in the row is leaving this palette.
+    act(() => within(group).getByRole("button", { name: "Music" }).focus());
+    expect(within(group).queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(within(group).getByRole("button", { name: "Learning" }));
+    act(() => screen.getByRole("button", { name: "After the row" }).focus());
     expect(within(group).queryByRole("dialog")).toBeNull();
   });
 });
