@@ -60,7 +60,7 @@ core-foundation = "0.10"
 core-graphics = "0.24"
 objc2 = { version = "0.6", features = ["exception"] }
 block2 = "0.6"
-objc2-app-kit = { version = "0.3.2", features = ["NSAlert", "NSAnimationContext", "NSApplication", "NSButton", "NSButtonCell", "NSCell", "NSColor", "NSControl", "NSEvent", "NSFont", "NSGraphics", "NSGraphicsContext", "NSImage", "NSImageRep", "NSImageView", "NSBitmapImageRep", "NSPanel", "NSResponder", "NSSavePanel", "NSScreen", "NSTextField", "NSTrackingArea", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication", "block2", "objc2-quartz-core"] }
+objc2-app-kit = { version = "0.3.2", features = ["NSAlert", "NSAnimationContext", "NSApplication", "NSButton", "NSButtonCell", "NSCell", "NSColor", "NSControl", "NSEvent", "NSFont", "NSGraphics", "NSGraphicsContext", "NSImage", "NSImageRep", "NSImageView", "NSBitmapImageRep", "NSPanel", "NSResponder", "NSSavePanel", "NSScreen", "NSStatusBarButton", "NSStatusItem", "NSMenu", "NSTextField", "NSTrackingArea", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication", "block2", "objc2-quartz-core"] }
 objc2-quartz-core = { version = "0.3.2", features = ["CALayer", "CAMediaTimingFunction", "objc2-core-foundation", "objc2-core-graphics"] }
 objc2-core-graphics = { version = "0.3.2", features = ["CGEventSource", "CGEventTypes"] }
 objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSString", "NSURL", "NSData", "NSDictionary", "NSProcessInfo", "std"] }

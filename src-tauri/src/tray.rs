@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod accessibility_press;
 mod drift_alarm_status;
 mod menu;
 mod productivity_icon;
@@ -407,7 +409,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         is_dark: is_dark_mode(),
         style: latest_tray_icon_style(app),
     });
-    TrayIconBuilder::with_id(TRAY_ID)
+    let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(Image::new_owned(initial_rgba, iw, ih))
         .icon_as_template(false)
         .tooltip("Drifty")
@@ -421,6 +423,10 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             shell_action::dispatch(app, action);
         })
         .build(app)?;
+    #[cfg(target_os = "macos")]
+    accessibility_press::install(&tray);
+    #[cfg(not(target_os = "macos"))]
+    let _ = tray;
 
     // Keep the root and every potential child alive, even while hidden.
     app.manage(TrayMenuState(Mutex::new(menu)));
