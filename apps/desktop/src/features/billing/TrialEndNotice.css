@@ -1,0 +1,104 @@
+/* The daily trial-end notice: CloudTrialStartedNotice's sibling in the top-right lane.
+   Same surface, hairline, radius, shadow and type scale; the close control keeps that
+   notice's right column, and the one action sits under the text. No entry animation. */
+.trial-end-notice {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  column-gap: 12px;
+  row-gap: 12px;
+  align-items: start;
+  width: min(23rem, calc(100vw - var(--space-4) * 2));
+  padding: 15px 14px 15px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--float-card-radius);
+  background: var(--surface);
+  box-shadow: var(--float-card-shadow);
+  color: var(--text);
+}
+
+.floating-notice-stack > .trial-end-notice {
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.trial-end-notice.is-leaving {
+  animation: floating-notice-leave 170ms var(--ease-float-out) forwards;
+}
+
+.trial-end-notice__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.trial-end-notice__copy strong {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 680;
+  letter-spacing: -0.008em;
+  line-height: 1.3;
+  word-break: keep-all;
+}
+
+.trial-end-notice__copy span {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+.trial-end-notice__dismiss {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: -5px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.trial-end-notice__dismiss:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.trial-end-notice__dismiss svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+
+.trial-end-notice__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trial-end-notice__actions .app-btn {
+  --btn-h: 1.875rem;
+  padding: 0 var(--space-3);
+}
+
+.trial-end-notice button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 680px) {
+  .floating-notice-stack > .trial-end-notice { width: 100%; max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trial-end-notice { animation: none !important; }
+}

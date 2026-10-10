@@ -64,13 +64,16 @@ import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
-import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
+import { AiConnectionStatusBar, resolveAiConnectionStatus, type AiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "./features/ai-connection/managedLocalAiRuntimeStatus";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
 import { resolveTrackerCtaSlot } from "./features/sidebar/trackerCtaSlot";
 import { resolveSidebarLiveActivityLabels } from "./features/sidebar/sidebarLiveActivity";
 import { ProDecisionSheet, type ProSheetContext } from "./features/billing/ProDecisionSheet";
 import { ProStartedNotice } from "./features/billing/ProStartedNotice";
+import { TrialEndNotice } from "./features/billing/TrialEndNotice";
+import { getTrialEndFollowUpKey, useTrialEndFollowUp } from "./features/billing/trialEndFollowUp";
+import { recordProFunnelStep } from "./lib/analytics/proFunnel";
 import { resolvePlanCardState } from "./features/billing/planCardState";
 import { canStartIndividualCheckout } from "./features/billing/billingEligibility";
 import {
@@ -1236,7 +1239,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     t: localization.t,
     onRefreshSelectedDay: () => refresh(selectedDay),
   });
-  const [dashboardAiUnavailablePreviewCase, setDashboardAiUnavailablePreviewCase] = useState<DashboardAiUnavailablePreviewCase>("trial-ended");
+  const [dashboardAiUnavailablePreviewCase, setDashboardAiUnavailablePreviewCase] = useState<DashboardAiUnavailablePreviewCase>("cloud-plan");
   const [dashboardAiUnavailablePreview, setDashboardAiUnavailablePreview] = useState<DashboardAiUnavailablePreviewState | null>(null);
   const [sidebarCtaPreviewCase, setSidebarCtaPreviewCase] = useState<SidebarCtaPreviewCase | null>(null);
   const [sidebarUpgradeDismissedUntil, setSidebarUpgradeDismissedUntil] = useState(readSidebarUpgradeDismissedUntil);
@@ -1567,6 +1570,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [promoHandoffMismatch, setPromoHandoffMismatch] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
+  /** The Pro sheet opened on its own after a trial ended (reported as trial_end_sheet). */
+  const [trialEndSheetAuto, setTrialEndSheetAuto] = useState(false);
   const [resumeUpgradePlanAfterAuth, setResumeUpgradePlanAfterAuth] = useState(false);
   const [accountDeletionModalOpen, setAccountDeletionModalOpen] = useState(false);
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
@@ -7402,7 +7407,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         classificationAvailability,
       })
       : null;
+  // A trial that ended is followed by the Pro sheet and its daily notice instead (trialEndFollowUp.ts).
   const dashboardAiRecoveryKey = dashboardAiUnavailableState && isCloudBillingVariant(dashboardAiUnavailableState.variant)
+    && dashboardAiUnavailableState.variant !== "trial-ended"
     ? dashboardAiUnavailableState.variant
     : null;
   useEffect(() => {
@@ -10128,6 +10135,41 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     return end !== null && Number.isFinite(end.getTime())
       && logicalDayIsoDateForDate(end, startOfDayMinutes) === logicalTodayIsoDate(startOfDayMinutes);
   };
+  // After a Pro trial ends: the Pro sheet once, then from the next day a two-line notice once a
+  // day while today's unclassified time is past 30 minutes (owner decision 2026-10-10). It asks
+  // nothing once the account buys Pro or classification moves to Local AI or the user's own key.
+  const trialEndedUnresolved = !isPreviewSurface && !activeDashboardAiUnavailablePreviewInput && !isSidebarCtaPreviewActive
+    && resolveDashboardAiUnavailableState({
+      billingEntitlement,
+      billingEntitlementError,
+      billingEntitlementLoading,
+      canUseCloudAiClassification,
+      hasRequiredAccountAuth,
+      isSupabaseConfigured,
+      localAiReady: Boolean(localAiClassificationOptions),
+      classificationAvailability,
+    })?.variant === "trial-ended";
+  const trialEndFollowUpKey = trialEndedUnresolved && user && user.is_anonymous !== true
+    ? getTrialEndFollowUpKey(user.id, billingEntitlement)
+    : null;
+  const {
+    stage: trialEndStage,
+    markSheetSeen: markTrialEndSheetSeen,
+    markNoticeSeen: markTrialEndNoticeSeen,
+  } = useTrialEndFollowUp(trialEndFollowUpKey, logicalTodayIsoDate(startOfDayMinutes), unclassifiedTodaySeconds);
+  const trialEndSheetCanOpen = trialEndStage === "sheet" && !upgradePlanModalOpen
+    && activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay && !isDashboardDemoReplayActive
+    && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen
+    && authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)
+    && billingEntitlementSupportsUpgrade && !billingEntitlementLoading && billingEntitlementError === null;
+  useEffect(() => {
+    if (!trialEndSheetCanOpen) return;
+    setTrialEndSheetAuto(true);
+    setUpgradePlanModalOpen(true);
+  }, [trialEndSheetCanOpen]);
+  useEffect(() => {
+    if (!upgradePlanModalOpen) setTrialEndSheetAuto(false);
+  }, [upgradePlanModalOpen]);
 
   if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
     return (
@@ -10196,6 +10238,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const funnelEnabled = !isPreviewSurface && !isDashboardDemoReplayActive
     && !isSidebarCtaPreviewActive && !isDashboardAiUnavailablePreviewActive
     && hasRequiredAccountAuth && Boolean(user) && user?.is_anonymous !== true;
+  // After a trial ended, the window-chrome pill names it and opens the Pro sheet instead of reading as a setup failure.
+  const chromeAiStatus: AiConnectionStatus = trialEndFollowUpKey !== null
+    ? { tone: "warning", label: "Trial ended", providerLabel: "View plans", memoryLabel: null, issueKind: null }
+    : effectiveAiConnectionStatus;
+  const openChromeAiStatus = trialEndFollowUpKey !== null
+    ? () => {
+      if (funnelEnabled) void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: "status_pill", offer_context: "trial_ended", offer_action: "view_plans" });
+      handleOpenUpgradePlanModal();
+    }
+    : openAiSetupSettings;
+  const chromeAiStatusAria = trialEndFollowUpKey !== null ? localization.t("ai.connection.trialEndedAria") : undefined;
+  // The daily notice waits for other notices, alerts and dialogs, and shows on today's dashboard only.
+  const trialEndNoticeVisible = trialEndStage === "notice" && unclassifiedTodaySeconds !== null
+    && activeTab === "dashboard" && !upgradePlanModalOpen && !onboardingOpen && !isDashboardDemoReplayActive
+    && !cloudTrialStartedNotice && !proStartedNoticeVisible && driftAlarmEvent === null
+    && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen;
   const effectiveCloudConnectionStatus: AuthConnectionStatus = isDashboardAiUnavailablePreviewActive ? "online" : cloudConnectionStatus;
   const cloudStatusLabel = effectiveCloudConnectionStatus === "offline"
     ? "Offline mode"
@@ -10423,7 +10481,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           )}
           trailing={(
             <>
-              <AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />
+              <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} />
               {titlebarUpdateVersion ? (
                 <TopbarUpdateButton
                   onInstall={() => void handleInstallUpdate()}
@@ -10457,7 +10515,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />
+          <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} />
           {titlebarUpdateVersion ? (
             <TopbarUpdateButton
               onInstall={() => void handleInstallUpdate()}
@@ -10477,6 +10535,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       ) : null}
       {proStartedNoticeVisible && !onboardingOpen && !isDashboardDemoReplayActive ? (
         <ProStartedNotice onDismiss={() => setProStartedNoticeVisible(false)} />
+      ) : null}
+      {trialEndNoticeVisible ? (
+        <TrialEndNotice
+          funnelEnabled={funnelEnabled}
+          unclassifiedSeconds={unclassifiedTodaySeconds ?? 0}
+          onViewPlans={() => {
+            markTrialEndNoticeSeen();
+            handleOpenUpgradePlanModal();
+          }}
+          onDismiss={markTrialEndNoticeSeen}
+        />
       ) : null}
       {shellStatusNotice ? <AppStatusNotice notice={shellStatusNotice} /> : null}
       {/* ── Sidebar ── */}
@@ -11409,6 +11478,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         open={shouldRenderUpgradePlanModal}
         context={upgradeSheetContext}
         funnelEnabled={funnelEnabled}
+        offerSurface={trialEndSheetAuto ? "trial_end_sheet" : "upgrade_modal"}
         trialEndsAt={upgradeSheetEntitlement?.trialEndsAt ?? null}
         trialEndedToday={trialEndedWithinToday(upgradeSheetEntitlement?.trialEndsAt)}
         unclassifiedSeconds={upgradeSheetContext === "trial-ended" ? unclassifiedTodaySeconds : null}
@@ -11422,7 +11492,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           if (isSidebarCtaPreviewActive) return;
           void startCloudCheckout(billingInterval);
         }}
-        onDismiss={() => setUpgradePlanModalOpen(false)}
+        onDismiss={() => {
+          if (trialEndSheetAuto && funnelEnabled) {
+            void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: "trial_end_sheet", offer_context: "trial_ended", offer_action: "dismiss" });
+          }
+          // Closing the sheet after a trial ended ends that day's follow-up, however it was opened.
+          if (trialEndFollowUpKey !== null) markTrialEndSheetSeen();
+          setUpgradePlanModalOpen(false);
+        }}
       />
 
       <ModalPresence>{accountDeletionModalOpen ? (

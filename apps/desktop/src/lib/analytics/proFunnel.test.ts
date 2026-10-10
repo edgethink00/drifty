@@ -67,6 +67,18 @@ describe("install conversion observations", () => {
     expect(deliver).toHaveBeenCalledTimes(2);
   });
 
+  it("counts each trial-end action, so a daily notice's dismissals are not folded into one", async () => {
+    const deliver = vi.fn().mockResolvedValue(true);
+    const record = createProFunnelRecorder(deliver);
+    const dismissed: ProFunnelStep = { step: "pro_offer_acted", offer_surface: "trial_end_notice", offer_context: "trial_ended", offer_action: "dismiss" };
+    await record(dismissed);
+    await record(dismissed);
+    expect(deliver).toHaveBeenCalledTimes(2);
+    const payload = sanitizePostHogEventProperties("pro_funnel_step", { ...dismissed, selected_day: "2026-10-10", focus_seconds: 10 });
+    expect(payload).toMatchObject(dismissed);
+    expect(payload).not.toHaveProperty("selected_day");
+  });
+
   it("keeps only enums and does not add account, order or activity properties", () => {
     const distinctId = getOrCreatePostHogInstallDistinctId(null, () => "fixture");
     const payload = createPostHogEventPayload({ apiKey: "test", distinctId, identityScope: "install", event: "pro_funnel_step", properties: sanitizePostHogEventProperties("pro_funnel_step", {

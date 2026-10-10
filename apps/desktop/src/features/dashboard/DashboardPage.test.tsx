@@ -560,15 +560,15 @@ describe("DashboardPage billing recovery overlay", () => {
     expect(screen.getByText(ENGLISH_TRANSLATIONS["dashboard.aiRecovery.billingSafeNote"])).toBeTruthy();
   });
 
-  it("keeps the payment-safe note off trial-ended recovery", () => {
+  it("keeps the payment-safe note off the no-plan recovery", () => {
     render(
       <LocalizationTestProvider language="en">
         <DashboardAiRecoveryOverlay
           billingCheckoutLoadingInterval={null}
           state={{
-            variant: "trial-ended",
-            titleKey: "dashboard.aiRecovery.trialEndedTitle",
-            bodyKey: "dashboard.aiRecovery.trialEndedBody",
+            variant: "cloud-plan",
+            titleKey: "dashboard.aiRecovery.planTitle",
+            bodyKey: "dashboard.aiRecovery.planBody",
             ctaLabelKey: "billing.plan.proCta",
           }}
           onClose={noop}
@@ -578,7 +578,7 @@ describe("DashboardPage billing recovery overlay", () => {
       </LocalizationTestProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: ENGLISH_TRANSLATIONS["dashboard.aiRecovery.trialEndedTitle"] })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: ENGLISH_TRANSLATIONS["dashboard.aiRecovery.planTitle"] })).toBeTruthy();
     expect(screen.queryByText(ENGLISH_TRANSLATIONS["dashboard.aiRecovery.billingSafeNote"])).toBeNull();
     expect(screen.queryByText(/Activity tracking and the timeline keep running on this device/i)).toBeNull();
   });

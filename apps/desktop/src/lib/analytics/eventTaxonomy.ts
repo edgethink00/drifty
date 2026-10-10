@@ -306,10 +306,11 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     error_kind: ERROR_KINDS,
   },
   pro_funnel_step: {
-    step: ["classified_result_viewed", "pro_offer_viewed", "checkout_opened"],
+    step: ["classified_result_viewed", "pro_offer_viewed", "pro_offer_acted", "checkout_opened"],
     dashboard_period: ["day", "week"],
-    offer_surface: ["sidebar", "upgrade_modal", "recovery_overlay"],
+    offer_surface: ["sidebar", "upgrade_modal", "recovery_overlay", "trial_end_sheet", "trial_end_notice", "status_pill"],
     offer_context: ["trial_active", "trial_ended", "upgrade", "upgrade_local"],
+    offer_action: ["view_plans", "dismiss"],
     billing_interval: BILLING_INTERVALS,
   },
   leaderboard_action: {

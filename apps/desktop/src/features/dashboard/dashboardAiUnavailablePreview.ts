@@ -1,7 +1,8 @@
 import type { BillingEntitlement } from "../billing/billingService";
 import type { DashboardAiUnavailableInput } from "./dashboardAiUnavailableState";
 
-export type DashboardAiUnavailablePreviewCase = "trial-ended" | "cloud-billing" | "device-limit" | "connect-ai";
+/** Cases that still open the recovery overlay. A trial that ended is followed by the Pro sheet instead. */
+export type DashboardAiUnavailablePreviewCase = "cloud-plan" | "cloud-billing" | "device-limit" | "connect-ai";
 
 export type DashboardAiUnavailablePreviewOption = {
   readonly id: DashboardAiUnavailablePreviewCase;
@@ -16,9 +17,9 @@ export type DashboardAiUnavailablePreviewState = {
 
 export const DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS = [
   {
-    id: "trial-ended",
-    label: "Trial ended",
-    detail: "Cloud plan CTA and plan cards",
+    id: "cloud-plan",
+    label: "No plan",
+    detail: "Pro plan cards after a plan lapsed",
   },
   {
     id: "cloud-billing",
@@ -37,22 +38,22 @@ export const DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS = [
   },
 ] as const satisfies readonly DashboardAiUnavailablePreviewOption[];
 
-const TRIAL_EXPIRED_ENTITLEMENT = {
+const NO_PLAN_ENTITLEMENT = {
   plan: "individual",
   status: "locked",
   canUseApp: false,
   trialEndsAt: null,
   currentPeriodEnd: null,
-  lockedReason: "trial_expired",
+  lockedReason: "billing_missing",
 } as const satisfies BillingEntitlement;
 
 const BILLING_LOCKED_ENTITLEMENT = {
-  ...TRIAL_EXPIRED_ENTITLEMENT,
+  ...NO_PLAN_ENTITLEMENT,
   lockedReason: "payment_required",
 } as const satisfies BillingEntitlement;
 
 const DEVICE_LIMIT_ENTITLEMENT = {
-  ...TRIAL_EXPIRED_ENTITLEMENT,
+  ...NO_PLAN_ENTITLEMENT,
   lockedReason: "device_limit_reached",
   deviceAccess: {
     allowed: false,
@@ -102,9 +103,9 @@ const DEVICE_LIMIT_ENTITLEMENT = {
 
 export function buildDashboardAiUnavailablePreviewInput(caseId: DashboardAiUnavailablePreviewCase): DashboardAiUnavailableInput {
   switch (caseId) {
-    case "trial-ended":
+    case "cloud-plan":
       return {
-        billingEntitlement: TRIAL_EXPIRED_ENTITLEMENT,
+        billingEntitlement: NO_PLAN_ENTITLEMENT,
         billingEntitlementError: null,
         billingEntitlementLoading: false,
         canUseCloudAiClassification: false,

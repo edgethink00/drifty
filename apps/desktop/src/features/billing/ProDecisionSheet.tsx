@@ -6,7 +6,7 @@ import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { formatLocalizedDuration } from "../../lib/formatting";
-import type { ProOfferContext } from "../../lib/analytics/proFunnel";
+import type { ProOfferContext, ProOfferSurface } from "../../lib/analytics/proFunnel";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { useLocalization } from "../localization/LocalizationContext";
 import { trialDaysRemaining } from "../sidebar/SidebarCtaSlot";
@@ -29,6 +29,8 @@ type ProDecisionSheetProps = {
   readonly open: boolean;
   readonly context: ProSheetContext;
   readonly funnelEnabled: boolean;
+  /** "trial_end_sheet" when the sheet opened on its own after a trial ended; user-opened sheets report "upgrade_modal". */
+  readonly offerSurface?: Extract<ProOfferSurface, "upgrade_modal" | "trial_end_sheet">;
   readonly trialEndsAt: string | null;
   /**
    * Whether the trial ended within today's logical day. Only then can the end
@@ -75,7 +77,7 @@ export function ProDecisionSheet({ open, ...props }: ProDecisionSheetProps) {
 }
 
 function DecisionSheet({
-  context, funnelEnabled, trialEndsAt, trialEndedToday = false, unclassifiedSeconds, billingCheckoutLoadingInterval,
+  context, funnelEnabled, offerSurface = "upgrade_modal", trialEndsAt, trialEndedToday = false, unclassifiedSeconds, billingCheckoutLoadingInterval,
   billingPlansDisabled = false, individualPricingQuote = null, billingActionError = null, billingActionErrorCode = null,
   onCheckForUpdates, onSelectBillingPlan, onDismiss,
 }: Omit<ProDecisionSheetProps, "open">) {
@@ -89,7 +91,7 @@ function DecisionSheet({
   useModalDismiss(onDismiss, { disabled: checkoutOpening });
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
   const offerRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled, {
-    step: "pro_offer_viewed", offer_surface: "upgrade_modal", offer_context: OFFER_CONTEXT[context],
+    step: "pro_offer_viewed", offer_surface: offerSurface, offer_context: OFFER_CONTEXT[context],
   });
 
   const quote = individualPricingQuote ?? STANDARD_INDIVIDUAL_PRICING_QUOTE;
@@ -254,4 +256,3 @@ function useSheetHeader(
       : t("billing.proSheet.factTodayUnclassified", { duration }),
   };
 }
-

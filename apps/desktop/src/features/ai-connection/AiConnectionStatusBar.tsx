@@ -128,9 +128,12 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
 export function AiConnectionStatusBar({
   status,
   onOpenSettings,
+  ariaLabel,
 }: {
   readonly status: AiConnectionStatus;
   readonly onOpenSettings: () => void;
+  /** Replaces the default "… Open AI settings" name when the pill leads somewhere else. */
+  readonly ariaLabel?: string;
 }) {
   const { t } = useLocalization();
   const statusLabel = localizeAiStatusLabel(status.label, t);
@@ -154,7 +157,7 @@ export function AiConnectionStatusBar({
       <button
         type="button"
         className="ai-connection-status"
-        aria-label={t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
+        aria-label={ariaLabel ?? t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
         title={failureExplanation}
         data-tone={status.tone}
         data-activity={status.activity ?? undefined}

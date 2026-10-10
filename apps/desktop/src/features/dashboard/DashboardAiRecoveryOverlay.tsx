@@ -2,7 +2,6 @@ import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { useRef } from "react";
 import type { BillingInterval } from "../billing/billingService";
 import { IndividualPlanCards } from "../billing/IndividualPlanCards";
-import { UpgradeDecisionPanel } from "../billing/UpgradeDecisionPanel";
 import type { IndividualPricingQuote } from "../billing/individualPricing";
 import {
   type DashboardAiUnavailableState,
@@ -43,10 +42,9 @@ export function DashboardAiRecoveryOverlay({
   useModalDismiss(onClose);
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
   const recoversExistingSubscription = state.variant === "cloud-billing";
-  const showsTrialEndedDecision = state.variant === "trial-ended";
+  // A trial that ended never reaches this overlay: the Pro sheet and its daily notice follow it instead.
   const offerRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled, recoversExistingSubscription ? null : {
-    step: "pro_offer_viewed", offer_surface: "recovery_overlay",
-    offer_context: showsTrialEndedDecision ? "trial_ended" : "upgrade",
+    step: "pro_offer_viewed", offer_surface: "recovery_overlay", offer_context: "upgrade",
   });
 
   return (
@@ -54,14 +52,13 @@ export function DashboardAiRecoveryOverlay({
       <section
         ref={dialogRef}
         className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace"
-        data-decision-layout={showsTrialEndedDecision ? "equal-airy" : undefined}
         role="dialog" aria-modal="true" aria-label={t("dashboard.aiRecovery.panelAria")}
         tabIndex={-1}
       >
         <ModalCloseButton label={t("dashboard.aiRecovery.dismiss")} onClick={onClose} />
         <div className="dashboard-ai-recovery__copy">
           <h2>{t(state.titleKey)}</h2>
-          <p>{t(showsTrialEndedDecision ? "billing.upgradeModal.endedDescription" : state.bodyKey)}</p>
+          <p>{t(state.bodyKey)}</p>
           {recoversExistingSubscription ? (
             <p className="dashboard-ai-recovery__meta">{t("dashboard.aiRecovery.billingSafeNote")}</p>
           ) : null}
@@ -80,17 +77,6 @@ export function DashboardAiRecoveryOverlay({
             <button type="button" className="modal-btn modal-btn--ghost" onClick={onOpenAiSetup}>
               {t("dashboard.aiRecovery.continueLocal")}
             </button>
-          </div>
-        ) : showsTrialEndedDecision ? (
-          <div className="dashboard-ai-recovery__plans" ref={offerRef}>
-            <UpgradeDecisionPanel
-              context="trial-ended"
-              disabled={billingPlansDisabled}
-              loadingInterval={billingCheckoutLoadingInterval}
-              onContinueLocal={onOpenAiSetup}
-              onSelectPlan={onSelectBillingPlan}
-              pricingQuote={individualPricingQuote}
-            />
           </div>
         ) : (
           <div className="dashboard-ai-recovery__plans" ref={offerRef}>

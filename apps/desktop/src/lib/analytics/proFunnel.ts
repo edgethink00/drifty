@@ -3,19 +3,21 @@ import { createProductAnalyticsDeliveryGuard, readProductAnalyticsRevision } fro
 
 export type ProFunnelStep = PostHogEventPropertiesByName["pro_funnel_step"];
 export type ProOfferContext = Extract<ProFunnelStep, { step: "pro_offer_viewed" }>["offer_context"];
+export type ProOfferSurface = Extract<ProFunnelStep, { step: "pro_offer_viewed" }>["offer_surface"];
 
 type Deliver = (properties: ProFunnelStep) => Promise<boolean>;
 
 /** Impressions: once per period or offer/context in this renderer session.
  * Successful delivery consumes the key; a failed delivery can be retried on re-exposure.
- * Checkout attempts remain individual events, with duplicate clicks guarded by billing.
+ * Checkout attempts and trial-end actions remain individual events; billing guards
+ * duplicate checkout clicks, and each trial-end surface acts at most once before it leaves.
  * No raw identity or activity data is persisted by this recorder.
  */
 export function createProFunnelRecorder(deliver: Deliver, getDeliveryRevision: () => number = () => 0) {
   const recorded = new Set<string>();
   const inFlight = new Map<string, Promise<boolean>>();
   return (properties: ProFunnelStep): Promise<boolean> => {
-    if (properties.step === "checkout_opened") return deliver(properties).catch(() => false);
+    if (properties.step === "checkout_opened" || properties.step === "pro_offer_acted") return deliver(properties).catch(() => false);
     const detail = properties.step === "classified_result_viewed"
       ? properties.dashboard_period
       : `${properties.offer_surface}:${properties.offer_context}`;

@@ -142,11 +142,8 @@ describe("app button system contract", () => {
   });
 
   it("keeps feature-owned text commands on the rounded-rectangle action shape", () => {
-    const upgradeDecisionStyles = readFileSync(join(sourceRoot, "features/billing/UpgradeDecisionPanel.css"), "utf8");
     const sharedSurfaceStyles = readFileSync(join(sourceRoot, "styles/shared-surfaces.css"), "utf8");
 
-    expect(upgradeDecisionStyles).toMatch(/\.upgrade-decision__primary\s*\{[^}]*border-radius:\s*var\(--radius-sm\);/);
-    expect(upgradeDecisionStyles).toMatch(/\.upgrade-decision__local-action\s*\{[^}]*border-radius:\s*var\(--radius-sm\);/);
     expect(sharedSurfaceStyles).toMatch(/\.auth-modal__callback-dismiss\s*\{[^}]*border-radius:\s*var\(--radius-sm\);/);
   });
 });

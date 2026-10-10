@@ -572,10 +572,6 @@
   width: min(45rem, 100%);
 }
 
-.dashboard-ai-recovery--trial-ended .dashboard-ai-recovery__panel {
-  max-height: min(88vh, 58rem);
-}
-
 .dashboard-ai-recovery--upgrade .dashboard-ai-recovery__panel {
   max-height: min(88vh, 58rem);
 }

@@ -47,6 +47,8 @@ const AI_STATUS_TRANSLATION_KEYS = {
   "Classifying…": "settings.ai.status.classifying",
   "AI setup needed": "settings.ai.status.setupNeeded",
   "Open settings": "settings.ai.status.openSettings",
+  "Trial ended": "settings.ai.status.trialEnded",
+  "View plans": "settings.ai.status.viewPlans",
 } as const satisfies Readonly<Record<string, TranslationKey>>;
 
 export function localizeAiStatusLabel(value: string, t: LocalizationController["t"]): string {
