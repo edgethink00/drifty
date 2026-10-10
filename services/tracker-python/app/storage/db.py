@@ -4,6 +4,7 @@ from app.tracker.browser_content import normalize_context as normalize_browser_c
 
 import json
 import math
+import re
 import sqlite3
 import sys
 import uuid
@@ -144,6 +145,12 @@ class ImportedActivityInsertResult:
 
 
 class TrackerDatabase:
+    # One-time repair for range deletions that the macOS tracker left incomplete
+    # before trimmed fractional seconds were parsed (#1767). See
+    # replay_trimmed_fraction_range_deletions().
+    RANGE_DELETION_REPLAY_META_KEY = "range_deletion_replay_v1"
+    _TRIMMED_FRACTION = re.compile(r"[T ]\d{2}:\d{2}:\d{2}\.(\d+)")
+
     def __init__(self, db_path: Path, *, perform_maintenance: bool = True, read_only: bool = False):
         self.db_path = db_path
         self.path = db_path
@@ -163,7 +170,76 @@ class TrackerDatabase:
             with database_initialization_guard(self.db_path):
                 self._init_db()
         if not self.read_only and perform_maintenance and self.maintenance_result.existed:
+            self._replay_range_deletions_once()
             self.create_periodic_backup()
+
+    def _replay_range_deletions_once(self) -> None:
+        try:
+            self.replay_trimmed_fraction_range_deletions()
+        except (OSError, sqlite3.DatabaseError) as error:
+            # A failed repair must not keep the tracker from starting. The
+            # marker stays unset, so the next start tries again.
+            self._record_maintenance_error(error, operation="Range deletion replay skipped")
+
+    @classmethod
+    def _has_trimmed_fraction(cls, value: str | None) -> bool:
+        match = cls._TRIMMED_FRACTION.search(value or "")
+        return bool(match) and len(match.group(1)) not in (3, 6)
+
+    def replay_trimmed_fraction_range_deletions(self) -> int:
+        """Finish this Mac's range deletions that skipped synced rows.
+
+        Before #1767 the macOS tracker's Python could not parse the trimmed
+        fractional seconds PostgreSQL gives synced rows. history_ends_after()
+        then returned False, so every range deletion with a start bound kept
+        the synced rows whose end time had such a fraction. Re-run that check
+        once, only for this device's own range tombstones and only for those
+        rows. Deleting them records a uids tombstone, so other Macs that kept
+        the same rows drop them too. Received range deletions are not stored
+        with their bounds and cannot be replayed here.
+        """
+        if self.read_only or CAPTURE_PLATFORM != "macos":
+            return 0
+        with self.connect() as conn:
+            done = conn.execute(
+                "SELECT 1 FROM tracker_meta WHERE key = ?",
+                (self.RANGE_DELETION_REPLAY_META_KEY,),
+            ).fetchone()
+            if done is not None:
+                return 0
+            ranges = conn.execute(
+                "SELECT range_start, range_end FROM sync_deletions "
+                "WHERE kind = 'range' AND range_start IS NOT NULL"
+            ).fetchall()
+            segment_ids: set[str] = set()
+            for deletion in ranges:
+                params: list[Any] = []
+                query = self._append_overlap_filters(
+                    "SELECT id, ended_at FROM activity_segments WHERE origin_device_id IS NOT NULL",
+                    params,
+                    deletion["range_start"],
+                    deletion["range_end"],
+                    strict_start=True,
+                )
+                segment_ids.update(
+                    str(row["id"])
+                    for row in conn.execute(query, tuple(params))
+                    if self._has_trimmed_fraction(row["ended_at"])
+                )
+        deleted = self.delete_activity_segments(sorted(segment_ids)) if segment_ids else 0
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tracker_meta(key, value) VALUES (?, ?)",
+                (
+                    self.RANGE_DELETION_REPLAY_META_KEY,
+                    json.dumps({
+                        "deleted": deleted,
+                        "ranges": len(ranges),
+                        "at": datetime.now(timezone.utc).isoformat(),
+                    }),
+                ),
+            )
+        return deleted
 
     def _record_maintenance_error(
         self, error: OSError | sqlite3.DatabaseError, *, operation: str

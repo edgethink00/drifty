@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -840,6 +841,108 @@ class SyncDeletionTests(DeviceSyncTestCase):
         pending = self.database.get_pending_sync_deletions()
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0]["segmentUids"], [uid])
+
+
+class RangeDeletionReplayTests(DeviceSyncTestCase):
+    """Finish range deletions that the macOS tracker left incomplete before #1767."""
+
+    def _leave_pre_fix_range_deletion(self, start: str | None, end: str | None) -> None:
+        # A deletion made before #1767 recorded its range tombstone, but the
+        # synced rows whose end had a trimmed fraction survived it.
+        with self.database.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO sync_deletions (
+                    deletion_uid, account_id, kind, range_start, range_end, created_at, pushed
+                ) VALUES (?, 'account-a', 'range', ?, ?, '2026-07-07T00:00:00+00:00', 1)
+                """,
+                (f"pre-fix-{start}-{end}", start, end),
+            )
+
+    def _restart(self, platform: str = "macos") -> None:
+        self.database.close()
+        with patch("app.storage.db.CAPTURE_PLATFORM", platform):
+            self.database = TrackerDatabase(self.db_path)
+
+    def _remaining_uids(self) -> set[str]:
+        with self.database.connect() as conn:
+            return {row[0] for row in conn.execute("SELECT segment_uid FROM activity_segments")}
+
+    def _uid_tombstones(self) -> list[str]:
+        with self.database.connect() as conn:
+            rows = conn.execute("SELECT segment_uids_json FROM sync_deletions WHERE kind = 'uids'").fetchall()
+        return [uid for row in rows for uid in json.loads(row[0])]
+
+    def test_restart_removes_only_the_rows_the_pre_fix_deletion_skipped(self) -> None:
+        skipped = "99999999-0000-0000-0000-00000000e001"
+        later = "99999999-0000-0000-0000-00000000e002"
+        outside = "99999999-0000-0000-0000-00000000e003"
+        self.database.apply_synced_segments([
+            self._remote_segment(skipped, started_at="2026-07-06T10:00:00.65494+00:00",
+                                 ended_at="2026-07-06T10:01:00.6549+00:00"),
+            # Regular fractions were deleted correctly, so a row like this in the
+            # range arrived afterwards and is not part of the repair.
+            self._remote_segment(later, started_at="2026-07-06T11:00:00.654940+00:00",
+                                 ended_at="2026-07-06T11:01:00.654941+00:00"),
+            self._remote_segment(outside, started_at="2026-07-08T10:00:00.65494+00:00",
+                                 ended_at="2026-07-08T10:01:00.6549+00:00"),
+        ])
+        self._insert_local_segment(1, started_at="2026-07-06T12:00:00.5+00:00",
+                                   ended_at="2026-07-06T12:00:30.5+00:00")
+        self._leave_pre_fix_range_deletion("2026-07-06T00:00:00+00:00", "2026-07-06T23:59:59+00:00")
+
+        self._restart()
+
+        remaining = self._remaining_uids()
+        self.assertNotIn(skipped, remaining)
+        self.assertIn(later, remaining)
+        self.assertIn(outside, remaining)
+        self.assertEqual(len(remaining), 3)
+        self.assertEqual(self._uid_tombstones(), [skipped])
+        with self.database.connect() as conn:
+            marker = conn.execute(
+                "SELECT value FROM tracker_meta WHERE key = ?",
+                (TrackerDatabase.RANGE_DELETION_REPLAY_META_KEY,),
+            ).fetchone()
+        self.assertEqual(json.loads(marker[0])["deleted"], 1)
+
+    def test_replay_runs_once(self) -> None:
+        self._leave_pre_fix_range_deletion("2026-07-06T00:00:00+00:00", None)
+        self._restart()
+        uid = "99999999-0000-0000-0000-00000000e004"
+        self.database.apply_synced_segments([
+            self._remote_segment(uid, started_at="2026-07-06T10:00:00.65494+00:00",
+                                 ended_at="2026-07-06T10:01:00.6549+00:00"),
+        ])
+
+        self._restart()
+
+        self.assertIn(uid, self._remaining_uids())
+        self.assertEqual(self._uid_tombstones(), [])
+
+    def test_range_without_a_start_and_windows_are_left_alone(self) -> None:
+        uid = "99999999-0000-0000-0000-00000000e005"
+        self.database.apply_synced_segments([
+            self._remote_segment(uid, started_at="2026-07-06T10:00:00.65494+00:00",
+                                 ended_at="2026-07-06T10:01:00.6549+00:00"),
+        ])
+        # Without a start bound the strict end check never ran, so nothing was skipped.
+        self._leave_pre_fix_range_deletion(None, "2026-07-06T23:59:59+00:00")
+        self._restart()
+        self.assertIn(uid, self._remaining_uids())
+
+        with self.database.connect() as conn:
+            conn.execute("DELETE FROM tracker_meta WHERE key = ?", (TrackerDatabase.RANGE_DELETION_REPLAY_META_KEY,))
+        self._leave_pre_fix_range_deletion("2026-07-06T00:00:00+00:00", "2026-07-06T23:59:59+00:00")
+        # The Windows tracker parsed these fractions, so its deletions were complete.
+        self._restart(platform="windows")
+        self.assertIn(uid, self._remaining_uids())
+        with self.database.connect() as conn:
+            marker = conn.execute(
+                "SELECT 1 FROM tracker_meta WHERE key = ?",
+                (TrackerDatabase.RANGE_DELETION_REPLAY_META_KEY,),
+            ).fetchone()
+        self.assertIsNone(marker)
 
 
 if __name__ == "__main__":
