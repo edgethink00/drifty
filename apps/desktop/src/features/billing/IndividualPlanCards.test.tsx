@@ -39,11 +39,11 @@ describe("IndividualPlanCards", () => {
     expect(within(proPlan).getByText("Recommended")).toBeTruthy();
     expect(within(proPlan).getByText("Peak performance. Zero setup.")).toBeTruthy();
     expect(within(proPlan).getByText("Includes all Free plan features")).toBeTruthy();
-    expect(within(proPlan).getByText("Private activity sync across three computers")).toBeTruthy();
-    expect(within(freePlan).queryByText("Private activity sync across three computers")).toBeNull();
+    expect(within(proPlan).getByText(/Cloud AI \+ private activity sync on up to 3 computers/)).toBeTruthy();
+    expect(within(freePlan).queryByText(/private activity sync/)).toBeNull();
     expect(within(proPlan).getByText(/More accurate on ambiguous work/)).toBeTruthy();
     expect(within(proPlan).getByText(/No downloads, API keys, or models to manage/)).toBeTruthy();
-    expect(within(proPlan).getByText(/on up to 3 devices/)).toBeTruthy();
+    expect(within(proPlan).getByText(/on up to 3 computers/)).toBeTruthy();
     expect(within(proPlan).getAllByText(/7-day free trial/).length).toBeGreaterThan(0);
     // Device management lives in the Account rows below, not as a plan benefit.
     expect(within(proPlan).queryByText(/Manage old devices/i)).toBeNull();

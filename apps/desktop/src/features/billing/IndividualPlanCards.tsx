@@ -38,7 +38,6 @@ const INDIVIDUAL_PLAN_FEATURE_KEYS = [
   "billing.plan.proFeature2",
   "billing.plan.proFeature3",
   "billing.plan.proFeature4",
-  "billing.plan.proFeature5",
 ] as const satisfies readonly TranslationKey[];
 
 function PlanFeatureList({ items }: { readonly items: readonly string[] }) {
