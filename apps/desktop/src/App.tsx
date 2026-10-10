@@ -7,6 +7,7 @@ import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { ModalPresence } from "./components/ModalPresence";
 import { deleteHistorySelection } from "./features/history/historyDeletion";
 import type { ProjectSaveResult } from "./features/projects/ProjectEditorModal";
+import type { ProjectDeleteResult } from "./features/projects/ProjectDeleteConfirmation";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeveloperDiagnosticsSettings, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
@@ -8547,9 +8548,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       return next;
     });
   }, []);
-  const handleDeleteProject = useCallback((projectId: string) => {
+  const handleDeleteProject = useCallback(async (projectId: string): Promise<ProjectDeleteResult> => {
     dropQueuedProjectAutoAnalysis(projectId);
-    void projectClassification.deleteProject(projectId);
+    let deleteError = "";
+    const deleted = await projectClassification.deleteProject(projectId, (message) => { deleteError = message; });
+    return deleted ? true : { deleted: false, error: deleteError };
   }, [dropQueuedProjectAutoAnalysis, projectClassification]);
   const scheduleProjectAutoAnalysis = useCallback((projectId: string) => {
     projectPassOpenTickedRef.current = true;

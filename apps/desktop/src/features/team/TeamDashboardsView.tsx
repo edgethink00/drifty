@@ -8,6 +8,7 @@ import { buildTeamTrendModel } from "./teamTrendView";
 import type { TeamProject, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
 import type { TeamProjectsWindow } from "./useTeamProjects";
 import "../projects/project-trend-chart.css";
+import { ActionLabel } from "../../components/ActionLabel";
 
 export type TeamDashboardsViewProps = {
   readonly window: TeamProjectsWindow;
@@ -283,8 +284,8 @@ export function TeamDashboardsView({
       <div className="team-dash-section team-card team-card--stats editorial-panel editorial-panel--soft insight-chart-panel" aria-label={t("team.dashboard.totalsAria")}>
         <div className="insight-panel-head">
           <span className="label-mono">{t("team.dashboard.totals")}</span>
-          <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={onRefresh} disabled={loading}>
-            {loading ? t("team.dashboard.refreshing") : t("team.dashboard.refresh")}
+          <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={onRefresh} disabled={loading} aria-busy={loading}>
+            <ActionLabel busy={loading}>{t("team.dashboard.refresh")}</ActionLabel>
           </button>
         </div>
         <div className="team-stats-stack">

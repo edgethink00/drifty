@@ -9,6 +9,7 @@ import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useLocalization } from "../localization/LocalizationContext";
 import "./AuthModal.css";
+import { ActionLabel } from "../../components/ActionLabel";
 
 type AuthMode = "sign-in" | "sign-up";
 type AuthView = "credentials" | "forgot-password";
@@ -427,8 +428,9 @@ export function AuthModal({
         className="auth-modal__connection-retry"
         onClick={() => void handleConnectionRetry()}
         disabled={isConnectionRetrying}
+        aria-busy={isConnectionRetrying}
       >
-        {isConnectionRetrying ? t("auth.modal.checkingConnection") : t("auth.modal.retryConnection")}
+        <ActionLabel busy={isConnectionRetrying} busyLabel={t("auth.modal.checkingConnection")}>{t("auth.modal.retryConnection")}</ActionLabel>
       </button>
     </div>
   ) : null;

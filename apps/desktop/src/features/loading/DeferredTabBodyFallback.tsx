@@ -1,3 +1,7 @@
+import { ActionLabel } from "../../components/ActionLabel";
+import { historyToolbarActionReserve } from "../history/historyToolbar";
+import { useLocalization } from "../localization/LocalizationContext";
+
 type DeferredTabBodyFallbackProps = {
   readonly label: string;
   readonly variant: "history" | "trends";
@@ -12,6 +16,7 @@ export function DeferredTabBodyFallback({ label, variant }: DeferredTabBodyFallb
 }
 
 function HistoryDeferredFallback({ label }: { readonly label: string }) {
+  const { t } = useLocalization();
   return (
     <section
       className="deferred-tab-skeleton deferred-tab-skeleton--history history-view"
@@ -25,8 +30,8 @@ function HistoryDeferredFallback({ label }: { readonly label: string }) {
           <span className="loading-skeleton-icon" />
           <span className="loading-skeleton-line loading-skeleton-line--search" />
         </label>
-        <button className="app-btn app-btn--secondary history-delete-all" disabled type="button">
-          Delete history…
+        <button className="app-btn app-btn--secondary history-delete-all history-toolbar-action" disabled type="button">
+          <ActionLabel busy={false} reserve={historyToolbarActionReserve(t)}>{t("history.deleteAll")}</ActionLabel>
         </button>
       </div>
       <div className="history-groups" aria-hidden="true">

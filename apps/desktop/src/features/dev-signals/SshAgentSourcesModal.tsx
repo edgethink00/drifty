@@ -22,6 +22,7 @@ import {
   type SavedSshAgentSource,
 } from "./sshAgentSourcesStorage";
 import { sshAgentSourceBackfillDays } from "./useSshAgentSourceSyncController";
+import { ActionLabel } from "../../components/ActionLabel";
 
 type Operation = { readonly kind: "test" | "collect"; readonly host: string } | null;
 type Status = (Pick<SshAgentSourceTestResult, "ok" | "code" | "message"> & Partial<Pick<SshAgentSourceCollectResult, "turnsFound">>) | null;
@@ -316,10 +317,10 @@ export function SshAgentSourcesModal({
               disabled={!normalizedHost || isBusy}
               onClick={() => void testConnection()}
             >
-              {operation?.kind === "test" ? t("agents.ssh.testing") : t("agents.ssh.test")}
+              <ActionLabel busy={operation?.kind === "test"} busyLabel={t("agents.ssh.testing")}>{t("agents.ssh.test")}</ActionLabel>
             </button>
             <button type="submit" className="modal-btn modal-btn--primary" disabled={!canCollectNew}>
-              {operation?.kind === "collect" && operation.host === normalizedHost ? t("agents.ssh.collecting") : t("agents.ssh.collectAndSave")}
+              <ActionLabel busy={operation?.kind === "collect" && operation.host === normalizedHost} busyLabel={t("agents.ssh.collecting")}>{t("agents.ssh.collectAndSave")}</ActionLabel>
             </button>
           </div>
         </form>
@@ -360,7 +361,7 @@ export function SshAgentSourcesModal({
                         disabled={isBusy}
                         onClick={() => void collect(source.host)}
                       >
-                        {collecting ? t("agents.ssh.collecting") : t("agents.ssh.collect")}
+                        <ActionLabel busy={collecting} busyLabel={t("agents.ssh.collecting")}>{t("agents.ssh.collect")}</ActionLabel>
                       </button>
                       <button
                         type="button"

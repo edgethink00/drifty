@@ -23,6 +23,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import type { DisplayLanguage } from "../localization/languagePreference";
 import { localizedPublishNote } from "./teamPublishNote";
 import "./team.css";
+import { ActionLabel } from "../../components/ActionLabel";
 
 export type TeamWorkspaceProps = {
   readonly isSupabaseEnabled: boolean;
@@ -759,7 +760,7 @@ export function TeamWorkspace({
                               aria-label={armed ? t("team.settings.removeConfirm") : t("team.settings.removeAria", { name: member.display_name })}
                               onClick={() => void removeMember(member.member_key)}
                             >
-                              {armed ? t("team.settings.removeConfirm") : t("team.settings.remove")}
+                              <ActionLabel busy={false} reserve={[t("team.settings.remove"), t("team.settings.removeConfirm")]}>{armed ? t("team.settings.removeConfirm") : t("team.settings.remove")}</ActionLabel>
                             </button>
                           ) : null}
                         </li>
@@ -834,11 +835,12 @@ export function TeamWorkspace({
                   type="button"
                   className="modal-btn modal-btn--primary"
                   disabled={projects.publishing}
+                  aria-busy={projects.publishing}
                   aria-label={t("team.settings.shareAria")}
                   onClick={() => void projects.publishMyTime()}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V4" /><path d="m7 9 5-5 5 5" /><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" /></svg>
-                  {projects.publishing ? t("team.settings.sharing") : t("team.settings.share")}
+                  <ActionLabel busy={projects.publishing} busyLabel={t("team.settings.sharing")}>{t("team.settings.share")}</ActionLabel>
                 </button>
                 <button
                   type="button"
@@ -864,7 +866,7 @@ export function TeamWorkspace({
                     disabled={teamActionLoading}
                     onClick={() => void leaveSelectedTeam()}
                   >
-                    {leaveArmed ? t("team.settings.leaveConfirm") : t("team.settings.leave")}
+                    <ActionLabel busy={false} reserve={[t("team.settings.leave"), t("team.settings.leaveConfirm")]}>{leaveArmed ? t("team.settings.leaveConfirm") : t("team.settings.leave")}</ActionLabel>
                   </button>
                 </div>
                 {failedAction === "member" && displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}

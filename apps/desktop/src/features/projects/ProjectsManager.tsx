@@ -4,6 +4,7 @@ import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting"
 import { ModalPresence } from "../../components/ModalPresence";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { ProjectEditorModal, type ProjectSaveResult } from "./ProjectEditorModal";
+import { ProjectDeleteConfirmation, type ProjectDeleteResult } from "./ProjectDeleteConfirmation";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -23,7 +24,8 @@ export interface ProjectsManagerProps {
   /** Caption in the per-project time column, e.g. "Latest 7 days". */
   readonly totalCaption: string;
   readonly onSave: (input: ProjectInput) => Promise<ProjectSaveResult> | ProjectSaveResult;
-  readonly onDelete: (id: string) => void;
+  /** Runs after the user confirms. A failure keeps the confirmation open to retry. */
+  readonly onDelete: (id: string) => Promise<ProjectDeleteResult> | ProjectDeleteResult | void;
   /** Row click → project detail. */
   readonly onOpenProject: (projectId: string) => void;
   readonly autoAnalysis: ProjectAutoAnalysisState;
@@ -42,6 +44,10 @@ function formatLastActivity(day: string | undefined, language: "en" | "ko"): str
   const parsed = new Date(`${day}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return "—";
   return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric", year: "numeric" }).format(parsed);
+}
+
+function focusInsideDialog(): boolean {
+  return document.activeElement instanceof HTMLElement && document.activeElement.closest('[role="dialog"]') !== null;
 }
 
 /**
@@ -72,6 +78,9 @@ export function ProjectsManager({
   const createTrigger = useRef<HTMLButtonElement | null>(null);
   // null = closed; "new" = create; otherwise the project being edited.
   const [editing, setEditing] = useState<Project | "new" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<{ readonly detail: string } | null>(null);
 
   useEffect(() => {
     if (!createRequested || busy) return;
@@ -126,6 +135,35 @@ export function ProjectsManager({
       status: project.status === "archived" ? "active" : "archived",
     });
   };
+
+  const handleStartDelete = (project: Project) => {
+    menuTrigger.current?.focus({ preventScroll: true });
+    setMenuFor(null);
+    setDeleteError(null);
+    setDeleteTarget(project);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      const result = await onDelete(deleteTarget.id);
+      if (result === false || (typeof result === "object" && result !== null && !result.deleted)) {
+        setDeleteError({ detail: typeof result === "object" ? result.error : "" });
+        return;
+      }
+      // The row's ⋮ button the dialog would return to leaves with the project.
+      if (focusInsideDialog()) createTrigger.current?.focus({ preventScroll: true });
+      setDeleteTarget(null);
+    } catch (failure) {
+      setDeleteError({ detail: failure instanceof Error ? failure.message : "" });
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const deleteMatchedSeconds = deleteTarget ? totalSecondsByProject.get(deleteTarget.id) ?? 0 : 0;
 
   return (
     <div className="projects-manager">
@@ -296,8 +334,7 @@ export function ProjectsManager({
                         disabled={busy}
                         onClick={(event) => {
                           event.stopPropagation();
-                          setMenuFor(null);
-                          onDelete(project.id);
+                          handleStartDelete(project);
                         }}
                       >
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4.4h10M6.4 4.4V3.2a0.8 0.8 0 0 1 .8-.8h1.6a0.8 0.8 0 0 1 .8.8v1.2" /><path d="M4.3 4.4l.5 8a1 1 0 0 0 1 .9h4.4a1 1 0 0 0 1-.9l.5-8" /><path d="M6.6 7v3.6M9.4 7v3.6" /></svg>
@@ -329,6 +366,23 @@ export function ProjectsManager({
           onSave={onSave}
           onClose={() => setEditing(null)}
         />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {deleteTarget ? (
+          <ProjectDeleteConfirmation
+            project={deleteTarget}
+            matchedTime={deleteMatchedSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(deleteMatchedSeconds, effectiveLanguage) : null}
+            matchedWindow={totalCaption}
+            deleting={deleteBusy}
+            error={deleteError}
+            onCancel={() => setDeleteTarget(null)}
+            onArchive={deleteTarget.status === "archived" ? undefined : () => {
+              handleToggleArchive(deleteTarget);
+              setDeleteTarget(null);
+            }}
+            onConfirm={() => void confirmDelete()}
+          />
         ) : null}
       </ModalPresence>
     </div>

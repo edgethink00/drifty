@@ -188,7 +188,51 @@ describe("ProjectsManager", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    // Deleting asks first: nothing is removed until the confirmation's button.
+    expect(props.onDelete).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Delete “Drifty”?" });
+    expect(within(dialog).getByText("Latest 7 days: 5h 30m matched to this project")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete project" }));
     expect(props.onDelete).toHaveBeenCalledWith("p1");
+  });
+
+  it("keeps the delete confirmation open with a translated line when deletion fails", async () => {
+    const onDelete = vi.fn().mockResolvedValueOnce({ deleted: false, error: "database is locked" }).mockResolvedValueOnce(true);
+    render(<ProjectsManager {...baseProps({ onDelete })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete “Drifty”?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete project" }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert.textContent).toBe("Could not delete the project. Try again.");
+    expect(alert.getAttribute("title")).toBe("database is locked");
+    expect(screen.getByRole("dialog", { name: "Delete “Drifty”?" })).toBe(dialog);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete project" }));
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(dialog).queryByRole("alert")).toBeNull());
+  });
+
+  it("offers Archive in the delete confirmation for an active project only", () => {
+    const props = baseProps({
+      projects: [project(), project({ id: "p2", name: "Blog relaunch", status: "archived", anchors: [] })],
+    });
+    render(<ProjectsManager {...props} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive instead" }));
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", status: "archived" }));
+    expect(props.onDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Options for Blog relaunch" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    const archivedDialog = screen.getByRole("dialog", { name: "Delete “Blog relaunch”?" });
+    expect(within(archivedDialog).queryByRole("button", { name: "Archive instead" })).toBeNull();
+    fireEvent.click(within(archivedDialog).getByRole("button", { name: "Cancel" }));
+    expect(props.onDelete).not.toHaveBeenCalled();
   });
 
   it("filters rows by search query and status", () => {

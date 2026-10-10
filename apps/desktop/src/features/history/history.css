@@ -72,6 +72,12 @@
   white-space: nowrap;
 }
 
+/* Equal-width digits, so the reserved "Delete 888 selected" covers every
+   three-digit count. */
+.history-toolbar-action {
+  font-variant-numeric: tabular-nums;
+}
+
 .history-search {
   display: flex;
   align-items: center;

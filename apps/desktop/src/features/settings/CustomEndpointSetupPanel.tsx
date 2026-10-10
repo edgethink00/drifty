@@ -8,6 +8,7 @@ import {
   OpenAiCompatibleModelListError,
 } from "./openAiCompatibleModels";
 import { isPreviewAiMockBaseUrl } from "./previewAiContract";
+import { ActionLabel } from "../../components/ActionLabel";
 
 type CustomEndpointSetupPanelProps = {
   readonly baseUrl: string;
@@ -253,9 +254,10 @@ export function CustomEndpointSetupPanel({
             type="button"
             className="settings-btn ai-setup-model-fetch ai-setup-connection-actions__fetch"
             disabled={loading || !baseUrl.trim()}
+            aria-busy={loading}
             onClick={() => void fetchModels()}
           >
-            {loading ? t("settings.ai.fetchingModels") : t("settings.ai.fetchModels")}
+            <ActionLabel busy={loading} busyLabel={t("settings.ai.fetchingModels")}>{t("settings.ai.fetchModels")}</ActionLabel>
           </button>
           {message ? (
             <span className={`ai-setup-model-discovery-message is-${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>

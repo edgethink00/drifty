@@ -124,7 +124,8 @@ export interface UseProjectClassificationResult {
   readonly runError: string | null;
   readonly revertReviewEvent: (id: number) => Promise<void>;
   readonly saveProject: (input: ProjectInput, onError?: (message: string) => void) => Promise<Project | null>;
-  readonly deleteProject: (id: string) => Promise<void>;
+  /** Resolves false after a failure. The caller that asked owns the message when it passes `onError`. */
+  readonly deleteProject: (id: string, onError?: (message: string) => void) => Promise<boolean>;
   readonly addAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
   readonly deleteAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
   readonly runPassNow: (range?: { start: string; end: string }) => Promise<ProjectPassSummary | null>;
@@ -524,13 +525,24 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   );
 
   const deleteProject = useCallback(
-    async (id: string) => {
+    async (id: string, onError?: (message: string) => void): Promise<boolean> => {
       try {
         await tracker.deleteProject(id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // Like a failed save: the confirmation that asked keeps itself open and
+        // retries in place, so the page banner would only repeat it.
+        if (onError) onError(message);
+        else setRunError(message);
+        return false;
+      }
+      try {
         await Promise.all([loadProjects(), loadAssignments(), loadInsightAssignments()]);
       } catch (error) {
+        // The project is gone; a stale view is the page's to report, not a failed delete.
         setRunError(error instanceof Error ? error.message : String(error));
       }
+      return true;
     },
     [tracker, loadProjects, loadAssignments, loadInsightAssignments],
   );

@@ -3,6 +3,7 @@ import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
+import { historyToolbarActionReserve } from "./historyToolbar";
 import { ActionLabel } from "../../components/ActionLabel";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
@@ -190,6 +191,7 @@ export function HistoryView({
   const hasAnySegments = segments.length > 0;
   const showToolbar = hasAnySegments || isSearching;
   const deleteLabel = t("history.deleteSelectedCount", { count: selectedCount });
+  const actionReserve = historyToolbarActionReserve(t);
 
   const toggleRow = useCallback((segmentIds: readonly string[], selected: boolean) => {
     setSelectedIds((current) => {
@@ -243,8 +245,8 @@ export function HistoryView({
         <div className="history-refresh-result" aria-busy={retryingRefresh}>
           <p role="alert">{t("history.deletedRefreshFailed")}</p>
           {onRefreshAfterDelete ? (
-            <button type="button" className="app-btn app-btn--secondary" disabled={retryingRefresh} onClick={() => void retryRefreshAfterDelete()}>
-              {t(retryingRefresh ? "settings.deleteHistory.refreshing" : "history.refreshView")}
+            <button type="button" className="app-btn app-btn--secondary" disabled={retryingRefresh} aria-busy={retryingRefresh} onClick={() => void retryRefreshAfterDelete()}>
+              <ActionLabel busy={retryingRefresh} busyLabel={t("settings.deleteHistory.refreshing")}>{t("history.refreshView")}</ActionLabel>
             </button>
           ) : null}
         </div>
@@ -266,24 +268,28 @@ export function HistoryView({
               placeholder={t("history.search")}
             />
           </label>
+          {/* One slot: the selection's delete takes the place of "Delete
+              history…" while rows are selected, and both labels are reserved,
+              so the search field keeps its width as the selection comes and
+              goes. "Delete history…" removes a date range, so a search that
+              matches nothing does not disable it. */}
           {selectedCount > 0 ? (
             <button
               type="button"
-              className="app-btn app-btn--danger"
+              className="app-btn app-btn--danger history-toolbar-action"
               disabled={isDeleting || retryingRefresh}
               onClick={() => { setDeleteError(null); setConfirmOpen(true); }}
             >
-              {deleteLabel}
+              <ActionLabel busy={false} reserve={actionReserve}>{deleteLabel}</ActionLabel>
             </button>
-          ) : null}
-          {onOpenDeleteHistory ? (
+          ) : onOpenDeleteHistory ? (
             <button
               type="button"
-              className="app-btn app-btn--secondary history-delete-all"
-              disabled={!hasAnySegments || deleting}
+              className="app-btn app-btn--secondary history-delete-all history-toolbar-action"
+              disabled={deleting}
               onClick={onOpenDeleteHistory}
             >
-              {t("history.deleteAll")}
+              <ActionLabel busy={false} reserve={actionReserve}>{t("history.deleteAll")}</ActionLabel>
             </button>
           ) : null}
         </div>

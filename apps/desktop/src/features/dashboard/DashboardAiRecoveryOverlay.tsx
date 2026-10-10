@@ -11,6 +11,7 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization } from "../localization/LocalizationContext";
+import { ActionLabel } from "../../components/ActionLabel";
 
 type DashboardAiRecoveryOverlayProps = {
   readonly funnelEnabled?: boolean;
@@ -71,9 +72,10 @@ export function DashboardAiRecoveryOverlay({
               type="button"
               className="modal-btn modal-btn--primary"
               disabled={billingPortalLoading || !onManageCloudBilling}
+              aria-busy={billingPortalLoading}
               onClick={onManageCloudBilling}
             >
-              {billingPortalLoading ? t("dashboard.aiRecovery.openingBilling") : t("dashboard.aiRecovery.fixBilling")}
+              <ActionLabel busy={billingPortalLoading} busyLabel={t("dashboard.aiRecovery.openingBilling")}>{t("dashboard.aiRecovery.fixBilling")}</ActionLabel>
             </button>
             <button type="button" className="modal-btn modal-btn--ghost" onClick={onOpenAiSetup}>
               {t("dashboard.aiRecovery.continueLocal")}

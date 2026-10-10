@@ -319,8 +319,8 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
               <div className="share-card-rank-gate" role="status">
                 <span>{rankGate.detail}</span>
                 {rankGate.action === "join" ? (
-                  <button type="button" disabled={joiningLeaderboard} onClick={handleJoinLeaderboard}>
-                    {joiningLeaderboard ? t("leaderboard.joining") : t("leaderboard.join")}
+                  <button type="button" disabled={joiningLeaderboard} aria-busy={joiningLeaderboard} onClick={handleJoinLeaderboard}>
+                    <ActionLabel busy={joiningLeaderboard} busyLabel={t("leaderboard.joining")}>{t("leaderboard.join")}</ActionLabel>
                   </button>
                 ) : null}
               </div>

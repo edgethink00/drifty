@@ -212,6 +212,46 @@ describe("HistoryView", () => {
     expect(screen.getByText("Try another search.")).toBeTruthy();
   });
 
+  it("puts the selection's delete in the Delete history slot instead of beside it", () => {
+    render(
+      <HistoryView
+        appIcons={{}}
+        deleting={false}
+        onDeleteSelected={vi.fn()}
+        onOpenDeleteHistory={vi.fn()}
+        segments={historySegments}
+      />,
+    );
+
+    const toolbar = document.querySelector(".history-view__toolbar");
+    if (!toolbar) throw new Error("History toolbar was not rendered");
+    expect(toolbar.querySelectorAll("button")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("checkbox", { name: /select api reference/i }));
+    expect(toolbar.querySelectorAll("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Delete 1 selected" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^delete history/i })).toBeNull();
+    // The one slot reserves both labels, so neither state narrows the search field.
+    const reserved = Array.from(toolbar.querySelectorAll(".action-label__size"), (element) => element.textContent);
+    expect(reserved).toEqual(expect.arrayContaining(["Delete history…", "Delete 888 selected"]));
+  });
+
+  it("keeps Delete history available when a backend search matches nothing", () => {
+    render(
+      <HistoryView
+        appIcons={{}}
+        deleting={false}
+        onDeleteSelected={vi.fn()}
+        onOpenDeleteHistory={vi.fn()}
+        searchQuery="no matching activity"
+        searchUsesBackend
+        segments={[]}
+      />,
+    );
+
+    const deleteHistory = screen.getByRole("button", { name: /^delete history/i });
+    expect((deleteHistory as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("shows a failed backend search instead of an empty result and retries it", () => {
     const onLoadMore = vi.fn();
 

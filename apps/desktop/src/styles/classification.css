@@ -969,19 +969,6 @@
   gap: 6px;
 }
 
-.classification-correction__spinner {
-  width: 0.75rem;
-  height: 0.75rem;
-  border: 1.5px solid color-mix(in srgb, currentColor 28%, transparent);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: classification-correction-spin 700ms linear infinite;
-}
-
-@keyframes classification-correction-spin {
-  to { transform: rotate(360deg); }
-}
-
 .classification-correction__chip:focus-visible,
 .classification-correction__segment:focus-visible,
 .classification-correction__close:focus-visible {
@@ -1137,7 +1124,6 @@
   .classification-correction,
   .classification-correction[data-positioned="true"],
   .classification-correction-result,
-  .classification-correction__spinner,
   .classification-panel-view__activity-row[data-recently-corrected="true"],
   .classification-panel-view__detail-top[data-recently-corrected="true"] .panel-header {
     animation: none;

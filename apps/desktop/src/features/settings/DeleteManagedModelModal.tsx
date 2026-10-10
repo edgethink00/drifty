@@ -2,6 +2,7 @@ import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 
 import { useLocalization } from "../localization/LocalizationContext";
+import { ActionLabel } from "../../components/ActionLabel";
 
 type DeleteManagedModelModalProps = {
   readonly modelLabel: string;
@@ -45,8 +46,8 @@ export function DeleteManagedModelModal({ modelLabel, deleting, onCancel, onConf
           <button type="button" className="modal-btn modal-btn--ghost" disabled={deleting} onClick={onCancel}>
             {t("settings.ai.deleteModelConfirmCancel")}
           </button>
-          <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} onClick={onConfirm}>
-            {deleting ? t("settings.ai.deleteModelDeleting") : t("settings.ai.deleteModel")}
+          <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} aria-busy={deleting} onClick={onConfirm}>
+            <ActionLabel busy={deleting} busyLabel={t("settings.ai.deleteModelDeleting")}>{t("settings.ai.deleteModel")}</ActionLabel>
           </button>
         </div>
       </section>

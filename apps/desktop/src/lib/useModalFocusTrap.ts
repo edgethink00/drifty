@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { isTopModal, modalFocusStack, MODAL_MOTION_PANEL_SELECTOR, ownModalElements, registerModal } from "./modalPresenceContext";
 
 const restoreTargets = new WeakMap<HTMLElement, HTMLElement[]>();
@@ -7,6 +7,19 @@ const MODAL_FOCUSABLE_SELECTOR = [
   "button:not([disabled])", "[href]", "input:not([disabled])", "select:not([disabled])",
   "textarea:not([disabled])", '[tabindex]:not([tabindex="-1"]):not([disabled])',
 ].join(", ");
+
+/** The button that opened the menu holding `element`, when `element` is one of
+ * that menu's items. Only meaningful while the menu is still in the document. */
+function menuButtonFor(element: Element | null): HTMLElement | null {
+  const menu = element?.closest('[role="menu"]');
+  if (!menu) return null;
+  for (let scope = menu.parentElement; scope; scope = scope.parentElement) {
+    const button = Array.from(scope.querySelectorAll<HTMLElement>('[aria-haspopup="menu"][aria-expanded="true"]'))
+      .find((candidate) => !menu.contains(candidate));
+    if (button) return button;
+  }
+  return null;
+}
 
 /** Contain focus until visual removal, then restore the trigger if focus still
  * belongs to this dialog. A ModalPresence boundary owns this for its descendants.
@@ -18,6 +31,16 @@ export function useModalFocusTrap(
   const initialFocusSelector = options?.initialFocusSelector;
   const enabled = options?.enabled ?? true;
   const explicitTabNavigation = options?.explicitTabNavigation ?? false;
+  // A menu item that opens a dialog usually leaves with its menu in the same
+  // commit, so by the time the effect below runs focus has fallen to <body> and
+  // the item is gone. Note the menu's own button while this render still sees
+  // the menu, so closing the dialog returns there instead of to nothing.
+  const openedFromMenu = useRef<HTMLElement | null>(null);
+  const wasEnabled = useRef(false);
+  if (enabled !== wasEnabled.current) {
+    openedFromMenu.current = enabled && typeof document !== "undefined" ? menuButtonFor(document.activeElement) : null;
+    wasEnabled.current = enabled;
+  }
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!enabled || !dialog) return;
@@ -27,9 +50,9 @@ export function useModalFocusTrap(
       return () => { delete dialog.dataset.modalInitialSelector; };
     }
     const previousFocus = document.activeElement instanceof HTMLElement && !dialog.contains(document.activeElement)
-      ? document.activeElement : null;
+      && document.activeElement !== document.body ? document.activeElement : null;
     const previousOwner = [...modalFocusStack].reverse().find((entry) => previousFocus && entry.contains(previousFocus));
-    const returnTargets = [previousFocus, ...(previousOwner ? restoreTargets.get(previousOwner) ?? [] : [])]
+    const returnTargets = [previousFocus, openedFromMenu.current, ...(previousOwner ? restoreTargets.get(previousOwner) ?? [] : [])]
       .filter((element): element is HTMLElement => element !== null);
     restoreTargets.set(dialog, returnTargets);
     const unregister = registerModal(dialog);

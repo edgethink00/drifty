@@ -6,6 +6,7 @@ import {
 import type { WorkProfileSettings } from "../onboarding/onboardingState";
 import { onboardingActivityLabel } from "../onboarding/onboardingOptionLabels";
 import { useLocalization } from "../localization/LocalizationContext";
+import { ActionLabel } from "../../components/ActionLabel";
 
 const SUGGESTED_ACTIVITIES = MAIN_ACTIVITY_OPTIONS.filter((activity) => activity !== "Other");
 const SUGGESTED_ACTIVITY_SET = new Set<string>(SUGGESTED_ACTIVITIES);
@@ -123,9 +124,10 @@ export function AiSetupWorkProfileSection({
               type="button"
               className="settings-btn"
               disabled={workProfileSaving}
+              aria-busy={workProfileSaving}
               onClick={() => void onSaveWorkProfile()}
             >
-              {workProfileSaving ? t("settings.ai.savingWorkProfile") : t("settings.ai.saveWorkProfile")}
+              <ActionLabel busy={workProfileSaving} busyLabel={t("settings.ai.savingWorkProfile")}>{t("settings.ai.saveWorkProfile")}</ActionLabel>
             </button>
           </div>
         </div>

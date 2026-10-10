@@ -55,6 +55,35 @@ describe("ModalPresence lifecycle", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("returns focus to the menu button when one of its items opened the dialog", () => {
+    // The item unmounts with its menu in the same commit that opens the dialog,
+    // so the focused element the dialog would normally return to is gone.
+    function MenuHarness() {
+      const [menuOpen, setMenuOpen] = useState(false);
+      const [dialogOpen, setDialogOpen] = useState(false);
+      return <>
+        <div>
+          <button aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>Account</button>
+          {menuOpen ? <div role="menu"><button role="menuitem" onClick={() => { setMenuOpen(false); setDialogOpen(true); }}>Sign in</button></div> : null}
+        </div>
+        <ModalPresence>{dialogOpen ? <Dialog title="Sign in" close={() => setDialogOpen(false)} /> : null}</ModalPresence>
+      </>;
+    }
+    render(<MenuHarness />);
+    const menuButton = screen.getByText("Account");
+    fireEvent.click(menuButton);
+    const item = screen.getByRole("menuitem");
+    item.focus();
+    fireEvent.click(item);
+    tick(20);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Sign in" }).contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    tick(221);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(menuButton);
+  });
+
   it("does not retain an invisible dialog when closed before its first frame", () => {
     render(<Harness />);
     fireEvent.click(screen.getByText("Open"));

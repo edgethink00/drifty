@@ -5,6 +5,7 @@ import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import type { LocalizationController } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { ClassificationCorrectionDraft, ClassificationCorrectionNotice } from "./classificationCorrection";
+import { ActionLabel } from "../../components/ActionLabel";
 
 export const CLASSIFICATION_CORRECTION_POPOVER_WIDTH = 296;
 export const CLASSIFICATION_CORRECTION_POPOVER_GAP = 8;
@@ -331,9 +332,8 @@ export function ClassificationCorrectionPopover({
         <p className="classification-correction__scope-note">{scopeDescription}</p>
         <div className="classification-correction__actions">
           <button type="button" className="app-btn app-btn--quiet app-btn--compact classification-correction__ghost-button" onClick={onCancel} disabled={saving}>{t("common.cancel")}</button>
-          <button type="button" className="app-btn app-btn--primary app-btn--compact classification-correction__save-button" onClick={onSave} disabled={saving || !changed}>
-            {saving ? <span className="classification-correction__spinner" aria-hidden="true" /> : null}
-            {saving ? t("classification.correction.applying") : t("classification.correction.apply")}
+          <button type="button" className="app-btn app-btn--primary app-btn--compact classification-correction__save-button" onClick={onSave} disabled={saving || !changed} aria-busy={saving}>
+            <ActionLabel busy={saving} busyLabel={t("classification.correction.applying")}>{t("classification.correction.apply")}</ActionLabel>
           </button>
         </div>
       </footer>

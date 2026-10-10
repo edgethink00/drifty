@@ -6,6 +6,7 @@ import "./CloudDeviceManagementPanel.css";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import { ModalPresence } from "../../components/ModalPresence";
+import { ActionLabel } from "../../components/ActionLabel";
 
 export type CloudDeviceManagementPanelProps = {
   readonly access: BillingEntitlement["deviceAccess"] | null;
@@ -83,9 +84,10 @@ export function CloudDeviceManagementPanel({
                 type="button"
                 className="settings-btn settings-btn--compact cloud-device-row__remove"
                 disabled={revokingId !== null}
+                aria-busy={revokingId === device.id}
                 onClick={() => setPendingRemovalDevice(device)}
               >
-                {revokingId === device.id ? t("settings.cloudDevices.removing") : t("settings.cloudDevices.remove")}
+                <ActionLabel busy={revokingId === device.id}>{t("settings.cloudDevices.remove")}</ActionLabel>
               </button>
             )}
           </div>

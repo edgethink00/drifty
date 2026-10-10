@@ -6,6 +6,7 @@ import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { AccountDeletionResult } from "./accountDeletionService";
 import "./AccountDeletionModal.css";
+import { ActionLabel } from "../../components/ActionLabel";
 
 type AccountDeletionModalProps = {
   readonly accountEmail: string | null;
@@ -118,10 +119,11 @@ export function AccountDeletionModal({
           <button
             className="modal-btn modal-btn--danger"
             disabled={!matches || deleting}
+            aria-busy={deleting}
             type="button"
             onClick={() => void handleDelete()}
           >
-            {deleting ? t("settings.account.deletingAccount") : t("settings.account.deletePermanently")}
+            <ActionLabel busy={deleting} busyLabel={t("settings.account.deletingAccount")}>{t("settings.account.deletePermanently")}</ActionLabel>
           </button>
         </div>
       </section>

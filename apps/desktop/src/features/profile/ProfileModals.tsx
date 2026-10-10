@@ -11,6 +11,7 @@ import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
+import { ActionLabel } from "../../components/ActionLabel";
 
 export type ProfileDraft = {
   displayName: string;
@@ -284,7 +285,7 @@ export function EditProfileModal({
 
         <div className="modal-foot profile-editor-modal__actions">
           <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("common.cancel")}</button>
-          <button type="button" className="modal-btn modal-btn--primary" onClick={onSave} disabled={profileLoading || profileSaving}>{profileSaving ? t("common.saving") : t("profile.editor.save")}</button>
+          <button type="button" className="modal-btn modal-btn--primary" onClick={onSave} disabled={profileLoading || profileSaving} aria-busy={profileSaving}><ActionLabel busy={profileSaving} busyLabel={t("common.saving")}>{t("profile.editor.save")}</ActionLabel></button>
         </div>
       </section>
     </div>

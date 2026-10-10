@@ -27,6 +27,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import "./AccountSettingsSection.css";
+import { ActionLabel } from "../../components/ActionLabel";
 
 export const ORGANIZATION_SEAT_MANAGEMENT_URL = "https://drifty.so/account/organization";
 
@@ -329,9 +330,9 @@ export function AccountSettingsSection({
               {t("settings.account.changePlan")}
             </button>
             {canManageCurrentPlan && !organizationSeat ? (
-              <button type="button" className="settings-btn" disabled={planActionBusy || billingPlansDisabled}
+              <button type="button" className="settings-btn" disabled={planActionBusy || billingPlansDisabled} aria-busy={billingPortalLoading}
                 onClick={() => void runBillingAction(onManageCloudBilling)}>
-                {billingPortalLoading ? t("billing.plan.openingBilling") : isPaymentRequiredLocked ? t("settings.account.fixBilling") : t("billing.plan.manageBilling")}
+                <ActionLabel busy={billingPortalLoading} busyLabel={t("billing.plan.openingBilling")}>{isPaymentRequiredLocked ? t("settings.account.fixBilling") : t("billing.plan.manageBilling")}</ActionLabel>
               </button>
             ) : null}
             {organizationSeat?.canManageSeats ? (
@@ -538,8 +539,9 @@ export function AccountSettingsSection({
                     className="settings-btn danger"
                     onClick={() => void onPurgeDeviceSyncData?.()}
                     disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
+                    aria-busy={deviceSyncPurging}
                   >
-                    {deviceSyncPurging ? t("settings.account.deleting") : t("settings.account.deleteCloud")}
+                    <ActionLabel busy={deviceSyncPurging} busyLabel={t("settings.account.deleting")}>{t("settings.account.deleteCloud")}</ActionLabel>
                   </button>
                 </div>
               </div>
@@ -555,8 +557,9 @@ export function AccountSettingsSection({
                     className="settings-btn danger"
                     onClick={() => void onPurgeDeviceSyncData?.()}
                     disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
+                    aria-busy={deviceSyncPurging}
                   >
-                    {deviceSyncPurging ? t("settings.account.deleting") : t("settings.account.deleteCloud")}
+                    <ActionLabel busy={deviceSyncPurging} busyLabel={t("settings.account.deleting")}>{t("settings.account.deleteCloud")}</ActionLabel>
                   </button>
                 </div>
               </div>
