@@ -10180,6 +10180,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       onStartTracking={handleStartTrackingFromOnboarding}
       onActivateCloudTrial={activateCloudTrial}
       onRefreshBillingEntitlement={refreshBillingEntitlement}
+      cloudDeviceRevokingId={cloudDeviceRevokingId}
+      cloudDeviceActionError={cloudDeviceActionError}
+      onRevokeCloudDevice={handleRevokeCloudDevice}
       onEarlyTrackingStart={() => {
         // Opportunistic: capture the rest of onboarding in the first day. Failures
         // stay silent — the completion-time start still surfaces real errors.

@@ -189,6 +189,17 @@
 .onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-inline-status .dc-onb-back {
   flex: none;
 }
+/* With the account's Cloud devices listed inside, the notice stacks: the
+   message, the full-width list, then the way back to the AI choice. */
+.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-inline-status--devices {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.onboarding-card.dc-onb-card[data-step="ready"] .dc-onb-inline-status--devices .dc-onb-devices {
+  justify-self: stretch;
+}
 :root[data-locale="ko"] .dc-onb-permission-path {
   word-break: keep-all;
   overflow-wrap: anywhere;

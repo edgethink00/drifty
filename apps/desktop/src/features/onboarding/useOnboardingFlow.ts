@@ -71,6 +71,10 @@ type UseOnboardingFlowOptions = {
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
   readonly expectsPromotion: boolean;
+  /** Cloud device removal, so a device-limited account can free a slot without leaving setup. */
+  readonly cloudDeviceRevokingId?: string | null;
+  readonly cloudDeviceActionError?: string | null;
+  readonly onRevokeCloudDevice?: (deviceId: string) => Promise<void>;
   readonly onAcknowledgeCloudTrialStartedNotice: () => void;
   readonly onComplete: (state: UserOnboardingState) => void;
   readonly devInitialStep?: OnboardingStep;
@@ -96,6 +100,9 @@ export function useOnboardingFlow({
   billingEntitlementError,
   billingEntitlementLoading,
   expectsPromotion,
+  cloudDeviceRevokingId = null,
+  cloudDeviceActionError = null,
+  onRevokeCloudDevice,
   onAcknowledgeCloudTrialStartedNotice,
   onComplete,
   devInitialStep,
@@ -368,7 +375,7 @@ export function useOnboardingFlow({
             ...(onActivateCloudTrial ? { activateCloudTrial: onActivateCloudTrial } : {}),
             ...(onRefreshBillingEntitlement ? { refreshEntitlement: onRefreshBillingEntitlement } : {}),
             unavailableMessage: t("billing.trialActivation.unavailable"),
-            deviceLimitMessage: t("onboarding.ready.cloudDeviceLimit"),
+            deviceLimitMessage: t(onRevokeCloudDevice ? "onboarding.ready.cloudDeviceLimitInline" : "onboarding.ready.cloudDeviceLimit"),
           });
           assertCurrentAccount();
           if (connection.setupChoice === "simple") {
@@ -437,7 +444,9 @@ export function useOnboardingFlow({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isFinalStep && connection.setupChoice === "simple" && billingEntitlementLoading) return;
+    // A Cloud device removal re-checks the entitlement right after it lands;
+    // continuing in between would retry against the full device list.
+    if (isFinalStep && connection.setupChoice === "simple" && (billingEntitlementLoading || cloudDeviceRevokingId !== null)) return;
     if (!isFinalStep) {
       setStorageError(null);
       setSetupError(null);
@@ -482,9 +491,19 @@ export function useOnboardingFlow({
     addMainActivity,
     browserHistoryBootstrapEnabled,
     blockedHint,
-    canAdvance: canAdvance && !(step === "ready" && connection.setupChoice === "simple" && billingEntitlementLoading),
+    canAdvance: canAdvance && !(step === "ready" && connection.setupChoice === "simple" && (billingEntitlementLoading || cloudDeviceRevokingId !== null)),
     cloudTrialStartedNotice,
     billingEntitlement,
+    cloudDeviceRevokingId,
+    cloudDeviceActionError,
+    revokeCloudDevice: onRevokeCloudDevice
+      ? async (deviceId: string) => {
+        await onRevokeCloudDevice(deviceId);
+        // The footer still names the limit from the last attempt; the inline
+        // list now owns the state until Continue is pressed again.
+        setSetupError(null);
+      }
+      : null,
     promotionActive,
     promotionEndsAt: promotionActive ? billingEntitlement?.trialEndsAt ?? null : null,
     expectsPromotion,

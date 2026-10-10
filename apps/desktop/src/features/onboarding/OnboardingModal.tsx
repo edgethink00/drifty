@@ -52,6 +52,9 @@ function OnboardingSession({
   billingEntitlementError,
   billingEntitlementLoading,
   expectsPromotion,
+  cloudDeviceRevokingId,
+  cloudDeviceActionError,
+  onRevokeCloudDevice,
   authCallbackStatus,
   onStartCloudTrialWithGoogle,
   onStartCloudTrialWithWebsite,
@@ -79,6 +82,9 @@ function OnboardingSession({
   billingEntitlementError: string | null;
   billingEntitlementLoading: boolean;
   expectsPromotion: boolean;
+  cloudDeviceRevokingId?: string | null;
+  cloudDeviceActionError?: string | null;
+  onRevokeCloudDevice?: (deviceId: string) => Promise<void>;
   authCallbackStatus: OAuthCallbackStatus | null;
   onStartCloudTrialWithGoogle: () => void;
   onStartCloudTrialWithWebsite?: () => void;
@@ -114,6 +120,9 @@ function OnboardingSession({
     billingEntitlementError,
     billingEntitlementLoading,
     expectsPromotion,
+    cloudDeviceRevokingId: cloudDeviceRevokingId ?? null,
+    cloudDeviceActionError: cloudDeviceActionError ?? null,
+    ...(onRevokeCloudDevice ? { onRevokeCloudDevice } : {}),
     onAcknowledgeCloudTrialStartedNotice,
     onComplete,
     devInitialStep: __devInitialStep,

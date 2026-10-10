@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BillingEntitlement } from "../../../billing/billingService";
 import { LocalizationTestProvider } from "../../../localization/LocalizationContext";
@@ -105,5 +105,51 @@ describe("ReadyStep", () => {
 
     expect(screen.getByRole("status").textContent).toContain("Cloud를 이용할 수 없습니다");
     expect(document.querySelector(".dc-onb-ready-line strong")?.textContent).toBe("이용 불가");
+  });
+
+  it("lets a device-limited account free a Cloud device without leaving setup", async () => {
+    const revokeCloudDevice = vi.fn().mockResolvedValue(undefined);
+    const flow = {
+      ...cloudFlow({
+        ...trialing,
+        status: "locked",
+        canUseApp: false,
+        lockedReason: "device_limit_reached",
+        cloudDevices: [
+          { id: "old-mac", label: "Old MacBook", platform: "macos", appVersion: "1.11.25", firstSeenAt: "2026-08-01T10:00:00.000Z", lastSeenAt: "2026-09-20T10:00:00.000Z", revokedAt: null, isActive: true, isCurrent: false },
+          { id: "studio", label: "Studio iMac", platform: "macos", appVersion: null, firstSeenAt: "2026-09-01T10:00:00.000Z", lastSeenAt: "2026-10-08T10:00:00.000Z", revokedAt: null, isActive: true, isCurrent: false },
+        ],
+      }),
+      revokeCloudDevice,
+      cloudDeviceRevokingId: null,
+      cloudDeviceActionError: null,
+    } as unknown as OnboardingFlow;
+    render(<LocalizationTestProvider language="en"><ReadyStep flow={flow} /></LocalizationTestProvider>);
+
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("Remove one you no longer use below");
+    expect(notice.textContent).not.toContain("another device");
+    expect(screen.getByRole("list", { name: "Cloud devices" }).textContent).toContain("Old MacBook");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove: Old MacBook" }));
+    // One more press confirms; the row says what removal does first.
+    expect(revokeCloudDevice).not.toHaveBeenCalled();
+    expect(notice.textContent).toContain("Cloud AI will stop working on that device");
+    fireEvent.click(screen.getByRole("button", { name: "Remove device" }));
+
+    await waitFor(() => expect(revokeCloudDevice).toHaveBeenCalledWith("old-mac"));
+    expect(screen.getByRole("button", { name: "Choose your setup" })).toBeTruthy();
+  });
+
+  it("does not send a device-limited user to another device when the list is unavailable", () => {
+    render(
+      <LocalizationTestProvider language="en">
+        <ReadyStep flow={cloudFlow({ ...trialing, status: "locked", canUseApp: false, lockedReason: "device_limit_reached" })} />
+      </LocalizationTestProvider>,
+    );
+
+    const text = screen.getByRole("status").textContent ?? "";
+    expect(text).toContain("Settings > Account");
+    expect(text).not.toContain("another device");
   });
 });

@@ -1,4 +1,5 @@
 import { BrowserHistoryBootstrapPreference } from "../BrowserHistoryBootstrapPreference";
+import { OnboardingCloudDeviceList } from "../OnboardingCloudDeviceList";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { ToggleButton } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
@@ -12,6 +13,12 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   const cloudUnavailable = cloudSetup && !flow.accountSkippedForDev
     && !flow.billingEntitlement?.canUseApp && !canStartCloudTrial(flow.billingEntitlement);
   const readyItems = readyItemsForFlow(flow, t, effectiveLanguage, cloudUnavailable);
+  const deviceLimited = cloudUnavailable && flow.billingEntitlement?.lockedReason === "device_limit_reached";
+  // Only devices holding a slot: removing an aged-out or revoked one frees nothing.
+  const otherDevices = (flow.billingEntitlement?.cloudDevices ?? [])
+    .filter((device) => !device.isCurrent && device.isActive && device.revokedAt === null);
+  const revokeCloudDevice = typeof flow.revokeCloudDevice === "function" ? flow.revokeCloudDevice : null;
+  const canFreeDeviceHere = deviceLimited && revokeCloudDevice !== null && otherDevices.length > 0;
   // Windows has no menu bar; tracking is paused from the taskbar icon there.
   const pauseNote = t(accessibilityClient.detectHostPlatform() === "macos"
     ? "onboarding.ready.pauseNote"
@@ -21,10 +28,21 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
     <>
       <p className="dc-onb-copy dc-onb-ready-copy">{t("onboarding.ready.intro")}</p>
       {cloudUnavailable ? (
-        <div className="dc-onb-inline-status" role="status">
-          <p>{t(flow.billingEntitlement?.lockedReason === "device_limit_reached"
-            ? "onboarding.ready.cloudDeviceLimit"
-            : "billing.trialActivation.unavailable")}</p>
+        <div className={canFreeDeviceHere ? "dc-onb-inline-status dc-onb-inline-status--devices" : "dc-onb-inline-status"} role="status">
+          <p>{t(canFreeDeviceHere
+            ? "onboarding.ready.cloudDeviceLimitInline"
+            : deviceLimited
+              ? "onboarding.ready.cloudDeviceLimit"
+              : "billing.trialActivation.unavailable")}</p>
+          {canFreeDeviceHere && revokeCloudDevice ? (
+            <OnboardingCloudDeviceList
+              devices={otherDevices}
+              revokingId={flow.cloudDeviceRevokingId ?? null}
+              actionError={flow.cloudDeviceActionError ?? null}
+              disabled={flow.isCompleting}
+              onRevoke={revokeCloudDevice}
+            />
+          ) : null}
           <button type="button" className="dc-onb-back" disabled={flow.isCompleting} onClick={flow.returnToSetupChoice}>
             {t("onboarding.title.chooseSetup")}
           </button>

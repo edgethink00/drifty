@@ -150,10 +150,10 @@ function formatCloudDeviceSummary(
   return t("settings.cloudDevices.summary", { active: activeCount, max: maxActiveDevices, days: activeWindowDays });
 }
 
-function formatCloudDeviceLastSeen(value: string, language: "en" | "ko", t: LocalizationController["t"]): string {
+export function formatCloudDeviceLastSeen(value: string, language: "en" | "ko", t: LocalizationController["t"]): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return t("settings.cloudDevices.lastSeenUnknown");
-  const formatted = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : undefined, {
+  const formatted = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
