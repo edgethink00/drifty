@@ -91,6 +91,7 @@ const BLANK_BROWSER_TITLE_PATTERN = /^(?:new tab|새 탭|about:blank|untitled|�
 const AI_MODEL_TOKEN_PRICES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
   "gemini-3.1-flash-lite": { input: 0, output: 0 },
   "anthropic/claude-haiku-5.5": { input: 0.1, output: 0.5 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5 },
   "deepseek/deepseek-v4-flash:free": { input: 0, output: 0 },
   "deepseek/deepseek-v4-flash": { input: 0.14, output: 0.28 },
 };
