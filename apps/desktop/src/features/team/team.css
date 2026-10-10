@@ -224,43 +224,46 @@
   height: 12px;
 }
 
-/* ── Segmented pills (add-team modal tabs) ── */
+/* ── Segmented control (add-team modal tabs) ──
+   Matches the Day / Week / Month switch in the page toolbar. */
 
 .content--team .team-panel .team-seg,
 .team-modal .team-seg {
   display: inline-flex;
-  gap: 0.3rem;
-  flex-wrap: wrap;
+  align-self: flex-start;
+  gap: 1.7px;
+  padding: 3px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
 }
 
 .content--team .team-panel .team-seg button,
 .team-modal .team-seg button {
-  font-family: var(--font-sans);
-  font-size: 0.78rem;
-  font-weight: 500;
-  letter-spacing: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
   text-transform: none;
-  border-radius: 999px;
-  min-height: 1.9rem;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--line-strong) 52%, var(--line));
+  border-radius: 5px;
+  padding: 0.42rem 0.9rem;
+  background: transparent;
+  border: 0;
   color: var(--text-soft);
   cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
 .content--team .team-panel .team-seg button:hover,
 .team-modal .team-seg button:hover {
   color: var(--text);
-  border-color: var(--line-strong);
 }
 
 .content--team .team-panel .team-seg button.on,
 .team-modal .team-seg button.on {
-  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface));
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
-  color: var(--accent-strong);
-  font-weight: 600;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  color: var(--text);
 }
 
 /* ── Icon button ── */
@@ -316,10 +319,74 @@
   min-width: 0;
 }
 
+/* Totals sit beside the chart (both fixed height) and the Team mix list beside
+   the member list (both grow with the team), so neither column leaves a tall gap. */
 .content--team .team-card--chart { grid-column: 1; grid-row: 1; }
-.content--team .team-card--side { grid-column: 2; grid-row: 1; }
-.content--team .team-card--stats { grid-column: 2; grid-row: 2; }
+.content--team .team-card--stats { grid-column: 2; grid-row: 1; }
+.content--team .team-card--side { grid-column: 2; grid-row: 2; }
 .content--team .team-card--members { grid-column: 1; grid-row: 2; }
+
+/* The shared panel head stacks below 920px; Totals keeps Refresh on its row. */
+.content--team .team-card--stats .insight-panel-head {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* Day view: team totals are per day, so a day is one data point. Like a line
+   chart with a single point, mark where each project's stacked line passes the
+   day, over a faint guide down to the baseline. */
+.content--team .team-day-guide {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.content--team .team-day-point {
+  position: absolute;
+  left: var(--team-day-x);
+  top: var(--team-day-y);
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  background: var(--team-day-color);
+  /* Same end-point dot as the Leaderboard focus sparkline. */
+  box-shadow: 0 0 0 2px var(--dashboard-plot-surface, var(--surface));
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* The day's total sits beside its point, where a line chart's last value would be read. */
+.content--team .team-day-point__value {
+  position: absolute;
+  left: calc(100% + 0.45rem);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.71875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The lone date label sits under the day's markers, not pinned to a plot edge. */
+.content--team .ptc-axis span:only-child {
+  transform: translateX(-50%);
+}
+
+/* Week labels collide once the chart narrows; keep every other day and the last. */
+.content--team .ptc-axis {
+  container: team-axis / inline-size;
+}
+
+@container team-axis (max-width: 26rem) {
+  .content--team .ptc-axis span:nth-child(even):not(:last-child),
+  .content--team .ptc-axis span:nth-last-child(2):not(:first-child) {
+    visibility: hidden;
+  }
+}
 
 @media (max-width: 860px) {
   .content--team .team-grid {
@@ -483,24 +550,26 @@
 
 .content--team .team-member {
   display: grid;
-  grid-template-columns: 1.6rem minmax(6rem, 10rem) minmax(0, 1fr);
+  grid-template-columns: 1.65rem minmax(5rem, 10rem) minmax(6rem, 1fr) 3.4rem;
   gap: 0.7rem;
   align-items: center;
+  min-height: 2rem;
 }
 
+/* Same initial avatar as the Leaderboard rows. */
 .content--team .team-member__avatar {
-  display: grid;
-  width: 1.6rem;
-  height: 1.6rem;
-  place-items: center;
-  border-radius: 7px;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 68%, transparent);
-  background: color-mix(in srgb, var(--accent-soft) 54%, var(--surface));
-  color: var(--accent-strong);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 720;
-  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-strong) 68%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 0.71875rem;
+  font-weight: 520;
 }
 
 .content--team .team-member__name {
@@ -519,40 +588,35 @@
   white-space: nowrap;
 }
 
+/* Same split bar as the Categories breakdown: one track, segments edge to edge. */
 .content--team .team-member__bar {
   display: flex;
   width: 100%;
-  height: 1.2rem;
-  gap: 2px;
+  height: 0.912rem;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 5%, transparent);
+  border-radius: 0.34rem;
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
 }
 
 .content--team .team-member__seg {
-  display: grid;
-  place-items: center;
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
   height: 100%;
-  min-width: 4px;
-  border-radius: 3px;
-  overflow: hidden;
 }
 
-.content--team .team-member__seg:first-child {
-  border-top-left-radius: 7px;
-  border-bottom-left-radius: 7px;
-}
-
-.content--team .team-member__seg:last-child {
-  border-top-right-radius: 7px;
-  border-bottom-right-radius: 7px;
-}
-
-.content--team .team-member__seg-label {
+.content--team .team-member__lead {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.92);
-  white-space: nowrap;
-  padding: 0 0.3rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .content--team .team-you-chip {
@@ -628,7 +692,7 @@
 .content--team .projects-table__head,
 .content--team .projects-table__row {
   display: grid;
-  grid-template-columns: minmax(8rem, 1.7fr) minmax(4.6rem, 6rem) minmax(5rem, 7rem) 2.2rem;
+  grid-template-columns: minmax(8rem, 1.7fr) minmax(4.6rem, 6rem) minmax(8rem, 12rem) 2.2rem;
   gap: var(--space-2);
   align-items: center;
   padding: 0.55rem var(--space-3);
@@ -737,14 +801,6 @@
 .content--team .pt-total {
   display: grid;
   gap: 0.05rem;
-}
-
-.content--team .pt-total small {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
-  color: var(--text-muted);
 }
 
 .content--team .pt-total b {
@@ -1293,9 +1349,17 @@
 }
 
 .team-set-you {
-  color: var(--text-muted);
+  /* Same chip as the dashboards' "You" marker. */
+  flex: 0 0 auto;
+  font-family: var(--font-sans);
   font-size: 0.71875rem;
-  font-weight: 560;
+  font-weight: 640;
+  border-radius: 999px;
+  padding: 0.1rem 0.34rem;
+  line-height: 1;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
 }
 
 .team-set-remove {
@@ -1367,3 +1431,69 @@
 /* Color selection uses the shared ProjectColorToken component — the same
    control as Settings → Appearance; its modal-scoped styles live in
    styles/modal-chrome.css. */
+
+/* The detail's way back and title read like the personal project detail:
+   a quiet back link, then the project's swatch, name and status on one line. */
+.content--team .project-detail__back {
+  align-self: flex-start;
+  margin-left: calc(var(--space-3) * -1);
+  margin-bottom: -0.5rem;
+}
+
+.content--team .team-detail-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.58rem;
+  min-width: 0;
+}
+
+.content--team .team-detail-identity__name {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1.45rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-detail-member {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.content--team .team-detail-member .team-member__avatar {
+  width: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.6875rem;
+}
+
+.content--team .team-detail-member__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Plain status text, as in the personal projects table. */
+.content--team .pt-status {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-chip-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The overview chart shares a row with the Totals card; let the plot fill it. */
+.content--team .team-card--chart {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.content--team .team-card--chart .ptc-bars,
+.content--team .team-card--chart .ptc-bars__plot {
+  height: 100%;
+  min-height: clamp(7.6rem, 12vw, 8.8rem);
+}

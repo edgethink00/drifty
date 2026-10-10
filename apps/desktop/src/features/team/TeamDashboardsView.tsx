@@ -1,17 +1,22 @@
 import { useMemo, useState } from "react";
-import type { CSSProperties, MouseEvent } from "react";
+import type { MouseEvent } from "react";
 
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDateRangeLabel, formatLocalizedDayLabel } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { ProjectTrendColumn } from "../projects/projectTrendView";
 import { buildTeamTrendModel } from "./teamTrendView";
 import type { TeamProject, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
+import { teamWindowCaption, teamWindowDayCount } from "./teamWindowCaption";
 import type { TeamProjectsWindow } from "./useTeamProjects";
 import "../projects/project-trend-chart.css";
 import { ActionLabel } from "../../components/ActionLabel";
+import { ProjectTrendBars } from "../projects/ProjectTrendBars";
+import { isOwnTeamMemberRow, teamMemberGroupKey } from "./teamMemberIdentity";
 
 export type TeamDashboardsViewProps = {
   readonly window: TeamProjectsWindow;
+  /** Whether the window ends today; earlier windows name their dates. */
+  readonly isLatestWindow: boolean;
   readonly projects: readonly TeamProject[];
   readonly mix: readonly TeamProjectMixRow[];
   readonly members: readonly TeamProjectMemberRow[];
@@ -39,6 +44,7 @@ interface HoverState {
 }
 
 interface MemberBarRow {
+  readonly key: string;
   readonly name: string;
   readonly isYou: boolean;
   readonly totalSeconds: number;
@@ -46,28 +52,12 @@ interface MemberBarRow {
     readonly projectId: string;
     readonly color: string;
     readonly pct: number;
-    readonly label: string;
     readonly title: string;
   }[];
 }
 
 const FALLBACK_COLOR = "#9ca3af";
 
-type ScaleTickStyle = CSSProperties & { readonly "--ptc-scale-y": string };
-type AxisTickStyle = CSSProperties & { readonly "--ptc-axis-x": string };
-
-function windowDayCount(window: TeamProjectsWindow): number {
-  const start = Date.parse(`${window.start_date}T00:00:00Z`);
-  const end = Date.parse(`${window.end_date}T00:00:00Z`);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 1;
-  return Math.round((end - start) / 86_400_000) + 1;
-}
-
-function initialsFor(name: string): string {
-  const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
-  const initials = parts.map((part) => part[0]!.toUpperCase()).join("");
-  return initials || "?";
-}
 
 /**
  * Shared-project dashboards: Team mix ranked bars, the over-time stacked area,
@@ -77,6 +67,7 @@ function initialsFor(name: string): string {
  */
 export function TeamDashboardsView({
   window: timeWindow,
+  isLatestWindow,
   projects,
   mix,
   members,
@@ -106,18 +97,20 @@ export function TeamDashboardsView({
     const activeProjectIds = new Set(projects.filter((project) => project.status === "active").map((project) => project.id));
     for (const slice of slices) activeProjectIds.add(slice.projectId);
     const nameByProjectId = new Map<string, string>();
-    const byMember = new Map<string, Map<string, number>>();
+    const byMember = new Map<string, { name: string; isYou: boolean; bucket: Map<string, number> }>();
     for (const row of members) {
       if (!activeProjectIds.has(row.organization_project_id)) continue;
       const seconds = Number.isFinite(row.seconds) ? Math.max(0, row.seconds) : 0;
       if (seconds <= 0) continue;
       nameByProjectId.set(row.organization_project_id, row.project_name);
-      const bucket = byMember.get(row.member_display_name) ?? new Map<string, number>();
+      const key = teamMemberGroupKey(row);
+      const entry = byMember.get(key) ?? { name: row.member_display_name, isYou: false, bucket: new Map<string, number>() };
+      const bucket = entry.bucket;
       bucket.set(row.organization_project_id, (bucket.get(row.organization_project_id) ?? 0) + seconds);
-      byMember.set(row.member_display_name, bucket);
+      byMember.set(key, { ...entry, isYou: entry.isYou || isOwnTeamMemberRow(row, memberDisplayName) });
     }
     return [...byMember.entries()]
-      .map(([name, bucket]) => {
+      .map(([key, { name, isYou, bucket }]) => {
         const total = [...bucket.values()].reduce((sum, seconds) => sum + seconds, 0);
         const segments = [...bucket.entries()]
           .sort((left, right) => right[1] - left[1])
@@ -128,17 +121,18 @@ export function TeamDashboardsView({
               projectId,
               color: colorByProjectId.get(projectId) ?? FALLBACK_COLOR,
               pct,
-              label: pct >= 9 ? `${Math.round(pct)}%` : "",
               title: `${projectName} · ${Math.round(pct)}%`,
             };
           });
-        return { name, isYou: name === memberDisplayName, totalSeconds: total, segments };
+        return { key, name, isYou, totalSeconds: total, segments };
       })
       .sort((left, right) => right.totalSeconds - left.totalSeconds || left.name.localeCompare(right.name));
   }, [colorByProjectId, memberDisplayName, members, projects, slices, t]);
 
-  const dayCount = windowDayCount(timeWindow);
-  const windowShortLabel = dayCount <= 1 ? t("team.dashboard.today") : t("team.dashboard.days", { count: dayCount });
+  const dayCount = teamWindowDayCount(timeWindow);
+  // Team totals are stored per day, so the Day view has a single data point.
+  const isSingleDay = dayCount <= 1;
+  const windowShortLabel = teamWindowCaption(timeWindow, isLatestWindow, effectiveLanguage, t);
   // The member count comes from the team list, which can lag a fresh join; never
   // show more people sharing than the team has.
   const sharingLabel = memberCount > 0
@@ -146,9 +140,8 @@ export function TeamDashboardsView({
     : `${memberRows.length}`;
   const activeProjectCount = projects.filter((project) => project.status === "active").length;
   const localizedWindowLabel = formatLocalizedDateRangeLabel(timeWindow.start_date, timeWindow.end_date, effectiveLanguage);
-  const { left, right, top, bottom } = view.bounds;
 
-  function showHover(column: ProjectTrendColumn, event: MouseEvent<SVGRectElement>) {
+  function showHover(column: ProjectTrendColumn, event: MouseEvent<Element>) {
     const labelByKey = new Map(view.series.map((item) => [item.key, item.label]));
     setHover({
       dayLabel: formatLocalizedDayLabel(column.day, effectiveLanguage),
@@ -222,60 +215,12 @@ export function TeamDashboardsView({
           </div>
         </div>
         {hasMix ? (
-          <div className="ptc-chart">
-            <div className="ptc-plot">
-              <svg
-                className="ptc-svg"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                role="img"
-                aria-label={t("team.dashboard.chartAria")}
-              >
-                <path className="ptc-grid" d={view.gridPath} />
-                <g className="ptc-areas">
-                  {view.areaBands.map((band) => (
-                    <path className="ptc-area" d={band.areaPath} fill={band.color} key={`area-${band.key}`} />
-                  ))}
-                </g>
-                <g className="ptc-lines">
-                  {view.areaBands.map((band) => (
-                    <path className="ptc-line" d={band.linePath} stroke={band.color} key={`line-${band.key}`} />
-                  ))}
-                </g>
-                <g className="ptc-hits">
-                  {view.columns.map((column, index) => {
-                    const previous = view.columns[index - 1];
-                    const next = view.columns[index + 1];
-                    const x0 = previous ? (previous.x + column.x) / 2 : left;
-                    const x1 = next ? (column.x + next.x) / 2 : right;
-                    return (
-                      <rect
-                        className="ptc-hit"
-                        x={x0}
-                        y={top}
-                        width={Math.max(0, x1 - x0)}
-                        height={bottom - top}
-                        key={column.day}
-                        onMouseEnter={(event) => showHover(column, event)}
-                        onMouseMove={(event) => showHover(column, event)}
-                        onMouseLeave={() => setHover(null)}
-                      />
-                    );
-                  })}
-                </g>
-              </svg>
-              <div className="ptc-scale" aria-hidden="true">
-                {view.yAxis.map((tick) => (
-                  <span style={{ "--ptc-scale-y": `${tick.y}%` } as ScaleTickStyle} key={tick.label}>{tick.label}</span>
-                ))}
-              </div>
-            </div>
-            <div className="ptc-axis" aria-hidden="true">
-              {view.axisTicks.map((tick) => (
-                <span style={{ "--ptc-axis-x": `${tick.x}%` } as AxisTickStyle} key={tick.id}>{tick.label}</span>
-              ))}
-            </div>
-          </div>
+          <ProjectTrendBars
+            view={view}
+            ariaLabel={isSingleDay ? t("team.dashboard.daySplitAria", { day: localizedWindowLabel }) : t("team.dashboard.chartAria")}
+            onHover={showHover}
+            onLeave={() => setHover(null)}
+          />
         ) : (
           <div className="team-empty">{t("team.dashboard.emptyTimeline")}</div>
         )}
@@ -313,27 +258,33 @@ export function TeamDashboardsView({
           <div className="team-empty">{t("team.dashboard.noMemberBreakdown")}</div>
         ) : (
           <div className="team-members">
-            {memberRows.map((member) => (
-              <div className="team-member" key={member.name}>
-                <span className="team-member__avatar" aria-hidden="true">{initialsFor(member.name)}</span>
-                <span className="team-member__name">
-                  <strong>{member.name}</strong>
-                  {member.isYou ? <span className="team-you-chip">{t("team.dashboard.you")}</span> : null}
-                </span>
-                <div className="team-member__bar" role="img" aria-label={t("team.dashboard.memberSplitAria", { name: member.name })}>
-                  {member.segments.map((segment) => (
-                    <span
-                      className="team-member__seg"
-                      style={{ width: `${segment.pct}%`, background: segment.color }}
-                      title={segment.title}
-                      key={segment.projectId}
-                    >
-                      <span className="team-member__seg-label">{segment.label}</span>
-                    </span>
-                  ))}
+            {memberRows.map((member) => {
+              const lead = member.segments[0];
+              return (
+                <div className="team-member" key={member.key}>
+                  <span className="team-member__avatar" aria-hidden="true">{member.name.trim().charAt(0).toUpperCase() || "?"}</span>
+                  <span className="team-member__name">
+                    <strong>{member.name}</strong>
+                    {member.isYou ? <span className="team-you-chip">{t("team.dashboard.you")}</span> : null}
+                  </span>
+                  <div className="team-member__bar" role="img" aria-label={t("team.dashboard.memberSplitAria", { name: member.name })}>
+                    {member.segments.map((segment) => (
+                      <span
+                        className="team-member__seg"
+                        style={{ width: `${segment.pct}%`, background: segment.color }}
+                        title={segment.title}
+                        key={segment.projectId}
+                      />
+                    ))}
+                  </div>
+                  {/* The member's largest share; the full split is on hover. Percentages
+                      only — another member's absolute hours are never shown. */}
+                  <span className="team-member__lead" title={lead?.title}>
+                    {lead ? <><span className="team-legend-swatch" style={{ background: lead.color }} aria-hidden="true" />{Math.round(lead.pct)}%</> : null}
+                  </span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

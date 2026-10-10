@@ -426,3 +426,10 @@
     gap: 0.18rem;
   }
 }
+
+/* A month of thin columns labels every few days; let those labels spill past
+   their narrow column so "9/16" is not clipped to "/1". Neighbours are blank. */
+.ptc-bars__day {
+  overflow: visible;
+  white-space: nowrap;
+}

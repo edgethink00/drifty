@@ -8,7 +8,7 @@ import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import TeamDashboardsView from "./TeamDashboardsView";
 import TeamProjectsView, { type TeamProjectDraft } from "./TeamProjectsView";
-import type { PendingTeamInvite } from "./teamInviteDeepLinks";
+import { toShareableTeamInviteUrl, type PendingTeamInvite } from "./teamInviteDeepLinks";
 import { isTeamQaMockEnabled, useTeamQaMockProjects } from "./teamQaMock";
 import type { AcceptTeamInviteInput } from "./teamService";
 import { canInviteToTeam, isTeamOwner, type TeamPeriod } from "./teamTypes";
@@ -315,6 +315,12 @@ export function TeamWorkspace({
   }, [isPopulated]);
   const windowLabel = formatLocalizedDateRangeLabel(projects.window.start_date, projects.window.end_date, effectiveLanguage);
   const atLatestWindow = windowOffset === 0;
+  const [projectsListResetSignal, setProjectsListResetSignal] = useState(0);
+  const handleSubViewChange = (next: TeamProjectsSubView) => {
+    // Pressing the open Projects tab again leaves a project's detail for the list.
+    if (next === "projects" && subView === "projects") setProjectsListResetSignal((value) => value + 1);
+    onSubViewChange(next);
+  };
   const viewTabs = [
     { id: "dashboards" as const, label: t("team.tab.overview") },
     { id: "projects" as const, label: t("team.tab.projects") },
@@ -446,7 +452,7 @@ export function TeamWorkspace({
           <PageTabs
             tabs={viewTabs}
             activeTab={subView}
-            onChange={onSubViewChange}
+            onChange={handleSubViewChange}
             ariaLabel={t("team.tabs.aria")}
             idPrefix="team-view"
             panelId="team-workspace-panel"
@@ -592,6 +598,7 @@ export function TeamWorkspace({
         {subView === "dashboards" ? (
           <TeamDashboardsView
             window={projects.window}
+            isLatestWindow={atLatestWindow}
             projects={projects.projects}
             mix={projects.mix}
             members={projects.members}
@@ -614,6 +621,8 @@ export function TeamWorkspace({
             members={projects.members}
             memberDisplayName={selectedTeam?.member_display_name ?? null}
             window={projects.window}
+            isLatestWindow={atLatestWindow}
+            listResetSignal={projectsListResetSignal}
             loading={projects.loading}
             error={displayProjectError}
             actionError={displayProjectActionError}
@@ -633,7 +642,7 @@ export function TeamWorkspace({
   }
 
   function renderInviteModal() {
-    const inviteUrl = activeInvite?.invite_url || "";
+    const inviteUrl = activeInvite?.invite_url ? toShareableTeamInviteUrl(activeInvite.invite_url) : "";
     const inviteCode = activeInvite?.invite_code || "";
     return (
       <div className="auth-modal__overlay" {...inviteOverlayDismiss}>

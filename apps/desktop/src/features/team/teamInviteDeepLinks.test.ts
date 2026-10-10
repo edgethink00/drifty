@@ -3,9 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   parseTeamInviteDeepLink,
   readPendingTeamInviteFromEvent,
+  toShareableTeamInviteUrl,
 } from "./teamInviteDeepLinks";
 
 describe("team invite desktop deep links", () => {
+  it("turns the invite list's site-relative path into a link people can open", () => {
+    expect(toShareableTeamInviteUrl("/team-invite?code=DRFT-ABCD-2345")).toBe("https://drifty.so/team-invite?code=DRFT-ABCD-2345");
+    expect(toShareableTeamInviteUrl("https://drifty.so/team-invite?code=DRFT-ABCD-2345")).toBe("https://drifty.so/team-invite?code=DRFT-ABCD-2345");
+    expect(toShareableTeamInviteUrl("//evil.example/team-invite")).toBe("//evil.example/team-invite");
+  });
+
   it("normalizes drifty team invite links into service-safe drifty.so invite keys", () => {
     expect(parseTeamInviteDeepLink("drifty://team-invite?token=abcdefghijklmnopqrstuvwxyzABCDEFG_1234567890&code=drftabcd2345")).toEqual({
       inviteKey: "https://drifty.so/team-invite?token=abcdefghijklmnopqrstuvwxyzABCDEFG_1234567890&code=DRFT-ABCD-2345",

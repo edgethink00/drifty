@@ -145,11 +145,14 @@ export function normalizeTeamProjectMixRow(row: unknown): TeamProjectMixRow {
 
 export function normalizeTeamProjectMemberRow(row: unknown): TeamProjectMemberRow {
   const record = toRecord(row);
+  const slot = record.member_slot;
   return {
     organization_id: readString(record, "organization_id"),
     organization_project_id: readString(record, "organization_project_id"),
     project_name: readString(record, "project_name"),
     member_display_name: readString(record, "member_display_name"),
+    member_slot: typeof slot === "number" && Number.isInteger(slot) ? slot : null,
+    is_self: typeof record.is_self === "boolean" ? record.is_self : null,
     seconds: readNumber(record, "seconds"),
   };
 }

@@ -104,7 +104,8 @@ function makeInvite(code: string, team: OwnTeam = MOCK_TEAM): TeamInvite {
     organization_id: team.organization_id,
     organization_name: team.organization_name,
     invite_code: code,
-    invite_url: `https://drifty.so/team-invite?code=${code}`,
+    // Matches get_organization_invites, which returns a site-relative path.
+    invite_url: `/team-invite?code=${code}`,
     role_label: "Member",
     status: "pending",
     expires_at: "2026-07-18T00:00:00.000Z",
@@ -407,6 +408,8 @@ export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTea
 
     const memberRows: TeamProjectMemberRow[] = [];
     const totalsByProject = new Map<string, number>();
+    // Like the server: one slot per member, ranked by name.
+    const memberNames = [...new Set(Object.values(hoursByProject).flatMap((byMember) => Object.keys(byMember)))].sort();
     for (const [projectId, hoursByMember] of Object.entries(hoursByProject)) {
       const project = projectById.get(projectId);
       if (!project) continue;
@@ -419,6 +422,8 @@ export function useTeamQaMockProjects(input: UseTeamQaMockProjectsInput): UseTea
           organization_project_id: projectId,
           project_name: project.name,
           member_display_name: memberName,
+          member_slot: memberNames.indexOf(memberName) + 1,
+          is_self: memberName === MOCK_TEAM.member_display_name,
           seconds,
         });
         totalsByProject.set(projectId, (totalsByProject.get(projectId) ?? 0) + seconds);

@@ -106,6 +106,20 @@ function compactDayLabel(day: string): string {
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 
+/** A month of daily labels cannot share one chart row; keep at most this many. */
+const MAX_DAY_AXIS_LABELS = 8;
+
+/**
+ * Thins day labels to an even stride while always keeping the first and last
+ * day, so the edge labels stay aligned to the plot edges.
+ */
+export function thinAxisTicks<Tick>(ticks: readonly Tick[], maxLabels = MAX_DAY_AXIS_LABELS): Tick[] {
+  if (ticks.length <= maxLabels) return [...ticks];
+  const last = ticks.length - 1;
+  const stride = Math.ceil(last / (maxLabels - 1));
+  return ticks.filter((_, index) => index === last || (index % stride === 0 && last - index >= stride / 2));
+}
+
 function xForDayIndex(index: number, dayCount: number): number {
   const { left, right } = PROJECT_TREND_CHART_BOUNDS;
   if (dayCount <= 1) return (left + right) / 2;
@@ -297,12 +311,13 @@ export function buildTrendGeometry(params: TrendGeometryParams): ProjectTrendVie
     };
   });
 
-  // Label every visible day on the x-axis (the trimmed window keeps this readable).
-  const axisTicks: ProjectTrendAxisTick[] = visibleDays.map((day, index) => ({
+  // Label every day of a week; a month keeps an even stride that still starts
+  // and ends on the window edges, so 30 labels never run together.
+  const axisTicks = thinAxisTicks<ProjectTrendAxisTick>(visibleDays.map((day, index) => ({
     id: `ptc-axis-${day}`,
     label: compactDayLabel(day),
     x: xForDayIndex(index, visibleCount),
-  }));
+  })));
 
   const yAxis: ProjectTrendYAxisTick[] = [];
   if (maxHours > 0) {

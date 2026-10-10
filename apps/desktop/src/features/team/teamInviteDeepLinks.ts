@@ -43,6 +43,18 @@ export function dispatchTeamInviteDeepLink(value: string): boolean {
   return true;
 }
 
+/**
+ * The invite list RPC returns a site-relative path ("/team-invite?code=…"), which
+ * chat apps do not turn into a link and which cannot reach the drifty.so bridge
+ * page that opens the app. Resolve such paths against drifty.so before showing
+ * or copying them; absolute links pass through unchanged.
+ */
+export function toShareableTeamInviteUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return trimmed;
+  return new URL(trimmed, TEAM_INVITE_ORIGIN).toString();
+}
+
 export function readPendingTeamInviteFromEvent(event: Event): PendingTeamInvite | null {
   if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return null;
   const inviteKey = typeof event.detail.inviteKey === "string" ? event.detail.inviteKey : null;

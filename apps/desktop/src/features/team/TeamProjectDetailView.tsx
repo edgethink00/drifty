@@ -6,12 +6,16 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { ProjectTrendChartSkeleton } from "../projects/ProjectTrendChartSkeleton";
 import type { ProjectTrendColumn } from "../projects/projectTrendView";
 import { buildTeamTrendModel } from "./teamTrendView";
+import { buildTeamDayPoints } from "./teamDayPoints";
+import { isOwnTeamMemberRow, teamMemberGroupKey } from "./teamMemberIdentity";
 import type { TeamProject, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
+import { teamWindowCaption, teamWindowDayCount } from "./teamWindowCaption";
 import type { TeamProjectsWindow } from "./useTeamProjects";
 import "../projects/project-trend-chart.css";
 
 type ScaleTickStyle = CSSProperties & { readonly "--ptc-scale-y": string };
 type AxisTickStyle = CSSProperties & { readonly "--ptc-axis-x": string };
+type DayPointStyle = CSSProperties & { readonly "--team-day-x": string; readonly "--team-day-y": string; readonly "--team-day-color": string };
 
 interface HoverState {
   readonly dayLabel: string;
@@ -21,23 +25,11 @@ interface HoverState {
 }
 
 interface MemberShareRow {
+  readonly key: string;
   readonly name: string;
   readonly isYou: boolean;
   readonly pct: number;
   readonly fillPct: number;
-}
-
-function windowDayCount(window: TeamProjectsWindow): number {
-  const start = Date.parse(`${window.start_date}T00:00:00Z`);
-  const end = Date.parse(`${window.end_date}T00:00:00Z`);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 1;
-  return Math.round((end - start) / 86_400_000) + 1;
-}
-
-function initialsFor(name: string): string {
-  const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
-  const initials = parts.map((part) => part[0]!.toUpperCase()).join("");
-  return initials || "?";
 }
 
 export interface TeamProjectDetailViewProps {
@@ -45,6 +37,8 @@ export interface TeamProjectDetailViewProps {
   readonly mix: readonly TeamProjectMixRow[];
   readonly members: readonly TeamProjectMemberRow[];
   readonly window: TeamProjectsWindow;
+  /** Whether the window ends today; earlier windows name their dates. */
+  readonly isLatestWindow: boolean;
   readonly memberDisplayName: string | null;
   readonly loading: boolean;
   readonly actionLoading: boolean;
@@ -64,6 +58,7 @@ export function TeamProjectDetailView({
   mix,
   members,
   window: timeWindow,
+  isLatestWindow,
   memberDisplayName,
   loading,
   actionLoading,
@@ -91,30 +86,41 @@ export function TeamProjectDetailView({
 
   // Percentage-only member split of this project's shared time.
   const memberRows = useMemo<readonly MemberShareRow[]>(() => {
-    const totals = new Map<string, number>();
+    const totals = new Map<string, { name: string; isYou: boolean; seconds: number }>();
     for (const row of members) {
       if (row.organization_project_id !== project.id) continue;
       const seconds = Number.isFinite(row.seconds) ? Math.max(0, row.seconds) : 0;
       if (seconds <= 0) continue;
-      totals.set(row.member_display_name, (totals.get(row.member_display_name) ?? 0) + seconds);
+      const key = teamMemberGroupKey(row);
+      const entry = totals.get(key);
+      totals.set(key, {
+        name: row.member_display_name,
+        isYou: (entry?.isYou ?? false) || isOwnTeamMemberRow(row, memberDisplayName),
+        seconds: (entry?.seconds ?? 0) + seconds,
+      });
     }
-    const total = [...totals.values()].reduce((sum, value) => sum + value, 0);
-    const ranked = [...totals.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
-    const maxSeconds = ranked[0]?.[1] ?? 0;
-    return ranked.map(([name, seconds]) => ({
-      name,
-      isYou: name === memberDisplayName,
-      pct: total > 0 ? Math.round((seconds / total) * 100) : 0,
-      fillPct: maxSeconds > 0 ? Math.max((seconds / maxSeconds) * 100, 3) : 0,
+    const total = [...totals.values()].reduce((sum, value) => sum + value.seconds, 0);
+    const ranked = [...totals.entries()].sort((left, right) => right[1].seconds - left[1].seconds || left[1].name.localeCompare(right[1].name));
+    const maxSeconds = ranked[0]?.[1].seconds ?? 0;
+    return ranked.map(([key, entry]) => ({
+      key,
+      name: entry.name,
+      isYou: entry.isYou,
+      pct: total > 0 ? Math.round((entry.seconds / total) * 100) : 0,
+      fillPct: maxSeconds > 0 ? Math.max((entry.seconds / maxSeconds) * 100, 3) : 0,
     }));
   }, [members, project.id, memberDisplayName]);
 
-  const dayCount = windowDayCount(timeWindow);
-  const windowCaption = dayCount <= 1 ? t("team.projects.today") : t("team.projects.lastDays", { count: dayCount });
+  const dayCount = teamWindowDayCount(timeWindow);
+  // Team totals are stored per day, so the Day view has a single data point.
+  const isSingleDay = dayCount <= 1;
+  const dayPoints = isSingleDay && view.columns[0] ? buildTeamDayPoints(view.columns[0], view.bounds) : [];
+  const dayGuidePath = dayPoints.length > 0 ? `M ${dayPoints[0]!.x} ${view.bounds.bottom} V ${Math.min(...dayPoints.map((point) => point.y))}` : "";
+  const windowCaption = teamWindowCaption(timeWindow, isLatestWindow, effectiveLanguage, t);
   const localizedWindowLabel = formatLocalizedDateRangeLabel(timeWindow.start_date, timeWindow.end_date, effectiveLanguage);
   const { left, right, top, bottom } = view.bounds;
 
-  function showHover(column: ProjectTrendColumn, event: MouseEvent<SVGRectElement>) {
+  function showHover(column: ProjectTrendColumn, event: MouseEvent<Element>) {
     setHover({
       dayLabel: formatLocalizedDayLabel(column.day, effectiveLanguage),
       totalLabel: column.totalSeconds > 0
@@ -131,13 +137,15 @@ export function TeamProjectDetailView({
         <span aria-hidden="true">&larr;</span> {t("team.detail.back")}
       </button>
 
-      <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={t("team.detail.projectAria", { name: project.name })}>
+      <div className="team-detail-identity">
+        <span className="pt-swatch" style={{ background: project.color }} aria-hidden="true" />
+        <h2 className="team-detail-identity__name">{project.name || t("team.projects.untitled")}</h2>
+        <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? t("team.projects.archived") : t("team.projects.active")}</span>
+      </div>
+
+      <section className="editorial-panel editorial-panel--soft insight-chart-panel project-detail__head-panel" aria-label={t("team.detail.projectAria", { name: project.name })}>
         <div className="project-detail__head">
-          <div className="project-detail__identity">
-            <span className="pt-swatch" style={{ background: project.color }} aria-hidden="true" />
-            <h2 className="project-detail__name">{project.name || t("team.projects.untitled")}</h2>
-            <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? t("team.projects.archived") : t("team.projects.active")}</span>
-          </div>
+          <span className="label-mono">{t("projects.detail.overview")}</span>
           {project.can_manage ? (
             <div className="project-detail__actions">
               <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); onEdit(project); }}>{t("team.projects.edit")}</button>
@@ -155,7 +163,7 @@ export function TeamProjectDetailView({
         <div className="project-detail__stats" role="group" aria-label={t("team.detail.statsAria")}>
           <div className="project-detail__stat">
             <span className="label-mono">{t("team.detail.teamTime", { range: windowCaption })}</span>
-            <strong>{formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage)}</strong>
+            <strong>{hasData ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : "—"}</strong>
           </div>
           <div className="project-detail__stat">
             <span className="label-mono">{t("team.detail.share")}</span>
@@ -185,8 +193,17 @@ export function TeamProjectDetailView({
           {hasData ? (
             <div className="ptc-chart">
               <div className="ptc-plot">
-                <svg className="ptc-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={t("team.detail.byDayAria", { name: project.name })}>
+                <svg
+                  className="ptc-svg"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  role="img"
+                  aria-label={isSingleDay ? t("team.dashboard.daySplitAria", { day: localizedWindowLabel }) : t("team.detail.byDayAria", { name: project.name })}
+                >
                   <path className="ptc-grid" d={view.gridPath} />
+                  {isSingleDay ? (
+                  <path className="team-day-guide" d={dayGuidePath} />
+                  ) : (<>
                   <g className="ptc-areas">
                     {view.areaBands.map((band) => (
                       <path className="ptc-area" d={band.areaPath} fill={band.color} key={`area-${band.key}`} />
@@ -197,6 +214,7 @@ export function TeamProjectDetailView({
                       <path className="ptc-line" d={band.linePath} stroke={band.color} key={`line-${band.key}`} />
                     ))}
                   </g>
+                </>)}
                   <g className="ptc-hits">
                     {view.columns.map((column, index) => {
                       const previous = view.columns[index - 1];
@@ -219,6 +237,11 @@ export function TeamProjectDetailView({
                     })}
                   </g>
                 </svg>
+                {dayPoints.map((point) => (
+                  <span className="team-day-point" style={{ "--team-day-x": `${point.x}%`, "--team-day-y": `${point.y}%`, "--team-day-color": point.color } as DayPointStyle} aria-hidden="true" key={point.key}>
+                    <span className="team-day-point__value">{formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage)}</span>
+                  </span>
+                ))}
                 <div className="ptc-scale" aria-hidden="true">
                   {view.yAxis.map((tick) => (
                     <span style={{ "--ptc-scale-y": `${tick.y}%` } as ScaleTickStyle} key={tick.label}>{tick.label}</span>
@@ -244,21 +267,21 @@ export function TeamProjectDetailView({
         {memberRows.length === 0 ? (
           <div className="team-empty">{t("team.dashboard.noMemberBreakdown")}</div>
         ) : (
-          <div className="team-rank">
+          <div className="project-detail__sources">
             {memberRows.map((member) => (
-              <div className="team-rank-row" key={member.name} title={t("team.detail.memberTitle", { name: member.name, percent: member.pct })}>
-                <div className="team-rank-meta">
-                  <span className="team-rank-name">
-                    <span className="team-member__avatar" aria-hidden="true">{initialsFor(member.name)}</span>
-                    {member.name}
+              <div className="project-detail__source" key={member.key} title={t("team.detail.memberTitle", { name: member.name, percent: member.pct })}>
+                <div className="project-detail__source-meta">
+                  <span className="team-detail-member">
+                    <span className="team-member__avatar" aria-hidden="true">{member.name.trim().charAt(0).toUpperCase() || "?"}</span>
+                    <span className="team-detail-member__name">{member.name}</span>
                     {member.isYou ? <span className="team-you-chip">{t("team.dashboard.you")}</span> : null}
                   </span>
-                  <span className="team-rank-val">
-                    <b>{member.pct}%</b>
+                  <span className="project-detail__source-val">
+                    <span>{member.pct}%</span>
                   </span>
                 </div>
-                <span className="team-rank-track">
-                  <span className="team-rank-fill" style={{ width: `${member.fillPct}%`, background: project.color }} />
+                <span className="project-detail__source-bar">
+                  <span style={{ width: `${member.fillPct}%`, background: project.color }} />
                 </span>
               </div>
             ))}

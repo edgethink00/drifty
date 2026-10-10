@@ -8,6 +8,7 @@ import {
   NO_PROJECT_KEY,
   type ProjectTrendColumn,
 } from "./projectTrendView";
+import { ProjectTrendBars } from "./ProjectTrendBars";
 import "./project-trend-chart.css";
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -42,7 +43,6 @@ interface HoverState {
 
 type ScaleTickStyle = CSSProperties & { readonly "--ptc-scale-y": string };
 type AxisTickStyle = CSSProperties & { readonly "--ptc-axis-x": string };
-type BarsGridStyle = CSSProperties & { readonly "--ptc-bar-columns": number };
 
 function scaleTickStyle(y: number): ScaleTickStyle {
   return { "--ptc-scale-y": `${y}%` };
@@ -140,53 +140,13 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
       </div>
 
       {hasData && isOverview ? (
-        <div
-          className="ptc-bars"
-          role="img"
-          aria-label={`${t("projects.chart.trendAria", { span: localizedSpanLabel })}. ${overviewAccessibleSummary}`}
-        >
-          <div className="ptc-bars__plot">
-            <div className="ptc-bars__grid" aria-hidden="true">
-              {view.yAxis.map((tick) => (
-                <span className="ptc-bars__gridline" style={scaleTickStyle(tick.y)} key={tick.label}><i>{tick.label}</i></span>
-              ))}
-              {view.columns.slice(1).map((column, index) => (
-                <span
-                  className="ptc-bars__vline"
-                  style={{ left: `${((index + 1) / view.columns.length) * 100}%` }}
-                  key={`vline-${column.day}`}
-                />
-              ))}
-            </div>
-            <div className="ptc-bars__columns" style={{ "--ptc-bar-columns": view.columns.length } as BarsGridStyle}>
-              {view.columns.map((column) => {
-                const stackHeight = column.segments.reduce((sum, segment) => sum + segment.heightPct, 0);
-                return (
-                  <div className="ptc-bars__column" key={column.day}>
-                    <div className="ptc-bars__zone">
-                      <div
-                        className="ptc-bars__stack"
-                        style={{ height: `${Math.min(stackHeight, 100)}%` }}
-                        onMouseEnter={(event) => showHover(column, event)}
-                        onMouseMove={(event) => showHover(column, event)}
-                        onMouseLeave={() => setHover(null)}
-                      >
-                        {column.segments.map((segment) => (
-                          <span
-                            className={`ptc-bars__segment${segment.key === NO_PROJECT_KEY ? " ptc-bars__segment--none" : ""}`}
-                            style={{ height: `${(segment.seconds / Math.max(column.totalSeconds, 1)) * 100}%`, background: segment.color }}
-                            key={segment.key}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    <span className="ptc-bars__day">{column.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <ProjectTrendBars
+          view={view}
+          ariaLabel={`${t("projects.chart.trendAria", { span: localizedSpanLabel })}. ${overviewAccessibleSummary}`}
+          mutedKey={NO_PROJECT_KEY}
+          onHover={showHover}
+          onLeave={() => setHover(null)}
+        />
       ) : hasData ? (
         <div className="ptc-chart">
           <div className="ptc-plot">

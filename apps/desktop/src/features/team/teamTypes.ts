@@ -130,6 +130,13 @@ export type TeamProjectMemberRow = {
   readonly organization_project_id: string;
   readonly project_name: string;
   readonly member_display_name: string;
+  /**
+   * Tells members apart within one response, so two people sharing under the
+   * same name stay separate. Not an identifier. Null from an older server.
+   */
+  readonly member_slot: number | null;
+  /** Whether the row is the caller's own. Null from an older server. */
+  readonly is_self: boolean | null;
   readonly seconds: number;
 };
 

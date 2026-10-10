@@ -28,6 +28,7 @@ function props(): TeamProjectsViewProps {
     members: [],
     memberDisplayName: "Alex",
     window: { start_date: "2026-07-14", end_date: "2026-07-14" },
+    isLatestWindow: true,
     loading: false,
     error: null,
     actionError: null,
@@ -131,8 +132,26 @@ describe("TeamProjectsView", () => {
 
     expect(screen.getByRole("button", { name: "새 프로젝트" })).toBeTruthy();
     expect(screen.getByLabelText("프로젝트 이름 검색")).toBeTruthy();
-    expect(screen.getByText("기간 내 팀 시간")).toBeTruthy();
+    expect(screen.getByText("팀 시간 · 오늘")).toBeTruthy();
     expect(screen.getByText("Shared alpha")).toBeTruthy();
     expect(screen.getByText("Shared project")).toBeTruthy();
+  });
+
+  it("returns from a project's detail to the list when the Projects tab is pressed again", () => {
+    const { rerender } = render(
+      <LocalizationTestProvider language="en">
+        <TeamProjectsView {...props()} />
+      </LocalizationTestProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /open shared alpha/i }));
+    expect(screen.getByRole("button", { name: /all projects/i })).toBeTruthy();
+
+    rerender(
+      <LocalizationTestProvider language="en">
+        <TeamProjectsView {...props()} listResetSignal={1} />
+      </LocalizationTestProvider>,
+    );
+    expect(screen.queryByRole("button", { name: /all projects/i })).toBeNull();
+    expect(screen.getByLabelText("Search project name")).toBeTruthy();
   });
 });

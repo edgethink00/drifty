@@ -11,6 +11,7 @@ import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/Pr
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import type { TeamProject, TeamProjectAnchor, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
+import { teamWindowCaption } from "./teamWindowCaption";
 import type { TeamProjectsWindow } from "./useTeamProjects";
 
 export type TeamProjectDraft = {
@@ -27,6 +28,10 @@ export type TeamProjectsViewProps = {
   readonly members: readonly TeamProjectMemberRow[];
   readonly memberDisplayName: string | null;
   readonly window: TeamProjectsWindow;
+  /** Whether the window ends today; earlier windows name their dates. */
+  readonly isLatestWindow: boolean;
+  /** Changes when the already-open Projects tab is pressed again, returning to the list. */
+  readonly listResetSignal?: number;
   readonly loading: boolean;
   readonly error: string | null;
   readonly actionError: string | null;
@@ -143,6 +148,8 @@ export function TeamProjectsView({
   members,
   memberDisplayName,
   window: timeWindow,
+  isLatestWindow,
+  listResetSignal = 0,
   loading,
   error,
   actionError,
@@ -159,6 +166,10 @@ export function TeamProjectsView({
   const menuTrigger = useRef<HTMLButtonElement | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const submittedRef = useRef(false);
+
+  useEffect(() => {
+    if (listResetSignal > 0) setSelectedProjectId(null);
+  }, [listResetSignal]);
 
   const secondsByProjectId = useMemo(() => {
     const map = new Map<string, number>();
@@ -225,14 +236,7 @@ export function TeamProjectsView({
     if (selectedProjectId && !selectedProject) setSelectedProjectId(null);
   }, [selectedProjectId, selectedProject]);
 
-  const windowDays = (() => {
-    const start = Date.parse(`${timeWindow.start_date}T00:00:00Z`);
-    const end = Date.parse(`${timeWindow.end_date}T00:00:00Z`);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 1;
-    return Math.round((end - start) / 86_400_000) + 1;
-  })();
-  const totalCaption = windowDays <= 1 ? t("team.projects.today") : t("team.projects.lastDays", { count: windowDays });
-
+  const windowCaption = teamWindowCaption(timeWindow, isLatestWindow, effectiveLanguage, t);
   const emptyLabel = projects.length === 0
     ? loading
       ? t("team.projects.loading")
@@ -247,6 +251,7 @@ export function TeamProjectsView({
           mix={mix}
           members={members}
           window={timeWindow}
+          isLatestWindow={isLatestWindow}
           memberDisplayName={memberDisplayName}
           loading={loading}
           actionLoading={actionLoading}
@@ -318,7 +323,7 @@ export function TeamProjectsView({
           <div className="projects-table__head">
             <span>{t("team.projects.headerProject")}</span>
             <span>{t("team.projects.headerStatus")}</span>
-            <span>{t("team.projects.headerTeamTime")}</span>
+            <span>{t("team.projects.headerTeamTimeCaption", { caption: windowCaption })}</span>
             <span><span className="sr-only">{t("team.projects.headerActions")}</span></span>
           </div>
           {filtered.map((project) => {
@@ -347,10 +352,16 @@ export function TeamProjectsView({
                       <small>{descShort}</small>
                     </button>
                   </div>
-                  <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? t("team.projects.archived") : t("team.projects.active")}</span>
+                  {/* As in the personal table: every live project is Active, so only
+                      Archived keeps the chip. */}
+                  {isArchived ? (
+                    <span className="chip gray">{t("team.projects.archived")}</span>
+                  ) : (
+                    <span className="pt-status">{t("team.projects.active")}</span>
+                  )}
                   <div className="pt-total">
-                    <small>{totalCaption}</small>
-                    <b>{formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage)}</b>
+                    {/* The window is in the toolbar above; each row only carries its total. */}
+                    <b>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : "—"}</b>
                   </div>
                   <span className="pt-menu-slot">
                     {project.can_manage ? (
