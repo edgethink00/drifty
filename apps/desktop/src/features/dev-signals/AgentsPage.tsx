@@ -39,6 +39,7 @@ import {
   clockHourForLogicalHour,
   formatLocalizedCalendarMinuteLabel,
   formatLocalizedCompactDurationFromSeconds,
+  formatLocalizedCompactHourLabel,
   formatLocalizedDateRangeLabel,
   formatLocalizedHourLabel,
   formatLocalizedQuarterHourLabel,
@@ -527,8 +528,8 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
   }, [colorMode, gridCells, intensityBands, repoLegend, repoColors, t]);
 
   return (
-    /* Same bordered chart box the day view wraps its flow chart in — without
-       it the card reads as cut off at the top and glued to the next panel. */
+    /* Same chart box the day view wraps its flow chart in. Inside
+       .day-split__main it follows Your Day's unframed flow chart. */
     <div className="flow-breakdown-layout flow-breakdown-layout--full">
       <div className="flow-breakdown-layout__chart">
         {/* The card carries FlowChartView's exact style contract — all four
@@ -936,10 +937,10 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
           <div className="week-v2-calendar__body" ref={setCalendarBodyElement} style={{ height: formatWeekDashboardAxisPixelValue(24 * AGENTS_WEEK_HOUR_HEIGHT) }}>
             <div className="week-v2-calendar__time-rail">
               {Array.from({ length: 24 }, (_, hour) => (
-                <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue(hour * AGENTS_WEEK_HOUR_HEIGHT) }}>{formatLocalizedHourLabel(clockHourForLogicalHour(hour, boundaryMinutes), effectiveLanguage)}</span>
+                <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue(hour * AGENTS_WEEK_HOUR_HEIGHT) }}>{formatLocalizedCompactHourLabel(clockHourForLogicalHour(hour, boundaryMinutes), effectiveLanguage)}</span>
               ))}
               <span className="week-v2-calendar__time-rail-endpoint" style={{ top: formatWeekDashboardAxisPixelValue(24 * AGENTS_WEEK_HOUR_HEIGHT) }}>
-                {formatLocalizedHourLabel(clockHourForLogicalHour(24, boundaryMinutes), effectiveLanguage)}
+                {formatLocalizedCompactHourLabel(clockHourForLogicalHour(24, boundaryMinutes), effectiveLanguage)}
               </span>
             </div>
             {currentMarkerStyle ? (
@@ -969,8 +970,8 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
                         style={{
                           top: formatWeekDashboardAxisPixelValue((event.start / 60) * AGENTS_WEEK_HOUR_HEIGHT),
                           height: formatWeekDashboardAxisPixelValue(heightPx),
-                          left: "4px",
-                          width: "calc(100% - 8px)",
+                          left: "1px",
+                          width: "calc(100% - 7px)",
                           "--event-tone": event.tone,
                           ...(event.foreground ? { "--agent-event-foreground": event.foreground } : {}),
                         } as CSSProperties}

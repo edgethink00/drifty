@@ -240,6 +240,13 @@
   line-height: 1;
 }
 
+/* The marker sits on this row's bottom edge, so lift the row above the next
+   one; otherwise the following row paints over the lower half of the line
+   and the arrow. */
+.flow-chart-row--now {
+  z-index: 3;
+}
+
 .flow-chart-row--now::before {
   content: "";
   position: absolute;

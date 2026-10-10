@@ -257,20 +257,20 @@ describe("planWeekIdentityStrip", () => {
   });
 
   it("drops icons into the +N chip when the squished column cannot fit them", () => {
-    // 120px column: 33px chrome leaves 87px; 4 icons + chip need 106px but
+    // 120px column: 32px chrome leaves 88px; 4 icons + chip need 106px but
     // 3 icons + a one-digit chip fit at 85px — at full size.
     expect(planWeekIdentityStrip(4, 2, 120)).toEqual({ visibleCount: 3, hiddenCount: 3, tilePx: 18, gapPx: 3 });
   });
 
   it("prefers dropping to two full-size icons over shrinking three", () => {
-    // 110px column: available 77px; 3 icons + chip need 85px at full size, so
+    // 110px column: available 78px; 3 icons + chip need 85px at full size, so
     // show 2 icons + "+2" (64px) at the regular tile size instead.
     expect(planWeekIdentityStrip(4, 0, 110)).toEqual({ visibleCount: 2, hiddenCount: 2, tilePx: 18, gapPx: 3 });
   });
 
   it("shrinks the tiles continuously, only as far as this strip needs", () => {
-    // 88px column: available 55px; even 2 icons + chip need 64px at full size,
-    // so the tiles drop just to 16px (2×16 + 2 + 2 + 19 = 55px), no further.
+    // 88px column: available 56px; even 2 icons + chip need 64px at full size,
+    // so the tiles drop just to 16px (2×16 + 2 + 2 + 19 = 55px fits in 56px), no further.
     expect(planWeekIdentityStrip(4, 0, 88)).toEqual({ visibleCount: 2, hiddenCount: 2, tilePx: 16, gapPx: 2 });
   });
 
@@ -287,7 +287,7 @@ describe("planWeekIdentityStrip", () => {
   });
 
   it("reserves a wider chip for double-digit hidden counts", () => {
-    // 130px column: available 97px; 4 icons + a one-digit chip need 106px,
+    // 130px column: available 98px; 4 icons + a one-digit chip need 106px,
     // 3 icons + a two-digit chip fit at 90px.
     expect(planWeekIdentityStrip(4, 9, 130)).toEqual({ visibleCount: 3, hiddenCount: 10, tilePx: 18, gapPx: 3 });
   });

@@ -3,7 +3,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
-import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedDuration, formatLocalizedHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
+import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedDuration, formatLocalizedCompactHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
@@ -718,13 +718,13 @@ export function WeekDashboard({
               <div ref={setCalendarBody} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
               <div className="week-v2-calendar__time-rail">
                 {calendarHours.map((hour) => (
-                  <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }}>{formatLocalizedHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes), effectiveLanguage)}</span>
+                  <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }}>{formatLocalizedCompactHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes), effectiveLanguage)}</span>
                 ))}
                 <span
                   className="week-v2-calendar__time-rail-endpoint"
                   style={{ top: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}
                 >
-                  {formatLocalizedHourLabel(clockHourForLogicalHour(calendarEndHour, startOfDayMinutes), effectiveLanguage)}
+                  {formatLocalizedCompactHourLabel(clockHourForLogicalHour(calendarEndHour, startOfDayMinutes), effectiveLanguage)}
                 </span>
               </div>
               {!initialDataLoading && currentCalendarMarkerStyle && currentCalendarLabel ? (
@@ -786,8 +786,10 @@ export function WeekDashboard({
                       const eventStyle: WeekCalendarEventStyle = {
                         top: formatWeekDashboardAxisPixelValue((event.topMinutes / 60) * calendarHourHeight),
                         height: formatWeekDashboardAxisPixelValue(eventLayout.eventHeight),
-                        left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 4px)` : "4px",
-                        width: event.laneCount > 1 ? "calc(100% - 32px)" : "calc(100% - 8px)",
+                        // Blocks hug the left of their day (1px) and leave the free space on
+                        // the right (6px), the direction concurrent lanes already cascade in.
+                        left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 1px)` : "1px",
+                        width: event.laneCount > 1 ? "calc(100% - 31px)" : "calc(100% - 7px)",
                         zIndex: event.laneCount > 1 ? 10 + event.lane : 3,
                         "--event-tone": colorMode === "productivity" ? PRODUCTIVITY_COLORS[event.productivity] : CATEGORY_COLORS[event.category],
                       };

@@ -325,9 +325,9 @@ describe("WeekDashboard calendar board", () => {
   });
 
   it("sizes day columns beside the time rail's rem width, which grows with the root font size", () => {
-    // Four full-size identity icons need a 114px day column (81px strip + 33px
-    // chrome). An 838px calendar body leaves 114px per day beside the 40px rail
-    // of a 16px root, but 113px beside the 47.5px rail of a 19px root.
+    // Four full-size identity icons need a 113px day column (81px strip + 32px
+    // chrome). An 831px calendar body leaves 113px per day beside the 40px rail
+    // of a 16px root, but under 112px beside the 47.5px rail of a 19px root.
     const identities = ["a", "b", "c", "d"].map((id, index) => ({
       id,
       label: id,
@@ -343,7 +343,7 @@ describe("WeekDashboard calendar board", () => {
     const measureElement = HTMLElement.prototype.getBoundingClientRect;
     const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       if (!this.classList.contains("week-v2-calendar__body")) return measureElement.call(this);
-      return { x: 0, y: 0, left: 0, top: 0, right: 838, bottom: 0, width: 838, height: 0, toJSON: () => ({}) } as DOMRect;
+      return { x: 0, y: 0, left: 0, top: 0, right: 831, bottom: 0, width: 831, height: 0, toJSON: () => ({}) } as DOMRect;
     });
     const visibleIcons = (container: HTMLElement) => container.querySelectorAll(".week-v2-calendar__identity").length;
     try {
@@ -1591,8 +1591,8 @@ describe("WeekDashboard activity inspector", () => {
 });
 
 describe("WeekDashboard time rail", () => {
-  it("positions time-rail labels with a tighter right inset so two-digit hours fit in the 2.5rem rail", () => {
-    expect(styles).toMatch(/\.week-v2-calendar__time-rail span\s*\{[^}]*right:\s*4px/);
+  it("centres compact time-rail labels on their hour line inside the 2.5rem rail", () => {
+    expect(styles).toMatch(/\.week-v2-calendar__time-rail span\s*\{[^}]*right:\s*7px[^}]*transform:\s*translateY\(-50%\)/);
   });
 
   it("keeps the original 2.5rem grid-column width for the time rail", () => {
