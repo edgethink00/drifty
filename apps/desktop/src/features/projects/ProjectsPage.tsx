@@ -14,6 +14,14 @@ import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../setting
 import { aggregateProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { formatProjectMatchCooldown, NO_PROJECT_MATCH_COOLDOWN, type ProjectMatchCooldown } from "./projectMatchCooldown";
 import { useLocalization } from "../localization/LocalizationContext";
+import { PROJECT_PASS_NO_RESULTS_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE } from "../classification/useProjectClassification";
+
+// Known project-pass messages are localized; provider and transport errors stay verbatim.
+function localizeProjectRunError(message: string, t: ReturnType<typeof useLocalization>["t"]): string {
+  if (message === PROJECT_PASS_NO_RESULTS_MESSAGE) return t("projects.runError.noResults");
+  if (message === PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE) return t("projects.runError.nothingToAnalyze");
+  return message;
+}
 
 const PROJECT_LIBRARY_WINDOW_DAYS = 7;
 
@@ -325,7 +333,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
       </div>
 
       {props.runError ? (
-        <div className="projects-page__banner projects-page__banner--error" role="alert">{props.runError}</div>
+        <div className="projects-page__banner projects-page__banner--error" role="alert">{localizeProjectRunError(props.runError, t)}</div>
       ) : null}
 
       {selectedProject ? (

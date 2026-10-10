@@ -34,6 +34,8 @@ describe("Intelligence destination policy", () => {
   it("distinguishes model and credential rejections from quota and access errors", () => {
     expect(analysisUnavailableReasonFromHttp(401, "")).toBe("authentication");
     expect(analysisUnavailableReasonFromHttp(404, { error: { code: "model_not_found" } })).toBe("model_unavailable");
+    expect(analysisUnavailableReasonFromHttp(404, { type: "error", error: { type: "not_found_error", message: "model: claude-opus6" } })).toBe("model_unavailable");
+    expect(analysisUnavailableReasonFromHttp(400, { type: "error", error: { type: "not_found_error" } })).toBeNull();
     expect(analysisUnavailableReasonFromHttp(403, { error: { type: "authentication_error" } })).toBe("authentication");
     expect(analysisUnavailableReasonFromHttp(403, { error: { code: "insufficient_quota" } })).toBeNull();
     expect(analysisUnavailableReasonFromHttp(429, { error: { type: "authentication_error" } })).toBeNull();

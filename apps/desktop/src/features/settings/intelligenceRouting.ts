@@ -66,5 +66,7 @@ export function analysisUnavailableReasonFromHttp(status: number, body: unknown)
   } catch { /* An unstructured error does not establish a safe reroute. */ }
   if (["invalid_api_key", "authentication_error"].includes(code) && [400, 403].includes(status)) return "authentication";
   if (["model_not_found", "invalid_model", "model_not_available"].includes(code) && [400, 404].includes(status)) return "model_unavailable";
+  // Anthropic answers an unknown model id with 404 and error.type "not_found_error".
+  if (code === "not_found_error" && status === 404) return "model_unavailable";
   return null;
 }

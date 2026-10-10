@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ActivitySegment } from "@drifty/domain";
 
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
+import { PROJECT_PASS_NO_RESULTS_MESSAGE } from "../classification/useProjectClassification";
 import { ProjectsPage, type ProjectsPageProps } from "./ProjectsPage";
 import { IDLE_PROJECT_AUTO_ANALYSIS } from "./projectAutoAnalysisState";
 import { NO_PROJECT_MATCH_COOLDOWN } from "./projectMatchCooldown";
@@ -231,5 +233,11 @@ describe("ProjectsPage", () => {
     expect(screen.getByRole("alert").textContent).toBe("Could not save the project.");
     fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
     expect(screen.getByRole("alert").textContent).toBe("Could not save the project.");
+  });
+
+  it("localizes the empty project-pass result and points to the current settings tab", () => {
+    render(<LocalizationTestProvider language="ko"><ProjectsPage {...baseProps({ runError: PROJECT_PASS_NO_RESULTS_MESSAGE })} /></LocalizationTestProvider>);
+
+    expect(screen.getByRole("alert").textContent).toBe("분석 모델이 결과를 돌려주지 않았어요. AI 설정 › AI 분석에서 API 키와 모델을 확인한 뒤 다시 시도해 주세요.");
   });
 });
