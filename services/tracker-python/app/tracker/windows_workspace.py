@@ -40,6 +40,7 @@ from typing import Callable
 
 from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
 from app.tracker.browser_content import content_excluded_url, normalize_context
+from app.tracker.browser_description import MAX_DESCRIPTION_UTF16, clip_description
 from app.tracker.browser_content_policy import policy_snapshot
 from app.text_safety import replace_lone_surrogates
 from app.tracker.capture_contract import Snapshot, utc_now_iso
@@ -50,6 +51,7 @@ from app.tracker.windows_browser_capture import (
     _URL_SAMPLE_BUDGET_SECONDS,
     read_browser_clues_with_budget,
     read_browser_url_with_budget,
+    read_public_description_with_budget,
 )
 from app.tracker.windows_browser_bridge import read_browser_bridge_metadata
 
@@ -73,6 +75,13 @@ _FOREGROUND_CHECK_RESERVE_SECONDS = 0.05
 # Edge labels its private windows in the window title; Chrome's incognito
 # window title has no label, so it is not detected (documented limit).
 _EDGE_PRIVATE_TITLE_LABEL = "[InPrivate]"
+# Leave time after the optional description lookup for the caller's checks.
+_DESCRIPTION_RESERVE_SECONDS = 0.03
+_CLUE_BUDGET_UTF16 = 240
+
+
+def _utf16_length(value: str) -> int:
+    return len(value.encode("utf-16-le")) // 2
 
 
 @dataclass(frozen=True)
@@ -361,6 +370,7 @@ def capture_windows_browser_content(
     *,
     timeout_seconds: float,
     clue_reader: Callable[[int, str | None, float], WindowsBrowserCluesResult] | None = None,
+    describer: Callable[[str, float], str | None] | None = None,
 ) -> dict[str, object] | None:
     """Bounded visible page clues for this foreground window, or None.
 
@@ -369,6 +379,9 @@ def capture_windows_browser_content(
     which must begin with the Document's own name, and are discarded when the
     Content context setting changes during the read. Unavailable optional
     context never affects tracking.
+
+    As on macOS, admitted clues on an HTTPS page may also carry one anonymous
+    public description (D) that shares the headings' 240-character budget.
     """
     window_title = snapshot.window_title
     if (os.environ.get("DRIFTY_BROWSER_CONTENT_CONTEXT") != "1" or timeout_seconds <= 0
@@ -379,6 +392,7 @@ def capture_windows_browser_content(
     policy = policy_snapshot()
     if policy is None:
         return None
+    started = time.monotonic()
     result = (
         clue_reader(hwnd, snapshot.app_name, timeout_seconds) if clue_reader is not None
         else read_browser_clues_with_budget(hwnd, snapshot.app_name, timeout_seconds)
@@ -386,11 +400,21 @@ def capture_windows_browser_content(
     if (result.error or not result.clues or result.url != snapshot.site_url or not result.title
             or not (window_title == result.title or window_title.startswith(result.title + " "))):
         return None
+    clues = dict(result.clues)
+    description_cap = min(MAX_DESCRIPTION_UTF16,
+                          _CLUE_BUDGET_UTF16 - sum(_utf16_length(h) for h in clues.get("headings", [])))
+    remaining = timeout_seconds - (time.monotonic() - started) - _DESCRIPTION_RESERVE_SECONDS
+    if description_cap > 0 and snapshot.site_url.startswith("https://"):
+        text = (describer(snapshot.site_url, remaining) if describer is not None
+                else read_public_description_with_budget(snapshot.site_url, remaining))
+        description = clip_description(text, description_cap) if isinstance(text, str) else ""
+        if description:
+            clues["description"] = description
     if policy_snapshot() != policy:
         return None
     return normalize_context({
         "version": 1, "collectedAt": snapshot.observed_at, "pageUrl": snapshot.site_url,
-        "pageTitle": window_title, **result.clues,
+        "pageTitle": window_title, **clues,
     })
 
 

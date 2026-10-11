@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import sys
 import threading
 import time
+import types
 import unittest
 from unittest.mock import patch
 
@@ -209,6 +211,79 @@ class WindowsBrowserCaptureTests(unittest.TestCase):
         self.assertEqual(calls, [(101, "Microsoft Edge", 570), (101, "Microsoft Edge", 320)])
         self.assertIn("no remaining", short.error or "")
         self.assertIsNotNone(other.error)
+
+    def test_public_description_uses_its_own_worker_and_never_raises(self) -> None:
+        calls: list[tuple[str, float]] = []
+
+        def reader(url, seconds):
+            calls.append((url, seconds))
+            if "fail" in url:
+                raise OSError("resolver text https://example.test/private")
+            return "Author description"
+
+        description_worker = self.worker(lambda *_: None)
+        with (
+            patch.object(windows_browser_capture.sys, "platform", "win32"),
+            patch.object(windows_browser_capture, "_description_worker", description_worker),
+        ):
+            found = windows_browser_capture.read_public_description_with_budget("https://example.test/a", 1.2, reader=reader)
+            failed = windows_browser_capture.read_public_description_with_budget("https://example.test/fail", 0.3, reader=reader)
+            short = windows_browser_capture.read_public_description_with_budget("https://example.test/a", 0.05, reader=reader)
+        with patch.object(windows_browser_capture.sys, "platform", "darwin"):
+            other = windows_browser_capture.read_public_description_with_budget("https://example.test/a", 1.0, reader=reader)
+        self.assertEqual(found, "Author description")
+        self.assertIsNone(failed)
+        self.assertIsNone(short)
+        self.assertIsNone(other)
+        self.assertEqual([url for url, _ in calls], ["https://example.test/a", "https://example.test/fail"])
+        self.assertAlmostEqual(calls[0][1], 0.60)
+        self.assertAlmostEqual(calls[1][1], 0.28)
+        # The UIA worker is never used for the network lookup.
+        self.assertIsNot(description_worker, windows_browser_capture._worker)
+
+    def test_public_description_tls_adds_bundled_roots_and_reuses_one_context(self) -> None:
+        class FakeContext:
+            def __init__(self) -> None:
+                self.bundles: list[str] = []
+
+            def load_verify_locations(self, cafile=None) -> None:
+                self.bundles.append(cafile)
+
+        clock = [100.0]
+        with (
+            patch.object(windows_browser_capture.ssl, "create_default_context", FakeContext),
+            patch.object(windows_browser_capture, "_description_tls", None),
+            patch.dict(sys.modules, {"certifi": types.SimpleNamespace(where=lambda: "C:/bundle/cacert.pem")}),
+        ):
+            first = windows_browser_capture._description_tls_context(lambda: clock[0])
+            clock[0] += 3599
+            reused = windows_browser_capture._description_tls_context(lambda: clock[0])
+            clock[0] += 2
+            rebuilt = windows_browser_capture._description_tls_context(lambda: clock[0])
+            with patch("app.tracker.browser_public_description.fetch_description") as fetch:
+                fetch.return_value = "Author description"
+                found = windows_browser_capture._fetch_description("https://example.test/a", 0.6)
+        self.assertIs(first, reused)
+        self.assertIsNot(first, rebuilt)
+        self.assertEqual(first.bundles, ["C:/bundle/cacert.pem"])
+        self.assertEqual(found, "Author description")
+        (url, seconds), kwargs = fetch.call_args
+        self.assertEqual(url, "https://example.test/a")
+        self.assertLessEqual(seconds, 0.6)
+        self.assertIsInstance(kwargs["context"], FakeContext)
+
+    def test_public_description_tls_falls_back_to_the_windows_store(self) -> None:
+        class FakeContext:
+            def load_verify_locations(self, cafile=None) -> None:
+                raise AssertionError("no bundle to load")
+
+        with (
+            patch.object(windows_browser_capture.ssl, "create_default_context", FakeContext),
+            patch.object(windows_browser_capture, "_description_tls", None),
+            patch.dict(sys.modules, {"certifi": None}),
+        ):
+            context = windows_browser_capture._description_tls_context()
+        self.assertIsInstance(context, FakeContext)
 
 
 if __name__ == "__main__":

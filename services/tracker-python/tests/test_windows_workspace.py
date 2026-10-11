@@ -1201,6 +1201,50 @@ class WindowsBrowserContentTests(unittest.TestCase):
             self.assertIsNone(capture_windows_browser_content(snapshot, 44, timeout_seconds=0.9, clue_reader=reader), url)
         self.assertEqual(calls, [])
 
+    def test_https_clues_gain_a_public_description_within_the_heading_budget(self) -> None:
+        reader, _ = self._reader()
+        lookups: list[tuple[str, float]] = []
+
+        def describe(url, seconds):
+            lookups.append((url, seconds))
+            return "  An   author\n description of the course.  "
+
+        context = capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader, describer=describe)
+        self.assertEqual(context["description"], "An author description of the course.")
+        self.assertEqual(context["headings"], ["Week 2"])
+        self.assertEqual(lookups[0][0], self.URL)
+        self.assertGreater(lookups[0][1], 0.8)
+        self.assertLessEqual(lookups[0][1], 0.9)
+        # Headings near the shared 240-character budget leave only the rest for D.
+        reader, _ = self._reader(clues={"headings": ["h" * 80, "i" * 80], "visibleTopic": ["x y"]})
+        context = capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader,
+                                                  describer=lambda url, seconds: "d" * 200)
+        self.assertEqual(context["description"], "d" * 80)
+        # A full heading budget skips the lookup entirely.
+        reader, _ = self._reader(clues={"headings": ["a" * 80, "b" * 80, "c" * 80]})
+        skipped: list[str] = []
+        context = capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader,
+                                                  describer=lambda url, seconds: skipped.append(url) or "x")
+        self.assertEqual(skipped, [])
+        self.assertNotIn("description", context)
+
+    def test_http_pages_and_failed_lookups_keep_clues_without_a_description(self) -> None:
+        http = self._snapshot()
+        http.site_url = "http://example.org/course"
+        reader, _ = self._reader(url="http://example.org/course")
+        lookups: list[str] = []
+        context = capture_windows_browser_content(http, 44, timeout_seconds=0.9, clue_reader=reader,
+                                                  describer=lambda url, seconds: lookups.append(url) or "x")
+        self.assertEqual(lookups, [])
+        self.assertEqual(context["visibleTopic"], ["Assignment closes Friday"])
+        self.assertNotIn("description", context)
+        reader, _ = self._reader()
+        for failed in (None, "", "   "):
+            context = capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader,
+                                                      describer=lambda url, seconds, value=failed: value)
+            self.assertEqual(context["headings"], ["Week 2"])
+            self.assertNotIn("description", context)
+
     def test_foreground_capture_reads_clues_inside_its_remaining_budget(self) -> None:
         stable = ForegroundWindow(hwnd=100, title="Course - Chrome", pid=10)
         changed = ForegroundWindow(hwnd=100, title="Other - Chrome", pid=10)

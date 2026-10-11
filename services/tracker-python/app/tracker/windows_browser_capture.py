@@ -7,11 +7,16 @@ The worker never receives or mutates the caller's Snapshot.
 
 Optional page-clue reads share that worker, so a clue read and a URL read never
 overlap in the UIA host.
+
+The anonymous public description (D) lookup uses its own single-flight worker:
+it waits on the network, never on the UIA host, and a blocked resolver must not
+delay the next URL read.
 """
 
 from __future__ import annotations
 
 import atexit
+import ssl
 import sys
 import threading
 import time
@@ -37,6 +42,18 @@ _CLUES_SAMPLE_BUDGET_SECONDS = 0.65
 _CLUES_TRANSIT_SECONDS = 0.08
 _CLUES_MIN_READER_MS = 100
 _CLUES_MAX_READER_MS = 620
+# The macOS reader's own deadline; shorter remaining time is used as is.
+_DESCRIPTION_MAX_SECONDS = 0.62
+_DESCRIPTION_MIN_SECONDS = 0.06
+# Windows installs most third-party roots only when its own verifier first needs
+# one, and Chrome and Firefox verify with their own root lists, so Python can
+# miss the root of a valid public site (17 of 398 study sites on a 34-root
+# guest). The sidecar already bundles certifi (sentry_sdk's transport imports
+# it), so the lookup also trusts those Mozilla roots. Loading the bundle costs
+# about 0.2s of CPU, so the single description worker reuses one context and
+# rebuilds it hourly to pick up roots Windows adds later.
+_DESCRIPTION_TLS_REFRESH_SECONDS = 3600.0
+_description_tls: tuple[float, ssl.SSLContext] | None = None
 
 
 @dataclass
@@ -163,6 +180,8 @@ _worker = _UrlWorker()
 # Registered after importing UIA, so LIFO exit first invalidates the sample,
 # then UIA terminates any still-running owned subprocess without its read lock.
 atexit.register(_worker.close)
+_description_worker = _UrlWorker()
+atexit.register(_description_worker.close)
 
 
 def close_browser_capture() -> None:
@@ -172,6 +191,7 @@ def close_browser_capture() -> None:
     repeat the same idempotent cleanup when the interpreter returns normally.
     """
     _worker.close()
+    _description_worker.close()
     _close_host()
 
 
@@ -202,3 +222,50 @@ def read_browser_clues_with_budget(
     if reader_ms < _CLUES_MIN_READER_MS:
         return WindowsBrowserCluesResult(error="Windows page clues have no remaining sample time budget.")
     return _worker.read_clues(hwnd, app_name, allowance, lambda: reader(hwnd, app_name, reader_ms))
+
+
+def _description_tls_context(now: Callable[[], float] = time.monotonic) -> ssl.SSLContext:
+    """Windows system roots plus the bundled certifi roots, reused by the description worker."""
+    global _description_tls
+    current = now()
+    cached = _description_tls
+    if cached is not None and current - cached[0] < _DESCRIPTION_TLS_REFRESH_SECONDS:
+        return cached[1]
+    context = ssl.create_default_context()
+    try:
+        import certifi
+
+        context.load_verify_locations(cafile=certifi.where())
+    except (ImportError, OSError, ssl.SSLError):
+        pass  # The Windows store alone still validates most public sites.
+    _description_tls = (current, context)
+    return context
+
+
+def _fetch_description(url: str, seconds: float) -> str | None:
+    from app.tracker.browser_public_description import fetch_description
+
+    started = time.monotonic()
+    context = _description_tls_context()
+    return fetch_description(url, seconds - (time.monotonic() - started), context=context)
+
+
+def read_public_description_with_budget(
+    url: str,
+    timeout_seconds: float,
+    *,
+    reader: Callable[[str, float], str | None] = _fetch_description,
+) -> str | None:
+    """One anonymous public description lookup within this sample's remaining time.
+
+    Uses the same bounded reader as macOS (no cookies, login, cache or proxy),
+    in-process on a dedicated worker. A late or failed lookup yields None.
+    """
+    if sys.platform != "win32" or not timeout_seconds or timeout_seconds < _DESCRIPTION_MIN_SECONDS:
+        return None
+    allowance = min(_DESCRIPTION_MAX_SECONDS, timeout_seconds)
+    result = _description_worker._submit(
+        0, None, allowance, lambda: reader(url, max(0.01, allowance - 0.02)),
+        lambda _message: None, "Windows page description",
+    )
+    return result if isinstance(result, str) and result else None
