@@ -152,6 +152,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "고양이 크기 확대 축소 pet size zoom",
   },
   {
+    id: "settings.pet.showHoverControls",
+    section: "pet",
+    titleKey: "settings.pet.showHoverControls",
+    descriptionKey: "settings.pet.showHoverControlsDescription",
+    keywords: "고양이 호버 빠른 제어 바 촬영 화면 공유 숨기기 pet hover quick controls recording filming screen sharing hide toolbar",
+  },
+  {
     id: "settings.pet.allowOutings",
     section: "pet",
     titleKey: "settings.pet.allowOutings",

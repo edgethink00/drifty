@@ -117,6 +117,11 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("combobox", { name: "Language" })).toBeNull();
   });
 
+  it("keeps the public hover preference out of Dev Lab", () => {
+    renderProductionDevSettings({ activeSubsection: "lab", petModeEnabled: true });
+    expect(screen.queryByRole("switch", { name: "Show quick controls on hover" })).toBeNull();
+  });
+
   it("keeps the detailed Pet Mode Lab in Dev while the pet itself ships elsewhere", () => {
     renderProductionDevSettings({ activeSubsection: "lab" });
     expect(screen.getByRole("group", { name: "Pet Mode Lab" })).toBeTruthy();

@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
+import { PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY } from "../pet-mode/petQuickControlsPreference";
 import { PET_OUTING_PREFERENCE_STORAGE_KEY } from "../pet-mode/petOutingPreference";
 import { PET_PRESENCE_MODE_STORAGE_KEY } from "../pet-mode/petPresenceMode";
 import { PetSettingsSection } from "./PetSettingsSection";
@@ -17,6 +18,24 @@ function renderPet(overrides: Partial<Parameters<typeof PetSettingsSection>[0]> 
 describe("PetSettingsSection", () => {
   beforeEach(() => window.localStorage.clear());
   afterEach(cleanup);
+
+  it("offers default-on hover controls without Dev and keeps automatic close independent", () => {
+    const { props, unmount } = renderPet({ automaticCloseEnabled: true });
+    const toggle = screen.getByRole("switch", { name: "마우스를 올리면 빠른 제어 표시" });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(/자동 닫기 설정은 그대로 유지/)).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(window.localStorage.getItem(PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY)).toBe("0");
+    expect(props.onAutomaticCloseChange).not.toHaveBeenCalled();
+    expect(props.onEnabledChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("switch", { name: "데스크톱 펫의 딴짓 자동 닫기 전환" }).getAttribute("aria-checked")).toBe("true");
+    unmount();
+    renderPet({ enabled: false });
+    const restored = screen.getByRole("switch", { name: "마우스를 올리면 빠른 제어 표시" });
+    expect(restored.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(restored);
+    expect(window.localStorage.getItem(PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY)).toBe("1");
+  });
 
   it("persists outings separately from visibility and automatic close", () => {
     const { props, unmount } = renderPet();

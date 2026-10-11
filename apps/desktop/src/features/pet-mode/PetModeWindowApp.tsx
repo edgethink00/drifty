@@ -70,6 +70,7 @@ import {
 import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
 import { preloadPetModeHitRegions, stagePetModeHitRegionTransition } from "./petModeHitRegions";
 import { getPetModeRenderSize, getPetModeSceneStyle } from "./petModeRenderGeometry";
+import { usePetQuickControlsPreference } from "./petQuickControlsPreference";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import {
   PET_MODE_AWAY_MS,
@@ -270,6 +271,10 @@ export function PetModeWindowApp() {
   const [hitRegionCommitRevision, setHitRegionCommitRevision] = useState(0);
   const [autonomousCycle, setAutonomousCycle] = useState(0);
   const [petOutingsEnabled] = usePetOutingPreference();
+  const [showHoverControls] = usePetQuickControlsPreference();
+  const [quickControlsHideRevision, setQuickControlsHideRevision] = useState(0);
+  const showHoverControlsRef = useRef(showHoverControls);
+  showHoverControlsRef.current = showHoverControls;
   const [presenceMode] = usePetPresenceMode();
   // True while the "drift only" cat is away off screen with no return
   // scheduled. It is the renderer-side twin of `outingTicketRef`: the ticket
@@ -3100,11 +3105,28 @@ export function PetModeWindowApp() {
   useEffect(() => {
     // Focus controls the cat's pose, not whether its user-facing controls are
     // reachable. Keep the seated cat hoverable while focus is active.
-    if (!petModeEnabled || !petVisible) {
+    if (!showHoverControls || !petModeEnabled || !petVisible) {
       quickControlsResumeAfterInteractionRef.current = false;
       controlsHoldingRef.current = false;
-      void setNativePetQuickControlsVisible(false).catch(() => undefined);
-      return undefined;
+      if (showHoverControls) {
+        void setNativePetQuickControlsVisible(false).catch(() => undefined);
+        return undefined;
+      }
+      let disposed = false;
+      let timerId = 0;
+      const hide = async () => {
+        // Native menus and action feedback temporarily own the panel. Retry
+        // their deferred hide, then stop sampling entirely while opted out.
+        const stillVisible = await setNativePetQuickControlsVisible(false).catch(() => true);
+        if (!disposed && stillVisible) {
+          timerId = window.setTimeout(() => { void hide(); }, PET_QUICK_CONTROLS_POLL_MS);
+        }
+      };
+      void hide();
+      return () => {
+        disposed = true;
+        window.clearTimeout(timerId);
+      };
     }
     let disposed = false;
     let timerId = 0;
@@ -3113,7 +3135,8 @@ export function PetModeWindowApp() {
     let publishedOpen = false;
     let closingUntilMs = 0;
     let observedDeniedRevision = quickControlsOpenDeniedRevisionRef.current;
-    const blockedNow = () => manualDragRef.current
+    const blockedNow = () => !showHoverControlsRef.current
+      || manualDragRef.current
       || menuOpenRef.current
       || watchingRef.current
       || isPetQuickControlsInteractionCoolingDown(
@@ -3125,6 +3148,16 @@ export function PetModeWindowApp() {
     const publishVisibility = async (requestedOpen: boolean) => {
       try {
         const visible = await setNativePetQuickControlsVisible(requestedOpen);
+        // A pending native open can settle after the recording toggle was disabled.
+        if (requestedOpen && !showHoverControlsRef.current) {
+          const stillVisible = await setNativePetQuickControlsVisible(false).catch(() => true);
+          // The opt-out hide loop may already have finished before this late
+          // open. Restart it if native menu ownership defers the compensating hide.
+          if (stillVisible && !showHoverControlsRef.current) {
+            setQuickControlsHideRevision((revision) => revision + 1);
+          }
+          return;
+        }
         if (requestedOpen && !visible) quickControlsOpenDeniedRevisionRef.current += 1;
         if (!disposed) {
           const wasPublishedOpen = publishedOpen;
@@ -3243,7 +3276,7 @@ export function PetModeWindowApp() {
       controlsHoldingRef.current = false;
       void setNativePetQuickControlsVisible(false).catch(() => undefined);
     };
-  }, [petModeEnabled, petVisible]);
+  }, [showHoverControls, quickControlsHideRevision, petModeEnabled, petVisible]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     // The overlay is a separate, non-focusable window. It must still consume

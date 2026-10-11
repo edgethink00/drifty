@@ -1,4 +1,6 @@
 export const ENGLISH_TRANSLATIONS = {
+  "settings.pet.showHoverControls": "Show quick controls on hover",
+  "settings.pet.showHoverControlsDescription": "Show quick controls below the cat when you hover over it. Turn off for recording or a simpler desktop. Auto-close stays unchanged; right-click the cat to open Pet Settings.",
   "auth.modal.recoveryCancelCleanupError": "Could not securely cancel password recovery. Check your connection and try again.",
   "auth.modal.backToSignIn": "Back to sign in",
   "auth.modal.checkingConnection": "Checking connection…",
@@ -3054,6 +3056,8 @@ export const ENGLISH_TRANSLATIONS = {
 export type TranslationKey = keyof typeof ENGLISH_TRANSLATIONS;
 
 export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
+  "settings.pet.showHoverControls": "마우스를 올리면 빠른 제어 표시",
+  "settings.pet.showHoverControlsDescription": "고양이 아래에 빠른 제어 바를 표시합니다. 촬영하거나 화면을 간결하게 유지하고 싶을 때 끌 수 있습니다. 자동 닫기 설정은 그대로 유지되며, 펫 설정은 고양이를 오른쪽 클릭해 열 수 있습니다.",
   "auth.modal.recoveryCancelCleanupError": "비밀번호 재설정을 안전하게 취소하지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.",
   "auth.modal.backToSignIn": "로그인으로 돌아가기",
   "auth.modal.checkingConnection": "연결 확인 중…",

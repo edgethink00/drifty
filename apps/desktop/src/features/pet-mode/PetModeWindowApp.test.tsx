@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, buildAutomaticCloseOverride } from "../companion/automaticCloseOverride";
+import { PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY, persistPetQuickControlsPreference } from "./petQuickControlsPreference";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import { PetModeWindowApp, formatTargetUnavailableReason } from "./PetModeWindowApp";
 import { getPetModeRenderSize } from "./petModeRenderGeometry";
@@ -1255,6 +1256,110 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("sit");
     expect(bridge.roamNativePet).not.toHaveBeenCalled();
   }, LONG_CLOCK_TEST_TIMEOUT_MS);
+
+  it("closes hover controls on opt-out, stays off outside Dev, and resumes after opt-in", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    let cursorX = 600;
+    bridge.sampleNativePetCursor.mockImplementation(async () => ({
+      cursorX: (cursorX += 3), cursorY: 330,
+      windowX: 560, windowY: 280, windowWidth: 144, windowHeight: 99, visible: true,
+    }));
+    bridge.isNativePetCursorInside.mockResolvedValue(true);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(true);
+
+    bridge.setNativePetQuickControlsVisible.mockClear();
+    // Model the Settings webview writing the preference while the bar is open.
+    await act(async () => {
+      window.localStorage.setItem(PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY, "0");
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY, newValue: "0",
+      }));
+    });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(false);
+    bridge.setNativePetQuickControlsVisible.mockClear();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalledWith(true);
+
+    cleanup();
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalledWith(true);
+
+    await act(async () => { persistPetQuickControlsPreference(true); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(true);
+  });
+
+  it.each([false, true])("hides a native open that settles after opt-out (native hide deferred: %s)", async (deferredHide) => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    let cursorX = 600;
+    bridge.sampleNativePetCursor.mockImplementation(async () => ({
+      cursorX: (cursorX += 3), cursorY: 330,
+      windowX: 560, windowY: 280, windowWidth: 144, windowHeight: 99, visible: true,
+    }));
+    bridge.isNativePetCursorInside.mockResolvedValue(true);
+    let finishOpen!: (visible: boolean) => void;
+    let menuOpen = false;
+    bridge.setNativePetQuickControlsVisible.mockImplementation((visible: boolean) => visible
+      ? new Promise<boolean>((resolve) => { finishOpen = resolve; })
+      : Promise.resolve(menuOpen));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(finishOpen).toBeTypeOf("function");
+    await act(async () => { persistPetQuickControlsPreference(false); });
+    bridge.setNativePetQuickControlsVisible.mockClear();
+    menuOpen = deferredHide;
+    await act(async () => { finishOpen(true); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(false);
+    if (deferredHide) {
+      bridge.setNativePetQuickControlsVisible.mockClear();
+      await act(async () => { await vi.advanceTimersByTimeAsync(160); });
+      expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(false);
+      menuOpen = false;
+      await act(async () => { await vi.advanceTimersByTimeAsync(80); });
+      bridge.setNativePetQuickControlsVisible.mockClear();
+      await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+      expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalled();
+    }
+  });
+
+  it("retries opt-out hiding until a native menu releases the panel", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY, "0");
+    let menuOpen = true;
+    bridge.setNativePetQuickControlsVisible.mockImplementation(async () => menuOpen);
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    bridge.setNativePetQuickControlsVisible.mockClear();
+    await act(async () => { await vi.advanceTimersByTimeAsync(160); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(false);
+    menuOpen = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(80); });
+    bridge.setNativePetQuickControlsVisible.mockClear();
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalled();
+  });
 
   it("requires a fresh hover dwell after native denies opening controls", async () => {
     vi.useFakeTimers();

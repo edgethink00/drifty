@@ -48,6 +48,15 @@ describe("settings search", () => {
     expect(searchSettings("blur", publicAvailability).some((entry) => entry.id === "settings.appearance.windowsBlur")).toBe(false);
   });
 
+  it("finds hover controls in public Pet settings with Dev mode off", () => {
+    for (const query of ["촬영", "호버", "recording", "hover controls"]) {
+      const result = searchSettings(query, publicAvailability).find((entry) => entry.id === "settings.pet.showHoverControls");
+      expect(result?.section).toBe("pet");
+      expect(result?.gate).toBeUndefined();
+      expect(result?.devSubsection).toBeUndefined();
+    }
+  });
+
   it("provides result/empty states, clear and Escape, without losing the existing navigation", () => {
     render(<LocalizationTestProvider><SettingsSearch><nav aria-label="Existing navigation" /></SettingsSearch></LocalizationTestProvider>);
     const input = screen.getByRole("combobox", { name: "설정 검색" });
