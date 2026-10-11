@@ -74,20 +74,20 @@ export type CouponRedemptionResult =
   | { readonly success: true; readonly data: CouponRedemption }
   | { readonly success: false; readonly code: CouponRedemptionFailureCode; readonly error: string };
 
-export type FriendInviteStatus = "active" | "exhausted" | "expired" | "inactive";
+export type FriendInviteStatus = "uncreated" | "active" | "exhausted" | "expired" | "inactive";
 
 export type FriendInviteClaim = {
   readonly claimedAt: string;
 };
 
 export type FriendInvite = {
-  readonly code: string;
+  readonly code: string | null;
   /** End of this account's own 14-day window for entering a friend's code; null hides code entry. */
   readonly codeEntryUntil: string | null;
   readonly durationDays: number;
   readonly claimedCount: number;
   readonly maxClaims: number;
-  readonly expiresAt: string;
+  readonly expiresAt: string | null;
   readonly status: FriendInviteStatus;
   /** Newest first. Only when a friend claimed the gift, never who. */
   readonly claims: readonly FriendInviteClaim[];
@@ -646,11 +646,19 @@ function toCloudDeviceRecord(value: unknown): CloudDeviceRecord[] {
 }
 
 /**
- * Reads the signed-in account's personal friend invite. The Edge Function
- * creates the code on first use and reports `enabled: false` until the owner
- * turns friend invites on, so a disabled or failed read simply hides the row.
+ * Reads without creating a code. A disabled or failed read hides the row.
  */
 export async function fetchFriendInvite(client: BillingClient = supabase): Promise<FriendInviteResult> {
+  return requestFriendInvite("read", client);
+}
+
+/** Creates the personal code only after the account explicitly asks to share. */
+export async function createFriendInvite(client: BillingClient = supabase): Promise<FriendInviteResult> {
+  const result = await requestFriendInvite("create", client);
+  return result.kind === "ready" && result.invite.status === "uncreated" ? { kind: "unavailable" } : result;
+}
+
+async function requestFriendInvite(action: "read" | "create", client: BillingClient): Promise<FriendInviteResult> {
   if (!client) return { kind: "unavailable" };
   const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -663,7 +671,7 @@ export async function fetchFriendInvite(client: BillingClient = supabase): Promi
   try {
     const { data, error } = await Promise.race([
       client.functions.invoke<unknown>("friend-invite", {
-        body: {},
+        body: { action },
         signal: controller.signal,
         timeout: FRIEND_INVITE_TIMEOUT_MS,
       }),
@@ -683,13 +691,15 @@ export async function fetchFriendInvite(client: BillingClient = supabase): Promi
 function readFriendInvite(value: unknown): FriendInvite | null {
   if (!isRecord(value)) return null;
   const { code, codeEntryUntil, durationDays, claimedCount, maxClaims, expiresAt, status, claims } = value;
+  const uncreated = status === "uncreated" && code === null && expiresAt === null && claimedCount === 0
+    && Array.isArray(claims) && claims.length === 0;
   if (
-    typeof code !== "string" || !/^[A-Z0-9][A-Z0-9-]{7,63}$/u.test(code)
+    (!uncreated && (typeof code !== "string" || !/^[A-Z0-9][A-Z0-9-]{7,63}$/u.test(code)))
     || typeof durationDays !== "number" || !Number.isInteger(durationDays) || durationDays < 1
     || typeof claimedCount !== "number" || !Number.isInteger(claimedCount) || claimedCount < 0
     || typeof maxClaims !== "number" || !Number.isInteger(maxClaims) || maxClaims < 1
-    || typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt))
-    || (status !== "active" && status !== "exhausted" && status !== "expired" && status !== "inactive")
+    || (!uncreated && (typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt))))
+    || (!uncreated && status !== "active" && status !== "exhausted" && status !== "expired" && status !== "inactive")
   ) {
     return null;
   }

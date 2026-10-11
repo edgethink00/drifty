@@ -2,10 +2,11 @@ import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type 
 import { PageTabs, pageTabId } from "../../components/PageTabs";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark-trim.png";
 import type { CouponRedemption, CouponRedemptionFailureCode, FriendInviteResult } from "../billing/billingService";
+import { createFriendInvite } from "../billing/billingService";
 import { useLocalization } from "../localization/LocalizationContext";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { TrialCouponRedemption } from "./TrialCouponRedemption";
-import { canEnterFriendCode, useFriendInvite } from "./friendInviteStore";
+import { canEnterFriendCode, storeCreatedFriendInvite, useFriendInvite } from "./friendInviteStore";
 import "../../styles/page-tabs.css";
 import "./FriendInviteCard.css";
 
@@ -36,6 +37,7 @@ type FriendInviteCardProps = {
   /** Identifies the signed-in account; the cached invite never crosses accounts. */
   readonly accountKey: string;
   readonly loadInvite: () => Promise<FriendInviteResult>;
+  readonly createInvite?: () => Promise<FriendInviteResult>;
   /** Present only where a code can be redeemed; the code tab also needs the
    *  account to be inside its 14-day new-account window. */
   readonly codeEntry?: FriendInviteCodeEntry | null;
@@ -48,25 +50,36 @@ type FriendInviteCardProps = {
  * receives, three steps and the invite link with Copy. Hidden until the server
  * reports an invite, so a disabled rollout or failed read shows nothing.
  */
-export function FriendInviteCard({ accountKey, loadInvite, codeEntry: offeredCodeEntry = null, copyText = writeClipboardText }: FriendInviteCardProps) {
+export function FriendInviteCard({ accountKey, loadInvite, createInvite, codeEntry: offeredCodeEntry = null, copyText = writeClipboardText }: FriendInviteCardProps) {
   const { effectiveLanguage, t } = useLocalization();
   const titleId = useId();
   const linkId = useId();
   const linkRef = useRef<HTMLInputElement>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accountRef = useRef(accountKey);
+  accountRef.current = accountKey;
+  const creatingRef = useRef(false);
   const invite = useFriendInvite(accountKey, loadInvite);
   // Friend codes are for new accounts, so the tab closes with the window.
   const codeEntry = invite && canEnterFriendCode(invite) ? offeredCodeEntry : null;
   const [tab, setTab] = useState<FriendInviteTab>("invite");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [createState, setCreateState] = useState<"idle" | "creating" | "failed">("idle");
 
   useEffect(() => {
     setCopyState("idle");
+    setCreateState("idle");
+    creatingRef.current = false;
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
   }, [accountKey]);
 
-  useEffect(() => () => {
-    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-  }, []);
+  useEffect(() => {
+    accountRef.current = accountKey;
+    return () => {
+      accountRef.current = "";
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, [accountKey]);
 
   // The code tab disappears where codes cannot be redeemed (e.g. a new
   // subscription), so fall back to Invite rather than an empty panel.
@@ -77,8 +90,8 @@ export function FriendInviteCard({ accountKey, loadInvite, codeEntry: offeredCod
   if (!invite || invite.status === "inactive") return null;
 
   const days = invite.durationDays;
-  const url = buildFriendInviteUrl(invite.code, effectiveLanguage);
-  const canShare = invite.status === "active";
+  const url = invite.code ? buildFriendInviteUrl(invite.code, effectiveLanguage) : "";
+  const canShare = invite.status === "active" || invite.status === "uncreated";
   const tabs = [
     { id: "invite" as const, label: t("settings.account.friendInviteTabInvite") },
     { id: "friends" as const, label: t("settings.account.friendInviteTabFriends", { count: invite.claimedCount }) },
@@ -89,12 +102,16 @@ export function FriendInviteCard({ accountKey, loadInvite, codeEntry: offeredCod
   // The link is already in state, so the clipboard write starts inside the
   // click without an intervening await (WebKit rejects late writes).
   function handleCopy() {
+    if (!url) return;
+    const copyingAccount = accountKey;
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     copyText(url).then(() => {
+      if (accountRef.current !== copyingAccount) return;
       setCopyState("copied");
       capturePostHogEvent("billing_action", { action: "friend_invite_copied", result: "success" });
       resetTimerRef.current = setTimeout(() => setCopyState("idle"), COPIED_RESET_MS);
     }, () => {
+      if (accountRef.current !== copyingAccount) return;
       setCopyState("failed");
       capturePostHogEvent("billing_action", { action: "friend_invite_copied", result: "error" });
       linkRef.current?.focus();
@@ -102,15 +119,40 @@ export function FriendInviteCard({ accountKey, loadInvite, codeEntry: offeredCod
     });
   }
 
+  async function handleCreate() {
+    if (creatingRef.current) return;
+    const creatingAccount = accountKey;
+    creatingRef.current = true;
+    setCreateState("creating");
+    try {
+      const result = await (createInvite ?? createFriendInvite)();
+      if (accountRef.current !== creatingAccount) return;
+      if (result.kind !== "ready" || result.invite.status === "uncreated") {
+        setCreateState("failed");
+        return;
+      }
+      storeCreatedFriendInvite(creatingAccount, result.invite);
+      setCreateState("idle");
+    } catch {
+      if (accountRef.current === creatingAccount) setCreateState("failed");
+    } finally {
+      if (accountRef.current === creatingAccount) creatingRef.current = false;
+    }
+  }
+
   const copyButton = (
     <button
       type="button"
       className="settings-btn primary friend-invite__copy"
       data-copied={copyState === "copied" || undefined}
-      onClick={handleCopy}
+      disabled={createState === "creating"}
+      aria-busy={createState === "creating" || undefined}
+      onClick={invite.status === "uncreated" ? () => { void handleCreate(); } : handleCopy}
     >
       {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
-      <span>{copyState === "copied" ? t("settings.account.friendInviteCopied") : t("settings.account.friendInviteCopy")}</span>
+      <span>{invite.status === "uncreated"
+        ? t(createState === "creating" ? "settings.account.friendInviteCreating" : "settings.account.friendInviteCreate")
+        : copyState === "copied" ? t("settings.account.friendInviteCopied") : t("settings.account.friendInviteCopy")}</span>
     </button>
   );
 
@@ -161,6 +203,7 @@ export function FriendInviteCard({ accountKey, loadInvite, codeEntry: offeredCod
                         className="friend-invite__link-input"
                         type="text"
                         value={url}
+                        placeholder={t("settings.account.friendInviteUncreated")}
                         readOnly
                         spellCheck={false}
                         onFocus={(event) => event.currentTarget.select()}
@@ -168,13 +211,15 @@ export function FriendInviteCard({ accountKey, loadInvite, codeEntry: offeredCod
                     </div>
                     {copyButton}
                   </div>
-                  {copyState === "failed" ? (
+                  {createState === "failed" ? (
+                    <p className="friend-invite__error" role="alert">{t("settings.account.friendInviteCreateFailed")}</p>
+                  ) : copyState === "failed" ? (
                     <p className="friend-invite__error" role="alert">{t("settings.account.friendInviteCopyFailed")}</p>
-                  ) : (
+                  ) : invite.expiresAt ? (
                     <p className="friend-invite__link-hint">
                       {t("settings.account.friendInviteFootnote", { date: formatDate(invite.expiresAt, effectiveLanguage) })}
                     </p>
-                  )}
+                  ) : null}
                   <span className="sr-only" role="status">{copyState === "copied" ? t("settings.account.friendInviteCopied") : ""}</span>
                 </div>
               ) : (

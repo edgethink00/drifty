@@ -1743,7 +1743,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const friendInviteLoader = isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth && Boolean(user)
     ? fetchFriendInvite
     : null;
-  const friendInvite = useFriendInvite(friendInviteLoader ? friendInviteAccountKey(user?.email) : null, friendInviteLoader);
+  const friendInvite = useFriendInvite(friendInviteLoader ? friendInviteAccountKey(user?.email, user?.id) : null, friendInviteLoader);
   const settingsSearchNavigateRef = useRef<((entry: SettingsSearchEntry) => void) | null>(null);
   const shouldBlockLocalTrackerAccess = isEffectiveAuthRequired && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
@@ -11146,6 +11146,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 	                    hasSignedInAccount={hasRequiredAccountAuth}
 	                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
 	                    loadFriendInvite={fetchFriendInvite}
+	                    authUserId={user?.id ?? null}
 	                    userEmail={user?.email ?? null}
 	                    deviceSyncEnabled={deviceSyncEnabled}
 	                    deviceSyncCanEnable={deviceSyncCanEnable}

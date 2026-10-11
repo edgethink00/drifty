@@ -6,6 +6,8 @@ import {
   createIndividualCheckout,
   fetchBillingEntitlement,
   fetchIndividualPricingQuote,
+  fetchFriendInvite,
+  createFriendInvite,
   redeemTrialCoupon,
 } from "./billingService";
 
@@ -14,6 +16,20 @@ type MockBillingClient = Parameters<typeof createBillingPortalSession>[0];
 describe("billingService", () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("separates read from create and validates the empty invite state", async () => {
+    const empty = { code: null, expiresAt: null, codeEntryUntil: null, durationDays: 30, maxClaims: 10, claimedCount: 0, status: "uncreated", claims: [] };
+    const invoke = vi.fn().mockResolvedValue({ data: { enabled: true, invite: empty }, error: null });
+    const client: MockBillingClient = { functions: { invoke } };
+    await expect(fetchFriendInvite(client)).resolves.toEqual({ kind: "ready", invite: empty });
+    expect(invoke.mock.calls[0]?.[1].body).toEqual({ action: "read" });
+    await expect(createFriendInvite(client)).resolves.toEqual({ kind: "unavailable" });
+    expect(invoke.mock.calls[1]?.[1].body).toEqual({ action: "create" });
+    invoke.mockResolvedValue({ data: { enabled: true, invite: { ...empty, claimedCount: 1 } }, error: null });
+    await expect(fetchFriendInvite(client)).resolves.toEqual({ kind: "unavailable" });
+    invoke.mockResolvedValue({ data: { enabled: true, invite: { ...empty, status: "active" } }, error: null });
+    await expect(fetchFriendInvite(client)).resolves.toEqual({ kind: "unavailable" });
   });
 
   it.each(["monthly", "yearly"] as const)("sends the selected %s interval to checkout", async (billingInterval) => {

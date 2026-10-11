@@ -5,6 +5,7 @@ import type { FriendInvite, FriendInviteResult } from "../billing/billingService
 import type { FriendInviteCodeEntry } from "./FriendInviteCard";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { buildFriendInviteUrl, FriendInviteCard } from "./FriendInviteCard";
+import { friendInviteAccountKey } from "./friendInviteStore";
 
 const { captureMock } = vi.hoisted(() => ({ captureMock: vi.fn() }));
 vi.mock("../../lib/analytics/posthogClient", () => ({ capturePostHogEvent: captureMock }));
@@ -33,6 +34,7 @@ function renderCard(
     readonly copyText?: (text: string) => Promise<void>;
     readonly accountKey?: string;
     readonly codeEntry?: FriendInviteCodeEntry | null;
+    readonly createInvite?: () => Promise<FriendInviteResult>;
   } = {},
 ) {
   const loadInvite = vi.fn(async () => result);
@@ -41,6 +43,7 @@ function renderCard(
       <FriendInviteCard
         accountKey={options.accountKey ?? freshAccount()}
         loadInvite={loadInvite}
+        createInvite={options.createInvite}
         copyText={options.copyText}
         codeEntry={options.codeEntry}
       />
@@ -89,6 +92,69 @@ describe("FriendInviteCard", () => {
     expect(copyText).toHaveBeenCalledWith("https://drifty.so/gift/#pass=DRIFTY-3F9A2C7B1D");
     expect(captureMock).toHaveBeenCalledWith("billing_action", { action: "friend_invite_copied", result: "success" });
     expect(JSON.stringify(captureMock.mock.calls)).not.toContain("DRIFTY-");
+  });
+
+  it("waits for explicit creation, prevents duplicate clicks, then copies on a fresh click", async () => {
+    let finish!: (result: FriendInviteResult) => void;
+    const createInvite = vi.fn(() => new Promise<FriendInviteResult>((resolve) => { finish = resolve; }));
+    const copyText = vi.fn(async () => undefined);
+    renderCard({ kind: "ready", invite: { ...INVITE, code: null, expiresAt: null, status: "uncreated" } }, { createInvite, copyText });
+    const button = await screen.findByRole("button", { name: "Create link" });
+    expect(createInvite).not.toHaveBeenCalled();
+    expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByText(/Your link works until/)).toBeNull();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(createInvite).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Creating…" }).hasAttribute("disabled")).toBe(true);
+    await act(async () => { finish({ kind: "ready", invite: INVITE }); });
+    expect(copyText).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    await waitFor(() => expect(copyText).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps creation retryable when the service fails", async () => {
+    const createInvite = vi.fn().mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ kind: "ready", invite: INVITE });
+    renderCard({ kind: "ready", invite: { ...INVITE, code: null, expiresAt: null, status: "uncreated" } }, { createInvite });
+    fireEvent.click(await screen.findByRole("button", { name: "Create link" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Couldn't create your link. Try again.");
+    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+    expect(await screen.findByRole("button", { name: "Copy link" })).toBeTruthy();
+    expect(createInvite).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a newly created link when an older read finishes afterwards", async () => {
+    const accountKey = freshAccount();
+    const empty = { ...INVITE, code: null, expiresAt: null, status: "uncreated" as const };
+    const first = renderCard({ kind: "ready", invite: empty }, { accountKey });
+    await screen.findByRole("button", { name: "Create link" });
+    first.unmount();
+    let finishRead!: (result: FriendInviteResult) => void;
+    const loadInvite = () => new Promise<FriendInviteResult>((resolve) => { finishRead = resolve; });
+    render(<LocalizationTestProvider language="en"><FriendInviteCard accountKey={accountKey} loadInvite={loadInvite}
+      createInvite={async () => ({ kind: "ready", invite: INVITE })} /></LocalizationTestProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+    await screen.findByRole("button", { name: "Copy link" });
+    await act(async () => { finishRead({ kind: "ready", invite: empty }); });
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeTruthy();
+    expect((screen.getByRole("textbox") as HTMLInputElement).value).toContain(INVITE.code);
+  });
+
+  it("ignores a create response after the account changes", async () => {
+    let finish!: (result: FriendInviteResult) => void;
+    const empty: FriendInviteResult = { kind: "ready", invite: { ...INVITE, code: null, expiresAt: null, status: "uncreated" } };
+    const loadInvite = async () => empty;
+    const createInvite = () => new Promise<FriendInviteResult>((resolve) => { finish = resolve; });
+    const view = render(<LocalizationTestProvider language="en"><FriendInviteCard accountKey={freshAccount()} loadInvite={loadInvite}
+      createInvite={createInvite} /></LocalizationTestProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Create link" }));
+    view.rerender(<LocalizationTestProvider language="en"><FriendInviteCard accountKey={freshAccount()} loadInvite={loadInvite}
+      createInvite={createInvite} /></LocalizationTestProvider>);
+    await screen.findByRole("button", { name: "Create link" });
+    await act(async () => { finish({ kind: "ready", invite: INVITE }); });
+    expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+    expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("");
   });
 
   it("leaves the link selected for manual copy when the clipboard refuses", async () => {
@@ -165,7 +231,7 @@ describe("FriendInviteCard", () => {
     const panel = screen.getByRole("tabpanel");
     const field = within(panel).getByRole("textbox", { name: "Drifty promo code" }) as HTMLInputElement;
     expect(field.placeholder).toBe("DRIFTY-XXXXXXXXXX");
-    expect(within(panel).getByText("Got a code from a friend? Enter it within 14 days of signing up to use Pro without a card.")).toBeTruthy();
+    expect(within(panel).getByText("Enter a friend's code within 14 days of signing up. Your Pro trial lasts 30 days from its first start, including the standard trial.")).toBeTruthy();
     fireEvent.change(field, { target: { value: " drifty‑3f9a2c7b1d " } });
     fireEvent.click(within(panel).getByRole("button", { name: "Apply" }));
 
@@ -209,5 +275,11 @@ describe("FriendInviteCard", () => {
     expect(screen.getByRole("textbox")).toBeTruthy();
     await act(async () => undefined);
     expect(screen.getByRole("textbox")).toBeTruthy();
+  });
+
+  it("uses immutable Auth ids for email-less and recreated accounts", () => {
+    expect(friendInviteAccountKey(null, "account-a")).toBe("account-a");
+    expect(friendInviteAccountKey(null, "account-b")).toBe("account-b");
+    expect(friendInviteAccountKey("same@example.com", "old-account")).not.toBe(friendInviteAccountKey("same@example.com", "new-account"));
   });
 });

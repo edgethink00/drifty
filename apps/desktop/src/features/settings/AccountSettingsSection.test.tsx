@@ -334,7 +334,7 @@ describe("AccountSettingsSection", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("30 days added");
+    expect(screen.getByRole("status").textContent).toContain("Code applied");
     // One code per account: the applied row replaces the field.
     expect(screen.queryByRole("textbox", { name: /Drifty promo code/i })).toBeNull();
 
@@ -581,7 +581,7 @@ describe("AccountSettingsSection", () => {
     );
 
     const result = screen.getByRole("status");
-    expect(result.textContent).toContain("30 days added");
+    expect(result.textContent).toContain("Code applied");
     expect(document.activeElement).toBe(result);
   });
 
@@ -1196,7 +1196,7 @@ describe("AccountSettingsSection friend invite", () => {
       trialEndsAt: "2026-11-14T00:00:00.000Z",
       redeemedAt: "2026-10-08T00:00:00.000Z",
     }} />);
-    expect(screen.getAllByText(/30 days added/)).toHaveLength(2);
+    expect(screen.getAllByText(/Code applied/)).toHaveLength(2);
     view.unmount();
   });
 

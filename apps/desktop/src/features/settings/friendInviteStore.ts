@@ -10,6 +10,7 @@ import type { FriendInvite, FriendInviteResult } from "../billing/billingService
  */
 const cache = new Map<string, FriendInvite | null>();
 const inFlight = new Map<string, Promise<void>>();
+const revisions = new Map<string, number>();
 const listeners = new Set<() => void>();
 
 export type FriendInviteLoader = () => Promise<FriendInviteResult>;
@@ -17,7 +18,9 @@ export type FriendInviteLoader = () => Promise<FriendInviteResult>;
 function refresh(accountKey: string, loadInvite: FriendInviteLoader): Promise<void> {
   const pending = inFlight.get(accountKey);
   if (pending) return pending;
+  const revision = revisions.get(accountKey) ?? 0;
   const next = loadInvite().then((result) => {
+    if ((revisions.get(accountKey) ?? 0) !== revision) return;
     if (result.kind === "unavailable" && cache.has(accountKey)) return;
     cache.set(accountKey, result.kind === "ready" ? result.invite : null);
   }, () => {
@@ -28,6 +31,13 @@ function refresh(accountKey: string, loadInvite: FriendInviteLoader): Promise<vo
   });
   inFlight.set(accountKey, next);
   return next;
+}
+
+/** A completed create wins over any read that began before it. */
+export function storeCreatedFriendInvite(accountKey: string, invite: FriendInvite): void {
+  revisions.set(accountKey, (revisions.get(accountKey) ?? 0) + 1);
+  cache.set(accountKey, invite);
+  for (const listener of listeners) listener();
 }
 
 /** Null while unknown, when invites are off, or for an inactive code. */
@@ -49,8 +59,11 @@ export function useFriendInvite(accountKey: string | null, loadInvite: FriendInv
 }
 
 /** The account key both surfaces use, so they read the same entry. */
-export function friendInviteAccountKey(userEmail: string | null | undefined): string {
-  return userEmail?.trim() || "signed-in";
+export function friendInviteAccountKey(userEmail: string | null | undefined, authUserId?: string | null): string {
+  // Production callers supply the immutable Auth id, including email-less
+  // full accounts and recreated accounts with the same email. Email remains
+  // a fallback for isolated UI fixtures that predate this parameter.
+  return authUserId?.trim() || userEmail?.trim() || "signed-in";
 }
 
 /** True while the account can still enter a friend's code (its first 14 days). */

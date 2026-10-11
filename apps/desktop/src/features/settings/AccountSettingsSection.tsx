@@ -54,6 +54,7 @@ export type AccountSettingsSectionProps = {
   /** Reads the account's friend invite. Without it the gift row is not offered. */
   readonly loadFriendInvite?: () => Promise<FriendInviteResult>;
   readonly userEmail: string | null;
+  readonly authUserId?: string | null;
   readonly deviceSyncEnabled?: boolean;
   readonly deviceSyncCanEnable?: boolean;
   readonly deviceSyncGateActive?: boolean;
@@ -98,6 +99,7 @@ export function AccountSettingsSection({
   isSupabaseConfigured,
   loadFriendInvite,
   userEmail,
+  authUserId,
   deviceSyncEnabled = false,
   deviceSyncCanEnable = false,
   deviceSyncGateActive = false,
@@ -548,7 +550,7 @@ export function AccountSettingsSection({
           search land on the invite card wherever it sits. */}
       {loadFriendInvite && isSignedIn && isSupabaseConfigured && (hasAuthenticatedSession ?? isSignedIn) ? (
         <FriendInviteCard
-          accountKey={friendInviteAccountKey(trimmedUserEmail)}
+          accountKey={friendInviteAccountKey(trimmedUserEmail, authUserId)}
           loadInvite={loadFriendInvite}
           codeEntry={showPromoCode ? couponEntryFor("invite") : null}
         />
