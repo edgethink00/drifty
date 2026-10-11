@@ -1030,6 +1030,7 @@ export function WeekDashboard({
                   label={t("common.apps")}
                   value={String(summaryMetrics.uniqueAppsCount)}
                   detail={summaryMetrics.topAppLabel}
+                  detailTitle
                 />
               </div>
             </>

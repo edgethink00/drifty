@@ -1,5 +1,5 @@
-import { memo, useMemo, useState } from "react";
-import type { CSSProperties, FocusEvent, MouseEvent } from "react";
+import { memo, useId, useMemo, useState } from "react";
+import type { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import type { AppIconMap } from "@drifty/domain";
 import { EmptyState } from "../../components/EmptyState";
 import { MetricTile } from "../../components/MetricTile";
@@ -67,7 +67,7 @@ export function FocusDriftSummaryTiles({
       <MetricTile className="insight-summary__tile insight-summary__tile--tracked" label={t("dashboard.today.tracked")} value={effectiveLanguage === "ko" ? formatLocalizedDuration(totalSeconds, effectiveLanguage) : formatDuration(totalSeconds)} detail={t("dashboard.today.activeHours", { duration: effectiveLanguage === "ko" ? `${activeHourCount}시간` : `${activeHourCount}h` })} />
       <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label={t("dashboard.today.sessions")} value={String(sessionCount)} detail={averageSessionMinutes > 0 ? t("dashboard.today.averageValue", { duration: effectiveLanguage === "ko" ? `${averageSessionMinutes}분` : `${averageSessionMinutes}m` }) : t("dashboard.today.noSessions")} />
       <MetricTile className="insight-summary__tile insight-summary__tile--peak" label={t("dashboard.today.peak")} value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(peakTrackedSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "—" : "No peak"} />
-      <MetricTile className="insight-summary__tile insight-summary__tile--apps" label={t("dashboard.today.apps")} value={String(uniqueAppsCount)} detail={topAppLabel} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--apps" label={t("dashboard.today.apps")} value={String(uniqueAppsCount)} detail={topAppLabel} detailTitle />
       <MetricTile className="insight-summary__tile insight-summary__tile--focus" label={t("dashboard.today.focusScore")} value={`${chart.focusConsistency}%`} detail={t("dashboard.today.score")} />
       {/* Same clock format as the Peak tile beside it; the chart's 24-hour bucket label is an axis label, not a display time.
           Without drift the tile keeps its place and uses the Peak tile's empty form. */}
@@ -192,6 +192,33 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     setHover(null);
   }
 
+  // The chart is one tab stop. Left/Right walk the half-hours, Up/Down switch
+  // between the focus and drift lines, Home/End jump to the ends.
+  const [keyboardStop, setKeyboardStop] = useState<{ readonly kind: FocusDriftHoverKind; readonly index: number }>({ kind: "focus", index: 0 });
+  const keyboardHintId = useId();
+  const [arrowKeysUsed, setArrowKeysUsed] = useState(false);
+  const stopIndex = Math.min(keyboardStop.index, Math.max(0, hoverPoints.length - 1));
+  function moveKeyboardStop(event: KeyboardEvent<SVGSVGElement>) {
+    const target = event.target instanceof Element ? event.target.closest<SVGElement>("[data-focus-drift-stop]") : null;
+    if (!target) return;
+    const [kind, rawIndex] = (target.dataset.focusDriftStop ?? "").split(":");
+    const index = Number(rawIndex);
+    let nextKind = kind as FocusDriftHoverKind;
+    let nextIndex = index;
+    switch (event.key) {
+      case "ArrowRight": nextIndex = Math.min(index + 1, hoverPoints.length - 1); break;
+      case "ArrowLeft": nextIndex = Math.max(index - 1, 0); break;
+      case "ArrowUp": nextKind = "focus"; break;
+      case "ArrowDown": nextKind = "drift"; break;
+      case "Home": nextIndex = 0; break;
+      case "End": nextIndex = hoverPoints.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    setArrowKeysUsed(true);
+    event.currentTarget.querySelector<SVGElement>(`[data-focus-drift-stop="${nextKind}:${nextIndex}"]`)?.focus();
+  }
+
   function updateKeyboardHover(kind: FocusDriftHoverKind, point: FocusDriftPoint, event: FocusEvent<SVGCircleElement>) {
     const marker = buildHoverState(point, kind, 0, 0);
     const svgBounds = event.currentTarget.ownerSVGElement?.getBoundingClientRect() ?? null;
@@ -267,7 +294,8 @@ export const FocusDriftSection = memo(function FocusDriftSection({
             aria-label={sectionAriaLabel}
           >
             <div className="focus-drift__plot" style={plotStyle}>
-              <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="group" aria-label={svgAriaLabel}>
+              <span id={keyboardHintId} className="sr-only">{t("dashboard.today.focusDriftKeyboardHint")}</span>
+              <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="group" aria-label={svgAriaLabel} onKeyDown={moveKeyboardStop}>
                 <defs>
                   <clipPath id="focus-drift-chart-bounds" clipPathUnits="userSpaceOnUse">
                     <rect x={FOCUS_DRIFT_CLIP_BOUNDS.left} y={FOCUS_DRIFT_CLIP_BOUNDS.top} width={FOCUS_DRIFT_CLIP_BOUNDS.right - FOCUS_DRIFT_CLIP_BOUNDS.left} height={FOCUS_DRIFT_CLIP_BOUNDS.bottom - FOCUS_DRIFT_CLIP_BOUNDS.top} />
@@ -297,10 +325,10 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                   </g>
                 ) : null}
                 <rect className="focus-drift__line-target" x={FOCUS_DRIFT_CHART_BOUNDS.left} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left} height={100 - FOCUS_DRIFT_CHART_BOUNDS.top} aria-label={t("dashboard.today.focusDriftHoverTarget")} onMouseEnter={updateLineHover} onMouseMove={updateLineHover} onMouseLeave={clearHover} />
-                {hoverPoints.map((point) => (
+                {hoverPoints.map((point, index) => (
                   <g key={point.id}>
-                    <circle className="focus-drift__target focus-drift__target--focus" cx={point.x} cy={point.focusY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "focus", effectiveLanguage, startOfDayMinutes)} onFocus={(event) => updateKeyboardHover("focus", point, event)} onBlur={clearHover} />
-                    <circle className="focus-drift__target focus-drift__target--drift" cx={point.x} cy={point.driftY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "drift", effectiveLanguage, startOfDayMinutes)} onFocus={(event) => updateKeyboardHover("drift", point, event)} onBlur={clearHover} />
+                    <circle className="focus-drift__target focus-drift__target--focus" cx={point.x} cy={point.focusY} r="3" role="img" tabIndex={keyboardStop.kind === "focus" && stopIndex === index ? 0 : -1} aria-describedby={!arrowKeysUsed && keyboardStop.kind === "focus" && stopIndex === index ? keyboardHintId : undefined} data-focus-drift-stop={`focus:${index}`} aria-label={formatFocusDriftHoverLabel(point, "focus", effectiveLanguage, startOfDayMinutes)} onFocus={(event) => { setKeyboardStop({ kind: "focus", index }); updateKeyboardHover("focus", point, event); }} onBlur={clearHover} />
+                    <circle className="focus-drift__target focus-drift__target--drift" cx={point.x} cy={point.driftY} r="3" role="img" tabIndex={keyboardStop.kind === "drift" && stopIndex === index ? 0 : -1} aria-describedby={!arrowKeysUsed && keyboardStop.kind === "drift" && stopIndex === index ? keyboardHintId : undefined} data-focus-drift-stop={`drift:${index}`} aria-label={formatFocusDriftHoverLabel(point, "drift", effectiveLanguage, startOfDayMinutes)} onFocus={(event) => { setKeyboardStop({ kind: "drift", index }); updateKeyboardHover("drift", point, event); }} onBlur={clearHover} />
                   </g>
                 ))}
               </svg>

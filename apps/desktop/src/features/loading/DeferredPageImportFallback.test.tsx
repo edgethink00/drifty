@@ -9,6 +9,6 @@ describe("DeferredPageImportFallback", () => {
     render(<DeferredPageImportFallback label="projects" />);
 
     expect(screen.getByRole("status", { name: "Loading projects" })).toBeTruthy();
-    expect(screen.getByText("Loading projects...")).toBeTruthy();
+    expect(screen.getByText("Loading projects…")).toBeTruthy();
   });
 });

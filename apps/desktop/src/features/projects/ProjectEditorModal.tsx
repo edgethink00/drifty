@@ -8,8 +8,9 @@ import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
+import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
 
-export type ProjectSaveResult = boolean | { readonly saved: false; readonly error: string };
+export type ProjectSaveResult = boolean | { readonly saved: false; readonly error: string; readonly detail?: string | null };
 
 export interface ProjectEditorModalProps {
   /** Project being edited, or null to create a new one. */
@@ -36,7 +37,7 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   const [color, setColor] = useState(project?.color || PROJECT_COLOR_SWATCHES[0].color);
   const [colorTouched, setColorTouched] = useState(isEditing);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<DescribedActionError | null>(null);
   const requestInFlight = useRef(false);
   const dialogRef = useRef<HTMLElement | null>(null);
 
@@ -79,9 +80,9 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
     try {
       const saved = await onSave(input);
       if (saved === true) onClose();
-      else setSaveError(typeof saved === "object" ? saved.error : t("projects.editor.saveError"));
+      else setSaveError(typeof saved === "object" ? { message: saved.error, detail: saved.detail ?? null } : { message: t("projects.editor.saveError"), detail: null });
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : t("projects.editor.saveError"));
+      setSaveError(describeActionError(error, t("projects.editor.saveError")));
     } finally {
       setSaving(false);
       requestInFlight.current = false;
@@ -131,7 +132,7 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
           />
         </fieldset>
         <div className="modal-foot">
-          {saveError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={saveError}>{saveError}</p> : null}
+          {saveError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={saveError.detail ?? saveError.message}>{saveError.message}{saveError.detail ? <span className="sr-only"> {saveError.detail}</span> : null}</p> : null}
           <button type="button" className="modal-btn modal-btn--ghost" onClick={requestClose} disabled={isBusy}>{t("common.cancel")}</button>
           <button type="button" className="modal-btn modal-btn--primary" onClick={() => void handleSave()} disabled={!canSave} aria-busy={saving}>
             <ActionLabel busy={saving} busyLabel={t("common.saving")}>{t(isEditing ? "projects.editor.saveChanges" : "projects.create")}</ActionLabel>

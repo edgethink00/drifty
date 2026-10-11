@@ -8,23 +8,30 @@ type DeferredTabBodyFallbackProps = {
 };
 
 export function DeferredTabBodyFallback({ label, variant }: DeferredTabBodyFallbackProps) {
+  const { effectiveLanguage, t } = useLocalization();
+  // The English label names what is loading; other languages use the tab name,
+  // like the page-level fallback, instead of an English sentence.
+  const localizedLabel = effectiveLanguage === "en" ? label : t(variant === "history" ? "nav.history" : "nav.trends");
+  const status = { text: t("loading.page", { label: localizedLabel }), aria: t("loading.pageAria", { label: localizedLabel }) };
   if (variant === "history") {
-    return <HistoryDeferredFallback label={label} />;
+    return <HistoryDeferredFallback status={status} />;
   }
 
-  return <TrendsDeferredFallback label={label} />;
+  return <TrendsDeferredFallback status={status} />;
 }
 
-function HistoryDeferredFallback({ label }: { readonly label: string }) {
+type FallbackStatus = { readonly text: string; readonly aria: string };
+
+function HistoryDeferredFallback({ status }: { readonly status: FallbackStatus }) {
   const { t } = useLocalization();
   return (
     <section
       className="deferred-tab-skeleton deferred-tab-skeleton--history history-view"
       role="status"
       aria-live="polite"
-      aria-label={`Loading ${label}`}
+      aria-label={status.aria}
     >
-      <strong className="deferred-tab-skeleton__status">Loading {label}...</strong>
+      <strong className="deferred-tab-skeleton__status">{status.text}</strong>
       <div className="history-view__toolbar" aria-hidden="true">
         <label className="history-search">
           <span className="loading-skeleton-icon" />
@@ -65,16 +72,16 @@ function HistoryDeferredFallback({ label }: { readonly label: string }) {
   );
 }
 
-function TrendsDeferredFallback({ label }: { readonly label: string }) {
+function TrendsDeferredFallback({ status }: { readonly status: FallbackStatus }) {
   return (
     <div
       className="insights-tabpanel insights-tabpanel--usage insights-reduced insights-retained insights-stacked insights-stacked--k insights-fit-window deferred-tab-skeleton deferred-tab-skeleton--trends"
       data-calendar-placement="right-bottom"
       role="status"
       aria-live="polite"
-      aria-label={`Loading ${label}`}
+      aria-label={status.aria}
     >
-      <strong className="deferred-tab-skeleton__status">Loading {label}...</strong>
+      <strong className="deferred-tab-skeleton__status">{status.text}</strong>
       <div className="insights-stacked__columns" aria-hidden="true">
         {/* Left column: patterns */}
         <div className="insights-stacked__patterns">

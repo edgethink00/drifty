@@ -1,5 +1,5 @@
-import { memo, useMemo } from "react";
-import type { CSSProperties } from "react";
+import { memo, useId, useMemo, useState } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 import { logicalMinuteOfDay, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { clockHourForLogicalHour, formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../lib/formatting";
@@ -71,6 +71,64 @@ export const FlowChartGrid = memo(function FlowChartGrid({
     timeBlockPrefix: effectiveLanguage === "ko" ? "시간대" : "Time block",
     durationPrefix: effectiveLanguage === "ko" ? "소요 시간" : "Duration",
   }), [effectiveLanguage, hoverGroupsByCell, t]);
+  // The grid is one tab stop: only one cell is in the tab order and the arrow
+  // keys move between cells, so the controls after the chart are one Tab away
+  // instead of a hundred. It starts on the day's earliest cell.
+  const firstCellMinute = useMemo(() => {
+    for (const hour of HOURS) {
+      for (const minuteOffset of rowMinuteOffsets) {
+        const minuteOfDay = minuteOfDayForCell(hour, minuteOffset, boundaryMinutes);
+        if (blockByCell.has(`${minuteOfDay}`)) return minuteOfDay;
+      }
+    }
+    return null;
+  }, [blockByCell, boundaryMinutes, rowMinuteOffsets]);
+  const [rovingMinute, setRovingMinute] = useState<number | null>(null);
+  // Announced once on the cell Tab lands on, until the arrow keys are used.
+  const keyboardHintId = useId();
+  const [arrowKeysUsed, setArrowKeysUsed] = useState(false);
+  const tabStopMinute = rovingMinute !== null && blockByCell.has(`${rovingMinute}`) ? rovingMinute : firstCellMinute;
+  const moveCellFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    const current = event.target instanceof HTMLButtonElement && event.target.classList.contains("flow-cell") ? event.target : null;
+    if (!current) return;
+    const cells = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button.flow-cell"));
+    const position = (cell: HTMLButtonElement) => [Number(cell.dataset.flowHour), Number(cell.dataset.flowOffset)] as const;
+    const [hour, offset] = position(current);
+    const chronological = [...cells].sort((left, right) => {
+      const [leftHour, leftOffset] = position(left);
+      const [rightHour, rightOffset] = position(right);
+      return leftHour - rightHour || leftOffset - rightOffset;
+    });
+    const nearest = (candidates: HTMLButtonElement[], distance: (cell: HTMLButtonElement) => number) => (
+      candidates.reduce<HTMLButtonElement | null>((best, cell) => (best === null || distance(cell) < distance(best) ? cell : best), null)
+    );
+    let next: HTMLButtonElement | null = null;
+    switch (event.key) {
+      case "ArrowDown":
+        next = nearest(cells.filter((cell) => position(cell)[0] === hour && position(cell)[1] > offset), (cell) => position(cell)[1] - offset);
+        break;
+      case "ArrowUp":
+        next = nearest(cells.filter((cell) => position(cell)[0] === hour && position(cell)[1] < offset), (cell) => offset - position(cell)[1]);
+        break;
+      case "ArrowRight":
+        next = nearest(cells.filter((cell) => position(cell)[0] > hour), (cell) => (position(cell)[0] - hour) * 1000 + Math.abs(position(cell)[1] - offset));
+        break;
+      case "ArrowLeft":
+        next = nearest(cells.filter((cell) => position(cell)[0] < hour), (cell) => (hour - position(cell)[0]) * 1000 + Math.abs(position(cell)[1] - offset));
+        break;
+      case "Home":
+        next = chronological[0] ?? null;
+        break;
+      case "End":
+        next = chronological[chronological.length - 1] ?? null;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    setArrowKeysUsed(true);
+    next?.focus();
+  };
   const firstPreviewMinuteById = useMemo(() => {
     if (!readOnlyPreview) return new Map<string, number>();
     const firstById = new Map<string, number>();
@@ -98,7 +156,8 @@ export const FlowChartGrid = memo(function FlowChartGrid({
           );
         })}
       </div>
-      <div className="flow-chart-grid" ref={setFlowGridElement}>
+      {readOnlyPreview ? null : <span id={keyboardHintId} className="sr-only">{t("dashboard.today.flowChartKeyboardHint")}</span>}
+      <div className="flow-chart-grid" ref={setFlowGridElement} onKeyDown={readOnlyPreview ? undefined : moveCellFocus}>
         {rowMinuteOffsets.map((minuteOffset) => {
           const isCurrentMinuteRow = minuteOffset === currentMinuteOffset;
           const nearestLabelMinuteOffset = currentMinuteOffset !== null && currentMinuteOffset + intervalMinutes < 60
@@ -169,7 +228,12 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                     key={block.minuteOfDay}
                     type="button"
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}
+                    tabIndex={block.minuteOfDay === tabStopMinute ? 0 : -1}
+                    aria-describedby={!readOnlyPreview && !arrowKeysUsed && block.minuteOfDay === tabStopMinute ? keyboardHintId : undefined}
                     data-flow-minute={block.minuteOfDay}
+                    data-flow-hour={hour}
+                    data-flow-offset={minuteOffset}
+                    onFocus={() => setRovingMinute(block.minuteOfDay)}
                     data-funnel-classified-result={colorMode !== "project" && block.category !== "unknown" && block.sourceSegmentIds?.some((id) => classifiedResultIds?.has(id)) ? "true" : undefined}
                     data-activity-inspector-trigger="true"
                     aria-haspopup={onOpenActivity ? "dialog" : undefined}

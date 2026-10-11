@@ -261,3 +261,14 @@ function statusInput(overrides: Partial<AiConnectionStatusInput> = {}): AiConnec
     ...overrides,
   };
 }
+
+describe("AiConnectionStatusBar on the AI setup page", () => {
+  it("drops 'Open settings' while AI setup is already on screen", () => {
+    const status = { tone: "error" as const, label: "AI setup needed", providerLabel: "Open settings", memoryLabel: null, issueKind: null };
+    const { rerender } = render(<AiConnectionStatusBar status={status} onOpenSettings={vi.fn()} />);
+    expect(screen.getByText("Open settings")).toBeTruthy();
+    rerender(<AiConnectionStatusBar status={status} onOpenSettings={vi.fn()} settingsOpen />);
+    expect(screen.queryByText("Open settings")).toBeNull();
+    expect(screen.getByRole("button", { name: "AI setup needed" })).toBeTruthy();
+  });
+});

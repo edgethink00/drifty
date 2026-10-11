@@ -38,7 +38,7 @@ describe("ManagedModelDownloadProgress", () => {
   it("shows how much of the model has actually arrived, not just a percentage", () => {
     render(<ManagedModelDownloadProgress status={status()} />);
 
-    const bar = screen.getByRole("progressbar", { name: "Downloading..." });
+    const bar = screen.getByRole("progressbar", { name: "Downloading…" });
     expect(bar.getAttribute("aria-valuenow")).toBe("44");
     expect(fillWidth()).toBe("44%");
     expect(screen.getByText("44%")).toBeTruthy();
@@ -48,7 +48,7 @@ describe("ManagedModelDownloadProgress", () => {
   it("moves without claiming a position before the first byte is reported", () => {
     render(<ManagedModelDownloadProgress status={status({ progress: null })} />);
 
-    const bar = screen.getByRole("progressbar", { name: "Downloading..." });
+    const bar = screen.getByRole("progressbar", { name: "Downloading…" });
     expect(bar.getAttribute("aria-valuenow")).toBeNull();
     expect(document.querySelector(".dc-onb-download__fill--indeterminate")).toBeTruthy();
     // No numbers are invented while none are known.

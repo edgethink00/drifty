@@ -251,3 +251,32 @@ describe("FocusDriftSection", () => {
     expect(container.querySelector("g")?.getAttribute("clip-path") ?? container.querySelector("g")?.getAttribute("clipPath")).toBe("url(#focus-drift-chart-reveal)");
   });
 });
+
+describe("FocusDriftSection keyboard", () => {
+  it("is one tab stop: left and right walk the day, up and down switch lines", () => {
+    const chart = buildFocusDriftChart([focusSegment()], "2026-06-29");
+    const { container } = renderFocusDriftSection(chart);
+    const stop = (id: string) => container.querySelector<SVGElement>(`[data-focus-drift-stop="${id}"]`)!;
+    const stops = Array.from(container.querySelectorAll<SVGElement>("[data-focus-drift-stop]"));
+    const last = stops.length / 2 - 1;
+    expect(last).toBeGreaterThan(0);
+    expect(stops.filter((element) => element.getAttribute("tabindex") === "0")).toEqual([stop("focus:0")]);
+    // The stop Tab lands on carries the arrow-key hint until the arrows are used.
+    const hintId = stop("focus:0").getAttribute("aria-describedby");
+    expect(hintId && document.getElementById(hintId)?.textContent).toMatch(/arrow keys/i);
+
+    stop("focus:0").focus();
+    fireEvent.keyDown(stop("focus:0"), { key: "ArrowRight" });
+    expect(document.activeElement).toBe(stop("focus:1"));
+    fireEvent.keyDown(stop("focus:1"), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(stop("drift:1"));
+    fireEvent.keyDown(stop("drift:1"), { key: "End" });
+    expect(document.activeElement).toBe(stop(`drift:${last}`));
+    fireEvent.keyDown(stop(`drift:${last}`), { key: "Home" });
+    expect(document.activeElement).toBe(stop("drift:0"));
+
+    // The tab stop follows focus, and the hint is not repeated on every move.
+    expect(stops.filter((element) => element.getAttribute("tabindex") === "0")).toEqual([stop("drift:0")]);
+    expect(stop("drift:0").getAttribute("aria-describedby")).toBeNull();
+  });
+});

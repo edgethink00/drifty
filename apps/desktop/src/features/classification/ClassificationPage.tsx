@@ -189,6 +189,7 @@ export function ClassificationPage({
   onTodayClassificationRange,
 }: ClassificationPageProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const sourceMetaLabel = (item: { readonly sessionCount: number; readonly averageSessionSeconds: number }) => `${item.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: item.sessionCount })} · ${t("classification.averageValue", { duration: formatLocalizedCompactDurationFromSeconds(item.averageSessionSeconds, effectiveLanguage) })}`;
   const surfaceCorrectionButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailCorrectionButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const [recentlyCorrectedRowId, setRecentlyCorrectedRowId] = useState<string | null>(null);
@@ -327,7 +328,7 @@ export function ClassificationPage({
           <span className="eyebrow">{t("classification.topApp")}</span>
           <div className="clf-stat__row">
             <AppGlyph appName={classificationTopAppName} iconSrc={classificationTopAppIconSrc} size="sm" />
-            <strong>{classificationTopAppLabel}</strong>
+            <strong title={classificationTopAppLabel}>{classificationTopAppLabel}</strong>
           </div>
         </div>
         <div
@@ -423,9 +424,10 @@ export function ClassificationPage({
                               : <AppGlyph appName={item.usageKind === "site" ? item.label : item.appName} iconSrc={appIcons[item.appName] ?? null} size="sm" />}
                           </div>
                           <div className="classification-panel-view__source-copy">
-                            <strong>{item.label}</strong>
+                            {/* Narrow windows cut long names; the full name stays on hover. */}
+                            <strong title={item.label}>{item.label}</strong>
                             <div className="classification-panel-view__source-meta">
-                              <span>{item.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: item.sessionCount })} · {t("classification.averageValue", { duration: formatLocalizedCompactDurationFromSeconds(item.averageSessionSeconds, effectiveLanguage) })}</span>
+                              <span title={sourceMetaLabel(item)}>{sourceMetaLabel(item)}</span>
                               <span
                                 className="classification-panel-view__source-productivity"
                                 aria-label={item.productivityMix.map((entry) => `${localizedProductivityLabel(entry.productivity, t)} ${formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, effectiveLanguage)}`).join(", ")}

@@ -4,6 +4,7 @@ import type { CloudDeviceRecord } from "../../cloud-devices/cloudDeviceService";
 import { formatCloudDeviceLastSeen } from "../../cloud-devices/CloudDeviceManagementPanel";
 import { useLocalization } from "../../localization/LocalizationContext";
 import { localizeSettingsError } from "../../localization/settingsMessageTranslations";
+import { ActionLabel } from "../../../components/ActionLabel";
 
 /**
  * The account's other Cloud devices, shown on the final setup step when this
@@ -58,7 +59,7 @@ export function OnboardingCloudDeviceList({
                       void onRevoke(device.id).finally(() => setConfirmingId(null));
                     }}
                   >
-                    {removing ? t("settings.cloudDevices.removing") : t("settings.cloudDevices.removeDevice")}
+                    <ActionLabel busy={removing} busyLabel={t("settings.cloudDevices.removing")}>{t("settings.cloudDevices.removeDevice")}</ActionLabel>
                   </button>
                 </span>
               ) : (

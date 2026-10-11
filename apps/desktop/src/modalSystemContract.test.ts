@@ -35,6 +35,7 @@ const animatedModalPanelFiles = [
   "./features/settings/DebugLogModal.tsx",
   "./features/settings/DeleteHistoryModal.tsx",
   "./features/settings/DeleteManagedModelModal.tsx",
+  "./features/settings/ExcludedAppHistoryConfirmation.tsx",
   "./features/share/ShareCardModal.tsx",
   "./features/team/TeamProjectsView.tsx",
   "./features/team/TeamWorkspace.tsx",
@@ -58,6 +59,7 @@ const sharedModalSurfaces = [
   ["Send feedback", "./features/feedback/FeedbackModal.tsx", /className="auth-modal modal-shell feedback-modal"\s+data-modal-variant="standard"/],
   ["Delete account", "./features/auth/AccountDeletionModal.tsx", /className="auth-modal modal-shell account-deletion-modal"\s+data-modal-variant="compact"/],
   ["Delete history", "./features/settings/DeleteHistoryModal.tsx", /className="auth-modal modal-shell delete-history-modal"\s+data-modal-variant="compact"/],
+  ["Delete excluded app records", "./features/settings/ExcludedAppHistoryConfirmation.tsx", /className="auth-modal modal-shell excluded-app-history-modal"\s+data-modal-variant="compact"/],
   ["Public profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal" data-modal-variant="standard"/],
   ["Edit profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace"/],
   ["Profile embed", "./features/profile/ProfileEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal profile-embeds-modal"\s+data-modal-variant="workspace"/],
@@ -175,7 +177,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(29);
+    expect(sharedModalSurfaces).toHaveLength(30);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);

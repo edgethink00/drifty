@@ -22,6 +22,7 @@ import {
   classificationRuleAppIconSrc,
 } from "../classification/classificationViewData";
 import type { LocalizationController } from "../localization/LocalizationContext";
+import { ActionLabel } from "../../components/ActionLabel";
 
 type ClassificationSavedRulesListProps = {
   readonly feedback?: ReactNode;
@@ -263,7 +264,7 @@ function ClassificationSavedRuleCard({
           </fieldset>
           <div className="classification-rule-card__form-actions">
             <button type="button" className="settings-btn" onClick={() => setEditing(false)} disabled={busy}>{t("common.cancel")}</button>
-            <button type="submit" className="settings-btn settings-btn--primary" aria-label={t(busy ? "settings.classification.saving" : "classification.rules.save")} disabled={busy}>{t(busy ? "settings.classification.saving" : "common.save")}</button>
+            <button type="submit" className="settings-btn settings-btn--primary" aria-label={t(busy ? "settings.classification.saving" : "classification.rules.save")} disabled={busy} aria-busy={busy}><ActionLabel busy={busy} busyLabel={t("settings.classification.saving")}>{t("common.save")}</ActionLabel></button>
           </div>
           <p>{t("classification.rules.editNotice")}</p>
         </form>

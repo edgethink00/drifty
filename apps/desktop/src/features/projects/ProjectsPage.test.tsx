@@ -6,7 +6,7 @@ import type { ActivitySegment } from "@drifty/domain";
 
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
-import { PROJECT_PASS_NO_RESULTS_MESSAGE } from "../classification/useProjectClassification";
+import { PROJECT_PASS_NO_RESULTS_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX } from "../classification/useProjectClassification";
 import { ProjectsPage, type ProjectsPageProps } from "./ProjectsPage";
 import { IDLE_PROJECT_AUTO_ANALYSIS } from "./projectAutoAnalysisState";
 import { NO_PROJECT_MATCH_COOLDOWN } from "./projectMatchCooldown";
@@ -233,6 +233,19 @@ describe("ProjectsPage", () => {
     expect(screen.getByRole("alert").textContent).toBe("Could not save the project.");
     fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
     expect(screen.getByRole("alert").textContent).toBe("Could not save the project.");
+  });
+
+  it("translates a tracker failure but keeps a provider's own message as written", () => {
+    const { rerender } = render(<ProjectsPage {...baseProps({ runError: "database is locked" })} />);
+    const alert = screen.getByRole("alert");
+    expect(alert.firstChild?.textContent).toBe("Another task was using the activity database. Try again in a moment.");
+    expect(alert.getAttribute("title")).toBe("database is locked");
+
+    rerender(<ProjectsPage {...baseProps({ runError: "Invalid API key" })} />);
+    expect(screen.getByRole("alert").textContent).toBe("Invalid API key");
+
+    rerender(<ProjectsPage {...baseProps({ runError: PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX + "no activity in range." })} />);
+    expect(screen.getByRole("alert").textContent).toBe("Nothing to analyze in this range.");
   });
 
   it("localizes the empty project-pass result and points to the current settings tab", () => {

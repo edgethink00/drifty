@@ -2,9 +2,12 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type R
 import type { AppIconMap, ExcludedAppRule } from "@drifty/domain";
 import { ActionLabel } from "../../components/ActionLabel";
 import { AppGlyph } from "../../components/AppGlyph";
+import { ModalPresence } from "../../components/ModalPresence";
+import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
 import { mergeAppIconResults } from "../app-icons/appIconRequests";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { useLocalization } from "../localization/LocalizationContext";
+import { ExcludedAppHistoryConfirmation } from "./ExcludedAppHistoryConfirmation";
 import "./AppExclusionSettingsRows.css";
 
 type RecentAppItem = {
@@ -48,6 +51,9 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   const { t } = useLocalization();
   const pickerId = useId();
   const addButtonRef = useRef<HTMLButtonElement>(null);
+  // Each row's Unblock button, so focus has somewhere to go when the control
+  // that held it leaves the list (an unblocked row, a spent "Delete N records").
+  const removeButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const searchRef = useRef<HTMLInputElement>(null);
   const [excludedApps, setExcludedApps] = useState<ExcludedAppRule[]>([]);
   const [historyCounts, setHistoryCounts] = useState<Record<string, number>>({});
@@ -67,6 +73,9 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   const addingRef = useRef(false);
   const countVersionsRef = useRef(new Map<string, number>());
   const adding = addingKey !== null;
+  // Deleting an app's past records asks first; the dialog owns its failure.
+  const [historyConfirm, setHistoryConfirm] = useState<{ readonly app: ExcludedAppRule; readonly count: number } | null>(null);
+  const [historyConfirmError, setHistoryConfirmError] = useState<DescribedActionError | null>(null);
 
   function clearRowError(id: string) {
     setRowErrors((current) => {
@@ -208,6 +217,9 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   }
 
   async function handleRemoveApp(id: string) {
+    const order = visibleApps.map((app) => app.id);
+    const neighborId = order[order.indexOf(id) + 1] ?? order[order.indexOf(id) - 1] ?? null;
+    const hadFocus = document.activeElement === removeButtonsRef.current.get(id);
     if (!beginRowAction(id, "remove")) return;
     try {
       await trackerClient.deleteExcludedApp(id);
@@ -218,6 +230,14 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
         delete next[id];
         return next;
       });
+      // The row goes with its button; keep keyboard focus in the list.
+      if (hadFocus || document.activeElement === document.body) {
+        window.requestAnimationFrame(() => {
+          const neighbor = neighborId ? removeButtonsRef.current.get(neighborId) : undefined;
+          if (neighbor) neighbor.focus();
+          else addButtonRef.current?.focus();
+        });
+      }
     } catch {
       setRowErrors((current) => ({ ...current, [id]: "remove" }));
     } finally {
@@ -227,12 +247,20 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
 
   async function handleDeleteHistory(app: ExcludedAppRule) {
     if (!beginRowAction(app.id, "delete")) return;
+    setHistoryConfirmError(null);
     try {
       await trackerClient.deleteExcludedAppHistory({ name: app.name, bundleId: app.bundleId });
       countVersionsRef.current.set(app.id, (countVersionsRef.current.get(app.id) ?? 0) + 1);
       setHistoryCounts((prev) => ({ ...prev, [app.id]: 0 }));
-    } catch {
-      setRowErrors((current) => ({ ...current, [app.id]: "delete" }));
+      setHistoryConfirm(null);
+      // The button that opened the confirmation is gone with the records, so
+      // focus moves to the same row's Unblock instead of falling to the page.
+      window.requestAnimationFrame(() => {
+        const active = document.activeElement;
+        if (!active || active === document.body || active.closest('[role="dialog"]')) removeButtonsRef.current.get(app.id)?.focus();
+      });
+    } catch (failure) {
+      setHistoryConfirmError(describeActionError(failure, t("settings.privacy.excludedAppsError.delete")));
     } finally {
       finishRowAction(app.id);
     }
@@ -407,8 +435,15 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
               error={rowErrors[app.id] ? t(`settings.privacy.excludedAppsError.${rowErrors[app.id]}`) : null}
               retryCountLabel={rowErrors[app.id] === "count" ? t("common.retry") : null}
               onRetryCount={() => void refreshHistoryCount(app)}
+              removeButtonRef={(button) => {
+                if (button) removeButtonsRef.current.set(app.id, button);
+                else removeButtonsRef.current.delete(app.id);
+              }}
               onRemove={() => void handleRemoveApp(app.id)}
-              onDeleteHistory={() => void handleDeleteHistory(app)}
+              onDeleteHistory={() => {
+                setHistoryConfirmError(null);
+                setHistoryConfirm({ app, count: historyCounts[app.id] ?? 0 });
+              }}
             />
           ))
         : null}
@@ -420,6 +455,19 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
           </div>
         </div>
       ) : null}
+
+      <ModalPresence>
+        {historyConfirm ? (
+          <ExcludedAppHistoryConfirmation
+            appName={historyConfirm.app.name}
+            count={historyConfirm.count}
+            deleting={rowPending[historyConfirm.app.id] === "delete"}
+            error={historyConfirmError}
+            onCancel={() => setHistoryConfirm(null)}
+            onConfirm={() => void handleDeleteHistory(historyConfirm.app)}
+          />
+        ) : null}
+      </ModalPresence>
     </>
   );
 }
@@ -470,6 +518,7 @@ function ExcludedAppRow({
   error,
   retryCountLabel,
   onRetryCount,
+  removeButtonRef,
 }: {
   readonly app: ExcludedAppRule;
   readonly count: number;
@@ -483,6 +532,7 @@ function ExcludedAppRow({
   readonly error: string | null;
   readonly retryCountLabel: string | null;
   readonly onRetryCount: () => void;
+  readonly removeButtonRef: (button: HTMLButtonElement | null) => void;
 }) {
   return (
     <div className="settings-row excluded-apps-row">
@@ -504,7 +554,7 @@ function ExcludedAppRow({
             <ActionLabel busy={pending === "delete"}>{deletePastCount}</ActionLabel>
           </button>
         ) : null}
-        <button type="button" disabled={Boolean(pending)} aria-busy={pending === "remove"} className="settings-btn excluded-apps-btn" onClick={onRemove} aria-label={removeNamed}>
+        <button ref={removeButtonRef} type="button" disabled={Boolean(pending)} aria-busy={pending === "remove"} className="settings-btn excluded-apps-btn" onClick={onRemove} aria-label={removeNamed}>
           <ActionLabel busy={pending === "remove"}>{removeLabel}</ActionLabel>
         </button>
       </div>

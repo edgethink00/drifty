@@ -3,6 +3,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DeferredTabBodyFallback } from "./DeferredTabBodyFallback";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 describe("DeferredTabBodyFallback", () => {
   it("renders the history deferred fallback with skeleton rows", () => {
@@ -38,5 +39,15 @@ describe("DeferredTabBodyFallback", () => {
     // Retired radar card must NOT be present
     expect(container.querySelector(".productivity-persona-card--radar-only")).toBeNull();
   });
-});
 
+  it("announces the loading tab in the app language", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <DeferredTabBodyFallback label="history records" variant="history" />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByRole("status", { name: "기록 불러오는 중" })).toBeTruthy();
+    expect(screen.getByText("기록 불러오는 중…")).toBeTruthy();
+  });
+});

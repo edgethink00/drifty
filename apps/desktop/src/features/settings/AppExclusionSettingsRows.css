@@ -242,3 +242,44 @@
     flex-basis: 12rem;
   }
 }
+
+/* Deleting an excluded app's past records asks first, in the app's compact
+   confirmation shell. */
+.excluded-app-history-modal {
+  max-width: 27rem;
+}
+
+.excluded-app-history-modal .auth-modal__header {
+  margin-bottom: var(--space-4);
+}
+
+.excluded-app-history-modal__detail {
+  display: grid;
+}
+
+.excluded-app-history-modal__detail > p {
+  grid-area: 1 / 1;
+}
+
+.excluded-app-history-modal__detail.has-error > p:first-child {
+  visibility: hidden;
+}
+
+.excluded-app-history-modal .auth-modal__header .excluded-app-history-modal__error {
+  color: var(--warn);
+}
+
+.excluded-app-history-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* The unblock notice adds Undo between its copy and the countdown. */
+.excluded-app-removed-notice {
+  grid-template-columns: minmax(0, 1fr) auto 28px;
+}
+
+.excluded-app-removed-notice__undo {
+  white-space: nowrap;
+}

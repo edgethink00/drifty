@@ -129,15 +129,20 @@ export function AiConnectionStatusBar({
   status,
   onOpenSettings,
   ariaLabel,
+  settingsOpen = false,
 }: {
   readonly status: AiConnectionStatus;
   readonly onOpenSettings: () => void;
   /** Replaces the default "… Open AI settings" name when the pill leads somewhere else. */
   readonly ariaLabel?: string;
+  /** AI setup is already on screen, so "Open settings" would point at the page the person is reading. */
+  readonly settingsOpen?: boolean;
 }) {
   const { t } = useLocalization();
   const statusLabel = localizeAiStatusLabel(status.label, t);
   const providerLabel = localizeAiStatusLabel(status.providerLabel, t);
+  const showsOpenSettings = status.providerLabel === "Open settings";
+  const hideProvider = settingsOpen && showsOpenSettings;
   const memoryAria = status.memoryLabel ? t("ai.connection.memoryAria", { memory: status.memoryLabel }) : "";
   // The pill only has room for a two-word label, so the cause, the recovery
   // step, and the local-data reassurance move to the title. With aria-label
@@ -157,7 +162,7 @@ export function AiConnectionStatusBar({
       <button
         type="button"
         className="ai-connection-status"
-        aria-label={ariaLabel ?? t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
+        aria-label={hideProvider ? statusLabel : ariaLabel ?? t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
         title={failureExplanation}
         data-tone={status.tone}
         data-activity={status.activity ?? undefined}
@@ -165,7 +170,7 @@ export function AiConnectionStatusBar({
       >
         <span className="ai-connection-status__dot" aria-hidden="true" />
         <span className="ai-connection-status__label">{statusLabel}</span>
-        <span className="ai-connection-status__provider">{providerLabel}</span>
+        {hideProvider ? null : <span className="ai-connection-status__provider">{providerLabel}</span>}
       </button>
     </>
   );

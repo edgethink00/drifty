@@ -2113,10 +2113,10 @@ describe("App onboarding", () => {
     const statusPollCountBeforeDownload = invokeMock.mock.calls.filter(([command]) => command === "managed_ai_status").length;
     fireEvent.click(within(defaultModel).getByRole("button", { name: /^download$/i }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
-    expect(within(defaultModel).getByRole("button", { name: /^downloading\.\.\.$/i })).toBeTruthy();
+    expect(within(defaultModel).getByRole("button", { name: /^downloading…$/i })).toBeTruthy();
     // The card button names the model being fetched; the number lives on the bar.
     await waitFor(() => expect(within(localDialog).getByRole("progressbar", { name: /downloading/i }).getAttribute("aria-valuenow")).toBe("44"), { timeout: 2_000 });
-    expect(within(defaultModel).getByRole("button", { name: /^downloading\.\.\.$/i })).toBeTruthy();
+    expect(within(defaultModel).getByRole("button", { name: /^downloading…$/i })).toBeTruthy();
     await waitFor(() => {
       const statusPollCount = invokeMock.mock.calls.filter(([command]) => command === "managed_ai_status").length;
       expect(statusPollCount).toBeGreaterThan(statusPollCountBeforeDownload);
@@ -2266,7 +2266,7 @@ describe("App onboarding", () => {
       });
     });
 
-    expect(within(defaultModel).getByRole("button", { name: /^downloading\.\.\.$/i })).toBeTruthy();
+    expect(within(defaultModel).getByRole("button", { name: /^downloading…$/i })).toBeTruthy();
     expect(within(localDialog).getAllByText(/1\.2\/2\.7 GB/i).length).toBeGreaterThan(0);
     expect(within(localDialog).getByRole("progressbar", { name: /downloading/i }).getAttribute("aria-valuenow")).toBe("44");
 
@@ -2383,7 +2383,7 @@ describe("App onboarding", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
     await waitFor(() => expect(within(defaultModel).getByRole("button", { name: /^retry$/i })).toBeTruthy(), { timeout: 2_000 });
-    expect(within(defaultModel).queryByRole("button", { name: /^downloading\.\.\.$/i })).toBeNull();
+    expect(within(defaultModel).queryByRole("button", { name: /^downloading…$/i })).toBeNull();
     expect(within(defaultModel).getByText(/managed local model files are missing/i)).toBeTruthy();
 
     await act(async () => {

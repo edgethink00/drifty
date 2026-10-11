@@ -48,7 +48,7 @@
   --onb-line-strong: var(--line-strong, rgba(28, 28, 25, 0.16));
   --onb-text: var(--text, #1c1c19);
   --onb-text-muted: var(--text-muted, #383834);
-  --onb-text-soft: var(--text-soft, #79776f);
+  --onb-text-soft: var(--text-soft, #6a6861);
   --onb-accent: #171715;
   --onb-accent-rgb: 23, 23, 21;
   --onb-accent-mid: #2a2a26;

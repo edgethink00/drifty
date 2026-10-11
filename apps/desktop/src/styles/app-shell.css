@@ -1113,6 +1113,13 @@
   margin-inline: auto;
 }
 
+/* The app-wide notice keeps the pages' 24px side inset. A full width plus the
+   legacy 28px side margin pushed its right edge past the content panel. */
+.content > .notice {
+  width: min(1160px, calc(100% - 48px));
+  margin: 12px auto 0;
+}
+
 .hero {
   display: flex;
   justify-content: space-between;

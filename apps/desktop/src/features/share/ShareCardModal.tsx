@@ -26,6 +26,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import { detectHostPlatform, type HostPlatform } from "../../lib/api/accessibilityClient";
 
 import { useShareCardPreview } from "./useShareCardPreview";
+import { describeActionError } from "../../lib/actionErrors";
 
 export type ShareCardModalCard =
   | { readonly kind: "day"; readonly data: ShareCardData }
@@ -65,7 +66,7 @@ type ExportState =
   | { readonly kind: "copied" }
   | { readonly kind: "saved" }
   | { readonly kind: "shared"; readonly destination: ShareCardDestination }
-  | { readonly kind: "error"; readonly message: string };
+  | { readonly kind: "error"; readonly message: string; readonly detail: string | null };
 
 type RankGate = {
   readonly detail: string;
@@ -198,7 +199,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
       .then(() => refreshLiveRanks())
       .catch((error: unknown) => {
         if (exportGenerationRef.current !== generation) return;
-        settle({ kind: "error", message: error instanceof Error ? error.message : t("share.joinError") }, generation);
+        settle({ kind: "error", ...describeActionError(error, t("share.joinError")) }, generation);
       })
       .finally(() => setJoiningLeaderboard(false));
   };
@@ -220,7 +221,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
       .then(() => settle({ kind: "copied" }, generation))
       .catch((error: unknown) => settle({
         kind: "error",
-        message: error instanceof Error ? error.message : t("share.copyError"),
+        ...describeActionError(error, t("share.copyError")),
       }, generation));
   };
 
@@ -232,7 +233,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
       .then((result) => settle(result.cancelled ? { kind: "idle" } : { kind: "saved" }, generation))
       .catch((error: unknown) => settle({
         kind: "error",
-        message: error instanceof Error ? error.message : t("share.saveError"),
+        ...describeActionError(error, t("share.saveError")),
       }, generation));
   };
 
@@ -247,7 +248,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
       .then(() => settle({ kind: "shared", destination }, generation))
       .catch((error: unknown) => settle({
         kind: "error",
-        message: error instanceof Error ? error.message : t("share.postError"),
+        ...describeActionError(error, t("share.postError")),
       }, generation));
   };
 
@@ -380,7 +381,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
               </div>
               {/* A failed export reports under the buttons that retry it. The
                   dialog's top is anchored, so the line only extends the bottom edge. */}
-              {exportState.kind === "error" ? <p className="share-card-outcome" role="alert">{exportState.message}</p> : null}
+              {exportState.kind === "error" ? <p className="share-card-outcome" role="alert" title={exportState.detail ?? undefined}>{exportState.message}{exportState.detail ? <span className="sr-only"> {exportState.detail}</span> : null}</p> : null}
             </div>
           </div>
         </section>

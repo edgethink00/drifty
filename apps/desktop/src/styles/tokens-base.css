@@ -315,7 +315,7 @@ html {
   --line-strong: rgba(28,28,25,.16);
   --text: #1c1c19;
   --text-muted: #383834;
-  --text-soft: #79776f;
+  --text-soft: #6a6861;
   --window-chrome-icon: #383834;
   --window-chrome-icon-hover: #1c1c19;
   /* The native window material supplies the frost, so this tint only shapes

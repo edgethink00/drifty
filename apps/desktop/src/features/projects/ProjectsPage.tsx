@@ -14,13 +14,20 @@ import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../setting
 import { aggregateProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { formatProjectMatchCooldown, NO_PROJECT_MATCH_COOLDOWN, type ProjectMatchCooldown } from "./projectMatchCooldown";
 import { useLocalization } from "../localization/LocalizationContext";
-import { PROJECT_PASS_NO_RESULTS_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE } from "../classification/useProjectClassification";
+import { PROJECT_PASS_NO_RESULTS_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX } from "../classification/useProjectClassification";
+import { classifyBackgroundError, describeBackgroundError, type DescribedActionError } from "../../lib/actionErrors";
 
-// Known project-pass messages are localized; provider and transport errors stay verbatim.
-function localizeProjectRunError(message: string, t: ReturnType<typeof useLocalization>["t"]): string {
-  if (message === PROJECT_PASS_NO_RESULTS_MESSAGE) return t("projects.runError.noResults");
-  if (message === PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE) return t("projects.runError.nothingToAnalyze");
-  return message;
+// Known project-pass messages are localized. A tracker or connection failure
+// reads in the app language with its original wording on hover; a provider's
+// own message (a bad key, an unknown model) is the actionable part, so it
+// stays as written.
+function describeProjectRunError(message: string, t: ReturnType<typeof useLocalization>["t"]): DescribedActionError {
+  if (message === PROJECT_PASS_NO_RESULTS_MESSAGE) return { message: t("projects.runError.noResults"), detail: null };
+  if (message === PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE || message.startsWith(PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX)) {
+    return { message: t("projects.runError.nothingToAnalyze"), detail: null };
+  }
+  if (classifyBackgroundError(message)) return describeBackgroundError(message, t);
+  return { message, detail: null };
 }
 
 const PROJECT_LIBRARY_WINDOW_DAYS = 7;
@@ -180,6 +187,7 @@ function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
 
 export function ProjectsPage(props: ProjectsPageProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const runNotice = props.runError ? describeProjectRunError(props.runError, t) : null;
   const [rangeMode, setRangeMode] = useState<TrendRangeMode>("week");
   const [windowOffset, setWindowOffset] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -332,8 +340,10 @@ export function ProjectsPage(props: ProjectsPageProps) {
         ) : null}
       </div>
 
-      {props.runError ? (
-        <div className="projects-page__banner projects-page__banner--error" role="alert">{localizeProjectRunError(props.runError, t)}</div>
+      {runNotice ? (
+        <div className="projects-page__banner projects-page__banner--error" role="alert" title={runNotice.detail ?? undefined}>
+          {runNotice.message}{runNotice.detail ? <span className="sr-only"> {runNotice.detail}</span> : null}
+        </div>
       ) : null}
 
       {selectedProject ? (

@@ -33,6 +33,8 @@ import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProduc
 import type { DisplayLanguage } from "../localization/languagePreference";
 import { buildActivityDevices, type ActivityDeviceSource } from "../device-sync/deviceTimelineLabels";
 import { DeviceSourceIcon } from "../device-sync/DeviceSourceIcon";
+import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
+import { ActionLabel } from "../../components/ActionLabel";
 
 const INSPECTOR_WIDTH_PX = 304;
 const MAX_VISIBLE_ACTIVITY_ROWS = 4;
@@ -859,7 +861,7 @@ function ActivityInspectorBody({
   readonly canAssignProject?: boolean;
   readonly canClassify?: boolean;
   readonly busy?: boolean;
-  readonly error?: string | null;
+  readonly error?: DescribedActionError | null;
   readonly savedChange?: SavedDirectChange | null;
   readonly onToggleAttribute?: (field: ActivityInspectorAttribute, trigger: HTMLButtonElement) => void;
   readonly onUndo?: () => void;
@@ -976,7 +978,7 @@ function ActivityInspectorBody({
       {actionsDisabledReason && actionsDisabledReason !== t("dashboard.week.remoteEditBlocked") ? (
         <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p>
       ) : null}
-      {error ? <p className="week-activity-inspector__error" role="alert">{error}</p> : null}
+      {error ? <p className="week-activity-inspector__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
 
       <div className="week-activity-inspector__actions week-activity-inspector__actions--destructive">
         {readOnly ? (
@@ -1176,7 +1178,7 @@ export function WeekActivityInspector({
     buildSegmentInspectorValues(event, targetSegments, classificationOptions)
   ));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedActionError | null>(null);
   const [savedChange, setSavedChange] = useState<SavedDirectChange | null>(null);
   const inspectorRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -1418,7 +1420,7 @@ export function WeekActivityInspector({
     } catch (caught) {
       setValues(previousValues);
       setSegmentValues(previousSegmentValues);
-      setError(caught instanceof Error ? caught.message : t("dashboard.week.inspector.saveError"));
+      setError(describeActionError(caught, t("dashboard.week.inspector.saveError")));
       setBusy(false);
       focusTrigger(field);
       return false;
@@ -1463,7 +1465,7 @@ export function WeekActivityInspector({
       setBusy(false);
       focusTrigger(change.field);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("dashboard.week.inspector.saveError"));
+      setError(describeActionError(caught, t("dashboard.week.inspector.saveError")));
       setBusy(false);
       focusTrigger(change.field);
     }
@@ -1478,7 +1480,7 @@ export function WeekActivityInspector({
       setSavedChange(null);
       onClose();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("dashboard.week.inspector.deleteError"));
+      setError(describeActionError(caught, t("dashboard.week.inspector.deleteError")));
       setBusy(false);
       window.requestAnimationFrame(() => {
         inspectorRef.current?.querySelector<HTMLButtonElement>(".week-activity-inspector__footer .app-btn--danger")?.focus();
@@ -1593,15 +1595,13 @@ export function WeekActivityInspector({
               : t("dashboard.week.inspector.oneActivity"),
           })}</p>
           {actionsDisabledReason && actionsDisabledReason !== t("dashboard.week.remoteEditBlocked") ? <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p> : null}
-          {error ? <p className="week-activity-inspector__error" role="alert">{error}</p> : null}
+          {error ? <p className="week-activity-inspector__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
           <footer className="week-activity-inspector__footer">
             <button type="button" className="app-btn app-btn--secondary" onClick={() => setView("overview")} disabled={busy}>{t("common.cancel")}</button>
-            <button type="button" className="app-btn app-btn--danger" onClick={() => void deleteActivity()} disabled={!canMutate || !onDelete || busy}>
-              {busy
-                ? t("common.deleting")
-                : count > 1
-                  ? t("dashboard.week.inspector.deleteActivities", { count })
-                  : t("dashboard.week.inspector.delete")}
+            <button type="button" className="app-btn app-btn--danger" onClick={() => void deleteActivity()} disabled={!canMutate || !onDelete || busy} aria-busy={busy}>
+              <ActionLabel busy={busy} busyLabel={t("common.deleting")}>
+                {count > 1 ? t("dashboard.week.inspector.deleteActivities", { count }) : t("dashboard.week.inspector.delete")}
+              </ActionLabel>
             </button>
           </footer>
         </div>

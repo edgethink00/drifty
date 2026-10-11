@@ -11,6 +11,7 @@ import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import "./history.css";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { HistoryDeletionResult } from "./historyDeletion";
+import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -19,6 +20,8 @@ type HistoryViewProps = {
   readonly hasMoreSegments?: boolean;
   readonly initialLoading?: boolean;
   readonly loadMoreError?: string | null;
+  /** The original wording behind `loadMoreError`, for hover and assistive technology. */
+  readonly loadMoreErrorDetail?: string | null;
   readonly loadingMore?: boolean;
   readonly onDeleteSelected: (ids: readonly string[]) => Promise<HistoryDeletionResult | void>;
   readonly onRefreshAfterDelete?: () => Promise<void>;
@@ -37,7 +40,7 @@ const EMPTY_HISTORY_ROWS: readonly HistoryRowModel[] = [];
 type HistoryDeleteConfirmationProps = {
   readonly deleting: boolean;
   readonly recordCount: number;
-  readonly error: string | null;
+  readonly error: DescribedActionError | null;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 };
@@ -66,7 +69,7 @@ function HistoryDeleteConfirmation({ deleting, recordCount, error, onCancel, onC
             nothing below moves. */}
         <div className={`history-confirm__body${error ? " has-error" : ""}`}>
           <p>{t(recordCount === 1 ? "history.deleteConfirmDetailSingle" : "history.deleteConfirmDetail", { count: recordCount })}</p>
-          {error ? <p className="history-confirm__error" role="alert">{error}</p> : null}
+          {error ? <p className="history-confirm__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
         </div>
         {deleting ? <span className="action-status" role="status">{t("settings.deleteHistory.deleting")}</span> : null}
         <div className="history-confirm__actions">
@@ -95,6 +98,7 @@ export function HistoryView({
   hasMoreSegments = false,
   initialLoading = false,
   loadMoreError = null,
+  loadMoreErrorDetail = null,
   loadingMore = false,
   onDeleteSelected,
   onRefreshAfterDelete,
@@ -110,7 +114,7 @@ export function HistoryView({
   const [uncontrolledQuery, setUncontrolledQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<DescribedActionError | null>(null);
   const [confirmDeleting, setConfirmDeleting] = useState(false);
   const [pendingRecordCount, setPendingRecordCount] = useState(0);
   const [refreshFailed, setRefreshFailed] = useState(false);
@@ -217,7 +221,7 @@ export function HistoryView({
       setConfirmOpen(false);
       setRefreshFailed(result?.refreshFailed ?? false);
     } catch (failure) {
-      setDeleteError(failure instanceof Error ? failure.message : t("history.deleteError"));
+      setDeleteError(describeActionError(failure, t("history.deleteError")));
     } finally {
       setConfirmDeleting(false);
       requestInFlight.current = false;
@@ -298,7 +302,7 @@ export function HistoryView({
       {groups.length === 0 ? (
         loadMoreError && !initialLoading ? (
           <div className="history-empty">
-            <p className="history-load-more-error" role="alert">{loadMoreError}</p>
+            <p className="history-load-more-error" role="alert" title={loadMoreErrorDetail ?? undefined}>{loadMoreError}{loadMoreErrorDetail ? <span className="sr-only"> {loadMoreErrorDetail}</span> : null}</p>
             <button
               type="button"
               className="app-btn app-btn--secondary history-show-more"
@@ -343,7 +347,7 @@ export function HistoryView({
           ) : null}
           {loadMoreError ? (
             <>
-              <p className="history-load-more-error" role="alert">{loadMoreError}</p>
+              <p className="history-load-more-error" role="alert" title={loadMoreErrorDetail ?? undefined}>{loadMoreError}{loadMoreErrorDetail ? <span className="sr-only"> {loadMoreErrorDetail}</span> : null}</p>
               <button
                 type="button"
                 className="app-btn app-btn--secondary history-show-more"

@@ -43,7 +43,24 @@ describe("MainContentShell", () => {
       </MainContentShell>,
     );
 
-    expect(screen.getByRole("alert").textContent).toBe("Error: Tracker connection failed");
+    // The visible line reads in the app language; the tracker's own wording
+    // stays available on hover and to assistive technology.
+    const alert = screen.getByRole("alert");
+    expect(alert.firstChild?.textContent).toBe("Something didn't finish. Try again in a moment.");
+    expect(alert.getAttribute("title")).toBe("Tracker connection failed");
+    expect(alert.textContent).toContain("Tracker connection failed");
+  });
+
+  it("names a busy activity database instead of showing the SQLite message", () => {
+    render(
+      <MainContentShell activeTab="dashboard" loading={false} hasLoadedOnce error="database is locked">
+        <p>Dashboard content</p>
+      </MainContentShell>,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert.firstChild?.textContent).toBe("Another task was using the activity database. Try again in a moment.");
+    expect(alert.getAttribute("title")).toBe("database is locked");
   });
 });
 

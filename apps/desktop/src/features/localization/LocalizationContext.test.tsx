@@ -203,7 +203,7 @@ describe("display language preference", () => {
     );
 
     expect(screen.queryByRole("switch", { name: "Automatically update Drifty" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Check for Updates" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeTruthy();
   });
 
   it("offers the release-build Developer mode control only on Windows", () => {

@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ThemeMode } from "../features/settings/settingsStorage";
 import type { NavIconType, TabId } from "./navigation";
 import { useLocalization } from "../features/localization/LocalizationContext";
+import { describeBackgroundError } from "../lib/actionErrors";
 
 export function NavIcon({ type }: { type: NavIconType }) {
   const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, width: 18, height: 18 };
@@ -245,13 +246,16 @@ type MainContentShellProps = {
 export function MainContentShell({ activeTab, loading, hasLoadedOnce, error, contentRef, children }: MainContentShellProps) {
   const { t } = useLocalization();
   const isRefreshing = loading && hasLoadedOnce;
+  // Errors reach here as the tracker or network worded them, in English; the
+  // notice reads in the app language and keeps that wording on hover.
+  const described = error ? describeBackgroundError(error, t) : null;
 
   return (
     <main ref={contentRef} className={`content content--${activeTab}`}>
       <div className="refresh-indicator" data-active={isRefreshing} aria-live="polite" aria-hidden={!isRefreshing}>
         {t("shell.refreshingTracker")}
       </div>
-      {error ? <div className="notice notice--error" role="alert">{t("shell.errorPrefix")} {error}</div> : null}
+      {described ? <div className="notice notice--error" role="alert" title={described.detail ?? undefined}>{described.message}{described.detail ? <span className="sr-only"> {described.detail}</span> : null}</div> : null}
       {children}
     </main>
   );

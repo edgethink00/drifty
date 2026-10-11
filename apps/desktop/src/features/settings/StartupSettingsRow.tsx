@@ -4,6 +4,7 @@ import { reportStartupRegistration } from "../../lib/analytics/startupEnvironmen
 import { toErrorMessage } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import { Toggle } from "../../components/Toggle";
+import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
 
 type StartupSettingsStatus = "loading" | "ready" | "saving" | "unavailable";
 
@@ -13,7 +14,7 @@ export function StartupSettingsRow() {
   const [status, setStatus] = useState<StartupSettingsStatus>(() => (
     startupSettingsClient.isAvailable() ? "loading" : "unavailable"
   ));
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedActionError | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -30,7 +31,7 @@ export function StartupSettingsRow() {
       } catch (nextError) {
         if (!isCurrent) return;
         setStatus("ready");
-        setError(t("settings.general.startupUnavailable", { error: toErrorMessage(nextError) }));
+        setError(describeActionError(toErrorMessage(nextError), t("settings.general.startupUnavailable")));
       }
     }
 
@@ -65,7 +66,7 @@ export function StartupSettingsRow() {
       });
       setEnabled(previousEnabled);
       setStatus("ready");
-      setError(t("settings.general.startupFailed", { error: toErrorMessage(nextError) }));
+      setError(describeActionError(toErrorMessage(nextError), t("settings.general.startupFailed")));
     }
   }
 
@@ -76,7 +77,7 @@ export function StartupSettingsRow() {
       <div>
         <div className="lbl">{t("settings.general.openAtLogin")}</div>
         <div className="desc">{t("settings.general.openAtLoginDescription")}</div>
-        {error ? <p className="capture-recency capture-recency--error" role="status">{error}</p> : null}
+        {error ? <p className="capture-recency capture-recency--error" role="status" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
       </div>
       <div className="ctrl">
         <Toggle

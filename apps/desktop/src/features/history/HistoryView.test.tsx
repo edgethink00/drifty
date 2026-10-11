@@ -415,7 +415,9 @@ describe("HistoryView", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete 1 selected/i }));
     const dialog = screen.getByRole("dialog", { name: /delete history records/i });
     fireEvent.click(within(dialog).getByRole("button", { name: /^delete records$/i }));
-    expect((await within(dialog).findByRole("alert")).textContent).toBe("Storage unavailable");
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert.firstChild?.textContent).toBe("Could not delete. Try again.");
+    expect(alert.getAttribute("title")).toBe("Storage unavailable");
     expect(checkbox).toHaveProperty("checked", true);
     expect(within(dialog).getByRole("button", { name: /^delete records$/i })).toHaveProperty("disabled", false);
     fireEvent.click(within(dialog).getByRole("button", { name: /^delete records$/i }));

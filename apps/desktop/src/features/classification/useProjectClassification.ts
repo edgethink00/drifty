@@ -21,6 +21,7 @@ import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettin
 /** Canonical project-pass run messages; ProjectsPage localizes them for display. */
 export const PROJECT_PASS_NO_RESULTS_MESSAGE = "The analysis model returned no results. Check the API key and model under AI settings › Intelligence, then try again.";
 export const PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE = "Nothing to analyze in this range.";
+export const PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX = "Nothing to analyze — ";
 export type ScheduledProjectPassFailureCategory =
   | "configuration"
   | "network"
@@ -423,7 +424,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         // A pass can "succeed" with nothing to show — surface that instead of
         // silently returning to the button so the user isn't left guessing.
         if (!options.quiet && !summary.ran && summary.skippedReason !== "already analyzed") {
-          setRunError(summary.skippedReason ? `Nothing to analyze — ${summary.skippedReason}.` : PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE);
+          setRunError(summary.skippedReason ? `${PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX}${summary.skippedReason}.` : PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE);
         } else if (
           summary.assignments === 0 && summary.corrections === 0
           && ((summary.skippedCorrections ?? 0) === 0 || summary.failedChunks > 0)

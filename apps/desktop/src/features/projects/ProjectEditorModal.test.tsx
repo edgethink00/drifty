@@ -43,7 +43,9 @@ describe("ProjectEditorModal", () => {
     const dialog = screen.getByRole("dialog", { name: "New project" });
     fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Launch review" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
-    expect((await within(dialog).findByRole("alert")).textContent).toBe("Storage unavailable");
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert.firstChild?.textContent).toBe("Could not save. Your changes are kept. Try again.");
+    expect(alert.getAttribute("title")).toBe("Storage unavailable");
     expect((within(dialog).getByLabelText("Name") as HTMLInputElement).value).toBe("Launch review");
   });
 

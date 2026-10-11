@@ -1182,3 +1182,31 @@ describe("FlowChartView activity inspector", () => {
     expect(screen.getByRole("dialog", { name: "docs.example.com" })).toBeTruthy();
   });
 });
+
+describe("FlowChartView keyboard", () => {
+  it("is one tab stop that the arrow keys walk through", () => {
+    const blocks = [
+      makeFlowBlock({ id: "a", minuteOfDay: 14 * 60 }),
+      makeFlowBlock({ id: "b", minuteOfDay: 14 * 60 + 3, siteDomain: "mail.example.com", colorKey: "mail.example.com" }),
+      makeFlowBlock({ id: "c", hour: 16, minuteOfDay: 16 * 60 + 6, siteDomain: "tasks.example.com", colorKey: "tasks.example.com" }),
+    ];
+    const { container } = render(<FlowChartView blocks={blocks} appIcons={{}} intervalMinutes={3} />);
+    const cell = (minute: number) => container.querySelector<HTMLButtonElement>(`button.flow-cell[data-flow-minute="${minute}"]`)!;
+    const tabbable = Array.from(container.querySelectorAll<HTMLButtonElement>("button.flow-cell")).filter((button) => button.tabIndex === 0);
+    // The earliest cell is the chart's only tab stop.
+    expect(tabbable).toEqual([cell(840)]);
+
+    cell(840).focus();
+    fireEvent.keyDown(cell(840), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(cell(843));
+    fireEvent.keyDown(cell(843), { key: "ArrowRight" });
+    expect(document.activeElement).toBe(cell(966));
+    fireEvent.keyDown(cell(966), { key: "Home" });
+    expect(document.activeElement).toBe(cell(840));
+    fireEvent.keyDown(cell(840), { key: "End" });
+    expect(document.activeElement).toBe(cell(966));
+    // The tab stop follows the last focused cell, so Tab comes back to it.
+    expect(cell(966).tabIndex).toBe(0);
+    expect(cell(840).tabIndex).toBe(-1);
+  });
+});

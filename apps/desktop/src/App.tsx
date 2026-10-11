@@ -129,6 +129,7 @@ import {
   storePendingPromoHandoff,
   type BillingSuccessSource,
 } from "./features/billing/promoHandoff";
+import { describeActionError, type DescribedActionError } from "./lib/actionErrors";
 import { AccountDeletionModal } from "./features/auth/AccountDeletionModal";
 import { deleteDriftyAccount, type AccountDeletionResult } from "./features/auth/accountDeletionService";
 import {
@@ -692,13 +693,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [historyNextCursor, setHistoryNextCursor] = useState<TimelinePageCursor | null>(null);
   const [historyHasMoreSegments, setHistoryHasMoreSegments] = useState(false);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
-  const [historyLoadMoreError, setHistoryLoadMoreError] = useState<string | null>(null);
+  const [historyLoadMoreError, setHistoryLoadMoreError] = useState<DescribedActionError | null>(null);
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [historySearchSegments, setHistorySearchSegments] = useState<ActivitySegment[]>([]);
   const [historySearchNextCursor, setHistorySearchNextCursor] = useState<TimelinePageCursor | null>(null);
   const [historySearchHasMoreSegments, setHistorySearchHasMoreSegments] = useState(false);
   const [historySearchLoading, setHistorySearchLoading] = useState(false);
-  const [historySearchError, setHistorySearchError] = useState<string | null>(null);
+  const [historySearchError, setHistorySearchError] = useState<DescribedActionError | null>(null);
   const normalizedHistorySearchQuery = historySearchQuery.trim();
   const isHistorySearchActive = normalizedHistorySearchQuery.length > 0;
   const [dashboardPreviousWeekFocusLoad, setDashboardPreviousWeekFocusLoad] = useState<DashboardPreviousWeekFocusLoad | null>(null);
@@ -2941,7 +2942,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           loadMissingSiteIcons(materializedPage.segments);
         } catch (nextError) {
           if (historySearchRequestRef.current !== requestId) return;
-          setHistorySearchError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
+          setHistorySearchError(describeActionError(nextError instanceof Error ? nextError : toErrorMessage(nextError), localization.t("history.searchError")));
         } finally {
           if (historySearchRequestRef.current === requestId) {
             setHistorySearchLoading(false);
@@ -4491,7 +4492,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       loadMissingSiteIcons(materializedPage.segments);
     } catch (nextError) {
       if (historyRefreshRequestRef.current !== requestId) return;
-      setHistoryLoadMoreError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
+      setHistoryLoadMoreError(describeActionError(nextError instanceof Error ? nextError : toErrorMessage(nextError), localization.t("history.loadOlderError")));
     } finally {
       if (historyLoadMoreRequestRef.current === loadMoreRequestId) {
         setHistoryLoadingMore(false);
@@ -4559,7 +4560,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       loadMissingSiteIcons(materializedPage.segments);
     } catch (nextError) {
       if (historySearchRequestRef.current !== requestId) return;
-      setHistorySearchError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
+      setHistorySearchError(describeActionError(nextError instanceof Error ? nextError : toErrorMessage(nextError), localization.t("history.searchError")));
     } finally {
       if (historySearchRequestRef.current === requestId) {
         setHistorySearchLoading(false);
@@ -8662,7 +8663,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     const isNewActiveProject = !input.id && (input.status ?? "active") === "active";
     let saveError: string | null = null;
     const saved = await projectClassification.saveProject(input, (message) => { saveError = message; });
-    if (!saved) return { saved: false, error: saveError ?? localization.t("projects.editor.saveError") };
+    if (!saved) return { saved: false, error: localization.t("projects.editor.saveError"), detail: saveError };
     // Archiving is an edit, not a creation: it must also release any queued
     // matching for that project so an archived project cannot pull a provider
     // pass along behind it.
@@ -10482,7 +10483,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           )}
           trailing={(
             <>
-              <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} />
+              <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && settingsSection === "aiSetup"} />
               {titlebarUpdateVersion ? (
                 <TopbarUpdateButton
                   onInstall={() => void handleInstallUpdate()}
@@ -10516,7 +10517,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} />
+          <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && settingsSection === "aiSetup"} />
           {titlebarUpdateVersion ? (
             <TopbarUpdateButton
               onInstall={() => void handleInstallUpdate()}
@@ -10907,7 +10908,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 hasMoreSegments={displayedHistoryHasMoreSegments}
                 initialLoading={historyInitialLoading}
                 loadingMore={displayedHistoryLoading}
-                loadMoreError={displayedHistoryLoadMoreError}
+                loadMoreError={displayedHistoryLoadMoreError?.message ?? null}
+                loadMoreErrorDetail={displayedHistoryLoadMoreError?.detail ?? null}
                 searchQuery={historySearchQuery}
                 searchUsesBackend={true}
                 segments={displayedHistorySegments}

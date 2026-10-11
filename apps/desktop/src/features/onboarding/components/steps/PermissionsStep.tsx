@@ -1,6 +1,7 @@
 import { useLiveTrackingPreview } from "../../useLiveTrackingPreview";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { useLocalization } from "../../../localization/LocalizationContext";
+import { ActionLabel } from "../../../../components/ActionLabel";
 
 export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { t } = useLocalization();
@@ -58,7 +59,9 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
             priority="optional"
             done={safariHistory.readable}
             disabled={safariHistory.opening}
-            actionLabel={safariHistory.opening ? t("onboarding.permissions.opening") : t("common.enable")}
+            actionLabel={t("common.enable")}
+            busy={safariHistory.opening}
+            busyLabel={t("onboarding.permissions.opening")}
             onClick={safariHistory.onEnable}
           />
         ) : null}
@@ -82,6 +85,8 @@ const PRIORITY_BADGE = {
 
 function PermissionRow({
   actionLabel,
+  busy = false,
+  busyLabel,
   description,
   disabled,
   done,
@@ -90,6 +95,10 @@ function PermissionRow({
   title,
 }: {
   readonly actionLabel: string;
+  /** The row's request is in flight. */
+  readonly busy?: boolean;
+  /** Shown beside the spinner while busy; its width is reserved, so the button never grows. */
+  readonly busyLabel?: string;
   readonly description: string;
   readonly disabled: boolean;
   /** Once on, the row shows a status (a dot and "Enabled") in place of its button. */
@@ -119,8 +128,8 @@ function PermissionRow({
         {done ? (
           <span className="dc-onb-permission-status">{t("onboarding.permissions.allowed")}</span>
         ) : (
-          <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled}>
-            {actionLabel}
+          <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled} aria-busy={busy || undefined}>
+            <ActionLabel busy={busy} busyLabel={busyLabel}>{actionLabel}</ActionLabel>
           </button>
         )}
       </div>

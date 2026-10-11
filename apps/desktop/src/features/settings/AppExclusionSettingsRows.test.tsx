@@ -224,7 +224,7 @@ describe("AppExclusionSettingsRows", () => {
     expect(remove).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the count after a failed history deletion and clears it only after a successful retry", async () => {
+  it("asks before deleting an excluded app's records, keeps a failure in the dialog and clears the count after a retry", async () => {
     vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue([
       { id: "a", name: "Vault", bundleId: null, source: "user" },
     ]);
@@ -233,13 +233,59 @@ describe("AppExclusionSettingsRows", () => {
       .mockRejectedValueOnce(new Error("storage unavailable")).mockResolvedValue({ deleted: 8 });
     render(<AppExclusionSettingsRows />);
     fireEvent.click(await screen.findByRole("button", { name: "Delete 8 records" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Could not delete");
-    fireEvent.click(screen.getByRole("button", { name: "Delete 8 records" }));
+    // The row button only opens the confirmation; nothing is deleted yet.
+    const dialog = await screen.findByRole("dialog", { name: "Delete 8 Vault records?" });
+    expect(remove).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete records" }));
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert.textContent).toContain("Could not delete");
+    expect(alert.getAttribute("title")).toBe("storage unavailable");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete records" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Delete 8 records" })).toBeNull());
     expect(screen.getByText("Vault")).toBeTruthy();
     expect(remove).toHaveBeenCalledTimes(2);
   });
 
+  it("cancels the record deletion without touching the records", async () => {
+    vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue([
+      { id: "a", name: "Vault", bundleId: null, source: "user" },
+    ]);
+    vi.mocked(trackerClient.getExcludedAppHistoryCount).mockResolvedValue({ count: 8 });
+    const remove = vi.spyOn(trackerClient, "deleteExcludedAppHistory").mockResolvedValue({ deleted: 8 });
+    render(<AppExclusionSettingsRows />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete 8 records" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Delete 8 records" })).toBeTruthy();
+  });
+
+  it("keeps keyboard focus in the list when the focused row or its record button goes away", async () => {
+    vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue([
+      { id: "a", name: "Vault", bundleId: null, source: "user" },
+      { id: "b", name: "Safe", bundleId: null, source: "user" },
+    ]);
+    vi.mocked(trackerClient.getExcludedAppHistoryCount).mockResolvedValue({ count: 8 });
+    vi.spyOn(trackerClient, "deleteExcludedAppHistory").mockResolvedValue({ deleted: 8 });
+    vi.spyOn(trackerClient, "deleteExcludedApp").mockResolvedValue({ deleted: true });
+    render(<AppExclusionSettingsRows />);
+    await screen.findByRole("button", { name: "Unblock Vault" });
+    const [first, second] = screen.getAllByRole("button", { name: /^Unblock / }).map((button) => button.getAttribute("aria-label"));
+
+    // A spent "Delete N records" leaves with the records; focus stays on its row.
+    const recordButtons = await screen.findAllByRole("button", { name: "Delete 8 records" });
+    recordButtons[0]!.focus();
+    fireEvent.click(recordButtons[0]!);
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete records" }));
+    await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe(first));
+
+    // An unblocked row hands focus to the next row, and the last one to Add app.
+    const firstUnblock = screen.getByRole("button", { name: first! });
+    firstUnblock.focus();
+    fireEvent.click(firstUnblock);
+    await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe(second));
+    fireEvent.click(screen.getByRole("button", { name: second! }));
+    await waitFor(() => expect(document.activeElement?.textContent).toContain("Add app"));
+  });
   it("still accepts an initial count arriving during an unblock that fails", async () => {
     vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue([
       { id: "a", name: "Vault", bundleId: null, source: "user" },
