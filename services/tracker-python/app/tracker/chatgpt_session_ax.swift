@@ -757,8 +757,19 @@ guard CommandLine.arguments.count >= 2, let pid = Int32(CommandLine.arguments[1]
 let app = AXUIElementCreateApplication(pid)
 var windowsRef: CFTypeRef?
 guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsRef) == .success,
-      let windows = windowsRef as? [AXUIElement],
-      let window = windows.first else {
+      let windows = windowsRef as? [AXUIElement], !windows.isEmpty else {
+    print("ok=0")
+    exit(0)
+}
+var focusedRef: CFTypeRef?
+let focusedResult = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &focusedRef)
+let window: AXUIElement
+if focusedResult == .success, let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID(),
+   windows.contains(where: { CFEqual($0, focusedRef) }) {
+    window = focusedRef as! AXUIElement
+} else if windows.count == 1 {
+    window = windows[0]
+} else {
     print("ok=0")
     exit(0)
 }
@@ -788,20 +799,47 @@ let chrome = Set([
     "New chat", "Open with", "Pull requests", "Sites", "Scheduled", "Plugins", "Pinned",
     "Projects", "Recents",
 ])
+// Session-header extraction is deliberately scoped to the project-marked
+// header; text from the conversation, sidebar or other windows is not a title.
+func sessionHeaderThread<Node>(
+    _ header: Node, children: (Node) -> [Node], role: (Node) -> String,
+    title: (Node) -> String, value: (Node) -> String
+) -> String? {
+    var buttons: [String] = []
+    var labels: [String] = []
+    func scan(_ node: Node, _ depth: Int) {
+        if depth > 4 { return }
+        for child in children(node).prefix(24) {
+            let r = role(child)
+            if r == "AXButton" {
+                let t = title(child)
+                if !t.isEmpty && !chrome.contains(t) && !t.contains("탭 닫기") && !t.lowercased().contains("close tab") { buttons.append(t) }
+            }
+            if r == "AXStaticText" {
+                let text = value(child).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty && !chrome.contains(text) { labels.append(text) }
+            }
+            if r == "AXGroup" { scan(child, depth + 1) }
+        }
+    }
+    scan(header, 0)
+    // The current toolbar has one text label; fail closed on ambiguity.
+    if role(header) == "AXToolbar" && labels.count == 1 { return labels[0] }
+    return buttons.count == 1 ? buttons[0] : nil
+}
+// End session-header extraction.
 var project = ""
 var thread = ""
 var visited = 0
 func scanHeader(_ el: AXUIElement) {
     for child in children(el) {
-        let role = strAttr(child, kAXRoleAttribute as CFString)
-        let title = strAttr(child, kAXTitleAttribute as CFString)
         let desc = strAttr(child, kAXDescriptionAttribute as CFString)
         if isProjectDesc(desc) { project = projectName(desc) }
-        if role == "AXButton", !title.isEmpty, !chrome.contains(title), !title.contains("탭 닫기"), !title.lowercased().contains("close tab"), thread.isEmpty {
-            thread = title
-        }
-        if role == "AXGroup" { scanHeader(child) }
     }
+    thread = sessionHeaderThread(el, children: children,
+        role: { strAttr($0, kAXRoleAttribute as CFString) },
+        title: { strAttr($0, kAXTitleAttribute as CFString) },
+        value: { strAttr($0, kAXValueAttribute as CFString) }) ?? ""
 }
 func walk(_ el: AXUIElement, depth: Int) {
     if visited > 3000 || (!project.isEmpty && !thread.isEmpty) { return }

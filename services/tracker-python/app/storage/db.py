@@ -8,6 +8,7 @@ import re
 import sqlite3
 import sys
 import uuid
+from ipaddress import IPv6Address
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -1880,6 +1881,20 @@ class TrackerDatabase:
         if target_kind not in VALID_RULE_TARGET_KINDS:
             raise ValueError("targetKind must be 'site' or 'app'")
 
+        # Old IPv6 exact-URL rows lost their brackets. Permit an unchanged
+        # row to be disabled without guessing its ambiguous host/port spelling.
+        existing_id = rule_input.get("id")
+        if existing_id and rule_input.get("enabled") is False:
+            with self.connect() as conn:
+                existing = conn.execute("SELECT * FROM classification_rules WHERE id = ?", (str(existing_id),)).fetchone()
+                if existing and existing["target_kind"] == "site" and ":" in existing["target_value"]:
+                    serialized = self._serialize_rule(existing)
+                    fields = ("targetKind", "targetValue", "matchScope", "detailKind", "detailValue", "category", "productivity", "confidence")
+                    if all(rule_input.get(key) == serialized[key] for key in fields):
+                        conn.execute("UPDATE classification_rules SET enabled = 0, updated_at = ? WHERE id = ?", (datetime.now(timezone.utc).isoformat(), str(existing_id)))
+                        conn.execute("DELETE FROM activity_classifications WHERE source = 'rule' AND classification_rule_id = ?", (str(existing_id),))
+                        return self._serialize_rule(conn.execute("SELECT * FROM classification_rules WHERE id = ?", (str(existing_id),)).fetchone())
+
         raw_target_value = str(rule_input.get("targetValue", rule_input.get("target_value", ""))).strip()
         normalized_target_value = self._normalize_rule_target(target_kind, raw_target_value)
         if not normalized_target_value:
@@ -1911,56 +1926,67 @@ class TrackerDatabase:
         rule_id = str(rule_input.get("id") or uuid.uuid4())
 
         with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO classification_rules (
-                    id,
-                    target_kind,
-                    target_value,
-                    normalized_target_value,
-                    match_scope,
-                    detail_kind,
-                    detail_value,
-                    normalized_detail_value,
-                    category,
-                    productivity,
-                    enabled,
-                    confidence,
-                    created_at,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(
-                    target_kind,
-                    normalized_target_value,
-                    match_scope,
-                    detail_kind,
-                    normalized_detail_value
-                ) DO UPDATE SET
-                    target_value = excluded.target_value,
-                    detail_value = excluded.detail_value,
-                    category = excluded.category,
-                    productivity = excluded.productivity,
-                    enabled = excluded.enabled,
-                    confidence = excluded.confidence,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    rule_id,
-                    target_kind,
-                    target_value,
-                    normalized_target_value,
-                    match_scope,
-                    detail_kind,
-                    detail_value,
-                    normalized_detail_value,
-                    category,
-                    productivity,
-                    enabled,
-                    confidence,
-                    timestamp,
-                    timestamp,
-                ),
-            )
+            if existing_id and target_kind == "site" and normalized_target_value.startswith("[") and conn.execute("SELECT 1 FROM classification_rules WHERE id = ?", (rule_id,)).fetchone():
+                # Re-normalizing a repaired IPv6 URL changes its unique key.
+                # Update the existing identity instead of inserting that id again.
+                conn.execute(
+                    """UPDATE classification_rules SET target_kind = ?, target_value = ?, normalized_target_value = ?,
+                    match_scope = ?, detail_kind = ?, detail_value = ?, normalized_detail_value = ?,
+                    category = ?, productivity = ?, enabled = ?, confidence = ?, updated_at = ? WHERE id = ?""",
+                    (target_kind, target_value, normalized_target_value, match_scope, detail_kind, detail_value,
+                     normalized_detail_value, category, productivity, enabled, confidence, timestamp, rule_id),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO classification_rules (
+                        id,
+                        target_kind,
+                        target_value,
+                        normalized_target_value,
+                        match_scope,
+                        detail_kind,
+                        detail_value,
+                        normalized_detail_value,
+                        category,
+                        productivity,
+                        enabled,
+                        confidence,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(
+                        target_kind,
+                        normalized_target_value,
+                        match_scope,
+                        detail_kind,
+                        normalized_detail_value
+                    ) DO UPDATE SET
+                        target_value = excluded.target_value,
+                        detail_value = excluded.detail_value,
+                        category = excluded.category,
+                        productivity = excluded.productivity,
+                        enabled = excluded.enabled,
+                        confidence = excluded.confidence,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        rule_id,
+                        target_kind,
+                        target_value,
+                        normalized_target_value,
+                        match_scope,
+                        detail_kind,
+                        detail_value,
+                        normalized_detail_value,
+                        category,
+                        productivity,
+                        enabled,
+                        confidence,
+                        timestamp,
+                        timestamp,
+                    ),
+                )
             row = conn.execute(
                 """
                 SELECT
@@ -4816,12 +4842,21 @@ class TrackerDatabase:
         if not text:
             return ""
         try:
+            return f"[{IPv6Address(text).compressed}]"
+        except ValueError:
+            pass
+        try:
             parsed = urlparse(text if "://" in text else f"//{text}")
             host = parsed.hostname or text.split("/", 1)[0].split(":", 1)[0]
         except ValueError:
             # Captured metadata can have a malformed URL and no site_domain.
             # It cannot match a site rule, but must not abort the rules batch.
             return ""
+        if ":" in host:
+            try:
+                return f"[{IPv6Address(host).compressed}]"
+            except ValueError:
+                return ""
         while host.startswith("www."):
             host = host[4:]
         return host.strip(".")

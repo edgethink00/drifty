@@ -48,6 +48,8 @@ def _canonical_host(hostname: str) -> str:
     host = hostname.lower().rstrip(".")
     while host.startswith("www."):
         host = host[4:]
+    if ":" in host:
+        return f"[{IPv6Address(host).compressed}]"
     return host
 
 

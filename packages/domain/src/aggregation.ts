@@ -1039,6 +1039,15 @@ function ruleDetailValues(segment: ActivitySegment, detailKind: NonNullable<Clas
 // Mirrors the tracker's _normalize_site_target so live matching agrees with the stored batch.
 function normalizeRuleSiteTarget(value?: string | null): string {
   let host = normalizeText(value);
+  // Bare IPv6 is the legacy tracker representation. URL() supplies the
+  // same bracketed/compressed identity as the current persisted rule.
+  if (host.includes(":")) {
+    try {
+      const candidate = host.includes("://") ? host : host.startsWith("[") ? `https://${host}` : `https://[${host}]`;
+      const parsed = new URL(candidate);
+      if (parsed.hostname.startsWith("[")) return parsed.hostname;
+    } catch { /* Ordinary hosts with ports continue through the existing path. */ }
+  }
   const schemeIndex = host.indexOf("://");
   if (schemeIndex !== -1) host = host.slice(schemeIndex + 3);
   host = host.split("/")[0].split("?")[0].split("#")[0];

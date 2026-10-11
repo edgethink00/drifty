@@ -202,6 +202,7 @@ export function useClassificationRulesController({
 
   const handleToggleClassificationRule = useCallback(async (rule: ClassificationRule, enabled: boolean) => {
     await saveClassificationRule({
+      id: rule.id,
       targetKind: rule.targetKind,
       targetValue: rule.targetValue,
       matchScope: rule.matchScope,

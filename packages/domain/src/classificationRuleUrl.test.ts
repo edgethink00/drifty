@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { findMatchingClassificationRule, type ActivitySegment } from "./index";
 import { canonicalizeClassificationRuleSiteUrl, siteTargetFromCanonicalUrl } from "./classificationRuleUrl";
 
 describe("canonicalizeClassificationRuleSiteUrl", () => {
@@ -28,4 +29,16 @@ describe("siteTargetFromCanonicalUrl", () => {
     expect(siteTargetFromCanonicalUrl("https://youtube.com/watch?v=ABC123")).toBe("youtube.com");
     expect(siteTargetFromCanonicalUrl("https://lichess.org/training/123")).toBe("lichess.org");
   });
+});
+
+it("keeps IPv6 identities distinct for exact and surface rules", () => {
+  const url = "http://[::1]:3000/work";
+  expect(canonicalizeClassificationRuleSiteUrl(url)).toBe(url);
+  expect(siteTargetFromCanonicalUrl(url)).toBe("[::1]");
+  const segment = { siteDomain: "[2001:db8::1]", siteUrl: "http://[2001:db8::1]/work" } as ActivitySegment;
+  const rule = { targetKind: "site", targetValue: "[2001:db8::1]", category: "workspace", productivity: "focus", enabled: true } as const;
+  expect(findMatchingClassificationRule(segment, [rule])).toBe(rule);
+  expect(findMatchingClassificationRule({ ...segment, siteDomain: "[2001:db8::2]" }, [rule])).toBeNull();
+  expect(findMatchingClassificationRule(segment, [{ ...rule, targetValue: "2001:db8::1" }])).not.toBeNull();
+  expect(findMatchingClassificationRule(segment, [{ ...rule, matchScope: "detail", detailKind: "siteUrl", detailValue: segment.siteUrl }])).not.toBeNull();
 });

@@ -230,6 +230,7 @@ export function WeeklyCategoryRow({
     <div className={`insights-row--weekly-categories insights-row--weekly-categories--${parts}`}>
       {parts === "rail" ? null : <WeeklyTrendChart
         chart={chart}
+        segmentLabel={(key) => hoverPayloads.get(key)?.label ?? key}
         hasData={hasData}
         mode={effectiveMode}
         projectModeAvailable={projectModeAvailable}

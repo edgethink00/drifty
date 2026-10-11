@@ -60,6 +60,14 @@ class ClassificationRuleUrlTests(unittest.TestCase):
             "https://example.com/work?view=compact",
         )
 
+    def test_ipv6_urls_keep_brackets_and_are_idempotent(self) -> None:
+        for url in ("http://[::1]:3000/work", "https://[2001:db8::1]/work", "http://[0:0:0:0:0:0:0:1]:80/work"):
+            with self.subTest(url=url):
+                canonical = canonicalize_classification_rule_site_url(url)
+                self.assertIn("[", canonical)
+                self.assertEqual(canonicalize_classification_rule_site_url(canonical), canonical)
+
+
 
 class TrackerDatabaseTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -69,6 +77,59 @@ class TrackerDatabaseTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         cleanup_temp_dir(self.tempdir)
+
+    def test_ipv6_exact_rule_applies_only_to_its_host_and_url(self) -> None:
+        self._insert_activity_segment(0, site_domain="[2001:db8::1]", site_url="http://[2001:db8::1]:3000/work")
+        self._insert_activity_segment(1, site_domain="[2001:db8::2]", site_url="http://[2001:db8::2]:3000/work")
+        self._insert_activity_segment(2, site_domain="[2001:db8::1]", site_url="http://[2001:db8::1]:3000/other")
+        rule = self.database.save_classification_rule(dict(targetKind="site", targetValue="[2001:db8::1]",
+            matchScope="detail", detailKind="siteUrl", detailValue="http://[2001:db8::1]:3000/work", category="workspace", productivity="focus"))
+        result = self.database.apply_classification_rules()
+        self.assertEqual(result["matchedCount"], 1)
+        self.assertEqual(result["appliedCount"], 1)
+        self.database.save_classification_rule({**rule, "enabled": False})
+        with self.database.connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM activity_classifications WHERE source = 'rule'").fetchone()[0], 0)
+
+    def test_ipv6_rule_save_toggle_and_explicit_legacy_repair(self) -> None:
+        for host in ("[::1]", "[2001:db8::1]"):
+            with self.subTest(host=host):
+                url = f"http://{host}:3000/work"
+                rule = self.database.save_classification_rule(dict(targetKind="site", targetValue=host,
+                    matchScope="detail", detailKind="siteUrl", detailValue=url, category="workspace", productivity="focus"))
+                self.assertEqual(rule["targetValue"], host)
+                self.assertEqual(rule["detailValue"], url)
+                disabled = self.database.save_classification_rule({**rule, "enabled": False})
+                self.assertFalse(disabled["enabled"])
+                self.assertEqual(disabled["id"], rule["id"])
+                self.assertTrue(self.database.save_classification_rule({**disabled, "enabled": True})["enabled"])
+
+        legacy = self.database.save_classification_rule(dict(targetKind="site", targetValue="[::2]",
+            matchScope="detail", detailKind="siteUrl", detailValue="http://[::2]:3000/work", category="workspace", productivity="focus"))
+        with self.database.connect() as conn:
+            conn.execute("UPDATE classification_rules SET target_value = '::2', normalized_target_value = '::2', detail_value = 'http://::2:3000/work', normalized_detail_value = 'http://::2:3000/work' WHERE id = ?", (legacy["id"],))
+        broken = next(row for row in self.database.get_classification_rules() if row["id"] == legacy["id"])
+        disabled = self.database.save_classification_rule({**broken, "enabled": False})
+        self.assertFalse(disabled["enabled"])
+        self.assertEqual(disabled["detailValue"], broken["detailValue"])
+        with self.assertRaises(ValueError):
+            self.database.save_classification_rule({**disabled, "enabled": True})
+        repaired = self.database.save_classification_rule({**disabled, "targetValue": "[::2]", "detailValue": "http://[::2]:3000/work", "enabled": True})
+        self.assertEqual(repaired["id"], legacy["id"])
+        self.assertEqual(repaired["createdAt"], legacy["createdAt"])
+        self.assertEqual(repaired["detailValue"], "http://[::2]:3000/work")
+        self.assertEqual(len(self.database.get_classification_rules()), 3)
+
+    def test_ipv6_edit_collision_preserves_both_rules(self) -> None:
+        def save(host):
+            return self.database.save_classification_rule(dict(targetKind="site", targetValue=host,
+                matchScope="detail", detailKind="siteUrl", detailValue=f"http://{host}/work", category="workspace", productivity="focus"))
+        original, other = save("[::1]"), save("[::2]")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.database.save_classification_rule({**original, "targetValue": other["targetValue"], "detailValue": other["detailValue"]})
+        rules = {row["id"]: row for row in self.database.get_classification_rules()}
+        self.assertEqual(rules[original["id"]], original)
+        self.assertEqual(rules[other["id"]], other)
 
     def test_database_context_does_not_leak_connections_or_resource_warnings(self) -> None:
         with warnings.catch_warnings(record=True) as captured:

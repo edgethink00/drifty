@@ -442,6 +442,8 @@ export interface ClassificationRule {
 }
 
 export interface ClassificationRuleInput {
+  /** Preserve a saved rule's identity when toggling or explicitly repairing it. */
+  id?: string;
   targetKind: ClassificationRuleTargetKind;
   targetValue: string;
   matchScope?: ClassificationRuleMatchScope;
