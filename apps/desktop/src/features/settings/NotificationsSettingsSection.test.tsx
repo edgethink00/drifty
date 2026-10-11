@@ -61,14 +61,14 @@ describe("NotificationsSettingsSection", () => {
     expect(badges.every((badge) => badge.getAttribute("aria-hidden") === null)).toBe(true);
   });
 
-  it("reads timing and wording as inactive while Drift alerts are off", () => {
+  it("hides inactive timing but keeps alert wording while Drift alerts are off", () => {
     renderSettings({ driftAlertsEnabled: false, extremeNudgeEnabled: false });
 
     const timingRow = document.querySelector('[data-setting-id="settings.notifications.timing"]');
     const wordingRow = document.querySelector('[data-setting-id="settings.alarmCopy.label"]');
-    expect(timingRow?.classList.contains("settings-row--disabled")).toBe(true);
+    expect(timingRow).toBeNull();
     expect(wordingRow?.classList.contains("settings-row--disabled")).toBe(true);
-    expect((screen.getByRole("combobox", { name: "Drift alert timing" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("combobox", { name: "Drift alert timing" })).toBeNull();
     expect((screen.getByRole("button", { name: "Edit alert wording" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -120,13 +120,15 @@ describe("NotificationsSettingsSection", () => {
     expect(openNotificationSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("locks the macOS notification switch while Drift alerts are off", () => {
-    renderSettings({ driftAlertsEnabled: false, macosNotificationEnabled: true });
-    const toggle = screen.getByRole("switch", { name: "Toggle macOS notifications" }) as HTMLButtonElement;
-    expect(toggle.disabled).toBe(true);
-    // The saved choice is kept, but it is not in effect, so it must not read as on.
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(toggle.closest(".settings-row")?.classList.contains("settings-row--disabled")).toBe(true);
+  it("hides inactive macOS delivery without resetting its saved choice", () => {
+    const props = renderSettings({ driftAlertsEnabled: false, macosNotificationEnabled: true, driftAlertDelaySeconds: 300 });
+    expect(screen.queryByRole("switch", { name: "Toggle macOS notifications" })).toBeNull();
+    expect(props.onMacosNotificationChange).not.toHaveBeenCalled();
+    expect(props.onDriftAlertDelaySecondsChange).not.toHaveBeenCalled();
+    cleanup();
+    renderSettings({ driftAlertsEnabled: true, macosNotificationEnabled: true, driftAlertDelaySeconds: 300 });
+    expect(screen.getByRole("switch", { name: "Toggle macOS notifications" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("combobox", { name: "Drift alert timing" }).textContent).toContain("5m");
   });
 
   it("offers celebration and day review switches with the review time beside them", () => {
@@ -141,9 +143,10 @@ describe("NotificationsSettingsSection", () => {
     expect(props.onDayReviewEnabledChange).toHaveBeenCalledWith(true);
   });
 
-  it("keeps quiet-hour times inactive until the window is on, and never lets start equal end", () => {
+  it("hides quiet-hour times until the window is on, and never lets start equal end", () => {
     const props = renderSettings();
-    expect((screen.getByRole("combobox", { name: "Starts at" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("combobox", { name: "Starts at" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Ends at" })).toBeNull();
 
     fireEvent.click(screen.getByRole("switch", { name: "Toggle quiet hours" }));
     expect(props.onQuietHoursChange).toHaveBeenLastCalledWith({ enabled: true, startMinute: 22 * 60, endMinute: 8 * 60 });

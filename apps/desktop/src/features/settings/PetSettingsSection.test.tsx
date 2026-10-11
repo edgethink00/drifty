@@ -23,7 +23,7 @@ describe("PetSettingsSection", () => {
     const { props, unmount } = renderPet({ automaticCloseEnabled: true });
     const toggle = screen.getByRole("switch", { name: "마우스를 올리면 빠른 제어 표시" });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText(/자동 닫기 설정은 그대로 유지/)).toBeTruthy();
+    expect(screen.getByText(/^제어 바를 표시합니다\. 꺼도 자동 닫기는 유지/)).toBeTruthy();
     fireEvent.click(toggle);
     expect(window.localStorage.getItem(PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY)).toBe("0");
     expect(props.onAutomaticCloseChange).not.toHaveBeenCalled();

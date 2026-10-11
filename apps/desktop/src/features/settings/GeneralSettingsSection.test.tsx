@@ -31,24 +31,22 @@ function renderGeneral(language: "en" | "ko", hostPlatform: "macos" | "windows" 
   );
 }
 
-describe("GeneralSettingsSection time zone row", () => {
+describe("GeneralSettingsSection", () => {
   afterEach(cleanup);
 
-  it("shows the device time zone read-only with where to change it", () => {
+  it("keeps the day boundary setting without a duplicate read-only time zone row", () => {
     renderGeneral("en");
-    const row = document.querySelector('[data-setting-id="settings.general.timeZone"]');
-    expect(row?.textContent).toContain("Time zone");
-    // The Vitest setup pins the process zone to Asia/Seoul.
-    expect(row?.textContent).toMatch(/Asia\/Seoul · GMT\+9/);
-    expect(row?.textContent).toContain("System Settings");
-    expect(row?.querySelector("select, input, [role=combobox], [role=switch]")).toBeNull();
+    expect(screen.getByRole("combobox", { name: "New day begins at" })).toBeTruthy();
+    expect(document.querySelector('[data-setting-id="settings.general.timeZone"]')).toBeNull();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeTruthy();
   });
 
-  it("uses Windows wording on Windows and Korean copy in Korean", () => {
+  it("keeps Windows and Korean day-boundary controls", () => {
     renderGeneral("en", "windows");
-    expect(document.querySelector('[data-setting-id="settings.general.timeZone"]')?.textContent).toContain("Time & language");
+    expect(screen.getByRole("combobox", { name: "New day begins at" })).toBeTruthy();
     cleanup();
     renderGeneral("ko");
-    expect(screen.getByText("시간대")).toBeTruthy();
+    expect(document.querySelector('[data-setting-id="settings.general.startOfDay"]')).toBeTruthy();
+    expect(screen.queryByText("시간대")).toBeNull();
   });
 });

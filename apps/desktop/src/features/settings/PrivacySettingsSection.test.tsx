@@ -37,6 +37,12 @@ function openAiGroup(): HTMLElement {
   return groupNamed("settings.privacy.aiSending");
 }
 
+function openSharingDetails(): HTMLElement {
+  const toggle = screen.getByRole("button", { name: "Data sharing details" });
+  if (toggle.getAttribute("aria-expanded") !== "true") fireEvent.click(toggle);
+  return groupNamed("settings.privacy.driftySharing");
+}
+
 /** Opens the AI details dialog from its row in the AI data sending group. */
 function openAiDetails(): HTMLElement {
   const group = within(openAiGroup());
@@ -63,7 +69,6 @@ describe("PrivacySettingsSection", () => {
     const headings = screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
     expect(headings).toEqual([
       "Privacy & Data",
-      "Data shared with Drifty",
       "Data on this computer",
     ]);
     // The AI group is one folded card: a title and a one-line subtitle, no badges, no rows yet.
@@ -71,9 +76,9 @@ describe("PrivacySettingsSection", () => {
     expect(aiToggle.getAttribute("aria-expanded")).toBe("false");
     expect(aiToggle.textContent).toBe("AI data sendingWhat Drifty can send for AI classification");
     expect(aiToggle.querySelector(".chip")).toBeNull();
-    // Cards are ordered by where the data goes: not recorded, AI, Drifty, this device.
+    // Everyday controls stay above the compact sharing footer.
     const order = Array.from(document.querySelectorAll(".settings-section--privacy > *"), (node) => node.getAttribute("data-setting-id") ?? node.querySelector("h3")?.textContent);
-    expect(order.slice(1, 3)).toEqual(["settings.privacy.aiSending", "settings.privacy.driftySharing"]);
+    expect(order.slice(1, 4)).toEqual(["settings.privacy.aiSending", "Data on this computer", "settings.privacy.driftySharing"]);
     // A group is a flat block: every row is a direct child, so no row sits in a nested box.
     for (const block of document.querySelectorAll(".settings-section--privacy > .settings-block")) {
       const children = Array.from(block.children);
@@ -83,13 +88,14 @@ describe("PrivacySettingsSection", () => {
   });
 
   it("shows every everyday control without opening anything", async () => {
-    render(<PrivacySettingsSection databasePath="/local/tracker.db" todaySessionCount={8} />);
+    render(<PrivacySettingsSection />);
 
-    expect(screen.getByRole("switch", { name: "Usage statistics" })).toBeTruthy();
+    expect(screen.queryByRole("switch", { name: "Usage statistics" })).toBeNull();
     expect(await screen.findByRole("button", { name: /Add app/i })).toBeTruthy();
-    expect(screen.getByText("/local/tracker.db")).toBeTruthy();
+    expect(screen.queryByText("Database")).toBeNull();
+    expect(screen.getByRole("button", { name: "Data sharing details" }).getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByRole("button", { name: "Delete history…" })).toBeTruthy();
-    // Only the AI group folds. Its switches are not reachable while it is closed.
+    // AI and sharing details are unavailable to keyboard navigation while closed.
     expect(screen.queryByRole("switch", { name: "Page address" })).toBeNull();
     expect(document.querySelector("details")).toBeNull();
     expect(screen.queryByText(/icon cache/i)).toBeNull();
@@ -294,7 +300,7 @@ describe("PrivacySettingsSection", () => {
   describe("data shared with Drifty", () => {
     it("provides one default-on usage statistics opt-out that survives external updates", () => {
       render(<PrivacySettingsSection />);
-      const preference = within(groupNamed("settings.privacy.driftySharing")).getByRole("switch", { name: "Usage statistics" });
+      const preference = within(openSharingDetails()).getByRole("switch", { name: "Usage statistics" });
 
       expect(isOn(preference)).toBe(true);
       fireEvent.click(preference);
@@ -316,12 +322,13 @@ describe("PrivacySettingsSection", () => {
       window.localStorage.setItem(PRODUCT_ANALYTICS_STORAGE_KEY, "0");
       render(<PrivacySettingsSection />);
 
-      expect(isOn(screen.getByRole("switch", { name: "Usage statistics" }))).toBe(false);
+      expect(screen.queryByRole("switch", { name: "Usage statistics" })).toBeNull();
+      expect(isOn(within(openSharingDetails()).getByRole("switch", { name: "Usage statistics" }))).toBe(false);
     });
 
-    it("names what Drifty receives in the row itself and states what is public", () => {
+    it("keeps recipients, excluded fields and public scope in the sharing details", () => {
       render(<PrivacySettingsSection />);
-      const drifty = within(groupNamed("settings.privacy.driftySharing"));
+      const drifty = within(openSharingDetails());
 
       expect(drifty.getByText(/PostHog receives named product events/i)).toBeTruthy();
       expect(drifty.getByText(/App names, sites, URLs, titles, segment IDs, and individual local activity times are never included/i)).toBeTruthy();
@@ -338,6 +345,8 @@ describe("PrivacySettingsSection", () => {
       render(<LocalizationTestProvider language="ko"><PrivacySettingsSection /></LocalizationTestProvider>);
 
       expect(screen.getByRole("link", { name: "개인정보처리방침" }).getAttribute("href")).toBe("https://drifty.so/ko/privacy/");
+      expect(screen.queryByRole("switch", { name: "사용 통계" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "데이터 공유 자세히" }));
       expect(screen.getByRole("switch", { name: "사용 통계" })).toBeTruthy();
     });
   });

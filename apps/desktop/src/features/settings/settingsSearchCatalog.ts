@@ -56,13 +56,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.general.startOfWeekDescription",
   },
   {
-    id: "settings.general.timeZone",
-    section: "general",
-    titleKey: "settings.general.timeZone",
-    keywords: "시간대 타임존 지역 표준시 서울 timezone time zone utc gmt",
-    descriptionKey: "settings.general.timeZoneDescription",
-  },
-  {
     id: "settings.general.openAtLogin",
     section: "general",
     titleKey: "settings.general.openAtLogin",
@@ -82,7 +75,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: "general",
     titleKey: "settings.general.manualUpdate",
     keywords: "업데이트 버전 확인 update version check",
-    descriptionKey: "settings.general.manualUpdateDescription",
   },
   {
     id: "settings.general.devMode",
@@ -181,6 +173,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "settings.notifications.timing",
+    reveal: "notifications-drift",
     section: "notifications",
     titleKey: "settings.notifications.timing",
     keywords: "알림 시간 지연 주기 delay alert timing",
@@ -194,6 +187,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "settings.notifications.macosNotification",
+    reveal: "notifications-drift",
     section: "notifications",
     titleKey: "settings.notifications.macosNotification",
     keywords: "맥 알림 알림 센터 배너 macOS notification center banner",
@@ -307,6 +301,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "settings.privacy.productAnalyticsTitle",
+    reveal: "privacy-sharing",
     section: "privacy",
     titleKey: "settings.privacy.productAnalyticsTitle",
     keywords: "제품 사용 분석 통계 공유 analytics telemetry PostHog opt out 데이터 전송 끄기",
@@ -314,15 +309,10 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "settings.privacy.driftySharing",
+    reveal: "privacy-sharing",
     section: "privacy",
-    titleKey: "settings.privacy.driftySharing",
+    titleKey: "settings.privacy.sharingDetails",
     keywords: "Drifty 데이터 공유 개인정보처리방침 privacy policy data use 원본 기록 공개 리더보드 프로필",
-  },
-  {
-    id: "settings.data.database",
-    section: "privacy",
-    titleKey: "settings.data.database",
-    keywords: "로컬 데이터베이스 저장 경로 local database storage path",
   },
   {
     id: "settings.privacy.deleteTitle",

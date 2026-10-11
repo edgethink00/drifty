@@ -75,7 +75,7 @@ describe("DeveloperSettingsSection", () => {
     expect(screen.getByText("~/.codex/skills/drifty")).toBeTruthy();
     expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
     expect(screen.getByText(/Ask what you worked on and when from Terminal/i)).toBeTruthy();
-    expect(screen.getByText(/Ask Codex, Claude Code, Cursor, or OpenCode about your recorded day/i)).toBeTruthy();
+    expect(screen.getByText(/Query your recorded day read-only from Codex, Claude Code, Cursor, or OpenCode/i)).toBeTruthy();
     expect(screen.getByText(/does not add network access/i)).toBeTruthy();
     expect(screen.queryByText(/Give local agents a safe, read-only way/i)).toBeNull();
     expect(screen.queryByText(/Query summaries, matching activity, and timelines/i)).toBeNull();

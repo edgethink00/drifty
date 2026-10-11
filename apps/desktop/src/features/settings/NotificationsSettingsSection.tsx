@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Toggle } from "../../components/Toggle";
 import { DRIFT_ALERT_DELAY_OPTIONS, driftAlertDelaySecondsFromValue, driftAlertDelayValueFromSeconds, type DriftAlertDelaySeconds } from "../companion/driftAlarmData";
 import type { DriftAlarmCopySettingsValue } from "../companion/driftAlarmCopy";
@@ -14,6 +14,7 @@ import {
 } from "../companion/quietHours";
 import { requestDriftNotificationPermission } from "../companion/watcherData";
 import { openSystemSettingsPane } from "../../lib/api/systemSettingsClient";
+import { useSettingsSearch } from "./SettingsSearchContext";
 import { SettingsSelect } from "./SettingsSelect";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
@@ -79,6 +80,11 @@ export function NotificationsSettingsSection({
   openNotificationSettings = openNotificationSettingsPane,
 }: NotificationsSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const { request } = useSettingsSearch();
+  const [revealInactiveAlerts, setRevealInactiveAlerts] = useState(false);
+  useEffect(() => {
+    if (request?.entry.reveal === "notifications-drift") setRevealInactiveAlerts(true);
+  }, [request]);
   const locale = effectiveLanguage === "ko" ? "ko-KR" : "en-US";
   // Only a host that reports a denial reaches this notice. The desktop
   // notification plugin (2.3.x) reports "granted" on macOS and Windows, so a
@@ -105,7 +111,6 @@ export function NotificationsSettingsSection({
      Automatic close above shows its effective value for the same reason. */
   const macosNotificationActive = macosNotificationEnabled && driftAlertsEnabled;
   const dayReviewTimeRowClassName = dayReviewEnabled ? "settings-row" : "settings-row settings-row--disabled";
-  const quietHoursRowClassName = quietHours.enabled ? "settings-row" : "settings-row settings-row--disabled";
   const handleAutomaticCloseChange = (enabled: boolean) => {
     if (enabled && !driftAlertsEnabled) {
       onDriftAlertsChange(true);
@@ -166,53 +171,57 @@ export function NotificationsSettingsSection({
           prerequisiteDescription={t("settings.notifications.extremeOffDescription")}
           toggleAriaLabel={t("settings.notifications.toggleExtreme")}
         />
-        <div data-setting-id="settings.notifications.timing" className={dependentRowClassName}>
-          <div>
-            <div className="lbl">{t("settings.notifications.timing")}</div>
-            <div className="desc">{t("settings.notifications.timingDescription")}</div>
-          </div>
-          <div className="ctrl">
-            <SettingsSelect
-              ariaLabel={t("settings.notifications.timing")}
-              value={driftAlertDelayValueFromSeconds(driftAlertDelaySeconds)}
-              options={driftAlertDelayOptions}
-              disabled={!driftAlertsEnabled}
-              onChange={(value) => onDriftAlertDelaySecondsChange(driftAlertDelaySecondsFromValue(value))}
-            />
-          </div>
-        </div>
-        <div data-setting-id="settings.notifications.macosNotification" className={dependentRowClassName}>
-          <div>
-            <div className="lbl">{t(hostPlatform === "windows"
-              ? "settings.notifications.windowsNotification"
-              : "settings.notifications.macosNotification")}</div>
-            <div className="desc">{t(hostPlatform === "windows"
-              ? "settings.notifications.windowsNotificationDescription"
-              : "settings.notifications.macosNotificationDescription")}</div>
-            {notificationPermissionDenied ? (
-              <>
-                <p className="capture-recency capture-recency--error" role="alert">{t(hostPlatform === "windows"
-                  ? "settings.notifications.windowsNotificationDenied"
-                  : "settings.notifications.macosNotificationDenied")}</p>
-                <button type="button" className="settings-inline-link" onClick={() => void openNotificationSettings()}>
-                  {t(hostPlatform === "windows"
-                    ? "settings.permissions.openSystemSettingsWindows"
-                    : "settings.permissions.openSystemSettings")} <span aria-hidden="true">→</span>
-                </button>
-              </>
-            ) : null}
-          </div>
-          <div className="ctrl">
-            <Toggle
-              checked={macosNotificationActive}
-              disabled={!driftAlertsEnabled}
-              onChange={handleMacosNotificationChange}
-              ariaLabel={t(hostPlatform === "windows"
-                ? "settings.notifications.toggleWindowsNotification"
-                : "settings.notifications.toggleMacosNotification")}
-            />
-          </div>
-        </div>
+        {driftAlertsEnabled || revealInactiveAlerts ? (
+          <>
+            <div data-setting-id="settings.notifications.timing" className={dependentRowClassName}>
+              <div>
+                <div className="lbl">{t("settings.notifications.timing")}</div>
+                <div className="desc">{t("settings.notifications.timingDescription")}</div>
+              </div>
+              <div className="ctrl">
+                <SettingsSelect
+                  ariaLabel={t("settings.notifications.timing")}
+                  value={driftAlertDelayValueFromSeconds(driftAlertDelaySeconds)}
+                  options={driftAlertDelayOptions}
+                  disabled={!driftAlertsEnabled}
+                  onChange={(value) => onDriftAlertDelaySecondsChange(driftAlertDelaySecondsFromValue(value))}
+                />
+              </div>
+            </div>
+            <div data-setting-id="settings.notifications.macosNotification" className={dependentRowClassName}>
+              <div>
+                <div className="lbl">{t(hostPlatform === "windows"
+                  ? "settings.notifications.windowsNotification"
+                  : "settings.notifications.macosNotification")}</div>
+                <div className="desc">{t(hostPlatform === "windows"
+                  ? "settings.notifications.windowsNotificationDescription"
+                  : "settings.notifications.macosNotificationDescription")}</div>
+                {notificationPermissionDenied ? (
+                  <>
+                    <p className="capture-recency capture-recency--error" role="alert">{t(hostPlatform === "windows"
+                      ? "settings.notifications.windowsNotificationDenied"
+                      : "settings.notifications.macosNotificationDenied")}</p>
+                    <button type="button" className="settings-inline-link" onClick={() => void openNotificationSettings()}>
+                      {t(hostPlatform === "windows"
+                        ? "settings.permissions.openSystemSettingsWindows"
+                        : "settings.permissions.openSystemSettings")} <span aria-hidden="true">→</span>
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              <div className="ctrl">
+                <Toggle
+                  checked={macosNotificationActive}
+                  disabled={!driftAlertsEnabled}
+                  onChange={handleMacosNotificationChange}
+                  ariaLabel={t(hostPlatform === "windows"
+                    ? "settings.notifications.toggleWindowsNotification"
+                    : "settings.notifications.toggleMacosNotification")}
+                />
+              </div>
+            </div>
+          </>
+        ) : null}
         <DriftAlarmCopySettings
           hostPlatform={hostPlatform}
           value={driftAlarmCopy}
@@ -282,34 +291,38 @@ export function NotificationsSettingsSection({
             />
           </div>
         </div>
-        <div data-setting-id="settings.quietHours.start" className={quietHoursRowClassName}>
-          <label>
-            <div className="lbl">{t("settings.quietHours.start")}</div>
-          </label>
-          <div className="ctrl">
-            <SettingsSelect
-              ariaLabel={t("settings.quietHours.start")}
-              value={quietHoursMinuteToValue(quietHours.startMinute)}
-              options={quietHoursOptions}
-              disabled={!quietHours.enabled}
-              onChange={(value) => updateQuietHours({ startMinute: quietHoursValueToMinute(value, quietHours.startMinute) })}
-            />
-          </div>
-        </div>
-        <div data-setting-id="settings.quietHours.end" className={quietHoursRowClassName}>
-          <label>
-            <div className="lbl">{t("settings.quietHours.end")}</div>
-          </label>
-          <div className="ctrl">
-            <SettingsSelect
-              ariaLabel={t("settings.quietHours.end")}
-              value={quietHoursMinuteToValue(quietHours.endMinute)}
-              options={quietHoursOptions}
-              disabled={!quietHours.enabled}
-              onChange={(value) => updateQuietHours({ endMinute: quietHoursValueToMinute(value, quietHours.endMinute) })}
-            />
-          </div>
-        </div>
+        {quietHours.enabled ? (
+          <>
+            <div data-setting-id="settings.quietHours.start" className="settings-row">
+              <label>
+                <div className="lbl">{t("settings.quietHours.start")}</div>
+              </label>
+              <div className="ctrl">
+                <SettingsSelect
+                  ariaLabel={t("settings.quietHours.start")}
+                  value={quietHoursMinuteToValue(quietHours.startMinute)}
+                  options={quietHoursOptions}
+                  disabled={!quietHours.enabled}
+                  onChange={(value) => updateQuietHours({ startMinute: quietHoursValueToMinute(value, quietHours.startMinute) })}
+                />
+              </div>
+            </div>
+            <div data-setting-id="settings.quietHours.end" className="settings-row">
+              <label>
+                <div className="lbl">{t("settings.quietHours.end")}</div>
+              </label>
+              <div className="ctrl">
+                <SettingsSelect
+                  ariaLabel={t("settings.quietHours.end")}
+                  value={quietHoursMinuteToValue(quietHours.endMinute)}
+                  options={quietHoursOptions}
+                  disabled={!quietHours.enabled}
+                  onChange={(value) => updateQuietHours({ endMinute: quietHoursValueToMinute(value, quietHours.endMinute) })}
+                />
+              </div>
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );

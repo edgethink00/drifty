@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsSearch } from "./SettingsSearch";
 import { SettingsSearchDestination, SettingsSearchNavigatorBridge, SettingsSearchProvider } from "./SettingsSearchContext";
@@ -173,6 +173,42 @@ describe("settings search", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Privacy" }).getAttribute("aria-expanded")).toBe("true"));
     expect(changeSetting).not.toHaveBeenCalled();
   });
+  it.each([undefined, 0])("keeps repeated search focused after the highlight expires and restores the original tabindex %s on blur", async (originalTabIndex) => {
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
+    function Harness() {
+      const [section, setSection] = useState<SettingsSection>("general");
+      return <SettingsSearchProvider activeSection={section} availability={publicAvailability} onNavigate={(entry) => setSection(entry.section)}>
+        <SettingsSearch><nav /></SettingsSearch>
+        <SettingsSearchDestination>{section === "privacy" ?
+          <div data-setting-id="settings.privacy.productAnalyticsTitle" tabIndex={originalTabIndex}>Usage statistics <button>Next control</button></div> : null}
+        </SettingsSearchDestination>
+      </SettingsSearchProvider>;
+    }
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      render(<Harness />);
+      const input = screen.getByRole("combobox");
+      fireEvent.change(input, { target: { value: "PostHog" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      const row = document.querySelector<HTMLElement>('[data-setting-id="settings.privacy.productAnalyticsTitle"]')!;
+      expect(document.activeElement).toBe(row);
+      fireEvent.change(input, { target: { value: "PostHog" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(document.activeElement).toBe(row);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2200); });
+      expect(row.classList.contains("settings-search-target")).toBe(false);
+      expect(document.activeElement).toBe(row);
+      expect(row.getAttribute("tabindex")).toBe(originalTabIndex === undefined ? "-1" : "0");
+      act(() => screen.getByRole("button", { name: "Next control" }).focus());
+      expect(row.getAttribute("tabindex")).toBe(originalTabIndex === undefined ? null : "0");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("unfolds the AI data sending card when search lands on it, without changing any setting", async () => {
     window.localStorage.setItem("drifty.aiPrivacyRequestSettings.v1", JSON.stringify({
       version: 1,

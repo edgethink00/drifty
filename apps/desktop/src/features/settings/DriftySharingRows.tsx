@@ -7,6 +7,8 @@ import {
   readProductAnalyticsEnabled,
   writeProductAnalyticsEnabled,
 } from "../../lib/analytics/productAnalyticsPreference";
+import { CollapsiblePanel } from "./CollapsiblePanel";
+import { useSettingsSearch } from "./SettingsSearchContext";
 import { useLocalization } from "../localization/LocalizationContext";
 
 function ExternalLinkIcon() {
@@ -17,15 +19,18 @@ function ExternalLinkIcon() {
   );
 }
 
-/**
- * The rows of the "data shared with Drifty" group: the one switch the user owns, then
- * one read-only statement of what is public, which also carries the policy link. The
- * statement is a full row with its own title, so a claim never reads as a control that
- * is missing its switch.
- */
+/** Compact footer entry: sharing details and the existing analytics preference.
+ * Opening or closing the explanation never changes the saved transmission choice. */
 export function DriftySharingRows() {
   const { effectiveLanguage, t } = useLocalization();
   const analyticsDescriptionId = useId();
+  const panelId = useId();
+  const buttonId = useId();
+  const { request } = useSettingsSearch();
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (request?.entry.reveal === "privacy-sharing") setExpanded(true);
+  }, [request]);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(readProductAnalyticsEnabled);
   const [policyOpenFailed, setPolicyOpenFailed] = useState(false);
   const policyUrl = effectiveLanguage === "ko" ? "https://drifty.so/ko/privacy/" : "https://drifty.so/privacy/";
@@ -53,34 +58,38 @@ export function DriftySharingRows() {
   }
 
   return (
-    <>
-      <div data-setting-id="settings.privacy.productAnalyticsTitle" className="settings-row">
-        <div>
-          <div className="lbl">{t("settings.privacy.productAnalyticsTitle")}</div>
-          <div className="desc" id={analyticsDescriptionId}>{t("settings.privacy.productAnalyticsDetails")}</div>
-        </div>
-        <div className="ctrl">
-          <Toggle
-            ariaDescribedBy={analyticsDescriptionId}
-            ariaLabel={t("settings.privacy.productAnalyticsTitle")}
-            checked={analyticsEnabled}
-            onChange={(next) => setAnalyticsEnabled(writeProductAnalyticsEnabled(next))}
-          />
-        </div>
+    <section className="privacy-sharing-details" data-setting-id="settings.privacy.driftySharing">
+      <div className="privacy-sharing-details__links">
+        <button type="button" className="settings-inline-link" aria-expanded={expanded} aria-controls={panelId} id={buttonId} onClick={() => setExpanded((current) => !current)}>
+          {t("settings.privacy.sharingDetails")}
+        </button>
+        <a className="privacy-policy-link" href={policyUrl} target="_blank" rel="noreferrer" onClick={(event) => void openPolicy(event)}>
+          {t("settings.privacy.policy")}<ExternalLinkIcon />
+        </a>
       </div>
-      <div data-setting-id="settings.privacy.publicScope" className="settings-row">
-        <div>
-          <div className="lbl">{t("settings.privacy.rawTitle")}</div>
-          <div className="desc">{t("settings.privacy.cloudDescription")}</div>
-          {policyOpenFailed ? <p className="desc" role="alert">{t("settings.privacy.policyOpenFailed")}</p> : null}
+      {policyOpenFailed ? <p className="desc" role="alert">{t("settings.privacy.policyOpenFailed")}</p> : null}
+      <CollapsiblePanel expanded={expanded} id={panelId} labelledBy={buttonId} contentClassName="privacy-sharing-details__body">
+        <div data-setting-id="settings.privacy.productAnalyticsTitle" className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.privacy.productAnalyticsTitle")}</div>
+            <div className="desc" id={analyticsDescriptionId}>{t("settings.privacy.productAnalyticsDetails")}</div>
+          </div>
+          <div className="ctrl">
+            <Toggle
+              ariaDescribedBy={analyticsDescriptionId}
+              ariaLabel={t("settings.privacy.productAnalyticsTitle")}
+              checked={analyticsEnabled}
+              onChange={(next) => setAnalyticsEnabled(writeProductAnalyticsEnabled(next))}
+            />
+          </div>
         </div>
-        <div className="ctrl">
-          <a className="settings-btn privacy-policy-link" href={policyUrl} target="_blank" rel="noreferrer" onClick={(event) => void openPolicy(event)}>
-            {t("settings.privacy.policy")}
-            <ExternalLinkIcon />
-          </a>
+        <div data-setting-id="settings.privacy.publicScope" className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.privacy.rawTitle")}</div>
+            <div className="desc">{t("settings.privacy.cloudDescription")}</div>
+          </div>
         </div>
-      </div>
-    </>
+      </CollapsiblePanel>
+    </section>
   );
 }

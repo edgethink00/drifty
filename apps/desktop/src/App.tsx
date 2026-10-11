@@ -11294,10 +11294,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 )}
                 {settingsSection === "privacy" && (
                   <PrivacySettingsSection
-                    databasePath={status?.databasePath}
                     deviceSyncEnabled={deviceSyncActive}
                     onHistoryDeleted={handleHistoryRangeDeleted}
-                    todaySessionCount={segments.length}
                   />
                 )}
                 {settingsSection === "developer" && <DeveloperSettingsSection />}

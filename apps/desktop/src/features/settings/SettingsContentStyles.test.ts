@@ -403,7 +403,7 @@ describe("Settings content styles", () => {
     expect(privacySource).toContain("<AiDataSendingRows");
   });
 
-  it("builds Privacy from the same flat blocks as General, with the AI group as its one folded card", () => {
+  it("builds Privacy from the same flat blocks as General, with the AI card and sharing details in the footer", () => {
     const privacySource = readFileSync("src/features/settings/PrivacySettingsSection.tsx", "utf8");
     const privacyRowSources = [
       "AiPrivacyReview.tsx",
@@ -411,10 +411,10 @@ describe("Settings content styles", () => {
       "DriftySharingRows.tsx",
     ].map((file) => readFileSync("src/features/settings/" + file, "utf8"));
 
-    // The page title, Drifty sharing and data on this device are settings-blocks with a title and
-    // direct-child rows. The AI group is the only card and it is folded.
-    expect(privacySource.match(/<div className="settings-block"/g)).toHaveLength(3);
-    expect(privacySource.match(/<h3>/g)).toHaveLength(3);
+    // App exclusions and local deletion remain flat blocks. The AI card stays folded;
+    // sharing details now have a compact footer entry.
+    expect(privacySource.match(/<div className="settings-block"/g)).toHaveLength(2);
+    expect(privacySource.match(/<h3>/g)).toHaveLength(2);
     expect(privacySource.match(/<SettingsCollapsibleCard/g)).toHaveLength(1);
     expect(privacySource).toContain("<AiDataSendingRows");
     // The folded header carries its title and subtitle only. A state badge there would have to

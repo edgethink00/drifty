@@ -77,7 +77,7 @@ describe("PermissionsSettingsSection", () => {
 
     const settingsButton = await screen.findByRole("button", { name: /^Open Windows Settings$/ });
     expect(screen.queryByRole("button", { name: /^Open System Settings$/ })).toBeNull();
-    expect(screen.getByText(/Windows allows Drifty notifications by default/)).toBeTruthy();
+    expect(screen.getByText(/No separate permission is needed.+Windows Settings/)).toBeTruthy();
     fireEvent.click(settingsButton);
     await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
   });
@@ -103,7 +103,7 @@ describe("PermissionsSettingsSection", () => {
     // so the row neither asks it nor shows Enabled/Not enabled.
     const notificationRow = screen.getByText("Notifications").closest(".settings-permission-row");
     expect(notificationRow?.querySelector(".settings-permission-status")).toBeNull();
-    expect(notificationRow?.textContent).toContain("macOS allows Drifty notifications by default");
+    expect(notificationRow?.textContent).toContain("No separate permission is needed.");
     expect(isPermissionGranted).not.toHaveBeenCalled();
     expect(requestPermission).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /^Allow notifications$/ })).toBeNull();

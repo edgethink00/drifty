@@ -67,18 +67,28 @@ export function SettingsSearchDestination({ children }: { readonly children: Rea
   const { request, consume } = useSettingsSearch();
   const rootRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<{ node: HTMLElement; tabIndex: string | null } | null>(null);
+  const originalTabIndexes = useRef(new WeakMap<HTMLElement, string | null>());
   const [highlight, setHighlight] = useState<{ node: HTMLElement; tabIndex: string | null } | null>(null);
   useEffect(() => {
     if (!highlight) return;
     const { node, tabIndex } = highlight;
+    const tabIndexes = originalTabIndexes.current;
     node.setAttribute("tabindex", "-1");
     node.classList.add("settings-search-target");
     const timer = window.setTimeout(() => { highlightRef.current = null; setHighlight(null); }, 2200);
     return () => {
       window.clearTimeout(timer);
       node.classList.remove("settings-search-target");
-      if (tabIndex === null) node.removeAttribute("tabindex");
-      else node.setAttribute("tabindex", tabIndex);
+      const restoreTabIndex = () => {
+        if (tabIndex === null) node.removeAttribute("tabindex");
+        else node.setAttribute("tabindex", tabIndex);
+        tabIndexes.delete(node);
+      };
+      // Removing tabindex from the focused row blurs it in Chromium. Keep the
+      // temporary focus target until the user leaves, including repeat searches.
+      if (tabIndex === null && document.activeElement === node) {
+        node.addEventListener("blur", restoreTabIndex, { once: true });
+      } else restoreTabIndex();
     };
   }, [highlight]);
 
@@ -102,12 +112,16 @@ export function SettingsSearchDestination({ children }: { readonly children: Rea
           .find((node) => node.dataset.settingId === request.entry.id);
         if (!target || !visible(target)) return;
         if (request.entry.aiProvider && target.querySelector('.collapsible-panel[aria-hidden="true"]')) return;
-        const tabIndex = highlightRef.current?.node === target ? highlightRef.current.tabIndex : target.getAttribute("tabindex");
+        const tabIndex = originalTabIndexes.current.has(target)
+          ? originalTabIndexes.current.get(target)!
+          : target.getAttribute("tabindex");
+        originalTabIndexes.current.set(target, tabIndex);
         target.setAttribute("tabindex", "-1");
         target.focus({ preventScroll: true });
         if (document.activeElement !== target) {
           if (tabIndex === null) target.removeAttribute("tabindex");
           else target.setAttribute("tabindex", tabIndex);
+          originalTabIndexes.current.delete(target);
           return;
         }
         observer.disconnect();

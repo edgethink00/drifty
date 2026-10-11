@@ -31,22 +31,14 @@
   padding: 0.72rem 0;
 }
 
-.privacy-policy-link {
-  color: var(--text);
-  gap: 0.4rem;
-  text-decoration: none;
-}
+/* Document links stay quiet at the foot of the page; details are opened on demand. */
+.privacy-sharing-details { padding: 0 0.5rem; }
+.privacy-sharing-details__links { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 1rem; }
+.privacy-sharing-details__links .settings-inline-link,
+.privacy-policy-link { color: var(--text-soft); font-size: 0.75rem; text-decoration: underline; text-underline-offset: 3px; }
+.privacy-policy-link { display: inline-flex; align-items: center; gap: 0.3rem; }
+.privacy-policy-link svg { display: block; height: 0.75rem; width: 0.75rem; }
+.privacy-sharing-details__body { margin-top: 0.75rem; }
 
-.privacy-policy-link svg {
-  display: block;
-  height: 0.85rem;
-  width: 0.85rem;
-}
-
-/* A long absolute path must not push the row wider than the panel. */
-.settings-section--privacy .ctrl--path {
-  max-width: 28rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.privacy-sharing-details__links .settings-inline-link { margin-block-start: 0; }
+.privacy-sharing-details__body > .settings-row { border-top: 0; padding: 0.72rem 1rem; }
