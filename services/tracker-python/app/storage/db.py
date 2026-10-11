@@ -3018,7 +3018,7 @@ class TrackerDatabase:
                         ai_result = excluded.ai_result,
                         stale = excluded.stale,
                         classification_rule_id = excluded.classification_rule_id
-                    WHERE activity_classifications.source NOT IN ('manual', 'ai_review')
+                    WHERE activity_classifications.source != 'manual'
                     """,
                     (
                         segment_id,
