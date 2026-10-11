@@ -231,9 +231,12 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
         return Ok(());
     }
     #[cfg(target_os = "windows")]
-    if !super::pet_mode::pet_native_thread_is_current(window)? {
+    {
+        // The transaction already checks the HWND's owner thread. A separate
+        // check here and recursive refresh each query the runtime's window
+        // handle again, adding main-thread round trips on every monitor tick.
         return super::pet_mode::run_pet_native_transaction(window, "pet_hit_region::refresh_windows", |window| {
-            refresh_pet_hit_region_for_window(&window)
+            refresh_windows_pet_hit_region_on_native_thread(&window)
         });
     }
     #[cfg(target_os = "macos")]
@@ -252,56 +255,6 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
                 .map_err(|_| "Pet Mode hit-region refresh timed out".to_string())?;
         }
         return refresh_pet_hit_region_on_main_thread(window);
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let pointer = super::pet_cursor_windows::cursor_position()?;
-        let position = window.outer_position().map_err(|error| error.to_string())?;
-        let dpi = super::pet_cursor_windows::window_scale_factor(window)?;
-        let scene_rect = current_pet_render_geometry().physical_scene_rect(dpi);
-        let (inside, mask_revision, mask_span_count) = HIT_REGION
-            .lock()
-            .map(|state| {
-                (
-                    hit_test_physical(
-                        &state,
-                        pointer.x - position.x as f64,
-                        pointer.y - position.y as f64,
-                        scene_rect,
-                    ),
-                    state.revision,
-                    state.spans.len() / 3,
-                )
-            })
-            .unwrap_or((false, 0, 0));
-        let button_down = windows_mouse_button_down();
-        let interactive = resolve_windows_press_interaction(inside, button_down);
-        let ignored_cursor_events_before_apply =
-            super::windows_overlay::windows_overlay_ignores_cursor_events(window).ok();
-        let result = set_windows_pet_interactive(window, interactive);
-        let sample = WindowsPetInputSample {
-            sampled_at_ms: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-            scale_factor: dpi,
-            window_client_x: (pointer.x - position.x as f64) / dpi,
-            window_client_y: (pointer.y - position.y as f64) / dpi,
-            mask_revision,
-            mask_span_count,
-            mask_inside: inside,
-            button_down,
-            interactive,
-            ignored_cursor_events_before_apply,
-            ignored_cursor_events:
-                super::windows_overlay::windows_overlay_ignores_cursor_events(window).ok(),
-            policy_applied: result.is_ok(),
-        };
-        WINDOWS_INPUT_DIAGNOSTICS
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .observe(sample);
-        result
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -329,6 +282,63 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
         }
         result
     }
+}
+
+#[cfg(target_os = "windows")]
+fn refresh_windows_pet_hit_region_on_native_thread(window: &WebviewWindow) -> Result<(), String> {
+    // Geometry can start changing after the caller queued the transaction.
+    // Preserve the second guard that the recursive refresh used to perform.
+    if pet_geometry_transition_active() {
+        HIT_REGION_NATIVE_REFRESH_PENDING.store(true, Ordering::Release);
+        return Ok(());
+    }
+    let pointer = super::pet_cursor_windows::cursor_position()?;
+    let position = window.outer_position().map_err(|error| error.to_string())?;
+    let dpi = super::pet_cursor_windows::window_scale_factor(window)?;
+    let scene_rect = current_pet_render_geometry().physical_scene_rect(dpi);
+    let (inside, mask_revision, mask_span_count) = HIT_REGION
+        .lock()
+        .map(|state| {
+            (
+                hit_test_physical(
+                    &state,
+                    pointer.x - position.x as f64,
+                    pointer.y - position.y as f64,
+                    scene_rect,
+                ),
+                state.revision,
+                state.spans.len() / 3,
+            )
+        })
+        .unwrap_or((false, 0, 0));
+    let button_down = windows_mouse_button_down();
+    let interactive = resolve_windows_press_interaction(inside, button_down);
+    let ignored_cursor_events_before_apply =
+        super::windows_overlay::windows_overlay_ignores_cursor_events(window).ok();
+    let result = set_windows_pet_interactive(window, interactive);
+    let sample = WindowsPetInputSample {
+        sampled_at_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
+        scale_factor: dpi,
+        window_client_x: (pointer.x - position.x as f64) / dpi,
+        window_client_y: (pointer.y - position.y as f64) / dpi,
+        mask_revision,
+        mask_span_count,
+        mask_inside: inside,
+        button_down,
+        interactive,
+        ignored_cursor_events_before_apply,
+        ignored_cursor_events:
+            super::windows_overlay::windows_overlay_ignores_cursor_events(window).ok(),
+        policy_applied: result.is_ok(),
+    };
+    WINDOWS_INPUT_DIAGNOSTICS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .observe(sample);
+    result
 }
 
 #[cfg(target_os = "windows")]
