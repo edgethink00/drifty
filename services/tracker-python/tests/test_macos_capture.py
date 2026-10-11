@@ -239,6 +239,7 @@ class NativeSnapshotTests(unittest.TestCase):
             ax_window_title='QA - YouTube', match_state='matched', browser_automation_status='granted',
         ))
         self.mock('_onscreen_window_rows', return_value=[])
+        self.wake = self.mock('request_accessibility_tree', return_value=True)
         self.mock('apply_native_chatgpt_session_title', side_effect=lambda app, bundle, title, pid, runner: title)
         self.adaptive = self.mock('adaptive_content_context_for_capture', return_value=None)
         self.memory = YouTubeVideoIdMemory()
@@ -290,9 +291,11 @@ class NativeSnapshotTests(unittest.TestCase):
                 workspace.current_snapshot(False)
         capture.assert_not_called()
 
-    def test_safari_and_firefox_address_bar_capture_binds_page_clues_to_the_window_title(self):
+    def test_safari_and_firefox_family_address_bar_capture_binds_page_clues_to_the_window_title(self):
         self.mock('refine_safari_url', side_effect=lambda browser, *args: browser)
-        for app, bundle in (('Safari', 'com.apple.Safari'), ('Firefox', 'org.mozilla.firefox')):
+        for app, bundle in (('Safari', 'com.apple.Safari'), ('Firefox', 'org.mozilla.firefox'),
+                            ('Firefox Developer Edition', 'org.mozilla.firefoxdeveloperedition'),
+                            ('Zen', 'app.zen-browser.zen'), ('Floorp', 'app.floorp.Floorp')):
             with self.subTest(app=app):
                 self.identity.return_value = FrontmostApplication(app, bundle, 42)
                 self.title.return_value = (app, bundle, 'Course page', 42)
@@ -307,10 +310,30 @@ class NativeSnapshotTests(unittest.TestCase):
                 self.assertEqual(capture.call_args.kwargs['page_url'], 'https://example.org/course/')
                 self.assertEqual(capture.call_args.kwargs['page_title'], 'Course page')
 
+    def test_firefox_family_tree_is_requested_before_its_address_bar_read(self):
+        order = []
+        metadata = self.browser.return_value
+        self.wake.side_effect = lambda pid: order.append(('tree', pid))
+        self.browser.side_effect = lambda app, *args: order.append(('address', app)) or metadata
+        for app, bundle in (('Firefox', 'org.mozilla.firefox'), ('Firefox Developer Edition', 'org.mozilla.firefoxdeveloperedition'),
+                            ('Zen', 'app.zen-browser.zen'), ('Floorp', 'app.floorp.Floorp')):
+            with self.subTest(app=app):
+                order.clear()
+                self.identity.return_value = FrontmostApplication(app, bundle, 42)
+                self.title.return_value = (app, bundle, 'Course page', 42)
+                workspace.current_snapshot(False)
+                self.assertEqual(order, [('tree', 42), ('address', app)])
+        order.clear()
+        self.identity.return_value = self.native
+        self.title.return_value = self.front
+        workspace.current_snapshot(False)
+        self.assertEqual(order, [('address', 'Google Chrome')])
+
     def test_other_address_bar_browsers_and_titleless_windows_cannot_start_body_capture(self):
         capture = self.mock('capture_browser_content', return_value=None)
         self.mock('refine_safari_url', side_effect=lambda browser, *args: browser)
-        for app, bundle, title in (('Zen', 'app.zen-browser.zen', 'Course page'), ('Safari', 'com.apple.Safari', None)):
+        for app, bundle, title in (('Safari Technology Preview', 'com.apple.SafariTechnologyPreview', 'Course page'),
+                                   ('Safari', 'com.apple.Safari', None)):
             with self.subTest(app=app):
                 self.identity.return_value = FrontmostApplication(app, bundle, 42)
                 self.title.return_value = (app, bundle, 'Course page', 42)

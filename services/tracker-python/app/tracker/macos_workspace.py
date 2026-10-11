@@ -13,6 +13,7 @@ from typing import Final, Literal
 from app.permissions.accessibility import read_front_window_title
 from app.tracker.browser_content import ADDRESS_BAR_CONTENT_BUNDLES, capture_browser_content
 from app.tracker.browser_content_policy import policy_snapshot
+from app.tracker.macos_accessibility_tree import FIREFOX_FAMILY_BUNDLES, request_accessibility_tree
 from app.tracker.capture_contract import (  # re-exported: this module was the
     FrontmostCaptureSource,  # original home of the capture contract, and callers
     Snapshot,  # still import it from here.
@@ -55,6 +56,7 @@ from app.tracker.macos_system_activity import (
 )
 from app.tracker.youtube_video_recovery import YouTubeVideoIdMemory
 from app.tracker.safari_url import refine_safari_url
+from app.tracker.zen_url import refine_zen_url
 
 # Recovers a video id for the occasional YouTube capture that lands mid SPA-navigation with
 # the video title but a bare base URL (see youtube_video_recovery). Capture runs on a single
@@ -328,8 +330,13 @@ def _capture_snapshot(
             browser = BrowserMetadata()
         browser_history = browser
     else:
+        # A Firefox-family tree that is still asleep exposes only title-bar
+        # buttons, so the address-bar read would fall back to history titles.
+        if pid is not None and bundle_id in FIREFOX_FAMILY_BUNDLES:
+            request_accessibility_tree(pid)
         browser = _browser_metadata(app_name, checked_osascript) if native else _browser_metadata(app_name)
         browser = refine_safari_url(browser, bundle_id, pid, checked_command if native else _run_command)
+        browser = refine_zen_url(browser, bundle_id, pid, checked_command if native else _run_command)
         browser_history = None
 
     check_current()
@@ -394,9 +401,9 @@ def _capture_snapshot(
 
     check_current()
     browser_content_context = None
-    # Safari's and Firefox's address bar paths never script the browser; the
-    # native helper binds the focused window's exact title and page URL
-    # through accessibility instead of a scripted tab.
+    # Safari's and the Firefox family's address bar paths never script the
+    # browser; the native helper binds the focused window's exact title and
+    # page URL through accessibility instead of a scripted tab.
     address_bar_content = (bundle_id in ADDRESS_BAR_CONTENT_BUNDLES and site_source == "accessibility-address-bar"
                            and bool(browser.ax_window_title) and (browser.site_url or "").startswith(("http://", "https://")))
     if native is not None and (site_source == "applescript" or address_bar_content) and pid is not None:

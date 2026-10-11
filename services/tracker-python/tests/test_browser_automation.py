@@ -137,12 +137,18 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
             script.index("my scanToolbarFirst(targetWindow)"),
         )
 
-    def test_accessibility_address_bar_script_has_zen_specific_navigation_path(self) -> None:
+    def test_zen_reads_its_address_bar_by_dom_id_then_its_older_layout_without_the_generic_walk(self) -> None:
         script = accessibility_address_bar_script("Zen")
 
+        # Zen 1.23 nests #nav-bar inside #navigator-toolbox; 1.22 kept fixed positions.
+        self.assertIn('whose value of attribute "AXDOMIdentifier" is "navigator-toolbox"', script)
+        self.assertLess(
+            script.index("my scanKnownFirefoxAddressBar(targetWindow)"),
+            script.index("my scanKnownZenAddressBar(targetWindow)"),
+        )
         self.assertIn("set addressToolbar to toolbar 1 of addressContainer", script)
-        self.assertIn("value of combo box 1 of addressContainer", script)
-        self.assertNotIn("scanToolbarFirst", script)
+        self.assertNotIn("my scanToolbarFirst(targetWindow)", script)
+        self.assertNotIn("my scanElement(targetWindow)", script)
         self.assertNotIn("entire contents", script)
 
     def test_accessibility_address_bar_script_has_whale_specific_toolbar_path(self) -> None:

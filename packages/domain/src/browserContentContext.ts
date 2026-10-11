@@ -49,7 +49,11 @@ export function normalizeBrowserContentClues(value: unknown): BrowserContentClue
   };
 }
 
-const ADDRESS_BAR_CONTENT_BUNDLES: ReadonlySet<string> = new Set(["com.apple.Safari", "org.mozilla.firefox"]);
+// Firefox Developer Edition, Zen and Floorp share Firefox's identity proof.
+// Bundle IDs are matched exactly; Floorp's carries a capital letter.
+const ADDRESS_BAR_CONTENT_BUNDLES: ReadonlySet<string> = new Set([
+  "com.apple.Safari", "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp",
+]);
 
 /** A historical observation must belong to this segment, never a reused page cache. */
 export function browserContentCluesForSegment(segment: {
@@ -60,8 +64,9 @@ export function browserContentCluesForSegment(segment: {
   readonly bundleId?: string | null; readonly windowTitle?: string | null;
 }): BrowserContentClues | undefined {
   const c = segment.browserContentContext;
-  // Safari and Firefox are read from their address bars, never scripted; the
-  // native helper binds the clues to the exact focused window title instead.
+  // Safari and the Firefox family are read from their address bars, never
+  // scripted; the native helper binds the clues to the exact focused window
+  // title instead.
   const addressBar = segment.siteSource === "accessibility-address-bar" && ADDRESS_BAR_CONTENT_BUNDLES.has(segment.bundleId ?? "");
   const pageTitle = addressBar ? segment.windowTitle : segment.siteTitle;
   if (!c || c.version !== 1 || segment.exclusionSource || (segment.siteSource !== "applescript" && !addressBar)

@@ -94,11 +94,15 @@ func chromiumFrontWindowNumber(_ rows: [(number: Int?, bounds: CGRect?)], matchi
 if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--browser-content" {
     final class Changes { var invalidated = false }
     func sample() -> [String: Any]? {
-        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "com.apple.Safari", "org.mozilla.firefox"]
-        // Safari and Firefox expose no scripting window mode; they are admitted
-        // through their own accessibility identity below and never receive
-        // Apple Events.
-        let safari = CommandLine.arguments[3] == "com.apple.Safari", gecko = CommandLine.arguments[3] == "org.mozilla.firefox"
+        // Firefox Developer Edition, Zen and Floorp keep Firefox's private
+        // window-title label, so they share its identity proof. Bundle
+        // identifiers are compared exactly; Floorp's carries a capital letter.
+        let geckoBundles = ["org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp"]
+        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "com.apple.Safari"] + geckoBundles
+        // Safari and the Firefox family expose no scripting window mode; they
+        // are admitted through their own accessibility identity below and never
+        // receive Apple Events.
+        let safari = CommandLine.arguments[3] == "com.apple.Safari", gecko = geckoBundles.contains(CommandLine.arguments[3])
         let addressBar = safari || gecko
         guard let pid = Int32(CommandLine.arguments[2]), pid > 0,
               let milliseconds = Double(CommandLine.arguments[6]), milliseconds > 0,
@@ -290,8 +294,10 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // while the page's own document title (its web area description) never
         // carries it. Requiring the window title to equal the document title
         // rejects private windows in any language. Its private-session button
-        // is a second, removable signal. Permanent private browsing, which adds
-        // no title label, is not detected.
+        // is a second, removable signal; Firefox and Developer Edition also
+        // show it in permanent private browsing, which adds no title label.
+        // Zen shows no such button and Floorp none in permanent mode, so their
+        // permanent private browsing is not detected.
         func geckoIdentity() -> Identity? {
             guard let reference = attribute(application, "AXFocusedWindow"), CFGetTypeID(reference) == AXUIElementGetTypeID() else { return nil }
             let window = reference as! AXUIElement
@@ -653,15 +659,20 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--frontmost-ap
     }
 }
 
-// Safari's AX address field omits http://. System Events cannot coerce the
-// web area's CFURL, so read only that native attribute (never page contents).
-if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--safari-url" {
+// Safari's AX address field omits http://, and Zen's shows only the host
+// while it is not being edited. System Events cannot coerce the web area's
+// CFURL, so read only that native attribute (never page contents).
+if CommandLine.arguments.count == 3, ["--safari-url", "--gecko-url"].contains(CommandLine.arguments[1]) {
+    let gecko = CommandLine.arguments[1] == "--gecko-url"
+    let bundles = gecko
+        ? ["org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp"]
+        : ["com.apple.Safari", "com.apple.SafariTechnologyPreview"]
     func snapshot() -> [String: Any]? {
         guard let pid = Int32(CommandLine.arguments[2]), pid > 0,
               let running = NSWorkspace.shared.frontmostApplication,
               running.processIdentifier == pid,
               let bundle = running.bundleIdentifier,
-              ["com.apple.Safari", "com.apple.SafariTechnologyPreview"].contains(bundle) else { return nil }
+              bundles.contains(bundle) else { return nil }
         let app = AXUIElementCreateApplication(pid)
         let deadline = ProcessInfo.processInfo.systemUptime + 0.25
         func value(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
@@ -691,7 +702,18 @@ if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--safari-url" 
             guard kids.count <= 24 else { incomplete = true; return }
             for child in kids { walkURL(child, depth + 1) }
         }
-        walkURL(window, 0)
+        if gecko {
+            // Zen keeps every tab in its sidebar under #navigator-toolbox, so
+            // search only the tab panels, where the selected page lives.
+            guard let parts = value(window, kAXChildrenAttribute) as? [AXUIElement],
+                  let main = parts.first(where: { value($0, kAXRoleAttribute) as? String == "AXGroup" }),
+                  let sections = value(main, kAXChildrenAttribute) as? [AXUIElement],
+                  let panels = sections.first(where: { value($0, "AXDOMIdentifier") as? String == "tabbrowser-tabpanels" })
+            else { return nil }
+            walkURL(panels, 0)
+        } else {
+            walkURL(window, 0)
+        }
         guard !incomplete, areas.count == 1,
               let url = value(areas[0], "AXURL") as? URL,
               ["http", "https"].contains(url.scheme ?? ""),
@@ -729,7 +751,7 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--onscreen-win
 }
 
 guard CommandLine.arguments.count >= 2, let pid = Int32(CommandLine.arguments[1]) else {
-    fputs("usage: chatgpt_ax_helper <pid>|--onscreen-windows|--frontmost-app|--safari-url <pid>\n", stderr)
+    fputs("usage: chatgpt_ax_helper <pid>|--onscreen-windows|--frontmost-app|--safari-url <pid>|--gecko-url <pid>\n", stderr)
     exit(2)
 }
 let app = AXUIElementCreateApplication(pid)

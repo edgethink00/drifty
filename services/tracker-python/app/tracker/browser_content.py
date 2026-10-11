@@ -18,13 +18,15 @@ from typing import Any
 from urllib.parse import urlparse
 from app.tracker.browser_content_policy import policy_snapshot
 from app.tracker.macos_capture import CommandScope
+from app.tracker.macos_accessibility_tree import FIREFOX_FAMILY_BUNDLES
 
 from app.tracker.chatgpt_session import packaged_helper_path
 
 EXTENSION_ORIGIN = "chrome-extension://neihkehcijfcfplmfomahlimejiiledi/"
 # Read from the address bar instead of scripting; the helper binds their page
-# clues to the focused window's exact title through accessibility.
-ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari", "org.mozilla.firefox"})
+# clues to the focused window's exact title through accessibility. Firefox
+# Developer Edition, Zen and Floorp share Firefox's identity proof.
+ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari"}) | FIREFOX_FAMILY_BUNDLES
 BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi"}) | ADDRESS_BAR_CONTENT_BUNDLES
 MAX_MESSAGE_BYTES = 32768
 

@@ -29,7 +29,7 @@ AX_ADDRESS_BAR_BROWSER_APPS: Final = CHROMIUM_BROWSER_APPS | {
 
 AX_NO_PROCESS: Final = "AX_NO_PROCESS"
 # Firefox-family browsers whose address field is found by DOM id first.
-_FIREFOX_DOM_ADDRESS_BAR_APPS: Final = frozenset({"Firefox", "Firefox Developer Edition", "Floorp"})
+_FIREFOX_DOM_ADDRESS_BAR_APPS: Final = frozenset({"Firefox", "Firefox Developer Edition", "Floorp", "Zen"})
 AX_NO_FRONT_WINDOW: Final = "AX_NO_FRONT_WINDOW"
 AX_NO_ADDRESS_FIELD: Final = "AX_NO_ADDRESS_FIELD"
 
@@ -66,28 +66,6 @@ def is_accessibility_address_bar_browser_app(app_name: str | None) -> bool:
 
 def accessibility_address_bar_script(app_name: str) -> str:
     process_name = "firefox" if app_name == "Firefox Developer Edition" else app_name
-    if app_name == "Zen":
-        return f'''
-            tell application "System Events"
-              if not (exists process "{process_name}") then return "{AX_NO_PROCESS}"
-              tell process "{process_name}"
-                if not (exists front window) then return "{AX_NO_FRONT_WINDOW}"
-                set targetWindow to front window
-                set axTitle to name of targetWindow
-                try
-                  set addressContainer to UI element 1 of targetWindow
-                  set addressToolbar to toolbar 1 of addressContainer
-                  set addressContainer to UI element 1 of addressToolbar
-                  set addressContainer to UI element 2 of addressContainer
-                  set currentUrl to value of combo box 1 of addressContainer as text
-                  if currentUrl is "" or currentUrl is "missing value" then return "{AX_NO_ADDRESS_FIELD}"
-                  return currentUrl & linefeed & axTitle
-                on error
-                  return "{AX_NO_ADDRESS_FIELD}"
-                end try
-              end tell
-            end tell
-        '''
     if app_name in {"Safari", "Safari Technology Preview"}:
         return f'''
             tell application "System Events"
@@ -127,10 +105,18 @@ def accessibility_address_bar_script(app_name: str) -> str:
         known_address_probe = "my scanKnownOperaAddressBar(targetWindow)"
     elif app_name == "Whale":
         known_address_probe = "my scanKnownWhaleAddressBar(targetWindow)"
+    elif app_name == "Zen":
+        known_address_probe = "my scanKnownFirefoxAddressBar(targetWindow)\n            my scanKnownZenAddressBar(targetWindow)"
     elif app_name in _FIREFOX_DOM_ADDRESS_BAR_APPS:
         known_address_probe = "my scanKnownFirefoxAddressBar(targetWindow)"
     else:
         known_address_probe = "my scanKnownChromiumAddressBar(targetWindow)"
+    # Zen's tab sidebar makes the generic walk exceed the tracker timeout, so
+    # Zen reads only its known paths and otherwise fails closed.
+    generic_walk = "" if app_name == "Zen" else '''my scanToolbarFirst(targetWindow)
+            if foundAddress is false then
+              my scanElement(targetWindow)
+            end if'''
     main_window_selection = ""
     if is_chromium_browser_app(app_name):
         main_window_selection = '''
@@ -289,7 +275,14 @@ def accessibility_address_bar_script(app_name: str) -> str:
           if foundAddress is true then return
           tell application "System Events"
             try
-              set navBar to first toolbar of UI element 1 of theWindow whose value of attribute "AXDOMIdentifier" is "nav-bar"
+              set rootGroup to UI element 1 of theWindow
+              try
+                set navBar to first toolbar of rootGroup whose value of attribute "AXDOMIdentifier" is "nav-bar"
+              on error
+                -- Zen 1.23 nests #nav-bar inside #navigator-toolbox.
+                set toolbox to first UI element of rootGroup whose value of attribute "AXDOMIdentifier" is "navigator-toolbox"
+                set navBar to first toolbar of toolbox whose value of attribute "AXDOMIdentifier" is "nav-bar"
+              end try
               set urlbarGroup to first UI element of navBar whose value of attribute "AXDOMIdentifier" is "urlbar"
               -- The field sits one group below #urlbar; check both levels only.
               repeat with urlbarChild in UI elements of urlbarGroup
@@ -306,6 +299,21 @@ def accessibility_address_bar_script(app_name: str) -> str:
             end try
           end tell
         end scanKnownFirefoxAddressBar
+
+        -- Zen 1.22 kept its address field at fixed positions below the
+        -- window's first toolbar.
+        on scanKnownZenAddressBar(theWindow)
+          if foundAddress is true then return
+          tell application "System Events"
+            try
+              set addressContainer to UI element 1 of theWindow
+              set addressToolbar to toolbar 1 of addressContainer
+              set addressContainer to UI element 1 of addressToolbar
+              set addressContainer to UI element 2 of addressContainer
+              my considerAddressCandidate(combo box 1 of addressContainer)
+            end try
+          end tell
+        end scanKnownZenAddressBar
 
         on considerFirefoxAddressField(candidateField)
           tell application "System Events"
@@ -396,10 +404,7 @@ def accessibility_address_bar_script(app_name: str) -> str:
             set toolbarVisitedCount to 0
             set foundAddress to false
             {known_address_probe}
-            my scanToolbarFirst(targetWindow)
-            if foundAddress is false then
-              my scanElement(targetWindow)
-            end if
+            {generic_walk}
             if readableCount is 0 then return "{AX_NO_ADDRESS_FIELD}"
             return bestValue & linefeed & axTitle
           end tell

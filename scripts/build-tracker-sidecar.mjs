@@ -422,6 +422,15 @@ function assertMacosNativeHelperSmokeTest(path, target) {
   if (result.status !== 0 || result.stdout.trim() !== "null") {
     fail(`native Safari URL smoke test did not return null (exit ${result.status}): ${result.stdout}`);
   }
+  // Zen's selected-page URL uses the same nullable contract.
+  try {
+    result = run(path, ["--gecko-url", "0"], { capture: true, timeoutMs: 5_000 });
+  } catch (error) {
+    fail(`native Gecko URL smoke test could not run: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (result.status !== 0 || result.stdout.trim() !== "null") {
+    fail(`native Gecko URL smoke test did not return null (exit ${result.status}): ${result.stdout}`);
+  }
 }
 
 function assertSmokeTest(path) {

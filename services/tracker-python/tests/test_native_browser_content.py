@@ -39,7 +39,7 @@ class NativeBrowserContentTests(unittest.TestCase):
         run = Mock()
         with patch.dict("os.environ", {"DRIFTY_BROWSER_CONTENT_CONTEXT": "0"}):
             self.assertIsNone(capture_browser_content(**self.arguments, run_command=run))
-        for change in ({"timeout": 0}, {"pid": True}, {"pid": 0}, {"bundle_id": "app.zen-browser.zen"},
+        for change in ({"timeout": 0}, {"pid": True}, {"pid": 0}, {"bundle_id": "com.apple.SafariTechnologyPreview"},
                        {"page_url": "file:///tmp/page"}, {"page_url": "https://[bad"},
                        {"page_title": ""}, {"page_title": "x" * 501}):
             with self.subTest(change=change):
