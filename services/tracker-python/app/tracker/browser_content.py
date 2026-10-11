@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import stat
 import subprocess
@@ -15,7 +16,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from app.tracker.browser_content_policy import policy_snapshot
 from app.tracker.macos_capture import CommandScope
 from app.tracker.macos_accessibility_tree import FIREFOX_FAMILY_BUNDLES
@@ -29,6 +30,33 @@ EXTENSION_ORIGIN = "chrome-extension://neihkehcijfcfplmfomahlimejiiledi/"
 ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari"}) | FIREFOX_FAMILY_BUNDLES
 BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi"}) | ADDRESS_BAR_CONTENT_BUNDLES
 MAX_MESSAGE_BYTES = 32768
+# Message, mail, AI chat and document-editor sites, and sign-in/payment/account
+# paths, never yield page clues. The macOS helper (chatgpt_session_ax.swift)
+# applies the same list before it reads a page; Windows applies it here.
+# These are conservative exclusions, not a comprehensive sensitivity detector.
+CONTENT_EXCLUDED_HOSTS = (
+    "slack.com", "discord.com", "whatsapp.com", "telegram.org", "messenger.com", "mail.google.com",
+    "outlook.live.com", "outlook.office.com", "teams.microsoft.com", "chatgpt.com", "claude.ai",
+    "notion.so", "docs.google.com",
+)
+CONTENT_EXCLUDED_PATH = re.compile(
+    r"(?:^|/)(?:login|signin|sign-in|auth|oauth|checkout|billing|payment|account|profile|messages|inbox|chat)(?:/|$)",
+    re.IGNORECASE,
+)
+
+
+def content_excluded_url(url: str | None) -> bool:
+    """True when page clues must not be read for this page address."""
+    try:
+        parsed = urlparse(url or "")
+        host = (parsed.hostname or "").lower()
+    except ValueError:
+        return True
+    if not host:
+        return True
+    if any(host == excluded or host.endswith("." + excluded) for excluded in CONTENT_EXCLUDED_HOSTS):
+        return True
+    return bool(CONTENT_EXCLUDED_PATH.search(unquote(parsed.path or "")))
 
 
 def bridge_directory() -> Path:

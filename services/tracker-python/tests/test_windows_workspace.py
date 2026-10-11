@@ -1192,6 +1192,15 @@ class WindowsBrowserContentTests(unittest.TestCase):
         self.assertIsNone(capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader))
         self.assertEqual(len(calls), 1)
 
+    def test_message_mail_and_account_pages_are_never_read(self) -> None:
+        reader, calls = self._reader()
+        for url in ("https://mail.google.com/mail/u/0/#inbox", "https://app.slack.com/client/T1/C2",
+                    "https://example.org/login", "https://example.org/account/billing"):
+            snapshot = self._snapshot()
+            snapshot.site_url = url
+            self.assertIsNone(capture_windows_browser_content(snapshot, 44, timeout_seconds=0.9, clue_reader=reader), url)
+        self.assertEqual(calls, [])
+
     def test_foreground_capture_reads_clues_inside_its_remaining_budget(self) -> None:
         stable = ForegroundWindow(hwnd=100, title="Course - Chrome", pid=10)
         changed = ForegroundWindow(hwnd=100, title="Other - Chrome", pid=10)

@@ -11,7 +11,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.tracker.browser_content import capture_browser_content, normalize_clues, normalize_context
+from app.tracker.browser_content import (
+    CONTENT_EXCLUDED_HOSTS,
+    CONTENT_EXCLUDED_PATH,
+    capture_browser_content,
+    content_excluded_url,
+    normalize_clues,
+    normalize_context,
+)
 from app.tracker.browser_content_host import admitted_clues, browser_parent_pid, read_native, write_native
 from app.storage.adaptive_context_serialization import sanitized_raw_context_json
 
@@ -28,6 +35,25 @@ def fixture():
 
 
 class BrowserContentTests(unittest.TestCase):
+    def test_page_exclusions_match_the_macos_helper_exactly(self):
+        import re
+        swift = (Path(__file__).resolve().parents[1] / "app/tracker/chatgpt_session_ax.swift").read_text(encoding="utf-8")
+        hosts_line = next(line for line in swift.splitlines() if line.strip().startswith("let excluded = ["))
+        self.assertEqual(tuple(re.findall(r'"([^"]+)"', hosts_line)), CONTENT_EXCLUDED_HOSTS)
+        path_pattern = re.search(r'url\.path\.range\(of: #"(.+?)"#', swift).group(1)
+        self.assertEqual(path_pattern, CONTENT_EXCLUDED_PATH.pattern)
+
+    def test_message_mail_chat_editor_and_account_pages_are_excluded(self):
+        for url in ("https://mail.google.com/mail/u/0/#inbox", "https://app.slack.com/client/T1/C2",
+                    "https://teams.microsoft.com/v2/", "https://chatgpt.com/c/abc", "https://www.notion.so/page",
+                    "https://docs.google.com/document/d/1/edit", "https://example.org/login",
+                    "https://example.org/Account/settings", "https://shop.example/checkout/", "https://example.org/My%20x/inbox",
+                    "not a url", ""):
+            self.assertTrue(content_excluded_url(url), url)
+        for url in ("https://github.com/rust-lang/rust", "https://en.wikipedia.org/wiki/Authentication",
+                    "https://docs.python.org/3/library/asyncio.html", "https://notslack.com/", "https://example.org/accounting"):
+            self.assertFalse(content_excluded_url(url), url)
+
     def test_browser_parent_resolver_passes_own_pid_and_only_frozen_executable(self):
         helper = Path("/task/helper")
         executable = str(Path("/task/tracker"))

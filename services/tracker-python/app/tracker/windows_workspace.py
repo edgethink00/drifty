@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
-from app.tracker.browser_content import normalize_context
+from app.tracker.browser_content import content_excluded_url, normalize_context
 from app.tracker.browser_content_policy import policy_snapshot
 from app.text_safety import replace_lone_surrogates
 from app.tracker.capture_contract import Snapshot, utc_now_iso
@@ -373,7 +373,8 @@ def capture_windows_browser_content(
     window_title = snapshot.window_title
     if (os.environ.get("DRIFTY_BROWSER_CONTENT_CONTEXT") != "1" or timeout_seconds <= 0
             or snapshot.site_source != "windows-uia-document" or not snapshot.site_url
-            or not window_title or _EDGE_PRIVATE_TITLE_LABEL in window_title):
+            or not window_title or _EDGE_PRIVATE_TITLE_LABEL in window_title
+            or content_excluded_url(snapshot.site_url)):
         return None
     policy = policy_snapshot()
     if policy is None:
