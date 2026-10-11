@@ -142,7 +142,7 @@ describe("FlowChartView", () => {
     expect(toneDotRule).toContain("aspect-ratio: 1;");
   });
 
-  it("keeps the detail overflow quiet without flattening the color mode toggle", () => {
+  it("keeps the agent detail control quiet without flattening shared color mode controls", () => {
     const detailControlRule = cssRule(".flow-detail-select");
     const detailTriggerRule = cssRule(".flow-detail-select .settings-select-control__trigger");
     const detailMenuRule = cssRule(".flow-detail-select .settings-select-control__menu");
@@ -161,78 +161,14 @@ describe("FlowChartView", () => {
     expect(colorModeButtonRule).toContain("letter-spacing: 0.05em;");
   });
 
-  it("moves 3m through 6m chart density behind a compact duration-only menu", () => {
-    const onIntervalChange = vi.fn();
-    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={onIntervalChange} />);
+  it("shows color mode controls without a Flow detail menu", () => {
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} />);
 
-    expect(screen.queryByRole("button", { name: "3m" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "4m" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "5m" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "6m" })).toBeNull();
-
-    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4m" });
-    expect(detailTrigger.getAttribute("title")).toBe("Flow detail: 4m");
-    fireEvent.click(detailTrigger);
-
-    expect(screen.getByRole("listbox", { name: "Flow detail" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "3m" }).getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("option", { name: "4m" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("option", { name: "5m" }).getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("option", { name: "6m" }).getAttribute("aria-selected")).toBe("false");
-
-    fireEvent.click(screen.getByRole("option", { name: "6m" }));
-
-    expect(onIntervalChange).toHaveBeenCalledWith(6);
-    expect(screen.queryByRole("listbox", { name: "Flow detail" })).toBeNull();
-  });
-
-  it("keeps the density overflow visually before the color mode toggle", () => {
-    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={() => undefined} />);
-
-    const actions = document.querySelector(".flow-chart-head__actions") as HTMLElement;
-    const controls = actions.querySelector(".flow-chart-head__controls") as HTMLElement;
-    const controlChildren = Array.from(controls.children).map((child) => child.className);
-    const actionChildren = Array.from(actions.children).map((child) => child.className);
-
-    expect(actionChildren[0]).toContain("flow-chart-head__controls");
-    expect(actionChildren[1]).toContain("flow-chart-legend");
-    expect(controlChildren[0]).toContain("flow-detail-select");
-    expect(controlChildren[1]).toContain("flow-color-mode-control");
-    expect(cssRule(".flow-chart-head__actions")).toContain("flex-direction: row-reverse;");
-    expect(cssRule(".flow-chart-head__controls")).toContain("gap: 2px;");
-  });
-
-  it("uses the actionless SettingsSelect row treatment", () => {
-    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={() => undefined} />);
-
-    fireEvent.click(screen.getByRole("combobox", { name: "Flow detail: 4m" }));
-
-    const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(4);
-    for (const option of options) {
-      const optionRow = option.closest(".settings-select-control__option-row");
-      expect(optionRow).toBeTruthy();
-      expect(optionRow?.classList.contains("has-action")).toBe(false);
-    }
-
-    const selectedOption = screen.getByRole("option", { name: "4m" });
-    expect(selectedOption.classList.contains("is-selected")).toBe(true);
-    expect(selectedOption.querySelector(".settings-select-control__check")).toBeNull();
-  });
-
-  it("supports keyboard-only Flow detail selection", () => {
-    const onIntervalChange = vi.fn();
-    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={onIntervalChange} />);
-
-    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4m" });
-    fireEvent.keyDown(detailTrigger, { key: "ArrowDown" });
-    expect(screen.getByRole("listbox", { name: "Flow detail" })).toBeTruthy();
-
-    fireEvent.keyDown(detailTrigger, { key: "ArrowDown" });
-    fireEvent.keyDown(detailTrigger, { key: "Enter" });
-
-    expect(onIntervalChange).toHaveBeenCalledWith(5);
-    expect(screen.queryByRole("listbox", { name: "Flow detail" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /Flow detail/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Category" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+    expect(screen.getByRole("button", { name: "Productivity" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("4-minute flow chart").getAttribute("data-flow-color-mode")).toBe("productivity");
   });
 
   it("tightens only the flow chart shell spacing while preserving cell scale", () => {

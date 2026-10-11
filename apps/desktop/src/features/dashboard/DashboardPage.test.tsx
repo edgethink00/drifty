@@ -80,7 +80,6 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       dashPeriod={options.dashPeriod ?? "Today"}
       flowBlocks={options.flowBlocks ?? []}
       summaryFlowBlocks={options.summaryFlowBlocks ?? []}
-      flowIntervalMinutes={3}
       focusDriftSection={<div data-testid="focus-drift-placeholder" />}
       dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}
       dayFocusDeltaSeconds={null}
@@ -100,7 +99,6 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       weekRefreshStatus={options.weekRefreshStatus ?? "idle"}
       weekRows={options.weekRows ?? []}
       onDismissDashboardAiRecovery={noop}
-      onFlowIntervalChange={noop}
       onOpenDashboardAiSetup={noop}
       onManageCloudBilling={noop}
       onSelectBillingPlan={noop}
@@ -210,7 +208,7 @@ describe("DashboardPage demo replay empty data", () => {
   it("keeps blank chart frames visible instead of empty-state copy while replay is active", () => {
     renderDashboardWithNoData();
 
-    expect(screen.getByLabelText("3-minute flow chart")).toBeTruthy();
+    expect(screen.getByLabelText("4-minute flow chart")).toBeTruthy();
     expect(screen.getByLabelText("No app usage for today yet")).toBeTruthy();
     expect(screen.queryByText("No timeline yet")).toBeNull();
     expect(screen.queryByText("No usage ranking")).toBeNull();
@@ -229,7 +227,7 @@ describe("DashboardPage demo replay empty data", () => {
 
     // The flow chart now keeps its real empty frame (legend + time axis) instead
     // of collapsing to an empty-state card; the bootstrap status renders below it.
-    expect(screen.getByLabelText("3-minute flow chart")).toBeTruthy();
+    expect(screen.getByLabelText("4-minute flow chart")).toBeTruthy();
     expect(screen.queryByText("No timeline yet")).toBeNull();
     expect(screen.getByText("Importing from browser history (last 48 hours).")).toBeTruthy();
     expect(screen.getByText("3 visits summarized locally.")).toBeTruthy();
@@ -523,7 +521,6 @@ describe("DashboardPage billing recovery overlay", () => {
         dashPeriod="Today"
         flowBlocks={[]}
         summaryFlowBlocks={[]}
-        flowIntervalMinutes={3}
         focusDriftSection={<div data-testid="focus-drift-placeholder" />}
         dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}
         dayFocusDeltaSeconds={null}
@@ -543,7 +540,6 @@ describe("DashboardPage billing recovery overlay", () => {
         weekRefreshStatus="idle"
         weekRows={[]}
         onDismissDashboardAiRecovery={noop}
-        onFlowIntervalChange={noop}
         onOpenDashboardAiSetup={noop}
         onManageCloudBilling={onManageCloudBilling}
         onSelectBillingPlan={onSelectBillingPlan}

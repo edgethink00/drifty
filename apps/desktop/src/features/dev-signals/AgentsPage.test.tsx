@@ -217,7 +217,7 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(document.querySelector(".agents-ssh-sync-status")?.classList.contains("is-error")).toBe(true);
   });
 
-  it("uses the same persisted Flow detail control as Your Day", () => {
+  it("keeps the persisted Flow detail control for Your Agents", () => {
     const onFlowIntervalChange = vi.fn();
     renderAgentsPage({ flowIntervalMinutes: 3, onFlowIntervalChange });
 
@@ -226,6 +226,20 @@ describe("AgentsPage shared dashboard controls", () => {
     fireEvent.click(screen.getByRole("option", { name: "6m" }));
 
     expect(onFlowIntervalChange).toHaveBeenCalledWith(6);
+  });
+
+  it("supports keyboard-only Flow detail selection in Your Agents", () => {
+    const onFlowIntervalChange = vi.fn();
+    renderAgentsPage({ flowIntervalMinutes: 4, onFlowIntervalChange });
+
+    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4m" });
+    fireEvent.keyDown(detailTrigger, { key: "ArrowDown" });
+    expect(screen.getByRole("listbox", { name: "Flow detail" })).toBeTruthy();
+    fireEvent.keyDown(detailTrigger, { key: "ArrowDown" });
+    fireEvent.keyDown(detailTrigger, { key: "Enter" });
+
+    expect(onFlowIntervalChange).toHaveBeenCalledWith(5);
+    expect(screen.queryByRole("listbox", { name: "Flow detail" })).toBeNull();
   });
 
   it("does not label the initial loading state as sample data", () => {

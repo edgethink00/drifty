@@ -2,11 +2,12 @@ import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { classifiedDashboardSegmentIds } from "./hasClassifiedDashboardResult";
 import { useMemo, useState, type ReactNode } from "react";
 import { ModalPresence } from "../../components/ModalPresence";
-import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, FlowIntervalMinutes, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
 import { FlowChartView } from "../flow-chart/FlowChartView";
+import { YOUR_DAY_FLOW_INTERVAL_MINUTES } from "../flow-chart/flowChartDetailPreference";
 import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
@@ -70,7 +71,6 @@ type DashboardPageProps = {
   readonly flowBlocks: FlowBlock[];
   /** Stable 5-minute blocks for summaries whose meaning must not change with the chart display preference. */
   readonly summaryFlowBlocks: FlowBlock[];
-  readonly flowIntervalMinutes: FlowIntervalMinutes;
   readonly projectModeAvailable?: boolean;
   readonly projectLegend?: readonly ProjectLegendEntry[];
   readonly activityInspectorProjectOptions?: readonly ActivityInspectorProjectOption[];
@@ -102,7 +102,6 @@ type DashboardPageProps = {
   readonly weekCurrentCalendarDay: string | null;
   readonly weekCurrentMinuteOfDay: number | null;
   readonly onDismissDashboardAiRecovery: () => void;
-  readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onOpenDashboardAiSetup: () => void;
   readonly shareAccountScope?: string | null;
   readonly onJoinLeaderboard?: () => Promise<void>;
@@ -147,7 +146,6 @@ export function DashboardPage({
   dashPeriod,
   flowBlocks,
   summaryFlowBlocks,
-  flowIntervalMinutes,
   projectModeAvailable,
   projectLegend,
   activityInspectorProjectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
@@ -179,7 +177,6 @@ export function DashboardPage({
   weekCurrentCalendarDay,
   weekCurrentMinuteOfDay,
   onDismissDashboardAiRecovery,
-  onFlowIntervalChange,
   onOpenDashboardAiSetup,
   shareAccountScope = null,
   onJoinLeaderboard,
@@ -425,9 +422,8 @@ export function DashboardPage({
                   blocks={flowBlocks}
                   appIcons={appIcons}
                   currentMinuteOfDay={currentMinuteOfDay}
-                  intervalMinutes={flowIntervalMinutes}
+                  intervalMinutes={YOUR_DAY_FLOW_INTERVAL_MINUTES}
                   startOfDayMinutes={startOfDayMinutes}
-                  onIntervalChange={onFlowIntervalChange}
                   /* Keep the frame (legend + axis + empty grid) whenever there
                      are no blocks — an empty day, replay, OR the brief moment
                      mid day-navigation before the next day's blocks arrive —

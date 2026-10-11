@@ -15,7 +15,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("dashboard Flow detail preference", () => {
+describe("legacy Flow detail preference for Your Agents", () => {
   it("defaults the chart to 4 minutes while keeping summaries at 5 minutes", () => {
     expect(DEFAULT_DASHBOARD_FLOW_INTERVAL_MINUTES).toBe(4);
     expect(DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES).toBe(5);

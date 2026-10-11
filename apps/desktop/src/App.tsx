@@ -173,6 +173,7 @@ import { CommandBar } from "./features/command-bar/CommandBar";
 import { NO_PROJECT_COLOR, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
 import {
   DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES,
+  YOUR_DAY_FLOW_INTERVAL_MINUTES,
   persistDashboardFlowIntervalMinutes,
   resolveInitialDashboardFlowIntervalMinutes,
 } from "./features/flow-chart/flowChartDetailPreference";
@@ -713,9 +714,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(resolveInitialDashboardFlowIntervalMinutes);
-  const handleFlowIntervalChange = useCallback((intervalMinutes: FlowIntervalMinutes) => {
-    setFlowIntervalMinutes(persistDashboardFlowIntervalMinutes(intervalMinutes));
+  const [agentsFlowIntervalMinutes, setAgentsFlowIntervalMinutes] = useState<FlowIntervalMinutes>(resolveInitialDashboardFlowIntervalMinutes);
+  const handleAgentsFlowIntervalChange = useCallback((intervalMinutes: FlowIntervalMinutes) => {
+    setAgentsFlowIntervalMinutes(persistDashboardFlowIntervalMinutes(intervalMinutes));
   }, []);
   const [classificationRange, setClassificationRange] = useState<ClassificationRange>("Day");
   const [trendsRange, setTrendsRange] = useState<InsightRange>("Week");
@@ -8535,7 +8536,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     const blocksByInterval = buildFlowBlocksForIntervals(
       effectiveSelectedDaySegments,
       selectedDay,
-      [flowIntervalMinutes, DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES],
+      [YOUR_DAY_FLOW_INTERVAL_MINUTES, DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES],
       effectiveSelectedDayClassificationOptions,
       startOfDayMinutes,
       flowProjectColorBySegment,
@@ -8543,10 +8544,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       selectedDayProjectProjection.segments,
     );
     return [
-      blocksByInterval.get(flowIntervalMinutes) ?? [],
+      blocksByInterval.get(YOUR_DAY_FLOW_INTERVAL_MINUTES) ?? [],
       blocksByInterval.get(DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES) ?? [],
     ] as const;
-  }, [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, selectedDayProjectProjection.segments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment]);
+  }, [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, selectedDayProjectProjection.segments, selectedDay, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment]);
   // Which newly created project is waiting on (or running) automatic matching,
   // so the Projects row can show an honest state instead of a finished-looking
   // "0m" for a project that has never been analyzed.
@@ -10765,7 +10766,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             dashPeriod={dashPeriod}
             flowBlocks={flowBlocks}
             summaryFlowBlocks={summaryFlowBlocks}
-            flowIntervalMinutes={flowIntervalMinutes}
             deviceLabelById={remoteDeviceLabelById}
             deviceTimelineFilter={deviceTimelineFilter}
             onDeviceTimelineFilterChange={setDeviceTimelineFilter}
@@ -10796,7 +10796,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             weekCurrentCalendarDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveTodayDayForWeekModel : null}
             weekCurrentMinuteOfDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveCurrentMinuteOfDay : null}
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
-            onFlowIntervalChange={handleFlowIntervalChange}
             onOpenDashboardAiSetup={openDashboardAiSetup}
             shareAccountScope={shareAccountScope}
             onJoinLeaderboard={handleLeaderboardOptIn}
@@ -10824,8 +10823,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {activeTab === "agents" && canOpenAgents ? (
           <LazyAgentsPage
             navigationRefreshEnabled={canUseNavigationRefresh}
-            flowIntervalMinutes={flowIntervalMinutes}
-            onFlowIntervalChange={handleFlowIntervalChange}
+            flowIntervalMinutes={agentsFlowIntervalMinutes}
+            onFlowIntervalChange={handleAgentsFlowIntervalChange}
             onSelectDay={selectDay}
             selectedDay={selectedDay}
             startOfDayMinutes={startOfDayMinutes}

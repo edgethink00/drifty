@@ -40,7 +40,6 @@ export function FlowChartView({
   appIcons,
   currentMinuteOfDay,
   intervalMinutes = 3,
-  onIntervalChange,
   showEmptyGrid = false,
   startOfDayMinutes = 0,
   projectModeAvailable = false,
@@ -62,7 +61,6 @@ export function FlowChartView({
   appIcons: Record<string, string | null>;
   currentMinuteOfDay?: number | null;
   intervalMinutes?: FlowIntervalMinutes;
-  onIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   showEmptyGrid?: boolean;
   startOfDayMinutes?: number;
   projectModeAvailable?: boolean;
@@ -265,9 +263,7 @@ export function FlowChartView({
         blocks={blocks}
         colorMode={effectiveColorMode}
         hoveredLegendCardRef={hoveredLegendCardRef}
-        intervalMinutes={intervalMinutes}
         onColorModeChange={setColorMode}
-        onIntervalChange={onIntervalChange}
         setHoveredLegend={setHoveredLegend}
         projectModeAvailable={projectModeAvailable}
         projectLegend={projectLegend}

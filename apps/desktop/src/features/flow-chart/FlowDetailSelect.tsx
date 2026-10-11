@@ -19,7 +19,7 @@ function flowIntervalFromDetailValue(value: FlowDetailValue): FlowIntervalMinute
   return intervalMinutes;
 }
 
-/** Shared timeline-density control used by every surface built on the Flow grid. */
+/** Timeline-density control for the adjustable Your Agents grid. */
 export function FlowDetailSelect({
   intervalMinutes,
   onIntervalChange,
