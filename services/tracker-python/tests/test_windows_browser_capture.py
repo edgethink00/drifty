@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from app.tracker import windows_browser_capture
 from app.tracker.windows_browser_capture import _UrlWorker
-from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
+from app.tracker.windows_browser_uia import WindowsBrowserCluesResult, WindowsBrowserUiaResult
 
 
 class WindowsBrowserCaptureTests(unittest.TestCase):
@@ -160,6 +160,55 @@ class WindowsBrowserCaptureTests(unittest.TestCase):
             with patch.object(windows_browser_capture.sys, "platform", "darwin"):
                 self.assertIsNone(windows_browser_capture.read_browser_url_with_budget(101, "Opera").url)
         worker.read.assert_not_called()
+
+    def test_page_clues_share_the_single_flight_and_keep_failures_fixed(self) -> None:
+        started = threading.Event()
+        release = self.release()
+
+        def read(_hwnd, _app):
+            started.set()
+            self.assertTrue(release.wait(timeout=3.0))
+            return WindowsBrowserUiaResult("https://example.test/a", None)
+
+        worker = self.worker(read)
+        worker.read(101, "Google Chrome", timeout_seconds=0.05)
+        self.assertTrue(started.wait(timeout=1.0))
+        jobs: list[int] = []
+        busy = worker.read_clues(101, "Google Chrome", 0.5, lambda: jobs.append(1))
+        self.assertIn("busy", busy.error or "")
+        self.assertEqual(jobs, [])
+        release.set()
+        self.wait_idle(worker)
+        done = worker.read_clues(
+            101, "Google Chrome", 0.5,
+            lambda: WindowsBrowserCluesResult(url="https://example.test/a", title="A", clues={"headings": ["H"]}),
+        )
+        self.assertEqual(done.clues, {"headings": ["H"]})
+
+        def leak():
+            raise RuntimeError("provider text https://example.test/private")
+
+        failed = worker.read_clues(101, "Google Chrome", 0.5, leak)
+        self.assertEqual(failed.error, "Windows page clue provider failed.")
+
+    def test_clue_budget_leaves_pipe_transit_and_caps_the_reader(self) -> None:
+        calls: list[tuple[int, str | None, int]] = []
+
+        def reader(hwnd, app, reader_ms):
+            calls.append((hwnd, app, reader_ms))
+            return WindowsBrowserCluesResult(error="sensitive")
+
+        with (
+            patch.object(windows_browser_capture.sys, "platform", "win32"),
+            patch.object(windows_browser_capture, "_worker", self.worker(lambda *_: None)),
+        ):
+            windows_browser_capture.read_browser_clues_with_budget(101, "Microsoft Edge", 1.4, reader=reader)
+            windows_browser_capture.read_browser_clues_with_budget(101, "Microsoft Edge", 0.4, reader=reader)
+            short = windows_browser_capture.read_browser_clues_with_budget(101, "Microsoft Edge", 0.15, reader=reader)
+            other = windows_browser_capture.read_browser_clues_with_budget(101, "Tor Browser", 1.0, reader=reader)
+        self.assertEqual(calls, [(101, "Microsoft Edge", 570), (101, "Microsoft Edge", 320)])
+        self.assertIn("no remaining", short.error or "")
+        self.assertIsNotNone(other.error)
 
 
 if __name__ == "__main__":

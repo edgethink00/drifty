@@ -24,23 +24,33 @@ Allowlisted browser URLs are read from the focused window's top-level Document
 ValuePattern through a resident UI Automation host. A fresh extension bridge
 is considered only when it matches the same foreground Document. Windows
 does not infer a foreground URL from a separate browser-history profile.
+
+With the Content context setting on, bounded visible page clues are read from
+that same just-validated Document and bound to this window's raw title.
 """
 
 from __future__ import annotations
 
 import ctypes
+import os
 import sys
 import time
 from dataclasses import dataclass
 from typing import Callable
 
 from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
+from app.tracker.browser_content import normalize_context
+from app.tracker.browser_content_policy import policy_snapshot
 from app.text_safety import replace_lone_surrogates
 from app.tracker.capture_contract import Snapshot, utc_now_iso
 from app.tracker.adaptive_context import AdaptiveContextCaptureInput, adaptive_content_context_for_capture
 from app.tracker.windows_app_names import exe_display_name, is_windows_browser_app
-from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
-from app.tracker.windows_browser_capture import _URL_SAMPLE_BUDGET_SECONDS, read_browser_url_with_budget
+from app.tracker.windows_browser_uia import WindowsBrowserCluesResult, WindowsBrowserUiaResult
+from app.tracker.windows_browser_capture import (
+    _URL_SAMPLE_BUDGET_SECONDS,
+    read_browser_clues_with_budget,
+    read_browser_url_with_budget,
+)
 from app.tracker.windows_browser_bridge import read_browser_bridge_metadata
 
 
@@ -60,6 +70,9 @@ _FOREGROUND_RETRY_BUDGET_SECONDS = 1.5
 # Leave room for the final HWND/PID/title check inside the same whole-capture
 # budget. Identity capture itself still has the original 1.5s acceptance gate.
 _FOREGROUND_CHECK_RESERVE_SECONDS = 0.05
+# Edge labels its private windows in the window title; Chrome's incognito
+# window title has no label, so it is not detected (documented limit).
+_EDGE_PRIVATE_TITLE_LABEL = "[InPrivate]"
 
 
 @dataclass(frozen=True)
@@ -342,6 +355,44 @@ def enrich_browser_snapshot(
     return snapshot
 
 
+def capture_windows_browser_content(
+    snapshot: Snapshot,
+    hwnd: int,
+    *,
+    timeout_seconds: float,
+    clue_reader: Callable[[int, str | None, float], WindowsBrowserCluesResult] | None = None,
+) -> dict[str, object] | None:
+    """Bounded visible page clues for this foreground window, or None.
+
+    Only a Document URL read from this exact HWND qualifies; the host inspects
+    that same Document once. The clues are bound to the raw window title,
+    which must begin with the Document's own name, and are discarded when the
+    Content context setting changes during the read. Unavailable optional
+    context never affects tracking.
+    """
+    window_title = snapshot.window_title
+    if (os.environ.get("DRIFTY_BROWSER_CONTENT_CONTEXT") != "1" or timeout_seconds <= 0
+            or snapshot.site_source != "windows-uia-document" or not snapshot.site_url
+            or not window_title or _EDGE_PRIVATE_TITLE_LABEL in window_title):
+        return None
+    policy = policy_snapshot()
+    if policy is None:
+        return None
+    result = (
+        clue_reader(hwnd, snapshot.app_name, timeout_seconds) if clue_reader is not None
+        else read_browser_clues_with_budget(hwnd, snapshot.app_name, timeout_seconds)
+    )
+    if (result.error or not result.clues or result.url != snapshot.site_url or not result.title
+            or not (window_title == result.title or window_title.startswith(result.title + " "))):
+        return None
+    if policy_snapshot() != policy:
+        return None
+    return normalize_context({
+        "version": 1, "collectedAt": snapshot.observed_at, "pageUrl": snapshot.site_url,
+        "pageTitle": window_title, **result.clues,
+    })
+
+
 def resolve_identity(
     window: ForegroundWindow,
     read_exe_path: Callable[[int], str | None] | None = None,
@@ -460,6 +511,16 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
                             max(0.0, remaining - _FOREGROUND_CHECK_RESERVE_SECONDS),
                         ),
                     )
+                    # Optional page clues use only what is left of this capture's
+                    # budget; the final foreground check below still covers them.
+                    if os.environ.get("DRIFTY_BROWSER_CONTENT_CONTEXT") == "1" and enriched.site_url:
+                        enriched.browser_content_context = capture_windows_browser_content(
+                            enriched, window.hwnd,
+                            timeout_seconds=(
+                                _FOREGROUND_RETRY_BUDGET_SECONDS - (time.monotonic() - capture_started)
+                                - _FOREGROUND_CHECK_RESERVE_SECONDS
+                            ),
+                        )
                     # URL/bridge reads may outlive the observation.
                     # Discard the whole candidate if its context changed.
                     enriched_window = read_foreground_window()

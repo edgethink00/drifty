@@ -18,6 +18,7 @@ from app.tracker import windows_browser_uia
 from app.tracker.windows_browser_uia import (
     is_live_uia_browser,
     normalize_uia_url,
+    parse_clues_response,
     parse_uia_response,
 )
 
@@ -54,6 +55,9 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         self.assertIn("'tabbrowser-tabpanels'", script)
         self.assertIn("'private-browsing-indicator-icon'", script)
         self.assertIn("'private-browsing-indicator-label'", script)
+        # Firefox 157 shows an indicator button and the private-session button instead.
+        self.assertIn("'private-browsing-indicator-button toolbarbutton-1'", script)
+        self.assertIn("$auto::AutomationIdProperty, 'reset-pbm-toolbar-button'", script)
         self.assertIn("^READ ([0-9]+)(?: (chromium|gecko))?$", script)
 
     def test_private_window_reply_carries_no_page(self) -> None:
@@ -180,11 +184,14 @@ class WindowsBrowserUiaTests(unittest.TestCase):
             self.assertFalse(script_path.exists())
 
     def test_host_reads_only_unambiguous_top_level_document_value(self) -> None:
-        script = windows_browser_uia._POWERSHELL_UIA_HOST
+        # The URL reader (everything before the lazily compiled clue reader)
+        # never touches editable fields, text ranges or the clipboard.
+        script = windows_browser_uia._POWERSHELL_UIA_HOST.split("$script:ClueReaderSource = @'", 1)[0]
         self.assertNotIn("ControlType]::Edit", script)
         self.assertNotIn("ControlType]::ToolBar", script)
         self.assertNotIn("TextPattern", script)
         self.assertNotIn("Clipboard", script)
+        self.assertNotIn("DriftyTrackerBrowserClues", script)
         self.assertIn("ControlType]::Document", script)
         self.assertIn("TryGetCurrentPattern", script)
         self.assertIn("multiple visible top-level documents", script)
@@ -201,6 +208,144 @@ class WindowsBrowserUiaTests(unittest.TestCase):
             script.index("$focusedDocument = Find-FocusedTopLevelDocument"),
             script.index("$documents = $root.FindAll"),
         )
+
+    def test_clue_reader_is_compiled_lazily_and_reads_only_the_last_validated_document(self) -> None:
+        script = windows_browser_uia._POWERSHELL_UIA_HOST
+        url_reader, clue_reader = script.split("$script:ClueReaderSource = @'", 1)
+        # Every READ clears the Document a CLUES request may inspect before reading.
+        self.assertIn(
+            "function Read-Document([IntPtr]$handle, [string]$family) {\n"
+            "  # Every READ replaces the one Document a following CLUES request may inspect.\n"
+            "  $script:lastDocument = $null\n  $script:lastPage = $null",
+            url_reader,
+        )
+        # A CLUES request consumes that Document once, for the same foreground HWND.
+        self.assertIn("$last = $script:lastDocument\n  $script:lastDocument = $null", clue_reader)
+        self.assertIn("$last.Handle -ne $handle -or [DriftyTrackerUiaNative]::GetForegroundWindow() -ne $handle", clue_reader)
+        # Compiled only inside Initialize-ClueReader, which only Read-Clues calls.
+        self.assertEqual(script.count("Add-Type -TypeDefinition $script:ClueReaderSource"), 1)
+        self.assertLess(script.index("function Initialize-ClueReader"), script.index("Add-Type -TypeDefinition $script:ClueReaderSource"))
+        self.assertEqual(script.count("Initialize-ClueReader"), 2)
+        self.assertIn("'^CLUES ([0-9]+) ([0-9]+)$'", clue_reader)
+        self.assertNotIn("__DRIFTY_CLUE_READER_SOURCE__", script)
+        # Structural sensitivity and bounds mirror the macOS helper.
+        for marker in ("multiline=true", "IsPasswordId", "MaxNodes = 8192", "budgetMs > 620", "Failure(\"sensitive\")",
+                       "thread.Join(budgetMs + 40)", "ElementFromPoint"):
+            self.assertIn(marker, clue_reader)
+        self.assertNotIn("Clipboard", clue_reader)
+
+    def test_clue_reply_keeps_only_capped_clues_bound_to_their_document(self) -> None:
+        ok = parse_clues_response(json.dumps({
+            "found": True, "url": "https://example.com/a", "title": "A",
+            "headings": ["Week 2"], "visibleTopic": ["Assignment closes Friday"],
+        }))
+        self.assertEqual((ok.url, ok.title, ok.error), ("https://example.com/a", "A", None))
+        self.assertEqual(ok.clues, {"headings": ["Week 2"], "visibleTopic": ["Assignment closes Friday"]})
+        empty_list = parse_clues_response(json.dumps({
+            "found": True, "url": "https://example.com/a", "title": "A", "headings": [], "visibleTopic": ["x y"],
+        }))
+        self.assertEqual(empty_list.clues, {"visibleTopic": ["x y"]})
+        for payload in (
+            {"found": False, "error": "sensitive"},
+            {"found": True, "url": "https://example.com/a", "title": "A", "headings": [], "visibleTopic": []},
+            {"found": True, "url": "javascript:alert(1)", "title": "A", "headings": ["H"]},
+            {"found": True, "url": "https://example.com/a", "title": "", "headings": ["H"]},
+            {"found": True, "url": "https://example.com/a", "title": "A" * 501, "headings": ["H"]},
+            {"found": True, "url": "https://example.com/a", "title": "A", "headings": ["H"], "rawText": "body"},
+            {"found": True, "url": "https://example.com/a", "title": "A", "visibleTopic": ["a" * 121]},
+            {"found": True, "url": "https://example.com/a", "title": "A", "headings": ["a", "b", "c", "d"]},
+            {"found": True, "url": "https://example.com/a", "title": "A", "headings": ["  padded"]},
+        ):
+            result = parse_clues_response(json.dumps(payload))
+            self.assertIsNone(result.clues, payload)
+            self.assertIsNotNone(result.error, payload)
+        self.assertEqual(parse_clues_response('{"found":false,"error":"sensitive"}').error, "sensitive")
+        self.assertIsNone(parse_clues_response("not json").clues)
+
+    def test_clue_requests_name_the_window_and_budget_and_only_the_first_compiles(self) -> None:
+        class FakeInput:
+            def __init__(self) -> None:
+                self.writes: list[str] = []
+
+            def write(self, value: str) -> None:
+                self.writes.append(value)
+
+            def flush(self) -> None:
+                pass
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdin = FakeInput()
+                self.stdout = object()
+
+            def poll(self):
+                return None
+
+        host = object.__new__(windows_browser_uia._WindowsUiaHost)
+        host._process = FakeProcess()
+        reply = '{"found":true,"url":"https://example.com/a","title":"A","headings":["H"],"visibleTopic":[]}'
+        with patch.object(windows_browser_uia, "_readline_with_timeout", side_effect=[reply, reply]) as read_reply:
+            first = host.read_clues(101, 570)
+            second = host.read_clues(101, 300)
+        self.assertEqual(first.clues, {"headings": ["H"]})
+        self.assertEqual(second.title, "A")
+        self.assertEqual(host._process.stdin.writes, ["CLUES 101 570\n", "CLUES 101 300\n"])
+        timeouts = [call.args[1] for call in read_reply.call_args_list]
+        self.assertAlmostEqual(timeouts[0], 0.57 + windows_browser_uia._CLUES_COLD_REPLY_SLACK_SECONDS)
+        self.assertAlmostEqual(timeouts[1], 0.30 + windows_browser_uia._CLUES_REPLY_SLACK_SECONDS)
+        self.assertLess(timeouts[1], windows_browser_uia._REQUEST_TIMEOUT_SECONDS)
+        for budget in (99, 621, 0.5):
+            with self.assertRaises(ValueError):
+                host.read_clues(101, budget)
+
+    def test_clue_reads_never_start_a_host_and_a_failed_exchange_retires_it(self) -> None:
+        with (
+            patch.object(windows_browser_uia.sys, "platform", "win32"),
+            patch.object(windows_browser_uia, "_host", None),
+            patch.object(windows_browser_uia, "_WindowsUiaHost") as factory,
+        ):
+            missing = windows_browser_uia.read_live_browser_clues(101, "Google Chrome", 500)
+        factory.assert_not_called()
+        self.assertIsNone(missing.clues)
+
+        class BrokenHost:
+            closed = False
+
+            def read_clues(self, hwnd, budget_ms):
+                raise TimeoutError("late reply with https://private.example/")
+
+            def close(self) -> None:
+                BrokenHost.closed = True
+
+        with (
+            patch.object(windows_browser_uia.sys, "platform", "win32"),
+            patch.object(windows_browser_uia, "_host", BrokenHost()),
+        ):
+            failed = windows_browser_uia.read_live_browser_clues(101, "Google Chrome", 500)
+            self.assertIsNone(windows_browser_uia._host)
+        self.assertTrue(BrokenHost.closed)
+        self.assertEqual(failed.error, "Windows page clues failed.")
+        with patch.object(windows_browser_uia.sys, "platform", "win32"):
+            self.assertIsNone(windows_browser_uia.read_live_browser_clues(101, "Tor Browser", 500).clues)
+
+        class Host:
+            closed = False
+
+            def read_clues(self, hwnd, budget_ms):
+                raise AssertionError("an invalid budget must not reach the host")
+
+            def close(self) -> None:
+                Host.closed = True
+
+        kept = Host()
+        with (
+            patch.object(windows_browser_uia.sys, "platform", "win32"),
+            patch.object(windows_browser_uia, "_host", kept),
+        ):
+            refused = windows_browser_uia.read_live_browser_clues(101, "Google Chrome", 5000)
+            self.assertIs(windows_browser_uia._host, kept)
+        self.assertFalse(Host.closed)
+        self.assertIsNotNone(refused.error)
 
     def test_startup_failure_closes_the_spawned_host(self) -> None:
         class FakeInput:
@@ -644,6 +789,11 @@ class WindowsBrowserUiaPowerShellTests(unittest.TestCase):
             result = host.read(0)
             self.assertIsNone(result.url)
             self.assertEqual(result.error, "document window unavailable or changed")
+            # A CLUES request without a just-validated Document is refused
+            # without compiling or reading anything.
+            clues = host.read_clues(0, 500)
+            self.assertIsNone(clues.clues)
+            self.assertEqual(clues.error, "document unavailable")
         finally:
             host.close()
         self.assertIsNotNone(process)

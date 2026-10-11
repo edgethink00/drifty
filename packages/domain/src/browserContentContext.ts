@@ -68,8 +68,11 @@ export function browserContentCluesForSegment(segment: {
   // scripted; the native helper binds the clues to the exact focused window
   // title instead.
   const addressBar = segment.siteSource === "accessibility-address-bar" && ADDRESS_BAR_CONTENT_BUNDLES.has(segment.bundleId ?? "");
-  const pageTitle = addressBar ? segment.windowTitle : segment.siteTitle;
-  if (!c || c.version !== 1 || segment.exclusionSource || (segment.siteSource !== "applescript" && !addressBar)
+  // Windows reads the focused window's own Document through UI Automation; the
+  // tracker binds its clues to that window's raw title.
+  const windowsDocument = segment.siteSource === "windows-uia-document";
+  const pageTitle = addressBar || windowsDocument ? segment.windowTitle : segment.siteTitle;
+  if (!c || c.version !== 1 || segment.exclusionSource || (segment.siteSource !== "applescript" && !addressBar && !windowsDocument)
     || c.pageUrl !== segment.siteUrl || !pageTitle || c.pageTitle !== pageTitle) return undefined;
   const at = Date.parse(c.collectedAt), start = Date.parse(segment.startedAt), end = Date.parse(segment.endedAt);
   if (![at, start, end].every(Number.isFinite) || end < start || at < start || at > end) return undefined;

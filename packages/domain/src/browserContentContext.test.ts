@@ -25,6 +25,15 @@ describe("browser context provenance and minimization",()=>{
     }
     expect(browserContentCluesForSegment({...segment(),siteSource:"accessibility-address-bar",siteTitle:null,bundleId:"com.apple.SafariTechnologyPreview",windowTitle:"Course"})).toBeUndefined();
   });
+  it("binds Windows UI Automation Document observations to the raw window title only",()=>{
+    const windowTitle = "Course - Chrome";
+    const windows = {...segment(),siteSource:"windows-uia-document",siteTitle:null,bundleId:"c:\\program files\\google\\chrome\\application\\chrome.exe",windowTitle};
+    windows.browserContentContext = {...windows.browserContentContext,pageTitle:windowTitle};
+    expect(browserContentCluesForSegment(windows)).toEqual({description:"Author course description",headings:["Week 2"],visibleTopic:["Assignment closes Friday"]});
+    for(const patch of [{windowTitle:"Other - Chrome"},{windowTitle:null},{siteUrl:"https://example.org/other"},{exclusionSource:"user"}])expect(browserContentCluesForSegment({...windows,...patch})).toBeUndefined();
+    // A Windows observation never binds through a scripted tab title.
+    expect(browserContentCluesForSegment({...windows,siteTitle:windowTitle,windowTitle:"Course"})).toBeUndefined();
+  });
   it("cannot attach a prior or future observation to a segment",()=>{
     for(const collectedAt of ["2026-10-05T00:59:59Z","2026-10-05T01:01:01Z","bad date"]) { const s=segment();s.browserContentContext.collectedAt=collectedAt;expect(browserContentCluesForSegment(s)).toBeUndefined(); }
   });

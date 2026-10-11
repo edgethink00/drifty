@@ -4,6 +4,9 @@ There is one worker and one in-flight request per tracker process, without a
 queue or a URL cache. Cold UIA may finish warming after a sample's deadline;
 that result is discarded and a later sample must read its own live Document.
 The worker never receives or mutates the caller's Snapshot.
+
+Optional page-clue reads share that worker, so a clue read and a URL read never
+overlap in the UIA host.
 """
 
 from __future__ import annotations
@@ -16,9 +19,11 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from app.tracker.windows_browser_uia import (
+    WindowsBrowserCluesResult,
     WindowsBrowserUiaResult,
     _close_host,
     is_live_uia_browser,
+    read_live_browser_clues,
     read_live_browser_url,
 )
 
@@ -26,6 +31,12 @@ from app.tracker.windows_browser_uia import (
 # Warm measured reads fit in this allowance. A cold provider keeps warming in
 # the single worker, while this sample retains only verified app context.
 _URL_SAMPLE_BUDGET_SECONDS = 0.25
+# Page clues use at most the macOS helper's 620ms reader deadline, and leave
+# time for the host reply to cross the pipe before this sample's deadline.
+_CLUES_SAMPLE_BUDGET_SECONDS = 0.65
+_CLUES_TRANSIT_SECONDS = 0.08
+_CLUES_MIN_READER_MS = 100
+_CLUES_MAX_READER_MS = 620
 
 
 @dataclass
@@ -34,9 +45,12 @@ class _UrlRequest:
     hwnd: int
     app_name: str | None
     deadline: float
+    job: Callable[[], object] | None = None
+    failure: Callable[[str], object] = lambda message: WindowsBrowserUiaResult(None, message)
+    label: str = "Windows URL"
     completed: threading.Event = field(default_factory=threading.Event)
     expired: bool = False
-    result: WindowsBrowserUiaResult | None = None
+    result: object | None = None
 
 
 class _UrlWorker:
@@ -57,14 +71,28 @@ class _UrlWorker:
         app_name: str | None,
         timeout_seconds: float = _URL_SAMPLE_BUDGET_SECONDS,
     ) -> WindowsBrowserUiaResult:
+        return self._submit(hwnd, app_name, timeout_seconds, None,
+                            lambda message: WindowsBrowserUiaResult(None, message), "Windows URL")
+
+    def read_clues(
+        self,
+        hwnd: int,
+        app_name: str | None,
+        timeout_seconds: float,
+        job: Callable[[], WindowsBrowserCluesResult],
+    ) -> WindowsBrowserCluesResult:
+        return self._submit(hwnd, app_name, timeout_seconds, job,
+                            lambda message: WindowsBrowserCluesResult(error=message), "Windows page clue")
+
+    def _submit(self, hwnd, app_name, timeout_seconds, job, failure, label):
         deadline = time.monotonic() + max(0.0, timeout_seconds)
         with self._condition:
             if self._closed:
-                return WindowsBrowserUiaResult(None, "Windows URL capture is stopped.")
+                return failure(f"{label} capture is stopped.")
             if self._active is not None:
-                return WindowsBrowserUiaResult(None, "Windows URL capture is still busy with a previous read.")
+                return failure(f"{label} capture is still busy with a previous read.")
             self._generation += 1
-            request = _UrlRequest(self._generation, hwnd, app_name, deadline)
+            request = _UrlRequest(self._generation, hwnd, app_name, deadline, job, failure, label)
             self._active = request
             if self._thread is None:
                 self._thread = threading.Thread(
@@ -75,7 +103,7 @@ class _UrlWorker:
                 except Exception:
                     self._thread = None
                     self._active = None
-                    return WindowsBrowserUiaResult(None, "Windows URL worker could not start.")
+                    return failure(f"{label} worker could not start.")
             self._condition.notify()
 
         request.completed.wait(max(0.0, deadline - time.monotonic()))
@@ -86,10 +114,10 @@ class _UrlWorker:
             request.result = None
             request.expired = True
             if self._closed:
-                return WindowsBrowserUiaResult(None, "Windows URL capture is stopped.")
+                return failure(f"{label} capture is stopped.")
             if result is not None and time.monotonic() <= deadline:
                 return result
-            return WindowsBrowserUiaResult(None, "Windows URL capture exceeded this sample's time budget.")
+            return failure(f"{label} capture exceeded this sample's time budget.")
 
     def _run(self) -> None:
         while True:
@@ -105,11 +133,11 @@ class _UrlWorker:
                     self._condition.notify_all()
                     continue
             try:
-                result = self._reader(request.hwnd, request.app_name)
+                result = request.job() if request.job is not None else self._reader(request.hwnd, request.app_name)
             except Exception:
                 # Provider exception text could contain page data. This stays
                 # a fixed local diagnostic, without exception telemetry.
-                result = WindowsBrowserUiaResult(None, "Windows URL provider failed.")
+                result = request.failure(f"{request.label} provider failed.")
             with self._condition:
                 if self._active is request:
                     self._active = None
@@ -157,3 +185,20 @@ def read_browser_url_with_budget(
     if timeout_seconds <= 0:
         return WindowsBrowserUiaResult(None, "Windows URL capture has no remaining sample time budget.")
     return _worker.read(hwnd, app_name, min(_URL_SAMPLE_BUDGET_SECONDS, timeout_seconds))
+
+
+def read_browser_clues_with_budget(
+    hwnd: int,
+    app_name: str | None,
+    timeout_seconds: float,
+    *,
+    reader: Callable[[int, str | None, int], WindowsBrowserCluesResult] = read_live_browser_clues,
+) -> WindowsBrowserCluesResult:
+    """Read page clues within this sample's remaining time, never past it."""
+    if sys.platform != "win32" or not is_live_uia_browser(app_name):
+        return WindowsBrowserCluesResult(error="Windows UIA is not applicable.")
+    allowance = min(_CLUES_SAMPLE_BUDGET_SECONDS, timeout_seconds)
+    reader_ms = min(_CLUES_MAX_READER_MS, int((allowance - _CLUES_TRANSIT_SECONDS) * 1000))
+    if reader_ms < _CLUES_MIN_READER_MS:
+        return WindowsBrowserCluesResult(error="Windows page clues have no remaining sample time budget.")
+    return _worker.read_clues(hwnd, app_name, allowance, lambda: reader(hwnd, app_name, reader_ms))

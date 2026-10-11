@@ -11,6 +11,7 @@ from app.tracker.windows_workspace import (
     ProcessIdentity,
     aumid_display_name,
     build_snapshot,
+    capture_windows_browser_content,
     enrich_browser_snapshot,
     exe_display_name,
     identity_key_for,
@@ -18,7 +19,7 @@ from app.tracker.windows_workspace import (
 )
 from app.tracker.browser_automation import BrowserMetadata
 from app.tracker.windows_browser_capture import _UrlWorker
-from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
+from app.tracker.windows_browser_uia import WindowsBrowserCluesResult, WindowsBrowserUiaResult
 
 
 class ExeDisplayNameTests(unittest.TestCase):
@@ -1103,6 +1104,126 @@ class PlatformDispatchTests(unittest.TestCase):
             result = platform_workspace.current_snapshot()
         self.assertIs(result, sentinel)
         win_capture.assert_called_once_with()
+
+
+class WindowsBrowserContentTests(unittest.TestCase):
+    URL = "https://example.org/course"
+    CLUES = {"headings": ["Week 2"], "visibleTopic": ["Assignment closes Friday"]}
+
+    def setUp(self) -> None:
+        env = patch.dict(windows_workspace.os.environ, {"DRIFTY_BROWSER_CONTENT_CONTEXT": "1"})
+        env.start()
+        self.addCleanup(env.stop)
+        policy = patch.object(windows_workspace, "policy_snapshot", return_value=("settings", "revision-1"))
+        self.policy = policy.start()
+        self.addCleanup(policy.stop)
+
+    def _snapshot(self, title: str = "Course - Chrome", app: str = "Google Chrome"):
+        path = {
+            "Google Chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "Microsoft Edge": r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        }[app]
+        snapshot = build_snapshot(
+            ForegroundWindow(hwnd=44, title=title, pid=5),
+            ProcessIdentity(exe_path=path, exe_name=path.rsplit("\\", 1)[-1], aumid=None),
+            observed_at="2026-10-11T00:00:00+00:00",
+        )
+        snapshot.site_url = self.URL
+        snapshot.site_source = "windows-uia-document"
+        return snapshot
+
+    def _reader(self, **fields):
+        calls: list[tuple[int, str | None, float]] = []
+
+        def read(hwnd, app, timeout_seconds):
+            calls.append((hwnd, app, timeout_seconds))
+            values = {"url": self.URL, "title": "Course", "clues": dict(self.CLUES)}
+            values.update(fields)
+            return WindowsBrowserCluesResult(**values)
+
+        return read, calls
+
+    def test_clues_bind_to_the_raw_window_title_of_the_same_document(self) -> None:
+        reader, calls = self._reader()
+        context = capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader)
+        self.assertEqual(context, {
+            "version": 1, "collectedAt": "2026-10-11T00:00:00+00:00", "pageUrl": self.URL,
+            "pageTitle": "Course - Chrome", **self.CLUES,
+        })
+        self.assertEqual(calls, [(44, "Google Chrome", 0.9)])
+        # Edge inserts a localized "and N more pages" fragment after the page title.
+        edge = "Course 외 페이지 1개 - 프로필 1 - Microsoft\u200b Edge"
+        context = capture_windows_browser_content(self._snapshot(edge, "Microsoft Edge"), 44, timeout_seconds=0.9, clue_reader=reader)
+        self.assertEqual(context["pageTitle"], edge)
+
+    def test_a_different_document_or_window_title_yields_no_clues(self) -> None:
+        for fields, title in (
+            ({"title": "Other"}, "Course - Chrome"),
+            ({}, "Course2 - Chrome"),
+            ({}, "Other - Chrome"),
+            ({"url": "https://example.org/other"}, "Course - Chrome"),
+            ({"clues": None, "error": "sensitive"}, "Course - Chrome"),
+            ({"title": None}, "Course - Chrome"),
+        ):
+            reader, _ = self._reader(**fields)
+            self.assertIsNone(
+                capture_windows_browser_content(self._snapshot(title), 44, timeout_seconds=0.9, clue_reader=reader),
+                (fields, title),
+            )
+
+    def test_setting_off_private_edge_or_no_live_document_never_reads(self) -> None:
+        reader, calls = self._reader()
+        private = self._snapshot("Course - [InPrivate] - Microsoft\u200b Edge", "Microsoft Edge")
+        self.assertIsNone(capture_windows_browser_content(private, 44, timeout_seconds=0.9, clue_reader=reader))
+        history = self._snapshot()
+        history.site_source = "browser-history-title"
+        self.assertIsNone(capture_windows_browser_content(history, 44, timeout_seconds=0.9, clue_reader=reader))
+        self.assertIsNone(capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0, clue_reader=reader))
+        self.policy.return_value = None
+        self.assertIsNone(capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader))
+        self.policy.return_value = ("settings", "revision-1")
+        with patch.dict(windows_workspace.os.environ, {"DRIFTY_BROWSER_CONTENT_CONTEXT": "0"}):
+            self.assertIsNone(capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader))
+        self.assertEqual(calls, [])
+
+    def test_setting_change_during_the_read_discards_the_clues(self) -> None:
+        reader, calls = self._reader()
+        self.policy.side_effect = [("settings", "revision-1"), ("settings", "revision-2")]
+        self.assertIsNone(capture_windows_browser_content(self._snapshot(), 44, timeout_seconds=0.9, clue_reader=reader))
+        self.assertEqual(len(calls), 1)
+
+    def test_foreground_capture_reads_clues_inside_its_remaining_budget(self) -> None:
+        stable = ForegroundWindow(hwnd=100, title="Course - Chrome", pid=10)
+        changed = ForegroundWindow(hwnd=100, title="Other - Chrome", pid=10)
+        context = {"version": 1, "collectedAt": "x", "pageUrl": "https://example.org/course", "pageTitle": "Course - Chrome", "headings": ["H"]}
+
+        def enrich(snapshot, hwnd, *, url_timeout_seconds):
+            snapshot.site_url = "https://example.org/course"
+            snapshot.site_source = "windows-uia-document"
+            return snapshot
+
+        def run(windows):
+            with (
+                patch.object(windows_workspace, "is_windows", return_value=True),
+                patch.object(windows_workspace, "process_session_id", return_value=1),
+                patch.object(windows_workspace, "read_foreground_window", side_effect=windows),
+                patch.object(windows_workspace, "resolve_identity", return_value=(
+                    ProcessIdentity(exe_path=r"C:\Apps\chrome.exe", exe_name="chrome.exe", aumid=None), None)),
+                patch.object(windows_workspace, "enrich_browser_snapshot", side_effect=enrich),
+                patch.object(windows_workspace, "capture_windows_browser_content", return_value=context) as clues,
+            ):
+                return windows_workspace.current_snapshot(), clues
+
+        snapshot, clues = run([stable, stable, stable])
+        self.assertEqual(snapshot.browser_content_context, context)
+        self.assertLessEqual(clues.call_args.kwargs["timeout_seconds"], 1.45)
+        self.assertGreater(clues.call_args.kwargs["timeout_seconds"], 1.0)
+        # A title change after the clue read discards the whole candidate.
+        snapshot, _ = run([stable, stable, changed, changed, changed, changed])
+        self.assertEqual(snapshot.window_title, "Other - Chrome")
+        snapshot, _ = run([stable, stable, changed, changed, changed, stable])
+        self.assertIsNone(snapshot.browser_content_context)
+        self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
 
 
 if __name__ == "__main__":
