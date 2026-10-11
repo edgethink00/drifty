@@ -20,6 +20,17 @@ CREATE TABLE ai_review_events (
 )
 """
 
+PRE_SNAPSHOT_CASCADE_REVIEW_SCHEMA = """
+CREATE TABLE ai_review_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    segment_id INTEGER NOT NULL REFERENCES activity_segments(id) ON DELETE CASCADE,
+    pass_id INTEGER NOT NULL REFERENCES project_pass_runs(id),
+    prev_category TEXT, prev_productivity TEXT, prev_source TEXT,
+    new_category TEXT, new_productivity TEXT, confidence REAL,
+    reason TEXT, created_at TEXT NOT NULL, reverted_at TEXT
+)
+"""
+
 
 class AiReviewDeletionTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -72,7 +83,10 @@ class AiReviewDeletionTests(unittest.TestCase):
             conn.execute("DROP TABLE ai_review_events")
             conn.execute(LEGACY_REVIEW_SCHEMA)
             if not only_orphans:
-                conn.executemany("INSERT INTO ai_review_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", expected)
+                conn.executemany(
+                    "INSERT INTO ai_review_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [row[:12] for row in expected],
+                )
             conn.execute("""INSERT INTO ai_review_events(id,segment_id,pass_id,reason,created_at)
                             VALUES (50,999,?,'Orphan segment','2026-10-03T12:00:00Z')""", (self.pass_id,))
             conn.execute("""INSERT INTO ai_review_events(id,segment_id,pass_id,reason,created_at)
@@ -149,6 +163,26 @@ class AiReviewDeletionTests(unittest.TestCase):
         self.assertEqual(self.review_rows(), first)
         self.assertEqual(self.raw("SELECT name,sql FROM sqlite_master WHERE tbl_name='ai_review_events' ORDER BY name"), schema)
 
+    def test_pre_snapshot_cascade_schema_adds_columns_and_preserves_legacy_events(self) -> None:
+        expected = self.review_rows()
+        self.db.close()
+        with closing(sqlite3.connect(self.path)) as conn:
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("DROP TABLE ai_review_events")
+            conn.execute(PRE_SNAPSHOT_CASCADE_REVIEW_SCHEMA)
+            conn.executemany(
+                "INSERT INTO ai_review_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [row[:12] for row in expected],
+            )
+            conn.commit()
+
+        self.reopen()
+        self.assertEqual(self.review_rows(), expected)
+        self.assertEqual(
+            [row[1] for row in self.raw("PRAGMA table_info(ai_review_events)")][-2:],
+            ["prev_classification_json", "applied_classification_json"],
+        )
+
     def test_failed_schema_rebuild_rolls_back_ddl_rows_and_sequence(self) -> None:
         from app.storage.ai_review_schema import ensure_ai_review_schema
 
@@ -181,6 +215,46 @@ class AiReviewDeletionTests(unittest.TestCase):
         self.assertEqual(self.raw("SELECT name,sql FROM sqlite_master WHERE tbl_name='ai_review_events' ORDER BY name"), before_schema)
         self.assertEqual(self.raw("SELECT seq FROM sqlite_sequence WHERE name='ai_review_events'"), sequence)
         self.assertEqual(self.raw("SELECT name FROM sqlite_master WHERE name='ai_review_events_cascade'"), [])
+
+    def test_failed_snapshot_column_upgrade_rolls_back_all_schema_changes(self) -> None:
+        from app.storage.ai_review_schema import ensure_ai_review_schema
+
+        self.db.close()
+        with closing(sqlite3.connect(self.path)) as conn:
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("DROP TABLE ai_review_events")
+            conn.execute(PRE_SNAPSHOT_CASCADE_REVIEW_SCHEMA)
+            conn.commit()
+
+        with closing(sqlite3.connect(self.path)) as conn:
+            before_columns = [row[1] for row in conn.execute("PRAGMA table_info(ai_review_events)")]
+            conn.execute("INSERT INTO tracker_meta(key,value) VALUES ('qa.snapshot.outer','retained')")
+            alter_calls = 0
+
+            def deny_second_alter(action: int, first: str, second: str, *_unused) -> int:
+                nonlocal alter_calls
+                if action == sqlite3.SQLITE_ALTER_TABLE and second == "ai_review_events":
+                    alter_calls += 1
+                    if alter_calls == 2:
+                        return sqlite3.SQLITE_DENY
+                return sqlite3.SQLITE_OK
+
+            conn.set_authorizer(deny_second_alter)
+            try:
+                with self.assertRaises(sqlite3.DatabaseError):
+                    ensure_ai_review_schema(conn)
+            finally:
+                conn.set_authorizer(lambda *_args: sqlite3.SQLITE_OK)
+            self.assertEqual(alter_calls, 2)
+            self.assertTrue(conn.in_transaction)
+            self.assertEqual(
+                conn.execute("SELECT value FROM tracker_meta WHERE key='qa.snapshot.outer'").fetchone()[0],
+                "retained",
+            )
+            self.assertEqual(
+                [row[1] for row in conn.execute("PRAGMA table_info(ai_review_events)")],
+                before_columns,
+            )
 
     def test_fresh_schema_rejects_orphan_review_writes(self) -> None:
         with self.db.connect() as conn:

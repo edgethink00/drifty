@@ -89,6 +89,178 @@ class ClassificationWriteGuardsTests(unittest.TestCase):
         self.assertEqual(self.db.revert_ai_review_event(event["id"]), {"reverted": True, "restored": True})
         self.assertEqual(self.current()["category"], "workspace")
 
+    def test_review_revert_restores_the_complete_prior_classification(self) -> None:
+        original = self.record(
+            category="workspace",
+            productivity="focus",
+            confidence=0.61,
+            reason="Original LLM reason",
+            model="synthetic-model",
+            promptVersion="prompt-v7",
+            taxonomyVersion="taxonomy-v4",
+            requestId="request-original",
+            latencyMs=654,
+            classifiedAt="2026-04-06T08:00:00Z",
+            aiResult=True,
+            stale=False,
+        )
+        self.db.save_classifications([original])
+        with self.db.connect() as conn:
+            before = dict(conn.execute(
+                "SELECT * FROM activity_classifications WHERE segment_id = ?", (self.sid,)
+            ).fetchone())
+
+        pid = self.pass_id()
+        self.db.save_classifications([self.record(
+            "ai_review", reviewPassId=pid, reason="Review reason", model=None,
+            promptVersion=None, taxonomyVersion=None, requestId=None, latencyMs=None,
+            aiResult=False,
+        )])
+        event = self.db.get_ai_review_events()[0]
+        self.assertEqual(
+            set(event),
+            {"id", "segmentId", "passId", "prevCategory", "prevProductivity", "prevSource",
+             "newCategory", "newProductivity", "confidence", "reason", "createdAt", "revertedAt"},
+        )
+
+        traced: list[str] = []
+        self.db.connect().set_trace_callback(traced.append)
+        try:
+            self.assertEqual(
+                self.db.revert_ai_review_event(event["id"]),
+                {"reverted": True, "restored": True},
+            )
+        finally:
+            self.db.connect().set_trace_callback(None)
+        with self.db.connect() as conn:
+            after = dict(conn.execute(
+                "SELECT * FROM activity_classifications WHERE segment_id = ?", (self.sid,)
+            ).fetchone())
+        self.assertEqual(after, before)
+        self.assertEqual(next(statement for statement in traced if statement.startswith("BEGIN")), "BEGIN IMMEDIATE")
+        self.assertEqual(self.db.get_reusable_ai_classifications(["qa-late"])["qa-late"]["model"],
+                         "synthetic-model")
+        self.assertEqual(self.db.refresh_non_ai_classifications(), 0)
+        self.assertIsNotNone(self.current())
+
+    def test_latest_then_earlier_revert_restores_the_original_classification(self) -> None:
+        self.db.save_classifications([self.record(
+            category="workspace", productivity="focus", confidence=0.61,
+            reason="Original AI reason", model="original-model", aiResult=True,
+        )])
+        original = self.current()
+        self.db.save_classifications([self.record(
+            "ai_review", reviewPassId=self.pass_id(),
+            category="communication", productivity="neutral",
+        )])
+        first = self.db.get_ai_review_events()[0]
+        self.db.save_classifications([self.record("ai_review", reviewPassId=self.pass_id())])
+        latest = self.db.get_ai_review_events()[0]
+        self.assertEqual(self.db.revert_ai_review_event(latest["id"]),
+                         {"reverted": True, "restored": True})
+        self.assertEqual(self.current()["category"], "communication")
+        self.assertEqual(self.db.revert_ai_review_event(first["id"]),
+                         {"reverted": True, "restored": True})
+        self.assertEqual(self.current(), original)
+
+    def test_older_review_is_consumed_without_overwriting_newer_review(self) -> None:
+        self.db.save_classifications([self.record(category="workspace", productivity="focus")])
+        first_pass = self.pass_id()
+        self.db.save_classifications([self.record(
+            "ai_review", reviewPassId=first_pass,
+            category="communication", productivity="neutral", reason="first review",
+        )])
+        older = self.db.get_ai_review_events()[0]
+
+        second_pass = self.pass_id()
+        self.db.save_classifications([self.record(
+            "ai_review", reviewPassId=second_pass,
+            category="learning", productivity="focus", reason="second review",
+        )])
+        newer = self.db.get_ai_review_events()[0]
+
+        self.assertEqual(
+            self.db.revert_ai_review_event(older["id"]),
+            {"reverted": True, "restored": False},
+        )
+        self.assertEqual((self.current()["category"], self.current()["source"]),
+                         ("learning", "ai_review"))
+        events = {event["id"]: event for event in self.db.get_ai_review_events()}
+        self.assertIsNotNone(events[older["id"]]["revertedAt"])
+        self.assertIsNone(events[newer["id"]]["revertedAt"])
+
+        self.assertEqual(
+            self.db.revert_ai_review_event(newer["id"]),
+            {"reverted": True, "restored": True},
+        )
+        self.assertEqual((self.current()["category"], self.current()["productivity"]),
+                         ("communication", "neutral"))
+        self.assertEqual(self.db.revert_ai_review_event(newer["id"]),
+                         {"reverted": False, "restored": False})
+
+    def test_revert_rejects_same_label_ai_review_that_does_not_own_current_row(self) -> None:
+        self.db.save_classifications([self.record(category="workspace", productivity="focus")])
+        pid = self.pass_id()
+        review = self.record("ai_review", reviewPassId=pid, reason="accepted review")
+        self.db.save_classifications([review])
+        event = self.db.get_ai_review_events()[0]
+
+        # A later legacy writer can reproduce the same labels without creating
+        # an accepted event. Exact applied-state comparison still detects it.
+        self.db.save_classifications([self.record("ai_review", reason="later same-label write")])
+        self.assertEqual(
+            self.db.revert_ai_review_event(event["id"]),
+            {"reverted": True, "restored": False},
+        )
+        self.assertEqual(self.current()["reason"], "later same-label write")
+
+    def test_revert_rejects_accepted_ai_review_aba(self) -> None:
+        self.db.save_classifications([self.record(category="workspace", productivity="focus")])
+        first_pass = self.pass_id()
+        self.db.save_classifications([self.record(
+            "ai_review", reviewPassId=first_pass,
+            category="communication", productivity="neutral", reason="A to B",
+        )])
+        oldest = self.db.get_ai_review_events()[0]
+        second_pass = self.pass_id()
+        self.db.save_classifications([self.record(
+            "ai_review", reviewPassId=second_pass,
+            category="learning", productivity="focus", reason="B to C",
+        )])
+        third_pass = self.pass_id()
+        self.db.save_classifications([self.record(
+            "ai_review", reviewPassId=third_pass,
+            category="communication", productivity="neutral", reason="C back to B",
+        )])
+
+        self.assertEqual((self.current()["category"], self.current()["productivity"]),
+                         ("communication", "neutral"))
+        self.assertEqual(
+            self.db.revert_ai_review_event(oldest["id"]),
+            {"reverted": True, "restored": False},
+        )
+        self.assertEqual(self.current()["reason"], "C back to B")
+
+    def test_revert_preserves_a_later_active_rule_materialization(self) -> None:
+        self.db.save_classifications([self.record(category="workspace", productivity="focus")])
+        pid = self.pass_id()
+        self.db.save_classifications([self.record("ai_review", reviewPassId=pid)])
+        event = self.db.get_ai_review_events()[0]
+        rule = self.db.save_classification_rule({
+            "targetKind": "app", "targetValue": "Code",
+            "category": "learning", "productivity": "focus",
+        })
+        self.db.save_classifications([self.record(
+            "rule", classificationRuleId=rule["id"], category="learning", productivity="focus",
+        )])
+
+        self.assertEqual(
+            self.db.revert_ai_review_event(event["id"]),
+            {"reverted": True, "restored": False},
+        )
+        self.assertEqual((self.current()["source"], self.current()["classificationRuleId"]),
+                         ("rule", rule["id"]))
+
     def test_rejected_review_creates_no_event_or_correction_count(self) -> None:
         self.rule()
         pid = self.pass_id()

@@ -3975,6 +3975,25 @@ class TrackerDatabase:
             for row in rows
         ]
 
+    _AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS = (
+        "input_fingerprint",
+        "category",
+        "productivity",
+        "source",
+        "confidence",
+        "reason",
+        "model",
+        "prompt_version",
+        "taxonomy_version",
+        "request_id",
+        "latency_ms",
+        "classified_at",
+        "refreshed_at",
+        "ai_result",
+        "stale",
+        "classification_rule_id",
+    )
+
     @staticmethod
     def _serialize_ai_review_event(row: sqlite3.Row) -> dict[str, Any]:
         return {
@@ -3999,7 +4018,11 @@ class TrackerDatabase:
 
     @staticmethod
     def _save_ai_review_events(
-        conn: sqlite3.Connection, events: list[dict[str, Any]], timestamp: str
+        conn: sqlite3.Connection,
+        events: list[dict[str, Any]],
+        timestamp: str,
+        *,
+        capture_classification_snapshots: bool = False,
     ) -> int:
         saved = 0
         for event in events:
@@ -4012,15 +4035,30 @@ class TrackerDatabase:
             except (TypeError, ValueError):
                 continue
             confidence = event.get("confidence")
+            previous_snapshot = event.get("_previousClassification")
+            applied_snapshot = event.get("_appliedClassification")
+            if capture_classification_snapshots:
+                previous_snapshot_json = json.dumps(
+                    previous_snapshot, separators=(",", ":"), sort_keys=True
+                )
+                applied_snapshot_json = json.dumps(
+                    applied_snapshot, separators=(",", ":"), sort_keys=True
+                )
+            else:
+                # The legacy public event command cannot supply restore state.
+                # Only the atomic classification writer owns these snapshots.
+                previous_snapshot_json = None
+                applied_snapshot_json = None
             # pass_id references project_pass_runs; an event whose segment is gone
             # can never be shown or reverted. Skip either case per row (#1492).
             cursor = conn.execute(
                 """
                 INSERT INTO ai_review_events (
                     segment_id, pass_id, prev_category, prev_productivity, prev_source,
-                    new_category, new_productivity, confidence, reason, created_at, reverted_at
+                    new_category, new_productivity, confidence, reason, created_at, reverted_at,
+                    prev_classification_json, applied_classification_json
                 )
-                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?
                 WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
                   AND EXISTS (SELECT 1 FROM project_pass_runs WHERE id = ?)
                 """,
@@ -4035,6 +4073,8 @@ class TrackerDatabase:
                     float(confidence) if confidence is not None else None,
                     event.get("reason"),
                     event.get("createdAt") or event.get("created_at") or timestamp,
+                    previous_snapshot_json,
+                    applied_snapshot_json,
                     segment_id,
                     pass_id,
                 ),
@@ -4062,38 +4102,80 @@ class TrackerDatabase:
     def revert_ai_review_event(self, event_id: int) -> dict[str, Any]:
         timestamp = datetime.now(timezone.utc).isoformat()
         with self.connect() as conn:
+            # Reserve the writer before reading either the event or the current
+            # classification. The ownership check and restore are one snapshot.
+            if not conn.in_transaction:
+                conn.execute("BEGIN IMMEDIATE")
             event = conn.execute(
                 "SELECT * FROM ai_review_events WHERE id = ?", (event_id,)
             ).fetchone()
             if event is None or event["reverted_at"] is not None:
                 return {"reverted": False, "restored": False}
 
+            snapshot_columns = ", ".join(self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)
             current = conn.execute(
-                "SELECT source FROM activity_classifications WHERE segment_id = ?",
+                f"SELECT {snapshot_columns} FROM activity_classifications WHERE segment_id = ?",
                 (event["segment_id"],),
             ).fetchone()
+            newer_event = conn.execute(
+                "SELECT 1 FROM ai_review_events WHERE segment_id = ? AND id > ? AND reverted_at IS NULL LIMIT 1",
+                (event["segment_id"], event["id"]),
+            ).fetchone()
             restored = False
-            if (
-                current is not None
-                and current["source"] == "ai_review"
-                and event["prev_category"] is not None
-                and event["prev_productivity"] is not None
-            ):
-                conn.execute(
-                    """
-                    UPDATE activity_classifications
-                    SET category = ?, productivity = ?, source = ?, refreshed_at = ?
-                    WHERE segment_id = ?
-                    """,
-                    (
-                        event["prev_category"],
-                        event["prev_productivity"],
-                        event["prev_source"] or "llm",
-                        timestamp,
-                        event["segment_id"],
-                    ),
-                )
-                restored = True
+            previous_snapshot_json = event["prev_classification_json"]
+            applied_snapshot_json = event["applied_classification_json"]
+            if current is not None and newer_event is None:
+                if previous_snapshot_json is not None or applied_snapshot_json is not None:
+                    try:
+                        previous_snapshot = json.loads(previous_snapshot_json)
+                        applied_snapshot = json.loads(applied_snapshot_json)
+                    except (TypeError, json.JSONDecodeError):
+                        previous_snapshot = None
+                        applied_snapshot = None
+                    expected_columns = set(self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)
+                    if (
+                        isinstance(previous_snapshot, dict)
+                        and isinstance(applied_snapshot, dict)
+                        and set(previous_snapshot) == expected_columns
+                        and set(applied_snapshot) == expected_columns
+                        and applied_snapshot["source"] == "ai_review"
+                        and dict(current) == applied_snapshot
+                    ):
+                        assignments = ", ".join(
+                            f"{column} = ?" for column in self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS
+                        )
+                        conn.execute(
+                            f"UPDATE activity_classifications SET {assignments} WHERE segment_id = ?",
+                            tuple(previous_snapshot[column]
+                                  for column in self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)
+                            + (event["segment_id"],),
+                        )
+                        restored = True
+                elif (
+                    # Legacy events have no complete snapshot. Preserve their
+                    # historical label-only behavior, but apply the same
+                    # ownership/latest-event guard and never infer metadata.
+                    current["source"] == "ai_review"
+                    and current["category"] == event["new_category"]
+                    and current["productivity"] == event["new_productivity"]
+                    and event["prev_category"] is not None
+                    and event["prev_productivity"] is not None
+                ):
+                    conn.execute(
+                        """
+                        UPDATE activity_classifications
+                        SET category = ?, productivity = ?, source = ?, refreshed_at = ?
+                        WHERE segment_id = ?
+                        """,
+                        (
+                            event["prev_category"],
+                            event["prev_productivity"],
+                            event["prev_source"] or "llm",
+                            timestamp,
+                            event["segment_id"],
+                        ),
+                    )
+                    restored = True
             conn.execute(
                 "UPDATE ai_review_events SET reverted_at = ? WHERE id = ?",
                 (timestamp, event_id),
@@ -4158,7 +4240,8 @@ class TrackerDatabase:
                     ).fetchone() is not None:
                         continue
                     review_previous = conn.execute(
-                        "SELECT category, productivity, source FROM activity_classifications WHERE segment_id = ?",
+                        f"SELECT {', '.join(self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)} "
+                        "FROM activity_classifications WHERE segment_id = ?",
                         (segment_id,),
                     ).fetchone()
                     if review_previous is None:
@@ -4253,6 +4336,11 @@ class TrackerDatabase:
                 if cursor.rowcount > 0:
                     saved += cursor.rowcount
                     if source == "ai_review" and review_pass_id is not None:
+                        review_applied = conn.execute(
+                            f"SELECT {', '.join(self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)} "
+                            "FROM activity_classifications WHERE segment_id = ?",
+                            (segment_id,),
+                        ).fetchone()
                         event_saved = self._save_ai_review_events(conn, [{
                             "segmentId": segment_id,
                             "passId": review_pass_id,
@@ -4263,7 +4351,9 @@ class TrackerDatabase:
                             "newProductivity": item["productivity"],
                             "confidence": item.get("confidence"),
                             "reason": item.get("reason"),
-                        }], timestamp)
+                            "_previousClassification": dict(review_previous),
+                            "_appliedClassification": dict(review_applied),
+                        }], timestamp, capture_classification_snapshots=True)
                         if event_saved != 1:
                             raise sqlite3.IntegrityError("Unable to record the applied AI review correction")
                         conn.execute(
