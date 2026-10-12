@@ -6,11 +6,71 @@
 !define DRIFTY_VC_REDIST_MINOR 51
 !define DRIFTY_VC_REDIST_BLD 36247
 !define DRIFTY_VC_REDIST_RBLD 0
+!ifndef DRIFTY_TRACKER_IMAGE
+  !define DRIFTY_TRACKER_IMAGE "drifty-tracker.exe"
+!endif
+!ifndef DRIFTY_TRACKER_INSTALLED_EXE
+  ; tauri.windows.conf.json installs the onedir sidecar as drifty-tracker/.
+  !define DRIFTY_TRACKER_INSTALLED_EXE "drifty-tracker\${DRIFTY_TRACKER_IMAGE}"
+!endif
+; The app's own exit Stop waits up to 3 s, so a tracker that honored it is
+; normally gone before the installer starts.
+!define DRIFTY_TRACKER_GRACE_MS 10000
+!define DRIFTY_TRACKER_REAP_MS 5000
+
+; A silent installer cannot replace an executable that is still running: NSIS
+; (AllowSkipFiles on, Tauri's default) answers its own file error with Ignore,
+; skips the file and still exits 0. The updated app then keeps launching the
+; previous tracker. Let a tracker that is already stopping finish its own
+; cleanup, stop whatever still holds the file, and only then copy.
+; Opening the installed exe for writing is the same check the copy will make.
+Function DriftyStopTrackerForUpdate
+  Push $R6
+  Push $R7
+  Push $R8
+  IfFileExists "$INSTDIR\${DRIFTY_TRACKER_INSTALLED_EXE}" 0 drifty_tracker_released
+  System::Call 'kernel32::GetTickCount()i .R6'
+  drifty_tracker_grace:
+    ClearErrors
+    FileOpen $R8 "$INSTDIR\${DRIFTY_TRACKER_INSTALLED_EXE}" a
+    IfErrors 0 drifty_tracker_open
+    System::Call 'kernel32::GetTickCount()i .R7'
+    IntOp $R7 $R7 - $R6
+    IntCmp $R7 ${DRIFTY_TRACKER_GRACE_MS} drifty_tracker_kill 0 drifty_tracker_kill
+    Sleep 250
+    Goto drifty_tracker_grace
+  drifty_tracker_kill:
+    DetailPrint "Stopping ${DRIFTY_TRACKER_IMAGE} so the update can replace it"
+    nsExec::Exec 'taskkill /F /IM ${DRIFTY_TRACKER_IMAGE}'
+    Pop $R8
+    System::Call 'kernel32::GetTickCount()i .R6'
+  drifty_tracker_reap:
+    ; Termination is asynchronous; the image stays locked until the process exits.
+    ClearErrors
+    FileOpen $R8 "$INSTDIR\${DRIFTY_TRACKER_INSTALLED_EXE}" a
+    IfErrors 0 drifty_tracker_open
+    System::Call 'kernel32::GetTickCount()i .R7'
+    IntOp $R7 $R7 - $R6
+    IntCmp $R7 ${DRIFTY_TRACKER_REAP_MS} drifty_tracker_released 0 drifty_tracker_released
+    Sleep 250
+    Goto drifty_tracker_reap
+  drifty_tracker_open:
+    FileClose $R8
+  drifty_tracker_released:
+  Pop $R8
+  Pop $R7
+  Pop $R6
+FunctionEnd
 
 !macro NSIS_HOOK_PREINSTALL
-  ; Drifty's native updater stops the app and tracker before launching /UPDATE.
-  ; A second forced kill here can interrupt database cleanup.
-  StrCmp $UpdateMode "1" drifty_processes_stopped
+  ; Updates arrive from the current native updater, which already sent Stop,
+  ; and from older clients' Tauri updater, which may leave the tracker running.
+  ; Wait for a stopping tracker instead of interrupting its database cleanup,
+  ; but never leave a running one for the silent copy to skip.
+  StrCmp $UpdateMode "1" 0 drifty_processes_kill
+  Call DriftyStopTrackerForUpdate
+  Goto drifty_processes_stopped
+  drifty_processes_kill:
   ; Interactive/manual installation may replace a still-running app.
   nsExec::Exec 'taskkill /F /IM drifty.exe'
   nsExec::Exec 'taskkill /F /IM drifty-tracker.exe'
