@@ -133,6 +133,27 @@ describe("ProDecisionSheet", () => {
     expect(screen.getByRole("button", { name: "Not now" }).hasAttribute("disabled")).toBe(true);
   });
 
+  it("cannot be dismissed while checkout opens, so Privacy settings stay out of reach", () => {
+    // The pending-checkout opt-out race needs Settings > Privacy, which this
+    // sheet covers. docs/analytics/pro-funnel.md relies on this lock to record
+    // that race as not reachable; a dismissal path here reopens the live check.
+    const opening = renderSheet({ billingCheckoutLoadingInterval: "monthly" });
+    fireEvent.keyDown(window, { key: "Escape" });
+    const closeButton = screen.getByRole("button", { name: "Close plan choice" });
+    expect(closeButton.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(closeButton);
+    const overlay = document.querySelector(".pro-sheet") as HTMLElement;
+    fireEvent.pointerDown(overlay);
+    fireEvent.click(overlay);
+    expect(opening.onDismiss).not.toHaveBeenCalled();
+
+    cleanup();
+    const idle = renderSheet();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(idle.onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+
   it("renders nothing when closed", () => {
     renderSheet({ open: false });
     expect(screen.queryByRole("dialog")).toBeNull();
