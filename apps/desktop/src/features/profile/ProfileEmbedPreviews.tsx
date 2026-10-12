@@ -1,3 +1,4 @@
+import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { formatFocusDuration } from "../share/badgeSvg";
 import type { BadgeThemeOption } from "../share/embedSnippets";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
@@ -88,7 +89,7 @@ export function FocusCardEmbedPreview({
       <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${palette.line}`, paddingTop: 8, fontSize: "0.72rem", color: palette.muted }}>
         <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#2e9e4f" : "#9a9e96" }} />
         <span>live preview</span>
-        <span style={{ marginLeft: "auto", fontWeight: 600 }}>powered by <strong style={{ color: palette.ink }}>drifty</strong> ↗</span>
+        <span style={{ marginLeft: "auto", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, whiteSpace: "nowrap" }}><span>powered by <strong style={{ color: palette.ink }}>drifty</strong></span><ExternalLinkIcon /></span>
       </div>
     </div>
   );

@@ -36,8 +36,8 @@
 .privacy-sharing-details__links { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 1rem; }
 .privacy-sharing-details__links .settings-inline-link,
 .privacy-policy-link { color: var(--text-soft); font-size: 0.75rem; text-decoration: underline; text-underline-offset: 3px; }
-.privacy-policy-link { display: inline-flex; align-items: center; gap: 0.3rem; }
-.privacy-policy-link svg { display: block; height: 0.75rem; width: 0.75rem; }
+.privacy-policy-link { display: inline-flex; align-items: center; gap: 4px; }
+.privacy-policy-link svg { height: 12px; width: 12px; }
 .privacy-sharing-details__body { margin-top: 0.75rem; }
 
 .privacy-sharing-details__links .settings-inline-link { margin-block-start: 0; }

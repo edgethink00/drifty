@@ -266,6 +266,11 @@
 }
 
 .rank-embed-preview__brand {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  white-space: nowrap;
   font-weight: 600;
   margin-left: auto;
 }
@@ -416,6 +421,9 @@
 }
 
 .rank-embed-snippet__preview {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
   color: var(--accent-strong);
   font-size: 0.7rem;
   justify-self: end;

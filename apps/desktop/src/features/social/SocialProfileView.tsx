@@ -1,3 +1,4 @@
+import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { useEffect, useState, type CSSProperties } from "react";
 import { formatRoundedDuration } from "../../lib/formatting";
 import { ModalPresence } from "../../components/ModalPresence";
@@ -139,7 +140,7 @@ export function SocialProfileView({
             <div className="social-profile-url">
               <span className="social-profile-url__value">{profileUrl}</span>
               <button type="button" className="app-btn app-btn--primary" onClick={publicProfile.onCopyProfileLink}>Copy link</button>
-              {draft.isPublic ? <a href={profileUrl} target="_blank" rel="noreferrer" aria-label="Open public profile">↗</a> : null}
+              {draft.isPublic ? <a href={profileUrl} target="_blank" rel="noreferrer" aria-label="Open public profile"><ExternalLinkIcon /></a> : null}
             </div>
           ) : draft.isPublic ? (
             <button type="button" className="app-btn app-btn--primary social-profile-setup" disabled={publicProfile.profileSaving} onClick={() => void publicProfile.onEnsureProfile()}>

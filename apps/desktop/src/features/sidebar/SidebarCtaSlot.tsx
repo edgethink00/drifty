@@ -1,3 +1,4 @@
+import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import type { CSSProperties } from "react";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
@@ -656,29 +657,24 @@ export function SidebarCtaSlot({
           onClick={onAction}
         >
           <span className="sidebar-cta-slot__action-label">{actionLabel}</span>
-          <svg
-            className="sidebar-cta-slot__arrow"
-            data-direction={state.direction}
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            {state.direction === "external" ? (
-              <>
-                <path d="M3.6 8.4 8.4 3.6" />
-                <path d="M4.6 3.6h3.8v3.8" />
-              </>
-            ) : (
-              <>
-                <path d="M2.4 6h7.2" />
-                <path d="M6.6 3 9.6 6l-3 3" />
-              </>
-            )}
-          </svg>
+          {state.direction === "external" ? (
+            <ExternalLinkIcon className="sidebar-cta-slot__arrow" />
+          ) : (
+            <svg
+              className="sidebar-cta-slot__arrow"
+              data-direction="forward"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2.4 6h7.2" />
+              <path d="M6.6 3 9.6 6l-3 3" />
+            </svg>
+          )}
         </button>
       </div>
       {onDismiss ? (

@@ -1,3 +1,4 @@
+import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { SettingsSearch } from "./SettingsSearch";
 import { PetIcon } from "../../components/PetIcon";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -99,15 +100,6 @@ function CommunityIcon() {
       <circle cx="9.5" cy="8" r="3.2" />
       <path d="M22 20v-1a4 4 0 0 0-3-3.87" />
       <path d="M15.5 4.8a3.2 3.2 0 0 1 0 6.2" />
-    </svg>
-  );
-}
-
-function ExternalLinkIcon() {
-  return (
-    <svg className="settings-nav-item__external" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4.2 2H2.8a.8.8 0 0 0-.8.8v6.4a.8.8 0 0 0 .8.8h6.4a.8.8 0 0 0 .8-.8V7.8" />
-      <path d="M6.4 2H10v3.6M10 2 5.4 6.6" />
     </svg>
   );
 }
@@ -214,7 +206,7 @@ export function SettingsSidebar({
         >
           <span className="settings-nav-item__icon" aria-hidden="true"><CommunityIcon /></span>
           <span className="settings-nav-item__label">{t("settings.sidebar.community")}</span>
-          <ExternalLinkIcon />
+          {!isCollapsed ? <ExternalLinkIcon className="settings-nav-item__external" /> : null}
           {isCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{t("settings.sidebar.community")}</span> : null}
         </button>
         {discordError ? <p className="settings-sidebar-links__error" role="alert">{t("settings.general.communityOpenFailed")}</p> : null}

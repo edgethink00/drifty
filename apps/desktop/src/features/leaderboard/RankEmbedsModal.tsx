@@ -1,3 +1,4 @@
+import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { formatLocalizedDuration } from "../../lib/formatting";
@@ -139,7 +140,7 @@ export function RankEmbedsModal({
                     <div className="rank-embed-preview__foot">
                       <span className="rank-embed-preview__dot" />
                       <span>{t("leaderboard.embed.liveRanking")}</span>
-                      <span className="rank-embed-preview__brand">{t("leaderboard.embed.poweredBy")} <b>drifty</b> ↗</span>
+                      <span className="rank-embed-preview__brand"><span>{t("leaderboard.embed.poweredBy")} <b>drifty</b></span><ExternalLinkIcon /></span>
                     </div>
                   </div>
                 ) : design === "compact" ? (
@@ -182,7 +183,7 @@ export function RankEmbedsModal({
                   <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={markdownSnippet} onFocus={(event) => event.currentTarget.select()} />
                   <button type="button" className="modal-btn modal-btn--secondary profile-copy-row__copy" disabled={!live} onClick={() => void copy("markdown", markdownSnippet)}>{copied === "markdown" ? t("leaderboard.embed.copied") : t("leaderboard.embed.copy")}</button>
                 </div>
-                {live ? <a className="rank-embed-snippet__preview" href={embedUrl} target="_blank" rel="noreferrer">{t("leaderboard.embed.openPreview")}</a> : null}
+                {live ? <a className="rank-embed-snippet__preview" href={embedUrl} target="_blank" rel="noreferrer">{t("leaderboard.embed.openPreview")}<ExternalLinkIcon /></a> : null}
               </div>
               {!live ? (
                 <div className="rank-embed-snippets__lock" role="note">

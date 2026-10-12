@@ -80,8 +80,8 @@
 }
 
 .settings-nav-item__external {
-  width: 0.7rem;
-  height: 0.7rem;
+  width: 14px;
+  height: 14px;
   margin-left: auto;
   flex: 0 0 auto;
   opacity: 0.7;
