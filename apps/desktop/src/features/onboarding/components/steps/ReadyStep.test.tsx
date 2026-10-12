@@ -134,7 +134,7 @@ describe("ReadyStep", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove: Old MacBook" }));
     // One more press confirms; the row says what removal does first.
     expect(revokeCloudDevice).not.toHaveBeenCalled();
-    expect(notice.textContent).toContain("Cloud AI will stop working on that device");
+    expect(notice.textContent).toContain("Cloud AI and device sync stop on that device");
     fireEvent.click(screen.getByRole("button", { name: "Remove device" }));
 
     await waitFor(() => expect(revokeCloudDevice).toHaveBeenCalledWith("old-mac"));

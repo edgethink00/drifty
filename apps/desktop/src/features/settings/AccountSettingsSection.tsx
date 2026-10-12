@@ -1,8 +1,6 @@
 import { useRef, useState } from "react";
 import { canOfferPromoCode, canStartCloudTrial } from "../billing/billingEligibility";
-import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
-import { DeviceSyncSetupModal } from "../device-sync/DeviceSyncSetupModal";
-import { Toggle } from "../../components/Toggle";
+import { DevicesSettingsBlock } from "./DevicesSettingsBlock";
 import { formatOrganizationSeatAccessCopy } from "../billing/billingAccessCopy";
 import {
   dissolveOwnOrganization,
@@ -121,7 +119,6 @@ export function AccountSettingsSection({
 }: AccountSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [couponSurface, setCouponSurface] = useState<"plan" | "invite">("plan");
-  const [syncSetupMode, setSyncSetupMode] = useState<"info" | "enable" | null>(null);
   const [localActionPending, setLocalActionPending] = useState(false);
   const [localActionError, setLocalActionError] = useState<string | null>(null);
   const actionInFlight = useRef(false);
@@ -208,6 +205,8 @@ export function AccountSettingsSection({
     }
   };
   const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
+  const isDeviceLimitReached = isDeviceLimitLocked
+    || (cloudDeviceAccess?.allowed === false && cloudDeviceAccess.reason === "device_limit_reached");
   const isPaymentRequiredLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "payment_required";
   const isCurrentCloudPlan = billingEntitlementStatus === "active";
   const organizationSeat = resolveOrganizationSeatDisplay(billingEntitlement);
@@ -453,98 +452,28 @@ export function AccountSettingsSection({
           ) : null}
         </div>
         <GoogleCalendarSettings />
-        {onDeviceSyncEnabledChange ? (
-          <>
-            <div data-setting-id="settings.account.syncMacs" className="settings-row account-device-sync-row">
-              <div>
-                <div className="lbl settings-label-with-badge">
-                  {t("settings.account.deviceSync")}
-                  <span className="status-badge">Pro</span>
-                </div>
-                <div className="desc">
-                  {t("settings.account.syncDescription")}{" "}
-                  <button type="button" className="account-device-sync-help" aria-haspopup="dialog"
-                    onClick={() => setSyncSetupMode("info")}>
-                    {t("settings.account.syncLearnMore")}
-                  </button>
-                </div>
-                {!deviceSyncGateActive && deviceSyncEnabled ? (
-                  <p className="capture-recency capture-recency--error" role="status">
-                    {t("settings.account.syncPaused")}
-                  </p>
-                ) : null}
-                {deviceSyncStatus?.lastError ? (
-                  <p className="capture-recency capture-recency--error" role="status">{localizeSettingsError(deviceSyncStatus.lastError, effectiveLanguage, t)}</p>
-                ) : null}
-              </div>
-              <div className="ctrl">
-                <Toggle
-                  checked={deviceSyncEnabled}
-                  disabled={!deviceSyncEnabled && !deviceSyncCanEnable}
-                  onChange={(enabled) => {
-                    if (enabled) setSyncSetupMode("enable");
-                    else onDeviceSyncEnabledChange(false);
-                  }}
-                  ariaLabel={t("settings.account.toggleSync")}
-                />
-              </div>
-            </div>
-            {deviceSyncEnabled ? (
-              <div className="settings-row settings-row--stacked-action">
-                <div>
-                  <div className="lbl">{t("settings.account.syncStatus")}</div>
-                  <div className="desc">{describeDeviceSyncStatus(deviceSyncStatus, t)}</div>
-                </div>
-                <div className="ctrl account-public-profile-actions">
-                  <button type="button" className="settings-btn" onClick={() => void onDeviceSyncNow?.()} disabled={!onDeviceSyncNow || !deviceSyncGateActive}>
-                    {t("settings.account.syncNow")}
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-btn danger"
-                    onClick={() => void onPurgeDeviceSyncData?.()}
-                    disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
-                    aria-busy={deviceSyncPurging}
-                  >
-                    <ActionLabel busy={deviceSyncPurging} busyLabel={t("settings.account.deleting")}>{t("settings.account.deleteCloud")}</ActionLabel>
-                  </button>
-                </div>
-              </div>
-            ) : isSignedIn ? (
-              <div className="settings-row settings-row--stacked-action">
-                <div>
-                  <div className="lbl">{t("settings.account.cloudCopy")}</div>
-                  <div className="desc">{t("settings.account.deleteCloudDescription")}</div>
-                </div>
-                <div className="ctrl">
-                  <button
-                    type="button"
-                    className="settings-btn danger"
-                    onClick={() => void onPurgeDeviceSyncData?.()}
-                    disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
-                    aria-busy={deviceSyncPurging}
-                  >
-                    <ActionLabel busy={deviceSyncPurging} busyLabel={t("settings.account.deleting")}>{t("settings.account.deleteCloud")}</ActionLabel>
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </>
-        ) : null}
-        {shouldShowDeviceManagement ? (
-          <div className="settings-row settings-row--cloud-devices">
-            <CloudDeviceManagementPanel
-              access={cloudDeviceAccess}
-              actionError={cloudDeviceActionError}
-              devices={cloudDevices}
-              isRefreshing={cloudStatusRefreshing}
-              revokingId={cloudDeviceRevokingId}
-              onRefresh={onRefreshCloudStatus}
-              onRevoke={onRevokeCloudDevice}
-            />
-          </div>
-        ) : null}
       </div>
+
+      <DevicesSettingsBlock
+        isSignedIn={isSignedIn}
+        deviceLimitReached={isDeviceLimitReached}
+        showDeviceList={shouldShowDeviceManagement}
+        cloudDeviceAccess={cloudDeviceAccess}
+        cloudDeviceActionError={cloudDeviceActionError}
+        cloudDeviceRevokingId={cloudDeviceRevokingId}
+        cloudDevices={cloudDevices}
+        cloudStatusRefreshing={cloudStatusRefreshing}
+        deviceSyncEnabled={deviceSyncEnabled}
+        deviceSyncCanEnable={deviceSyncCanEnable}
+        deviceSyncGateActive={deviceSyncGateActive}
+        deviceSyncStatus={deviceSyncStatus}
+        deviceSyncPurging={deviceSyncPurging}
+        onDeviceSyncEnabledChange={onDeviceSyncEnabledChange}
+        onDeviceSyncNow={onDeviceSyncNow}
+        onPurgeDeviceSyncData={onPurgeDeviceSyncData}
+        onRefreshCloudStatus={onRefreshCloudStatus}
+        onRevokeCloudDevice={onRevokeCloudDevice}
+      />
 
       {/* Plan and account controls come first; the account menu and settings
           search land on the invite card wherever it sits. */}
@@ -556,12 +485,6 @@ export function AccountSettingsSection({
         />
       ) : null}
 
-      <DeviceSyncSetupModal mode={syncSetupMode} canEnable={deviceSyncCanEnable}
-        onClose={() => setSyncSetupMode(null)} onEnable={() => {
-          if (!deviceSyncCanEnable) return;
-          setSyncSetupMode(null);
-          onDeviceSyncEnabledChange?.(true);
-        }} />
 
       {canDeleteAccount && onDeleteAccount ? (
         <div className="settings-block settings-block--danger-zone">
@@ -587,27 +510,4 @@ function organizationRoleLabel(role: OrganizationSeatDisplay["role"], t: Localiz
   if (role === "owner") return t("settings.account.organizationRoleOwner");
   if (role === "admin") return t("settings.account.organizationRoleAdmin");
   return t("settings.account.organizationRoleMember");
-}
-
-function describeDeviceSyncStatus(status: DeviceSyncStatus | undefined, t: LocalizationController["t"]): string {
-  if (!status || !status.enabled) return t("settings.account.syncWaiting");
-  const parts: string[] = [];
-  // Sequence gaps can come from received rows or already-covered history.
-  // They are not upload work after the actual outbox has drained.
-  if (status.pendingPushCount > 0 && status.backfill && status.backfill.pushedSeq < status.backfill.totalSeq) {
-    const percent = status.backfill.totalSeq > 0
-      ? Math.min(100, Math.floor((status.backfill.pushedSeq / status.backfill.totalSeq) * 100))
-      : 0;
-    parts.push(t("settings.account.syncUploading", { percent }));
-  }
-  if (status.lastPushedAt) parts.push(t("settings.account.lastUpload", { time: formatSyncTimestamp(status.lastPushedAt) }));
-  if (status.lastPulledAt) parts.push(t("settings.account.lastDownload", { time: formatSyncTimestamp(status.lastPulledAt) }));
-  if (parts.length === 0) return t("settings.account.syncWaiting");
-  return parts.join(" · ");
-}
-
-function formatSyncTimestamp(value: string): string {
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return value;
-  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }

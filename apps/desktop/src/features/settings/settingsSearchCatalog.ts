@@ -255,10 +255,17 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "로그인 계정 이메일 login sign in email account",
   },
   {
+    id: "settings.account.devices",
+    section: "account",
+    titleKey: "settings.account.devices",
+    keywords: "기기 내 기기 기기 제거 기기 한도 devices your devices remove device limit windows",
+    gate: "deviceSync",
+  },
+  {
     id: "settings.account.syncMacs",
     section: "account",
     titleKey: "settings.account.syncMacs",
-    keywords: "기기 동기화 맥 동기화 device sync macs",
+    keywords: "기기 동기화 이 기기 동기화 맥 동기화 device sync this device macs",
     descriptionKey: "settings.account.syncDescription",
     gate: "deviceSync",
   },

@@ -44,6 +44,7 @@
 [data-anchored-presence] > .settings-select-control__menu,
 [data-anchored-presence] > .pt-menu,
 [data-anchored-presence] > .classification-rule-card__menu,
+[data-anchored-presence] > .cloud-device-row__menu,
 [data-anchored-presence] > .developer-skill-picker__menu {
   transform-origin: top right;
 }

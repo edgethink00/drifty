@@ -29,20 +29,6 @@
   content: none;
 }
 
-.content--settings .settings-section--account .settings-block--cloud-account > .settings-row--cloud-devices {
-  align-items: stretch;
-  padding-top: 0.2rem;
-}
-
-/* Cloud devices belong to the signed-in account. Inside that shared Settings
-   card, the row supplies the chrome and the panel supplies only its content. */
-.content--settings .settings-section--account .settings-block--cloud-account .cloud-device-management {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-}
-
 .content--settings .settings-section--account .settings-block--plans > .account-plan-notice {
   background: transparent;
   border: 0;
@@ -100,27 +86,6 @@
   overflow-wrap: anywhere;
 }
 
-.account-device-sync-help {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: var(--text-soft);
-  cursor: pointer;
-  font: inherit;
-  padding: 0;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-.account-device-sync-help:hover { color: var(--text); }
-.account-device-sync-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-
-.content--settings .account-device-sync-row {
-  align-items: flex-start;
-}
-.content--settings .account-device-sync-row > .ctrl {
-  flex: 0 0 auto;
-  padding-top: 0.1rem;
-}
 
 .device-sync-setup-modal { display: grid; gap: var(--space-4); }
 .device-sync-setup-modal__details {
