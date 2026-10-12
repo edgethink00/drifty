@@ -414,3 +414,71 @@ fn reports_older_than_the_window_are_left_alone() {
     );
     assert_eq!(forwarded, 0);
 }
+
+#[test]
+fn the_onedir_tracker_below_the_app_counts_as_this_install() {
+    // tauri.windows.conf.json installs the tracker as drifty-tracker\ below the
+    // install directory; the app and browser host sit in the directory itself.
+    let archive = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let tracker = "12121212-3434-4565-8787-909090909090";
+    let host = "abababab-cdcd-4efe-8a0a-1b1b1b1b1b1b";
+    let signatures = [
+        "0.0.0.0",
+        "6ac7f9ac",
+        "python312.dll",
+        "3.12.10150.1013",
+        "67f3a0b1",
+        "c0000005",
+        "000000000001a2b3",
+    ];
+    let crash = |process: &str, app_dir: &str, id: &str| {
+        report("APPCRASH", process, &signatures, app_dir, id)
+    };
+    let tracker_dir = format!(r"{INSTALL_DIR}\drifty-tracker");
+    write_report(
+        archive.path(),
+        "AppCrash_drifty-tracker._1",
+        &crash("drifty-tracker.exe", &tracker_dir, tracker),
+    );
+    write_report(
+        archive.path(),
+        "AppCrash_drifty-browser-_2",
+        &crash("drifty-browser-host.exe", INSTALL_DIR, host),
+    );
+    // Another install's tracker, and a tracker beside the app, where this
+    // install never places one.
+    write_report(
+        archive.path(),
+        "AppCrash_drifty-tracker._3",
+        &crash(
+            "drifty-tracker.exe",
+            r"C:\Users\jane\qa\drifty-candidate\drifty-tracker",
+            "c1c1c1c1-d2d2-4e3e-8f4f-a5a5a5a5a5a5",
+        ),
+    );
+    write_report(
+        archive.path(),
+        "AppCrash_drifty-tracker._4",
+        &crash(
+            "drifty-tracker.exe",
+            INSTALL_DIR,
+            "e6e6e6e6-f7f7-4a8a-9b9b-c0c0c0c0c0c0",
+        ),
+    );
+
+    let mut sent = Vec::new();
+    let forwarded = forward_new_reports(
+        &[archive.path().to_path_buf()],
+        Path::new(INSTALL_DIR),
+        &[],
+        &state.path().join(STATE_FILE_NAME),
+        SystemTime::now(),
+        |event| {
+            sent.push(event.tags.get("crash.incident").cloned().unwrap());
+        },
+    );
+    sent.sort();
+    assert_eq!(forwarded, 2);
+    assert_eq!(sent, [tracker, host]);
+}

@@ -39,6 +39,9 @@ const DRIFTY_PROCESSES: [&str; 3] = [
     "drifty-tracker.exe",
     "drifty-browser-host.exe",
 ];
+/// `tauri.windows.conf.json` installs the onedir tracker in this folder below
+/// the install directory; the app and browser host sit in the directory itself.
+const TRACKER_INSTALL_FOLDER: &str = "drifty-tracker";
 /// Seconds between 1601-01-01 (FILETIME) and 1970-01-01 (Unix).
 const FILETIME_UNIX_OFFSET_SECONDS: u64 = 11_644_473_600;
 const MAX_FIELD_CHARS: usize = 120;
@@ -157,6 +160,15 @@ fn parent_dir(path: &str) -> Option<String> {
         .rsplit_once('\\')
         .map(|(dir, _)| dir.to_string())
         .filter(|dir| !dir.is_empty())
+}
+
+/// Where this install places `process`, given its normalized install directory.
+fn installed_process_dir(process: &str, install_dir: &str) -> String {
+    if process == "drifty-tracker.exe" {
+        format!("{install_dir}\\{TRACKER_INSTALL_FOLDER}")
+    } else {
+        install_dir.to_string()
+    }
 }
 
 /// Lowercases and unifies separators so a WER path and a Tauri path compare
@@ -404,7 +416,9 @@ pub(crate) fn forward_new_reports(
         let Some(crash) = parse_report_wer(&bytes) else {
             continue;
         };
-        if crash.process_dir.as_deref() != Some(install_dir.as_str()) {
+        if crash.process_dir.as_deref()
+            != Some(installed_process_dir(&crash.process, &install_dir).as_str())
+        {
             continue;
         }
         if state.incidents.contains(&crash.incident_id) {
