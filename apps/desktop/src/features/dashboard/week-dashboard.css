@@ -2127,7 +2127,9 @@
 /* Your Day's flow chart sits on the page without a card frame, like Your
    Week's calendar. Scoped to the Day page; other flow-chart hosts keep it. */
 .day-split__main .flow-breakdown-layout__chart {
-  border-color: transparent;
+  /* Remove the border's layout space too: the legend keeps its coordinates
+     and the color controls keep their top/right edges on Day/Week switches. */
+  border: 0;
   background: transparent;
   padding-inline: 0;
 }
