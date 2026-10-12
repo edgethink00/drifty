@@ -1001,7 +1001,8 @@ pub fn run() {
             )?;
             setup_tray(app.handle())?;
             // Crashes that ended earlier sessions outside Rust (AppKit
-            // exceptions, aborts) only exist as macOS crash reports.
+            // exceptions, aborts, Windows heap corruption or fail-fast) only
+            // exist as macOS crash reports or Windows Error Reporting records.
             native_crash_reports::forward_previous_crashes(app.handle());
 
             // Reclaim icon-cache generations nothing reads anymore. Both run

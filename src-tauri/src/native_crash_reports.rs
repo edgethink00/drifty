@@ -35,6 +35,10 @@ const REMEMBERED_INCIDENTS: usize = 64;
 const STATE_FILE_NAME: &str = "native-crash-reports.json";
 const MECHANISM: &str = "macos_crash_report";
 
+// Windows Error Reporting records share this module's forwarding state rules.
+#[path = "native_crash_reports_windows.rs"]
+mod windows_reports;
+
 /// One Drifty crash parsed from a macOS `.ips` report.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CrashReport {
@@ -424,7 +428,13 @@ pub fn forward_previous_crashes(app: &tauri::AppHandle) {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows keeps the equivalent record in Windows Error Reporting.
+#[cfg(windows)]
+pub fn forward_previous_crashes(app: &tauri::AppHandle) {
+    windows_reports::forward_previous_crashes(app);
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn forward_previous_crashes(_app: &tauri::AppHandle) {}
 
 #[cfg(test)]
