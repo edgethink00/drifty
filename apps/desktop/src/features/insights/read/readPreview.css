@@ -1,0 +1,33 @@
+/* Dev-only review bar for the Your read preview. */
+
+.insights-read-devbar {
+  position: fixed;
+  z-index: 1300;
+  bottom: 14px;
+  left: 50%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 32px);
+  gap: 8px;
+  padding: 5px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #1c1c19 90%, transparent);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+  transform: translateX(-50%);
+}
+
+.insights-read-devbar__group { display: flex; gap: 2px; }
+
+.insights-read-devbar button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.68);
+  font: 500 11px var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.insights-read-devbar button.is-active { background: rgba(255, 255, 255, 0.16); color: #fff; }

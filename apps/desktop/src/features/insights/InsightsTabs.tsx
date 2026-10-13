@@ -2,11 +2,11 @@ import { PageTabs } from "../../components/PageTabs";
 import { useLocalization } from "../localization/LocalizationContext";
 import { isInsightsReadTabEnabled } from "./insightsReadTab";
 
-export type InsightsTabId = "usage" | "coach";
+export type InsightsTabId = "usage" | "read";
 
 const INSIGHTS_TAB_CATALOG = [
   { id: "usage", labelKey: "trends.tab.usage" },
-  { id: "coach", labelKey: "trends.tab.coach" },
+  { id: "read", labelKey: "trends.tab.coach" },
 ] as const satisfies readonly {
   readonly id: InsightsTabId;
   readonly labelKey: "trends.tab.usage" | "trends.tab.coach";

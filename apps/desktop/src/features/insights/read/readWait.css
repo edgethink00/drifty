@@ -1,0 +1,136 @@
+/* Your read · before the first read.
+   The read behind, out of focus, and one small dialog in the app's own modal
+   chrome. Nothing else. */
+
+.rw-root { padding-bottom: 72px; }
+
+.rw {
+  --rw-focus: 0;
+  --rw-open: 0;
+  position: relative;
+  height: min(36rem, calc(100vh - 220px));
+  min-height: 30rem;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 18px;
+  transition: height 760ms cubic-bezier(0.2, 0.7, 0.2, 1), border-radius 500ms ease;
+}
+/* The frame's edge sits over the read, so the read can use the frame's full width and clearing the edge moves nothing. */
+.rw::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border: 1px solid var(--line);
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: calc(1 - var(--rw-open));
+  transition: opacity 500ms ease;
+}
+.rw.is-open { --rw-open: 1; border-radius: 0; }
+
+/* The read behind at the page's width and settings, set in by a slight scale while covered. */
+.rw__behind {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  transform-origin: 50% 0;
+  transform: translateY(calc((1 - var(--rw-open)) * 20px)) scale(calc(1 - (1 - var(--rw-open)) * 0.04));
+  filter: blur(calc((1 - var(--rw-focus)) * 12px));
+  opacity: calc(0.6 + var(--rw-focus) * 0.4);
+  transition: filter 800ms ease, opacity 800ms ease, transform 760ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+/* Written: the last of the blur and veil go quickly, so the read is sharp well before the page takes over. */
+.rw.is-open .rw__behind { transition: filter 420ms ease, opacity 420ms ease, transform 760ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+.rw.is-open .rw__veil { transition: opacity 420ms ease; }
+
+.rw__veil {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  opacity: calc(1 - var(--rw-focus));
+  transition: opacity 800ms ease;
+}
+
+.rw-dialog {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  width: min(21rem, calc(100% - 48px));
+  padding: 22px 22px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--modal-radius-compact, 24px);
+  background: var(--surface);
+  box-shadow:
+    0 1px 2px rgba(28, 28, 25, 0.05),
+    0 24px 56px color-mix(in srgb, #1c1c19 10%, transparent);
+  transform: translate(-50%, -50%);
+  animation: rw-in 360ms ease both;
+}
+/* Each phase's words fade in where the last ones were; the dialog itself stays. */
+.rw-dialog__content { animation: rw-fade 220ms ease both; }
+/* Written: the bar has filled, then the dialog lifts away from where it stood while the frame opens under it. */
+.rw.is-open .rw-dialog { top: var(--rw-mid, 50%); animation: rw-out 300ms ease 200ms both; }
+
+:root[data-theme="dark"] .rw-dialog {
+  border-color: var(--line-strong);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 24px 56px rgba(0, 0, 0, 0.45);
+}
+
+.rw-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.rw-body {
+  margin: 6px 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+  animation: rw-fade 300ms ease both;
+}
+
+
+.rw-amount { display: flex; align-items: baseline; gap: 6px; margin: 20px 0 0; }
+
+.rw-amount strong {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rw-amount span { font-size: 0.8125rem; color: var(--text-soft); }
+
+.rw-bar { display: block; height: 4px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+.rw-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 600ms ease; animation: rw-grow 700ms ease both; }
+
+.rw-meta { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 0; font-size: 0.75rem; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+
+.rw-action { width: 100%; margin-top: 20px; }
+
+.rw-fine { margin: 12px 0 0; font-size: 0.75rem; line-height: 1.45; color: var(--text-soft); }
+
+.rw-body, .rw-fine { text-wrap: balance; }
+:lang(ko) .rw-body, :lang(ko) .rw-fine { word-break: keep-all; }
+
+@keyframes rw-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } to { opacity: 1; transform: translate(-50%, -50%); } }
+@keyframes rw-out { from { opacity: 1; transform: translate(-50%, -50%); } to { opacity: 0; transform: translate(-50%, calc(-50% - 8px)) scale(0.98); } }
+@keyframes rw-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rw-grow { from { width: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rw-root *, .rw-root *::before { animation: none !important; transition: none !important; }
+}

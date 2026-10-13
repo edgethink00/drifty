@@ -43,6 +43,13 @@
 /* The section tabs and window controls use the shared page toolbar
    (styles/page-tabs.css). */
 
+/* Your read's week navigator slot keeps the navigator's height while empty (before the first read), so the tabs
+   do not move when it arrives; the navigator fades in. */
+.insights-toolbar > .insights-read-toolbar { min-height: 1.75rem; }
+.insights-read-toolbar > .day-nav { animation: insights-read-nav-in 240ms ease both; }
+@keyframes insights-read-nav-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .insights-read-toolbar > .day-nav { animation: none; } }
+
 .insights-tabpanel {
   display: grid;
   gap: var(--block-gap);

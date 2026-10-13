@@ -17,11 +17,18 @@ import type { AttentionRhythmCell, InsightSourceLists, WeeklyBreakdownDay } from
 import { InsightsCoachPanel } from "./InsightsCoachPanel";
 import { buildInsightsCoachReadiness } from "./insightsReadiness";
 import { InsightsSummaryTiles } from "./InsightsSummaryTiles";
-import { isInsightsReadTabEnabled } from "./insightsReadTab";
+import { isInsightsReadDesignPreview, isInsightsReadTabEnabled } from "./insightsReadTab";
 import type { InsightsTabId } from "./InsightsTabs";
 import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
 import { useLocalization } from "../localization/LocalizationContext";
-import type { ReactNode } from "react";
+import { Suspense, lazy, type ReactNode } from "react";
+
+// Dev-server design review for Your read. Vite replaces import.meta.env.DEV
+// with false in production builds, so the preview and its fixtures are not
+// bundled there.
+const InsightsReadPreview = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import("./read/InsightsReadPreview")).InsightsReadPreview }))
+  : null;
 
 type TrendsPageBodyProps = {
   readonly calendar?: ReactNode;
@@ -45,6 +52,8 @@ type TrendsPageBodyProps = {
   readonly projectSegments: readonly ActivitySegment[];
   readonly projectSeries?: readonly WeeklyChartProjectSeriesItem[];
   readonly range: InsightRange;
+  /** Where Your read puts its week navigator: the toolbar slot Your usage uses for its range. */
+  readonly readToolbar?: HTMLElement | null;
   readonly segments: ActivitySegment[];
   readonly weekly: WeeklyBreakdownDay[];
   readonly weeklyChartMode: WeeklyChartMode;
@@ -69,6 +78,7 @@ export function TrendsPageBody({
   projectSegments,
   projectSeries,
   range,
+  readToolbar,
   segments,
   weekly,
   weeklyChartMode,
@@ -91,16 +101,20 @@ export function TrendsPageBody({
   const calendarOnRight = calendarPlacement === "right-top" || calendarPlacement === "right-bottom";
   const fitWindow = arrangement === "k" && calendarOnRight && (typeof window === "undefined" || new URLSearchParams(window.location.search).get("usageLayout") !== "scroll");
 
-  if (activeTab === "coach" && isInsightsReadTabEnabled()) {
+  if (activeTab === "read" && isInsightsReadTabEnabled()) {
     return (
       <div
-        className="insights-tabpanel insights-tabpanel--coach"
-        id="insights-tabpanel-coach"
+        className="insights-tabpanel insights-tabpanel--read"
+        id="insights-tabpanel-read"
         role="tabpanel"
-        aria-labelledby="insights-tab-coach"
+        aria-labelledby="insights-tab-read"
         tabIndex={-1}
       >
-        <InsightsCoachPanel readiness={buildInsightsCoachReadiness(segments)} />
+        {InsightsReadPreview && isInsightsReadDesignPreview() ? (
+          <Suspense fallback={null}><InsightsReadPreview toolbar={readToolbar ?? null} appIcons={appIcons} /></Suspense>
+        ) : (
+          <InsightsCoachPanel readiness={buildInsightsCoachReadiness(segments)} />
+        )}
       </div>
     );
   }

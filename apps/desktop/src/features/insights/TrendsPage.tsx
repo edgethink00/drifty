@@ -82,6 +82,9 @@ export function TrendsPage({
   const { effectiveLanguage, t } = useLocalization();
   const readTabEnabled = isInsightsReadTabEnabled();
   const [activeTab, setActiveTab] = useState<InsightsTabId>("usage");
+  // Your read steps through its weekly reads with the same navigator, in the
+  // same place; the read page fills this slot itself.
+  const [readToolbar, setReadToolbar] = useState<HTMLDivElement | null>(null);
   const visibleTab = readTabEnabled && INSIGHTS_TABS.some((tab) => tab.id === activeTab) ? activeTab : "usage";
   const productivityTotals = {
     focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
@@ -99,8 +102,8 @@ export function TrendsPage({
 
       {/* Tabs and the window controls share one rule: the range only ever
           filters the usage tab, so it belongs beside that tab rather than
-          floating in the page title row. The read tab, when restored, picks
-          its own comparable window, so the control leaves the row on that tab. */}
+          floating in the page title row. The read tab steps through its own
+          weekly reads with the same navigator, so it gets the same slot. */}
       <div className="page-toolbar insights-toolbar">
         <InsightsTabs activeTab={visibleTab} onChange={setActiveTab} />
         {visibleTab === "usage" ? (
@@ -133,7 +136,9 @@ export function TrendsPage({
               todayActionLabel={effectiveLanguage === "ko" ? "가장 최근 분석 기간으로 이동" : undefined}
             />
           </div>
-        ) : null}
+        ) : (
+          <div className="classification-range-controls trends-range-controls insights-read-toolbar" ref={setReadToolbar} />
+        )}
       </div>
 
       {bodyReady ? (
@@ -141,6 +146,7 @@ export function TrendsPage({
           <TrendsPageBody
             calendar={<FocusCalendarCard endDay={calendarEndDay} endDayIsInProgress={isTodaySelected} startOfDayMinutes={calendarStartOfDayMinutes} loadHistory={loadCalendarHistory} recentSegments={insightSegments} classificationOptions={insightClassificationOptions} />}
             activeTab={visibleTab}
+            readToolbar={readToolbar}
             weekly={weeklyBreakdown}
             range={trendsRange}
             categoryTotals={activeInsightCategoryTotals}

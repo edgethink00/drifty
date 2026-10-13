@@ -39,6 +39,15 @@ import {
   petModeChaseMotionStyle,
 } from "./petModeChaseMotion";
 import {
+  PET_MODE_FACE_MOUTH_PATH,
+  PET_MODE_SIT_BODY_PATH,
+  PET_MODE_SIT_FACE_TRANSFORM,
+  PET_MODE_SLEEP_BODY_PATH,
+  PET_MODE_SLEEP_EYE_FRONT_PATH,
+  PET_MODE_SLEEP_EYE_REAR_PATH,
+  PET_MODE_SLEEP_MOUTH_PATH,
+} from "./petModeVectorArt";
+import {
   resolvePetModeSitArtworkId,
   type PetModeSitArtworkId,
 } from "./petModeSitVariant";
@@ -1111,8 +1120,6 @@ function PetModeExpression({ phase }: { readonly phase: PetModeCatPhase }) {
   );
 }
 
-const PET_MODE_SIT_FACE_TRANSFORM = "translate(-12.84 -0.3)";
-
 /* ── Sit-pose variant registry (R0.12 character-bible artwork) ──────────────────
    Live D is the reviewed production sit. The former shipped vector remains an
    explicit fallback, while D/E/B reference frames stay available in the Dev
@@ -1159,8 +1166,7 @@ const PET_MODE_SIT_VARIANTS: Record<PetModeSitArtworkId, PetModeSitVariant> = {
   shipped: {
     kind: "vector",
     label: "Shipped vector",
-    bodyPath:
-      "M93.3 19.0C94.0 19.3 95.9 19.6 97.2 20.8C98.5 22.0 99.9 24.8 101.1 26.1C102.3 27.5 103.1 28.3 104.3 28.7C105.5 29.0 106.5 29.5 108.2 28.2C110.0 26.9 113.0 22.2 114.6 20.8C116.3 19.5 117.2 20.3 118.1 20.4C119.0 20.4 117.6 18.0 119.7 21.1C121.8 24.2 128.0 34.2 130.3 38.5C132.6 42.9 132.7 43.7 133.3 46.8C133.8 49.9 134.1 53.8 133.7 56.9C133.3 60.0 132.1 62.8 131.0 65.0C129.8 67.2 129.1 67.8 126.8 69.8C124.6 71.7 119.6 74.5 117.6 76.5C115.7 78.4 116.1 77.6 115.3 81.1C114.6 84.5 113.3 92.4 113.0 96.9C112.8 101.4 113.8 105.1 113.7 107.5C113.6 109.8 113.3 109.8 112.3 110.7C111.4 111.6 109.5 112.3 108.2 112.5C106.9 112.8 105.6 112.5 104.5 112.1C103.5 111.7 102.7 111.1 102.0 110.2C101.3 109.3 100.4 106.8 100.4 106.8C100.4 106.8 99.5 109.4 99.0 110.2C98.5 111.1 98.3 111.2 97.6 111.6C96.9 112.0 95.9 112.4 94.9 112.5C93.9 112.7 92.9 112.7 91.9 112.5C90.9 112.4 90.1 112.5 89.1 111.6C88.2 110.8 86.1 107.5 86.1 107.5C86.1 107.5 85.7 109.6 85.0 110.5C84.3 111.3 85.5 112.1 82.0 112.5C78.5 113.0 69.4 113.2 64.5 113.0C59.7 112.8 56.3 112.1 53.5 111.4C50.7 110.6 51.0 109.2 48.0 108.6C44.9 108.0 38.9 108.5 35.6 107.9C32.3 107.4 30.7 106.5 28.7 105.6C26.7 104.7 25.5 104.1 23.9 102.7C22.2 101.2 20.1 99.0 18.8 96.9C17.5 94.8 16.7 92.5 16.3 90.2C15.8 88.0 15.9 85.5 16.0 83.6C16.2 81.7 16.7 80.5 17.4 79.2C18.1 78.0 18.9 76.9 20.2 76.2C21.4 75.6 23.6 75.5 24.8 75.5C25.9 75.6 26.2 76.1 26.9 76.7C27.5 77.3 28.2 77.7 28.5 79.2C28.7 80.7 28.0 83.5 28.2 85.4C28.5 87.3 28.9 89.0 30.1 90.5C31.2 91.9 33.1 93.1 34.9 93.9C36.7 94.7 39.5 96.8 40.4 95.1C41.3 93.4 40.1 86.7 40.2 84.0C40.3 81.4 40.3 81.8 40.9 79.7C41.5 77.5 42.6 73.8 43.6 71.4C44.7 69.0 45.6 67.5 47.1 65.4C48.6 63.4 50.9 61.0 52.6 59.4C54.3 57.9 55.2 57.3 57.2 56.2C59.2 55.1 61.6 54.0 64.3 53.0C67.0 52.1 70.8 51.7 73.0 50.7C75.3 49.8 75.3 51.6 77.4 47.5C79.6 43.4 83.7 31.3 85.7 26.8C87.7 22.4 88.2 22.5 89.1 21.3C90.0 20.1 90.3 20.0 91.0 19.7C91.6 19.3 92.7 19.3 93.0 19.2C93.4 19.1 92.6 18.7 93.3 19.0Z",
+    bodyPath: PET_MODE_SIT_BODY_PATH,
     faceTransform: PET_MODE_SIT_FACE_TRANSFORM,
   },
   "d-lifted-tail-live": {
@@ -1261,7 +1267,7 @@ function PetModeWalkFace({
       ) : null}
       <path
         className={biting ? "pet-mode-cat__walk-mouth pet-mode-cat__walk-mouth--bite" : "pet-mode-cat__walk-mouth"}
-        d="M127.6 50.2 Q129.6 52.8 131.6 50.5 Q133.6 52.8 135.7 50.2"
+        d={PET_MODE_FACE_MOUTH_PATH}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.9"
@@ -1378,10 +1384,10 @@ function PetModeSleepPose({ irritated = false }: { readonly irritated?: boolean 
     <svg className="pet-mode-cat__vector pet-mode-cat__sleep-pose" viewBox="0 0 150 120" aria-hidden="true">
       <path
         fill="currentColor"
-        d="M16.5 81.3c0-27.2 19.8-46.7 48.4-46.7h10c20.8 0 39.5 7.1 51.1 18.3 4.6-2.6 8.4-1.8 9.8 3.2 3.7 12.6 3.6 27.7-3.6 39.9-6.9 11.6-21.2 14-37.6 13.7-8.1-.1-11.8-1.8-18.9.9-7.3 2.8-17.6 1.5-25.4.9-21.2-1.7-33.8-11.9-33.8-30.2Z"
+        d={PET_MODE_SLEEP_BODY_PATH}
       />
       <g className="pet-mode-cat__face">
-        <path className="pet-mode-cat__sleep-eye pet-mode-cat__sleep-eye--closed-front" d="M83.9 92.2 Q87.9 95.4 91.9 92.2" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        <path className="pet-mode-cat__sleep-eye pet-mode-cat__sleep-eye--closed-front" d={PET_MODE_SLEEP_EYE_FRONT_PATH} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
         {irritated ? (
           <g className="pet-mode-cat__sleep-eyes--squint">
             <path
@@ -1400,8 +1406,8 @@ function PetModeSleepPose({ irritated = false }: { readonly irritated?: boolean 
             />
           </g>
         ) : null}
-        <path className="pet-mode-cat__sleep-eye pet-mode-cat__sleep-eye--closed-rear" d="M113.7 92.2 Q117.7 95.4 121.7 92.2" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-        <path d="M98.9 95.1 Q100.9 97.7 102.9 95.4 Q104.9 97.7 106.9 95.1" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+        <path className="pet-mode-cat__sleep-eye pet-mode-cat__sleep-eye--closed-rear" d={PET_MODE_SLEEP_EYE_REAR_PATH} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        <path d={PET_MODE_SLEEP_MOUTH_PATH} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
       </g>
     </svg>
   );
