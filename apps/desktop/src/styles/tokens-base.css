@@ -196,6 +196,11 @@ html {
   --sidebar-fade-delay: 120ms;
   --content-panel-gap: 8px;
   --content-panel-radius: 14px;
+  /* The dashboard Breakdown block (open panel or collapsed rail) sits half the
+     panel radius inside the content panel, and its corners stay concentric
+     with the panel's (radius = panel radius - gap): 7px and 7px on macOS. */
+  --breakdown-edge-gap: calc(var(--content-panel-radius) / 2);
+  --breakdown-radius: calc(var(--content-panel-radius) - var(--breakdown-edge-gap));
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -298,6 +303,10 @@ html {
   --windows-caption-button-width: 46px;
   --windows-caption-controls-width: calc(var(--windows-caption-button-width) * 3);
   --content-panel-radius: 10px;
+  /* main.content draws a uniform 4px corner on Windows rather than the 10px
+     token above, so the Breakdown block keeps the 7px gap with that corner. */
+  --breakdown-edge-gap: 7px;
+  --breakdown-radius: 4px;
   --sidebar-duration: 180ms;
 }
 

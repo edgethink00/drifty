@@ -1725,11 +1725,29 @@
   display: block;
   min-width: 0;
   overflow: hidden;
+  /* Up into the page's top inset, so the block sits --breakdown-edge-gap
+     from the content panel's top edge. */
+  margin-top: calc(var(--breakdown-edge-gap) - var(--page-content-block-start));
 }
 
 .page--week-dashboard .week-v2-grid--calendar .week-v2-side {
-  height: 100%;
+  /* Fill the column plus the top inset the block moved into. */
+  height: calc(100% + var(--page-content-block-start) - var(--breakdown-edge-gap));
   min-height: 0;
+}
+
+/* Open or collapsed, the Breakdown block sits --breakdown-edge-gap from the
+   content panel's right edge instead of the wider page inset; the main column
+   takes the freed width. Scoped to grids that hold the panel so the
+   onboarding Day demo keeps its layout. */
+.week-v2-grid--calendar:has(> .week-v2-side) {
+  margin-right: calc(var(--breakdown-edge-gap) - var(--page-content-inline));
+}
+
+/* Where the block fills the column (Your Week, Agents week), its bottom gap
+   matches the top and right ones. */
+.content .page.page--week-dashboard:has(.week-v2-side) {
+  padding-bottom: var(--breakdown-edge-gap);
 }
 
 .week-v2-side__content {
@@ -1766,7 +1784,7 @@
   min-height: 18rem;
   padding: var(--space-3) 0;
   border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--breakdown-radius);
   background: color-mix(in srgb, var(--surface) 72%, transparent);
   color: var(--text-soft);
   font-size: 0.9rem;
@@ -1842,8 +1860,8 @@
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  /* App-standard card radius — consistent with every other surface. */
-  border-radius: var(--radius-md);
+  /* The hover row follows the Breakdown block's corner, never rounder. */
+  border-radius: var(--breakdown-radius);
   cursor: pointer;
   color: inherit;
   text-align: left;
@@ -2026,6 +2044,8 @@
 .week-v2-side__content .wt-plot {
   height: 7.9rem;
   padding: 0.4rem 1.8rem 0.1rem 0.5rem;
+  /* Inner blocks never round more than the Breakdown block around them. */
+  border-radius: var(--breakdown-radius);
 }
 
 .week-v2-side__content .wt-grid {
@@ -2143,7 +2163,9 @@
 }
 
 .week-v2-grid--day .week-v2-side {
-  height: 100%;
+  /* The block starts in the page's top inset, so add that inset back: its
+     bottom stays on the main column's bottom edge. */
+  height: calc(100% + var(--page-content-block-start) - var(--breakdown-edge-gap));
 }
 
 .week-v2-grid--day .week-v2-side__content {
@@ -2276,7 +2298,7 @@
   /* Bordered inner block inside the white panel. */
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--breakdown-radius);
   box-shadow: none;
   margin-right: 0;
   padding: 4px var(--space-3) var(--space-3);
@@ -2345,7 +2367,7 @@
 .week-v2-grid--day .week-v2-side__content > .kpi-row--insights,
 .page--week-dashboard .week-v2-side__content > .kpi-row--insights {
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--breakdown-radius);
   background: var(--line);
   gap: 1px;
   padding: 0;
@@ -2515,7 +2537,7 @@
      block matches that height and scrolls internally. */
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--breakdown-radius);
   box-shadow: none;
   /* Leave the KPI card's 6px alignment bleed inside the scrollport instead
      of extending the scrollable width on Windows. The content rule below

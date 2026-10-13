@@ -468,9 +468,10 @@ const DEFAULT_MIN_WIDTH: f64 = 960.0;
 #[cfg(not(target_os = "windows"))]
 const DEFAULT_MIN_HEIGHT: f64 = 680.0;
 /// Default sizes on either side of the dashboard's 804px compact boundary.
-/// The width is the 184px sidebar plus the unchanged 1041px dashboard column
-/// and the 8px content gap.
-const DEFAULT_MAIN_WINDOW_WIDTH: f64 = 1233.0;
+/// The width is the 184px sidebar plus the 1024px content panel and the 8px
+/// content gap. The Breakdown block sits 7px from the panel edge instead of
+/// the 24px page inset, so the dashboard calendar keeps its 737px width.
+const DEFAULT_MAIN_WINDOW_WIDTH: f64 = 1216.0;
 const DEFAULT_MAIN_WINDOW_COMPACT_HEIGHT: f64 = 800.0;
 const DEFAULT_MAIN_WINDOW_ROOMY_HEIGHT: f64 = 809.0;
 /// A roomy default should not merely fit: it should leave about 80 logical
@@ -1033,20 +1034,20 @@ mod tests {
 
     #[test]
     fn roomy_work_areas_use_the_six_rank_default() {
-        assert_size(calibrated_main_window_size(1680.0, 1084.0), 1233.0, 809.0);
-        assert_size(calibrated_main_window_size(1920.0, 1080.0), 1233.0, 809.0);
-        assert_size(calibrated_main_window_size(1393.0, 969.0), 1233.0, 809.0);
+        assert_size(calibrated_main_window_size(1680.0, 1084.0), 1216.0, 809.0);
+        assert_size(calibrated_main_window_size(1920.0, 1080.0), 1216.0, 809.0);
+        assert_size(calibrated_main_window_size(1376.0, 969.0), 1216.0, 809.0);
     }
 
     #[test]
     fn either_missing_headroom_keeps_the_five_rank_default() {
-        assert_size(calibrated_main_window_size(1392.0, 1084.0), 1233.0, 800.0);
-        assert_size(calibrated_main_window_size(1680.0, 968.0), 1233.0, 800.0);
+        assert_size(calibrated_main_window_size(1375.0, 1084.0), 1216.0, 800.0);
+        assert_size(calibrated_main_window_size(1680.0, 968.0), 1216.0, 800.0);
     }
 
     #[test]
     fn compact_work_areas_use_the_safe_area_without_creating_avoidable_scroll() {
-        assert_size(calibrated_main_window_size(1280.0, 800.0), 1233.0, 800.0);
+        assert_size(calibrated_main_window_size(1280.0, 800.0), 1216.0, 800.0);
         assert_size(calibrated_main_window_size(1100.0, 760.0), 1100.0, 760.0);
     }
 

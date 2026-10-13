@@ -967,7 +967,7 @@ pub fn run() {
             setup_app_menu(app.handle())?;
             #[cfg(not(target_os = "windows"))]
             if let Err(error) = calibrate_main_window_to_work_area(app.handle()) {
-                // The configured 1233×800 fallback is already usable. Monitor
+                // The configured 1216×800 fallback is already usable. Monitor
                 // discovery is a launch refinement and must not block startup.
                 eprintln!("could not calibrate initial main-window size: {error}");
             }
