@@ -111,15 +111,13 @@ $privateIndicatorCondition = New-Object System.Windows.Automation.OrCondition(
 # and nests each tab's page inside it under URL-less webview Documents. Only a
 # private window shows the address bar's private-window indicator class, which
 # is language independent (measured 8.2 on Windows; macOS uses the same class).
-# Vivaldi builds that interface tree only after a client asks for it, so the
-# indicator's absence counts only once the address bar toolbar itself is present.
+# An unknown private state does not withhold a page (owner decision
+# 2026-10-13): only the indicator's presence marks a private window. Without
+# it, as with a hidden address bar or a tree that is still being built, the
+# window counts as normal.
 $vivaldiInterfaceUrl = 'chrome-extension://mpognobbkildjkofajifpdfhcoklimli/window.html'
 $vivaldiPrivateCondition = New-Object System.Windows.Automation.PropertyCondition(
   $auto::ClassNameProperty, 'UrlBar-PrivateWindowIndicator')
-$toolBarCondition = New-Object System.Windows.Automation.PropertyCondition(
-  $auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::ToolBar)
-# One tree walk finds both the toolbars and the indicator.
-$vivaldiChromeCondition = New-Object System.Windows.Automation.OrCondition($toolBarCondition, $vivaldiPrivateCondition)
 # Whale 5.39 and Chrome 155 give a private window the same title as a normal
 # one. Only the profile button differs, and its name is localized. Measured:
 # the Korean UI names it "secret mode" (Whale adds "is in use"; the first label
@@ -301,17 +299,11 @@ function Read-VivaldiPage($root, $treeWalker, $condition, $focusedElement, $root
   return $url
 }
 
-# 'private' or 'normal' only when the address bar is present; otherwise 'unknown'.
-function Get-VivaldiWindowPrivacy($root) {
-  $addressBar = $false
-  $private = $false
-  foreach ($element in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $vivaldiChromeCondition)) {
-    if (Test-ClassToken $element 'UrlBar-PrivateWindowIndicator') { $private = $true }
-    elseif (Test-ClassToken $element 'toolbar-addressbar') { $addressBar = $true }
+function Test-VivaldiPrivateWindow($root) {
+  foreach ($element in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $vivaldiPrivateCondition)) {
+    if (Test-ClassToken $element 'UrlBar-PrivateWindowIndicator') { return $true }
   }
-  if (-not $addressBar) { return 'unknown' }
-  if ($private) { return 'private' }
-  return 'normal'
+  return $false
 }
 
 function Test-ProfileButtonIncognito($root) {
@@ -356,12 +348,10 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
     if ($family -eq 'vivaldi') {
       # Select the page first: that focus query also makes Vivaldi build its interface tree.
       $vivaldiUrl = Read-VivaldiPage $root $treeWalker $condition $focusedElement $rootRect
-      $vivaldiPrivacy = Get-VivaldiWindowPrivacy $root
-      if ($vivaldiPrivacy -ne 'normal') { $script:lastPage = $null }
-      if ($vivaldiPrivacy -eq 'private') {
+      if (Test-VivaldiPrivateWindow $root) {
+        $script:lastPage = $null
         return [pscustomobject]@{ found = $false; url = ''; error = 'private browsing window'; privacy = 'private' }
       }
-      if ($vivaldiPrivacy -ne 'normal') { throw 'document URL unavailable' }
       return [pscustomobject]@{ found = $true; url = $vivaldiUrl; error = ''; privacy = $privacy }
     }
     if ($family -eq 'whale' -and (Test-ChromiumPrivateWindow $root)) {

@@ -107,7 +107,7 @@ try {
     'Get-DocumentChain',
     'Select-VivaldiPage',
     'Read-VivaldiPage',
-    'Get-VivaldiWindowPrivacy',
+    'Test-VivaldiPrivateWindow',
     'Test-ProfileButtonIncognito',
     'Test-RootViewPrivateLabel',
     'Test-ChromiumPrivateWindow',
@@ -141,8 +141,6 @@ try {
   $privateIndicatorCondition = 'synthetic private indicator condition'
   $vivaldiPrivateCondition = 'synthetic Vivaldi private indicator condition'
   $vivaldiInterfaceUrl = 'chrome-extension://mpognobbkildjkofajifpdfhcoklimli/window.html'
-  $toolBarCondition = 'synthetic toolbar condition'
-  $vivaldiChromeCondition = 'synthetic Vivaldi toolbar or indicator condition'
 
   Assert-Equal 'explicit-http-preserved' (Test-ExplicitHttpUrl 'http://127.0.0.1:4173/Docs/?Q=Case#Fragment') $true
   Assert-Equal 'explicit-https-preserved' (Test-ExplicitHttpUrl 'https://example.com/Path/') $true
@@ -329,7 +327,8 @@ try {
   $guest = New-TestElement 'vg' $documentType $false $null $webview @() ''
   $vPage = New-TestElement 'vp' $documentType $false $null $guest @() 'https://doc.rust-lang.org/book/'
   $vRoot.Children = @($interface, $webview, $guest, $vPage)
-  Assert-Equal 'vivaldi-unbuilt-interface-refused' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').found $false
+  # An unknown private state (no indicator, no address bar yet) does not withhold the page.
+  Assert-Equal 'vivaldi-without-address-bar-reads-the-page' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').url 'https://doc.rust-lang.org/book/'
   $addressBar = New-TestElement 'vt' ([System.Windows.Automation.ControlType]::ToolBar) $false $null $interface @() '' $true $false '' 'toolbar toolbar-mainbar toolbar-addressbar toolbar-visible'
   $vRoot.Children = @($interface, $addressBar, $webview, $guest, $vPage)
   Assert-Equal 'vivaldi-page-inside-interface' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').url 'https://doc.rust-lang.org/book/'
@@ -364,8 +363,8 @@ try {
   Assert-Equal 'vivaldi-private-window-flagged' $vPrivate.privacy 'private'
   Assert-Equal 'vivaldi-private-window-has-no-url' $vPrivate.url ''
   $vRoot.Children = @($interface, $indicator, $webview, $guest, $vPage)
-  $vUnproven = Read-TopLevelDocument $vRoot $walker $documentCondition $vFocus 'vivaldi'
-  Assert-Equal 'vivaldi-indicator-without-address-bar-still-refused' $vUnproven.found $false
+  $vIndicatorOnly = Read-TopLevelDocument $vRoot $walker $documentCondition $vFocus 'vivaldi'
+  Assert-Equal 'vivaldi-indicator-without-address-bar-still-private' $vIndicatorOnly.privacy 'private'
 
   # Whale (measured 5.39): a private window has the same title; only the
   # profile button's localized name differs. The labels come from the host.

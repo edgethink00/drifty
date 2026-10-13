@@ -243,9 +243,9 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         # never touches editable fields, text ranges or the clipboard.
         script = windows_browser_uia._POWERSHELL_UIA_HOST.split("$script:ClueReaderSource = @'", 1)[0]
         self.assertNotIn("ControlType]::Edit", script)
-        # Vivaldi's privacy probe only proves its address bar toolbar exists; it reads no value there.
-        self.assertEqual(script.count("ControlType]::ToolBar"), 1)
-        privacy_probe = script.split("function Get-VivaldiWindowPrivacy", 1)[1].split("\nfunction ", 1)[0]
+        # Vivaldi's privacy probe only looks for its private-window indicator class; it reads no value.
+        self.assertNotIn("ControlType]::ToolBar", script)
+        privacy_probe = script.split("function Test-VivaldiPrivateWindow", 1)[1].split("\nfunction ", 1)[0]
         self.assertNotIn("Pattern", privacy_probe)
         self.assertNotIn("TextPattern", script)
         self.assertNotIn("Clipboard", script)

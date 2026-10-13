@@ -51,6 +51,27 @@ func chromiumWindowTitleMatches(_ nativeTitle: String, tabTitle: String) -> Bool
     return !browserLabel.isEmpty && !browserLabel.contains("(") && !browserLabel.contains(")")
 }
 
+// An unknown private state does not withhold page clues (owner decision
+// 2026-10-13); only a window positively identified as private does.
+// A Chromium browser that reports no window mode counts as normal.
+func scriptedWindowModeAllowsClues(_ mode: String?) -> Bool { mode == nil || mode == "normal" }
+
+// Safari appends a localized mode label to a private window's title but never
+// to the page's own title (the web area description). A private tab group
+// marks it too. The toolbar picker or sidebar isPrivate=false proves a normal
+// window; an untitled page with neither leaves the state unknown, and allowed.
+func safariWindowAllowsClues(windowTitle: String, pageTitle: String, normalProof: Bool, privateGroup: Bool) -> Bool {
+    if privateGroup { return false }
+    if normalProof || pageTitle.isEmpty { return true }
+    return pageTitle == windowTitle
+}
+
+// Dia names its focused AX window bigBrowserWindow_<id> (normal) or
+// bigIncognitoBrowserWindow_<id> (incognito); the trailing id binds the window.
+func diaWindowAllowsClues(identifier: String, windowID: String) -> Bool {
+    !windowID.isEmpty && identifier.hasSuffix("_" + windowID) && !identifier.contains("Incognito")
+}
+
 func chromiumSameBounds(_ a: CGRect, _ b: CGRect) -> Bool {
     abs(a.minX-b.minX) <= 2 && abs(a.minY-b.minY) <= 2 && abs(a.width-b.width) <= 2 && abs(a.height-b.height) <= 2
 }
@@ -114,9 +135,8 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // title. Its scripting window id appears in the focused AX window's
         // identifier: bigBrowserWindow_<id> for a normal window and
         // bigIncognitoBrowserWindow_<id> for incognito, in any UI language.
-        // Requiring the normal identifier for the scripted window binds the
-        // exact window and rejects incognito; an incognito scripting window
-        // also has no active profile, which is checked as well.
+        // The trailing _<id> binds the exact scripted window; the Incognito
+        // marker, or an incognito window's missing active profile, rejects it.
         let dia = CommandLine.arguments[3] == "company.thebrowser.dia"
         guard let pid = Int32(CommandLine.arguments[2]), pid > 0,
               let milliseconds = Double(CommandLine.arguments[6]), milliseconds > 0,
@@ -165,12 +185,15 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
                       (reply.paramDescriptor(forKeyword: code("errn"))?.int32Value ?? 0) == 0 else { return nil }
                 return reply.paramDescriptor(forKeyword: code("----"))
             }
-            var mode = "normal"
+            // An unknown private state does not withhold a page (owner decision
+            // 2026-10-13): only a mode or profile that proves a private window
+            // rejects it. A browser that reports no mode counts as normal.
+            let mode = "normal"
             if dia {
-                guard let profile = read("acPr", scriptWindow), profile.descriptorType == typeObjectSpecifier else { return nil }
-            } else {
-                guard let scriptedMode = read("mode", scriptWindow)?.stringValue, scriptedMode == "normal" else { return nil }
-                mode = scriptedMode
+                if let profile = read("acPr", scriptWindow), profile.descriptorType == typeNull
+                    || (profile.descriptorType == typeType && profile.typeCodeValue == code("msng")) { return nil }
+            } else if !scriptedWindowModeAllowsClues(read("mode", scriptWindow)?.stringValue) {
+                return nil
             }
             guard let windowID = read("ID  ", scriptWindow)?.stringValue, !windowID.isEmpty,
                   let title = read("pnam", scriptWindow)?.stringValue, !title.isEmpty,
@@ -292,7 +315,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             let identifier = string(window, "AXIdentifier"), title = string(window, "AXTitle")
             guard identifier.hasPrefix("SafariWindow?"), identifier.contains("UUID="), string(window, "AXSubrole") == "AXStandardWindow",
                   title == CommandLine.arguments[5], let bounds = rectangle(window) else { return nil }
-            var normal = false, privateGroup = false, pages: [String?] = [], visited = 0, incomplete = false
+            var normal = false, privateGroup = false, pages: [String?] = [], pageTitles: [String] = [], visited = 0, incomplete = false
             func scan(_ element: AXUIElement, _ depth: Int) {
                 guard depth < 12, visited < 400 else { incomplete = true; return }
                 visited += 1
@@ -302,13 +325,21 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
                 if id == "SidebarLibraryItemTab" { return }
                 if string(element, "AXRole") == "AXWebArea" {
                     let value = attribute(element, "AXURL")
-                    pages.append((value as? URL)?.absoluteString ?? value as? String); return
+                    pages.append((value as? URL)?.absoluteString ?? value as? String)
+                    pageTitles.append(string(element, "AXDescription")); return
                 }
                 guard let children = attribute(element, "AXChildren") as? [AXUIElement] else { return }
                 for child in children { scan(child, depth + 1) }
             }
             scan(window, 0)
-            guard !incomplete, normal, !privateGroup, pages.count == 1, sameAddress(pages[0], CommandLine.arguments[4]) else { return nil }
+            guard !incomplete, !privateGroup, pages.count == 1, sameAddress(pages[0], CommandLine.arguments[4]) else { return nil }
+            // An unknown private state does not withhold a page (owner decision
+            // 2026-10-13). Safari appends a localized mode label to a private
+            // window's title, never to the page's own title (the web area's
+            // AXDescription), so a mismatch marks a private window in any UI
+            // language. The tab-group picker or sidebar isPrivate=false proves a
+            // normal window outright; an untitled page leaves it unknown.
+            guard safariWindowAllowsClues(windowTitle: title, pageTitle: pageTitles[0], normalProof: normal, privateGroup: privateGroup) else { return nil }
             return Identity(mode: "normal", windowID: identifier, title: title, tabID: "", url: CommandLine.arguments[4], tabTitle: title, bounds: bounds)
         }
         // Firefox appends a localized mode label to a private window's title,
@@ -350,7 +381,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // tab title already matched to the caller, plus any browser/profile labels.
         // Keep the scripting window name in the before/after identity proof.
         let nativeTitle = string(window, "AXTitle")
-        let windowBound = dia ? string(window, "AXIdentifier") == "bigBrowserWindow_" + before.windowID
+        let windowBound = dia ? diaWindowAllowsClues(identifier: string(window, "AXIdentifier"), windowID: before.windowID)
             : chromiumWindowTitleMatches(nativeTitle, tabTitle: before.tabTitle)
         guard windowBound, let windowBounds = rectangle(window),
               arc || dia || sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
