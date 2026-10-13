@@ -200,6 +200,89 @@ fn earlier_versions_get_their_own_release_and_the_running_version_joins_its_buil
 }
 
 #[test]
+fn forwarded_report_uses_crash_time_instead_of_later_file_modification() {
+    let reports = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let captured =
+        SystemTime::UNIX_EPOCH + Duration::from_secs(1_791_895_517) + Duration::from_millis(123);
+    let copied = captured + Duration::from_secs(3_600);
+    let mut header = drifty_header("copied-report");
+    // Apple documents the header timestamp as log-system tracking time,
+    // while captureTime is the crash time.
+    header["timestamp"] = json!("2026-10-13 22:45:17.123 +0900");
+    let mut body = uncaught_exception_body();
+    body["captureTime"] = json!("2026-10-13 21:45:17.123 +0900");
+    let path = reports.path().join("drifty-copied.ips");
+    std::fs::write(&path, report_text(header, body)).unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(copied))
+        .unwrap();
+    let state_path = state.path().join(STATE_FILE_NAME);
+    let mut timestamps = Vec::new();
+    assert_eq!(
+        forward_new_reports(
+            &[reports.path().to_path_buf()],
+            &state_path,
+            copied,
+            |event| {
+                timestamps.push(event.timestamp);
+            }
+        ),
+        1
+    );
+    assert_eq!(timestamps, [captured]);
+    assert_eq!(
+        forward_new_reports(&[reports.path().to_path_buf()], &state_path, copied, |_| {
+            panic!("correcting the timestamp must not resend an incident")
+        }),
+        0
+    );
+}
+
+#[test]
+fn crash_time_preserves_fractional_seconds_and_explicit_timezone() {
+    let expected = SystemTime::UNIX_EPOCH
+        + Duration::from_secs(1_791_895_517)
+        + Duration::from_nanos(123_456_000);
+    for capture_time in [
+        "2026-10-13 21:45:17.123456 +0900",
+        "2026-10-13 05:45:17.123456 -0700",
+        "2026-10-13T12:45:17.123456Z",
+    ] {
+        let mut body = uncaught_exception_body();
+        body["captureTime"] = json!(capture_time);
+        let report =
+            parse_crash_report(&report_text(drifty_header("offset-report"), body)).unwrap();
+        assert_eq!(
+            crash_event(&report, SystemTime::UNIX_EPOCH).timestamp,
+            expected
+        );
+    }
+}
+
+#[test]
+fn missing_or_invalid_crash_time_keeps_file_time_fallback() {
+    let fallback = SystemTime::UNIX_EPOCH + Duration::from_secs(1_791_899_117);
+    for capture_time in [
+        Value::Null,
+        json!(""),
+        json!("not a date"),
+        json!("2026-10-13 21:45:17"),
+        json!(123),
+    ] {
+        let mut header = drifty_header("legacy-report");
+        header["timestamp"] = json!("2026-10-13 21:45:17.123 +0900");
+        let mut body = uncaught_exception_body();
+        body["captureTime"] = capture_time;
+        let report = parse_crash_report(&report_text(header, body)).unwrap();
+        assert_eq!(crash_event(&report, fallback).timestamp, fallback);
+    }
+}
+
+#[test]
 fn each_crash_is_forwarded_once_across_launches() {
     let reports = tempfile::tempdir().unwrap();
     let state = tempfile::tempdir().unwrap();

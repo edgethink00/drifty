@@ -47,6 +47,7 @@ pub(crate) struct CrashReport {
     pub incident_id: String,
     pub app_version: Option<String>,
     pub os_version: Option<String>,
+    pub captured_at: Option<SystemTime>,
     pub exception_type: String,
     pub exception_value: Option<String>,
     /// Caller first, as Sentry expects.
@@ -146,12 +147,37 @@ pub(crate) fn parse_crash_report(text: &str) -> Option<CrashReport> {
         app_version: non_empty(header.get("app_version"))
             .or_else(|| non_empty(body.pointer("/bundleInfo/CFBundleShortVersionString"))),
         os_version: non_empty(header.get("os_version")),
+        captured_at: body
+            .get("captureTime")
+            .and_then(Value::as_str)
+            .and_then(crash_time),
         exception_type: exception_type(&body),
         exception_value: exception_value(&body),
         frames,
         images: referenced_images.into_values().collect(),
         from_exception_backtrace,
     })
+}
+
+fn crash_time(value: &str) -> Option<SystemTime> {
+    // The IPS header timestamp tracks the log system, not the crash.
+    // Only the body's captureTime identifies when the process crashed.
+    let value = value.trim();
+    let parsed = chrono::DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f %z")
+        .or_else(|_| chrono::DateTime::parse_from_rfc3339(value))
+        .ok()?;
+    let seconds = parsed.timestamp();
+    let subsecond = Duration::from_nanos(u64::from(parsed.timestamp_subsec_nanos()));
+    let whole_seconds = Duration::from_secs(seconds.unsigned_abs());
+    if seconds >= 0 {
+        SystemTime::UNIX_EPOCH
+            .checked_add(whole_seconds)?
+            .checked_add(subsecond)
+    } else {
+        SystemTime::UNIX_EPOCH
+            .checked_sub(whole_seconds)?
+            .checked_add(subsecond)
+    }
 }
 
 fn non_empty(value: Option<&Value>) -> Option<String> {
@@ -234,7 +260,7 @@ fn exception_value(body: &Value) -> Option<String> {
     Some(joined.chars().take(MAX_VALUE_CHARS).collect())
 }
 
-pub(crate) fn crash_event(report: &CrashReport, timestamp: SystemTime) -> Event<'static> {
+pub(crate) fn crash_event(report: &CrashReport, fallback_time: SystemTime) -> Event<'static> {
     let mut tags = BTreeMap::new();
     tags.insert(
         "crash.source".to_string(),
@@ -263,7 +289,7 @@ pub(crate) fn crash_event(report: &CrashReport, timestamp: SystemTime) -> Event<
     Event {
         level: Level::Fatal,
         platform: Cow::Borrowed("native"),
-        timestamp,
+        timestamp: report.captured_at.unwrap_or(fallback_time),
         release: Some(Cow::Owned(release_for_app_version(
             report.app_version.as_deref(),
         ))),
