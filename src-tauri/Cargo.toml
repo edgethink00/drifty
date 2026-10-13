@@ -101,3 +101,7 @@ windows-sys = { version = "0.61.2", features = ["Win32_System_IO", "Win32_System
 [profile.release]
 debug = 1
 split-debuginfo = "packed"
+
+# Preserve Tao 0.37.1, with a Windows-only WM_ENDSESSION callback repair.
+[patch.crates-io]
+tao = { path = "vendor/tao" }
