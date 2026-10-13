@@ -143,8 +143,8 @@ export function useDeviceSyncController({
           {
             tracker: trackerClient,
             pushBatch: (segments, deletions, generation) => pushSyncBatch(segments, deletions, generation, accountId),
-            fetchPullPage: (cursor, excludeDeviceId) => fetchSyncedSegmentsPage(cursor, excludeDeviceId, accountId),
-            fetchDeletionsPullPage: (cursor, excludeDeviceId) => fetchSyncedDeletionsPage(cursor, excludeDeviceId, accountId),
+            fetchPullPage: (cursor, excludeDeviceId) => fetchSyncedSegmentsPage(cursor, excludeDeviceId, accountId, accountState.syncGeneration),
+            fetchDeletionsPullPage: (cursor, excludeDeviceId) => fetchSyncedDeletionsPage(cursor, excludeDeviceId, accountId, accountState.syncGeneration),
             resolveDeviceId: refreshDeviceLabels,
             syncAccountId: accountId,
             isSyncAccountCurrent: isScopeCurrent,

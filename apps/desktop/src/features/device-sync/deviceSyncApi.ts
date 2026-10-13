@@ -38,7 +38,7 @@ export class DeviceSyncHttpError extends Error {
 }
 
 async function postSyncAction<TResponse>(
-  action: "push" | "purge" | "devices" | "resume",
+  action: "push" | "pull" | "purge" | "devices" | "resume",
   expectedAccountId: string,
   extra: Record<string, unknown> = {},
 ): Promise<TResponse> {
@@ -138,6 +138,13 @@ export type SyncedSegmentsPage = {
 
 export const SYNC_PULL_PAGE_LIMIT = 1000;
 
+type SyncPullResponse<TRow> = {
+  readonly rows: TRow[];
+  readonly nextCursor: string | null;
+  readonly hasMore: boolean;
+  readonly syncGeneration: number;
+};
+
 type SyncedSegmentRow = {
   readonly segment_uid: string;
   readonly device_id: string;
@@ -209,13 +216,6 @@ export function encodeSyncPullCursor(serverUpdatedAt: string, segmentUid: string
   return `${serverUpdatedAt}|${segmentUid}`;
 }
 
-function decodeSyncPullCursor(cursor: string | null): { serverUpdatedAt: string; segmentUid: string } | null {
-  if (!cursor) return null;
-  const separator = cursor.lastIndexOf("|");
-  if (separator <= 0) return null;
-  return { serverUpdatedAt: cursor.slice(0, separator), segmentUid: cursor.slice(separator + 1) };
-}
-
 export type SyncedDeletionsPage = {
   readonly deletions: SyncDeletionRecord[];
   readonly nextCursor: string | null;
@@ -242,36 +242,14 @@ export async function fetchSyncedDeletionsPage(
   cursor: string | null,
   excludeDeviceId: string | null,
   expectedAccountId: string,
+  syncGeneration: number,
   limit: number = SYNC_PULL_PAGE_LIMIT,
 ): Promise<SyncedDeletionsPage> {
-  if (!supabase) {
-    throw new Error("Supabase is not configured.");
-  }
-  let query = supabase
-    .from("synced_deletions")
-    .select("*")
-    .eq("user_id", expectedAccountId)
-    .order("server_updated_at", { ascending: true })
-    .order("deletion_uid", { ascending: true })
-    .limit(limit);
-  if (excludeDeviceId) {
-    query = query.neq("device_id", excludeDeviceId);
-  }
-  const decoded = decodeSyncPullCursor(cursor);
-  if (decoded) {
-    query = query.or(
-      `server_updated_at.gt.${decoded.serverUpdatedAt},and(server_updated_at.eq.${decoded.serverUpdatedAt},deletion_uid.gt.${decoded.segmentUid})`,
-    );
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    throw new Error(`Device sync deletions pull failed: ${error.message}`);
-  }
-  const rows = (data ?? []) as SyncedDeletionRow[];
-  const last = rows[rows.length - 1];
+  const page = await postSyncAction<SyncPullResponse<SyncedDeletionRow>>("pull", expectedAccountId, {
+    kind: "deletions", cursor, excludeDeviceId, syncGeneration, limit,
+  });
   return {
-    deletions: rows.map((row) => ({
+    deletions: page.rows.map((row) => ({
       deletionUid: row.deletion_uid,
       kind: row.kind,
       rangeStart: row.range_start,
@@ -279,51 +257,28 @@ export async function fetchSyncedDeletionsPage(
       segmentUids: row.segment_uids,
       createdAt: row.created_at,
     })),
-    nextCursor: last ? encodeSyncPullCursor(last.server_updated_at, last.deletion_uid) : cursor,
-    hasMore: rows.length === limit,
+    nextCursor: page.nextCursor ?? cursor,
+    hasMore: page.hasMore,
   };
 }
 
 /**
- * Pull one page of other devices' segments via the RLS-scoped table select.
- * Short paged requests are fine on WebView fetch; only the push rides native
- * HTTP.
+ * Pull through the same authenticated billing/device gate as uploads.
+ * The server binds every page to the calling device and the cycle generation.
  */
 export async function fetchSyncedSegmentsPage(
   cursor: string | null,
   excludeDeviceId: string | null,
   expectedAccountId: string,
+  syncGeneration: number,
   limit: number = SYNC_PULL_PAGE_LIMIT,
 ): Promise<SyncedSegmentsPage> {
-  if (!supabase) {
-    throw new Error("Supabase is not configured.");
-  }
-  let query = supabase
-    .from("synced_activity_segments")
-    .select("*")
-    .eq("user_id", expectedAccountId)
-    .order("server_updated_at", { ascending: true })
-    .order("segment_uid", { ascending: true })
-    .limit(limit);
-  if (excludeDeviceId) {
-    query = query.neq("device_id", excludeDeviceId);
-  }
-  const decoded = decodeSyncPullCursor(cursor);
-  if (decoded) {
-    query = query.or(
-      `server_updated_at.gt.${decoded.serverUpdatedAt},and(server_updated_at.eq.${decoded.serverUpdatedAt},segment_uid.gt.${decoded.segmentUid})`,
-    );
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    throw new Error(`Device sync pull failed: ${error.message}`);
-  }
-  const rows = (data ?? []) as SyncedSegmentRow[];
-  const last = rows[rows.length - 1];
+  const page = await postSyncAction<SyncPullResponse<SyncedSegmentRow>>("pull", expectedAccountId, {
+    kind: "segments", cursor, excludeDeviceId, syncGeneration, limit,
+  });
   return {
-    segments: rows.map(toSyncedSegmentInput),
-    nextCursor: last ? encodeSyncPullCursor(last.server_updated_at, last.segment_uid) : cursor,
-    hasMore: rows.length === limit,
+    segments: page.rows.map(toSyncedSegmentInput),
+    nextCursor: page.nextCursor ?? cursor,
+    hasMore: page.hasMore,
   };
 }

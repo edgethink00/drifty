@@ -14,7 +14,7 @@ vi.mock("../../lib/supabase/client", () => ({
   supabase: { auth: { getSession: mocks.getSession } },
 }));
 
-import { purgeCloudSyncData } from "./deviceSyncApi";
+import { fetchSyncedDeletionsPage, fetchSyncedSegmentsPage, purgeCloudSyncData } from "./deviceSyncApi";
 
 describe("device sync API purge", () => {
   beforeEach(() => {
@@ -60,5 +60,30 @@ describe("device sync API purge", () => {
         },
       }),
     });
+  });
+
+  it.each(["segments", "deletions"])("downloads %s through native authenticated HTTP", async (kind) => {
+    mocks.readCloudDevicePayload.mockResolvedValue({ installId: "install-1" });
+    mocks.invoke.mockResolvedValue({ status: 200, body: JSON.stringify({ rows: [], nextCursor: null, hasMore: false, syncGeneration: 3 }) });
+    const pull = kind === "segments" ? fetchSyncedSegmentsPage : fetchSyncedDeletionsPage;
+    await expect(pull("cursor-1", "device-1", "user-1", 3, 20)).resolves.toMatchObject({ nextCursor: "cursor-1", hasMore: false });
+    expect(mocks.invoke).toHaveBeenCalledWith("cloud_sync_http_post", {
+      request: expect.objectContaining({
+        bodyJson: { action: "pull", accountId: "user-1", trialActivation: "explicit-v1",
+          cloudDevice: { installId: "install-1" }, kind, cursor: "cursor-1", excludeDeviceId: "device-1", syncGeneration: 3, limit: 20 },
+      }),
+    });
+  });
+
+  it("rejects account changes before sending a download", async () => {
+    await expect(fetchSyncedSegmentsPage(null, "device-1", "user-2", 3)).rejects.toMatchObject({ code: "sync_account_changed" });
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("propagates a denied download without a direct-table fallback", async () => {
+    mocks.readCloudDevicePayload.mockResolvedValue({ installId: "install-1" });
+    mocks.invoke.mockResolvedValue({ status: 402, body: JSON.stringify({ error: "Access expired" }) });
+    await expect(fetchSyncedSegmentsPage(null, "device-1", "user-1", 3)).rejects.toMatchObject({ status: 402 });
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
   });
 });
