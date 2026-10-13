@@ -350,8 +350,8 @@ describe("AgentsPage shared dashboard controls", () => {
 
     fireEvent.mouseMove(hoverTarget, { clientX: 10.2, clientY: 42 });
     expect(screen.getByRole("tooltip").textContent).toContain("1 AM–2 AM");
-    expect(screen.getByRole("tooltip").textContent).toContain("4.0hAgent work");
-    expect(screen.getByRole("tooltip").textContent).toContain("0Commits");
+    expect(screen.getByRole("tooltip").textContent).toContain("Agent work4.0h");
+    expect(screen.getByRole("tooltip").textContent).toContain("Commits0");
     expect(document.querySelector(".focus-drift__hover-dot--commits")).toBeNull();
 
     fireEvent.mouseMove(hoverTarget, { clientX: 17.8, clientY: 36 });

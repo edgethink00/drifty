@@ -6,7 +6,9 @@ import type { FocusDriftPoint, FocusDriftSourceSummary } from "./focusDriftChart
 import { getViewportSafeHoverPosition } from "../../components/hoverCardPosition";
 import { formatSharePercent } from "./HoverCards";
 import type { FocusDriftHoverKind, FocusDriftHoverState } from "./HoverCards";
+import { formatFocusDriftWindowRange } from "./focusDriftHoverFormat";
 import { useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 
 type FocusDriftHoverCardProps = {
@@ -15,39 +17,43 @@ type FocusDriftHoverCardProps = {
   readonly startOfDayMinutes?: number;
 };
 
-type FocusDriftMetric = {
-  readonly kind: FocusDriftHoverKind;
-  readonly value: string;
-  readonly share: string;
-};
-
 type HoverCardSize = {
   readonly width: number;
   readonly height: number;
 };
+
+type ShareStyle = CSSProperties & { "--focus-drift-share": string };
 
 const HOVER_KIND_LABELS: Record<FocusDriftHoverKind, string> = {
   focus: "Focus",
   drift: "Drift",
 };
 
+const HOVER_KINDS: readonly FocusDriftHoverKind[] = ["focus", "drift"];
+
+/**
+ * One window of the Focus/Drift chart as two symmetric columns. Each column owns
+ * its kind's total and its top source, so no "Top focus source" caption is
+ * needed on screen; the caption stays as screen-reader text.
+ */
 export function FocusDriftHoverCard({ hover, appIcons, startOfDayMinutes = 0 }: FocusDriftHoverCardProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { point } = hover;
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<HoverCardSize>({ width: 0, height: 0 });
-  const focusPercent = formatSharePercent(point.focusScore);
-  const driftPercent = formatSharePercent(point.driftScore);
   const focusDuration = formatLocalizedDuration(point.focusSeconds, effectiveLanguage);
   const driftDuration = formatLocalizedDuration(point.driftSeconds, effectiveLanguage);
   const trackedDuration = formatLocalizedCompactDurationFromSeconds(point.trackedSeconds, effectiveLanguage);
-  const isFocusHeavy = point.focusScore >= point.driftScore;
-  const verdict = isFocusHeavy ? t("dashboard.today.focusHeavy") : t("dashboard.today.driftHeavy");
-  const metrics = buildFocusDriftMetrics(focusDuration, driftDuration, focusPercent, driftPercent, effectiveLanguage);
+  // The verdict names the larger side. Its colour must follow the verdict, not
+  // the line under the pointer, or a drift hover on a focus-heavy window pairs
+  // a red marker with "Focus-heavy".
+  const verdictKind: FocusDriftHoverKind = point.focusScore >= point.driftScore ? "focus" : "drift";
+  const verdict = verdictKind === "focus" ? t("dashboard.today.focusHeavy") : t("dashboard.today.driftHeavy");
   // The same clock format as the summary tiles; point.label is the chart's
   // 24-hour bucket key, not a display time.
-  const pointLabel = formatLocalizedQuarterHourLabel(point.bucketStartMinute + startOfDayMinutes, effectiveLanguage);
+  const windowRange = formatFocusDriftWindowRange(point.bucketStartMinute, startOfDayMinutes, effectiveLanguage);
   const position = getViewportSafeHoverPosition(hover.x, hover.y, cardSize.width, cardSize.height);
+  const hasSources = Boolean(point.topFocusSource || point.topDriftSource);
 
   useLayoutEffect(() => {
     const card = cardRef.current;
@@ -73,11 +79,9 @@ export function FocusDriftHoverCard({ hover, appIcons, startOfDayMinutes = 0 }: 
     };
   }, [
     driftDuration,
-    driftPercent,
+    effectiveLanguage,
     focusDuration,
-    focusPercent,
     point.id,
-    pointLabel,
     point.trackedSeconds,
     point.topDriftSource?.captures,
     point.topDriftSource?.id,
@@ -85,38 +89,60 @@ export function FocusDriftHoverCard({ hover, appIcons, startOfDayMinutes = 0 }: 
     point.topFocusSource?.captures,
     point.topFocusSource?.id,
     point.topFocusSource?.seconds,
+    verdict,
+    windowRange,
   ]);
 
   return (
     <div ref={cardRef} className={`focus-drift-hover-card focus-drift-hover-card--${hover.kind}`} style={position}>
       <div className="focus-drift-hover-card__head">
-        <span className={`productivity-dot productivity-dot--${hover.kind}`} aria-hidden="true" />
-        <div className="focus-drift-hover-card__title">
-          <span className="focus-drift-hover-card__eyebrow">{pointLabel}</span>
-          <strong>{verdict}</strong>
+        <div className="focus-drift-hover-card__when">
+          <strong>{windowRange}</strong>
+          <span className={`focus-drift-hover-card__verdict focus-drift-hover-card__verdict--${verdictKind}`}>{verdict}</span>
         </div>
-        <span className="focus-drift-hover-card__window">{t("dashboard.today.trackedAmount", { duration: trackedDuration })}</span>
+        <span className="focus-drift-hover-card__tracked">{t("dashboard.today.trackedAmount", { duration: trackedDuration })}</span>
       </div>
       <span className="sr-only">{effectiveLanguage === "ko" ? `${focusDuration} ${t("activity.productivity.focus")} · ${driftDuration} ${t("activity.productivity.drift")}` : `${focusDuration} focus · ${driftDuration} drift`}</span>
-      <div className="focus-drift-hover-card__metrics" aria-hidden="true">
-        {metrics.map((metric) => (
-          <div className={`focus-drift-hover-card__metric${metric.kind === hover.kind ? " is-active" : ""}`} key={metric.kind}>
-            <strong>{metric.value}</strong>
-            <span>{metric.share}</span>
-          </div>
-        ))}
+      <div
+        className="focus-drift-hover-card__duo"
+        role={hasSources ? "group" : undefined}
+        aria-label={hasSources ? t("dashboard.today.topSources") : undefined}
+        aria-hidden={hasSources ? undefined : true}
+      >
+        {HOVER_KINDS.map((kind) => {
+          const seconds = kind === "focus" ? point.focusSeconds : point.driftSeconds;
+          const score = kind === "focus" ? point.focusScore : point.driftScore;
+          const source = kind === "focus" ? point.topFocusSource : point.topDriftSource;
+          const shareStyle: ShareStyle = { "--focus-drift-share": `${clampPercent(score)}%` };
+          return (
+            <div className={`focus-drift-hover-card__col focus-drift-hover-card__col--${kind}${kind === hover.kind ? " is-active" : ""}`} key={kind}>
+              <div className="focus-drift-hover-card__metric" aria-hidden="true">
+                <span className="focus-drift-hover-card__label">
+                  <span className={`productivity-dot productivity-dot--${kind}`} />
+                  {t(kind === "focus" ? "activity.productivity.focus" : "activity.productivity.drift")}
+                </span>
+                <div className="focus-drift-hover-card__value">
+                  <strong>{formatLocalizedDuration(seconds, effectiveLanguage)}</strong>
+                  <em>{formatSharePercent(score)}</em>
+                </div>
+                <span className="focus-drift-hover-card__bar"><i style={shareStyle} /></span>
+              </div>
+              {source ? (
+                <FocusDriftSourceBlock appIcons={appIcons} point={point} source={source} kind={kind} language={effectiveLanguage} />
+              ) : (
+                <div className="focus-drift-hover-card__source focus-drift-hover-card__source--empty" aria-hidden="true">
+                  <span>{t(kind === "focus" ? "dashboard.today.noFocusSource" : "dashboard.today.noDriftSource")}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-      {point.topFocusSource || point.topDriftSource ? (
-        <div className="focus-drift-hover-card__sources" aria-label={t("dashboard.today.topSources")}>
-          {point.topFocusSource ? <FocusDriftSourceRow appIcons={appIcons} point={point} source={point.topFocusSource} kind="focus" language={effectiveLanguage} /> : null}
-          {point.topDriftSource ? <FocusDriftSourceRow appIcons={appIcons} point={point} source={point.topDriftSource} kind="drift" language={effectiveLanguage} /> : null}
-        </div>
-      ) : null}
     </div>
   );
 }
 
-function FocusDriftSourceRow({
+function FocusDriftSourceBlock({
   appIcons,
   point,
   source,
@@ -133,9 +159,10 @@ function FocusDriftSourceRow({
   const iconSrc = resolveFocusDriftSourceIcon(source, appIcons);
   const sourceDetail = formatFocusDriftSourceDetail(source, language, t);
   const sourceShare = formatFocusDriftSourceShare(source, point, kind);
+  const sourceDuration = formatLocalizedCompactDurationFromSeconds(source.seconds, language);
 
   return (
-    <div className={`focus-drift-hover-card__source-row focus-drift-hover-card__source-row--${kind}`}>
+    <div className={`focus-drift-hover-card__source focus-drift-hover-card__source--${kind}`}>
       <span className="focus-drift-hover-card__source-icon" aria-hidden="true">
         {source.siteDomain ? (
           <SiteFavicon domain={source.siteDomain} size={24} fallbackIconSrc={iconSrc} />
@@ -144,29 +171,18 @@ function FocusDriftSourceRow({
         )}
       </span>
       <div className="focus-drift-hover-card__source-body">
-        <div className="focus-drift-hover-card__source-heading">
-          <span className="focus-drift-hover-card__source-kind">{kind === "focus" ? t("dashboard.today.topFocusSource") : t("dashboard.today.topDriftSource")}</span>
-          <strong>{source.label}</strong>
-        </div>
-        <em>{sourceDetail}</em>
+        <span className="sr-only">{kind === "focus" ? t("dashboard.today.topFocusSource") : t("dashboard.today.topDriftSource")}</span>
+        <strong>{source.label}</strong>
+        <span className="focus-drift-hover-card__source-meta" aria-hidden="true">{sourceDuration} · {sourceShare}</span>
+        <span className="sr-only">{sourceDetail} · {sourceShare}</span>
       </div>
-      <strong className="focus-drift-hover-card__source-duration">{sourceShare}</strong>
     </div>
   );
 }
 
-function buildFocusDriftMetrics(
-  focusDuration: string,
-  driftDuration: string,
-  focusPercent: string,
-  driftPercent: string,
-  language: DisplayLanguage,
-): readonly FocusDriftMetric[] {
-  const labels = language === "ko" ? { focus: "집중", drift: "딴짓" } : { focus: "focus", drift: "drift" };
-  return [
-    { kind: "focus", value: `${focusDuration} ${labels.focus}`, share: focusPercent },
-    { kind: "drift", value: `${driftDuration} ${labels.drift}`, share: driftPercent },
-  ];
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Math.round(value)));
 }
 
 function resolveFocusDriftSourceIcon(source: FocusDriftSourceSummary, appIcons: AppIconMap): string | null {
@@ -213,3 +229,4 @@ export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDr
   }
   return `${kindLabel} point for ${pointLabel}. Focus is ${focusPercent}, ${focusDuration}; drift is ${driftPercent}, ${driftDuration}; tracked time is ${trackedDuration}. This ${point.unit} is ${verdict}.${topFocusSource}${topDriftSource}`;
 }
+

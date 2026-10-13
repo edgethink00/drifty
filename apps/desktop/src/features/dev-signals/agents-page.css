@@ -890,9 +890,19 @@
   background: var(--text-soft);
 }
 
-.agents-rhythm-hover-card--commits .focus-drift-hover-card__metric.is-active {
-  border-color: color-mix(in srgb, var(--text-soft) 44%, var(--line));
-  background: color-mix(in srgb, var(--text-soft) 9%, var(--surface-strong));
+/* The Agents rhythm card shares the Focus/Drift hover card's material and
+   columns. Agent time keeps the focus tone; commits keep the neutral grey. */
+.agents-rhythm-hover-card .focus-drift-hover-card__verdict {
+  background: var(--bg-2);
+  color: var(--text-muted);
+}
+
+.agents-rhythm-hover-card .agents-rhythm-hover-card__col--agent.is-active {
+  background: color-mix(in srgb, var(--productivity-focus) 8%, transparent);
+}
+
+.agents-rhythm-hover-card .agents-rhythm-hover-card__col--commits.is-active {
+  background: color-mix(in srgb, var(--text-soft) 9%, transparent);
 }
 
 /* Models ranked list. */

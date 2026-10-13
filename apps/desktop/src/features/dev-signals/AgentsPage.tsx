@@ -1230,12 +1230,11 @@ function AgentsRhythmHoverCard({
       style={position}
     >
       <div className="focus-drift-hover-card__head">
-        <span className={`agents-rhythm-hover-card__dot agents-rhythm-hover-card__dot--${hover.kind}`} aria-hidden="true" />
-        <div className="focus-drift-hover-card__title">
-          <span className="focus-drift-hover-card__eyebrow">{timeRange}</span>
-          <strong>{t("agents.rhythm.hoverTitle")}</strong>
+        <div className="focus-drift-hover-card__when">
+          <strong>{timeRange}</strong>
+          <span className="focus-drift-hover-card__verdict">{t("agents.rhythm.hoverTitle")}</span>
         </div>
-        <span className="focus-drift-hover-card__window">{t("agents.rhythm.hoverWindow")}</span>
+        <span className="focus-drift-hover-card__tracked">{t("agents.rhythm.hoverWindow")}</span>
       </div>
       <span className="sr-only">
         {t("agents.rhythm.hoverPointAria", {
@@ -1245,14 +1244,20 @@ function AgentsRhythmHoverCard({
           count: hover.commits,
         })}
       </span>
-      <div className="focus-drift-hover-card__metrics" aria-hidden="true">
-        <div className={`focus-drift-hover-card__metric${hover.kind === "agent" ? " is-active" : ""}`}>
-          <strong>{workDuration}</strong>
-          <span>{t("agents.rhythm.agentTime")}</span>
+      <div className="focus-drift-hover-card__duo" aria-hidden="true">
+        <div className={`focus-drift-hover-card__col agents-rhythm-hover-card__col--agent${hover.kind === "agent" ? " is-active" : ""}`}>
+          <span className="focus-drift-hover-card__label">
+            <span className="agents-rhythm-hover-card__dot" />
+            {t("agents.rhythm.agentTime")}
+          </span>
+          <div className="focus-drift-hover-card__value"><strong>{workDuration}</strong></div>
         </div>
-        <div className={`focus-drift-hover-card__metric${hover.kind === "commits" ? " is-active" : ""}`}>
-          <strong>{hover.commits}</strong>
-          <span>{t("agents.rhythm.commits")}</span>
+        <div className={`focus-drift-hover-card__col agents-rhythm-hover-card__col--commits${hover.kind === "commits" ? " is-active" : ""}`}>
+          <span className="focus-drift-hover-card__label">
+            <span className="agents-rhythm-hover-card__dot agents-rhythm-hover-card__dot--commits" />
+            {t("agents.rhythm.commits")}
+          </span>
+          <div className="focus-drift-hover-card__value"><strong>{hover.commits}</strong></div>
         </div>
       </div>
     </div>
