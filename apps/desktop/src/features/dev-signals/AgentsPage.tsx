@@ -6,8 +6,7 @@
  * read as a foreign surface. This version reuses the day view's actual
  * skeleton, so the two pages feel like siblings:
  *
- *   - the "Focused for Xh" headline pattern → cumulative agent work, with
- *     elapsed time kept directly underneath
+ *   - the "Focused for Xh" headline pattern → cumulative agent work
  *   - day-split main column + the shared Breakdown side panel, with the
  *     summary tiles living in the side panel exactly like the day breakdown
  *   - the timeline as a flow-chart-card, sharing the flow chart's axis and
@@ -115,6 +114,7 @@ function formatLogicalClock(logicalMinute: number, startOfDayMinutes: number, la
 }
 
 function formatAgentDuration(minutes: number, language: DisplayLanguage): string {
+  if (minutes > 0 && minutes < 1) return language === "ko" ? "1분 미만" : "<1m";
   return language === "ko"
     ? formatLocalizedCompactDurationFromSeconds(Math.round(minutes * 60), language)
     : formatHours(minutes);
@@ -134,11 +134,6 @@ function formatAgentRunTimeRange(
   // Agent turns can be shorter than a minute. Floor the opening edge and ceil
   // the closing edge so a real run never reads as a zero-length clock range.
   return `${formatLogicalClock(Math.floor(start), startOfDayMinutes, language)}–${formatLogicalClock(Math.ceil(end), startOfDayMinutes, language)}`;
-}
-
-function formatAgentRunDuration(activeMinutes: number, language: DisplayLanguage): string {
-  if (activeMinutes > 0 && activeMinutes < 1) return language === "ko" ? "1분 미만" : "<1m";
-  return formatAgentDuration(activeMinutes, language);
 }
 
 /* FlowChartView's cell-height constants, reproduced exactly so the agents grid
@@ -221,7 +216,7 @@ function agentsHoverAriaLabel(details: AgentsHoverDetails, language: DisplayLang
   return t(details.cellSummary ? "agents.hover.cellAria" : "agents.hover.runAria", {
     repo,
     range: details.timeRangeLabel,
-    duration: formatAgentRunDuration(details.activeSeconds / 60, language),
+    duration: formatAgentDuration(details.activeSeconds / 60, language),
     peak: details.peakConcurrency,
     tools,
   });
@@ -999,7 +994,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
                           provider: event.providerLabel || t("agents.generic.unknownProvider"),
                           peak: event.peakConcurrency,
                           range: formatAgentRunTimeRange(event.start, event.end, boundaryMinutes, effectiveLanguage),
-                          duration: formatAgentRunDuration(event.activeMinutes, effectiveLanguage),
+                          duration: formatAgentDuration(event.activeMinutes, effectiveLanguage),
                         })}
                       >
                         {event.segments.map((segment) => (
@@ -1016,7 +1011,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
                             aria-hidden="true"
                           />
                         ))}
-                        {!isShort ? <strong>{formatAgentRunDuration(event.activeMinutes, effectiveLanguage)}</strong> : null}
+                        {!isShort ? <strong>{formatAgentDuration(event.activeMinutes, effectiveLanguage)}</strong> : null}
                       </article>
                     );
                   })}
@@ -1545,7 +1540,7 @@ export function AgentsPage({
     () => getDashboardPeriodRange(selectedDay, period, boundaryMinutes, startOfWeek),
     [boundaryMinutes, period, selectedDay, startOfWeek],
   );
-  const { days, loading, live } = useAgentsData(
+  const { days, loading, live, error } = useAgentsData(
     range.startDay,
     range.endDay,
     boundaryMinutes,
@@ -1568,18 +1563,14 @@ export function AgentsPage({
   const headlineMinutes = period === "Today"
     ? dayModel?.cumulativeMinutes ?? 0
     : models.reduce((sum, model) => sum + model.cumulativeMinutes, 0);
-  const wallClockMinutes = period === "Today"
-    ? dayModel?.wallClockMinutes ?? 0
-    : models.reduce((sum, model) => sum + model.wallClockMinutes, 0);
-  const concurrencyPeak = period === "Today"
-    ? dayModel?.concurrencyPeak ?? 0
-    : Math.max(0, ...models.map((model) => model.concurrencyPeak));
-  const headlineDuration = headlineMinutes >= 1 ? formatAgentDuration(headlineMinutes, effectiveLanguage) : null;
+  const headlineDuration = headlineMinutes > 0 ? formatAgentDuration(headlineMinutes, effectiveLanguage) : null;
   const titleAriaLabel = loading
     ? t("agents.headline.loadingAria")
-    : headlineDuration === null
-      ? t("agents.headline.noActivity")
-      : t("agents.headline.ranAria", { duration: headlineDuration });
+    : error
+      ? t("agents.headline.ranLead")
+      : headlineDuration === null
+        ? t("agents.headline.noActivity")
+        : t("agents.headline.ranAria", { duration: headlineDuration });
   const dateLabel = formatLocalizedDateRangeLabel(range.startDay, range.endDay, effectiveLanguage);
   const totalCommits = period === "Today"
     ? dayModel?.commitCount ?? 0
@@ -1631,20 +1622,14 @@ export function AgentsPage({
             <h1 aria-label={titleAriaLabel} className="dashboard-page-head__title">
               {loading ? (
                 <><span className="dashboard-page-head__focus-word">{t("agents.headline.ranLead")}</span><span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /></>
+              ) : error ? (
+                <span className="dashboard-page-head__focus-word">{t("agents.headline.ranLead")}</span>
               ) : headlineDuration === null ? (
                 <span className="dashboard-page-head__focus-word">{t("agents.headline.noActivity")}</span>
               ) : (
                 <><span className="dashboard-page-head__focus-word">{t("agents.headline.ranLead")}</span><span className="dashboard-page-head__focus-value">{headlineDuration}</span></>
               )}
             </h1>
-            {!loading && headlineDuration !== null ? (
-              <p className="agents-headline-context">
-                {t("agents.headline.elapsed", {
-                  duration: formatAgentDuration(wallClockMinutes, effectiveLanguage),
-                  count: concurrencyPeak,
-                })}
-              </p>
-            ) : null}
           </div>
           <div className="agents-ssh-controls">
             <button
@@ -1706,7 +1691,7 @@ export function AgentsPage({
           )}
           <DateNavigator
             ariaLabel={t(period === "Week" ? "agents.date.weekSelector" : "agents.date.daySelector")}
-            label={`${dateLabel}${!loading && !live ? ` · ${t("agents.date.sample")}` : ""}`}
+            label={`${dateLabel}${!loading && !error && !live ? ` · ${t("agents.date.sample")}` : ""}`}
             todayLabel={t(period === "Week" ? "agents.date.currentWeek" : "agents.date.currentDay")}
             isTodayDisabled={isCurrentPeriod}
             isNextDisabled={!canShiftForward}
@@ -1720,6 +1705,32 @@ export function AgentsPage({
       </div>
     </div>
   );
+
+  if (error) {
+    return (
+      <div className="page page--agents">
+        {pageHead}
+        <section className="agents-data-error" role="alert">
+          <div>
+            <h2>{t("agents.data.errorTitle")}</h2>
+            <p>{t("agents.data.errorDescription")}</p>
+          </div>
+          <button type="button" className="app-btn app-btn--secondary" onClick={() => setDataRefreshKey((key) => key + 1)}>
+            {t("agents.data.retry")}
+          </button>
+        </section>
+        <ModalPresence>
+          {sshModalOpen ? (
+            <SshAgentSourcesModal
+              onClose={() => setSshModalOpen(false)}
+              onCollected={() => setDataRefreshKey((key) => key + 1)}
+              collectSource={syncSshHost}
+            />
+          ) : null}
+        </ModalPresence>
+      </div>
+    );
+  }
 
   const breakdownPanel = (
     <BreakdownSidePanel

@@ -3,9 +3,9 @@
  *
  * In the Tauri app the tab reads the tracker: one get_dev_signals call per day
  * (commits + agent turns) and one timeline call per day (attention), with a
- * sync_dev_signals pass first so the numbers are fresh. Outside Tauri, or when
- * the tracker returns nothing at all, the real-week fixture keeps the surface
- * reviewable in a browser.
+ * sync_dev_signals pass first so the numbers are fresh. Outside Tauri, the
+ * sample fixture keeps the surface reviewable. Tracker failures stay explicit
+ * instead of substituting sample activity for the requested data.
  *
  * Times land as minutes since the configured logical day start because that
  * is the unit both views draw in; conversion happens here once, not in the
@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 
 import {
   logicalDayIsoDateForDate,
@@ -194,8 +195,10 @@ export type AgentsDataState = {
   readonly days: readonly AgentsDaySource[];
   /** True while the requested range's tracker read is in flight. */
   readonly loading: boolean;
-  /** True when the tracker answered; false means the fixture is on screen. */
+  /** True when the entire requested range was read from the tracker. */
   readonly live: boolean;
+  /** True when the requested range could not be read; never substitute a fixture. */
+  readonly error: boolean;
 };
 
 type StoredAgentsDataState = AgentsDataState & {
@@ -216,6 +219,7 @@ export function useAgentsData(
     days: buildAgentsLoadingDays(days),
     loading: true,
     live: false,
+    error: false,
     rangeKey,
   }));
 
@@ -223,7 +227,7 @@ export function useAgentsData(
     let cancelled = false;
     // Loading is its own state. Rendering the browser fixture here makes real
     // data briefly appear as `sample` every time the tab or range changes.
-    setState({ days: buildAgentsLoadingDays(days), loading: true, live: false, rangeKey });
+    setState({ days: buildAgentsLoadingDays(days), loading: true, live: false, error: false, rangeKey });
 
     async function load() {
       try {
@@ -254,21 +258,20 @@ export function useAgentsData(
         // No tracker bridge (browser dev server) answers null for every day;
         // date-shift the fixture so navigation remains reviewable and honest
         // about the selected range (the header marks it as sample data).
-        if (payloads.every((entry) => entry.signals === null)) {
-          setState({ days: sampleDaysFor(days), loading: false, live: false, rangeKey });
+        if (!isTauri() && payloads.every((entry) => entry.signals === null)) {
+          setState({ days: sampleDaysFor(days), loading: false, live: false, error: false, rangeKey });
           return;
         }
 
-        const sources = payloads.map(({ day, signals, attention }) => toDaySource(
-          day,
-          signals ?? { commits: [], agentTurns: [], agentSummary: { wallClockSeconds: 0, cumulativeSeconds: 0, concurrencyPeak: 0, parallelFactor: 0, spans: [] } },
-          attention,
-          reposByKey,
-          boundaryMinutes,
-        ));
-        setState({ days: sources, loading: false, live: true, rangeKey });
+        const sources = payloads.map(({ day, signals, attention }) => {
+          if (signals === null) {
+            throw new Error("Agent activity is unavailable for part of the requested range");
+          }
+          return toDaySource(day, signals, attention, reposByKey, boundaryMinutes);
+        });
+        setState({ days: sources, loading: false, live: true, error: false, rangeKey });
       } catch {
-        if (!cancelled) setState({ days: sampleDaysFor(days), loading: false, live: false, rangeKey });
+        if (!cancelled) setState({ days: buildAgentsLoadingDays(days), loading: false, live: false, error: true, rangeKey });
       }
     }
 
@@ -279,7 +282,7 @@ export function useAgentsData(
   }, [boundaryMinutes, days, endDay, rangeKey, refreshKey, startDay]);
 
   if (state.rangeKey !== rangeKey) {
-    return { days: buildAgentsLoadingDays(days), loading: true, live: false };
+    return { days: buildAgentsLoadingDays(days), loading: true, live: false, error: false };
   }
-  return { days: state.days, loading: state.loading, live: state.live };
+  return { days: state.days, loading: state.loading, live: state.live, error: state.error };
 }

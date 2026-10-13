@@ -52,6 +52,7 @@ type RepoBarEntry = {
 };
 
 function formatAgentDuration(minutes: number, language: DisplayLanguage): string {
+  if (minutes > 0 && minutes < 1) return language === "ko" ? "1분 미만" : "<1m";
   return language === "ko"
     ? formatLocalizedCompactDurationFromSeconds(Math.round(minutes * 60), language)
     : formatHours(minutes);
@@ -171,7 +172,7 @@ export function AgentsBreakdownComposed({ sources, dayModel, models, period }: A
         title={t("agents.breakdown.models")}
         entries={ringEntries}
         totalSeconds={ringSeconds}
-        centerPercent={Math.round(slices[0]?.share ?? 0)}
+        centerPercent={ringEntries.length > 0 ? Math.round(slices[0]?.share ?? 0) : 0}
         flowBlocks={[]}
         appIcons={{}}
         language={effectiveLanguage}

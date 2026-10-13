@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agentsBackfillDays,
@@ -8,6 +8,9 @@ import {
   shouldAwaitBackfill,
   useAgentsData,
 } from "./useAgentsData";
+
+const runtime = vi.hoisted(() => ({ native: false }));
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => runtime.native }));
 
 const trackerClient = vi.hoisted(() => ({
   getDevRepos: vi.fn(),
@@ -32,6 +35,7 @@ const emptySignals = {
 
 describe("Your Agents date ranges", () => {
   beforeEach(() => {
+    runtime.native = false;
     trackerClient.getDevRepos.mockReset().mockResolvedValue([]);
     trackerClient.getDevSignals.mockReset().mockResolvedValue(emptySignals);
     trackerClient.getTimeline.mockReset().mockResolvedValue([]);
@@ -103,7 +107,59 @@ describe("Your Agents date ranges", () => {
       days: [{ day: "2026-08-27", attention: [], turns: [], commits: [] }],
       loading: true,
       live: false,
+      error: false,
     });
+  });
+
+  it("uses sample data only when the browser has no tracker bridge", async () => {
+    trackerClient.getDevSignals.mockResolvedValue(null);
+    const hook = renderHook(() => useAgentsData("2026-08-28", "2026-08-28"));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    expect(hook.result.current).toMatchObject({ live: false, error: false });
+    expect(hook.result.current.days[0]?.turns.length).toBeGreaterThan(0);
+  });
+
+  it("does not substitute sample data when the desktop tracker returns no payload", async () => {
+    runtime.native = true;
+    trackerClient.getDevSignals.mockResolvedValue(null);
+    const hook = renderHook(() => useAgentsData("2026-08-28", "2026-08-28"));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    expect(hook.result.current).toMatchObject({ live: false, error: true });
+    expect(hook.result.current.days[0]?.turns).toEqual([]);
+  });
+
+  it("reports failed reads and recovers on retry without showing sample activity", async () => {
+    trackerClient.getDevSignals.mockRejectedValueOnce(new Error("Tracker unavailable"));
+    const hook = renderHook(({ refreshKey }) => useAgentsData("2026-08-28", "2026-08-28", 0, refreshKey), {
+      initialProps: { refreshKey: 0 },
+    });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    expect(hook.result.current).toEqual({
+      days: buildAgentsLoadingDays(["2026-08-28"]), loading: false, live: false, error: true,
+    });
+    hook.rerender({ refreshKey: 1 });
+    await waitFor(() => expect(hook.result.current.live).toBe(true));
+    expect(hook.result.current.error).toBe(false);
+    expect(hook.result.current.days[0]?.turns).toEqual([]);
+  });
+
+  it("does not count missing week payloads as empty days", async () => {
+    trackerClient.getDevSignals.mockResolvedValueOnce(emptySignals).mockResolvedValueOnce(null);
+    const hook = renderHook(() => useAgentsData("2026-08-27", "2026-08-28"));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    expect(hook.result.current).toMatchObject({ live: false, error: true });
+  });
+
+  it("ignores a late failure from the previous date after navigation succeeds", async () => {
+    let rejectPrevious!: (reason: Error) => void;
+    trackerClient.getDevSignals.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectPrevious = reject; }));
+    const hook = renderHook(({ day }) => useAgentsData(day, day), { initialProps: { day: "2026-08-28" } });
+    await waitFor(() => expect(rejectPrevious).toBeTypeOf("function"));
+    hook.rerender({ day: "2026-08-27" });
+    await waitFor(() => expect(hook.result.current.live).toBe(true));
+    await act(async () => rejectPrevious(new Error("Late failure")));
+    expect(hook.result.current).toMatchObject({ loading: false, live: true, error: false });
+    expect(hook.result.current.days[0]?.day).toBe("2026-08-27");
   });
 
   it("queries and maps a day from the configured logical start", async () => {

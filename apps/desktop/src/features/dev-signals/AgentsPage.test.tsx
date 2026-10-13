@@ -54,7 +54,7 @@ function renderAgentsPage(
 
 describe("AgentsPage shared dashboard controls", () => {
   beforeEach(() => {
-    vi.mocked(useAgentsData).mockReturnValue({ days: [source], loading: false, live: true });
+    vi.mocked(useAgentsData).mockReturnValue({ days: [source], loading: false, error: false, live: true });
   });
 
   afterEach(() => {
@@ -246,7 +246,7 @@ describe("AgentsPage shared dashboard controls", () => {
     vi.mocked(useAgentsData).mockReturnValue({
       days: [{ day: source.day, attention: [], turns: [], commits: [] }],
       loading: true,
-      live: false,
+      error: false, live: false,
     });
 
     renderAgentsPage();
@@ -278,7 +278,7 @@ describe("AgentsPage shared dashboard controls", () => {
     vi.mocked(useAgentsData).mockReturnValue({
       days: [{ day: "2026-08-27", attention: [], turns: [], commits: [] }],
       loading: true,
-      live: false,
+      error: false, live: false,
     });
     rerender(
       <AgentsPage
@@ -310,15 +310,47 @@ describe("AgentsPage shared dashboard controls", () => {
         ],
       }],
       loading: false,
-      live: true,
+      error: false, live: true,
     });
 
     renderAgentsPage();
 
     expect(screen.getByRole("heading", { name: "4.0h of agent work" }).textContent).toBe("Agent work4.0h");
-    expect(screen.getAllByText("1.0h elapsed · peak ×4 concurrent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1.0h elapsed · peak ×4 concurrent")).toHaveLength(1);
+    expect(document.querySelector(".dashboard-page-head")?.textContent).not.toContain("elapsed");
     expect(screen.getByText("4.5h")).toBeTruthy();
     expect(screen.getAllByText("Agent work").length).toBeGreaterThan(1);
+  });
+
+  it.each(["en", "ko"] as const)("keeps sub-minute activity visible in Day and Week (%s)", (language) => {
+    vi.mocked(useAgentsData).mockReturnValue({
+      days: [{ ...source, turns: [[60, 60.5, "codex", "drifty_mac"]] }],
+      loading: false, live: true, error: false,
+    });
+    renderAgentsPage({}, language);
+
+    const headline = language === "ko" ? "에이전트 작업량 1분 미만" : "<1m of agent work";
+    expect(screen.getByRole("heading", { name: headline })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: language === "ko" ? "주간" : "Week" }));
+    expect(screen.getByRole("heading", { name: headline })).toBeTruthy();
+  });
+
+  it.each(["en", "ko"] as const)("offers a retry without presenting failed reads as no activity or sample data (%s)", (language) => {
+    vi.mocked(useAgentsData).mockReturnValue({
+      days: [{ day: source.day, turns: [], attention: [], commits: [] }],
+      loading: false, live: false, error: true,
+    });
+    renderAgentsPage({}, language);
+
+    expect(screen.getByRole("alert").textContent).toContain(language === "ko" ? "에이전트 활동을 불러오지 못했어요" : "Couldn’t load agent activity");
+    expect(screen.queryByRole("heading", { name: /No agent activity|에이전트 활동 없음/ })).toBeNull();
+    expect(screen.queryByText(/ · (sample|샘플)/)).toBeNull();
+    expect(document.querySelector(".agents-rhythm-chart")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: language === "ko" ? "다시 시도" : "Try again" }));
+    expect(useAgentsData).toHaveBeenLastCalledWith("2026-08-28", "2026-08-28", 0, 1);
+    fireEvent.click(screen.getByRole("button", { name: language === "ko" ? "주간" : "Week" }));
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(useAgentsData).toHaveBeenLastCalledWith("2026-08-24", "2026-08-30", 0, 1);
   });
 
   it("shows hourly rhythm values on pointer hover and keyboard focus", () => {
@@ -334,7 +366,7 @@ describe("AgentsPage shared dashboard controls", () => {
         commits: [[210, 1, 0, 1, "abc123", "drifty_mac"]],
       }],
       loading: false,
-      live: true,
+      error: false, live: true,
     });
     renderAgentsPage();
 
@@ -379,24 +411,24 @@ describe("AgentsPage shared dashboard controls", () => {
     act(() => agentPoint.blur());
   });
 
-  it("keeps sub-minute agent time out of the headline", () => {
+  it("keeps the headline consistent with sub-minute timeline activity", () => {
     vi.mocked(useAgentsData).mockReturnValue({
       days: [{
         ...source,
         attention: [],
-        turns: [[60, 60.4, "codex", "drifty_mac"]],
+        turns: [[60, 60.4, "codex", "drifty_mac", "gpt-5"]],
         commits: [],
       }],
       loading: false,
-      live: true,
+      error: false, live: true,
     });
 
     renderAgentsPage();
 
-    const heading = screen.getByRole("heading", { name: "No agent activity" });
-    expect(heading).toBeTruthy();
-    expect(heading.textContent).toBe("No agent activity");
-    expect(heading.querySelector(".dashboard-page-head__focus-value")).toBeNull();
+    const heading = screen.getByRole("heading", { name: "<1m of agent work" });
+    expect(heading.textContent).toBe("Agent work<1m");
+    expect(document.querySelector(".agents-story__value")?.textContent).toBe("<1m");
+    expect(document.querySelector(".flow-compact-productivity-circle__center")?.textContent).toBe("0%");
 
     const dayRun = screen.getByRole("img", { name: /Agent activity, drifty_mac/i });
     expect(dayRun.getAttribute("aria-label")).toContain("01:00–01:03, <1m active");
@@ -479,7 +511,7 @@ describe("AgentsPage shared dashboard controls", () => {
         ]),
       }],
       loading: false,
-      live: true,
+      error: false, live: true,
     });
 
     renderAgentsPage();
@@ -504,7 +536,7 @@ describe("AgentsPage shared dashboard controls", () => {
         commits: [],
       }],
       loading: false,
-      live: true,
+      error: false, live: true,
     });
     renderAgentsPage();
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
@@ -533,7 +565,7 @@ describe("AgentsPage shared dashboard controls", () => {
         [623, 624, "gemini", "gamma", "model-c", 0],
       ],
       commits: [[622, 1, 0, 1, "inside", "beta"], [624, 1, 0, 1, "outside", "gamma"]],
-    }], loading: false, live: true });
+    }], loading: false, error: false, live: true });
     renderAgentsPage();
     const mixed = document.querySelector<HTMLElement>('[data-flow-minute="621"]')!;
     fireEvent(mixed, new MouseEvent("pointermove", { bubbles: true }));
@@ -564,7 +596,7 @@ describe("AgentsPage shared dashboard controls", () => {
         [1203, 1206, "claude", "beta", "model-c"],
       ],
       commits: [],
-    }], loading: false, live: true });
+    }], loading: false, error: false, live: true });
     renderAgentsPage({ startOfDayMinutes: 4 * 60 });
     const first = screen.getByRole("img", { name: /23:57–00:00/ });
     const next = screen.getByRole("img", { name: /00:00–00:03/ });
@@ -584,7 +616,7 @@ describe("AgentsPage shared dashboard controls", () => {
   it("does not invent one surrounding run for two separate runs inside a coarse cell", () => {
     vi.mocked(useAgentsData).mockReturnValue({ days: [{ ...source,
       turns: [[600, 600.1, "codex", "alpha"], [605.9, 610, "claude", "beta"]], commits: [],
-    }], loading: false, live: true });
+    }], loading: false, error: false, live: true });
     renderAgentsPage({ flowIntervalMinutes: 6 });
     fireEvent.focus(screen.getByRole("img", { name: /10:00–10:06/ }));
     expect(screen.getByRole("tooltip").textContent).toContain("Peak concurrent×1");
@@ -601,7 +633,7 @@ describe("AgentsPage shared dashboard controls", () => {
         ],
       }],
       loading: false,
-      live: true,
+      error: false, live: true,
     });
     renderAgentsPage();
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
@@ -687,7 +719,7 @@ describe("AgentsPage shared dashboard controls", () => {
         "drifty_mac",
       ] as const),
     };
-    vi.mocked(useAgentsData).mockReturnValue({ days: [highConcurrencySource], loading: false, live: true });
+    vi.mocked(useAgentsData).mockReturnValue({ days: [highConcurrencySource], loading: false, error: false, live: true });
 
     renderAgentsPage();
 
@@ -726,7 +758,7 @@ describe("AgentsPage shared dashboard controls", () => {
         [60, 120, "codex", "drifty_mac"],
       ],
     };
-    vi.mocked(useAgentsData).mockReturnValue({ days: [noCommitSource], loading: false, live: true });
+    vi.mocked(useAgentsData).mockReturnValue({ days: [noCommitSource], loading: false, error: false, live: true });
 
     renderAgentsPage();
 
