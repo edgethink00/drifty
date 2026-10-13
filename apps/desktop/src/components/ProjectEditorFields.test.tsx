@@ -30,7 +30,7 @@ describe("ProjectEditorFields", () => {
     expect((textarea as HTMLTextAreaElement).value).toBe("Project description context");
 
     // AI sparkle icon is rendered in the label
-    const icon = container.querySelector(".project-editor-field__ai-icon");
+    const icon = container.querySelector(".ai-field-mark");
     expect(icon).toBeTruthy();
     expect(icon?.getAttribute("aria-hidden")).toBe("true");
     expect(icon?.querySelector("svg")).toBeTruthy();

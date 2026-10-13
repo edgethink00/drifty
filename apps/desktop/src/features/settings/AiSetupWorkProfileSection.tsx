@@ -7,6 +7,7 @@ import type { WorkProfileSettings } from "../onboarding/onboardingState";
 import { onboardingActivityLabel } from "../onboarding/onboardingOptionLabels";
 import { useLocalization } from "../localization/LocalizationContext";
 import { ActionLabel } from "../../components/ActionLabel";
+import { AiFieldMark } from "../../components/AiIcons";
 
 const SUGGESTED_ACTIVITIES = MAIN_ACTIVITY_OPTIONS.filter((activity) => activity !== "Other");
 const SUGGESTED_ACTIVITY_SET = new Set<string>(SUGGESTED_ACTIVITIES);
@@ -88,9 +89,7 @@ export function AiSetupWorkProfileSection({
           <div className="ai-setup-work-description">
             <div className="ai-setup-work-description__label-row">
               <label className="ai-setup-work-description__label" htmlFor="ai-setup-work-description">
-                <span className="ai-setup-work-description__icon" aria-hidden="true">
-                  <AiSparkIcon />
-                </span>
+                <AiFieldMark />
                 {t("onboarding.job.descriptionLabel")}
               </label>
               <span className="ai-setup-work-description__privacy" id="ai-setup-work-description-privacy">
@@ -133,13 +132,5 @@ export function AiSetupWorkProfileSection({
         </div>
       </div>
     </section>
-  );
-}
-
-function AiSparkIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M8 0.7c.4 3.1 1.9 4.6 5 5C9.9 6.1 8.4 7.6 8 10.7 7.6 7.6 6.1 6.1 3 5.7 6.1 5.3 7.6 3.8 8 0.7Z" />
-    </svg>
   );
 }

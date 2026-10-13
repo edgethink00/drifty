@@ -20,22 +20,6 @@
   gap: 0.25rem;
 }
 
-.project-editor-field__ai-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: var(--text);
-  flex: none;
-  line-height: 0;
-  transform: translateY(2.5px);
-}
-
-.project-editor-field__ai-icon svg {
-  display: block;
-}
-
 .project-editor-field__textarea {
   /* No native grip on a rounded writing field; see --field-radius in
      tokens-base.css. The resting box grows to pay for the lost handle. */

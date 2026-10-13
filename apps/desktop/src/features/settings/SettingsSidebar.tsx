@@ -1,5 +1,6 @@
 import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { SettingsSearch } from "./SettingsSearch";
+import { AiMarkIcon } from "../../components/AiIcons";
 import { PetIcon } from "../../components/PetIcon";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useRef, useState } from "react";
@@ -56,7 +57,7 @@ function SettingsSectionIcon({ section }: { section: SettingsSection }) {
       // Lucide palette: https://lucide.dev/icons/palette
       return (<svg {...props}><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" /><circle cx="13.5" cy="6.5" r=".5" fill="currentColor" /><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" /><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" /><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /></svg>);
     case "aiSetup":
-      return (<svg {...props}><path d="M12 3.2l1.7 4.6 4.6 1.7-4.6 1.7L12 15.8l-1.7-4.6-4.6-1.7 4.6-1.7z" /><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></svg>);
+      return <AiMarkIcon />;
     case "classification":
       // Lucide tag: https://lucide.dev/icons/tag. General keeps the slider glyph.
       return (<svg {...props}><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></svg>);

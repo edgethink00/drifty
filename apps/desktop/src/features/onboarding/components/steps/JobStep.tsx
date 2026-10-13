@@ -1,7 +1,7 @@
 import { MAX_MAIN_ACTIVITY_SELECTIONS, MAX_WORK_DESCRIPTION_LENGTH, type MainActivity } from "../../constants";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { onboardingActivityLabel } from "../../onboardingOptionLabels";
-import { AiSparkIcon } from "../../../../components/AiSparkIcon";
+import { AiFieldMark } from "../../../../components/AiIcons";
 
 const SUGGESTED_ACTIVITIES: readonly MainActivity[] = [
   "Coding",
@@ -75,9 +75,7 @@ export function JobStep({
       <div className="dc-onb-natural-language">
         <div className="dc-onb-natural-language__label-row">
           <label className="dc-onb-field-label" id="onboarding-work-description-label" htmlFor="onboarding-work-description">
-            <span className="dc-onb-natural-language__icon" aria-hidden="true">
-              <AiSparkIcon />
-            </span>
+            <AiFieldMark />
             {t("onboarding.job.descriptionLabel")}
           </label>
           <span className="dc-onb-natural-language__privacy" id="onboarding-work-description-privacy">

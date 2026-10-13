@@ -694,21 +694,6 @@
   line-height: 1.15;
 }
 
-.dc-onb-natural-language__icon {
-  display: inline-flex;
-  width: 18px;
-  height: 18px;
-  transform: translateY(2.5px);
-  align-items: center;
-  justify-content: center;
-  color: var(--dc-onb-text);
-  flex: none;
-}
-
-.dc-onb-natural-language__icon svg {
-  display: block;
-}
-
 .dc-onb-optional {
   color: var(--dc-onb-pale);
   font-size: 11px;

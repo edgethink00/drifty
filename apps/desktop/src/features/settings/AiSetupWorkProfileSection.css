@@ -130,21 +130,6 @@
   line-height: 1.15;
 }
 
-.ai-setup-work-description__icon {
-  align-items: center;
-  color: var(--text);
-  display: inline-flex;
-  flex: none;
-  height: 18px;
-  justify-content: center;
-  transform: translateY(2.5px);
-  width: 18px;
-}
-
-.ai-setup-work-description__icon svg {
-  display: block;
-}
-
 .ai-setup-work-description__privacy {
   color: var(--text-muted);
   font-size: 0.6875rem;

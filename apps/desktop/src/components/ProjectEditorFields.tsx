@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AiSparkIcon } from "./AiSparkIcon";
+import { AiFieldMark } from "./AiIcons";
 import { ColorSwatchGrid, swatchStyle, type SwatchItem } from "./ColorSwatchGrid";
 import "./project-editor-fields.css";
 import { useLocalization, type LocalizationController } from "../features/localization/LocalizationContext";
@@ -186,9 +186,7 @@ export function ProjectEditorFields({
       </div>
       <label className="project-editor-field" htmlFor={descriptionId}>
         <span className="label-mono project-editor-field__label-mono">
-          <span className="project-editor-field__ai-icon" aria-hidden="true">
-            <AiSparkIcon />
-          </span>
+          <AiFieldMark />
           {t("projects.editor.description")}
         </span>
         <textarea

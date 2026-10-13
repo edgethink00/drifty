@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { type TabId } from "../../app/navigation";
+import { AiMarkIcon, AiReclassifyIcon } from "../../components/AiIcons";
 import { accessibilityClient } from "../../lib/api/accessibilityClient";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -123,11 +124,7 @@ function renderCommandIcon(icon: string): ReactNode {
         </svg>
       );
     case "reclassify":
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" />
-        </svg>
-      );
+      return <AiReclassifyIcon />;
     case "newProject":
       return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -143,20 +140,7 @@ function renderCommandIcon(icon: string): ReactNode {
         </svg>
       );
     case "ai":
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect width="16" height="16" x="4" y="4" rx="2" />
-          <rect width="6" height="6" x="9" y="9" rx="1" />
-          <path d="M15 2v2" />
-          <path d="M15 20v2" />
-          <path d="M2 15h2" />
-          <path d="M2 9h2" />
-          <path d="M20 15h2" />
-          <path d="M20 9h2" />
-          <path d="M9 2v2" />
-          <path d="M9 20v2" />
-        </svg>
-      );
+      return <AiMarkIcon />;
     default:
       return null;
   }
