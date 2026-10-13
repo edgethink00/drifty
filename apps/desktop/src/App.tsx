@@ -475,12 +475,6 @@ import { WhatsNewDialog } from "./features/whats-new/WhatsNewDialog";
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
 import {
   entriesForBuild,
-  markWhatsNewAutoOpened,
-  markWhatsNewSeen,
-  newestShownVersion,
-  readWhatsNewLastAutoOpenAt,
-  readWhatsNewLastSeenVersion,
-  resolveWhatsNewLaunch,
   toWhatsNewPlatform,
 } from "./features/whats-new/whatsNewPolicy";
 import {
@@ -1622,10 +1616,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
-  /** One automatic sheet per launch: the trial-end sheet or What's new, never both in a row. */
+  /** The trial-end sheet opens by itself at most once per launch. */
   const [automaticSheetShownThisLaunch, setAutomaticSheetShownThisLaunch] = useState(false);
-  const [whatsNewLastSeenVersion, setWhatsNewLastSeenVersion] = useState(() => readWhatsNewLastSeenVersion());
-  const [whatsNewLastAutoOpenAt] = useState(() => readWhatsNewLastAutoOpenAt());
   /** The Pro sheet opened on its own after a trial ended (reported as trial_end_sheet). */
   const [trialEndSheetAuto, setTrialEndSheetAuto] = useState(false);
   const [resumeUpgradePlanAfterAuth, setResumeUpgradePlanAfterAuth] = useState(false);
@@ -1785,10 +1777,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   deviceSyncAccountIdRef.current = deviceSyncAccountId;
   const onboardingCompletedAt = readUserOnboardingState(user?.id ?? "local", ["local"])?.completedAt ?? null;
   const featureNewBadges = useFeatureNewBadges(onboardingCompletedAt, petModeEnabled);
-  const recordWhatsNewSeen = useCallback((version: string | null) => {
-    markWhatsNewSeen(version);
-    setWhatsNewLastSeenVersion(readWhatsNewLastSeenVersion());
-  }, []);
   const openWhatsNew = useCallback(() => setWhatsNewOpen(true), []);
   const authMetadataAvatarUrl = getAuthMetadataAvatarUrl(user);
   const isEffectiveAuthRequired = isAuthRequired;
@@ -10327,15 +10315,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     if (!upgradePlanModalOpen) setTrialEndSheetAuto(false);
   }, [upgradePlanModalOpen]);
-  // What's new reads the drifty.so changelog once the dashboard settles. It
-  // opens by itself only for chapters this install has not seen, at most once
-  // a week, never in the same launch as an automatic trial-end sheet, and it
-  // yields to onboarding, update prompts and every other dialog.
-  const whatsNewShellReady = activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay
-    && !isDashboardDemoReplayActive && authStatus !== "loading" && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
+  // What's new never opens by itself (owner decision 2026-10-14). It opens from
+  // Drifty > What's New and Settings > General, and reads the drifty.so
+  // changelog only once it is open.
   const whatsNewChangelog = useWhatsNewChangelog(
     localization.effectiveLanguage === "ko" ? "ko" : "en",
-    whatsNewShellReady || whatsNewOpen,
+    whatsNewOpen,
   );
   const whatsNewEntries = useMemo(
     () => whatsNewChangelog.entries
@@ -10343,32 +10328,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       : null,
     [hostPlatform, whatsNewChangelog.entries],
   );
-  const whatsNewLaunch = resolveWhatsNewLaunch({
-    entries: whatsNewEntries,
-    currentVersion: BUILD_INFO.version,
-    lastSeenVersion: whatsNewLastSeenVersion,
-    lastAutoOpenAt: whatsNewLastAutoOpenAt,
-    onboardingCompletedAt,
-  });
-  const whatsNewCanAutoOpen = whatsNewShellReady && whatsNewLaunch.autoOpen && !whatsNewOpen && !automaticSheetShownThisLaunch
-    && trialEndStage !== "sheet" && !upgradePlanModalOpen && !visibleUpdate && driftAlarmEvent === null
-    && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen;
-  const whatsNewRecordSilently = whatsNewShellReady && whatsNewLaunch.recordSilently;
-  useEffect(() => {
-    if (whatsNewRecordSilently) recordWhatsNewSeen(BUILD_INFO.version);
-  }, [recordWhatsNewSeen, whatsNewRecordSilently]);
-  useEffect(() => {
-    if (!whatsNewCanAutoOpen) return;
-    setAutomaticSheetShownThisLaunch(true);
-    markWhatsNewAutoOpened();
-    openWhatsNew();
-  }, [openWhatsNew, whatsNewCanAutoOpen]);
-  // Showing the list counts as seen up to the newest version on screen. A
-  // chapter drifty.so has not published yet stays unseen for a later launch.
-  const whatsNewShownVersion = whatsNewOpen && whatsNewEntries ? newestShownVersion(whatsNewEntries, BUILD_INFO.version) : null;
-  useEffect(() => {
-    if (whatsNewShownVersion) recordWhatsNewSeen(whatsNewShownVersion);
-  }, [recordWhatsNewSeen, whatsNewShownVersion]);
 
   if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
     return (
