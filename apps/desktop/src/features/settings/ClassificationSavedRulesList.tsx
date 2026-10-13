@@ -77,7 +77,8 @@ export function ClassificationSavedRulesList({
           <p id={helpId} className="classification-rules-manager__help" hidden={!helpOpen}>{t("settings.classification.savedRulesDescription")}</p>
         </div>
         <div className="classification-rule-list-head">
-          <span className="classification-rule-list-count" role="status">{!hasError && !classificationRulesLoading ? t(query ? "classification.rules.count" : "classification.rules.totalCount", { count: visibleRules.length, total: classificationRules.length }) : null}</span>
+          {/* The empty state already says there are none; "0 classifications" above it only repeats that. */}
+          <span className="classification-rule-list-count" role="status">{!hasError && !classificationRulesLoading && (classificationRules.length > 0 || query) ? t(query ? "classification.rules.count" : "classification.rules.totalCount", { count: visibleRules.length, total: classificationRules.length }) : null}</span>
           <div className="classification-rule-list-tools">
             {classificationRules.length > 8 || search ? <input type="search" className="settings-input" aria-label={t("classification.rules.search")} placeholder={t("classification.rules.search")} value={search} onChange={(event) => setSearch(event.target.value)} /> : null}
             {hasError ? <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>{t("common.retry")}</button> : null}

@@ -19,6 +19,13 @@ function chooseFromOptions(target: string, item: "Edit" | "Remove") {
 }
 afterEach(cleanup);
 describe("saved classification management", () => {
+  it("keeps an empty list to its message, without a zero count or the one-time edit note", () => {
+    setup([]);
+    expect(screen.getByText("No ongoing classifications yet")).toBeTruthy();
+    expect(screen.queryByText("0 classifications")).toBeNull();
+    expect(screen.getByText(/^Classifications that keep applying to matching records\.$/)).toBeTruthy();
+    expect(screen.queryByText(/One-time edits are not listed/)).toBeNull();
+  });
   it("edits a legacy exact-page choice without changing its match or disabled state", async () => {
     const { onSaveRule } = setup();
     chooseFromOptions("https://example.com/course", "Edit");

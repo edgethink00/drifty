@@ -276,6 +276,8 @@ function localizedSegmentCount(count: number, t: ReturnType<typeof useLocalizati
 }
 
 function localizedApplyResult(result: ClassificationRuleApplyResult, t: ReturnType<typeof useLocalization>["t"]): string {
+  // A new site or app with no history matches nothing yet; "0 updated, 0 unchanged" reads like a failure.
+  if (result.matchedCount === 0) return t("classification.rules.applyNone");
   return t("classification.rules.applySummary", {
     matched: result.matchedCount,
     applied: result.appliedCount,
