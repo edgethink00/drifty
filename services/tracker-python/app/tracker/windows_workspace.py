@@ -72,9 +72,10 @@ _FOREGROUND_RETRY_BUDGET_SECONDS = 1.5
 # Leave room for the final HWND/PID/title check inside the same whole-capture
 # budget. Identity capture itself still has the original 1.5s acceptance gate.
 _FOREGROUND_CHECK_RESERVE_SECONDS = 0.05
-# Edge labels its private windows in the window title. Chrome's incognito
-# title has no label; the UIA host refuses its clues by the profile button's
-# name instead, which is measured only for the Korean and English UI.
+# Edge labels its private windows in the window title. Chrome, Brave and
+# Opera do not; the UIA host refuses their clues by the parenthesized mode
+# label on the browser root view (any measured UI language) or the profile
+# button's name.
 _EDGE_PRIVATE_TITLE_LABEL = "[InPrivate]"
 # Leave time after the optional description lookup for the caller's checks.
 _DESCRIPTION_RESERVE_SECONDS = 0.03

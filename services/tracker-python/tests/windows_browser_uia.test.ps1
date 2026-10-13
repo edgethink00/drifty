@@ -109,6 +109,8 @@ try {
     'Read-VivaldiPage',
     'Get-VivaldiWindowPrivacy',
     'Test-ProfileButtonIncognito',
+    'Test-RootViewPrivateLabel',
+    'Test-ChromiumPrivateWindow',
     'Test-ChromiumClueIncognito',
     'Read-TopLevelDocument'
   )
@@ -378,6 +380,8 @@ try {
   if ($null -eq $labelAssignment) { throw 'profile incognito labels missing' }
   Invoke-Expression $labelAssignment.Extent.Text
   $avatarButtonCondition = 'synthetic avatar button condition'
+  $rootViewCondition = 'synthetic root view condition'
+  $rootViewClasses = @('BrowserRootView', 'BraveBrowserRootView', 'RootView')
   $koreanIncognito = -join ([char[]](0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC, 0xB97C, 0x20, 0xC0AC, 0xC6A9, 0x20, 0xC911, 0xC785, 0xB2C8, 0xB2E4, 0x2E))
   $wRoot = New-TestElement 'wr' $windowType
   $wPage = New-TestElement 'wp' $documentType $false $null $wRoot @() 'https://doc.rust-lang.org/book/'
@@ -414,6 +418,44 @@ try {
   Assert-Equal 'gecko-clues-ignore-the-profile-button' (Test-ChromiumClueIncognito 'gecko' $wRoot) $false
   $wRoot.PrivateMarker = $null
   Assert-Equal 'chrome-without-profile-button-clues-allowed' (Test-ChromiumClueIncognito 'chromium' $wRoot) $false
+
+  # Root view label (measured Chrome, Edge, Brave, Opera, Whale in ko/en/de/ja).
+  $rvRoot = New-TestElement 'rv' $windowType
+  # This root answers the root view query with its panes and the document query with the rest.
+  $rvRoot | Add-Member -Force ScriptMethod FindAll {
+    param($scope, $condition)
+    $panes = [string]$condition -eq 'synthetic root view condition'
+    return @($this.Children | Where-Object { ($_.Current.ControlType.ProgrammaticName -eq 'ControlType.Pane') -eq $panes })
+  }
+  $d3d = New-TestElement 'rvd' $paneType $false $null $rvRoot @() '' $true $false '' 'Intermediate D3D Window'
+  $d3d.Current | Add-Member NoteProperty Name 'Rust (book) - Brave (Private)'
+  $view = New-TestElement 'rvv' $paneType $false $null $rvRoot @() '' $true $false '' 'BraveBrowserRootView'
+  $view.Current | Add-Member NoteProperty Name 'What is Ownership? (Rust) - Brave'
+  $rvRoot.Children = @($d3d, $view)
+  Assert-Equal 'rootview-normal-title-with-parentheses-is-normal' (Test-RootViewPrivateLabel $rvRoot) $false
+  Assert-Equal 'rootview-other-class-label-ignored' (Test-ChromiumClueIncognito 'chromium' $rvRoot) $false
+  $view.Current.Name = 'What is Ownership? - Brave (Private)'
+  Assert-Equal 'rootview-brave-private' (Test-ChromiumClueIncognito 'chromium' $rvRoot) $true
+  $view.Current.ClassName = 'RootView'
+  $view.Current.Name = 'What is Ownership? ' + [char]0x2013 + ' Opera (privat)'
+  Assert-Equal 'rootview-opera-german-private' (Test-RootViewPrivateLabel $rvRoot) $true
+  $view.Current.Name = 'What is Ownership? - Opera' + [char]0xFF08 + 'Private' + [char]0xFF09
+  Assert-Equal 'rootview-fullwidth-parenthesis-private' (Test-RootViewPrivateLabel $rvRoot) $true
+  $view.Current.ClassName = 'BrowserRootView'
+  $view.Current.Name = 'What is Ownership? - Google Chrome (anonym) '
+  Assert-Equal 'rootview-trailing-space-private' (Test-RootViewPrivateLabel $rvRoot) $true
+  $view.Current.Name = 'What is Ownership? - Google Chrome'
+  Assert-Equal 'rootview-plain-browser-suffix-is-normal' (Test-RootViewPrivateLabel $rvRoot) $false
+  $rvPage = New-TestElement 'rvp' $documentType $false $null $rvRoot @() 'https://doc.rust-lang.org/book/'
+  $rvRoot.Children = @($d3d, $view, $rvPage)
+  $view.Current.Name = 'What is Ownership? - NAVER Whale (Incognito)'
+  $rvWhale = Read-TopLevelDocument $rvRoot $walker $documentCondition $null 'whale'
+  Assert-Equal 'rootview-whale-private-not-found' $rvWhale.found $false
+  Assert-Equal 'rootview-whale-private-flagged' $rvWhale.privacy 'private'
+  Assert-Equal 'rootview-chromium-private-keeps-url' (Read-TopLevelDocument $rvRoot $walker $documentCondition $null 'chromium').url 'https://doc.rust-lang.org/book/'
+  Assert-Equal 'rootview-gecko-ignores-label' (Test-ChromiumClueIncognito 'gecko' $rvRoot) $false
+  $view.Current.Name = 'What is Ownership? - NAVER Whale'
+  Assert-Equal 'rootview-whale-normal-reads-page' (Read-TopLevelDocument $rvRoot $walker $documentCondition $null 'whale').url 'https://doc.rust-lang.org/book/'
 } catch {
   Add-Case 'suite-execution' $false $_.Exception.Message
 }

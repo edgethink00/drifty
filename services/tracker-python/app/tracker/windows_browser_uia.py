@@ -132,6 +132,20 @@ $avatarButtonCondition = New-Object System.Windows.Automation.PropertyCondition(
 $profileIncognitoLabels = @(
   (-join ([char[]](0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC))),
   'Incognito')
+# Every measured Chromium browser names the pane directly under its window
+# "<page title> - <browser>" and appends a parenthesized mode label only to a
+# private or guest window: Chrome "(Incognito)", Edge "(InPrivate)", Brave
+# "(Private)", Opera "(Private)", Whale "(Incognito)", localized in Korean,
+# German and Japanese (fullwidth parentheses). The label's text is localized;
+# its closing parenthesis is not. This is the same parenthesized label macOS
+# already rejects in the accessibility window title. A normal window whose
+# name ended in a parenthesis (an unmeasured channel or profile label) would
+# only lose its page clues.
+$rootViewClasses = @('BrowserRootView', 'BraveBrowserRootView', 'RootView')
+$rootViewCondition = New-Object System.Windows.Automation.OrCondition(
+  (New-Object System.Windows.Automation.PropertyCondition($auto::ClassNameProperty, 'BrowserRootView')),
+  (New-Object System.Windows.Automation.PropertyCondition($auto::ClassNameProperty, 'BraveBrowserRootView')),
+  (New-Object System.Windows.Automation.PropertyCondition($auto::ClassNameProperty, 'RootView')))
 
 function Test-SameAutomationElement($left, $right) {
   try {
@@ -310,6 +324,21 @@ function Test-ProfileButtonIncognito($root) {
   return $false
 }
 
+function Test-RootViewPrivateLabel($root) {
+  foreach ($view in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $rootViewCondition)) {
+    if ($rootViewClasses -notcontains [string]$view.Current.ClassName) { continue }
+    $name = ([string]$view.Current.Name).TrimEnd()
+    if ($name.EndsWith(')') -or $name.EndsWith([string][char]0xFF09)) { return $true }
+  }
+  return $false
+}
+
+# Either signal marks a Chromium-family private window: the root view's
+# parenthesized label (any UI language) or the profile button's name.
+function Test-ChromiumPrivateWindow($root) {
+  return ((Test-RootViewPrivateLabel $root) -or (Test-ProfileButtonIncognito $root))
+}
+
 function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement = $null, [string]$family = 'chromium') {
   # The private indicator can establish a Gecko private window. Its absence
   # cannot prove a normal window when an accessibility provider is incomplete.
@@ -335,7 +364,7 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
       if ($vivaldiPrivacy -ne 'normal') { throw 'document URL unavailable' }
       return [pscustomobject]@{ found = $true; url = $vivaldiUrl; error = ''; privacy = $privacy }
     }
-    if ($family -eq 'whale' -and (Test-ProfileButtonIncognito $root)) {
+    if ($family -eq 'whale' -and (Test-ChromiumPrivateWindow $root)) {
       return [pscustomobject]@{ found = $false; url = ''; error = 'private browsing window'; privacy = 'private' }
     }
     $requiredAncestorId = ''
@@ -460,10 +489,10 @@ function Initialize-ClueReader {
   return ($script:clueReaderState -eq 'loaded')
 }
 
-# Chrome incognito keeps its URL and title, as on macOS and like Edge InPrivate,
-# but its page text is never read when the profile button names it.
+# A Chromium private window (Chrome, Brave, Opera; Edge also by its title)
+# keeps its URL and title, as on macOS, but its page text is never read.
 function Test-ChromiumClueIncognito([string]$family, $root) {
-  return ($family -eq 'chromium' -and (Test-ProfileButtonIncognito $root))
+  return ($family -eq 'chromium' -and (Test-ChromiumPrivateWindow $root))
 }
 
 function Read-Clues([IntPtr]$handle, [int]$budgetMs) {

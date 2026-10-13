@@ -108,6 +108,12 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         clues = script.split("function Read-Clues", 1)[1].split("\nfunction ", 1)[0]
         self.assertIn("Test-ChromiumClueIncognito ([string]$last.Family)", clues)
         self.assertIn("error = 'private browsing window'", clues)
+        # The root view label is checked for the Chromium and Whale families.
+        self.assertIn("$rootViewClasses = @('BrowserRootView', 'BraveBrowserRootView', 'RootView')", script)
+        private_window = script.split("function Test-ChromiumPrivateWindow", 1)[1].split("\nfunction ", 1)[0]
+        self.assertIn("Test-RootViewPrivateLabel $root", private_window)
+        self.assertIn("Test-ProfileButtonIncognito $root", private_window)
+        self.assertIn("$family -eq 'whale' -and (Test-ChromiumPrivateWindow $root)", script)
 
     def test_private_window_reply_carries_no_page(self) -> None:
         result = parse_uia_response(
