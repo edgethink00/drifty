@@ -15,17 +15,10 @@
 
 .settings-permission-control {
   display: grid;
-  grid-template-columns: minmax(5.5rem, auto) minmax(10rem, auto);
   align-items: center;
   justify-content: end;
-  gap: var(--space-3);
-  min-width: 18rem;
-}
-
-/* A row with only an action (Notifications) keeps its button in the action
-   column so it lines up with the status rows above it. */
-.settings-permission-control--action-only > .settings-btn {
-  grid-column: 2;
+  justify-items: end;
+  min-width: 10rem;
 }
 
 .settings-permission-status {
@@ -41,6 +34,19 @@
   color: color-mix(in srgb, var(--accent) 82%, var(--text));
 }
 
+/* A dot ahead of a settled status, as in the onboarding permission step, so
+   "Enabled" reads as a state of the row instead of a stray label. */
+.settings-permission-status[data-tone="success"]::before {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-inline-end: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  vertical-align: 0.08em;
+}
+
 .settings-permission-status[data-tone="required"],
 .settings-permission-status[data-tone="error"] {
   color: var(--warn);
@@ -48,6 +54,21 @@
 
 .settings-permission-status[data-tone="unavailable"] {
   opacity: 0.72;
+}
+
+/* The link closes the description sentence instead of taking a line of its own. */
+.settings-permission-row .settings-permission-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  white-space: nowrap;
+}
+
+.settings-permission-row .settings-permission-link:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
 }
 
 .settings-permission-error {
@@ -62,13 +83,6 @@
   .settings-permission-row {
     align-items: flex-start;
   }
-
-  .settings-permission-control {
-    grid-template-columns: 1fr;
-    justify-items: end;
-    gap: var(--space-2);
-    min-width: 10rem;
-  }
 }
 
 @media (max-width: 620px) {
@@ -77,14 +91,15 @@
     flex-direction: column;
   }
 
+  /* Stacked under the description, the single control starts at the text edge. */
   .settings-permission-control {
-    grid-template-columns: minmax(0, 1fr) minmax(10rem, auto);
-    justify-items: stretch;
-    width: 100%;
+    align-self: flex-start;
+    justify-content: start;
+    justify-items: start;
+    min-width: 0;
   }
 
   .settings-permission-status {
-    align-self: center;
     text-align: left;
   }
 }

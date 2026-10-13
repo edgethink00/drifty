@@ -98,18 +98,26 @@ describe("PermissionsSettingsSection", () => {
     await waitFor(() => expect(onCheckAccessibility).toHaveBeenCalledTimes(1));
     fireEvent.click(await screen.findByRole("button", { name: /^Allow Accessibility$/ }));
     await waitFor(() => expect(onRequestAccessibility).toHaveBeenCalledTimes(1));
+    const accessibilityRow = screen.getByText("Accessibility").closest(".settings-permission-row");
+    expect(accessibilityRow?.querySelector(".settings-inline-link")).toBeNull();
+    // A missing grant shows only its next step: no status text beside the button.
+    expect(accessibilityRow?.querySelector(".settings-permission-status")).toBeNull();
+    expect(accessibilityRow?.querySelectorAll(".settings-permission-control > *")).toHaveLength(1);
 
     // The desktop notification plugin answers "granted" without asking the OS,
     // so the row neither asks it nor shows Enabled/Not enabled.
     const notificationRow = screen.getByText("Notifications").closest(".settings-permission-row");
     expect(notificationRow?.querySelector(".settings-permission-status")).toBeNull();
+    // Its one control is the settings shortcut button, as before.
+    expect(notificationRow?.querySelectorAll(".settings-permission-control > *")).toHaveLength(1);
+    expect(notificationRow?.querySelector(".settings-btn")?.textContent).toBe("Open System Settings");
     expect(notificationRow?.textContent).toContain("No separate permission is needed.");
     expect(isPermissionGranted).not.toHaveBeenCalled();
     expect(requestPermission).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /^Allow notifications$/ })).toBeNull();
   });
 
-  it("opens System Settings for an already granted permission and refreshes on focus", async () => {
+  it("shows a granted permission as a status with a quiet settings link and refreshes it on focus", async () => {
     const onCheckAccessibility = vi.fn().mockResolvedValue(true);
 
     render(
@@ -123,12 +131,59 @@ describe("PermissionsSettingsSection", () => {
 
     const accessibilityRow = screen.getByText("Accessibility").closest(".settings-permission-row");
     if (!(accessibilityRow instanceof HTMLElement)) throw new Error("accessibility row missing");
-    fireEvent.click(await within(accessibilityRow).findByRole("button", { name: /^Open System Settings$/ }));
+    expect(await within(accessibilityRow).findByText("Enabled")).toBeTruthy();
+    // The status is the row's only control. The way into System Settings is a
+    // text link under the description, never a bordered button beside the status.
+    expect(accessibilityRow.querySelector(".settings-btn")).toBeNull();
+    expect(accessibilityRow.querySelectorAll(".settings-permission-control > *")).toHaveLength(1);
+    const settingsLink = within(accessibilityRow).getByRole("button", { name: /^Open System Settings$/ });
+    expect(settingsLink.classList.contains("settings-inline-link")).toBe(true);
+    fireEvent.click(settingsLink);
     await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("accessibility"));
 
     onCheckAccessibility.mockClear();
     fireEvent.focus(window);
     await waitFor(() => expect(onCheckAccessibility).toHaveBeenCalledTimes(1));
+  });
+
+  it("reports when a granted permission's settings app cannot open", async () => {
+    openSystemSettingsPane.mockRejectedValueOnce(new Error("pane unavailable"));
+
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted
+        accessibilityRequired
+        onCheckAccessibility={vi.fn().mockResolvedValue(true)}
+        onRequestAccessibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const accessibilityRow = screen.getByText("Accessibility").closest(".settings-permission-row");
+    if (!(accessibilityRow instanceof HTMLElement)) throw new Error("accessibility row missing");
+    fireEvent.click(await within(accessibilityRow).findByRole("button", { name: /^Open System Settings$/ }));
+    expect((await within(accessibilityRow).findByRole("alert")).textContent).toContain("couldn't open the settings app");
+    // The failed open is not reported as a failed permission check.
+    expect(within(accessibilityRow).queryByText(/couldn't check this permission/)).toBeNull();
+  });
+
+  it("offers a retry on its own when the Accessibility check fails", async () => {
+    const onCheckAccessibility = vi.fn().mockRejectedValueOnce(new Error("check failed")).mockResolvedValue(true);
+
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted={false}
+        accessibilityRequired
+        onCheckAccessibility={onCheckAccessibility}
+        onRequestAccessibility={vi.fn().mockResolvedValue(false)}
+      />,
+    );
+
+    const accessibilityRow = screen.getByText("Accessibility").closest(".settings-permission-row");
+    if (!(accessibilityRow instanceof HTMLElement)) throw new Error("accessibility row missing");
+    expect((await within(accessibilityRow).findByRole("alert")).textContent).toContain("couldn't check this permission");
+    expect(accessibilityRow.querySelector(".settings-permission-status")).toBeNull();
+    fireEvent.click(within(accessibilityRow).getByRole("button", { name: /^Check again$/ }));
+    await waitFor(() => expect(onCheckAccessibility).toHaveBeenCalledTimes(2));
   });
 
   it("opens notification settings directly and reports when the settings app cannot open", async () => {
@@ -145,6 +200,7 @@ describe("PermissionsSettingsSection", () => {
 
     const notificationRow = screen.getByText("Notifications").closest(".settings-permission-row");
     if (!(notificationRow instanceof HTMLElement)) throw new Error("notification row missing");
+    expect(notificationRow.querySelector(".settings-inline-link")).toBeNull();
     fireEvent.click(within(notificationRow).getByRole("button", { name: /^Open System Settings$/ }));
     await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
     expect((await within(notificationRow).findByRole("alert")).textContent).toContain("couldn't open the settings app");
@@ -165,6 +221,27 @@ describe("PermissionsSettingsSection", () => {
     expect(await screen.findByText("Safari history")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Allow Safari history$/ }));
     expect(safariHistoryPermission.onEnable).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a granted Safari history row as a status with a quiet Full Disk Access link", async () => {
+    safariHistoryPermission.show = true;
+    safariHistoryPermission.readable = true;
+
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted
+        accessibilityRequired
+        onCheckAccessibility={vi.fn().mockResolvedValue(true)}
+        onRequestAccessibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const safariRow = screen.getByText("Safari history").closest(".settings-permission-row");
+    if (!(safariRow instanceof HTMLElement)) throw new Error("safari row missing");
+    expect(safariRow.querySelector(".settings-btn")).toBeNull();
+    expect(within(safariRow).getByText("Enabled")).toBeTruthy();
+    fireEvent.click(within(safariRow).getByRole("button", { name: /^Open System Settings$/ }));
+    await waitFor(() => expect(openFullDiskAccessSettingsPane).toHaveBeenCalledTimes(1));
   });
 
   it("does not present the macOS Accessibility grant when the native platform does not require it", async () => {
