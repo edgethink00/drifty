@@ -25,6 +25,7 @@
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     "allow-update-policy-fetch",
+    "allow-whats-new-changelog-fetch",
     "allow-windows-download-stable-update",
     "allow-windows-install-prepared-stable-update",
     "allow-windows-clear-prepared-stable-update",

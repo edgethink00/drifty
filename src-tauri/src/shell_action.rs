@@ -5,6 +5,7 @@ use crate::{request_main_window, tray, MAIN_WINDOW_LABEL};
 pub(crate) mod app_menu_id {
     pub(crate) const ROOT: &str = "drifty-app-menu";
     pub(crate) const DEVELOPER_SUBMENU: &str = "drifty-app-menu-developer";
+    pub(crate) const WHATS_NEW: &str = "drifty-app-menu-whats-new";
     pub(crate) const CHECK_FOR_UPDATES: &str = "drifty-app-menu-check-for-updates";
     pub(crate) const SETTINGS: &str = "drifty-app-menu-settings";
     pub(crate) const DEV_MODE: &str = "drifty-app-menu-dev-mode";
@@ -39,6 +40,7 @@ pub(crate) enum ShellAction {
     PauseTrackingFor(u64),
     PauseTrackingForever,
     Settings,
+    WhatsNew,
     CheckForUpdates,
     ToggleDevMode,
     CheckLatestBuild,
@@ -48,6 +50,7 @@ pub(crate) enum ShellAction {
 impl ShellAction {
     pub(crate) fn from_app_menu_id(id: &str) -> Option<Self> {
         match id {
+            app_menu_id::WHATS_NEW => Some(Self::WhatsNew),
             app_menu_id::CHECK_FOR_UPDATES => Some(Self::CheckForUpdates),
             app_menu_id::SETTINGS => Some(Self::Settings),
             app_menu_id::DEV_MODE => Some(Self::ToggleDevMode),
@@ -78,6 +81,7 @@ const EVENT_OPEN_SETTINGS: &str = "tray-open-settings";
 const EVENT_CHECK_FOR_UPDATES: &str = "tray-check-for-updates";
 const EVENT_TOGGLE_DEV_MODE: &str = "app-menu-toggle-dev-mode";
 const EVENT_CHECK_LATEST_BUILD: &str = "app-menu-check-latest-build";
+const EVENT_OPEN_WHATS_NEW: &str = "app-menu-open-whats-new";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ShellActionEffect {
@@ -109,6 +113,10 @@ impl ShellAction {
             ],
             Self::CheckForUpdates => &[
                 ShellActionEffect::EmitMainWindowEvent(EVENT_CHECK_FOR_UPDATES),
+            ],
+            Self::WhatsNew => &[
+                ShellActionEffect::RevealMainWindow,
+                ShellActionEffect::EmitMainWindowEvent(EVENT_OPEN_WHATS_NEW),
             ],
             Self::ToggleDevMode => &[
                 ShellActionEffect::RevealMainWindow,
@@ -238,6 +246,7 @@ mod tests {
     #[test]
     fn source_parsers_map_all_action_ids() {
         for (id, action) in [
+            (app_menu_id::WHATS_NEW, ShellAction::WhatsNew),
             (app_menu_id::CHECK_FOR_UPDATES, ShellAction::CheckForUpdates),
             (app_menu_id::SETTINGS, ShellAction::Settings),
             (app_menu_id::DEV_MODE, ShellAction::ToggleDevMode),
@@ -280,6 +289,7 @@ mod tests {
     #[test]
     fn actionable_ids_are_rejected_by_the_opposite_source_parser() {
         for id in [
+            app_menu_id::WHATS_NEW,
             app_menu_id::CHECK_FOR_UPDATES,
             app_menu_id::SETTINGS,
             app_menu_id::DEV_MODE,
@@ -307,6 +317,7 @@ mod tests {
     #[test]
     fn dual_global_listeners_resolve_each_action_exactly_once() {
         let cases = [
+            (app_menu_id::WHATS_NEW, ShellAction::WhatsNew),
             (app_menu_id::CHECK_FOR_UPDATES, ShellAction::CheckForUpdates),
             (app_menu_id::SETTINGS, ShellAction::Settings),
             (app_menu_id::DEV_MODE, ShellAction::ToggleDevMode),
@@ -461,6 +472,13 @@ mod tests {
                 &[
                     ShellActionEffect::RevealMainWindow,
                     ShellActionEffect::EmitMainWindowEvent(EVENT_CHECK_LATEST_BUILD),
+                ][..],
+            ),
+            (
+                ShellAction::WhatsNew,
+                &[
+                    ShellActionEffect::RevealMainWindow,
+                    ShellActionEffect::EmitMainWindowEvent(EVENT_OPEN_WHATS_NEW),
                 ][..],
             ),
             (ShellAction::Quit, &[ShellActionEffect::RequestQuit][..]),

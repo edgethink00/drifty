@@ -131,6 +131,13 @@ fn build_app_submenu(
     let ko = language.is_korean();
     // Use AppKit's bundle-backed About panel.
     let about = PredefinedMenuItem::about(app, Some(if ko { "Drifty에 관하여" } else { "About Drifty" }), None)?;
+    let whats_new = MenuItem::with_id(
+        app,
+        app_menu_id::WHATS_NEW,
+        if ko { "새로운 기능…" } else { "What’s New…" },
+        true,
+        None::<&str>,
+    )?;
     let check_updates = MenuItem::with_id(
         app,
         app_menu_id::CHECK_FOR_UPDATES,
@@ -198,6 +205,7 @@ fn build_app_submenu(
         true,
         &[
             &about,
+            &whats_new,
             &app_primary_separator,
             &check_updates,
             &settings,
@@ -217,6 +225,11 @@ fn build_app_submenu(
             item: MenuItemKind::Predefined(about),
             english: "About Drifty",
             korean: "Drifty에 관하여",
+        },
+        LocalizedItem {
+            item: MenuItemKind::MenuItem(whats_new),
+            english: "What’s New…",
+            korean: "새로운 기능…",
         },
         LocalizedItem {
             item: MenuItemKind::MenuItem(check_updates),

@@ -1,0 +1,128 @@
+.whats-new.modal-shell {
+  display: flex;
+  flex-direction: column;
+  width: min(36rem, calc(100vw - 2 * var(--space-6)));
+  /* The auth-modal family caps dialogs at 400px; release notes need a line wide
+     enough for the version and its date. */
+  max-width: none;
+  max-height: min(40rem, calc(100vh - 2 * var(--space-6)));
+  padding-bottom: 0;
+}
+
+.whats-new__header {
+  margin-bottom: 0;
+  padding-right: var(--modal-close-gutter);
+  padding-bottom: var(--space-3);
+  /* Inset to the content width, like the dividers between releases. */
+  border-bottom: 1px solid var(--line);
+}
+
+.whats-new__header h2 {
+  margin: 0;
+}
+
+.whats-new__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 calc(var(--modal-shell-inset) * -1);
+  padding: 0 var(--modal-shell-inset) var(--modal-shell-inset);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.whats-new__status {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 0;
+  color: var(--text-soft);
+}
+
+.whats-new__status p {
+  margin: 0;
+}
+
+.whats-new__release {
+  padding-top: var(--space-5);
+}
+
+.whats-new__release + .whats-new__release {
+  margin-top: var(--space-5);
+  border-top: 1px solid var(--line);
+}
+
+.whats-new__release-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.whats-new__version {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.whats-new__release-head time {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.whats-new__summary {
+  margin: 0 0 var(--space-3);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.whats-new__items {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.whats-new__item {
+  color: var(--text-soft);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.whats-new__item::marker {
+  color: var(--text-muted);
+}
+
+/* Settings > General > Manual update. The version stays in the description.
+   What's new is a control, so it shares the check button's center line instead
+   of sitting in the description, where the inline-link's top margin dropped it
+   below the version. */
+.settings-update-version {
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-update-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem;
+}
+
+.settings-update-actions .settings-inline-link {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: var(--settings-action-height);
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  white-space: nowrap;
+  text-underline-offset: 0.18em;
+}

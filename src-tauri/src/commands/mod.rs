@@ -35,6 +35,7 @@ mod startup_settings;
 mod system_settings;
 mod tracker;
 mod update_policy;
+mod whats_new;
 mod windows_update_feed;
 #[cfg(target_os = "windows")]
 mod windows_stable_update;
@@ -71,6 +72,7 @@ pub use startup_settings::*;
 pub use system_settings::*;
 pub use tracker::*;
 pub use update_policy::*;
+pub use whats_new::*;
 #[cfg(target_os = "windows")]
 pub use windows_stable_update::*;
 pub use watcher::*;

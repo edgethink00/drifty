@@ -15,6 +15,8 @@ import { ActionLabel } from "../../components/ActionLabel";
 type GeneralSettingsSectionProps = {
   readonly backgroundUpdatesEnabled: boolean;
   readonly backgroundUpdatesSupported: boolean;
+  /** Running app version shown beside the manual update check. */
+  readonly currentVersion?: string | null;
   readonly devModeEnabled?: boolean;
   readonly hostPlatform?: HostPlatform;
   /** OS permission status block; it lives at the end of General instead of its own page. */
@@ -28,6 +30,8 @@ type GeneralSettingsSectionProps = {
   readonly updaterMessage: string | null;
   readonly onBackgroundUpdatesEnabledChange: (enabled: boolean) => void;
   readonly onCheckForUpdates: () => void;
+  /** Opens the What's new dialog; omitted when this build has no notes. */
+  readonly onOpenWhatsNew?: () => void;
   readonly onDevModeChange?: (enabled: boolean) => void;
   readonly onStartOfDayChange: (value: string) => void;
   readonly onStartOfWeekChange: (value: StartOfWeek) => void;
@@ -36,6 +40,7 @@ type GeneralSettingsSectionProps = {
 export function GeneralSettingsSection({
   backgroundUpdatesEnabled,
   backgroundUpdatesSupported,
+  currentVersion = null,
   devModeEnabled = false,
   hostPlatform = "macos",
   permissions = null,
@@ -48,6 +53,7 @@ export function GeneralSettingsSection({
   updaterMessage,
   onBackgroundUpdatesEnabledChange,
   onCheckForUpdates,
+  onOpenWhatsNew,
   onDevModeChange,
   onStartOfDayChange,
   onStartOfWeekChange,
@@ -79,7 +85,18 @@ export function GeneralSettingsSection({
       </div>
       <div className="settings-block"><h3>{t("settings.general.updates")}</h3>
         {backgroundUpdatesSupported ? <div data-setting-id="settings.general.autoUpdates" className="settings-row"><div><div className="lbl">{t("settings.general.autoUpdates")}</div><div className="desc">{t("settings.general.autoUpdatesDescription")}</div></div><div className="ctrl"><Toggle checked={backgroundUpdatesEnabled} onChange={onBackgroundUpdatesEnabledChange} ariaLabel={t("settings.general.autoUpdates")} /></div></div> : null}
-        <div data-setting-id="settings.general.manualUpdate" className="settings-row"><div><div className="lbl">{t("settings.general.manualUpdate")}</div>{updaterMessage ? <p className="capture-recency" role="status">{localizeUpdateMessage(updaterMessage, "status", effectiveLanguage, t)}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="alert">{localizeUpdateMessage(updaterError, "error", effectiveLanguage, t)}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={onCheckForUpdates} disabled={updaterChecking || updaterInstalling} aria-busy={updaterChecking}><ActionLabel busy={updaterChecking} busyLabel={t("settings.general.checking")}>{t("settings.general.checkForUpdates")}</ActionLabel></button></div></div>
+        <div data-setting-id="settings.general.manualUpdate" className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.general.manualUpdate")}</div>
+            {currentVersion ? <div className="desc settings-update-version">{t("settings.general.currentVersion", { version: currentVersion })}</div> : null}
+            {updaterMessage ? <p className="capture-recency" role="status">{localizeUpdateMessage(updaterMessage, "status", effectiveLanguage, t)}</p> : null}
+            {updaterError ? <p className="capture-recency capture-recency--error" role="alert">{localizeUpdateMessage(updaterError, "error", effectiveLanguage, t)}</p> : null}
+          </div>
+          <div className="ctrl settings-update-actions">
+            {onOpenWhatsNew ? <button type="button" className="settings-inline-link" onClick={onOpenWhatsNew}>{t("settings.general.whatsNew")}</button> : null}
+            <button type="button" className="settings-btn" onClick={onCheckForUpdates} disabled={updaterChecking || updaterInstalling} aria-busy={updaterChecking}><ActionLabel busy={updaterChecking} busyLabel={t("settings.general.checking")}>{t("settings.general.checkForUpdates")}</ActionLabel></button>
+          </div>
+        </div>
       </div>
       {permissions}
       {showDevMode && hostPlatform === "windows" ? <div className="settings-block"><h3>{t("settings.general.developer")}</h3>

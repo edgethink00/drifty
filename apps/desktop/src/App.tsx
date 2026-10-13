@@ -467,6 +467,18 @@ import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeTogg
 import { replaceNavigationHistoryTab, type NavigationHistoryState, type TabId } from "./app/navigation";
 import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
+import { WhatsNewDialog } from "./features/whats-new/WhatsNewDialog";
+import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
+import {
+  entriesForBuild,
+  markWhatsNewAutoOpened,
+  markWhatsNewSeen,
+  newestShownVersion,
+  readWhatsNewLastAutoOpenAt,
+  readWhatsNewLastSeenVersion,
+  resolveWhatsNewLaunch,
+  toWhatsNewPlatform,
+} from "./features/whats-new/whatsNewPolicy";
 import {
   captureAiClassificationRun,
   captureAiClassificationRunOncePerDay,
@@ -1578,6 +1590,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [promoHandoffMismatch, setPromoHandoffMismatch] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  /** One automatic sheet per launch: the trial-end sheet or What's new, never both in a row. */
+  const [automaticSheetShownThisLaunch, setAutomaticSheetShownThisLaunch] = useState(false);
+  const [whatsNewLastSeenVersion, setWhatsNewLastSeenVersion] = useState(() => readWhatsNewLastSeenVersion());
+  const [whatsNewLastAutoOpenAt] = useState(() => readWhatsNewLastAutoOpenAt());
   /** The Pro sheet opened on its own after a trial ended (reported as trial_end_sheet). */
   const [trialEndSheetAuto, setTrialEndSheetAuto] = useState(false);
   const [resumeUpgradePlanAfterAuth, setResumeUpgradePlanAfterAuth] = useState(false);
@@ -1737,6 +1754,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   deviceSyncAccountIdRef.current = deviceSyncAccountId;
   const onboardingCompletedAt = readUserOnboardingState(user?.id ?? "local", ["local"])?.completedAt ?? null;
   const featureNewBadges = useFeatureNewBadges(onboardingCompletedAt, petModeEnabled);
+  const recordWhatsNewSeen = useCallback((version: string | null) => {
+    markWhatsNewSeen(version);
+    setWhatsNewLastSeenVersion(readWhatsNewLastSeenVersion());
+  }, []);
+  const openWhatsNew = useCallback(() => setWhatsNewOpen(true), []);
   const authMetadataAvatarUrl = getAuthMetadataAvatarUrl(user);
   const isEffectiveAuthRequired = isAuthRequired;
   const allowsEffectiveAnonymousAuth = allowsAnonymousAuth && !isEffectiveAuthRequired;
@@ -5427,6 +5449,26 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [handleAppMenuCheckLatestBuild]);
 
   useEffect(() => {
+    if (!isTauriRuntime()) return undefined;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen("app-menu-open-whats-new", openWhatsNew).then((nextUnlisten) => {
+      if (disposed) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      disposed = true;
+      cleanupTauriEventListener(unlisten);
+    };
+  }, [openWhatsNew]);
+
+  useEffect(() => {
     if (!manualUpdateNoticeVisible) return undefined;
     if (updaterChecking) return undefined;
     if (!updaterMessage && !updaterError) return undefined;
@@ -7471,7 +7513,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     || onboardingOpen
     || selectedLeaderboardRow
     || isProfileEditorOpen
-    || cmdOpen,
+    || cmdOpen
+    || whatsNewOpen,
   );
   // A user-requested native prompt must remain reachable through account and onboarding gates.
   // Automatic prompts still respect the existing modal/first-run quiet policy.
@@ -10195,16 +10238,61 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const trialEndSheetCanOpen = trialEndStage === "sheet" && !upgradePlanModalOpen
     && activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay && !isDashboardDemoReplayActive
     && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen
+    && !whatsNewOpen
+    && !automaticSheetShownThisLaunch
     && authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)
     && billingEntitlementSupportsUpgrade && !billingEntitlementLoading && billingEntitlementError === null;
   useEffect(() => {
     if (!trialEndSheetCanOpen) return;
+    setAutomaticSheetShownThisLaunch(true);
     setTrialEndSheetAuto(true);
     setUpgradePlanModalOpen(true);
   }, [trialEndSheetCanOpen]);
   useEffect(() => {
     if (!upgradePlanModalOpen) setTrialEndSheetAuto(false);
   }, [upgradePlanModalOpen]);
+  // What's new reads the drifty.so changelog once the dashboard settles. It
+  // opens by itself only for chapters this install has not seen, at most once
+  // a week, never in the same launch as an automatic trial-end sheet, and it
+  // yields to onboarding, update prompts and every other dialog.
+  const whatsNewShellReady = activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay
+    && !isDashboardDemoReplayActive && authStatus !== "loading" && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
+  const whatsNewChangelog = useWhatsNewChangelog(
+    localization.effectiveLanguage === "ko" ? "ko" : "en",
+    whatsNewShellReady || whatsNewOpen,
+  );
+  const whatsNewEntries = useMemo(
+    () => whatsNewChangelog.entries
+      ? entriesForBuild(whatsNewChangelog.entries, toWhatsNewPlatform(hostPlatform), BUILD_INFO.version)
+      : null,
+    [hostPlatform, whatsNewChangelog.entries],
+  );
+  const whatsNewLaunch = resolveWhatsNewLaunch({
+    entries: whatsNewEntries,
+    currentVersion: BUILD_INFO.version,
+    lastSeenVersion: whatsNewLastSeenVersion,
+    lastAutoOpenAt: whatsNewLastAutoOpenAt,
+    onboardingCompletedAt,
+  });
+  const whatsNewCanAutoOpen = whatsNewShellReady && whatsNewLaunch.autoOpen && !whatsNewOpen && !automaticSheetShownThisLaunch
+    && trialEndStage !== "sheet" && !upgradePlanModalOpen && !visibleUpdate && driftAlarmEvent === null
+    && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen;
+  const whatsNewRecordSilently = whatsNewShellReady && whatsNewLaunch.recordSilently;
+  useEffect(() => {
+    if (whatsNewRecordSilently) recordWhatsNewSeen(BUILD_INFO.version);
+  }, [recordWhatsNewSeen, whatsNewRecordSilently]);
+  useEffect(() => {
+    if (!whatsNewCanAutoOpen) return;
+    setAutomaticSheetShownThisLaunch(true);
+    markWhatsNewAutoOpened();
+    openWhatsNew();
+  }, [openWhatsNew, whatsNewCanAutoOpen]);
+  // Showing the list counts as seen up to the newest version on screen. A
+  // chapter drifty.so has not published yet stays unseen for a later launch.
+  const whatsNewShownVersion = whatsNewOpen && whatsNewEntries ? newestShownVersion(whatsNewEntries, BUILD_INFO.version) : null;
+  useEffect(() => {
+    if (whatsNewShownVersion) recordWhatsNewSeen(whatsNewShownVersion);
+  }, [recordWhatsNewSeen, whatsNewShownVersion]);
 
   if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
     return (
@@ -11209,6 +11297,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 {settingsSection === "general" && (
                   <GeneralSettingsSection
                     backgroundUpdatesSupported={hostPlatform === "macos" || hostPlatform === "windows"}
+                    currentVersion={BUILD_INFO.version === "unknown" ? null : BUILD_INFO.version}
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
                     devModeEnabled={isDevModeActive}
                     hostPlatform={hostPlatform}
@@ -11230,6 +11319,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     updaterMessage={updaterMessage}
                     onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
+                    onOpenWhatsNew={openWhatsNew}
                     onDevModeChange={handleDevModeEnabledChange}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
@@ -11555,6 +11645,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         <Suspense fallback={null}>
           <LazyFeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} />
         </Suspense>
+      ) : null}</ModalPresence>
+      <ModalPresence>{whatsNewOpen ? (
+        <WhatsNewDialog
+          entries={whatsNewEntries}
+          status={whatsNewChangelog.status}
+          onRetry={whatsNewChangelog.retry}
+          onClose={() => setWhatsNewOpen(false)}
+        />
       ) : null}</ModalPresence>
       <ModalPresence>{deleteHistoryModalOpen ? (
         <DeleteHistoryModal

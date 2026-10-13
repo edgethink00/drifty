@@ -74,7 +74,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "settings.general.manualUpdate",
     section: "general",
     titleKey: "settings.general.manualUpdate",
-    keywords: "업데이트 버전 확인 update version check",
+    keywords: "업데이트 버전 확인 새로운 기능 변경 사항 릴리스 노트 update version check what's new changelog release notes",
   },
   {
     id: "settings.general.devMode",

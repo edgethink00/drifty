@@ -60,6 +60,7 @@ fn main() {
             "sentry_capture_native_smoke",
             "share_card_save_png",
             "update_policy_fetch",
+            "whats_new_changelog_fetch",
             "update_prompt_show_native",
             "update_status_show_native",
             "tracker_get_status",

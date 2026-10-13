@@ -40,6 +40,7 @@ const animatedModalPanelFiles = [
   "./features/team/TeamProjectsView.tsx",
   "./features/team/TeamWorkspace.tsx",
   "./features/updates/AvailableUpdateDialog.tsx",
+  "./features/whats-new/WhatsNewDialog.tsx",
 ] as const;
 
 // A doc comment naming the selector must not register a file as a panel.
@@ -85,6 +86,7 @@ const sharedModalSurfaces = [
   ["Promo account handoff", "./features/billing/PromoHandoffAccountDialog.tsx", /className="auth-modal modal-shell"\s+data-modal-variant="standard"/],
   ["SSH agent sources", "./features/dev-signals/SshAgentSourcesModal.tsx", /className="auth-modal modal-shell agents-ssh-modal"\s+data-modal-variant="standard"/],
   ["Windows update", "./features/updates/AvailableUpdateDialog.tsx", /className="auth-modal modal-shell windows-update-prompt"\s+data-modal-variant="compact"/],
+  ["What's new", "./features/whats-new/WhatsNewDialog.tsx", /className="auth-modal modal-shell whats-new"\s+data-modal-variant="standard"/],
 ] as const;
 
 const purposeBuiltDialogSurfaces = [
@@ -177,7 +179,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(30);
+    expect(sharedModalSurfaces).toHaveLength(31);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
