@@ -67,6 +67,7 @@ import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./feature
 import { AiConnectionStatusBar, resolveAiConnectionStatus, type AiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "./features/ai-connection/managedLocalAiRuntimeStatus";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
+import { readDayNotePreview } from "./features/day-note/dayNoteGate";
 import { resolveTrackerCtaSlot } from "./features/sidebar/trackerCtaSlot";
 import { resolveSidebarLiveActivityLabels } from "./features/sidebar/sidebarLiveActivity";
 import { ProDecisionSheet, type ProSheetContext } from "./features/billing/ProDecisionSheet";
@@ -456,7 +457,7 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { useLeaderboardSeriesPrewarm } from "./features/leaderboard/useLeaderboardSeriesPrewarm";
@@ -613,6 +614,24 @@ function assertNever(value: never): never {
  * AppBody's return paths still wrap their trees in the same controller; this
  * outer provider is the one its hooks depend on.
  */
+// Dev-server design review of where the day note lives (?driftyNote=1).
+// import.meta.env.DEV is false in production builds, so none of it ships.
+const DayNoteNavItemPreview = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import("./features/day-note/DayNotePreview")).DayNoteNavItem }))
+  : null;
+const DayNotePagePreview = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import("./features/day-note/DayNotePreview")).DayNotePage }))
+  : null;
+const DayNoteMomentPreview = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import("./features/day-note/DayNotePreview")).DayNoteMoment }))
+  : null;
+// Dev mode's Daily record preview (all builds, off by default): the page on this Mac's own records.
+const LazyDayRecordPage = lazy(async () => ({ default: (await import("./features/day-note/DayRecordPage")).DayRecordPage }));
+const LazyDayRecordNavItem = lazy(async () => ({ default: (await import("./features/day-note/DayRecordPage")).DayRecordNavItem }));
+const DayNoteDevBarPreview = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import("./features/day-note/DayNotePreview")).DayNoteDevBar }))
+  : null;
+
 export default function App() {
   const localization = useLocalizationController();
   return (
@@ -656,7 +675,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const previousSurfaceAnalyticsKeyRef = useRef<string | null>(null);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>(() => ({
     entries: [{
-      tabId: devSettingsReviewSubsection ? "settings" : "dashboard",
+      tabId: devSettingsReviewSubsection
+        ? "settings"
+        : import.meta.env.DEV && readDayNotePreview()?.place === "insights" ? "trends" : "dashboard",
       dashPeriod: initialNavigationRefreshEnabled ? resolveInitialDashboardPeriod() : "Today",
     }],
     index: 0,
@@ -823,6 +844,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(
     () => floatingCompanionDevSupported && resolveInitialFloatingCompanionDevEnabled(),
   );
+  const [dailyRecordPreviewEnabled, setDailyRecordPreviewEnabled] = useState(resolveInitialDailyRecordPreviewEnabled);
   const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   useAutomaticUpdateScheduler({
@@ -834,6 +856,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     checkForUpdates: developerPreReleaseUpdateController.checkLatestBuild,
     storageKey: WINDOWS_BETA_NEXT_AUTOMATIC_CHECK_STORAGE_KEY,
   });
+  const isDailyRecordPreviewActive = isDevModeActive && dailyRecordPreviewEnabled;
   const [browserContentContextEnabled, setBrowserContentContextEnabled] = useState(() => readAiPrivacyRequestSettings().optional.contentContext);
   useEffect(() => {
     const refresh = () => setBrowserContentContextEnabled(readAiPrivacyRequestSettings().optional.contentContext);
@@ -2685,6 +2708,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       sidebarCtaPreviewInput.managedLocalAiStatus,
     )
     : runtimeAwareAiConnectionStatus;
+  const dayNotePreview = import.meta.env.DEV ? readDayNotePreview() : null;
+  const [dayNotePageOpen, setDayNotePageOpen] = useState(() => dayNotePreview?.place === "page");
+  const [dayRecordOpen, setDayRecordOpen] = useState(false);
+  const dayRecordVisible = isDailyRecordPreviewActive && dayRecordOpen && !dayNotePageOpen;
   const sidebarCtaSlot = resolveSidebarCtaSlot(
     sidebarCtaPreviewInput
       ? sidebarCtaPreviewInput
@@ -5160,6 +5187,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     window.localStorage.setItem(FLOATING_COMPANION_DEV_STORAGE_KEY, floatingCompanionDevActive ? "1" : "0");
   }, [floatingCompanionDevActive, floatingCompanionDevEnabled, floatingCompanionDevSupported]);
+
+  useEffect(() => {
+    persistDailyRecordPreviewEnabled(dailyRecordPreviewEnabled);
+  }, [dailyRecordPreviewEnabled]);
+  // The Daily record page covers the tab under it; any move to a tab (a link, a shortcut, history) closes it.
+  useEffect(() => {
+    setDayRecordOpen(false);
+  }, [activeTab]);
 
   useEffect(() => {
     const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
@@ -10713,7 +10748,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
         <div className="sidebar-scroll">
           <SidebarNavigation
-            activeTab={activeTab}
+            activeTab={dayNotePageOpen || dayRecordVisible ? "settings" : activeTab}
             canOpenAgentsBeta={canOpenAgentsBeta}
             canOpenProfileBeta={canOpenProfileBeta}
             canOpenTeamsBeta={canOpenTeamsBeta}
@@ -10724,11 +10759,25 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             socialSection={socialSection}
             teamReviewVariant={sidebarTeamReviewVariant}
             t={localization.t}
-            onNavigate={navigateToTab}
+            onNavigate={dayNotePreview?.place === "page" || isDailyRecordPreviewActive
+              ? (tabId, period) => { setDayNotePageOpen(false); setDayRecordOpen(false); navigateToTab(tabId, period); }
+              : navigateToTab}
+            activityExtra={DayNoteNavItemPreview && dayNotePreview?.place === "page" ? (
+              <Suspense fallback={null}>
+                <DayNoteNavItemPreview active={dayNotePageOpen} collapsed={isSidebarVisuallyCollapsed} onOpen={() => setDayNotePageOpen(true)} />
+              </Suspense>
+            ) : isDailyRecordPreviewActive ? (
+              <Suspense fallback={null}>
+                <LazyDayRecordNavItem active={dayRecordVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => setDayRecordOpen(true)} />
+              </Suspense>
+            ) : null}
           />
         </div>
 
         <div className="sidebar-foot">
+          {DayNoteDevBarPreview && dayNotePreview ? (
+            <Suspense fallback={null}><DayNoteDevBarPreview /></Suspense>
+          ) : null}
           {visibleSidebarCtaSlot ? (
             <SidebarCtaSlot
               funnelEnabled={funnelEnabled}
@@ -10867,6 +10916,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       {/* ── Main content ── */}
       <MainContentShell activeTab={activeTab} loading={loading} hasLoadedOnce={hasLoadedOnce} error={error} contentRef={contentRef}>
         <Suspense fallback={<DeferredPageImportFallback label={activeTab} />}>
+        {/* Dev-server review only: the day note's own page covers the tab under it. */}
+        {DayNotePagePreview && dayNotePageOpen ? (
+          <Suspense fallback={null}><DayNotePagePreview appIcons={appIcons} onConnect={openAiSetupSettings} /></Suspense>
+        ) : null}
+        {dayRecordVisible ? (
+          <Suspense fallback={null}>
+            <LazyDayRecordPage loadHistory={loadCompactHistoryRange} recentSegments={insightSegments} classificationOptions={insightClassificationOptions} startOfDayMinutes={startOfDayMinutes} appIcons={appIcons} />
+          </Suspense>
+        ) : null}
 
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
@@ -11558,6 +11616,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onProfileBetaChange={setProfileBetaEnabled}
                     onAgentsBetaChange={setAgentsBetaEnabled}
                     onNavigationRefreshChange={setNavigationRefreshEnabled}
+                    dailyRecordPreviewEnabled={dailyRecordPreviewEnabled}
+                    onDailyRecordPreviewChange={setDailyRecordPreviewEnabled}
                     onBreakdownPatternsPreviewChange={setBreakdownPatternsPreviewEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}
@@ -11572,6 +11632,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
       {!isTauriRuntime() ? (
         <>
+          {DayNoteMomentPreview && dayNotePreview?.place === "moment" ? (
+            <Suspense fallback={null}><DayNoteMomentPreview onConnect={openAiSetupSettings} /></Suspense>
+          ) : null}
           {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && endOfDayReviewEvent ? (
             <CompanionDayReviewBrowserSurface
               event={endOfDayReviewEvent}

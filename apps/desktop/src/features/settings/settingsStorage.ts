@@ -48,6 +48,7 @@ export const FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY = "drifty.dev.forceB
 
 export const FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY = "drifty.dev.forceChromiumAxExtremeNudge";
 
+export const DAILY_RECORD_PREVIEW_STORAGE_KEY = "drifty.dev.dailyRecordPreview";
 export const DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.preRollSeconds";
 
 export const DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.durationSeconds";
@@ -724,4 +725,13 @@ function readStoredBoolean(storageKey: string, fallback = false): boolean {
 function writeStoredBoolean(storageKey: string, enabled: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(storageKey, enabled ? "1" : "0");
+}
+
+/** Dev mode's Daily record preview: the 하루 기록 page in the sidebar, off by default. */
+export function resolveInitialDailyRecordPreviewEnabled(): boolean {
+  return readStoredBoolean(DAILY_RECORD_PREVIEW_STORAGE_KEY, false);
+}
+
+export function persistDailyRecordPreviewEnabled(enabled: boolean): void {
+  writeStoredBoolean(DAILY_RECORD_PREVIEW_STORAGE_KEY, enabled);
 }

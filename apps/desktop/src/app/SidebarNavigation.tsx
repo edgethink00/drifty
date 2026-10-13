@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { DashboardPeriod } from "../features/dashboard/dashboardPeriods";
 import type { LocalizationController } from "../features/localization/LocalizationContext";
 import { NavIcon } from "./AppShell";
@@ -19,6 +20,8 @@ export function resolveSidebarTeamReviewVariant(
 
 type SidebarNavigationProps = {
   readonly activeTab: TabId;
+  /** Dev-server design review only: one more item at the end of the activity group. */
+  readonly activityExtra?: ReactNode;
   readonly canOpenAgentsBeta: boolean;
   readonly canOpenProfileBeta: boolean;
   readonly canOpenTeamsBeta: boolean;
@@ -145,6 +148,7 @@ function RefreshedNavigation(props: SidebarNavigationProps) {
               onClick={() => props.onNavigate(item.id)}
             />
           ))}
+          {props.activityExtra}
         </div>
       </nav>
       <div className="nav-label">{props.t("nav.group.social")}</div>
@@ -205,6 +209,7 @@ function LegacyNavigation(props: SidebarNavigationProps) {
                 onClick={() => props.onNavigate(item.id)}
               />
             ))}
+          {props.activityExtra}
         </nav>
       </div>
       <div className="nav-label">{props.t("nav.group.social")}</div>

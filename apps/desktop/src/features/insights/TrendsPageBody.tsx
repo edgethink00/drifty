@@ -18,6 +18,7 @@ import { InsightsCoachPanel } from "./InsightsCoachPanel";
 import { buildInsightsCoachReadiness } from "./insightsReadiness";
 import { InsightsSummaryTiles } from "./InsightsSummaryTiles";
 import { isInsightsReadDesignPreview, isInsightsReadTabEnabled } from "./insightsReadTab";
+import { readDayNotePreview } from "../day-note/dayNoteGate";
 import type { InsightsTabId } from "./InsightsTabs";
 import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -28,6 +29,11 @@ import { Suspense, lazy, type ReactNode } from "react";
 // bundled there.
 const InsightsReadPreview = import.meta.env.DEV
   ? lazy(async () => ({ default: (await import("./read/InsightsReadPreview")).InsightsReadPreview }))
+  : null;
+
+// Dev-server design review of the day note in this tab (?driftyNote=1&notePlace=insights).
+const DayNoteInsights = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import("../day-note/DayNotePreview")).DayNoteInsights }))
   : null;
 
 type TrendsPageBodyProps = {
@@ -110,7 +116,9 @@ export function TrendsPageBody({
         aria-labelledby="insights-tab-read"
         tabIndex={-1}
       >
-        {InsightsReadPreview && isInsightsReadDesignPreview() ? (
+        {DayNoteInsights && readDayNotePreview()?.place === "insights" ? (
+          <Suspense fallback={null}><DayNoteInsights appIcons={appIcons} /></Suspense>
+        ) : InsightsReadPreview && isInsightsReadDesignPreview() ? (
           <Suspense fallback={null}><InsightsReadPreview toolbar={readToolbar ?? null} appIcons={appIcons} /></Suspense>
         ) : (
           <InsightsCoachPanel readiness={buildInsightsCoachReadiness(segments)} />

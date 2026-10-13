@@ -6,6 +6,7 @@ import { INSIGHT_RANGE_OPTIONS, type InsightRange } from "../dashboard/dashboard
 import type { AttentionRhythmCell, InsightSourceLists, WeeklyBreakdownDay } from "./insightData";
 import { InsightsTabs, INSIGHTS_TABS, type InsightsTabId } from "./InsightsTabs";
 import { isInsightsReadTabEnabled } from "./insightsReadTab";
+import { readDayNotePreview } from "../day-note/dayNoteGate";
 import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
 import { useLocalization } from "../localization/LocalizationContext";
 import { FocusCalendarCard, type FocusCalendarCardProps } from "./FocusCalendarCard";
@@ -81,7 +82,9 @@ export function TrendsPage({
 }: TrendsPageProps) {
   const { effectiveLanguage, t } = useLocalization();
   const readTabEnabled = isInsightsReadTabEnabled();
-  const [activeTab, setActiveTab] = useState<InsightsTabId>("usage");
+  const [activeTab, setActiveTab] = useState<InsightsTabId>(() => (
+    import.meta.env.DEV && readDayNotePreview()?.place === "insights" ? "read" : "usage"
+  ));
   // Your read steps through its weekly reads with the same navigator, in the
   // same place; the read page fills this slot itself.
   const [readToolbar, setReadToolbar] = useState<HTMLDivElement | null>(null);

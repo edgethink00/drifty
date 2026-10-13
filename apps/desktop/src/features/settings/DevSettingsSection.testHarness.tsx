@@ -82,6 +82,8 @@ export function renderProductionDevSettings(
     onProfileBetaChange: vi.fn(),
     onAgentsBetaChange: vi.fn(),
     onNavigationRefreshChange: vi.fn(),
+    dailyRecordPreviewEnabled: false,
+    onDailyRecordPreviewChange: vi.fn(),
     onBreakdownPatternsPreviewChange: vi.fn(),
     onAiAvailabilityGateDevDisabledChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),

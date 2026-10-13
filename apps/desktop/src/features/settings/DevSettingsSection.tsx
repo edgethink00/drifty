@@ -152,6 +152,8 @@ type DevSettingsSectionProps = {
   readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onAgentsBetaChange: (enabled: boolean) => void;
   readonly onNavigationRefreshChange: (enabled: boolean) => void;
+  readonly dailyRecordPreviewEnabled: boolean;
+  readonly onDailyRecordPreviewChange: (enabled: boolean) => void;
   readonly onBreakdownPatternsPreviewChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
@@ -235,6 +237,8 @@ export function DevSettingsSection({
   onProfileBetaChange,
   onAgentsBetaChange,
   onNavigationRefreshChange,
+  dailyRecordPreviewEnabled,
+  onDailyRecordPreviewChange,
   onBreakdownPatternsPreviewChange,
   onPreviewDashboardAiUnavailableCase,
   onReplayDashboardDemo,
@@ -773,6 +777,15 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={profileBetaEnabled} onChange={onProfileBetaChange} ariaLabel="Toggle Profile beta" />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Daily record preview</div>
+            <div className="desc">Show the Daily record page (하루 기록) in the sidebar's activity group: this Mac's activity for a day on the Attention rhythm board. Its highlight cards stay empty until Intelligence writes day notes. Off hides the page.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={dailyRecordPreviewEnabled} onChange={onDailyRecordPreviewChange} ariaLabel="Toggle Daily record preview" />
           </div>
         </div>
         <div className="settings-row">
