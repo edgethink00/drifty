@@ -922,19 +922,23 @@ function ActivityInspectorBody({
 
   return (
     <>
+      {/* The note describes the whole block, so it closes the header above the
+          divider instead of reading like a title for the attribute rows. It
+          sits outside the attribute container, so the card's aria-describedby
+          lists its id separately to keep it in the announced description. */}
+      {hasMixedValues ? (
+        <p className="week-activity-inspector__mixed-summary" id={`${descriptionId}-mixed`}>
+          {t("dashboard.week.inspector.dominantValuesSummary")}
+        </p>
+      ) : null}
       {regroupedBlockCount > 1 ? (
         <div className="week-activity-inspector__regroup-notice" role="status">
           {t("dashboard.week.inspector.regroupedBlocks", { count: regroupedBlockCount })}
         </div>
       ) : null}
       <div className="week-activity-inspector__attributes" id={descriptionId}>
-        {hasMixedValues ? (
-          <p className="week-activity-inspector__mixed-summary">
-            {t("dashboard.week.inspector.dominantValuesSummary")}
-          </p>
-        ) : null}
         {event.hasPartialSourceActivity ? (
-          <p className="week-activity-inspector__mixed-summary">
+          <p className="week-activity-inspector__scope-note">
             {t("dashboard.week.inspector.sourceActivityScope")}
           </p>
         ) : null}
@@ -1129,7 +1133,7 @@ export function ActivityInspectorPreview({
         style={layout.style}
         role="tooltip"
         aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        aria-describedby={`${descriptionId}-mixed ${descriptionId}`}
         data-mode="peek"
         data-side={layout.side}
       >
@@ -1504,7 +1508,7 @@ export function WeekActivityInspector({
       aria-modal="false"
       tabIndex={-1}
       aria-labelledby="week-activity-inspector-title"
-      aria-describedby="week-activity-inspector-description"
+      aria-describedby="week-activity-inspector-description-mixed week-activity-inspector-description"
       data-view={view}
       data-mode="pinned"
       data-side={layout.side}

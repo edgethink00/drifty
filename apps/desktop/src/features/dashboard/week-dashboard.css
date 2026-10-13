@@ -2839,7 +2839,9 @@
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
   overflow: auto;
-  padding: 8px;
+  /* The bottom is 2px tighter because the delete row below already carries its
+     own vertical padding; equal insets made the card look bottom-heavy. */
+  padding: 8px 8px 6px;
   border: 1px solid var(--week-inspector-border);
   border-radius: 14px;
   background: var(--shell-floating-surface-strong, var(--surface));
@@ -2988,11 +2990,11 @@
 
 .week-activity-inspector__actions--destructive {
   padding-top: 3px;
-  padding-bottom: 3px;
+  padding-bottom: 0;
 }
 
 .week-activity-inspector__actions--destructive .week-activity-inspector__action {
-  min-height: 34px;
+  min-height: 30px;
   padding-block: 3px;
 }
 
@@ -3140,7 +3142,26 @@
   padding: 5px 0 5px;
 }
 
+/* Header meta line: aligned with the heading text column and closing the
+   header above the divider. */
+.week-activity-inspector__header:has(+ .week-activity-inspector__mixed-summary) {
+  padding-bottom: 3px;
+  border-bottom: 0;
+}
+
 .week-activity-inspector__mixed-summary {
+  margin: 0;
+  padding: 0 var(--inspector-rail-inset) 8px calc(var(--inspector-rail-inset) + var(--inspector-rail-icon-size) + var(--inspector-rail-gap));
+  border-bottom: 1px solid var(--week-inspector-divider);
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+  font-weight: 540;
+  line-height: 1.3;
+}
+
+/* Edit-scope note for partially shown source activity: it qualifies the
+   attribute rows and delete action, so it stays at the top of that section. */
+.week-activity-inspector__scope-note {
   margin: 1px var(--inspector-rail-inset) 2px;
   color: var(--text-soft);
   font-size: var(--type-caption-size);
@@ -3444,9 +3465,9 @@
 
 .week-activity-inspector__activity-list {
   display: grid;
-  gap: 1px;
+  gap: 0;
   margin: 0;
-  padding: 4px 0 5px;
+  padding: 3px 0 4px;
   border-top: 1px solid var(--week-inspector-divider);
 }
 
@@ -3455,23 +3476,25 @@
   grid-template-columns: var(--inspector-rail-icon-size) minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--inspector-rail-gap);
-  min-height: 31px;
+  /* Composition rows are secondary to the attribute rows above, so they stay
+     shorter than them (26px vs 30px) while keeping the shared icon rail. */
+  min-height: 26px;
   /* Trailing durations stop at the chevron glyphs' visual right edge instead
      of the chevron cell edge, so the right column reads as one line. */
-  padding: 2px calc(var(--inspector-rail-inset) + 7px) 2px var(--inspector-rail-inset);
+  padding: 1px calc(var(--inspector-rail-inset) + 7px) 1px var(--inspector-rail-inset);
 }
 
 .week-activity-inspector__activity-row .usage-identity-icon--sm {
   width: var(--inspector-rail-icon-size);
-  height: var(--inspector-rail-icon-size);
+  height: 22px;
 }
 
 .week-activity-inspector__activity-row .app-glyph--sm,
 .week-activity-inspector__activity-row .app-icon--sm,
 .week-activity-inspector__activity-row .site-favicon {
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
 }
 
 .week-activity-inspector__activity-row > span:nth-child(2) {

@@ -520,6 +520,11 @@ describe("WeekDashboard activity inspector", () => {
     expect(within(inspector).queryByText("Selection saves immediately")).toBeNull();
     expect(within(inspector).getByText("Focus")).toBeTruthy();
     expect(within(inspector).getByText(/Mixed values · showing dominant/)).toBeTruthy();
+    const describedText = (inspector.getAttribute("aria-describedby") ?? "")
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ");
+    expect(describedText).toContain("Mixed values · showing dominant");
     expect(within(inspector).queryByText("Focus · dominant")).toBeNull();
     expect(within(inspector).queryByText("Workspace · dominant")).toBeNull();
     expect(within(inspector).queryByRole("button", { name: /Change Project/ })).toBeNull();
