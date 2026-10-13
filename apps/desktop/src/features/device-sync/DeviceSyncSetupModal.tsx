@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
+import "./DeviceSyncSetupModal.css";
 
 /** Keep the setting brief; explain the upload before a device opts in. */
 export function DeviceSyncSetupModal({ mode, canEnable, onClose, onEnable }: {

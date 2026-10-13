@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import { canOfferPromoCode, canStartCloudTrial } from "../billing/billingEligibility";
-import { DevicesSettingsBlock } from "./DevicesSettingsBlock";
 import { formatOrganizationSeatAccessCopy } from "../billing/billingAccessCopy";
 import {
   dissolveOwnOrganization,
@@ -19,7 +18,6 @@ import type {
   CouponRedemptionFailureCode,
   FriendInviteResult,
 } from "../billing/billingService";
-import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
@@ -41,10 +39,6 @@ export type AccountSettingsSectionProps = {
   readonly couponRedemption: CouponRedemption | null;
   readonly couponRedemptionErrorCode: CouponRedemptionFailureCode | null;
   readonly couponRedemptionLoading: boolean;
-  readonly cloudDeviceAccess: BillingEntitlement["deviceAccess"] | null;
-  readonly cloudDeviceActionError: string | null;
-  readonly cloudDeviceRevokingId: string | null;
-  readonly cloudDevices: BillingEntitlement["cloudDevices"];
   readonly cloudStatusRefreshing: boolean;
   readonly hasAuthenticatedSession?: boolean;
   readonly hasSignedInAccount?: boolean;
@@ -53,14 +47,6 @@ export type AccountSettingsSectionProps = {
   readonly loadFriendInvite?: () => Promise<FriendInviteResult>;
   readonly userEmail: string | null;
   readonly authUserId?: string | null;
-  readonly deviceSyncEnabled?: boolean;
-  readonly deviceSyncCanEnable?: boolean;
-  readonly deviceSyncGateActive?: boolean;
-  readonly deviceSyncStatus?: DeviceSyncStatus;
-  readonly deviceSyncPurging?: boolean;
-  readonly onDeviceSyncEnabledChange?: (enabled: boolean) => void;
-  readonly onDeviceSyncNow?: () => void | Promise<void>;
-  readonly onPurgeDeviceSyncData?: () => void | Promise<void>;
   readonly onDeleteAccount?: () => void;
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onOpenAiSetup?: () => void;
@@ -68,7 +54,6 @@ export type AccountSettingsSectionProps = {
   readonly onRedeemTrialCoupon: (code: string) => void | Promise<void>;
   readonly onReleaseOrganizationSeat?: (seatId: string) => Promise<OrganizationSeatReleaseResult>;
   readonly onDissolveOrganization?: () => Promise<OrganizationDissolveResult>;
-  readonly onRevokeCloudDevice: (deviceId: string) => void | Promise<void>;
   readonly onSignIn: () => void;
   /** Opens the one Pro decision sheet (or sign-in first); see ProDecisionSheet. */
   readonly onUpgradeToPro?: () => void;
@@ -87,10 +72,6 @@ export function AccountSettingsSection({
   couponRedemption,
   couponRedemptionErrorCode,
   couponRedemptionLoading,
-  cloudDeviceAccess,
-  cloudDeviceActionError,
-  cloudDeviceRevokingId,
-  cloudDevices = [],
   cloudStatusRefreshing,
   hasAuthenticatedSession,
   hasSignedInAccount,
@@ -98,14 +79,6 @@ export function AccountSettingsSection({
   loadFriendInvite,
   userEmail,
   authUserId,
-  deviceSyncEnabled = false,
-  deviceSyncCanEnable = false,
-  deviceSyncGateActive = false,
-  deviceSyncStatus,
-  deviceSyncPurging = false,
-  onDeviceSyncEnabledChange,
-  onDeviceSyncNow,
-  onPurgeDeviceSyncData,
   onDeleteAccount,
   onManageCloudBilling,
   onOpenAiSetup,
@@ -113,7 +86,6 @@ export function AccountSettingsSection({
   onRedeemTrialCoupon,
   onReleaseOrganizationSeat = releaseOwnOrganizationSeat,
   onDissolveOrganization = dissolveOwnOrganization,
-  onRevokeCloudDevice,
   onSignIn,
   onUpgradeToPro,
 }: AccountSettingsSectionProps) {
@@ -205,15 +177,12 @@ export function AccountSettingsSection({
     }
   };
   const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
-  const isDeviceLimitReached = isDeviceLimitLocked
-    || (cloudDeviceAccess?.allowed === false && cloudDeviceAccess.reason === "device_limit_reached");
   const isPaymentRequiredLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "payment_required";
   const isCurrentCloudPlan = billingEntitlementStatus === "active";
   const organizationSeat = resolveOrganizationSeatDisplay(billingEntitlement);
   const organizationSeatCopy = organizationSeat
     ? formatOrganizationSeatAccessCopy(organizationSeat.organizationName, effectiveLanguage)
     : null;
-  const shouldShowDeviceManagement = isCurrentCloudPlan || isDeviceLimitLocked || cloudDevices.length > 0;
   // A trial holds Pro access without owning the subscription. Passing the real
   // state (instead of relabelling the account as Free) keeps Pro purchasable
   // while the cards still say the trial is what is currently running.
@@ -453,27 +422,6 @@ export function AccountSettingsSection({
         </div>
         <GoogleCalendarSettings />
       </div>
-
-      <DevicesSettingsBlock
-        isSignedIn={isSignedIn}
-        deviceLimitReached={isDeviceLimitReached}
-        showDeviceList={shouldShowDeviceManagement}
-        cloudDeviceAccess={cloudDeviceAccess}
-        cloudDeviceActionError={cloudDeviceActionError}
-        cloudDeviceRevokingId={cloudDeviceRevokingId}
-        cloudDevices={cloudDevices}
-        cloudStatusRefreshing={cloudStatusRefreshing}
-        deviceSyncEnabled={deviceSyncEnabled}
-        deviceSyncCanEnable={deviceSyncCanEnable}
-        deviceSyncGateActive={deviceSyncGateActive}
-        deviceSyncStatus={deviceSyncStatus}
-        deviceSyncPurging={deviceSyncPurging}
-        onDeviceSyncEnabledChange={onDeviceSyncEnabledChange}
-        onDeviceSyncNow={onDeviceSyncNow}
-        onPurgeDeviceSyncData={onPurgeDeviceSyncData}
-        onRefreshCloudStatus={onRefreshCloudStatus}
-        onRevokeCloudDevice={onRevokeCloudDevice}
-      />
 
       {/* Plan and account controls come first; the account menu and settings
           search land on the invite card wherever it sits. */}

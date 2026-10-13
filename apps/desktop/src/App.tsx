@@ -140,6 +140,7 @@ import { useGoogleCalendarWeek } from "./features/calendar/useGoogleCalendarWeek
 import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
+import { SyncSettingsSection } from "./features/settings/SyncSettingsSection";
 import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
 import { ClassificationRulesManager } from "./features/settings/ClassificationRulesManager";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
@@ -1495,6 +1496,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
+  const openSyncSettings = useCallback(() => {
+    setSettingsSection("sync");
+    navigateToTab("settings");
+    setAccountMenuOpen(false);
+  }, [navigateToTab]);
   const handleSettingsBack = useCallback(() => {
     setAccountMenuOpen(false);
     if (canNavigateBack) {
@@ -2184,7 +2190,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
   // Paid device sync: same entitlement gate as cloud AI, plus the per-device
   // explicit opt-in toggle (raw activity leaves the device only when both hold).
-  // Account settings exposes the default-off Pro feature independently of Dev mode.
+  // Settings > Sync exposes the default-off Pro feature independently of Dev mode.
   const deviceSyncFeatureVisible = true;
   const deviceSyncCanEnable =
     deviceSyncAccountId !== null &&
@@ -10745,7 +10751,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                   return;
                 }
                 if (visibleSidebarCtaSlot.kind === "device-limit") {
-                  openAccountSettings();
+                  openSyncSettings();
                   return;
                 }
                 if (visibleSidebarCtaSlot.kind === "download" || visibleSidebarCtaSlot.kind === "preparing") return;
@@ -11265,30 +11271,46 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     couponRedemption={couponRedemption}
                     couponRedemptionErrorCode={couponRedemptionErrorCode}
                     couponRedemptionLoading={couponRedemptionLoading}
+                    cloudStatusRefreshing={effectiveBillingEntitlementLoading}
+                    hasAuthenticatedSession={Boolean(user)}
+                    hasSignedInAccount={hasRequiredAccountAuth}
+                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
+                    loadFriendInvite={fetchFriendInvite}
+                    authUserId={user?.id ?? null}
+                    userEmail={user?.email ?? null}
+                    onDeleteAccount={() => setAccountDeletionModalOpen(true)}
+                    onManageCloudBilling={handleManageCloudBilling}
+                    onOpenAiSetup={openAiSetupSettings}
+                    onRefreshCloudStatus={refreshBillingEntitlement}
+                    onRedeemTrialCoupon={handleRedeemTrialCoupon}
+                    onSignIn={openDefaultAuthModal}
+                    onUpgradeToPro={handleOpenUpgradePlanModal}
+                  />
+                )}
+                {settingsSection === "sync" && (
+                  <SyncSettingsSection
+                    key={user?.id ?? "signed-out"}
+                    appVersion={BUILD_INFO.version}
+                    billingEntitlement={effectiveBillingEntitlement}
+                    billingEntitlementError={effectiveBillingEntitlementError}
                     cloudDeviceAccess={effectiveBillingEntitlement?.deviceAccess ?? null}
                     cloudDeviceActionError={cloudDeviceActionError}
                     cloudDeviceRevokingId={cloudDeviceRevokingId}
                     cloudDevices={effectiveBillingEntitlement?.cloudDevices ?? cloudDevices}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
-	                    hasAuthenticatedSession={Boolean(user)}
-	                    hasSignedInAccount={hasRequiredAccountAuth}
-	                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
-	                    loadFriendInvite={fetchFriendInvite}
-	                    authUserId={user?.id ?? null}
-	                    userEmail={user?.email ?? null}
-	                    deviceSyncEnabled={deviceSyncEnabled}
-	                    deviceSyncCanEnable={deviceSyncCanEnable}
-	                    deviceSyncGateActive={deviceSyncActive}
-	                    deviceSyncStatus={deviceSyncStatus}
-	                    deviceSyncPurging={deviceSyncPurging}
-	                    onDeviceSyncEnabledChange={deviceSyncFeatureVisible ? handleDeviceSyncEnabledChange : undefined}
-	                    onDeviceSyncNow={deviceSyncNow}
-	                    onPurgeDeviceSyncData={handlePurgeDeviceSyncData}
-	                    onDeleteAccount={() => setAccountDeletionModalOpen(true)}
-	                    onManageCloudBilling={handleManageCloudBilling}
-	                    onOpenAiSetup={openAiSetupSettings}
-	                    onRefreshCloudStatus={refreshBillingEntitlement}
-                    onRedeemTrialCoupon={handleRedeemTrialCoupon}
+                    hasSignedInAccount={hasRequiredAccountAuth}
+                    hostPlatform={hostPlatform}
+                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
+                    userEmail={user?.email ?? null}
+                    deviceSyncEnabled={deviceSyncEnabled}
+                    deviceSyncCanEnable={deviceSyncCanEnable}
+                    deviceSyncGateActive={deviceSyncActive}
+                    deviceSyncStatus={deviceSyncStatus}
+                    deviceSyncPurging={deviceSyncPurging}
+                    onDeviceSyncEnabledChange={deviceSyncFeatureVisible ? handleDeviceSyncEnabledChange : undefined}
+                    onDeviceSyncNow={deviceSyncNow}
+                    onPurgeDeviceSyncData={handlePurgeDeviceSyncData}
+                    onRefreshCloudStatus={refreshBillingEntitlement}
                     onRevokeCloudDevice={handleRevokeCloudDevice}
                     onSignIn={openDefaultAuthModal}
                     onUpgradeToPro={handleOpenUpgradePlanModal}
@@ -11355,7 +11377,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason}
                     billingEntitlementError={billingEntitlementError}
                     onRefreshCloudStatus={refreshBillingEntitlement}
-                    onManageCloudDevices={() => setSettingsSection("account")}
+                    onManageCloudDevices={() => setSettingsSection("sync")}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                     connectionStatus={runtimeAwareAiConnectionStatus}

@@ -85,20 +85,3 @@
 .account-plan-notice__error {
   overflow-wrap: anywhere;
 }
-
-
-.device-sync-setup-modal { display: grid; gap: var(--space-4); }
-.device-sync-setup-modal__details {
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.5;
-}
-.device-sync-setup-modal__details summary { cursor: pointer; }
-.device-sync-setup-modal__details p { margin: var(--space-2) 0 0; }
-
-.device-sync-setup-modal .auth-modal__header { margin-bottom: 0; }
-.device-sync-setup-modal__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}

@@ -3,13 +3,25 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Toggle } from "../../components/Toggle";
 import { ActionLabel } from "../../components/ActionLabel";
 import type { BillingEntitlement } from "../billing/billingService";
-import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
+import { CloudDeviceManagementPanel, CloudDevicePreviewPanel } from "../cloud-devices/CloudDeviceManagementPanel";
 import { DeviceSyncSetupModal } from "../device-sync/DeviceSyncSetupModal";
 import { formatDeviceRelativeTime, resolveDeviceSyncSummary, type DeviceSyncSummary } from "../device-sync/deviceSyncSummary";
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import "./DevicesSettingsBlock.css";
+
+/** One inline action that would let a switched-off device turn sync on. */
+export type DeviceSyncAccessAction = {
+  readonly label: string;
+  readonly onClick: () => void;
+};
+
+/** What this computer can truthfully show in the dimmed preview before it syncs. */
+export type DeviceSyncPreviewDevice = {
+  readonly platform: "macos" | "windows";
+  readonly appVersion: string | null;
+};
 
 export type DevicesSettingsBlockProps = {
   readonly isSignedIn: boolean;
@@ -25,6 +37,9 @@ export type DevicesSettingsBlockProps = {
   readonly deviceSyncGateActive: boolean;
   readonly deviceSyncStatus?: DeviceSyncStatus;
   readonly deviceSyncPurging: boolean;
+  readonly accessAction?: DeviceSyncAccessAction | null;
+  /** Shown dimmed in place of the device list while sync is off and no list is available. */
+  readonly previewDevice?: DeviceSyncPreviewDevice | null;
   /** Present only where device sync is offered. */
   readonly onDeviceSyncEnabledChange?: (enabled: boolean) => void;
   readonly onDeviceSyncNow?: () => void | Promise<void>;
@@ -36,8 +51,9 @@ export type DevicesSettingsBlockProps = {
 const RELATIVE_TIME_TICK_MS = 30_000;
 
 /**
- * Settings > Account > Devices: this device's sync switch above the account's
- * device list, with the cloud copy's deletion at the foot of the block.
+ * Settings > Sync, as two blocks: this device's sync switch with the cloud
+ * copy at its foot, then the account's device list (dimmed as a preview while
+ * this device is not syncing and no list is available).
  */
 export function DevicesSettingsBlock({
   isSignedIn,
@@ -53,6 +69,8 @@ export function DevicesSettingsBlock({
   deviceSyncGateActive,
   deviceSyncStatus,
   deviceSyncPurging,
+  accessAction = null,
+  previewDevice = null,
   onDeviceSyncEnabledChange,
   onDeviceSyncNow,
   onPurgeDeviceSyncData,
@@ -74,6 +92,7 @@ export function DevicesSettingsBlock({
     })
     : null;
   const canSyncNow = Boolean(onDeviceSyncNow) && deviceSyncGateActive && !syncRunning;
+  const showPreview = syncOffered && !showDeviceList && !deviceSyncEnabled && previewDevice !== null;
 
   if (!syncOffered && !showDeviceList) return null;
 
@@ -91,8 +110,10 @@ export function DevicesSettingsBlock({
   }
 
   return (
-    <div data-setting-id="settings.account.devices" className="settings-block settings-block--devices">
-      <h3>{t("settings.account.devices")}</h3>
+    <>
+    {syncOffered ? (
+    <div data-setting-id="settings.section.sync" className="settings-block settings-block--sync">
+      <h3>{t("settings.section.sync")}</h3>
       {summary && onDeviceSyncEnabledChange ? (
         <div data-setting-id="settings.account.syncMacs" className="settings-row account-device-sync-row">
           <div className="account-device-sync-row__copy">
@@ -105,6 +126,7 @@ export function DevicesSettingsBlock({
               now={now}
               errorMessage={deviceSyncStatus?.lastError ?? null}
               canSyncNow={canSyncNow}
+              accessAction={accessAction}
               onSyncNow={() => void syncNow()}
               onLearnMore={() => setSyncSetupMode("info")}
             />
@@ -122,22 +144,7 @@ export function DevicesSettingsBlock({
           </div>
         </div>
       ) : null}
-      {showDeviceList ? (
-        <div className="settings-row settings-row--cloud-devices">
-          <CloudDeviceManagementPanel
-            access={cloudDeviceAccess}
-            actionError={cloudDeviceActionError}
-            devices={cloudDevices ?? []}
-            isRefreshing={cloudStatusRefreshing}
-            revokingId={cloudDeviceRevokingId}
-            currentDeviceSync={summary}
-            now={now}
-            onRefresh={onRefreshCloudStatus}
-            onRevoke={onRevokeCloudDevice}
-          />
-        </div>
-      ) : null}
-      {syncOffered && isSignedIn ? (
+      {isSignedIn ? (
         <div className="settings-row account-cloud-copy-row">
           <span className="account-cloud-copy-row__note">{t("settings.account.cloudCopyRetention")}</span>
           <button
@@ -161,6 +168,33 @@ export function DevicesSettingsBlock({
           }} />
       ) : null}
     </div>
+    ) : null}
+    {showDeviceList || (showPreview && previewDevice) ? (
+      <div data-setting-id="settings.cloudDevices.yourDevices" className="settings-block settings-block--devices">
+        <h3>{t("settings.cloudDevices.yourDevices")}</h3>
+        {showDeviceList ? (
+          <div className="settings-row settings-row--cloud-devices">
+            <CloudDeviceManagementPanel
+              access={cloudDeviceAccess}
+              actionError={cloudDeviceActionError}
+              devices={cloudDevices ?? []}
+              isRefreshing={cloudStatusRefreshing}
+              revokingId={cloudDeviceRevokingId}
+              currentDeviceSync={summary}
+              now={now}
+              titled={false}
+              onRefresh={onRefreshCloudStatus}
+              onRevoke={onRevokeCloudDevice}
+            />
+          </div>
+        ) : previewDevice ? (
+          <div className="settings-row settings-row--cloud-devices device-sync-preview" aria-disabled="true">
+            <CloudDevicePreviewPanel platform={previewDevice.platform} appVersion={previewDevice.appVersion} />
+          </div>
+        ) : null}
+      </div>
+    ) : null}
+    </>
   );
 }
 
@@ -169,6 +203,7 @@ function DeviceSyncStatusLine({
   now,
   errorMessage,
   canSyncNow,
+  accessAction,
   onSyncNow,
   onLearnMore,
 }: {
@@ -176,6 +211,7 @@ function DeviceSyncStatusLine({
   readonly now: number;
   readonly errorMessage: string | null;
   readonly canSyncNow: boolean;
+  readonly accessAction: DeviceSyncAccessAction | null;
   readonly onSyncNow: () => void;
   readonly onLearnMore: () => void;
 }) {
@@ -193,7 +229,17 @@ function DeviceSyncStatusLine({
   const separator = <span className="account-device-sync-status__separator" aria-hidden="true">·</span>;
 
   if (summary.kind === "off") {
-    return <div className="desc">{t("settings.account.syncDescription")}{" "}{learnMore}</div>;
+    return (
+      <div className="desc">
+        {t("settings.account.syncDescription")}{" "}{learnMore}
+        {accessAction ? (
+          <>
+            {separator}
+            <button type="button" className="account-device-sync-link" onClick={accessAction.onClick}>{accessAction.label}</button>
+          </>
+        ) : null}
+      </div>
+    );
   }
 
   const tone = summary.tone;

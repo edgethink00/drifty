@@ -20,6 +20,8 @@ export type CloudDeviceManagementPanelProps = {
   readonly currentDeviceSync?: DeviceSyncSummary | null;
   /** Clock used for relative times; defaults to the time of render. */
   readonly now?: number;
+  /** Settings gives the list its own block heading, so the panel drops its title and leads with the count. */
+  readonly titled?: boolean;
   readonly onRefresh: () => void | Promise<unknown>;
   readonly onRevoke: (deviceId: string) => void | Promise<void>;
 };
@@ -34,6 +36,7 @@ export function CloudDeviceManagementPanel({
   revokingId,
   currentDeviceSync = null,
   now,
+  titled = true,
   onRefresh,
   onRevoke,
 }: CloudDeviceManagementPanelProps) {
@@ -45,6 +48,9 @@ export function CloudDeviceManagementPanel({
   const orderedDevices = useMemo(() => orderDevices(devices), [devices]);
   const renderNow = now ?? Date.now();
   const windowDays = access?.activeWindowDays ?? 30;
+  const count = (
+    <span title={t("settings.cloudDevices.countHint", { days: windowDays })}>{formatCloudDeviceCount(access, devices, t)}</span>
+  );
 
   function confirmDeviceRemoval() {
     if (pendingRemovalDevice === null) return;
@@ -56,9 +62,9 @@ export function CloudDeviceManagementPanel({
   return (
     <section className="cloud-device-management" aria-label={t("settings.cloudDevices.yourDevices")}>
       <div className="cloud-device-management__header">
-        <span className="cloud-device-management__title">{t("settings.cloudDevices.yourDevices")}</span>
+        <span className="cloud-device-management__title">{titled ? t("settings.cloudDevices.yourDevices") : count}</span>
         <span className="cloud-device-management__summary">
-          <span title={t("settings.cloudDevices.countHint", { days: windowDays })}>{formatCloudDeviceCount(access, devices, t)}</span>
+          {titled ? count : null}
           <button
             type="button"
             className="cloud-device-management__refresh"
@@ -251,6 +257,43 @@ const DESKTOP_ICON = (
     <path d="M9 20h6M12 16v4" />
   </svg>
 );
+
+/**
+ * The device list as it looks once sync is on, shown dimmed while this device
+ * is not syncing. It states only what is true now: this computer's platform
+ * and app version, with sync off, and where the other computers will appear.
+ */
+export function CloudDevicePreviewPanel({ platform, appVersion }: {
+  readonly platform: "macos" | "windows";
+  readonly appVersion: string | null;
+}) {
+  const { t } = useLocalization();
+  const meta = [platformLabel(platform), appVersion ? "v" + appVersion : null].filter(Boolean).join(" · ");
+  return (
+    <section className="cloud-device-management cloud-device-management--preview" aria-label={t("settings.cloudDevices.yourDevices")}>
+      <ul className="cloud-device-list">
+        <li className="cloud-device-row">
+          <span className="cloud-device-row__icon" aria-hidden="true">{platform === "windows" ? DESKTOP_ICON : LAPTOP_ICON}</span>
+          <span className="cloud-device-row__copy">
+            <span className="cloud-device-row__name">{t("settings.cloudDevices.previewThisComputer")}</span>
+            <span className="cloud-device-row__meta">{meta}</span>
+          </span>
+          <span className="cloud-device-row__status cloud-device-row__status--neutral">
+            <span className="cloud-device-row__dot" aria-hidden="true" />
+            {t("settings.cloudDevices.statusSyncOff")}
+          </span>
+          <span className="cloud-device-row__menu-slot" aria-hidden="true" />
+        </li>
+        <li className="cloud-device-row cloud-device-row--placeholder">
+          <span className="cloud-device-row__icon" aria-hidden="true">{platform === "windows" ? LAPTOP_ICON : DESKTOP_ICON}</span>
+          <span className="cloud-device-row__copy">
+            <span className="cloud-device-row__meta">{t("settings.cloudDevices.previewOthers")}</span>
+          </span>
+        </li>
+      </ul>
+    </section>
+  );
+}
 
 /** This device first, then devices that still count toward the limit, most recent first. */
 function orderDevices(devices: readonly CloudDeviceRecord[]): CloudDeviceRecord[] {

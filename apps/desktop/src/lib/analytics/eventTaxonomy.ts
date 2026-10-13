@@ -37,6 +37,7 @@ export const SETTINGS_SECTIONS = [
   "general",
   "permissions",
   "account",
+  "sync",
   "appearance",
   "pet",
   "classification",

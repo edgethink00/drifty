@@ -149,7 +149,7 @@ describe("ReadyStep", () => {
     );
 
     const text = screen.getByRole("status").textContent ?? "";
-    expect(text).toContain("Settings > Account");
+    expect(text).toContain("Settings > Sync");
     expect(text).not.toContain("another device");
   });
 });

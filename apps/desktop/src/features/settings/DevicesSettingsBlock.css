@@ -1,8 +1,18 @@
-.content--settings .settings-block--devices > .account-device-sync-row {
+/* Sync owns its vertical rhythm like Account: the section gap alone separates
+   the sync block from the device list. */
+.content--settings .settings-section--sync {
+  gap: var(--space-5);
+}
+
+.content--settings .settings-section--sync > .settings-block {
+  margin-bottom: 0;
+}
+
+.content--settings .settings-block--sync > .account-device-sync-row {
   align-items: flex-start;
 }
 
-.content--settings .settings-block--devices > .account-device-sync-row > .ctrl {
+.content--settings .settings-block--sync > .account-device-sync-row > .ctrl {
   flex: 0 0 auto;
   padding-top: 0.1rem;
 }
@@ -75,6 +85,12 @@
   color: var(--text-soft);
 }
 
+/* The switched-off description is running text, so its separator carries the
+   same space the live status line's flex gap gives it. */
+.account-device-sync-row .desc > .account-device-sync-status__separator {
+  margin-inline: 0.45rem;
+}
+
 .account-device-sync-status--attention {
   color: var(--gold);
 }
@@ -114,12 +130,20 @@
   display: block;
 }
 
-/* Sync, the device list and the cloud copy are separate concerns in one card. */
-.content--settings .settings-block--devices > .settings-row + .settings-row {
+/* Before this device syncs, the device list shows dimmed and inert so the
+   section still says what it holds; the sync switch above stays at full strength. */
+.content--settings .settings-block--devices > .device-sync-preview {
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The sync switch and the cloud copy it fills share one card, split by a rule. */
+.content--settings .settings-block--sync > .settings-row + .settings-row {
   border-top: 1px solid var(--line);
 }
 
-.content--settings .settings-block--devices > .account-cloud-copy-row {
+.content--settings .settings-block--sync > .account-cloud-copy-row {
   align-items: center;
   display: flex;
   gap: var(--space-3);
@@ -165,7 +189,7 @@
 }
 
 @media (max-width: 560px) {
-  .content--settings .settings-block--devices > .account-cloud-copy-row {
+  .content--settings .settings-block--sync > .account-cloud-copy-row {
     align-items: flex-start;
     flex-direction: column;
   }

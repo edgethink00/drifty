@@ -41,6 +41,7 @@ describe("SettingsSidebar", () => {
       "Desktop pet",
       "Companion & Alerts",
       "Account",
+      "Sync",
       "Privacy & Data",
     ]);
     expect(within(aiGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([

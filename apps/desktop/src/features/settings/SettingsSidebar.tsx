@@ -8,7 +8,7 @@ import type { DevSettingsSubsection } from "./devSettingsNavigation";
 
 export const DRIFTY_DISCORD_INVITE_URL = "https://discord.gg/NxcubTe2KD";
 
-export type SettingsSection = "account" | "general" | "appearance" | "pet" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
+export type SettingsSection = "account" | "sync" | "general" | "appearance" | "pet" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
 
 const SETTINGS_NAV_GROUPS = [
   {
@@ -20,6 +20,7 @@ const SETTINGS_NAV_GROUPS = [
       { id: "pet", labelKey: "settings.pet.title" },
       { id: "notifications", labelKey: "settings.section.notifications" },
       { id: "account", labelKey: "settings.section.account" },
+      { id: "sync", labelKey: "settings.section.sync" },
       { id: "privacy", labelKey: "settings.section.privacy" },
     ],
   },
@@ -53,6 +54,9 @@ function SettingsSectionIcon({ section }: { section: SettingsSection }) {
       return <PetIcon />;
     case "account":
       return (<svg {...props}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>);
+    case "sync":
+      // Lucide refresh-cw: https://lucide.dev/icons/refresh-cw
+      return (<svg {...props}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg>);
     case "appearance":
       // Lucide palette: https://lucide.dev/icons/palette
       return (<svg {...props}><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" /><circle cx="13.5" cy="6.5" r=".5" fill="currentColor" /><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" /><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" /><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /></svg>);

@@ -159,6 +159,16 @@
   opacity: 0.55;
 }
 
+/* The preview's empty slot: an outlined tile where another computer would be. */
+.cloud-device-row--placeholder .cloud-device-row__icon {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.cloud-device-row--placeholder .cloud-device-row__meta {
+  white-space: normal;
+}
+
 .cloud-device-row__status {
   align-items: center;
   color: var(--text-soft);
