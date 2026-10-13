@@ -119,11 +119,11 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // so they share its focused-window identity proof. Bundle
         // identifiers are compared exactly; Floorp's carries a capital letter.
         let geckoBundles = ["org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp", "net.librewolf.librewolf", "net.waterfox.waterfox"]
-        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "ai.perplexity.comet", "com.apple.Safari"] + geckoBundles
+        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "ai.perplexity.comet", "com.apple.Safari", "com.apple.SafariTechnologyPreview"] + geckoBundles
         // Safari and the Firefox family expose no scripting window mode; they
         // are admitted through their own accessibility identity below and never
         // receive Apple Events.
-        let safari = CommandLine.arguments[3] == "com.apple.Safari", gecko = geckoBundles.contains(CommandLine.arguments[3])
+        let safari = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"].contains(CommandLine.arguments[3]), gecko = geckoBundles.contains(CommandLine.arguments[3])
         let addressBar = safari || gecko
         // Arc names its scripting window class WiND (Chrome: cwin) and has no
         // window bounds property. Its scripting identity still proves normal

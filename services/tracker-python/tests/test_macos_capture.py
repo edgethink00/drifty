@@ -293,7 +293,8 @@ class NativeSnapshotTests(unittest.TestCase):
 
     def test_safari_and_firefox_family_address_bar_capture_binds_page_clues_to_the_window_title(self):
         self.mock('refine_safari_url', side_effect=lambda browser, *args: browser)
-        for app, bundle in (('Safari', 'com.apple.Safari'), ('Firefox', 'org.mozilla.firefox'),
+        for app, bundle in (('Safari', 'com.apple.Safari'), ('Safari Technology Preview', 'com.apple.SafariTechnologyPreview'),
+                            ('Firefox', 'org.mozilla.firefox'),
                             ('Firefox Developer Edition', 'org.mozilla.firefoxdeveloperedition'),
                             ('Zen', 'app.zen-browser.zen'), ('Floorp', 'app.floorp.Floorp'),
                             ('LibreWolf', 'net.librewolf.librewolf'), ('Waterfox', 'net.waterfox.waterfox')):
@@ -334,7 +335,8 @@ class NativeSnapshotTests(unittest.TestCase):
     def test_other_address_bar_browsers_and_titleless_windows_cannot_start_body_capture(self):
         capture = self.mock('capture_browser_content', return_value=None)
         self.mock('refine_safari_url', side_effect=lambda browser, *args: browser)
-        for app, bundle, title in (('Safari Technology Preview', 'com.apple.SafariTechnologyPreview', 'Course page'),
+        for app, bundle, title in (('Opera', 'com.operasoftware.Opera', 'Course page'),
+                                   ('Safari Technology Preview', 'com.apple.SafariTechnologyPreview', None),
                                    ('Safari', 'com.apple.Safari', None)):
             with self.subTest(app=app):
                 self.identity.return_value = FrontmostApplication(app, bundle, 42)

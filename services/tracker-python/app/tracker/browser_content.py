@@ -27,7 +27,7 @@ EXTENSION_ORIGIN = "chrome-extension://neihkehcijfcfplmfomahlimejiiledi/"
 # Read from the address bar instead of scripting; the helper binds their page
 # clues to the focused window's exact title through accessibility. Firefox
 # Firefox-family browsers share the same focused-window identity proof.
-ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari"}) | FIREFOX_FAMILY_BUNDLES
+ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari", "com.apple.SafariTechnologyPreview"}) | FIREFOX_FAMILY_BUNDLES
 BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "ai.perplexity.comet"}) | ADDRESS_BAR_CONTENT_BUNDLES
 MAX_MESSAGE_BYTES = 32768
 # Message, mail, AI chat and document-editor sites, and sign-in/payment/account

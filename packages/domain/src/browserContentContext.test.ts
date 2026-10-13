@@ -18,12 +18,12 @@ describe("browser context provenance and minimization",()=>{
     for(const patch of [{siteUrl:"https://example.org/other"},{siteTitle:"Other"},{siteSource:"browser-history-title"},{exclusionSource:"user"}])expect(browserContentCluesForSegment({...segment(),...patch})).toBeUndefined();
   });
   it("binds Safari and Firefox-family address-bar observations to the focused window title only",()=>{
-    for(const bundleId of ["com.apple.Safari","org.mozilla.firefox","org.mozilla.firefoxdeveloperedition","app.zen-browser.zen","app.floorp.Floorp","net.librewolf.librewolf","net.waterfox.waterfox"]) {
+    for(const bundleId of ["com.apple.Safari","com.apple.SafariTechnologyPreview","org.mozilla.firefox","org.mozilla.firefoxdeveloperedition","app.zen-browser.zen","app.floorp.Floorp","net.librewolf.librewolf","net.waterfox.waterfox"]) {
       const browser = {...segment(),siteSource:"accessibility-address-bar",siteTitle:null,bundleId,windowTitle:"Course"};
       expect(browserContentCluesForSegment(browser)).toEqual({description:"Author course description",headings:["Week 2"],visibleTopic:["Assignment closes Friday"]});
       for(const patch of [{windowTitle:"Course, Private Browsing"},{windowTitle:null},{siteUrl:"https://example.org/other"}])expect(browserContentCluesForSegment({...browser,...patch})).toBeUndefined();
     }
-    expect(browserContentCluesForSegment({...segment(),siteSource:"accessibility-address-bar",siteTitle:null,bundleId:"com.apple.SafariTechnologyPreview",windowTitle:"Course"})).toBeUndefined();
+    expect(browserContentCluesForSegment({...segment(),siteSource:"accessibility-address-bar",siteTitle:null,bundleId:"unsupported.browser",windowTitle:"Course"})).toBeUndefined();
   });
   it("binds Windows UI Automation Document observations to the raw window title only",()=>{
     const windowTitle = "Course - Chrome";

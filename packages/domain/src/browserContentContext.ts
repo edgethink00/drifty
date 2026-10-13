@@ -52,7 +52,7 @@ export function normalizeBrowserContentClues(value: unknown): BrowserContentClue
 // Firefox-family browsers share the focused-window identity proof.
 // Bundle IDs are matched exactly; Floorp's carries a capital letter.
 const ADDRESS_BAR_CONTENT_BUNDLES: ReadonlySet<string> = new Set([
-  "com.apple.Safari", "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp",
+  "com.apple.Safari", "com.apple.SafariTechnologyPreview", "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp",
   "net.librewolf.librewolf", "net.waterfox.waterfox",
 ]);
 
