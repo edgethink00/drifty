@@ -5,7 +5,7 @@ import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventSty
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedDuration, formatLocalizedCompactHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
 import {
   WeekActivityInspector,
@@ -31,6 +31,7 @@ import { BreakdownSidePanel } from "./BreakdownSidePanelChrome";
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationHoverState } from "./HoverCards";
 import { buildWeekBreakdownHoverRows } from "./weekBreakdownHover";
+import { buildWeekProjectView, type WeekProjectSlice } from "./weekProjectView";
 import { MetricTile } from "../../components/MetricTile";
 import { FlowChartLegend } from "../flow-chart/FlowChartLegend";
 import type { FlowLegendBreakdownRequest } from "../flow-chart/FlowChartLegend";
@@ -57,7 +58,9 @@ function readRootFontSizePx(): number {
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
 
-export type WeekDashboardColorMode = "category" | "productivity";
+export type WeekDashboardColorMode = "category" | "productivity" | "project";
+const EMPTY_PROJECT_ASSIGNMENTS: readonly ProjectAssignmentRecord[] = [];
+const EMPTY_PROJECT_WINDOW_ASSIGNMENTS: readonly ProjectWindowAssignmentRecord[] = [];
 
 const WEEK_COLOR_MODE_OPTIONS = ["category", "productivity"] as const satisfies readonly WeekDashboardColorMode[];
 
@@ -138,8 +141,10 @@ function buildWeekSideTrendChart(
   colorMode: WeekDashboardColorMode,
   language: "en" | "ko",
   t: LocalizationController["t"],
+  projectSlicesByDay?: ReadonlyMap<string, readonly WeekProjectSlice[]>,
 ): WeekSideTrendChart {
-  const maxHours = Math.max(...rows.map((row) => row.totalSeconds / 3600), 0);
+  const chartRows = colorMode === "project" ? rows.map(row => ({ ...row, totalSeconds: (projectSlicesByDay?.get(row.day) ?? []).reduce((sum, slice) => sum + slice.seconds, 0) })) : rows;
+  const maxHours = Math.max(...chartRows.map((row) => row.totalSeconds / 3600), 0);
   const axisMaxHours = maxHours > 0 ? maxHours / 0.93 : 1;
   const stepHours = WEEK_SIDE_TREND_STEP_CANDIDATES.find((candidate) => maxHours / candidate <= 4)
     ?? WEEK_SIDE_TREND_STEP_CANDIDATES[WEEK_SIDE_TREND_STEP_CANDIDATES.length - 1];
@@ -156,10 +161,12 @@ function buildWeekSideTrendChart(
   }
   gridlines.reverse();
 
-  const columns = rows.map((row) => {
+  const columns = chartRows.map((row) => {
     const off = row.totalSeconds <= 0;
     // .wt-bar stacks bottom-up; pin category-mode Unclassified above the classified slices.
-    const slices = colorMode === "productivity"
+    const slices = colorMode === "project"
+      ? projectSlicesByDay?.get(row.day) ?? []
+      : colorMode === "productivity"
       ? row.productivitySlices.map((slice) => ({
           key: slice.productivity,
           seconds: slice.totalSeconds,
@@ -193,6 +200,10 @@ function buildWeekSideTrendChart(
 }
 
 type WeekDashboardProps = {
+  readonly colorMode?: WeekDashboardColorMode;
+  readonly onColorModeChange?: (mode: WeekDashboardColorMode) => void;
+  readonly projectAssignments?: readonly ProjectAssignmentRecord[];
+  readonly projectWindowAssignments?: readonly ProjectWindowAssignmentRecord[];
   readonly classifiedResultIds?: ReadonlySet<string>;
   readonly funnelResultRef?: Ref<HTMLElement>;
   /** Page header (title + date navigator) rendered inside the calendar block
@@ -288,6 +299,10 @@ export function WeekDashboard({
   activityActionsEnabled = false,
   projectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
   projectBySegmentId = EMPTY_PROJECT_BY_SEGMENT_ID,
+  colorMode: controlledColorMode,
+  onColorModeChange,
+  projectAssignments = EMPTY_PROJECT_ASSIGNMENTS,
+  projectWindowAssignments = EMPTY_PROJECT_WINDOW_ASSIGNMENTS,
   onSaveActivityValues,
   onAssignProject,
   onClassifyActivity,
@@ -299,7 +314,20 @@ export function WeekDashboard({
   const [localSideOpen, setLocalSideOpen] = useState(true);
   const sideOpen = controlledSideOpen ?? localSideOpen;
   const toggleSide = onToggleSide ?? (() => setLocalSideOpen((open) => !open));
-  const [colorMode, setColorMode] = useState<WeekDashboardColorMode>("category");
+  const [localColorMode, setLocalColorMode] = useState<WeekDashboardColorMode>("category");
+  const projectModeAvailable = projectOptions.some(project => project.id !== null)
+    && (projectAssignments.length > 0 || projectWindowAssignments.length > 0);
+  const selectedColorMode = controlledColorMode ?? localColorMode;
+  const colorMode = selectedColorMode === "project" && !projectModeAvailable ? "category" : selectedColorMode;
+  const setColorMode = onColorModeChange ?? setLocalColorMode;
+  const colorModeOptions: readonly WeekDashboardColorMode[] = projectModeAvailable ? [...WEEK_COLOR_MODE_OPTIONS, "project"] : WEEK_COLOR_MODE_OPTIONS;
+  const projectView = useMemo(() => colorMode === "project" ? buildWeekProjectView({
+    segments, assignments: projectAssignments, windowAssignments: projectWindowAssignments, projects: projectOptions,
+    classificationOptions, startDay, endDay, startOfDayMinutes,
+    calendarHourHeightPx: weekDashboardAxisScalePercentToHourHeight(axisScalePercent),
+    noProjectLabel: t("projects.chart.noProject"), unavailableProjectLabel: t("dashboard.week.inspector.unavailableProject"),
+  }) : null, [colorMode, segments, projectAssignments, projectWindowAssignments, projectOptions, classificationOptions, startDay, endDay, startOfDayMinutes, axisScalePercent, t]);
+  const renderedCalendarEvents = projectView?.calendarEvents ?? calendarEvents;
   const [legendHover, setLegendHover] = useState<FlowLegendHoverState | null>(null);
   const [breakdownHover, setBreakdownHover] = useState<CompactClassificationHoverState | null>(null);
   const [activityInspector, setActivityInspector] = useState<WeekActivityInspectorState | null>(null);
@@ -342,12 +370,13 @@ export function WeekDashboard({
     [effectiveLanguage, rows, segments, t, totalSeconds],
   );
   const sideTrendChart = useMemo(
-    () => buildWeekSideTrendChart(rows, colorMode, effectiveLanguage, t),
-    [colorMode, effectiveLanguage, rows, t],
+    () => buildWeekSideTrendChart(rows, colorMode, effectiveLanguage, t, projectView?.slicesByDay),
+    [colorMode, effectiveLanguage, rows, t, projectView],
   );
   const buildHoverRows = useCallback((key: string | readonly string[], mode: WeekDashboardColorMode, day?: string) => (
     buildWeekBreakdownHoverRows({
-      segments,
+      segments: mode === "project" ? projectView?.segments ?? [] : segments,
+      projectBySegmentId: projectView?.projectBySegmentId,
       classificationOptions,
       startDay,
       endDay,
@@ -356,7 +385,7 @@ export function WeekDashboard({
       key,
       day,
     })
-  ), [classificationOptions, endDay, segments, startDay, startOfDayMinutes]);
+  ), [classificationOptions, endDay, segments, startDay, startOfDayMinutes, projectView]);
   const buildLegendHoverRows = useCallback((request: FlowLegendBreakdownRequest) => {
     switch (request.kind) {
       case "category": return buildHoverRows(request.category, "category");
@@ -404,7 +433,7 @@ export function WeekDashboard({
     if (currentCalendarDay === undefined && realCurrentCalendarMinute !== null) return realCurrentCalendarMinute;
 
     const earliestEventOffset = calendarRows.reduce<number | null>((earliest, row) => {
-      const firstEvent = calendarEvents.get(row.day)?.[0];
+      const firstEvent = renderedCalendarEvents.get(row.day)?.[0];
       if (!firstEvent) return earliest;
       return earliest === null ? firstEvent.topMinutes : Math.min(earliest, firstEvent.topMinutes);
     }, null);
@@ -412,23 +441,23 @@ export function WeekDashboard({
     return earliestEventOffset === null
       ? minCalendarMinute
       : Math.min(maxCalendarMinute, Math.max(minCalendarMinute, minCalendarMinute + earliestEventOffset));
-  }, [calendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute]);
+  }, [renderedCalendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute]);
 
   const displayCalendarEvents = useMemo(() => {
-    if (effectiveLanguage === "en") return calendarEvents;
+    if (effectiveLanguage === "en") return renderedCalendarEvents;
 
-    return new Map(Array.from(calendarEvents.entries()).map(([day, events]) => [
+    return new Map(Array.from(renderedCalendarEvents.entries()).map(([day, events]) => [
       day,
       events.map((event) => {
         const startMinute = minCalendarMinute + event.topMinutes;
         const endMinute = startMinute + event.durationMinutes;
         const startLabel = formatLocalizedCalendarMinuteLabel(day, startMinute, effectiveLanguage, startOfDayMinutes);
         const endLabel = formatLocalizedCalendarMinuteLabel(day, endMinute, effectiveLanguage, startOfDayMinutes);
-        const categoryName = localizedCategoryLabel(event.category, t);
+        const categoryName = colorMode === "project" ? event.projectName ?? t("projects.chart.noProject") : localizedCategoryLabel(event.category, t);
         const recordLabel = event.sessionCount === 1
           ? t("dashboard.week.inspector.record")
           : t("dashboard.week.inspector.records", { count: event.sessionCount });
-        const detailSummary = event.isGroupedCluster || event.sessionCount > 1 ? recordLabel : categoryName;
+        const detailSummary = colorMode === "project" ? categoryName : event.isGroupedCluster || event.sessionCount > 1 ? recordLabel : categoryName;
         const detailTitle = [
           `${startLabel}–${endLabel} · ${categoryName}`,
           `${formatLocalizedCompactDurationFromSeconds(event.activeDurationMinutes * 60, effectiveLanguage)} · ${recordLabel}`,
@@ -440,7 +469,7 @@ export function WeekDashboard({
         return { ...event, startLabel, endLabel, detailSummary, detailTitle };
       }),
     ]));
-  }, [calendarEvents, effectiveLanguage, minCalendarMinute, startOfDayMinutes, t]);
+  }, [renderedCalendarEvents, colorMode, effectiveLanguage, minCalendarMinute, startOfDayMinutes, t]);
 
   // The calendar squishes (no horizontal scroll) while the Breakdown panel is
   // open, so the identity strips must adapt to the live day-column width
@@ -653,7 +682,7 @@ export function WeekDashboard({
             ) : (
               <div className="flow-chart-head__actions">
                 <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
-                  {WEEK_COLOR_MODE_OPTIONS.map((option) => (
+                  {colorModeOptions.map((option) => (
                     <button
                       key={option}
                       type="button"
@@ -665,7 +694,7 @@ export function WeekDashboard({
                         setColorMode(option);
                       }}
                     >
-                      {t(option === "category" ? "common.category" : "common.productivity")}
+                      {t(option === "project" ? "common.project" : option === "category" ? "common.category" : "common.productivity")}
                     </button>
                   ))}
                 </div>
@@ -673,6 +702,7 @@ export function WeekDashboard({
                 <FlowChartLegend
                   ariaLabel={t(colorMode === "category" ? "dashboard.week.categoryTones" : "dashboard.week.productivityTones")}
                   colorMode={colorMode}
+                  projectLegend={projectView?.legend}
                   getAppBreakdown={buildLegendHoverRows}
                   hasUnclassified={hasUnclassified}
                   hoveredLegendCardRef={legendHoverCardRef}
@@ -791,7 +821,7 @@ export function WeekDashboard({
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 1px)` : "1px",
                         width: event.laneCount > 1 ? "calc(100% - 31px)" : "calc(100% - 7px)",
                         zIndex: event.laneCount > 1 ? 10 + event.lane : 3,
-                        "--event-tone": colorMode === "productivity" ? PRODUCTIVITY_COLORS[event.productivity] : CATEGORY_COLORS[event.category],
+                        "--event-tone": colorMode === "project" ? event.projectColor : colorMode === "productivity" ? PRODUCTIVITY_COLORS[event.productivity] : CATEGORY_COLORS[event.category],
                       };
                       return (
                         <article
@@ -818,7 +848,7 @@ export function WeekDashboard({
                             title={event.detailTitle}
                             onClick={(clickEvent) => openActivityInspector(event, clickEvent.currentTarget)}
                           >
-                            <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
+                            <span className={`category-dot category-dot--${event.category}`} style={colorMode === "project" ? { background: event.projectColor } : undefined} aria-hidden="true" />
                             {eventLayout.showsIdentityStrip ? (
                               <span
                                 className="week-v2-calendar__identity-strip"
@@ -915,14 +945,14 @@ export function WeekDashboard({
           ) : (
             <>
               <CompactRingChart
-                title={t("common.productivity")}
-                ariaLabel={t("dashboard.today.compactClassificationAria", { title: t("common.productivity") })}
-                entries={productivityRingEntries}
-                totalSeconds={totalSeconds}
-                centerPercent={productivityCenterPercent}
+                title={t(colorMode === "project" ? "dashboard.today.projects" : "common.productivity")}
+                ariaLabel={t("dashboard.today.compactClassificationAria", { title: t(colorMode === "project" ? "dashboard.today.projects" : "common.productivity") })}
+                entries={projectView?.ringEntries ?? productivityRingEntries}
+                totalSeconds={projectView?.totalSeconds ?? totalSeconds}
+                centerPercent={projectView?.centerPercent ?? productivityCenterPercent}
                 flowBlocks={[]}
                 appIcons={appIcons}
-                getAppBreakdown={(entry) => buildHoverRows(entry.key, "productivity")}
+                getAppBreakdown={(entry) => buildHoverRows(entry.key, projectView ? "project" : "productivity")}
                 language={effectiveLanguage}
               />
               <CompactClassificationBar<CategoryDuration>
@@ -971,7 +1001,7 @@ export function WeekDashboard({
                                     label: segment.label,
                                     durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
                                     shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
-                                    dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
+                                    dotClassName: colorMode === "project" ? "" : colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
                                     color: segment.color,
                                     appBreakdown: buildHoverRows(segment.key, colorMode, column.day),
                                     x: event.clientX,
@@ -985,7 +1015,7 @@ export function WeekDashboard({
                                       label: segment.label,
                                       durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
                                       shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
-                                      dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
+                                      dotClassName: colorMode === "project" ? "" : colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
                                       color: segment.color,
                                       appBreakdown: buildHoverRows(segment.key, colorMode, column.day),
                                       x: bounds.left + bounds.width / 2,

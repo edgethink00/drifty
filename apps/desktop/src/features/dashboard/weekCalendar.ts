@@ -1,4 +1,4 @@
-import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, activityTimeBounds, classifyActivityDetailed, isExcludedSegment, logicalDayEndExclusiveMs, logicalDayStartMs, shiftIsoDate } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, activityTimeBounds, sampledActivitySecondsWithinInterval, sampledActivityTimeBounds, classifyActivityDetailed, isExcludedSegment, logicalDayEndExclusiveMs, logicalDayStartMs, shiftIsoDate } from "@drifty/domain";
 import type { ExclusionSource } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, ClassificationSource, ProductivityLabel } from "@drifty/domain";
 import { DEFAULT_START_OF_WEEK } from "../settings/settingsStorage";
@@ -48,6 +48,11 @@ export type WeekCalendarEventIdentity = WeekCalendarIdentity & {
 };
 
 export type WeekCalendarEvent = {
+  /** Present only on project-colored calendar slices; null is No project. */
+  projectId?: string | null;
+  projectName?: string;
+  projectColor?: string;
+  hasMixedProject?: boolean;
   id: string;
   /** Full captured records contributing to this rendered aggregate. Mutations
    *  intentionally operate on these records, never on the visual time slice. */
@@ -145,8 +150,8 @@ export type SegmentDayOverlap = {
   durationSeconds: number;
 };
 
-export function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: string, endDay: string, startOfDayMinutes = 0): SegmentDayOverlap[] {
-  const { start: segmentStartMs, end: segmentEndMs } = activityTimeBounds(segment);
+export function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: string, endDay: string, startOfDayMinutes = 0, { sampledTime = false }: { sampledTime?: boolean } = {}): SegmentDayOverlap[] {
+  const { start: segmentStartMs, end: segmentEndMs } = sampledTime ? sampledActivityTimeBounds(segment) : activityTimeBounds(segment);
   if (!Number.isFinite(segmentStartMs) || !Number.isFinite(segmentEndMs) || segmentEndMs <= segmentStartMs) return [];
 
   return buildIsoDayList(startDay, endDay).flatMap((day) => {
@@ -159,7 +164,7 @@ export function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: 
       day,
       startedAt: new Date(overlapStartMs),
       endedAt: new Date(overlapEndMs),
-      durationSeconds: activitySecondsWithinInterval(segment, overlapStartMs, overlapEndMs),
+      durationSeconds: (sampledTime ? sampledActivitySecondsWithinInterval : activitySecondsWithinInterval)(segment, overlapStartMs, overlapEndMs),
     }];
   });
 }
@@ -173,6 +178,7 @@ export function buildWeekCalendarEvents(
   classificationOptions?: ClassificationOptions,
   startOfDayMinutes = 0,
   classificationBySegmentId?: ReadonlyMap<string, WeekSegmentClassification>,
+  { sampledTime = false }: { sampledTime?: boolean } = {},
 ): Map<string, WeekCalendarEvent[]> {
   const days = buildIsoDayList(startDay, endDay);
 
@@ -377,7 +383,7 @@ export function buildWeekCalendarEvents(
   for (const segment of aggregateDeviceElapsedTime(segments)) {
     const classification = classificationBySegmentId?.get(segment.id) ?? classifyActivityDetailed(segment, classificationOptions);
     const identity = weekCalendarSegmentIdentity(segment);
-    for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay, startOfDayMinutes)) {
+    for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay, startOfDayMinutes, { sampledTime })) {
       const buckets = bucketsByDay.get(overlap.day);
       if (!buckets) continue;
 
@@ -393,7 +399,7 @@ export function buildWeekCalendarEvents(
         const overlapEndMs = Math.min(overlap.endedAt.getTime(), bucketEndMs);
         const overlapMs = overlapEndMs - overlapStartMs;
         if (overlapMs <= 0) continue;
-        const overlapSeconds = activitySecondsWithinInterval(segment, overlapStartMs, overlapEndMs);
+        const overlapSeconds = (sampledTime ? sampledActivitySecondsWithinInterval : activitySecondsWithinInterval)(segment, overlapStartMs, overlapEndMs);
         if (overlapSeconds <= 0) continue;
         let intervalStartMinute = Math.max(bucket.startMinute, Math.round((overlapStartMs - dayStartMs) / 60000));
         let intervalEndMinute = Math.min(bucket.endMinute, Math.round((overlapEndMs - dayStartMs) / 60000));
@@ -556,7 +562,7 @@ export function buildWeekCalendarEvents(
   return eventsByDay;
 }
 
-export function assignWeekCalendarEventLanes(events: WeekCalendarEvent[]): void {
+export function assignWeekCalendarEventLanes(events: WeekCalendarEvent[], durationMinutes: (event: WeekCalendarEvent) => number = event => event.durationMinutes): void {
   let cluster: WeekCalendarEvent[] = [];
   let clusterEnd = -1;
 
@@ -567,14 +573,14 @@ export function assignWeekCalendarEventLanes(events: WeekCalendarEvent[]): void 
       const lane = laneEnds.findIndex((end) => end <= event.topMinutes);
       const assignedLane = lane === -1 ? laneEnds.length : lane;
       event.lane = assignedLane;
-      laneEnds[assignedLane] = event.topMinutes + event.durationMinutes;
+      laneEnds[assignedLane] = event.topMinutes + durationMinutes(event);
     }
     for (const event of cluster) event.laneCount = laneEnds.length;
     cluster = [];
   };
 
   for (const event of events) {
-    const eventEnd = event.topMinutes + event.durationMinutes;
+    const eventEnd = event.topMinutes + durationMinutes(event);
     if (cluster.length > 0 && event.topMinutes >= clusterEnd) flushCluster();
     cluster.push(event);
     clusterEnd = Math.max(clusterEnd, eventEnd);

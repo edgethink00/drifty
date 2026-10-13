@@ -14,6 +14,8 @@ export function buildWeekActivityInspectorEvent(
 ): ActivityInspectorEvent {
   const project = summarizeDashboardActivityProject(event.segmentIds, segmentsById, projectBySegmentId);
   const projectOption = project.projectId ? projectsById.get(project.projectId) ?? null : null;
+  const sourceDurationSeconds = event.segmentIds.reduce((total, id) => total + (segmentsById.get(id)?.durationSeconds ?? 0), 0);
+  const displayedDurationSeconds = event.activeDurationMinutes * 60;
   return {
     ...event,
     surface: "week",
@@ -24,7 +26,8 @@ export function buildWeekActivityInspectorEvent(
       segmentId,
       projectId: projectBySegmentId.get(segmentId) ?? null,
     })),
-    hasMixedProject: project.hasMixedProject,
-    durationSeconds: event.activeDurationMinutes * 60,
+    hasMixedProject: project.hasMixedProject || event.hasMixedProject === true,
+    durationSeconds: displayedDurationSeconds,
+    hasPartialSourceActivity: event.projectId !== undefined && sourceDurationSeconds > displayedDurationSeconds + 1,
   };
 }

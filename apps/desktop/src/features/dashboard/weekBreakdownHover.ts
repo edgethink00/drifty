@@ -3,11 +3,13 @@ import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { buildCompactActivityBreakdown } from "./compactChartBreakdown";
 import type { CompactClassificationBreakdownRow } from "./HoverCards";
 import { splitSegmentIntoDayOverlaps } from "./weekCalendar";
+import { WEEK_NO_PROJECT_KEY } from "./weekProjectView";
 
-type WeekDashboardColorMode = "category" | "productivity";
+type WeekDashboardColorMode = "category" | "productivity" | "project";
 
 type WeekBreakdownHoverInput = {
   readonly segments: readonly ActivitySegment[];
+  readonly projectBySegmentId?: ReadonlyMap<string, string>;
   readonly classificationOptions: ClassificationOptions;
   readonly startDay: string;
   readonly endDay: string;
@@ -25,6 +27,7 @@ type WeekBreakdownHoverInput = {
  */
 export function buildWeekBreakdownHoverRows({
   segments,
+  projectBySegmentId,
   classificationOptions,
   startDay,
   endDay,
@@ -40,12 +43,14 @@ export function buildWeekBreakdownHoverRows({
 
   for (const segment of aggregateDeviceElapsedTime(segments)) {
     const classification = classifyActivity(segment, classificationOptions);
-    const matches = mode === "productivity"
+    const matches = mode === "project"
+      ? keys.includes(projectBySegmentId?.get(segment.id) ?? WEEK_NO_PROJECT_KEY)
+      : mode === "productivity"
       ? keys.includes(classification.productivity)
       : keys.includes(classification.category);
     if (!matches) continue;
 
-    for (const overlap of splitSegmentIntoDayOverlaps(segment, rangeStartDay, rangeEndDay, startOfDayMinutes)) {
+    for (const overlap of splitSegmentIntoDayOverlaps(segment, rangeStartDay, rangeEndDay, startOfDayMinutes, { sampledTime: mode === "project" })) {
       clippedSegments.push(clipDeviceElapsedTimeSegment({
         ...segment,
         startedAt: overlap.startedAt.toISOString(),

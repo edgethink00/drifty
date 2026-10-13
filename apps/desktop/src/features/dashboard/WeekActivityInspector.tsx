@@ -95,6 +95,7 @@ export type ActivityInspectorEvent = {
   readonly hasMixedProductivity: boolean;
   readonly detailLabel?: string | null;
   readonly durationSeconds?: number;
+  readonly hasPartialSourceActivity?: boolean;
   readonly devices?: readonly ActivityDeviceSource[];
 };
 
@@ -932,6 +933,11 @@ function ActivityInspectorBody({
             {t("dashboard.week.inspector.dominantValuesSummary")}
           </p>
         ) : null}
+        {event.hasPartialSourceActivity ? (
+          <p className="week-activity-inspector__mixed-summary">
+            {t("dashboard.week.inspector.sourceActivityScope")}
+          </p>
+        ) : null}
         {rows.map((row) => (
           <DirectAttributeRow
             key={row.field}
@@ -1187,7 +1193,8 @@ export function WeekActivityInspector({
     readonly field: ActivityInspectorAttribute;
     readonly element: HTMLButtonElement;
   } | null>(null);
-  const hasMixedProject = new Set(segmentValues.map((item) => item.projectId ?? "__no_project__")).size > 1;
+  const hasMixedProject = new Set(segmentValues.map((item) => item.projectId ?? "__no_project__")).size > 1
+    || (Boolean(event.hasMixedProject) && savedChange?.field !== "project");
   const showProjectAttribute = shouldShowProjectAttribute(projectOptions, values.projectId, hasMixedProject);
   const layout = useAnchoredCardLayout(
     anchorElement,

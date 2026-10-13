@@ -12,6 +12,8 @@ export interface ProjectSliceProjection {
   readonly segments: ActivitySegment[];
   /** Virtual slice id -> assigned project. Missing means No project. */
   readonly projectBySegmentId: Map<string, string>;
+  /** Virtual slice id -> original record, for source-scoped activity actions. */
+  readonly sourceSegmentIdBySliceId: Map<string, string>;
 }
 
 type NormalizedSegmentAssignment = {
@@ -83,6 +85,7 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
   const coveredIntervalsBySourceId = new Map<string, Array<{ readonly startMs: number; readonly endMs: number }>>();
   const projectedSegments: ActivitySegment[] = [];
   const projectBySegmentId = new Map<string, string>();
+  const sourceSegmentIdBySliceId = new Map<string, string>();
 
   for (const assignment of [...input.windowAssignments]
     .filter((item) => !item.stale)
@@ -121,6 +124,7 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
         coveredIntervalsBySourceId.set(source.id, intervals);
         coveredSecondsBySourceId.set(source.id, (coveredSecondsBySourceId.get(source.id) ?? 0) + slice.durationSeconds);
         projectedSegments.push(slice);
+        sourceSegmentIdBySliceId.set(sliceId, source.id);
         if (projectId) projectBySegmentId.set(sliceId, projectId);
       }
     }
@@ -141,6 +145,7 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
     if (weightedGaps.length === 0) {
       const sliceId = `project-window:${input.scope}:legacy:${source.id}`;
       projectedSegments.push({ ...source, id: sliceId, durationSeconds: remainingSeconds });
+      sourceSegmentIdBySliceId.set(sliceId, source.id);
       if (projectId) projectBySegmentId.set(sliceId, projectId);
       continue;
     }
@@ -153,6 +158,7 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
         endedAt: new Date(gap.endMs).toISOString(),
         durationSeconds: gap.durationSeconds,
       }));
+      sourceSegmentIdBySliceId.set(sliceId, source.id);
       if (projectId) projectBySegmentId.set(sliceId, projectId);
     }
   }
@@ -160,6 +166,7 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
   return {
     segments: projectedSegments,
     projectBySegmentId,
+    sourceSegmentIdBySliceId,
   };
 }
 

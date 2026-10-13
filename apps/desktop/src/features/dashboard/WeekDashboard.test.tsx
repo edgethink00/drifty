@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ActivityCategory, ActivitySegment, CategoryDuration, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, CategoryDuration, ProductivityDuration, ProductivityLabel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
 import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } from "./WeekActivityInspector";
 import { buildWeekCalendarEvents, type WeekCalendarEvent, type WeekDayRow } from "./weekCalendar";
@@ -124,6 +124,8 @@ function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): Week
 }
 
 type WeekDashboardRenderOverrides = {
+  readonly projectAssignments?: readonly ProjectAssignmentRecord[];
+  readonly projectWindowAssignments?: readonly ProjectWindowAssignmentRecord[];
   readonly activityActionsEnabled?: boolean;
   readonly axisScalePercent?: number;
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
@@ -1865,5 +1867,62 @@ describe("WeekDashboard event elevation", () => {
 
   it("drops the gloss hairline the Day surface never had", () => {
     expect(styles).not.toMatch(/\.week-v2-calendar__event\s*\{[^}]*inset 0 1px 0 color-mix\(in srgb, white 16%/);
+  });
+});
+
+describe("WeekDashboard Project mode", () => {
+  const projects = [{ id: "build", name: "Build", color: "#123456" }, { id: "research", name: "Research", color: "#abcdef" }];
+  const assignments: ProjectAssignmentRecord[] = [{ segmentId: "week-focus-code", projectId: "build", source: "manual" }];
+
+  it("switches calendar colors, legend, donut and weekly bars together, retaining No project", () => {
+    const { container } = renderWeekDashboard({ projectOptions: projects, projectAssignments: assignments });
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+    expect(screen.getByRole("button", { name: "Project" }).getAttribute("aria-pressed")).toBe("true");
+    const legend = container.querySelector('.flow-chart-legend--project')!;
+    expect(legend.textContent).toContain("Build");
+    expect(legend.textContent).toContain("No project");
+    const events = container.querySelectorAll<HTMLElement>('.week-v2-calendar__event');
+    expect([...events].map(event => event.style.getPropertyValue('--event-tone'))).toEqual(["#123456", "#9ca3af"]);
+    expect(screen.getByLabelText("Projects compact classification")).toBeTruthy();
+    const bars = container.querySelectorAll<HTMLElement>('.wt-seg');
+    expect([...bars].map(bar => bar.title)).toEqual(["Build · 1h", "No project · 15m"]);
+    fireEvent.focus(bars[0]);
+    expect(document.querySelector(".compact-classification-hover-card")?.textContent).toContain("Visual Studio Code");
+    fireEvent.blur(bars[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+    expect(screen.getByLabelText("Productivity compact classification")).toBeTruthy();
+    expect(container.querySelector('.flow-chart-legend--project')).toBeNull();
+  });
+
+  it("hides unavailable Project and falls back safely when its assignments disappear", () => {
+    const { rerender } = renderWeekDashboard({ projectOptions: projects });
+    expect(screen.queryByRole("button", { name: "Project" })).toBeNull();
+    rerender(weekDashboardElement({ projectOptions: projects, projectAssignments: assignments }));
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+    rerender(weekDashboardElement({ projectOptions: projects }));
+    expect(screen.queryByRole("button", { name: "Project" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Category" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("keeps AI windows distinct while source-record details and edits retain full-record scope", async () => {
+    const raw = { ...weekSegments[0], endedAt: "2024-01-03T09:06:00", durationSeconds: 360 };
+    const onAssignProject = vi.fn().mockResolvedValue(undefined);
+    const windows: ProjectWindowAssignmentRecord[] = [
+      { windowId: "w1", teamProjectId: null, windowStartedAt: "2024-01-03T09:00:00", windowEndedAt: "2024-01-03T09:03:00", durationSeconds: 180, projectId: "build", source: "ai", segmentOverlaps: [{ segmentId: raw.id, durationSeconds: 180 }] },
+      { windowId: "w2", teamProjectId: null, windowStartedAt: "2024-01-03T09:03:00", windowEndedAt: "2024-01-03T09:06:00", durationSeconds: 180, projectId: "research", source: "ai", segmentOverlaps: [{ segmentId: raw.id, durationSeconds: 180 }] },
+    ];
+    const { container } = renderWeekDashboard({ projectOptions: projects, projectWindowAssignments: windows, projectBySegmentId: new Map([[raw.id, "build"]]), segments: [raw], activityActionsEnabled: true, onAssignProject });
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+    const events = container.querySelectorAll<HTMLElement>('.week-v2-calendar__event');
+    expect(events).toHaveLength(2);
+    fireEvent.click(events[1].querySelector('.week-v2-calendar__event-open')!);
+    const inspector = screen.getByRole("dialog");
+    expect(within(inspector).getByRole("button", { name: /Current value: Build · dominant/ })).toBeTruthy();
+    expect(within(inspector).getByText("Edits and deletion apply to the full activity.")).toBeTruthy();
+    fireEvent.click(within(inspector).getByRole("button", { name: /Change Project/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Research" }));
+    await waitFor(() => expect(onAssignProject).toHaveBeenCalledWith([raw], "research"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo Project change" }));
+    await waitFor(() => expect(onAssignProject).toHaveBeenNthCalledWith(2, [raw], "build"));
   });
 });

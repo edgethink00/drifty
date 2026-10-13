@@ -10774,6 +10774,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             projectLegend={flowProjectLegend}
             activityInspectorProjectOptions={activityInspectorProjectOptions}
             activityInspectorProjectBySegmentId={dashboardInspectorProjectBySegmentId}
+            weekProjectAssignments={dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey ? dashboardProjectAssignmentLoad.assignments : undefined}
+            weekProjectWindowAssignments={dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey ? dashboardProjectAssignmentLoad.windowAssignments : undefined}
             flowProjectRingEntries={dashboardProjectRing.entries}
             flowProjectCenterPercent={dashboardProjectRing.centerPercent}
             focusDriftSection={focusDriftSection}

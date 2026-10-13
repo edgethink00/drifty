@@ -2,7 +2,7 @@ import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { classifiedDashboardSegmentIds } from "./hasClassifiedDashboardResult";
 import { useMemo, useState, type ReactNode } from "react";
 import { ModalPresence } from "../../components/ModalPresence";
-import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, ProductivityDuration, ProductivityLabel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
@@ -71,6 +71,8 @@ type DashboardPageProps = {
   readonly flowBlocks: FlowBlock[];
   /** Stable 5-minute blocks for summaries whose meaning must not change with the chart display preference. */
   readonly summaryFlowBlocks: FlowBlock[];
+  readonly weekProjectAssignments?: readonly ProjectAssignmentRecord[];
+  readonly weekProjectWindowAssignments?: readonly ProjectWindowAssignmentRecord[];
   readonly projectModeAvailable?: boolean;
   readonly projectLegend?: readonly ProjectLegendEntry[];
   readonly activityInspectorProjectOptions?: readonly ActivityInspectorProjectOption[];
@@ -150,6 +152,8 @@ export function DashboardPage({
   projectLegend,
   activityInspectorProjectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
   activityInspectorProjectBySegmentId = EMPTY_PROJECT_BY_SEGMENT_ID,
+  weekProjectAssignments,
+  weekProjectWindowAssignments,
   deviceLabelById,
   deviceTimelineFilter = "all",
   onDeviceTimelineFilterChange,
@@ -358,6 +362,10 @@ export function DashboardPage({
 
       {dashPeriod === "Week" ? (
         <WeekDashboard
+          colorMode={flowColorMode}
+          onColorModeChange={setFlowColorMode}
+          projectAssignments={weekProjectAssignments}
+          projectWindowAssignments={weekProjectWindowAssignments}
           funnelResultRef={resultRef}
           classifiedResultIds={classifiedResultIds}
           header={headInsideBlock ? pageHead : null}
