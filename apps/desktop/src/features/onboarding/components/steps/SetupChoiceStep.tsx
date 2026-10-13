@@ -4,6 +4,7 @@ import { TRIAL_DAYS } from "./shared";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
 import { isLocalModelUnsupported } from "../../localModelSetupAnalytics";
+import { CUSTOM_ENDPOINT_LINK_PATHS } from "../../../settings/customEndpointLinkMark";
 import { memoryTagFromGap, smallestModelMemoryGap } from "../../../settings/managedModelFitCopy";
 
 type SetupCardProps = {
@@ -183,8 +184,10 @@ function KeyIcon() {
 
 function CustomEndpointIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5.4 8.2h7.9a3.8 3.8 0 1 1 0 7.6H9.6M9.6 12h9M9.6 15.8a3.8 3.8 0 1 1 0-7.6h3.7" />
+    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      {CUSTOM_ENDPOINT_LINK_PATHS.map((d) => (
+        <path key={d} d={d} />
+      ))}
     </svg>
   );
 }
