@@ -71,6 +71,7 @@ def browser_script(app_name: str) -> str | None:
         "Aside",
         "Brave Browser",
         "Chromium",
+        "Comet",
         "Opera",
         "Vivaldi",
         "Whale",
@@ -181,6 +182,15 @@ def _tab_matching_script(
     fallback_title: str,
 ) -> str:
     aside_synthetic_window_recovery = ""
+    focused_title = "if exists front window then set axTitle to name of front window"
+    if app_name == "Comet":
+        # Comet lists the translation bubble as its front AXUnknown window.
+        # The focused standard window still points to the actual tab, and is
+        # the same window the native content helper validates before/after.
+        focused_title = '''
+              set focusedWindow to value of attribute "AXFocusedWindow"
+              if subrole of focusedWindow is "AXStandardWindow" then set axTitle to name of focusedWindow
+        '''
     if app_name == "Aside":
         aside_synthetic_window_recovery = '''
               -- Aside keeps an empty AXUnknown shadow window ahead of its real
@@ -215,7 +225,7 @@ def _tab_matching_script(
             set frontProc to first application process whose frontmost is true
             if name of frontProc is not equal to "{app_name}" then return "STALE"
             tell frontProc
-              if exists front window then set axTitle to name of front window
+              {focused_title}
 {aside_synthetic_window_recovery}
             end tell
           end try

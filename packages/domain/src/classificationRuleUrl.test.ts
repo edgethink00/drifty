@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMatchingClassificationRule, type ActivitySegment } from "./index";
+import { findMatchingClassificationRule, isBrowserActivity, type ActivitySegment } from "./index";
 import { canonicalizeClassificationRuleSiteUrl, siteTargetFromCanonicalUrl } from "./classificationRuleUrl";
 
 describe("canonicalizeClassificationRuleSiteUrl", () => {
@@ -41,4 +41,9 @@ it("keeps IPv6 identities distinct for exact and surface rules", () => {
   expect(findMatchingClassificationRule({ ...segment, siteDomain: "[2001:db8::2]" }, [rule])).toBeNull();
   expect(findMatchingClassificationRule(segment, [{ ...rule, targetValue: "2001:db8::1" }])).not.toBeNull();
   expect(findMatchingClassificationRule(segment, [{ ...rule, matchScope: "detail", detailKind: "siteUrl", detailValue: segment.siteUrl }])).not.toBeNull();
+});
+
+it("recognizes Comet as a browser before URL capture is available", () => {
+  expect(isBrowserActivity({ appName: "Comet", bundleId: null, siteDomain: null, browserName: null })).toBe(true);
+  expect(isBrowserActivity({ appName: "comet.exe", bundleId: "ai.perplexity.comet", siteDomain: null, browserName: null })).toBe(true);
 });

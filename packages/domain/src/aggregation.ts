@@ -2004,7 +2004,7 @@ interface ClassificationRegistryEntry {
   domains?: string[];
 }
 
-const KNOWN_BROWSER_APP_NAMES = ["safari", "google chrome", "arc", "brave browser", "chromium", "microsoft edge", "firefox"];
+const KNOWN_BROWSER_APP_NAMES = ["safari", "google chrome", "arc", "brave browser", "chromium", "microsoft edge", "firefox", "comet"];
 const KNOWN_BROWSER_BUNDLE_IDS = [
   "com.apple.safari",
   "com.google.chrome",
@@ -2013,6 +2013,7 @@ const KNOWN_BROWSER_BUNDLE_IDS = [
   "org.chromium.chromium",
   "com.microsoft.edgemac",
   "org.mozilla.firefox",
+  "ai.perplexity.comet",
 ];
 
 const APP_CLASSIFICATIONS: ClassificationRegistryEntry[] = [

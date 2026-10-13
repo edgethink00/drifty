@@ -51,6 +51,7 @@ class BrowserContentTests(unittest.TestCase):
         gecko = re.findall(r'"([^"]+)"', next(line for line in sample.splitlines() if "let geckoBundles = [" in line))
         allowed = re.findall(r'"([^"]+)"', next(line for line in sample.splitlines() if "let allowed = [" in line))
         self.assertEqual(set(allowed) | set(gecko), set(BROWSER_BUNDLES))
+        self.assertIn("ai.perplexity.comet", BROWSER_BUNDLES)
         # Arc's scripting window class is WiND and it has no bounds property.
         self.assertIn("company.thebrowser.Browser", BROWSER_BUNDLES)
         self.assertIn('specifier(arc ? "WiND" : "cwin"', sample)

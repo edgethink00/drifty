@@ -40,6 +40,23 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_comet_uses_focused_chromium_tab_and_address_bar_fallback(self) -> None:
+        self.assertTrue(is_chromium_browser_app("Comet"))
+        self.assertTrue(is_accessibility_address_bar_browser_app("Comet"))
+        with patch("app.tracker.macos_workspace._run_osascript", return_value="https://example.com/course\nCourse\nmatched\nCourse - Comet") as run:
+            result = _browser_metadata("Comet")
+        self.assertEqual(result.site_url, "https://example.com/course")
+        self.assertEqual(result.site_title, "Course")
+        self.assertEqual(result.browser_name, "Comet")
+        self.assertIn('tell application "Comet"', run.call_args.args[0])
+        self.assertIn('value of attribute "AXFocusedWindow"', run.call_args.args[0])
+        self.assertIn('subrole of focusedWindow is "AXStandardWindow"', run.call_args.args[0])
+        self.assertNotIn('value of attribute "AXFocusedWindow"', _browser_script("Google Chrome"))
+        with patch("app.tracker.macos_workspace._run_osascript", side_effect=[RuntimeError("timed out (-1712)"), "example.com/course\nCourse - Comet"]) as run:
+            result = _browser_metadata("Comet")
+        self.assertEqual(result.site_url, "https://example.com/course")
+        self.assertIn('process "Comet"', run.call_args.args[0])
+
     def test_accessibility_address_bar_script_uses_bounded_ui_element_scan(self) -> None:
         script = accessibility_address_bar_script("Google Chrome")
 
