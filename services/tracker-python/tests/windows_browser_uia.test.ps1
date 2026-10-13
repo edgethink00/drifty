@@ -108,7 +108,8 @@ try {
     'Select-VivaldiPage',
     'Read-VivaldiPage',
     'Get-VivaldiWindowPrivacy',
-    'Test-WhalePrivateWindow',
+    'Test-ProfileButtonIncognito',
+    'Test-ChromiumClueIncognito',
     'Read-TopLevelDocument'
   )
   foreach ($functionName in $requiredFunctions) {
@@ -370,11 +371,11 @@ try {
     {
       param($node)
       $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
-        $node.Left.Extent.Text -eq '$whaleIncognitoLabels'
+        $node.Left.Extent.Text -eq '$profileIncognitoLabels'
     },
     $true
   ) | Select-Object -First 1
-  if ($null -eq $labelAssignment) { throw 'Whale incognito labels missing' }
+  if ($null -eq $labelAssignment) { throw 'profile incognito labels missing' }
   Invoke-Expression $labelAssignment.Extent.Text
   $avatarButtonCondition = 'synthetic avatar button condition'
   $koreanIncognito = -join ([char[]](0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC, 0xB97C, 0x20, 0xC0AC, 0xC6A9, 0x20, 0xC911, 0xC785, 0xB2C8, 0xB2E4, 0x2E))
@@ -398,7 +399,21 @@ try {
   Assert-Equal 'whale-english-incognito-flagged' $wEnglish.privacy 'private'
   Assert-Equal 'whale-english-incognito-has-no-url' $wEnglish.url ''
   Assert-Equal 'chromium-ignores-whale-profile-button' (Read-TopLevelDocument $wRoot $walker $documentCondition $null 'chromium').url 'https://doc.rust-lang.org/book/'
+  # Chrome 155 (measured): the profile button reads "secret mode" in Hangul or
+  # "Incognito"; normal windows show the profile name. Only clues are refused.
+  $wAvatar.Current.Name = -join ([char[]](0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC))
+  Assert-Equal 'chrome-korean-incognito-clues-refused' (Test-ChromiumClueIncognito 'chromium' $wRoot) $true
+  Assert-Equal 'chrome-korean-incognito-keeps-its-url' (Read-TopLevelDocument $wRoot $walker $documentCondition $null 'chromium').url 'https://doc.rust-lang.org/book/'
+  $wAvatar.Current.Name = 'Incognito'
+  Assert-Equal 'chrome-english-incognito-clues-refused' (Test-ChromiumClueIncognito 'chromium' $wRoot) $true
+  $wAvatar.Current.Name = 'You'
+  Assert-Equal 'chrome-english-normal-clues-allowed' (Test-ChromiumClueIncognito 'chromium' $wRoot) $false
+  $wAvatar.Current.Name = ([string][char]0xB098)
+  Assert-Equal 'chrome-korean-normal-clues-allowed' (Test-ChromiumClueIncognito 'chromium' $wRoot) $false
+  $wAvatar.Current.Name = 'Incognito'
+  Assert-Equal 'gecko-clues-ignore-the-profile-button' (Test-ChromiumClueIncognito 'gecko' $wRoot) $false
   $wRoot.PrivateMarker = $null
+  Assert-Equal 'chrome-without-profile-button-clues-allowed' (Test-ChromiumClueIncognito 'chromium' $wRoot) $false
 } catch {
   Add-Case 'suite-execution' $false $_.Exception.Message
 }

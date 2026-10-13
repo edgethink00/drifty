@@ -120,15 +120,16 @@ $toolBarCondition = New-Object System.Windows.Automation.PropertyCondition(
   $auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::ToolBar)
 # One tree walk finds both the toolbars and the indicator.
 $vivaldiChromeCondition = New-Object System.Windows.Automation.OrCondition($toolBarCondition, $vivaldiPrivateCondition)
-# Whale 5.39 gives a private window the same title as a normal one. Only its
-# profile button differs, and that name is localized. Measured: the Korean UI
-# says "secret mode is in use" (the first label spells "secret mode" in Hangul)
-# and the English UI says "You're Incognito"; a normal window shows the profile
-# name. The button precedes the page in the tree. Other UI languages stay
-# undetected, as Chrome incognito already is on Windows.
+# Whale 5.39 and Chrome 155 give a private window the same title as a normal
+# one. Only the profile button differs, and its name is localized. Measured:
+# the Korean UI names it "secret mode" (Whale adds "is in use"; the first label
+# spells "secret mode" in Hangul) and the English UI "Incognito" (Whale: "You're
+# Incognito"); a normal window shows the profile name. The button precedes the
+# page in the tree. Other UI languages stay undetected. Edge has no such button
+# (its title carries [InPrivate]); Brave and Opera showed none either.
 $avatarButtonCondition = New-Object System.Windows.Automation.PropertyCondition(
   $auto::ClassNameProperty, 'AvatarToolbarButton')
-$whaleIncognitoLabels = @(
+$profileIncognitoLabels = @(
   (-join ([char[]](0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC))),
   'Incognito')
 
@@ -299,11 +300,11 @@ function Get-VivaldiWindowPrivacy($root) {
   return 'normal'
 }
 
-function Test-WhalePrivateWindow($root) {
+function Test-ProfileButtonIncognito($root) {
   $button = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $avatarButtonCondition)
   if ($null -eq $button) { return $false }
   $name = [string]$button.Current.Name
-  foreach ($label in $whaleIncognitoLabels) {
+  foreach ($label in $profileIncognitoLabels) {
     if ($name.IndexOf($label, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
   }
   return $false
@@ -334,7 +335,7 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
       if ($vivaldiPrivacy -ne 'normal') { throw 'document URL unavailable' }
       return [pscustomobject]@{ found = $true; url = $vivaldiUrl; error = ''; privacy = $privacy }
     }
-    if ($family -eq 'whale' -and (Test-WhalePrivateWindow $root)) {
+    if ($family -eq 'whale' -and (Test-ProfileButtonIncognito $root)) {
       return [pscustomobject]@{ found = $false; url = ''; error = 'private browsing window'; privacy = 'private' }
     }
     $requiredAncestorId = ''
@@ -459,6 +460,12 @@ function Initialize-ClueReader {
   return ($script:clueReaderState -eq 'loaded')
 }
 
+# Chrome incognito keeps its URL and title, as on macOS and like Edge InPrivate,
+# but its page text is never read when the profile button names it.
+function Test-ChromiumClueIncognito([string]$family, $root) {
+  return ($family -eq 'chromium' -and (Test-ProfileButtonIncognito $root))
+}
+
 function Read-Clues([IntPtr]$handle, [int]$budgetMs) {
   # Only the Document the immediately preceding READ validated for this exact
   # foreground window is inspected, once. Page text leaves only as capped clues.
@@ -467,6 +474,9 @@ function Read-Clues([IntPtr]$handle, [int]$budgetMs) {
   try {
     if ($null -eq $last -or $last.Handle -ne $handle -or [DriftyTrackerUiaNative]::GetForegroundWindow() -ne $handle) {
       return [pscustomobject]@{ found = $false; error = 'document unavailable' }
+    }
+    if (Test-ChromiumClueIncognito ([string]$last.Family) ($auto::FromHandle($handle))) {
+      return [pscustomobject]@{ found = $false; error = 'private browsing window' }
     }
     if (-not (Initialize-ClueReader)) { return [pscustomobject]@{ found = $false; error = 'clue reader unavailable' } }
     $title = [string]$last.Document.Current.Name

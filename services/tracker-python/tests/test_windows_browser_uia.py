@@ -95,7 +95,7 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         self.assertIn("$vivaldiInterfaceUrl = 'chrome-extension://mpognobbkildjkofajifpdfhcoklimli/window.html'", script)
         self.assertIn("$auto::ClassNameProperty, 'UrlBar-PrivateWindowIndicator')", script)
 
-    def test_whale_requests_its_private_window_check(self) -> None:
+    def test_whale_and_chrome_use_the_profile_button_private_check(self) -> None:
         self.assertEqual(windows_browser_uia._uia_family("Whale"), "whale")
         self.assertEqual(windows_browser_uia._uia_family("Google Chrome"), "chromium")
         script = windows_browser_uia._POWERSHELL_UIA_HOST
@@ -104,6 +104,10 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         self.assertTrue(script.isascii())
         self.assertIn("0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC", script)
         self.assertEqual("".join(map(chr, (0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC))), "시크릿 모드")
+        # Chrome incognito refuses only the page clues; the READ stays unchanged.
+        clues = script.split("function Read-Clues", 1)[1].split("\nfunction ", 1)[0]
+        self.assertIn("Test-ChromiumClueIncognito ([string]$last.Family)", clues)
+        self.assertIn("error = 'private browsing window'", clues)
 
     def test_private_window_reply_carries_no_page(self) -> None:
         result = parse_uia_response(
