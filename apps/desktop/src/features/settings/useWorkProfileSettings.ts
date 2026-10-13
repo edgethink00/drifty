@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   readUserWorkProfileSettings,
   saveUserWorkProfileSettings,
+  summarizeWorkProfileSettings,
   type WorkProfileSettings,
 } from "../onboarding/onboardingState";
 import { synchronizeLivingSoulDeclaredContextForUser } from "../classification/livingSoul";
@@ -52,7 +53,12 @@ export function useWorkProfileSettings(workProfileUserId: string) {
     setWorkProfileSaving(true);
     const savedState = saveUserWorkProfileSettings(targetUserId, workProfileDraft);
     if (!savedState) {
-      setWorkProfileMessage(t("settings.ai.workProfileSaveHint"));
+      // A filled draft is refused only when no completed onboarding record
+      // exists (a settings save must not mint one), so name that cause rather
+      // than asking for activities the user already chose.
+      setWorkProfileMessage(t(summarizeWorkProfileSettings(workProfileDraft)
+        ? "settings.ai.workProfileNeedsSetup"
+        : "settings.ai.workProfileSaveHint"));
       savingRef.current = false;
       setWorkProfileSaving(false);
       return false;

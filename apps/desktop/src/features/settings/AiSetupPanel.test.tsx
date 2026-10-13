@@ -282,6 +282,20 @@ describe("AiSetupPanel", () => {
     expect(JSON.parse(window.localStorage.getItem(getUserOnboardingStorageKey("local")) ?? "{}")).toMatchObject({ jobType: "Coding" });
   });
 
+  it("names the missing initial setup instead of asking for activities the user already chose", () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    const memoryOverview = screen.getByLabelText(/Drifty Memory overview/i);
+    fireEvent.click(within(memoryOverview).getByRole("button", { name: /^Add work$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Designing" }));
+    fireEvent.click(within(memoryOverview).getByRole("button", { name: /^Save$/ }));
+
+    // Without a completed onboarding record the save is refused on purpose.
+    expect(within(memoryOverview).getByText("Finish the initial setup to save your work profile.")).toBeTruthy();
+    expect(within(memoryOverview).queryByText(/Choose a work activity/i)).toBeNull();
+    expect(window.localStorage.getItem(getUserOnboardingStorageKey("local"))).toBeNull();
+  });
+
   it("shows the current Living Soul revision and learned pattern summaries", async () => {
     window.localStorage.setItem(await soulStorageKeyForUser("local"), [
       "---",
