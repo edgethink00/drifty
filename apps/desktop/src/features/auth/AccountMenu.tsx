@@ -10,11 +10,13 @@ import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
 import { BUILD_INFO } from "../../buildInfo";
 import "./AccountMenuTracker.css";
 
+const MENU_ICON_STROKE_WIDTH = 1.6;
+
 const menuIconProps: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
   fill: "none",
   stroke: "currentColor",
-  strokeWidth: 1.6,
+  strokeWidth: MENU_ICON_STROKE_WIDTH,
   strokeLinecap: "round",
   strokeLinejoin: "round",
   "aria-hidden": true,
@@ -511,7 +513,7 @@ export function AccountMenu({
         <span>{t("common.settings")}</span>
       </button>
       <button type="button" className="account-menu-item" onClick={onAiSetting} role="menuitem">
-        <span className="account-menu-icon"><AiMarkIcon /></span>
+        <span className="account-menu-icon"><AiMarkIcon strokeWidth={MENU_ICON_STROKE_WIDTH} /></span>
         <span>{t("account.aiSettings")}</span>
       </button>
       <div className="account-menu-separator" role="separator" />
