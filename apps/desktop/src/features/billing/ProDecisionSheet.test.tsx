@@ -44,6 +44,7 @@ describe("ProDecisionSheet", () => {
     const value = within(dialog).getByRole("list", { name: "Included with Pro" });
     expect(within(value).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "Cloud AI classification · Claude 5.5", "Project analysis · GPT-6", "Activity sync across 3 computers", "No downloads or API keys",
+      "4 pet coats",
     ]);
     expect(within(dialog).getByText("Cancel anytime.")).toBeTruthy();
     expect(within(dialog).queryByRole("button", { name: /local ai/i })).toBeNull();
@@ -157,6 +158,41 @@ describe("ProDecisionSheet", () => {
   it("renders nothing when closed", () => {
     renderSheet({ open: false });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+
+describe("ProDecisionSheet opened from a locked Pro look", () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => cleanup());
+
+  it("names the look beside its picture, keeps the plans, and lists the cat icons on macOS", () => {
+    render(<ProDecisionSheet
+      open context="trial-ended" funnelEnabled trialEndsAt="2026-10-08T06:30:00.000Z" unclassifiedSeconds={7800}
+      billingCheckoutLoadingInterval={null} onSelectBillingPlan={vi.fn()} onDismiss={vi.fn()}
+      look={{ kind: "icon", id: "peek" }} looksIncludeAppIcons
+    />);
+    const dialog = screen.getByRole("dialog", { name: "‘Peek’ is a Pro icon" });
+    expect(within(dialog).getByText("Start Pro and it goes straight into your Dock. Cloud AI classification comes with it.")).toBeTruthy();
+    expect(within(dialog).queryByText(/left unclassified/)).toBeNull();
+    expect(dialog.querySelector(".pro-look-thumb img")).toBeTruthy();
+    expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
+    const value = within(dialog).getByRole("list", { name: "Included with Pro" });
+    const lines = within(value).getAllByRole("listitem");
+    expect(lines[lines.length - 1].textContent).toBe("4 pet coats and the cat app icons");
+  });
+
+  it("shows a coat on the desktop cat it would dress", () => {
+    render(<ProDecisionSheet
+      open context="upgrade" funnelEnabled trialEndsAt={null} unclassifiedSeconds={null}
+      billingCheckoutLoadingInterval={null} onSelectBillingPlan={vi.fn()} onDismiss={vi.fn()}
+      look={{ kind: "coat", id: "sage" }}
+    />);
+    const dialog = screen.getByRole("dialog", { name: "‘Sage’ is a Pro coat" });
+    expect(within(dialog).getByText("Start Pro and your desktop cat wears it right away. Cloud AI classification comes with it.")).toBeTruthy();
+    expect(dialog.querySelector(".pro-look-thumb--coat")).toBeTruthy();
   });
 });
 

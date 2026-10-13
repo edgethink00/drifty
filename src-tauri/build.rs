@@ -43,6 +43,9 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "accessibility_get_status",
             "accessibility_request_access",
+            "app_icon_get",
+            "app_icon_preview",
+            "app_icon_set",
             "app_menu_set_dev_mode_checked",
             "quit_confirmation_set_language",
             "app_restart_after_update",

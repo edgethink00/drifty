@@ -71,6 +71,8 @@ import { readDayNotePreview } from "./features/day-note/dayNoteGate";
 import { resolveTrackerCtaSlot } from "./features/sidebar/trackerCtaSlot";
 import { resolveSidebarLiveActivityLabels } from "./features/sidebar/sidebarLiveActivity";
 import { ProDecisionSheet, type ProSheetContext } from "./features/billing/ProDecisionSheet";
+import { resolveProLooksAccess, type ProLook } from "./features/pro-looks/proLooks";
+import { ProLooksProvider, useProLooksController } from "./features/pro-looks/useProLooksController";
 import { ProStartedNotice } from "./features/billing/ProStartedNotice";
 import { TrialEndNotice } from "./features/billing/TrialEndNotice";
 import { getTrialEndFollowUpKey, useTrialEndFollowUp } from "./features/billing/trialEndFollowUp";
@@ -1856,6 +1858,39 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     setProStartedNoticeVisible(true);
   }, [acknowledgeProPurchase, classificationOnCloudRoute, proPurchaseConfirmed, setLocalAiSetup]);
+  // Pro looks: cat Dock icons and four pet coats need a trial, Pro or a seat.
+  // Locks follow the real account (not Dev previews), so a preview can never
+  // put someone's look away.
+  const [upgradeSheetLook, setUpgradeSheetLook] = useState<ProLook | null>(null);
+  const proLooksAccess = useMemo(() => resolveProLooksAccess({
+    accountsConfigured: isSupabaseConfigured,
+    authStatus,
+    signedIn: Boolean(user) && hasRequiredAccountAuth,
+    entitlement: billingEntitlement,
+    entitlementLoading: billingEntitlementLoading,
+    entitlementError: billingEntitlementError,
+  }), [authStatus, billingEntitlement, billingEntitlementError, billingEntitlementLoading, hasRequiredAccountAuth, isSupabaseConfigured, user]);
+  const proLooks = useProLooksController({
+    access: proLooksAccess,
+    appIconsSupported: hostPlatform === "macos",
+    coat: petModeCoat,
+    setCoat: setPetModeCoat,
+    flowOpen: authModalOpen || upgradePlanModalOpen || cloudTrialStarting
+      || billingCheckoutAwaitingConfirmation || billingCheckoutLoadingInterval !== null,
+    requestSignIn: requestCloudBillingAuth,
+    startTrial: activateCloudTrial,
+    openProSheet: (look) => {
+      setUpgradeSheetLook(look);
+      setUpgradePlanModalOpen(true);
+    },
+    openAccountSettings: () => {
+      setSettingsSection("account");
+      navigateToTab("settings");
+    },
+  });
+  useEffect(() => {
+    if (!upgradePlanModalOpen) setUpgradeSheetLook(null);
+  }, [upgradePlanModalOpen]);
   useEffect(() => {
     function handlePromoBillingSuccess(event: Event) {
       const source = event instanceof CustomEvent
@@ -10612,7 +10647,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       <LocalizationProvider controller={localization}>
     <SettingsSearchProvider
       activeSection={activeTab === "settings" ? settingsSection : null}
-      availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows",
+      availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows", macos: hostPlatform === "macos",
         backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired,
         promoCode: canOfferPromoCode(effectiveBillingEntitlement), friendInvite: Boolean(friendInvite) }}
       onNavigate={(entry) => {
@@ -10698,7 +10733,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         />
       ) : null}
       {proStartedNoticeVisible && !onboardingOpen && !isDashboardDemoReplayActive ? (
-        <ProStartedNotice onDismiss={() => setProStartedNoticeVisible(false)} />
+        <ProStartedNotice
+          look={proLooks.unlockedLook}
+          onDismiss={() => {
+            setProStartedNoticeVisible(false);
+            proLooks.forgetUnlockedLook();
+          }}
+        />
       ) : null}
       {trialEndNoticeVisible ? (
         <TrialEndNotice
@@ -11262,6 +11303,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {activeTab === "settings" ? (
           <div className="page">
             <h1 className="sr-only">{localization.t("common.settings")}</h1>
+            <ProLooksProvider value={proLooks}>
             <SettingsSearchDestination>
                 {settingsSection === "classification" && (
                   <ClassificationRulesManager
@@ -11625,6 +11667,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                   />
                 )}
             </SettingsSearchDestination>
+            </ProLooksProvider>
           </div>
         ) : null}
         </Suspense>
@@ -11692,6 +11735,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       <ProDecisionSheet
         open={shouldRenderUpgradePlanModal}
         context={upgradeSheetContext}
+        look={upgradeSheetLook}
+        looksIncludeAppIcons={hostPlatform === "macos"}
         funnelEnabled={funnelEnabled}
         offerSurface={trialEndSheetAuto ? "trial_end_sheet" : "upgrade_modal"}
         trialEndsAt={upgradeSheetEntitlement?.trialEndsAt ?? null}

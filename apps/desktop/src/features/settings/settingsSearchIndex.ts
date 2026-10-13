@@ -5,6 +5,7 @@ export type SettingsSearchAvailability = {
   readonly dev: boolean;
   readonly intelligence: boolean;
   readonly windows: boolean;
+  readonly macos?: boolean;
   readonly backgroundUpdates: boolean;
   readonly signedIn: boolean;
   readonly authenticated?: boolean;

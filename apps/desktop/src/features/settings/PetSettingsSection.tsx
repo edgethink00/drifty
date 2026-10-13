@@ -5,6 +5,7 @@ import { type PetModeCoat, type PetModeSize } from "../pet-mode/petModeData";
 import { usePetQuickControlsPreference } from "../pet-mode/petQuickControlsPreference";
 import { usePetOutingPreference } from "../pet-mode/petOutingPreference";
 import { usePetPresenceMode } from "../pet-mode/petPresenceMode";
+import { useProLooks } from "../pro-looks/useProLooksController";
 import { PetSettings } from "./PetCoatPicker";
 import "./PetSettingsSection.css";
 import { PetSettingsPreview } from "./PetSettingsPreview";
@@ -35,12 +36,15 @@ export function PetSettingsSection({
   const [allowOutings, setAllowOutings] = usePetOutingPreference();
   const [presenceMode] = usePetPresenceMode();
   const outingsUnused = enabled && presenceMode === "drift_only";
+  // A locked coat being tried on dresses the preview too, not only the desktop pet.
+  const looks = useProLooks();
+  const shownCoat = looks?.preview?.kind === "coat" ? looks.preview.id : coat;
 
   return (
     <div className="settings-section settings-section--pet">
       <div className="settings-block">
         <h3 className="settings-block__title-with-badge">{t("settings.pet.title")}{showNewBadge ? <FeatureNewBadge /> : null}</h3>
-        <PetSettingsPreview enabled={enabled} coat={coat} size={size} />
+        <PetSettingsPreview enabled={enabled} coat={shownCoat} size={size} />
         <PetSettings enabled={enabled} coat={coat} size={size}
           onEnabledChange={onEnabledChange} onCoatChange={onCoatChange} onSizeChange={onSizeChange} />
       </div>

@@ -1,18 +1,24 @@
 import { useFloatingNotice } from "../../components/useFloatingNotice";
 import { FloatingNoticePortal } from "../../components/FloatingNoticePortal";
 import { useLocalization } from "../localization/LocalizationContext";
+import { localizedProLookLabel } from "../pro-looks/proLookCatalog";
+import type { ProLook } from "../pro-looks/proLooks";
 import "./CloudTrialStartedNotice.css";
 
 type ProStartedNoticeProps = {
   readonly onDismiss: () => void;
+  /** A Pro look the purchase was made for; the detail then says it was applied. */
+  readonly look?: ProLook | null;
 };
 
 /**
  * Confirms a Pro purchase made from the app, in the trial-start notice's place
  * and form: top-right lane, five seconds, paused on hover or focus. One line for
  * everyone; a Local AI user was told before paying that the route would switch.
+ * A purchase started from a locked Pro look names that look instead, since it
+ * is already in the Dock or on the desktop pet by the time this shows.
  */
-export function ProStartedNotice({ onDismiss }: ProStartedNoticeProps) {
+export function ProStartedNotice({ onDismiss, look = null }: ProStartedNoticeProps) {
   const { t } = useLocalization();
   const { rootRef, hasEntered, isLeaving, isTimerPaused, requestLeave, handlers } = useFloatingNotice(onDismiss);
   const className = [
@@ -31,7 +37,11 @@ export function ProStartedNotice({ onDismiss }: ProStartedNoticeProps) {
     >
       <span className="cloud-trial-started-notice__copy">
         <strong>{t("billing.proStarted.title")}</strong>
-        <span className="cloud-trial-started-notice__detail">{t("billing.proStarted.detail")}</span>
+        <span className="cloud-trial-started-notice__detail">
+          {look
+            ? t(look.kind === "icon" ? "billing.proStarted.lookIconDetail" : "billing.proStarted.lookCoatDetail", { name: localizedProLookLabel(look, t) })
+            : t("billing.proStarted.detail")}
+        </span>
       </span>
       <button
         type="button"

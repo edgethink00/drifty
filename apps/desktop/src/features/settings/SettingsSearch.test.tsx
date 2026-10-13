@@ -48,6 +48,14 @@ describe("settings search", () => {
     expect(searchSettings("blur", publicAvailability).some((entry) => entry.id === "settings.appearance.windowsBlur")).toBe(false);
   });
 
+  it("finds the app icon picker in Mac Appearance only", () => {
+    const mac = { ...publicAvailability, macos: true };
+    for (const query of ["앱 아이콘", "로고", "Dock icon"]) {
+      expect(searchSettings(query, mac).find((entry) => entry.id === "settings.appearance.appIcon")?.section).toBe("appearance");
+    }
+    expect(searchSettings("앱 아이콘", { ...publicAvailability, windows: true }).some((entry) => entry.id === "settings.appearance.appIcon")).toBe(false);
+  });
+
   it("finds hover controls in public Pet settings with Dev mode off", () => {
     for (const query of ["촬영", "호버", "recording", "hover controls"]) {
       const result = searchSettings(query, publicAvailability).find((entry) => entry.id === "settings.pet.showHoverControls");

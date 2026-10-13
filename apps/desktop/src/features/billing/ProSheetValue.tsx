@@ -2,7 +2,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 
 type Benefit = {
-  readonly id: "cloud" | "projects" | "sync" | "setup";
+  readonly id: "cloud" | "projects" | "sync" | "setup" | "looks";
   readonly label: TranslationKey;
   /** The Cloud model behind the benefit, by generation. */
   readonly model?: string;
@@ -34,13 +34,17 @@ function Tick() {
  * then a thin tick and one short line per benefit, the model in bold. No icon
  * tiles and no row dividers. Every line maps to a shipped Pro entitlement.
  */
-export function ProSheetValue() {
+export function ProSheetValue({ looksLineKey = "billing.proSheet.plus.coats" }: {
+  /** The Pro looks line: coats everywhere, plus the cat Dock icons on macOS. */
+  readonly looksLineKey?: TranslationKey;
+}) {
   const { t } = useLocalization();
+  const benefits: readonly Benefit[] = [...BENEFITS, { id: "looks", label: looksLineKey }];
   return (
     <div className="pro-sheet-value">
       <p className="pro-sheet-value__lead">{t("billing.proSheet.lead")}</p>
       <ul aria-label={t("billing.proSheet.benefitsAria")}>
-        {BENEFITS.map((benefit) => (
+        {benefits.map((benefit) => (
           <li key={benefit.id}>
             <Tick />
             <span>

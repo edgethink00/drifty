@@ -31,8 +31,8 @@ describe("pet mode coat selection", () => {
     expect(isPetModeCoat("tabby")).toBe(false);
   });
 
-  it("offers the six shipped coats with ivory first", () => {
-    expect([...PET_MODE_COATS]).toEqual(["ivory", "charcoal", "grey", "apricot", "sage", "plum"]);
+  it("offers the six shipped coats with the free pair (ivory, grey) first", () => {
+    expect([...PET_MODE_COATS]).toEqual(["ivory", "grey", "charcoal", "apricot", "sage", "plum"]);
     expect(PET_MODE_COATS[0]).toBe(PET_MODE_DEFAULT_COAT);
   });
 

@@ -1,6 +1,7 @@
 mod accessibility;
 mod ai;
 mod analysis_credentials;
+mod app_icon;
 #[cfg(target_os = "macos")]
 mod ax_values;
 mod cloud_sync;
@@ -51,6 +52,9 @@ mod windows_overlay;
 pub use accessibility::*;
 pub use ai::*;
 pub use analysis_credentials::*;
+pub use app_icon::{app_icon_get, app_icon_preview, app_icon_set};
+#[cfg(target_os = "macos")]
+pub(crate) use app_icon::apply_saved_app_icon;
 pub use cloud_sync::*;
 pub use companion_context::*;
 pub use correction_evidence::*;

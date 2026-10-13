@@ -1481,6 +1481,24 @@
   max-width: 26rem;
 }
 
+/* Pro looks: the try-on bubble anchors inside the row, and the trial or
+   put-away note sits under the chips. */
+.content--settings .settings-row--pet-coat {
+  position: relative;
+}
+
+.content--settings .settings-row--pet-coat .ctrl,
+.content--settings .settings-row--app-icon .ctrl {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.content--settings .app-icon-swatch.is-trying-on,
+.content--settings .pet-coat-swatch.is-trying-on {
+  outline: 1.5px dashed var(--accent);
+  outline-offset: 3px;
+}
+
 .content--settings .pet-coat-picker {
   display: flex;
   /* One row, always. Chips share the available width so six coats stay on a
@@ -1491,6 +1509,7 @@
 }
 
 .content--settings .pet-coat-swatch {
+  position: relative;
   display: grid;
   gap: 0.16rem;
   justify-items: center;
@@ -1586,6 +1605,73 @@
 @media (prefers-reduced-motion: reduce) {
   .content--settings .pet-coat-swatch { transition: none; }
   .content--settings .pet-coat-swatch:hover { transform: none; }
+}
+
+/* App icon picker. As in the Dock, the artwork is the choice: no chip and no
+   caption (the name stays in the tooltip and the accessible label). The
+   selected ring is concentric with the tile, which sits inside the artwork's
+   own margin, so the radius is the tile radius plus that margin
+   ((184 + 96) / 1024 of the artwork). Eleven icons do not fit beside the
+   description, so the picker sits under it and wraps on narrow windows. */
+.content--settings .settings-row--app-icon {
+  position: relative;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.content--settings .settings-row--app-icon .ctrl {
+  flex: 1 1 auto;
+}
+
+.content--settings .app-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.content--settings .app-icon-swatch {
+  --app-icon-size: 2.75rem;
+  position: relative;
+  display: block;
+  width: var(--app-icon-size);
+  height: var(--app-icon-size);
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--app-icon-size) * 0.273);
+  background: none;
+  cursor: pointer;
+  transition:
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.content--settings .app-icon-swatch:hover {
+  transform: translateY(-1px);
+}
+
+.content--settings .app-icon-swatch.is-selected {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.content--settings .app-icon-swatch:focus-visible {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 3px;
+}
+
+.content--settings .app-icon-swatch__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* A white tile on a pale surface needs a hint of edge to read as a tile. */
+  filter: drop-shadow(0 0.5px 1px rgb(0 0 0 / 0.24));
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content--settings .app-icon-swatch { transition: none; }
+  .content--settings .app-icon-swatch:hover { transform: none; }
 }
 
 .pet-mode-lab {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Toggle } from "../../components/Toggle";
 import { SettingsSelect } from "./SettingsSelect";
 import {
@@ -7,8 +8,15 @@ import {
   type PetModeSize,
 } from "../pet-mode/petModeData";
 import { usePetPresenceMode, type PetPresenceMode } from "../pet-mode/petPresenceMode";
-import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
+import { localizedPetCoatLabel } from "../pro-looks/proLookCatalog";
+import { ProLookLockBadge, ProLookPopover, ProLookRowNote } from "../pro-looks/ProLookViews";
+import { useProLooks } from "../pro-looks/useProLooksController";
+import { PetCoatSwatchCat } from "./PetCoatSwatchCat";
+
+export { localizedPetCoatLabel } from "../pro-looks/proLookCatalog";
+export { PetCoatSwatchCat } from "./PetCoatSwatchCat";
 
 // Power and style are separate controls on purpose: the account menu already
 // presents the pet as an on/off checkbox. Presence stays disabled while off so
@@ -124,6 +132,8 @@ function PetSizePicker({
 // "Grey" into a mental image of the pet. These swatches draw the actual
 // silhouette in the actual fur and ink, so the choice is visible rather than
 // named. The grid wraps, so adding coats does not require touching layout.
+// Ivory and Grey are free; the other coats are Pro looks (features/pro-looks):
+// a locked coat is tried on the desktop pet while its bubble is open.
 export function PetCoatPicker({
   value,
   onChange,
@@ -134,75 +144,46 @@ export function PetCoatPicker({
   readonly disabled?: boolean;
 }) {
   const { t } = useLocalization();
+  const looks = useProLooks();
+  const [row, setRow] = useState<HTMLDivElement | null>(null);
   return (
-    <div data-setting-id="settings.pet.coat" className={`settings-row settings-row--pet-coat${disabled ? " settings-row--disabled" : ""}`}>
+    <div ref={setRow} data-setting-id="settings.pet.coat" className={`settings-row settings-row--pet-coat${disabled ? " settings-row--disabled" : ""}`}>
       <div>
         <div className="lbl">{t("settings.pet.coat")}</div>
       </div>
       <div className="ctrl">
         <div className="pet-coat-picker" role="radiogroup" aria-label={t("settings.pet.coat")} aria-disabled={disabled}>
           {PET_MODE_COAT_SPECS.map((spec) => {
-            const label = localizedPetCoatLabel(spec.value, t);
+            const look = { kind: "coat", id: spec.value } as const;
+            const name = localizedPetCoatLabel(spec.value, t);
+            const locked = looks?.isLocked(look) ?? false;
+            const label = locked ? t("settings.proLooks.lockedLabel", { name }) : name;
+            const tryingOn = looks?.preview?.kind === "coat" && looks.preview.id === spec.value;
             return (
             <button
               key={spec.value}
               type="button"
-              className={`pet-coat-swatch${spec.value === value ? " is-selected" : ""}`}
+              className={"pet-coat-swatch" + (spec.value === value ? " is-selected" : "") + (tryingOn ? " is-trying-on" : "")}
               style={{ "--pet-coat-fur": spec.fur, "--pet-coat-ink": spec.ink } as React.CSSProperties}
               role="radio"
               aria-checked={spec.value === value}
               aria-label={label}
+              aria-haspopup={locked ? "dialog" : undefined}
               title={label}
               disabled={disabled}
-              onClick={() => onChange(spec.value)}
+              data-pro-look={"coat:" + spec.value}
+              onClick={() => (looks ? looks.pick(look) : onChange(spec.value))}
             >
               <PetCoatSwatchCat />
-              <span className="pet-coat-swatch__label">{label}</span>
+              <span className="pet-coat-swatch__label">{name}</span>
+              {locked ? <ProLookLockBadge /> : null}
             </button>
             );
           })}
         </div>
+        {looks ? <ProLookRowNote looks={looks} kind="coat" /> : null}
       </div>
+      {looks ? <ProLookPopover looks={looks} kind="coat" container={row} /> : null}
     </div>
-  );
-}
-
-const PET_COAT_LABEL_KEYS: Readonly<Record<PetModeCoat, TranslationKey>> = {
-  ivory: "settings.pet.coatIvory",
-  charcoal: "settings.pet.coatCharcoal",
-  grey: "settings.pet.coatGrey",
-  apricot: "settings.pet.coatApricot",
-  sage: "settings.pet.coatSage",
-  plum: "settings.pet.coatPlum",
-};
-
-export function localizedPetCoatLabel(
-  coat: PetModeCoat,
-  t: LocalizationController["t"],
-): string {
-  return t(PET_COAT_LABEL_KEYS[coat]);
-}
-
-// The pet's resting pose is a baked bitmap, not a vector, so an approximated
-// path never quite matches what the user sees on their desktop. Instead the
-// swatch masks a solid fill with that exact bitmap: the silhouette is pixel
-// identical to the real pet, and the fill follows each coat's fur token. The
-// face is drawn on top from the same frame's ink positions.
-export function PetCoatSwatchCat() {
-  return (
-    <span className="pet-coat-swatch__cat" aria-hidden="true">
-      <span className="pet-coat-swatch__body" />
-      <svg className="pet-coat-swatch__face" viewBox="0 0 797 581">
-        <ellipse cx="581.3" cy="254.7" rx="11.8" ry="12.8" />
-        <ellipse cx="679.7" cy="244.1" rx="10" ry="12.4" />
-        <path
-          d="M616 263 Q616 279 626.5 280 Q634.5 280 636.2 263 Q638 280 646.5 280 Q656 279 656 261"
-          fill="none"
-          strokeWidth="9"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
   );
 }

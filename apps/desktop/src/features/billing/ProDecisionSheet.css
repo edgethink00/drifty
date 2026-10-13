@@ -33,6 +33,13 @@
   word-break: keep-all;
 }
 
+/* Opened from a locked Pro look: the look sits beside the header copy. */
+.pro-sheet__panel .modal-head.pro-sheet__head--look {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .pro-sheet__cadences {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -1,4 +1,5 @@
 import { WindowsBlurSettingsRow } from "./WindowsBlurSettingsRow";
+import { AppIconSettingsRow } from "./AppIconSettingsRow";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import type { ActivityCategory } from "@drifty/domain";
 import { AccentColorControl, CategoryColorControls, ProductivityColorControls, type AppThemeColorKey } from "./SettingsColorControls";
@@ -64,6 +65,7 @@ export function AppearanceSettingsSection({
           onColorChange={onAppThemeColorChange}
           onColorReset={onAppThemeColorReset}
         />
+        {hostPlatform === "macos" && <AppIconSettingsRow />}
       </div>
       <div className="settings-block"><h3>{t("settings.appearance.activityColors")}</h3>
         <ProductivityColorControls

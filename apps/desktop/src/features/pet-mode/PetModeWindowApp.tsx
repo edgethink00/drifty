@@ -77,6 +77,7 @@ import {
   PET_MODE_BLINK_DURATION_MS,
   PET_MODE_BLINK_INTERVAL_MAX_MS,
   PET_MODE_BLINK_INTERVAL_MIN_MS,
+  PET_MODE_COAT_PREVIEW_STORAGE_KEY,
   PET_MODE_COAT_STORAGE_KEY,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
@@ -119,7 +120,7 @@ import {
   getPetModeNextActionInterval,
   pickPetModeLifeAction,
   pickPetModePostDropReaction,
-  resolveInitialPetModeCoat,
+  resolvePetModeCoatShown,
   resolveInitialPetModeHiddenUntil,
   resolveInitialPetModeFastRunEnabled,
   resolveInitialPetModeSize,
@@ -1391,10 +1392,11 @@ export function PetModeWindowApp() {
     const applyCoat = (coat: PetModeCoat) => {
       document.documentElement.dataset.petCoat = coat;
     };
-    applyCoat(resolveInitialPetModeCoat());
+    // A Pro coat tried on from Settings wins over the saved coat while it lasts.
+    applyCoat(resolvePetModeCoatShown());
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== PET_MODE_COAT_STORAGE_KEY) return;
-      applyCoat(resolveInitialPetModeCoat());
+      if (event.key !== null && event.key !== PET_MODE_COAT_STORAGE_KEY && event.key !== PET_MODE_COAT_PREVIEW_STORAGE_KEY) return;
+      applyCoat(resolvePetModeCoatShown());
     };
     window.addEventListener("storage", handleStorage);
     return () => {

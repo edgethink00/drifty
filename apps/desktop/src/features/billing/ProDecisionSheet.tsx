@@ -9,6 +9,8 @@ import { formatLocalizedDuration } from "../../lib/formatting";
 import type { ProOfferContext, ProOfferSurface } from "../../lib/analytics/proFunnel";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { useLocalization } from "../localization/LocalizationContext";
+import { ProLookThumbnail, proLookTitle } from "../pro-looks/ProLookViews";
+import type { ProLook } from "../pro-looks/proLooks";
 import { trialDaysRemaining } from "../sidebar/SidebarCtaSlot";
 import type { BillingInterval, CheckoutFailureCode } from "./billingService";
 import {
@@ -47,6 +49,13 @@ type ProDecisionSheetProps = {
   readonly onCheckForUpdates?: () => void;
   readonly onSelectBillingPlan: (interval: BillingInterval) => void;
   readonly onDismiss: () => void;
+  /**
+   * The locked Pro look (cat icon or coat) the sheet was opened from. The
+   * header then names that look beside its picture; plans and benefits stay.
+   */
+  readonly look?: ProLook | null;
+  /** macOS: the benefit line includes the cat Dock icons as well as the coats. */
+  readonly looksIncludeAppIcons?: boolean;
 };
 
 /** The sheet offers the two individual cadences. */
@@ -79,7 +88,7 @@ export function ProDecisionSheet({ open, ...props }: ProDecisionSheetProps) {
 function DecisionSheet({
   context, funnelEnabled, offerSurface = "upgrade_modal", trialEndsAt, trialEndedToday = false, unclassifiedSeconds, billingCheckoutLoadingInterval,
   billingPlansDisabled = false, individualPricingQuote = null, billingActionError = null, billingActionErrorCode = null,
-  onCheckForUpdates, onSelectBillingPlan, onDismiss,
+  onCheckForUpdates, onSelectBillingPlan, onDismiss, look = null, looksIncludeAppIcons = false,
 }: Omit<ProDecisionSheetProps, "open">) {
   const { t } = useLocalization();
   const id = useId();
@@ -116,7 +125,13 @@ function DecisionSheet({
     },
   };
 
-  const { title, fact } = useSheetHeader(context, trialEndsAt, trialEndedToday, unclassifiedSeconds);
+  const stateHeader = useSheetHeader(context, trialEndsAt, trialEndedToday, unclassifiedSeconds);
+  const { title, fact } = look
+    ? {
+      title: proLookTitle(look, t),
+      fact: t(look.kind === "icon" ? "billing.proSheet.lookIconFact" : "billing.proSheet.lookCoatFact"),
+    }
+    : stateHeader;
   const checkoutLabel = checkoutOpening
     ? t("billing.plan.openingCheckout")
     : t(cadence === "yearly" ? "billing.proSheet.startYearly" : "billing.proSheet.startMonthly");
@@ -152,7 +167,8 @@ function DecisionSheet({
         tabIndex={-1}
       >
         <ModalCloseButton disabled={checkoutOpening} label={t("billing.proSheet.dismiss")} onClick={dismiss} />
-        <header className="modal-head">
+        <header className={look ? "modal-head pro-sheet__head--look" : "modal-head"}>
+          {look ? <ProLookThumbnail look={look} /> : null}
           <div className="modal-head__copy">
             <h2 id={`${id}-title`}>{title}</h2>
             <p id={`${id}-fact`}>{fact}</p>
@@ -197,7 +213,7 @@ function DecisionSheet({
         {quote.variant === "regional" ? (
           <p className="pro-sheet__regional">{t("billing.plan.regionalPrice", { currency: quote.currency })}</p>
         ) : null}
-        <ProSheetValue />
+        <ProSheetValue looksLineKey={looksIncludeAppIcons ? "billing.proSheet.plus.looks" : "billing.proSheet.plus.coats"} />
         {showError ? (
           <div className="pro-sheet__error" role="alert">
             <span>{billingActionError ?? t("billing.checkout.updateRequired")}</span>

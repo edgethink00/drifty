@@ -833,7 +833,9 @@ export function resolvePetModePresent(now = Date.now()): boolean {
 // The native pet lost that pairing when the silhouette moved to baked
 // rasters, so the coat is an explicit user choice here instead of a theme
 // side effect. `ivory` keeps the exact colors the current pet already ships.
-export const PET_MODE_COATS = ["ivory", "charcoal", "grey", "apricot", "sage", "plum"] as const;
+// Ivory and Grey are free; the rest are Pro looks (features/pro-looks), so the
+// free pair leads the picker.
+export const PET_MODE_COATS = ["ivory", "grey", "charcoal", "apricot", "sage", "plum"] as const;
 export type PetModeCoat = (typeof PET_MODE_COATS)[number];
 export const PET_MODE_DEFAULT_COAT: PetModeCoat = "ivory";
 
@@ -857,14 +859,14 @@ export const PET_MODE_COAT_SPECS: readonly PetModeCoatSpec[] = [
     ink: "#171916",
   },
   {
-    value: "charcoal",
-    fur: "#33332f",
-    ink: "#f2f1ed",
-  },
-  {
     value: "grey",
     fur: "#a3a199",
     ink: "#1a1b18",
+  },
+  {
+    value: "charcoal",
+    fur: "#33332f",
+    ink: "#f2f1ed",
   },
   {
     value: "apricot",
@@ -950,6 +952,24 @@ export function resolveInitialPetModeCoat(): PetModeCoat {
   if (isPetModeCoat(stored)) return stored;
   const legacy = window.localStorage.getItem(PET_MODE_LEGACY_COAT_STORAGE_KEY);
   return isPetModeCoat(legacy) ? legacy : PET_MODE_DEFAULT_COAT;
+}
+
+/**
+ * Set while a locked Pro coat is being tried on from Settings. The pet window
+ * shows it instead of the saved coat; Settings clears it when the try-on ends
+ * and again at launch, so a crash cannot leave the pet dressed in it.
+ */
+export const PET_MODE_COAT_PREVIEW_STORAGE_KEY = "drifty.pet.coatPreview";
+
+export function resolvePetModeCoatShown(): PetModeCoat {
+  if (typeof window === "undefined") return PET_MODE_DEFAULT_COAT;
+  try {
+    const preview = window.localStorage.getItem(PET_MODE_COAT_PREVIEW_STORAGE_KEY);
+    if (isPetModeCoat(preview)) return preview;
+  } catch {
+    // Fall through to the saved coat.
+  }
+  return resolveInitialPetModeCoat();
 }
 
 export function buildPetModeSnapshot(snapshot: WatcherSnapshot): PetModeSnapshot {

@@ -39,6 +39,7 @@ use commands::configure_main_window_material;
 use commands::{
     analysis_provider_load_api_key, analysis_provider_save_api_key,
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
+    app_icon_get, app_icon_preview, app_icon_set,
     ai_classification_openai_chat, ai_list_openai_models, cloud_sync_http_post,
     companion_informational_moments_suppressed, correction_evidence_append,
     developer_check_pre_release_update, developer_install_pre_release_update, developer_list_releases, developer_install_release,
@@ -1111,6 +1112,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             accessibility_get_status,
+            app_icon_get,
+            app_icon_preview,
+            app_icon_set,
             accessibility_request_access,
             companion_informational_moments_suppressed,
             sentry_capture_native_smoke,
@@ -1357,6 +1361,11 @@ pub fn run() {
         if !matches!(event, tauri::RunEvent::Ready) {
             return;
         }
+
+        // Before the window reveal so a chosen Dock icon replaces the bundle
+        // icon as early as the launch allows.
+        #[cfg(target_os = "macos")]
+        commands::apply_saved_app_icon(handle);
 
         let keep_hidden = should_keep_main_window_hidden_on_ready(handle);
         #[cfg(target_os = "windows")]

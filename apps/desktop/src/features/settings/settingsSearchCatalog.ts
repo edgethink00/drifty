@@ -12,7 +12,7 @@ export type SettingsSearchEntry = {
   readonly aiTab?: "providers" | "intelligence" | "profile";
   readonly aiProvider?: "openrouter" | "custom";
   readonly devSubsection?: DevSettingsSubsection;
-  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "promoCode" | "friendInvite";
+  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite";
 };
 
 // Reuse visible labels and descriptions; aliases contain vocabulary only.
@@ -112,6 +112,14 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.appearance.accent",
     keywords: "강조색 포인트색 accent color",
     descriptionKey: "settings.appearance.accentDescription",
+  },
+  {
+    id: "settings.appearance.appIcon",
+    section: "appearance",
+    titleKey: "settings.appearance.appIcon",
+    keywords: "앱 아이콘 로고 독 아이콘 변경 app icon logo dock",
+    descriptionKey: "settings.appearance.appIconDescription",
+    gate: "macos",
   },
   {
     id: "settings.appearance.productivityColors",
