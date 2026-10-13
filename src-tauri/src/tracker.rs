@@ -825,6 +825,15 @@ impl TrackerController {
             "payload": payload,
         });
 
+        if let Some(timeout) = ssh_agent_one_shot_timeout(command) {
+            return invoke_one_shot_with_timeout(
+                &runtime,
+                &db_path,
+                &request,
+                timeout.max(serve_round_trip_timeout()),
+            );
+        }
+
         // Fast path: reuse a long-lived `serve` process so each request avoids
         // the ~160ms interpreter/import cold-start (and the contention of
         // spawning several interpreters at once during a refresh burst).
@@ -1310,6 +1319,20 @@ where
 
 fn should_use_one_shot_when_serve_busy(command: &str) -> bool {
     command == "get_timeline_page"
+}
+
+/// SSH source commands wait on another machine: the tracker allows 15s for a
+/// connection test and 45s for the remote export, then ingests what came back.
+/// They need no warm serve state, so each runs in its own bounded one-shot
+/// process. A slow first import then neither exceeds the shared serve budget
+/// nor holds the serve slot that every screen refresh waits behind.
+fn ssh_agent_one_shot_timeout(command: &str) -> Option<Duration> {
+    match command {
+        "list_ssh_agent_sources" => Some(Duration::from_secs(15)),
+        "test_ssh_agent_source" => Some(Duration::from_secs(30)),
+        "collect_ssh_agent_source" => Some(Duration::from_secs(120)),
+        _ => None,
+    }
 }
 
 fn serve_slot() -> &'static Mutex<Option<ServeProcess>> {
@@ -2414,6 +2437,20 @@ mod tests {
         assert!(should_use_one_shot_when_serve_busy("get_timeline_page"));
         assert!(!should_use_one_shot_when_serve_busy("get_timeline"));
         assert!(!should_use_one_shot_when_serve_busy("get_status"));
+    }
+
+    #[test]
+    fn ssh_agent_commands_run_outside_the_shared_serve_budget() {
+        // The remote export alone may take 45s; its budget must cover that plus
+        // ingestion instead of the 30s shared serve round trip.
+        let collect =
+            ssh_agent_one_shot_timeout("collect_ssh_agent_source").expect("collect is one-shot");
+        assert!(collect > SERVE_ROUND_TRIP_TIMEOUT + Duration::from_secs(45));
+        let test = ssh_agent_one_shot_timeout("test_ssh_agent_source").expect("test is one-shot");
+        assert!(test > Duration::from_secs(15));
+        assert!(ssh_agent_one_shot_timeout("list_ssh_agent_sources").is_some());
+        assert!(ssh_agent_one_shot_timeout("get_timeline_page").is_none());
+        assert!(ssh_agent_one_shot_timeout("sync_dev_signals").is_none());
     }
 
     #[test]

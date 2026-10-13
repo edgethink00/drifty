@@ -120,14 +120,13 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(document.querySelector(".dashboard-page-head__side")?.contains(sshButton)).toBe(false);
     fireEvent.click(sshButton);
 
-    expect(screen.getByRole("dialog", { name: "Collect from SSH" })).toBeTruthy();
-    expect(screen.getByText(/Hosts are read locally/).textContent).toContain("~/.ssh/config");
-    expect(screen.getByLabelText("Host or alias")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Collect & keep synced" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("dialog", { name: "SSH sources" })).toBeTruthy();
     expect(await screen.findByText(/SSH config discovery is available in the Drifty desktop app/)).toBeTruthy();
+    expect(screen.getByLabelText("Host")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled")).toBe(true);
   });
 
-  it("shows continuous and active SSH collection feedback beside the add button", () => {
+  it("keeps the SSH header button plain and leaves host names to the dialog", () => {
     const { rerender } = render(
       <LocalizationTestProvider language="ko">
         <AgentsPage
@@ -153,10 +152,19 @@ describe("AgentsPage shared dashboard controls", () => {
       </LocalizationTestProvider>,
     );
 
-    const sshButton = screen.getByRole("button", { name: "SSH 에이전트 소스 추가" });
-    expect(screen.getByRole("status").textContent).toContain("lab-host+1");
-    expect(screen.getByRole("status").querySelector(".sr-only")?.textContent).toContain("SSH 소스 lab-host");
+    const sshButton = screen.getByRole("button", { name: "SSH 소스 관리" });
+    expect(sshButton.textContent).toBe("SSH");
+    expect(sshButton.querySelector("svg")).toBeTruthy();
+    expect(sshButton.hasAttribute("title")).toBe(false);
     expect(document.querySelector(".agents-ssh-controls")?.contains(sshButton)).toBe(true);
+    const head = document.querySelector(".dashboard-page-head") as HTMLElement;
+    const visibleHeadText = [...head.querySelectorAll("*")]
+      .filter((node) => !node.closest(".sr-only") && node.children.length === 0)
+      .map((node) => node.textContent)
+      .join(" ");
+    expect(visibleHeadText).not.toContain("lab-host");
+    expect(visibleHeadText).not.toContain("10.0.0.8");
+    expect(screen.getByRole("status").textContent).toContain("SSH 소스 lab-host");
 
     rerender(
       <LocalizationTestProvider language="ko">
@@ -183,9 +191,8 @@ describe("AgentsPage shared dashboard controls", () => {
       </LocalizationTestProvider>,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("10.0.0.8");
-    expect(screen.getByRole("status").querySelector(".sr-only")?.textContent).toContain("10.0.0.8에서");
-    expect(document.querySelector(".agents-ssh-sync-status")?.classList.contains("is-syncing")).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain("10.0.0.8에서");
+    expect(screen.getByRole("button", { name: "SSH 소스 관리" }).textContent).toBe("SSH");
 
     rerender(
       <LocalizationTestProvider language="ko">
@@ -212,9 +219,8 @@ describe("AgentsPage shared dashboard controls", () => {
       </LocalizationTestProvider>,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("10.0.0.8+1");
-    expect(screen.getByRole("status").querySelector(".sr-only")?.textContent).toContain("자동 수집에 실패");
-    expect(document.querySelector(".agents-ssh-sync-status")?.classList.contains("is-error")).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain("자동 수집에 실패");
+    expect(screen.getByRole("button", { name: "SSH 소스 관리" }).textContent).toBe("SSH");
   });
 
   it("keeps the persisted Flow detail control for Your Agents", () => {

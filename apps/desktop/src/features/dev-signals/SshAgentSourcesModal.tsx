@@ -21,12 +21,26 @@ import {
   upsertSshAgentSource,
   type SavedSshAgentSource,
 } from "./sshAgentSourcesStorage";
-import { sshAgentSourceBackfillDays } from "./useSshAgentSourceSyncController";
-import { ActionLabel } from "../../components/ActionLabel";
+import {
+  INACTIVE_SSH_AGENT_SOURCE_SYNC_STATUS,
+  SSH_AGENT_INITIAL_BACKFILL_DAYS,
+  sshAgentSourceBackfillDays,
+  type SshAgentSourceSyncStatus,
+} from "./useSshAgentSourceSyncController";
 
-type Operation = { readonly kind: "test" | "collect"; readonly host: string } | null;
-type Status = (Pick<SshAgentSourceTestResult, "ok" | "code" | "message"> & Partial<Pick<SshAgentSourceCollectResult, "turnsFound">>) | null;
+type Operation = { readonly kind: "connect" | "sync"; readonly host: string } | null;
+type StatusResult = Pick<SshAgentSourceTestResult, "ok" | "code" | "message"> & Partial<Pick<SshAgentSourceCollectResult, "turnsFound">>;
+// The latest outcome of a saved host's manual sync, shown on that host's row.
+type Status = (StatusResult & { readonly host: string }) | null;
+// A host the user just chose to connect. It joins the connected list right
+// away so progress and failure stay on the row the user acted on.
+type PendingConnection = {
+  readonly host: string;
+  readonly phase: "checking" | "importing" | "failed";
+  readonly status?: StatusResult;
+};
 type Discovery = Pick<SshAgentSourceListResult, "ok" | "code" | "message" | "aliases"> | null;
+type HostState = "synced" | "syncing" | "error";
 
 function localizedDiscoveryMessage(
   discovery: NonNullable<Discovery>,
@@ -43,7 +57,7 @@ function localizedDiscoveryMessage(
 }
 
 function localizedStatusMessage(
-  status: NonNullable<Status>,
+  status: StatusResult,
   language: DisplayLanguage,
   t: LocalizationController["t"],
 ): string {
@@ -76,32 +90,36 @@ export function SshAgentSourcesModal({
   onClose,
   onCollected,
   collectSource = (host, backfillDays) => trackerClient.collectSshAgentSource(host, backfillDays),
+  syncStatus = INACTIVE_SSH_AGENT_SOURCE_SYNC_STATUS,
 }: {
   readonly onClose: () => void;
   readonly onCollected: () => void;
   readonly collectSource?: (host: string, backfillDays: number) => Promise<SshAgentSourceCollectResult>;
+  readonly syncStatus?: SshAgentSourceSyncStatus;
 }): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const dialogRef = useRef<HTMLElement>(null);
-  const [host, setHost] = useState("");
-  const [verifiedHost, setVerifiedHost] = useState<string | null>(null);
+  const manualInputRef = useRef<HTMLInputElement>(null);
+  const [manualHost, setManualHost] = useState("");
+  const [manualOpen, setManualOpen] = useState(false);
   const [operation, setOperation] = useState<Operation>(null);
   const [status, setStatus] = useState<Status>(null);
+  const [pending, setPending] = useState<readonly PendingConnection[]>([]);
+  const [announcement, setAnnouncement] = useState("");
   const [sources, setSources] = useState(loadSshAgentSources);
   const [discovery, setDiscovery] = useState<Discovery>(null);
-  const normalizedHost = host.trim();
   const isBusy = operation !== null;
-  const sourceLimitReached = sources.length >= MAX_SAVED_SSH_AGENT_SOURCES
-    && !sources.some((source) => source.host === normalizedHost);
-  const canCollectNew = normalizedHost.length > 0
-    && verifiedHost === normalizedHost
-    && !sourceLimitReached
-    && !isBusy;
-  const savedHostKeys = new Set(sources.map((source) => source.host.toLocaleLowerCase()));
-  const discoveredAliases = discovery?.aliases.filter((alias) => !savedHostKeys.has(alias.toLocaleLowerCase())) ?? [];
+  const sourceLimitReached = sources.length >= MAX_SAVED_SSH_AGENT_SOURCES;
+  const knownHostKeys = new Set([...sources.map((source) => source.host), ...pending.map((entry) => entry.host)]
+    .map((value) => value.toLocaleLowerCase()));
+  const detectedHosts = discovery?.aliases.filter((alias) => !knownHostKeys.has(alias.toLocaleLowerCase())) ?? [];
+  // Without detected hosts, typing a host is the only way in, so the field is
+  // already open.
+  const showManual = manualOpen || (discovery !== null && detectedHosts.length === 0);
+  const normalizedManualHost = manualHost.trim();
 
   useModalDismiss(onClose, { disabled: isBusy });
-  useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-ssh-host-input]" });
+  useModalFocusTrap(dialogRef);
 
   useEffect(() => {
     let active = true;
@@ -128,85 +146,163 @@ export function SshAgentSourcesModal({
     setSources(loadSshAgentSources());
   }), []);
 
-  const updateSources = (next: SavedSshAgentSource[]): boolean => {
-    if (!saveSshAgentSources(next)) {
-      setStatus({ ok: false, code: "save_error", message: "Drifty could not save the SSH source for continuous collection." });
-      return false;
-    }
+  useEffect(() => {
+    if (manualOpen) manualInputRef.current?.focus();
+  }, [manualOpen]);
+
+  const persistSources = (next: SavedSshAgentSource[]): boolean => {
+    if (!saveSshAgentSources(next)) return false;
     setSources(next);
     return true;
   };
 
-  const testConnection = async () => {
-    if (!normalizedHost || isBusy) return;
-    const testedHost = normalizedHost;
-    setOperation({ kind: "test", host: testedHost });
-    setVerifiedHost(null);
-    setStatus(null);
+  const updatePending = (host: string, next: PendingConnection | null) => {
+    setPending((current) => {
+      const rest = current.filter((entry) => entry.host !== host);
+      return next ? [...rest, next] : rest;
+    });
+  };
+
+  // One click connects: check the SSH route, import the first 30 days, then
+  // save the host for background sync. Nothing connects before this click.
+  const connect = async (targetHost: string) => {
+    const host = targetHost.trim();
+    if (!host || isBusy) return;
+    const savedSources = loadSshAgentSources();
+    const alreadySaved = savedSources.find((source) => source.host.toLocaleLowerCase() === host.toLocaleLowerCase());
+    if (alreadySaved) {
+      // A typed host that is already connected is a manual sync of that row,
+      // not a second pending entry for the same machine.
+      setManualHost("");
+      setManualOpen(false);
+      await syncSaved(alreadySaved.host);
+      return;
+    }
+    if (savedSources.length >= MAX_SAVED_SSH_AGENT_SOURCES) {
+      updatePending(host, {
+        host,
+        phase: "failed",
+        status: { ok: false, code: "source_limit", message: "Remove a saved SSH source before adding another one." },
+      });
+      return;
+    }
+    setOperation({ kind: "connect", host });
+    setAnnouncement("");
+    updatePending(host, { host, phase: "checking" });
     try {
-      const result = await trackerClient.testSshAgentSource(testedHost);
-      setStatus(result);
-      if (result.ok && host.trim() === testedHost) setVerifiedHost(testedHost);
-    } catch {
-      setStatus({ ok: false, code: "start_error", message: "Drifty could not start the SSH connection. Try again." });
+      let tested: SshAgentSourceTestResult;
+      try {
+        tested = await trackerClient.testSshAgentSource(host);
+      } catch {
+        updatePending(host, {
+          host,
+          phase: "failed",
+          status: { ok: false, code: "start_error", message: "Drifty could not start the SSH connection. Try again." },
+        });
+        return;
+      }
+      if (!tested.ok) {
+        updatePending(host, { host, phase: "failed", status: tested });
+        return;
+      }
+      updatePending(host, { host, phase: "importing" });
+      let result: SshAgentSourceCollectResult;
+      try {
+        result = await collectSource(host, SSH_AGENT_INITIAL_BACKFILL_DAYS);
+      } catch {
+        updatePending(host, {
+          host,
+          phase: "failed",
+          status: { ok: false, code: "collect_error", message: "Drifty could not collect from this host. Check SSH in Terminal, then retry." },
+        });
+        return;
+      }
+      if (!result.ok) {
+        updatePending(host, { host, phase: "failed", status: result });
+        return;
+      }
+      const saved = persistSources(upsertSshAgentSource(loadSshAgentSources(), {
+        host,
+        lastCollectedAt: new Date().toISOString(),
+        lastMessage: result.message,
+        turnsFound: result.turnsFound,
+      }));
+      if (!saved) {
+        updatePending(host, {
+          host,
+          phase: "failed",
+          status: { ok: false, code: "save_error", message: "Drifty could not save the SSH source for continuous collection." },
+        });
+        return;
+      }
+      updatePending(host, null);
+      setAnnouncement(localizedStatusMessage(result, effectiveLanguage, t));
+      if (manualHost.trim() === host) {
+        setManualHost("");
+        setManualOpen(false);
+      }
+      onCollected();
     } finally {
       setOperation(null);
     }
   };
 
-  const collect = async (targetHost: string) => {
-    if (!targetHost || isBusy) return;
-    setOperation({ kind: "collect", host: targetHost });
+  const syncSaved = async (host: string) => {
+    if (isBusy) return;
+    setOperation({ kind: "sync", host });
     setStatus(null);
+    setAnnouncement("");
     try {
-      const currentSources = loadSshAgentSources();
-      const savedSource = currentSources.find((source) => source.host === targetHost);
-      if (!savedSource && currentSources.length >= MAX_SAVED_SSH_AGENT_SOURCES) {
-        setStatus({ ok: false, code: "source_limit", message: "Remove a saved SSH source before adding another one." });
-        return;
-      }
+      const savedSource = loadSshAgentSources().find((source) => source.host === host);
       const result = await collectSource(
-        targetHost,
-        savedSource ? sshAgentSourceBackfillDays(savedSource.lastCollectedAt, Date.now()) : 30,
+        host,
+        savedSource ? sshAgentSourceBackfillDays(savedSource.lastCollectedAt, Date.now()) : SSH_AGENT_INITIAL_BACKFILL_DAYS,
       );
-      setStatus(result);
+      setStatus({ ...result, host });
       if (result.ok) {
-        const sourceSaved = updateSources(upsertSshAgentSource(loadSshAgentSources(), {
-          host: targetHost,
+        const saved = persistSources(upsertSshAgentSource(loadSshAgentSources(), {
+          host,
           lastCollectedAt: new Date().toISOString(),
           lastMessage: result.message,
           turnsFound: result.turnsFound,
         }));
-        if (sourceSaved) {
-          setHost(targetHost);
-          setVerifiedHost(targetHost);
-          onCollected();
+        if (!saved) {
+          setStatus({ ok: false, code: "save_error", message: "Drifty could not save the SSH source for continuous collection.", host });
+          return;
         }
+        setAnnouncement(localizedStatusMessage(result, effectiveLanguage, t));
+        onCollected();
       }
     } catch {
-      setStatus({ ok: false, code: "collect_error", message: "Drifty could not collect from this host. Check SSH in Terminal, then retry." });
+      setStatus({ ok: false, code: "collect_error", message: "Drifty could not collect from this host. Check SSH in Terminal, then retry.", host });
     } finally {
       setOperation(null);
     }
   };
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleManualSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (canCollectNew) void collect(normalizedHost);
-    else void testConnection();
+    void connect(normalizedManualHost);
   };
 
-  const chooseHost = (nextHost: string) => {
-    if (isBusy) return;
-    setHost(nextHost);
-    setVerifiedHost(null);
-    setStatus(null);
+  const savedHostState = (host: string): HostState => {
+    if ((operation?.kind === "sync" && operation.host === host) || syncStatus.activeHosts.includes(host)) return "syncing";
+    if (status?.host === host) return status.ok ? "synced" : "error";
+    if (syncStatus.lastErrorHost === host) return "error";
+    return "synced";
   };
 
   const requestClose = () => {
     if (!isBusy) onClose();
   };
   const overlayDismiss = useOverlayDismiss(requestClose, { disabled: isBusy });
+
+  const syncIcon = (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M15.5 9.2A5.6 5.6 0 0 0 5.6 6.4M4.5 10.8a5.6 5.6 0 0 0 9.9 2.8" />
+      <path d="M5.2 3.6v3.1h3.1M14.8 16.4v-3.1h-3.1" />
+    </svg>
+  );
 
   return (
     <div className="auth-modal__overlay agents-ssh-modal__overlay" {...overlayDismiss}>
@@ -228,159 +324,178 @@ export function SshAgentSourcesModal({
           </div>
         </div>
 
-        <div className="agents-ssh-modal__notice">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 9l3 3-3 3M13 15h3" />
-            <rect x="3" y="4" width="18" height="16" rx="3" />
-          </svg>
-          <p>
-            {t("agents.ssh.privacyBefore")} <code>~/.ssh/config</code>{t("agents.ssh.privacyAfter")}
-          </p>
-        </div>
-
-        <div className="agents-ssh-modal__discovered" aria-busy={discovery === null}>
-          <div className="agents-ssh-modal__section-head">
-            <h3>{t("agents.ssh.config")}</h3>
-            <span>{t("agents.ssh.local")}</span>
-          </div>
-          {discovery === null ? (
-            <p className="agents-ssh-modal__discovery-state" role="status">{t("agents.ssh.looking")}</p>
-          ) : discoveredAliases.length > 0 ? (
-            <ul aria-label={t("agents.ssh.configHostsAria")}>
-              {discoveredAliases.map((alias) => {
-                const selected = normalizedHost === alias;
-                return (
-                  <li key={alias}>
-                    <button
-                      type="button"
-                      className={selected ? "is-selected" : undefined}
-                      aria-pressed={selected}
-                      disabled={isBusy}
-                      onClick={() => chooseHost(alias)}
-                    >
-                      <span className="agents-ssh-modal__host-glyph" aria-hidden="true">
-                        <svg viewBox="0 0 20 20"><path d="M6 7.2L9 10l-3 2.8M10.8 13h3.2" /></svg>
-                      </span>
-                      <span className="agents-ssh-modal__host-copy">
-                        <strong dir="ltr">{alias}</strong>
-                        <small>{t("agents.ssh.fromConfig")}</small>
-                      </span>
-                      <svg className="agents-ssh-modal__host-check" viewBox="0 0 20 20" aria-hidden="true">
-                        <path d="M4.5 10.2l3.2 3.2 7.8-7.8" />
-                      </svg>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className={`agents-ssh-modal__discovery-state ${discovery.ok ? "" : "is-error"}`}>
-              {discovery.aliases.length > 0
-                ? t("agents.ssh.allSaved")
-                : localizedDiscoveryMessage(discovery, effectiveLanguage, t)}
-            </p>
-          )}
-        </div>
-
-        <form className="agents-ssh-modal__form" onSubmit={handleSubmit}>
-          <label className="auth-modal__field" htmlFor="agents-ssh-host">
-            <span>{t("agents.ssh.hostLabel")}</span>
-            <input
-              id="agents-ssh-host"
-              data-ssh-host-input
-              aria-describedby="agents-ssh-host-hint"
-              className="settings-input modal-code agents-ssh-modal__input"
-              value={host}
-              maxLength={383}
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              dir="ltr"
-              placeholder={t("agents.ssh.hostPlaceholder")}
-              disabled={isBusy}
-              onChange={(event) => {
-                setHost(event.target.value);
-                setVerifiedHost(null);
-                setStatus(null);
-              }}
-            />
-          </label>
-          <p id="agents-ssh-host-hint" className={`agents-ssh-modal__hint${sourceLimitReached ? " is-error" : ""}`}>
-            {sourceLimitReached
-              ? t("agents.ssh.sourceLimit", { count: MAX_SAVED_SSH_AGENT_SOURCES })
-              : t("agents.ssh.hint")}
-          </p>
-          <div className="agents-ssh-modal__actions">
-            <button
-              type="button"
-              className="modal-btn modal-btn--secondary"
-              disabled={!normalizedHost || isBusy}
-              onClick={() => void testConnection()}
-            >
-              <ActionLabel busy={operation?.kind === "test"} busyLabel={t("agents.ssh.testing")}>{t("agents.ssh.test")}</ActionLabel>
-            </button>
-            <button type="submit" className="modal-btn modal-btn--primary" disabled={!canCollectNew}>
-              <ActionLabel busy={operation?.kind === "collect" && operation.host === normalizedHost} busyLabel={t("agents.ssh.collecting")}>{t("agents.ssh.collectAndSave")}</ActionLabel>
-            </button>
-          </div>
-        </form>
-
-        {status ? (
-          <div
-            className={`agents-ssh-modal__status ${status.ok ? "is-success" : "is-error"}`}
-            role={status.ok ? "status" : "alert"}
-          >
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              {status.ok
-                ? <path d="M4 10.5l3.4 3.4L16 5.8" />
-                : <><circle cx="10" cy="10" r="7" /><path d="M10 6.5v4.5M10 14h.01" /></>}
-            </svg>
-            <span>{localizedStatusMessage(status, effectiveLanguage, t)}</span>
-          </div>
-        ) : null}
-
-        {sources.length > 0 ? (
-          <div className="agents-ssh-modal__saved" aria-label={t("agents.ssh.savedAria")}>
-            <div className="agents-ssh-modal__saved-head">
-              <h3>{t("agents.ssh.saved")}</h3>
-              <span>{t("agents.ssh.local")}</span>
-            </div>
-            <ul>
+        {sources.length > 0 || pending.length > 0 ? (
+          <section className="agents-ssh-modal__section" aria-labelledby="agents-ssh-connected">
+            <h3 id="agents-ssh-connected" className="label-mono agents-ssh-modal__label">
+              {t("agents.ssh.saved")}
+              <span className="agents-ssh-modal__count">{sources.length}</span>
+            </h3>
+            <ul className="agents-ssh-modal__table agents-ssh-modal__hosts" aria-label={t("agents.ssh.savedAria")}>
               {sources.map((source) => {
-                const collecting = operation?.kind === "collect" && operation.host === source.host;
+                const state = savedHostState(source.host);
+                const rowStatus = status?.host === source.host ? status : null;
+                const meta = state === "syncing"
+                  ? t("agents.ssh.hostSyncing")
+                  : rowStatus && !rowStatus.ok
+                    ? localizedStatusMessage(rowStatus, effectiveLanguage, t)
+                    : state === "error"
+                      ? t("agents.ssh.hostSyncFailed")
+                      : formatCollectedAt(source.lastCollectedAt, effectiveLanguage, t);
                 return (
-                  <li key={source.host}>
-                    <div className="agents-ssh-modal__source-copy">
-                      <strong dir="ltr">{source.host}</strong>
-                      <span>{formatCollectedAt(source.lastCollectedAt, effectiveLanguage, t)} · {t("agents.ssh.turnsFound", { count: source.turnsFound })}</span>
+                  <li key={source.host} className="agents-ssh-modal__host" data-state={state}>
+                    <span className="agents-ssh-modal__host-dot" aria-hidden="true" />
+                    <div className="agents-ssh-modal__host-copy">
+                      <strong dir="ltr" title={source.host}>{source.host}</strong>
+                      <span role={rowStatus && !rowStatus.ok ? "alert" : undefined}>{meta}</span>
                     </div>
-                    <div className="agents-ssh-modal__source-actions">
+                    <div className="agents-ssh-modal__host-actions">
                       <button
                         type="button"
-                        className="modal-btn modal-btn--secondary"
+                        className="modal-btn modal-btn--ghost agents-ssh-modal__icon-btn"
+                        aria-label={t("agents.ssh.collect")}
+                        title={t("agents.ssh.collect")}
                         disabled={isBusy}
-                        onClick={() => void collect(source.host)}
+                        onClick={() => void syncSaved(source.host)}
                       >
-                        <ActionLabel busy={collecting} busyLabel={t("agents.ssh.collecting")}>{t("agents.ssh.collect")}</ActionLabel>
+                        {syncIcon}
                       </button>
                       <button
                         type="button"
-                        className="agents-ssh-modal__remove"
+                        className="modal-btn modal-btn--ghost agents-ssh-modal__icon-btn agents-ssh-modal__icon-btn--danger"
                         aria-label={t("agents.ssh.removeAria", { host: source.host })}
                         title={t("agents.ssh.removeTitle")}
                         disabled={isBusy}
-                        onClick={() => updateSources(removeSshAgentSource(loadSshAgentSources(), source.host))}
+                        onClick={() => {
+                          if (status?.host === source.host) setStatus(null);
+                          if (!persistSources(removeSshAgentSource(loadSshAgentSources(), source.host))) {
+                            setStatus({ ok: false, code: "save_error", message: "Drifty could not save the SSH source for continuous collection.", host: source.host });
+                          }
+                        }}
                       >
-                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 3h4M7 6l.6 10h4.8L13 6" /></svg>
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 6h11M8.2 3.5h3.6M6.5 6l.6 9.5h5.8l.6-9.5" /></svg>
                       </button>
                     </div>
                   </li>
                 );
               })}
+              {pending.map((entry) => {
+                const failed = entry.phase === "failed";
+                return (
+                  <li key={"pending:" + entry.host} className="agents-ssh-modal__host" data-state={failed ? "error" : "syncing"}>
+                    <span className="agents-ssh-modal__host-dot" aria-hidden="true" />
+                    <div className="agents-ssh-modal__host-copy">
+                      <strong dir="ltr" title={entry.host}>{entry.host}</strong>
+                      <span role={failed ? "alert" : "status"}>
+                        {failed && entry.status
+                          ? localizedStatusMessage(entry.status, effectiveLanguage, t)
+                          : t(entry.phase === "checking" ? "agents.ssh.connecting" : "agents.ssh.importing")}
+                      </span>
+                    </div>
+                    {failed ? (
+                      <div className="agents-ssh-modal__host-actions">
+                        <button
+                          type="button"
+                          className="modal-btn modal-btn--ghost agents-ssh-modal__icon-btn"
+                          aria-label={t("agents.ssh.retryAria", { host: entry.host })}
+                          title={t("agents.ssh.retry")}
+                          disabled={isBusy}
+                          onClick={() => void connect(entry.host)}
+                        >
+                          {syncIcon}
+                        </button>
+                        <button
+                          type="button"
+                          className="modal-btn modal-btn--ghost agents-ssh-modal__icon-btn"
+                          aria-label={t("agents.ssh.dismissAria", { host: entry.host })}
+                          title={t("agents.ssh.dismiss")}
+                          disabled={isBusy}
+                          onClick={() => updatePending(entry.host, null)}
+                        >
+                          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9" /></svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="agents-ssh-modal__progress" aria-hidden="true" data-phase={entry.phase} />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
-            <p className="agents-ssh-modal__saved-foot">{t("agents.ssh.removeDetail")}</p>
-          </div>
+          </section>
         ) : null}
+
+        <section className="agents-ssh-modal__section" aria-labelledby="agents-ssh-add" aria-busy={discovery === null}>
+          <h3 id="agents-ssh-add" className="label-mono agents-ssh-modal__label">{t("agents.ssh.addHost")}</h3>
+          <div className="agents-ssh-modal__table">
+            {discovery === null ? (
+              <p className="agents-ssh-modal__table-note" role="status">{t("agents.ssh.looking")}</p>
+            ) : detectedHosts.length > 0 ? (
+              <ul className="agents-ssh-modal__hosts" aria-label={t("agents.ssh.configHostsAria")}>
+                {detectedHosts.map((alias) => (
+                  <li key={alias} className="agents-ssh-modal__host agents-ssh-modal__host--detected">
+                    <span className="agents-ssh-modal__glyph" aria-hidden="true">
+                      <svg viewBox="0 0 20 20"><path d="M6.2 7.6l2.4 2.4-2.4 2.4M10.4 12.6h3.6" /></svg>
+                    </span>
+                    <div className="agents-ssh-modal__host-copy">
+                      <strong dir="ltr" title={alias}>{alias}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="modal-btn modal-btn--secondary agents-ssh-modal__row-btn"
+                      aria-label={t("agents.ssh.connectAria", { host: alias })}
+                      disabled={isBusy || sourceLimitReached}
+                      onClick={() => void connect(alias)}
+                    >
+                      {t("agents.ssh.connect")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {showManual ? (
+              <form className="agents-ssh-modal__manual" onSubmit={handleManualSubmit}>
+                <span className="agents-ssh-modal__glyph" aria-hidden="true">
+                  <svg viewBox="0 0 20 20"><path d="M6.2 7.6l2.4 2.4-2.4 2.4M10.4 12.6h3.6" /></svg>
+                </span>
+                <input
+                  ref={manualInputRef}
+                  data-ssh-host-input
+                  aria-label={t("agents.ssh.hostLabel")}
+                  className="agents-ssh-modal__input"
+                  value={manualHost}
+                  maxLength={383}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  dir="ltr"
+                  placeholder={t("agents.ssh.hostPlaceholder")}
+                  disabled={isBusy}
+                  onChange={(event) => setManualHost(event.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="modal-btn modal-btn--primary agents-ssh-modal__row-btn"
+                  disabled={!normalizedManualHost || isBusy || sourceLimitReached}
+                >
+                  {t("agents.ssh.connect")}
+                </button>
+              </form>
+            ) : discovery !== null ? (
+              <button type="button" className="agents-ssh-modal__add-row" disabled={isBusy} onClick={() => setManualOpen(true)}>
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                {t("agents.ssh.manualEntry")}
+              </button>
+            ) : null}
+          </div>
+          {sourceLimitReached ? (
+            <p className="agents-ssh-modal__note is-error">{t("agents.ssh.sourceLimit", { count: MAX_SAVED_SSH_AGENT_SOURCES })}</p>
+          ) : discovery !== null && discovery.aliases.length === 0 ? (
+            <p className={"agents-ssh-modal__note" + (discovery.ok ? "" : " is-error")}>
+              {localizedDiscoveryMessage(discovery, effectiveLanguage, t)}
+            </p>
+          ) : null}
+        </section>
+        <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
       </section>
     </div>
   );
@@ -389,10 +504,13 @@ export function SshAgentSourcesModal({
 function formatCollectedAt(value: string, language: DisplayLanguage, t: LocalizationController["t"]): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return t("agents.ssh.collectedPreviously");
-  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+  const elapsedMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60_000));
+  if (elapsedMinutes < 1) return t("agents.ssh.syncedJustNow");
+  const relative = new Intl.RelativeTimeFormat(language === "ko" ? "ko-KR" : "en-US", { numeric: "auto" });
+  const time = elapsedMinutes < 60
+    ? relative.format(-elapsedMinutes, "minute")
+    : elapsedMinutes < 48 * 60
+      ? relative.format(-Math.round(elapsedMinutes / 60), "hour")
+      : relative.format(-Math.round(elapsedMinutes / (24 * 60)), "day");
+  return t("agents.ssh.syncedAt", { time });
 }

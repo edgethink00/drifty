@@ -1604,6 +1604,7 @@ export function AgentsPage({
       : sshSyncStatus.sourceHosts;
   const visibleSshHost = visibleSshHosts[0] ?? null;
   const additionalVisibleSshHosts = Math.max(0, visibleSshHosts.length - 1);
+  const hasSshSources = (sshSyncStatus.autoSyncEnabled || isSshSyncing) && visibleSshHost !== null;
   const sshStatusAriaKey = isSshSyncing
     ? additionalVisibleSshHosts > 0 ? "agents.ssh.syncingHostsAria" : "agents.ssh.syncingHostAria"
     : isSshSyncError
@@ -1635,34 +1636,20 @@ export function AgentsPage({
             <button
               type="button"
               className="agents-ssh-trigger"
-              aria-label={t("agents.ssh.add")}
+              aria-label={hasSshSources ? t("agents.ssh.manage") : t("agents.ssh.add")}
               onClick={() => setSshModalOpen(true)}
             >
               <span>SSH</span>
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
             </button>
-            {(sshSyncStatus.autoSyncEnabled || isSshSyncing) && visibleSshHost ? (
-              <span
-                className={`agents-ssh-sync-status${isSshSyncing ? " is-syncing" : ""}${isSshSyncError ? " is-error" : ""}`}
-                role="status"
-                aria-live="polite"
-                title={t(
-                  isSshSyncing
-                    ? "agents.ssh.syncingHostTitle"
-                    : isSshSyncError ? "agents.ssh.errorHostTitle" : "agents.ssh.autoSyncHostTitle",
-                  { host: visibleSshHost },
-                )}
-              >
-                <span className="sr-only">
-                  {t(sshStatusAriaKey, { host: visibleSshHost, count: additionalVisibleSshHosts })}
-                </span>
-                <span className="agents-ssh-sync-status__dot" aria-hidden="true" />
-                <code className="agents-ssh-sync-status__host" dir="ltr" aria-hidden="true">{visibleSshHost}</code>
-                {additionalVisibleSshHosts > 0 ? (
-                  <span className="agents-ssh-sync-status__count" aria-hidden="true">+{additionalVisibleSshHosts}</span>
-                ) : null}
-              </span>
-            ) : null}
+            {/* Host names and sync state live inside the SSH sources dialog; the
+                header button stays a plain entry point. Assistive tech still
+                hears the background sync state. */}
+            <span className="sr-only" role="status" aria-live="polite">
+              {hasSshSources && visibleSshHost
+                ? t(sshStatusAriaKey, { host: visibleSshHost, count: additionalVisibleSshHosts })
+                : ""}
+            </span>
           </div>
         </div>
         <div className="dashboard-page-head__side">
@@ -1725,6 +1712,7 @@ export function AgentsPage({
               onClose={() => setSshModalOpen(false)}
               onCollected={() => setDataRefreshKey((key) => key + 1)}
               collectSource={syncSshHost}
+              syncStatus={sshSyncStatus}
             />
           ) : null}
         </ModalPresence>
@@ -1779,6 +1767,7 @@ export function AgentsPage({
             onClose={() => setSshModalOpen(false)}
             onCollected={() => setDataRefreshKey((key) => key + 1)}
             collectSource={syncSshHost}
+            syncStatus={sshSyncStatus}
           />
           ) : null}
         </ModalPresence>
@@ -1825,6 +1814,7 @@ export function AgentsPage({
           onClose={() => setSshModalOpen(false)}
           onCollected={() => setDataRefreshKey((key) => key + 1)}
           collectSource={syncSshHost}
+          syncStatus={sshSyncStatus}
         />
         ) : null}
       </ModalPresence>
