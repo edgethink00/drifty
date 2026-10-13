@@ -13,6 +13,7 @@ except Exception:  # pragma: no cover - environment-dependent
     plistlib = None  # type: ignore[assignment]
     _PLISTLIB_AVAILABLE = False
 from contextlib import closing
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -22,7 +23,7 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from app.storage.db import TrackerDatabase
+from app.storage.db import ImportedActivitySegment, TrackerDatabase
 from app.capture_platform import CAPTURE_PLATFORM
 from app.tracker.browser_history import (  # noqa: E402
     default_browser_is_safari,
@@ -364,6 +365,112 @@ class BrowserHistoryImportTests(unittest.TestCase):
         self.assertEqual(imported["insertedCount"], 0)
         self.assertEqual(imported["skippedDuplicateCount"], 1)
         self.assertEqual({row["source"] for row in rows}, {"nsworkspace"})
+
+    def _synthetic_import_segment(self, key: str, start: datetime) -> ImportedActivitySegment:
+        return ImportedActivitySegment(
+            import_key=key, started_at=start.isoformat(),
+            ended_at=(start + timedelta(seconds=20)).isoformat(), duration_seconds=20,
+            app_name="Synthetic Browser", bundle_id=None, window_title="Synthetic page",
+            site_domain="example.invalid", site_title="Synthetic page", site_url="https://example.invalid/",
+            youtube_video_id=None, youtube_playlist_id=None, youtube_is_shorts=None,
+            browser_name="Synthetic Browser", site_source="browser-history-import",
+            platform=CAPTURE_PLATFORM, source="browser-history-import", confidence=0.35,
+            raw_context_json="{}",
+        )
+
+    def test_import_does_not_repeatedly_scan_unrelated_earlier_or_later_history(self) -> None:
+        # Bound actual SQLite work, not wall-clock time or a platform's chosen
+        # EXPLAIN wording. Both date distributions need a selective range.
+        for name, existing_is_later, origin, opposite_local_count in (
+            ("local-later", True, None, 0), ("local-earlier", False, None, 0),
+            ("remote-earlier", False, "remote", 10), ("remote-later", True, "remote", 10),
+        ):
+            with self.subTest(distribution=name):
+                db = TrackerDatabase(self.root / f"range-{name}.sqlite3", perform_maintenance=False)
+                existing_start = self.now - timedelta(days=1 if existing_is_later else 3)
+                import_start = self.now - timedelta(days=2)
+                with db.connect() as conn:
+                    conn.executemany(
+                        "INSERT INTO activity_segments(started_at, ended_at, duration_seconds, app_name, "
+                        "platform, source, confidence, origin_device_id) "
+                        "VALUES (?, ?, 5, 'Synthetic existing', ?, 'synthetic', 1, ?)",
+                        [((existing_start + timedelta(seconds=i * 10)).isoformat(),
+                          (existing_start + timedelta(seconds=i * 10 + 5)).isoformat(), CAPTURE_PLATFORM, origin)
+                         for i in range(2000)],
+                    )
+                    opposite_start = self.now - timedelta(days=3 if existing_is_later else 1)
+                    conn.executemany(
+                        "INSERT INTO activity_segments(started_at, ended_at, duration_seconds, app_name, "
+                        "platform, source, confidence) VALUES (?, ?, 5, 'Synthetic local', ?, 'synthetic', 1)",
+                        [((opposite_start + timedelta(seconds=i * 10)).isoformat(),
+                          (opposite_start + timedelta(seconds=i * 10 + 5)).isoformat(), CAPTURE_PLATFORM)
+                         for i in range(opposite_local_count)],
+                    )
+                segments = [self._synthetic_import_segment(f"range-{i}", import_start + timedelta(seconds=i * 30))
+                            for i in range(80)]
+                vm_steps = 0
+
+                def count_work() -> int:
+                    nonlocal vm_steps
+                    vm_steps += 1000
+                    return 0
+
+                db.connect().set_progress_handler(count_work, 1000)
+                try:
+                    result = db.insert_imported_activity_segments(segments, self.now.isoformat())
+                finally:
+                    db.connect().set_progress_handler(None, 0)
+                self.assertEqual((result.inserted_count, result.skipped_duplicate_count), (80, 0))
+                self.assertLess(vm_steps, 200_000, "unrelated history must not be rescanned for every import")
+                self.assertEqual(db.connect().execute("SELECT COUNT(*) FROM activity_segments").fetchone()[0],
+                                 2080 + opposite_local_count)
+                db.close()
+
+    def test_import_preserves_overlap_and_remote_exemption_for_unsorted_offset_dates(self) -> None:
+        db = TrackerDatabase(self.root / "overlap.sqlite3", perform_maintenance=False)
+        first = self._synthetic_import_segment("first", self.now - timedelta(days=2))
+        later = self._synthetic_import_segment("later", self.now - timedelta(days=1))
+        with db.connect() as conn:
+            conn.execute(
+                "INSERT INTO activity_segments(started_at, ended_at, duration_seconds, app_name, platform, "
+                "source, confidence, origin_device_id) VALUES (?, ?, 20, 'Synthetic remote', ?, 'synthetic', 1, 'remote')",
+                (first.started_at, first.ended_at, CAPTURE_PLATFORM),
+            )
+            conn.execute(
+                "INSERT INTO activity_segments(started_at, ended_at, duration_seconds, app_name, platform, "
+                "source, confidence) VALUES (?, ?, 20, 'Synthetic local', ?, 'synthetic', 1)",
+                (later.started_at, later.ended_at, CAPTURE_PLATFORM),
+            )
+        offset = timezone(timedelta(hours=9))
+        offset_first = replace(first, started_at=datetime.fromisoformat(first.started_at).astimezone(offset).isoformat(),
+                               ended_at=datetime.fromisoformat(first.ended_at).astimezone(offset).isoformat())
+        overlap = replace(first, import_key="overlap")
+        touching = self._synthetic_import_segment("touching", datetime.fromisoformat(first.ended_at))
+        result = db.insert_imported_activity_segments([later, touching, offset_first, overlap], self.now.isoformat())
+        self.assertEqual((result.inserted_count, result.skipped_duplicate_count), (2, 2))
+        rerun = db.insert_imported_activity_segments([offset_first, touching], self.now.isoformat())
+        self.assertEqual((rerun.inserted_count, rerun.skipped_duplicate_count), (0, 2))
+        self.assertEqual(db.connect().execute("SELECT COUNT(*) FROM activity_segments").fetchone()[0], 4)
+        db.close()
+
+    def test_import_failure_rolls_back_the_whole_batch_and_import_keys(self) -> None:
+        db = TrackerDatabase(self.root / "rollback.sqlite3", perform_maintenance=False)
+        first = self._synthetic_import_segment("first", self.now - timedelta(days=2))
+        second = replace(self._synthetic_import_segment("second", self.now - timedelta(days=1)),
+                         app_name="Synthetic failure")
+        with db.connect() as conn:
+            conn.execute("CREATE TRIGGER synthetic_failure BEFORE INSERT ON activity_segments "
+                         "WHEN NEW.app_name = 'Synthetic failure' BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END")
+        with self.assertRaises(sqlite3.IntegrityError):
+            db.insert_imported_activity_segments([first, second], self.now.isoformat())
+        self.assertFalse(db.connect().in_transaction)
+        self.assertEqual(db.connect().execute("SELECT COUNT(*) FROM activity_segments").fetchone()[0], 0)
+        self.assertEqual(db.connect().execute("SELECT COUNT(*) FROM browser_history_import_keys").fetchone()[0], 0)
+        with db.connect() as conn:
+            conn.execute("DROP TRIGGER synthetic_failure")
+        result = db.insert_imported_activity_segments([first, second], self.now.isoformat())
+        self.assertEqual((result.inserted_count, result.skipped_duplicate_count), (2, 0))
+        db.close()
 
     def test_trim_latest_segment_leaves_imported_segments_untouched(self) -> None:
         self._write_chromium_history(

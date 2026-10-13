@@ -1634,6 +1634,7 @@ class TrackerDatabase:
         inserted_count = 0
         skipped_duplicate_count = 0
         with self.connect() as conn:
+            overlap_index = self._browser_history_import_overlap_index(conn, segments)
             for segment in segments:
                 # A re-run can regroup visits into a session with a new import key
                 # (e.g. the session gained a visit), and imports can cover time the
@@ -1643,8 +1644,8 @@ class TrackerDatabase:
                 # exempt: another Mac being active at the same time does not make this
                 # Mac's imported browsing a duplicate.
                 overlapping = conn.execute(
-                    """
-                    SELECT 1 FROM activity_segments
+                    f"""
+                    SELECT 1 FROM activity_segments INDEXED BY {overlap_index}
                     WHERE datetime(started_at) < datetime(?)
                       AND datetime(ended_at) > datetime(?)
                       AND origin_device_id IS NULL
@@ -1732,6 +1733,35 @@ class TrackerDatabase:
             inserted_count=inserted_count,
             skipped_duplicate_count=skipped_duplicate_count,
         )
+
+    def _browser_history_import_overlap_index(
+        self, conn: sqlite3.Connection, segments: list[ImportedActivitySegment],
+    ) -> str:
+        # SQLite normally picks the ended-at range for the two-sided overlap
+        # predicate. Importing older history then visits every later record for
+        # each segment, holding the import's write lock across those repeated
+        # scans. Compare the batch's two indexed ranges once, before any write,
+        # and keep the exact overlap predicate and one atomic import transaction.
+        # Count remote rows too: these indexes must scan them before the overlap
+        # predicate can discard them. Counting only local matches can choose a
+        # range full of remote records instead of the cheaper opposite range.
+        # These indexes are created by _init_db for both new and existing DBs.
+        if not segments:
+            return "idx_activity_segments_ended_at"
+        latest_end = max(self._normalize_range_bound(segment.ended_at) for segment in segments)
+        earliest_start = min(self._normalize_range_bound(segment.started_at) for segment in segments)
+        candidates = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM activity_segments INDEXED BY idx_activity_segments_started_at
+                 WHERE datetime(started_at) < datetime(?)) AS started,
+                (SELECT COUNT(*) FROM activity_segments INDEXED BY idx_activity_segments_ended_at
+                 WHERE datetime(ended_at) > datetime(?)) AS ended
+            """,
+            (latest_end, earliest_start),
+        ).fetchone()
+        return ("idx_activity_segments_started_at" if candidates["started"] < candidates["ended"]
+                else "idx_activity_segments_ended_at")
 
     @staticmethod
     def _normalize_range_bound(value: str) -> str:
