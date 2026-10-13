@@ -19,6 +19,7 @@ mod living_soul;
 mod macos_panel;
 mod managed_ai;
 mod native_update_dialog;
+mod native_notifications;
 #[cfg(target_os = "windows")]
 mod pet_cursor_windows;
 mod pet_drop;
@@ -68,6 +69,7 @@ pub use google_calendar::*;
 pub use living_soul::*;
 pub use managed_ai::*;
 pub use native_update_dialog::*;
+pub use native_notifications::*;
 pub use pet_hit_region::*;
 pub use pet_mode::*;
 pub use pet_mode_startup::*;

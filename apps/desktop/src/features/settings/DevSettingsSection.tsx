@@ -105,6 +105,7 @@ type DevSettingsSectionProps = {
   readonly onPreviewCompanionMilestone: (previewId: CompanionMilestonePreviewId) => void;
   readonly onPreviewCompanionMoment: (previewId: CompanionMomentPreviewId) => void;
   readonly onPreviewCompanionDayReview: () => void;
+  readonly onPreviewCompanionDayReviewNotification?: () => void;
   readonly preReleaseUpdateStatus: PreReleaseUpdateStatus;
   readonly preReleaseUpdateMessage: string | null;
   readonly preReleaseUpdateError: string | null;
@@ -191,6 +192,7 @@ export function DevSettingsSection({
   onPreviewCompanionMilestone,
   onPreviewCompanionMoment,
   onPreviewCompanionDayReview,
+  onPreviewCompanionDayReviewNotification,
   preReleaseUpdateStatus,
   preReleaseUpdateMessage,
   preReleaseUpdateError,
@@ -857,6 +859,7 @@ export function DevSettingsSection({
             onPreviewMilestone={onPreviewCompanionMilestone}
             onPreviewMoment={onPreviewCompanionMoment}
             onPreviewDayReview={onPreviewCompanionDayReview}
+            onPreviewDayReviewNotification={onPreviewCompanionDayReviewNotification}
           />
           {AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED ? (
             <div className="settings-block settings-block--dev-preview">

@@ -101,7 +101,9 @@ use commands::{
     tracker_list_ssh_agent_sources, tracker_sync_dev_signals, tracker_test_ssh_agent_source,
     tracker_upsert_team_projects,
     update_policy_fetch, update_prompt_show_native, whats_new_changelog_fetch,
-    update_status_show_native, watcher_companion_clamp_to_screen,
+    update_status_show_native, native_notification_authorization,
+    native_notification_request_authorization, native_notification_send,
+    watcher_companion_clamp_to_screen,
     watcher_companion_cursor_over_capsule, watcher_companion_dismiss_moment,
     watcher_companion_present_prepared, watcher_companion_set_click_through,
     watcher_companion_set_enabled, watcher_companion_set_state,
@@ -967,6 +969,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             repair_windows_deep_link_registration(app.handle());
             setup_app_menu(app.handle())?;
+            // Before any notification is clicked, so a click can bring Drifty forward.
+            commands::install_native_notification_delegate(app.handle());
             #[cfg(not(target_os = "windows"))]
             if let Err(error) = calibrate_main_window_to_work_area(app.handle()) {
                 // The configured 1216×800 fallback is already usable. Monitor
@@ -1148,6 +1152,9 @@ pub fn run() {
             whats_new_changelog_fetch,
             update_prompt_show_native,
             update_status_show_native,
+            native_notification_authorization,
+            native_notification_request_authorization,
+            native_notification_send,
             tracker_get_status,
             tracker_start,
             tracker_stop,

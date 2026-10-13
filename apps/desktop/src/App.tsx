@@ -407,6 +407,7 @@ import {
   endOfDayReviewValueToMinute,
   resolveInitialEndOfDayReviewMinute,
 } from "./features/companion/endOfDayReviewSchedule";
+import { sendDayReviewNotification } from "./features/companion/dayReviewNotification";
 import {
   acknowledgeDayReview,
   isDayReviewUserActive,
@@ -3469,6 +3470,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       isMock: true,
     }).then(showEndOfDayReview);
   }, [buildEndOfDayReviewEvent, isDevModeActive, segments, selectedDay, showEndOfDayReview]);
+
+  const handleEndOfDayReviewNotificationPreview = useCallback(() => {
+    if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
+    if (!isDevModeActive) return;
+    const previewSegments = segments.length > 0 ? segments : buildMockEndOfDayReviewSegments(selectedDay);
+    void buildEndOfDayReviewEvent({
+      day: selectedDay,
+      generatedAt: new Date().toISOString(),
+      segments: previewSegments,
+      assessment: null,
+      isMock: true,
+    }).then((event) => sendDayReviewNotification(event, companionLanguage));
+  }, [buildEndOfDayReviewEvent, companionLanguage, isDevModeActive, segments, selectedDay]);
 
   const recordDriftInteraction = useCallback((interaction: DriftAlarmInteraction) => {
     setDriftAlarmInteractions(recordDriftAlarmInteraction(interaction));
@@ -8329,8 +8343,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       startOfDayMinutes,
       leaderboardCelebration,
     });
-    return showEndOfDayReview({ ...event, presentationDay: request.day, expiresAt: request.expiresAt });
-  }, [buildEndOfDayReviewEvent, isPolicySignedIn, isSupabaseConfigured, loadPreviousReviewDaySegments, showEndOfDayReview, startOfDayMinutes]);
+    const deliveredEvent = { ...event, presentationDay: request.day, expiresAt: request.expiresAt };
+    /* The scheduled review is a system notification and nothing else: it
+       waits in Notification Center, and clicking it brings Drifty forward.
+       A notification handed to the OS closes the day, and so do notifications
+       turned off for Drifty: nothing can show tonight's review, and Settings
+       says why. One that cannot be sent for another reason shows no card in
+       its place; the scheduler tries once more within its presentation
+       allowance and then lets the evening pass. */
+    const delivery = await sendDayReviewNotification(deliveredEvent, companionLanguage);
+    if (delivery === "sent") return "displayed";
+    if (delivery === "denied") return "dropped_surface_disabled";
+    return "failed";
+  }, [buildEndOfDayReviewEvent, companionLanguage, isPolicySignedIn, isSupabaseConfigured, loadPreviousReviewDaySegments, startOfDayMinutes]);
 
   useDayReviewScheduler({
     active: END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED
@@ -11584,6 +11609,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onPreviewCompanionMilestone={previewCompanionMilestone}
                     onPreviewCompanionMoment={previewCompanionMoment}
                     onPreviewCompanionDayReview={handleEndOfDayReviewPreview}
+                    onPreviewCompanionDayReviewNotification={handleEndOfDayReviewNotificationPreview}
                     preReleaseUpdateStatus={developerPreReleaseUpdateController.status}
                     preReleaseUpdateMessage={developerPreReleaseUpdateController.message}
                     preReleaseUpdateError={developerPreReleaseUpdateController.error}

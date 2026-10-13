@@ -17,6 +17,7 @@ import { openSystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { useSettingsSearch } from "./SettingsSearchContext";
 import { SettingsSelect } from "./SettingsSelect";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
+import { useNativeNotificationAuthorization } from "./useNativeNotificationAuthorization";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
@@ -90,6 +91,9 @@ export function NotificationsSettingsSection({
   // notification plugin (2.3.x) reports "granted" on macOS and Windows, so a
   // real OS-level block needs a native permission read before it can show.
   const [notificationPermissionDenied, setNotificationPermissionDenied] = useState(false);
+  /* The day review arrives only as a notification; macOS reports when Drifty's are off. */
+  const { authorization: notificationAuthorization } = useNativeNotificationAuthorization();
+  const dayReviewBlocked = dayReviewEnabled && notificationAuthorization === "denied";
 
   const driftAlertDelayOptions = DRIFT_ALERT_DELAY_OPTIONS.map((option) => ({
     value: option.value,
@@ -250,6 +254,14 @@ export function NotificationsSettingsSection({
           <div>
             <div className="lbl">{t("settings.moments.dayReview")}</div>
             <div className="desc">{t("settings.moments.dayReviewDescription")}</div>
+            {dayReviewBlocked ? (
+              <>
+                <p className="capture-recency capture-recency--error" role="alert">{t("settings.moments.dayReviewNotificationsOff")}</p>
+                <button type="button" className="settings-inline-link" onClick={() => void openNotificationSettings()}>
+                  {t("settings.permissions.openSystemSettings")} <span aria-hidden="true">→</span>
+                </button>
+              </>
+            ) : null}
           </div>
           <div className="ctrl">
             <Toggle

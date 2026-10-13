@@ -7,6 +7,8 @@ import {
   openFullDiskAccessSettingsPane,
   openSystemSettingsPane,
 } from "../../lib/api/systemSettingsClient";
+import type { TranslationKey } from "../localization/translations";
+import { useNativeNotificationAuthorization } from "./useNativeNotificationAuthorization";
 import "./PermissionsSettingsSection.css";
 
 type PermissionsSettingsSectionProps = {
@@ -27,9 +29,10 @@ function isDesktopRuntime() {
 // A permission row keeps one control in its action column: the step the user
 // still has to take (a bordered button) or the result (a status). Never both,
 // because a button beside "Enabled" asks for an action the row no longer needs.
-// This is also how the onboarding permission step reads. Notifications is the
-// one row whose button is a shortcut rather than a step: it has no status to
-// show, so its button is the row's only control.
+// This is also how the onboarding permission step reads. Notifications on
+// Windows, or in a Drifty process outside an app bundle, is the one row whose
+// button is a shortcut rather than a step: it has no status to show, so its
+// button is the row's only control.
 function PermissionControl({ children }: { readonly children: ReactNode }) {
   return <div className="ctrl settings-permission-control settings-permission-control--single">{children}</div>;
 }
@@ -71,6 +74,13 @@ export function PermissionsSettingsSection({
   const [accessibilityError, setAccessibilityError] = useState(false);
   const [openFailedTarget, setOpenFailedTarget] = useState<OsSettingsTarget | null>(null);
   const windowsHost = hostPlatform === "windows";
+  const { authorization: notificationAuthorization, request: requestNotificationAuthorization } = useNativeNotificationAuthorization();
+  /* Only macOS's UNUserNotificationCenter reports a real answer. Windows and a
+     Drifty process outside an app bundle report "unavailable" and keep the
+     plain shortcut to the OS settings. */
+  const notificationStatus = !windowsHost && notificationAuthorization && notificationAuthorization !== "unavailable"
+    ? notificationAuthorization
+    : null;
 
   useEffect(() => {
     onCheckAccessibilityRef.current = onCheckAccessibility;
@@ -162,6 +172,39 @@ export function PermissionsSettingsSection({
 
   const accessibilitySettled = desktopRuntime && !accessibilityChecking && accessibilityGranted && !accessibilityError;
 
+  function notificationDescriptionKey(): TranslationKey {
+    if (notificationStatus === "authorized") return "settings.permissions.notificationsDescriptionAuthorized";
+    if (notificationStatus === "denied") return "settings.permissions.notificationsDescriptionDenied";
+    if (notificationStatus === "notDetermined") return "settings.permissions.notificationsDescriptionNotDetermined";
+    return windowsHost
+      ? "settings.permissions.notificationsDescriptionWindows"
+      : "settings.permissions.notificationsDescription";
+  }
+
+  // Allowed: the status, with the settings link in the description. Off: the
+  // step that turns them back on. Not asked: the step that asks. No readable
+  // answer: the shortcut alone, as on Windows.
+  function notificationControl() {
+    if (!desktopRuntime) return <PermissionStatus label={t("settings.permissions.macAppOnly")} tone="unavailable" />;
+    if (notificationStatus === "authorized") return <PermissionStatus label={t("common.enabled")} tone="success" />;
+    if (notificationStatus === "notDetermined") {
+      return (
+        <PermissionControl>
+          <button type="button" className="settings-btn" onClick={() => void requestNotificationAuthorization()}>
+            {t("settings.permissions.allowNotifications")}
+          </button>
+        </PermissionControl>
+      );
+    }
+    return (
+      <PermissionControl>
+        <button type="button" className="settings-btn" onClick={() => void openOsSettings("notifications")}>
+          {openSettingsLabel}
+        </button>
+      </PermissionControl>
+    );
+  }
+
   // Rendered as the last block of Settings > General, not as its own page:
   // two or three status rows (one on Windows) did not justify a sidebar tab.
   return (
@@ -196,22 +239,15 @@ export function PermissionsSettingsSection({
             <div className="lbl">{t("settings.permissions.notifications")}</div>
             <span className="ui-badge settings-permission-requirement">{t("common.recommended")}</span>
           </div>
-          <div className="desc">{t(windowsHost
-            ? "settings.permissions.notificationsDescriptionWindows"
-            : "settings.permissions.notificationsDescription")}</div>
+          <div className="desc">
+            {t(notificationDescriptionKey())}
+            {notificationStatus === "authorized" ? (
+              <> <OsSettingsLink label={openSettingsLabel} onOpen={() => void openOsSettings("notifications")} /></>
+            ) : null}
+          </div>
           {openFailedAlert("notifications")}
         </div>
-        {/* No status on desktop: the plugin cannot read the OS notification
-            setting, and nothing here needs to be granted. The button is the
-            row's only control, a shortcut to where the OS changes how
-            notifications appear. */}
-        {desktopRuntime ? (
-          <PermissionControl>
-            <button type="button" className="settings-btn" onClick={() => void openOsSettings("notifications")}>
-              {openSettingsLabel}
-            </button>
-          </PermissionControl>
-        ) : <PermissionStatus label={t("settings.permissions.macAppOnly")} tone="unavailable" />}
+        {notificationControl()}
       </div>
 
       {safariHistory.show ? (

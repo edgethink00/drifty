@@ -8,12 +8,16 @@ const {
   isPermissionGranted,
   openFullDiskAccessSettingsPane,
   openSystemSettingsPane,
+  readNativeNotificationAuthorization,
+  requestNativeNotificationAuthorization,
   requestPermission,
   safariHistoryPermission,
 } = vi.hoisted(() => ({
   isPermissionGranted: vi.fn(),
   openFullDiskAccessSettingsPane: vi.fn(),
   openSystemSettingsPane: vi.fn(),
+  readNativeNotificationAuthorization: vi.fn(),
+  requestNativeNotificationAuthorization: vi.fn(),
   requestPermission: vi.fn(),
   safariHistoryPermission: {
     show: false,
@@ -31,6 +35,11 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
 vi.mock("../../lib/api/systemSettingsClient", () => ({
   openFullDiskAccessSettingsPane,
   openSystemSettingsPane,
+}));
+
+vi.mock("../../lib/api/nativeNotificationClient", () => ({
+  readNativeNotificationAuthorization,
+  requestNativeNotificationAuthorization,
 }));
 
 vi.mock("../onboarding/useSafariHistoryPermission", () => ({
@@ -51,6 +60,8 @@ describe("PermissionsSettingsSection", () => {
     requestPermission.mockResolvedValue("granted");
     openSystemSettingsPane.mockResolvedValue(true);
     openFullDiskAccessSettingsPane.mockResolvedValue(true);
+    readNativeNotificationAuthorization.mockResolvedValue("unavailable");
+    requestNativeNotificationAuthorization.mockResolvedValue("authorized");
     safariHistoryPermission.show = false;
     safariHistoryPermission.readable = false;
     safariHistoryPermission.opening = false;
@@ -82,7 +93,7 @@ describe("PermissionsSettingsSection", () => {
     await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
   });
 
-  it("requests Accessibility but never reports a notification status it cannot read", async () => {
+  it("requests Accessibility and shows no notification status when macOS cannot report one", async () => {
     const onCheckAccessibility = vi.fn().mockResolvedValue(false);
     const onRequestAccessibility = vi.fn().mockResolvedValue(false);
 
@@ -104,17 +115,72 @@ describe("PermissionsSettingsSection", () => {
     expect(accessibilityRow?.querySelector(".settings-permission-status")).toBeNull();
     expect(accessibilityRow?.querySelectorAll(".settings-permission-control > *")).toHaveLength(1);
 
-    // The desktop notification plugin answers "granted" without asking the OS,
-    // so the row neither asks it nor shows Enabled/Not enabled.
+    // Outside an app bundle (and on Windows) only the plugin is left, which
+    // answers "granted" without asking the OS: no status, no request button.
     const notificationRow = screen.getByText("Notifications").closest(".settings-permission-row");
+    await waitFor(() => expect(readNativeNotificationAuthorization).toHaveBeenCalled());
     expect(notificationRow?.querySelector(".settings-permission-status")).toBeNull();
     // Its one control is the settings shortcut button, as before.
     expect(notificationRow?.querySelectorAll(".settings-permission-control > *")).toHaveLength(1);
     expect(notificationRow?.querySelector(".settings-btn")?.textContent).toBe("Open System Settings");
-    expect(notificationRow?.textContent).toContain("No separate permission is needed.");
+    expect(notificationRow?.textContent).toContain("Change how Drifty notifications appear in System Settings");
     expect(isPermissionGranted).not.toHaveBeenCalled();
     expect(requestPermission).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /^Allow notifications$/ })).toBeNull();
+  });
+
+  it("shows macOS's own notification answer and asks only while it is unanswered", async () => {
+    readNativeNotificationAuthorization.mockResolvedValue("notDetermined");
+
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted
+        accessibilityRequired
+        onCheckAccessibility={vi.fn().mockResolvedValue(true)}
+        onRequestAccessibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const notificationRow = screen.getByText("Notifications").closest(".settings-permission-row");
+    if (!(notificationRow instanceof HTMLElement)) throw new Error("notification row missing");
+    // Not asked: the request button is the row's only control.
+    const allow = await within(notificationRow).findByRole("button", { name: /^Allow notifications$/ });
+    expect(notificationRow.querySelector(".settings-permission-status")).toBeNull();
+    expect(notificationRow.querySelectorAll(".settings-permission-control > *")).toHaveLength(1);
+    expect(notificationRow.textContent).toContain("macOS asks once before Drifty can send notifications");
+    fireEvent.click(allow);
+    await waitFor(() => expect(requestNativeNotificationAuthorization).toHaveBeenCalledTimes(1));
+    // Allowed: the status alone, with the settings shortcut as a quiet link in the description.
+    expect((await within(notificationRow).findByText("Enabled")).getAttribute("data-tone")).toBe("success");
+    expect(notificationRow.querySelector(".settings-btn")).toBeNull();
+    expect(notificationRow.querySelector(".settings-inline-link")?.textContent).toContain("Open System Settings");
+    expect(openSystemSettingsPane).not.toHaveBeenCalled();
+    fireEvent.click(within(notificationRow).getByRole("button", { name: /Open System Settings/ }));
+    await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
+  });
+
+  it("says the day review cannot arrive while notifications are off for Drifty", async () => {
+    readNativeNotificationAuthorization.mockResolvedValue("denied");
+
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted
+        accessibilityRequired
+        onCheckAccessibility={vi.fn().mockResolvedValue(true)}
+        onRequestAccessibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const notificationRow = screen.getByText("Notifications").closest(".settings-permission-row");
+    if (!(notificationRow instanceof HTMLElement)) throw new Error("notification row missing");
+    // Off: the step that turns them back on is the row's only control, and the description says why.
+    await waitFor(() => expect(notificationRow.textContent).toContain("the day review cannot arrive"));
+    expect(notificationRow.querySelector(".settings-permission-status")).toBeNull();
+    expect(notificationRow.querySelectorAll(".settings-permission-control > *")).toHaveLength(1);
+    expect(notificationRow.querySelector(".settings-inline-link")).toBeNull();
+    fireEvent.click(within(notificationRow).getByRole("button", { name: /^Open System Settings$/ }));
+    await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
+    expect(requestNativeNotificationAuthorization).not.toHaveBeenCalled();
   });
 
   it("shows a granted permission as a status with a quiet settings link and refreshes it on focus", async () => {

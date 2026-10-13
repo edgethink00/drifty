@@ -6,6 +6,12 @@ import { DEFAULT_QUIET_HOURS } from "../companion/quietHours";
 import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
 import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 
+const nativeNotifications = vi.hoisted(() => ({ authorization: "unavailable" as string }));
+vi.mock("../../lib/api/nativeNotificationClient", () => ({
+  readNativeNotificationAuthorization: async () => nativeNotifications.authorization,
+  requestNativeNotificationAuthorization: async () => nativeNotifications.authorization,
+}));
+
 function renderSettings(
   overrides: Partial<Parameters<typeof NotificationsSettingsSection>[0]> = {},
   language: DisplayLanguage = "en",
@@ -42,7 +48,10 @@ function renderSettings(
 }
 
 describe("NotificationsSettingsSection", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    nativeNotifications.authorization = "unavailable";
+  });
 
   it("opens with the section title and no resident Companion controls", () => {
     renderSettings();
@@ -141,6 +150,24 @@ describe("NotificationsSettingsSection", () => {
     expect(reviewTime.disabled).toBe(true);
     fireEvent.click(screen.getByRole("switch", { name: "Toggle the day review" }));
     expect(props.onDayReviewEnabledChange).toHaveBeenCalledWith(true);
+  });
+
+  it("says the day review cannot arrive while notifications are off for Drifty, and only then", async () => {
+    nativeNotifications.authorization = "denied";
+    const openNotificationSettings = vi.fn(async () => true);
+    renderSettings({ openNotificationSettings });
+
+    const dayReviewRow = document.querySelector('[data-setting-id="settings.moments.dayReview"]');
+    if (!(dayReviewRow instanceof HTMLElement)) throw new Error("day review row missing");
+    expect((await within(dayReviewRow).findByRole("alert")).textContent).toBe("Notifications are off for Drifty, so the review cannot arrive.");
+    fireEvent.click(within(dayReviewRow).getByRole("button", { name: /Open System Settings/ }));
+    expect(openNotificationSettings).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    renderSettings({ dayReviewEnabled: false });
+    await Promise.resolve();
+    const offRow = document.querySelector('[data-setting-id="settings.moments.dayReview"]');
+    expect(offRow?.querySelector('[role="alert"]')).toBeNull();
   });
 
   it("hides quiet-hour times until the window is on, and never lets start equal end", () => {

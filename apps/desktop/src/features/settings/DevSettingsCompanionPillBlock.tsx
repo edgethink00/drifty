@@ -14,6 +14,8 @@ type DevSettingsCompanionPillBlockProps = {
   readonly onPreviewMilestone: (previewId: CompanionMilestonePreviewId) => void;
   readonly onPreviewMoment: (previewId: CompanionMomentPreviewId) => void;
   readonly onPreviewDayReview: () => void;
+  /** Sends the Day Review through its production channel, the system notification. */
+  readonly onPreviewDayReviewNotification?: () => void;
 };
 
 export function DevSettingsCompanionPillBlock({
@@ -23,9 +25,10 @@ export function DevSettingsCompanionPillBlock({
   onPreviewMilestone,
   onPreviewMoment,
   onPreviewDayReview,
+  onPreviewDayReviewNotification,
 }: DevSettingsCompanionPillBlockProps) {
   const [milestonePreview, setMilestonePreview] = useState<CompanionMilestonePreviewId>(COMPANION_MILESTONE_PREVIEW_OPTIONS[0].id);
-  const [momentPreview, setMomentPreview] = useState<CompanionMomentPreviewId | "dayReview">(COMPANION_MOMENT_PREVIEW_OPTIONS[0].id);
+  const [momentPreview, setMomentPreview] = useState<CompanionMomentPreviewId | "dayReview" | "dayReviewNotification">(COMPANION_MOMENT_PREVIEW_OPTIONS[0].id);
 
   return (
     <div className="settings-block settings-block--dev-preview">
@@ -68,11 +71,22 @@ export function DevSettingsCompanionPillBlock({
           </div>
         </div>
         <div className="ctrl dev-preview-picker">
-          <select className="settings-select" aria-label="Companion moment preview" value={momentPreview} onChange={(event) => setMomentPreview(event.target.value as CompanionMomentPreviewId | "dayReview")}>
+          <select className="settings-select" aria-label="Companion moment preview" value={momentPreview} onChange={(event) => setMomentPreview(event.target.value as CompanionMomentPreviewId | "dayReview" | "dayReviewNotification")}>
             {COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
             <option value="dayReview">Day review</option>
+            {onPreviewDayReviewNotification ? <option value="dayReviewNotification">Day review notification</option> : null}
           </select>
-          <button type="button" className="settings-btn settings-btn--primary" onClick={() => momentPreview === "dayReview" ? onPreviewDayReview() : onPreviewMoment(momentPreview)}>Preview</button>
+          <button
+            type="button"
+            className="settings-btn settings-btn--primary"
+            onClick={() => {
+              if (momentPreview === "dayReview") onPreviewDayReview();
+              else if (momentPreview === "dayReviewNotification") onPreviewDayReviewNotification?.();
+              else onPreviewMoment(momentPreview);
+            }}
+          >
+            Preview
+          </button>
         </div>
       </div>
     </div>
