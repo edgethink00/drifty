@@ -1,7 +1,9 @@
 import {
   type PostHogEventName,
   type PostHogEventPropertiesArgument,
+  sanitizePostHogEventProperties,
 } from "./events";
+import { recordSupportJournalEvent } from "../diagnostics/supportJournal";
 import {
   PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT,
   PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY,
@@ -179,6 +181,7 @@ export function capturePostHogEvent<Event extends PostHogEventName>(
   event: Event,
   ...properties: PostHogEventPropertiesArgument<Event>
 ): void {
+  journalSupportEvent(event, properties[0]);
   client.capturePostHogEvent(event, ...properties);
 }
 
@@ -188,7 +191,18 @@ export function capturePostHogDailyEvent<Event extends PostHogEventName>(
   dedupKey: string,
   ...properties: PostHogEventPropertiesArgument<Event>
 ): void {
+  journalSupportEvent(event, properties[0]);
   client.capturePostHogDailyEvent(event, dedupKey, ...properties);
+}
+
+/**
+ * Keeps the sanitized outcome in the local support journal before the
+ * analytics preference is consulted; the journal only leaves the device with a
+ * feedback report the person chose to send with diagnostics.
+ */
+function journalSupportEvent(event: PostHogEventName, properties: unknown): void {
+  const record = properties && typeof properties === "object" ? properties as Readonly<Record<string, unknown>> : undefined;
+  recordSupportJournalEvent(event, sanitizePostHogEventProperties(event, record));
 }
 
 export function recordPostHogAuthState(user: PostHogUser | null): void {

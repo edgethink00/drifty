@@ -257,3 +257,33 @@ fn reports_older_than_the_window_are_left_alone() {
     );
     assert_eq!(forwarded, 0);
 }
+#[test]
+fn feedback_summaries_list_recent_drifty_crashes_without_paths_or_frames() {
+    let reports = tempfile::tempdir().unwrap();
+    std::fs::write(
+        reports.path().join("drifty-2026-09-27-120000.ips"),
+        report_text(drifty_header("incident-a"), uncaught_exception_body()),
+    )
+    .unwrap();
+    let mut foreign = drifty_header("incident-c");
+    foreign["bundleID"] = json!("com.example.other");
+    std::fs::write(
+        reports.path().join("drifty-helper-2026-09-27.ips"),
+        report_text(foreign, uncaught_exception_body()),
+    )
+    .unwrap();
+
+    let summaries = summarize_recent_reports(
+        &[reports.path().to_path_buf(), reports.path().join("missing")],
+        SystemTime::now(),
+    );
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].incident_id, "incident-a");
+    assert_eq!(summaries[0].kind, "EXC_CRASH (SIGABRT)");
+    assert_eq!(summaries[0].app_version.as_deref(), Some("1.11.21"));
+    assert!(summaries[0].occurred_at_ms > 0);
+    let serialized = serde_json::to_string(&summaries).unwrap();
+    assert!(!serialized.contains("/Users/"), "{serialized}");
+    assert!(!serialized.contains("NSWindow"), "{serialized}");
+}

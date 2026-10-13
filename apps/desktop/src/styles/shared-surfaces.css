@@ -1063,6 +1063,76 @@ img.site-favicon { border-radius: 20%; }
   color: var(--warn);
 }
 
+/* The debug log travels with a report by default. Its checkbox sits beside
+   Attach images in the same quiet footer button; the box is drawn to match the
+   footer, filling with the Send button's color when on. */
+.feedback-modal__debug-log {
+  position: relative;
+  cursor: pointer;
+}
+
+.feedback-modal__debug-log-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.feedback-modal__debug-log-box {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, var(--text-soft) 70%, transparent);
+  border-radius: 4.5px;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.feedback-modal__debug-log-box svg {
+  width: 11px;
+  height: 11px;
+  opacity: 0;
+}
+
+.feedback-modal__debug-log-input:checked + .feedback-modal__debug-log-box {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--surface);
+}
+
+.feedback-modal__debug-log-input:checked + .feedback-modal__debug-log-box svg {
+  opacity: 1;
+}
+
+.feedback-modal__debug-log:has(.feedback-modal__debug-log-input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 1px;
+}
+
+.feedback-modal__debug-log.is-disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+/* A send error takes the row's flexible space; the label text steps aside
+   (it stays the checkbox's accessible name) so the message keeps its room. */
+.feedback-modal__actions:has(.modal-foot__note--error) .feedback-modal__debug-log {
+  padding-inline: var(--space-2);
+}
+
+.feedback-modal__actions:has(.modal-foot__note--error) .feedback-modal__debug-log-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 .auth-modal .feedback-modal__actions {
   border-top: 0;
   padding-top: 0;
@@ -1071,7 +1141,7 @@ img.site-favicon { border-radius: 20%; }
 .feedback-modal__attach-group {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 2px;
   margin-right: auto;
 }
 

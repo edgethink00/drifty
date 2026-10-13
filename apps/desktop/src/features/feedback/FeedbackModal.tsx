@@ -6,6 +6,7 @@ import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { DisplayLanguage } from "../localization/languagePreference";
+import type { FeedbackDiagnostics } from "./feedbackDiagnostics";
 import { submitFeedback, type FeedbackAttachment } from "./feedbackService";
 
 const MESSAGE_MAX_LENGTH = 3_000;
@@ -16,6 +17,8 @@ const ATTACHMENT_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,image/heic,
 const MAX_ATTACHMENTS = 3;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_ATTACHMENT_TOTAL_BYTES = 10 * 1024 * 1024;
+/** A slow native read must not hold the report back; it sends without diagnostics instead. */
+const DIAGNOSTICS_TIMEOUT_MS = 5_000;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -34,15 +37,23 @@ type AttachmentDraft = {
 type FeedbackModalProps = {
   initialEmail?: string | null;
   onClose: () => void;
+  /**
+   * Builds the debug log a report carries while "Include debug logs" stays
+   * checked. Omitted where the app cannot read one, which hides the option.
+   */
+  collectDiagnostics?: () => Promise<FeedbackDiagnostics | null>;
 };
 
-export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
+export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: FeedbackModalProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [email, setEmail] = useState(initialEmail?.trim() ?? "");
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
+  // Checked by default: a report with a debug log can usually be answered
+  // without a follow-up round trip. The person can uncheck it per report.
+  const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; message?: string }>({});
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -106,10 +117,15 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
       return;
     }
 
+    // Read at send time; a failed or slow read sends the message without it.
+    const diagnostics = includeDiagnostics && collectDiagnostics
+      ? await withTimeout(collectDiagnostics(), DIAGNOSTICS_TIMEOUT_MS).catch(() => null)
+      : null;
     const result = await submitFeedback({
       email: trimmedEmail,
       message: trimmedMessage,
       attachments: preparedAttachments,
+      diagnostics,
     });
 
     setIsSending(false);
@@ -311,6 +327,29 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
                     disabled={isSending || attachments.length >= MAX_ATTACHMENTS}
                   />
                 </label>
+                {/* Sits beside Attach images as the other thing that travels
+                    with the message, in the same quiet footer button. While a
+                    send error needs the row, only the box stays visible. */}
+                {collectDiagnostics ? (
+                  <label
+                    className={`modal-btn modal-btn--ghost feedback-modal__debug-log${isSending ? " is-disabled" : ""}`}
+                    title={formError ? t("feedback.debugLog.include") : undefined}
+                  >
+                    <input
+                      type="checkbox"
+                      className="feedback-modal__debug-log-input"
+                      checked={includeDiagnostics}
+                      onChange={(event) => setIncludeDiagnostics(event.currentTarget.checked)}
+                      disabled={isSending}
+                    />
+                    <span className="feedback-modal__debug-log-box" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 12.5l4 4 8-9" />
+                      </svg>
+                    </span>
+                    <span className="feedback-modal__debug-log-text">{t("feedback.debugLog.include")}</span>
+                  </label>
+                ) : null}
               </div>
               {formError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={formError}>{formError}</p> : null}
               <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose} disabled={isSending}>
@@ -358,6 +397,22 @@ function localizeFeedbackServiceError(
     default:
       return t("feedback.error.sendWithDetail", { detail: error });
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(null), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 function createAttachmentId(file: File, index: number) {

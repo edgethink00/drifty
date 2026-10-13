@@ -34,6 +34,8 @@ const MAX_VALUE_CHARS: usize = 1_000;
 const REMEMBERED_INCIDENTS: usize = 64;
 const STATE_FILE_NAME: &str = "native-crash-reports.json";
 const MECHANISM: &str = "macos_crash_report";
+/// Crashes listed in a feedback report; Sentry keeps the full detail.
+const MAX_SUMMARIZED_CRASHES: usize = 5;
 
 // Windows Error Reporting records share this module's forwarding state rules.
 #[path = "native_crash_reports_windows.rs"]
@@ -391,6 +393,67 @@ pub(crate) fn forward_new_reports(
         }
     }
     forwarded
+}
+
+/// A recent Drifty crash as a feedback report lists it: the incident that
+/// links it to the forwarded Sentry event, the crash kind, the build and the
+/// time. No frames, paths, memory or device identifiers.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RecentCrashSummary {
+    pub incident_id: String,
+    pub kind: String,
+    pub app_version: Option<String>,
+    pub occurred_at_ms: u64,
+}
+
+/// Drifty's own crashes from the last 14 days, newest first.
+pub(crate) fn summarize_recent_reports(
+    report_dirs: &[PathBuf],
+    now: SystemTime,
+) -> Vec<RecentCrashSummary> {
+    candidate_reports(report_dirs, now)
+        .into_iter()
+        .filter_map(|(path, modified)| {
+            let text = std::fs::read_to_string(&path).ok()?;
+            let report = parse_crash_report(&text)?;
+            Some(RecentCrashSummary {
+                incident_id: report.incident_id,
+                kind: report.exception_type,
+                app_version: report.app_version,
+                occurred_at_ms: millis_since_epoch(modified),
+            })
+        })
+        .take(MAX_SUMMARIZED_CRASHES)
+        .collect()
+}
+
+fn millis_since_epoch(time: SystemTime) -> u64 {
+    time.duration_since(SystemTime::UNIX_EPOCH)
+        .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
+}
+
+/// Recent crashes of this install for a feedback report.
+#[cfg(target_os = "macos")]
+pub(crate) fn recent_crash_summaries(app: &tauri::AppHandle) -> Vec<RecentCrashSummary> {
+    use tauri::Manager;
+
+    let Ok(home) = app.path().home_dir() else {
+        return Vec::new();
+    };
+    let reports = home.join("Library/Logs/DiagnosticReports");
+    summarize_recent_reports(&[reports.join("Retired"), reports], SystemTime::now())
+}
+
+#[cfg(windows)]
+pub(crate) fn recent_crash_summaries(_app: &tauri::AppHandle) -> Vec<RecentCrashSummary> {
+    windows_reports::recent_crash_summaries()
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+pub(crate) fn recent_crash_summaries(_app: &tauri::AppHandle) -> Vec<RecentCrashSummary> {
+    Vec::new()
 }
 
 /// Starts a background pass that forwards crashes from earlier sessions.

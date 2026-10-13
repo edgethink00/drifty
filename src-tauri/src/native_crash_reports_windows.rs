@@ -16,8 +16,8 @@
 #![cfg_attr(not(windows), allow(dead_code))]
 
 use super::{
-    read_state, write_state, ForwardedState, MAX_FORWARDED_PER_LAUNCH, MAX_REPORT_AGE,
-    MAX_REPORT_BYTES, REMEMBERED_INCIDENTS,
+    read_state, write_state, ForwardedState, RecentCrashSummary, MAX_FORWARDED_PER_LAUNCH,
+    MAX_REPORT_AGE, MAX_REPORT_BYTES, MAX_SUMMARIZED_CRASHES, REMEMBERED_INCIDENTS,
 };
 use crate::observability::release_for_app_version;
 use sentry::protocol::{
@@ -439,6 +439,73 @@ pub(crate) fn forward_new_reports(
     forwarded
 }
 
+/// Crashes of this install's executables from the last 14 days, newest
+/// first. The kind names the process, so a tracker or browser-host crash is
+/// distinguishable from the app itself, and the faulting module the Sentry
+/// event already carries.
+pub(crate) fn summarize_recent_reports(
+    report_dirs: &[PathBuf],
+    install_dir: &Path,
+    now: SystemTime,
+) -> Vec<RecentCrashSummary> {
+    let install_dir = normalize_dir(&install_dir.to_string_lossy());
+    candidate_reports(report_dirs, now)
+        .into_iter()
+        .filter_map(|(path, modified)| {
+            let bytes = std::fs::read(&path).ok()?;
+            let crash = parse_report_wer(&bytes)?;
+            if crash.process_dir.as_deref()
+                != Some(installed_process_dir(&crash.process, &install_dir).as_str())
+            {
+                return None;
+            }
+            let mut kind = format!("{} {}", crash.process, crash.event_type);
+            if let Some(code) = crash.exception_code {
+                kind.push_str(&format!(" 0x{code:08x}"));
+            }
+            if let Some(module) = &crash.fault_module {
+                kind.push_str(&format!(" in {module}"));
+            }
+            let occurred_at = crash.event_time.unwrap_or(modified);
+            Some(RecentCrashSummary {
+                incident_id: crash.incident_id,
+                kind,
+                app_version: crash.app_version,
+                occurred_at_ms: occurred_at
+                    .duration_since(UNIX_EPOCH)
+                    .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+                    .unwrap_or(0),
+            })
+        })
+        .take(MAX_SUMMARIZED_CRASHES)
+        .collect()
+}
+
+/// Per-user crashes are filed in the machine store with an ACL for the
+/// crashing account; some configurations use the per-user store instead.
+#[cfg(windows)]
+fn wer_report_dirs() -> Vec<PathBuf> {
+    ["ProgramData", "LOCALAPPDATA"]
+        .iter()
+        .filter_map(|name| std::env::var_os(name).map(PathBuf::from))
+        .flat_map(|base| {
+            let wer = base.join("Microsoft").join("Windows").join("WER");
+            [wer.join("ReportArchive"), wer.join("ReportQueue")]
+        })
+        .collect()
+}
+
+#[cfg(windows)]
+pub(super) fn recent_crash_summaries() -> Vec<RecentCrashSummary> {
+    let Some(install_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    else {
+        return Vec::new();
+    };
+    summarize_recent_reports(&wer_report_dirs(), &install_dir, SystemTime::now())
+}
+
 /// Starts a background pass that forwards WER crash records of earlier
 /// sessions. It waits so it never competes with launch, and does nothing when
 /// Sentry is not configured for this build.
@@ -460,16 +527,7 @@ pub(super) fn forward_previous_crashes(app: &tauri::AppHandle) {
     else {
         return;
     };
-    // Per-user crashes are filed in the machine store with an ACL for the
-    // crashing account; some configurations use the per-user store instead.
-    let report_dirs: Vec<PathBuf> = ["ProgramData", "LOCALAPPDATA"]
-        .iter()
-        .filter_map(|name| std::env::var_os(name).map(PathBuf::from))
-        .flat_map(|base| {
-            let wer = base.join("Microsoft").join("Windows").join("WER");
-            [wer.join("ReportArchive"), wer.join("ReportQueue")]
-        })
-        .collect();
+    let report_dirs = wer_report_dirs();
     let state_path = app_data.join(STATE_FILE_NAME);
     let spawned = std::thread::Builder::new()
         .name("wer-crash-report-forwarder".to_string())

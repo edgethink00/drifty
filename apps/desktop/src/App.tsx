@@ -183,7 +183,9 @@ import {
   resolveInitialDashboardFlowIntervalMinutes,
 } from "./features/flow-chart/flowChartDetailPreference";
 
-import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
+import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents, type AiDebugLogInput, type DeviceSyncDebugInput } from "./features/settings/debugLog";
+import { collectFeedbackDiagnostics } from "./features/feedback/collectFeedbackDiagnostics";
+import type { FeedbackEntryPoint } from "./features/feedback/feedbackDiagnostics";
 import { createDeveloperDiagnosticsSync } from "./features/settings/developerDiagnosticsSync";
 import { readContextualGuardAuditEvents } from "./features/classification/contextualGuardAuditLog";
 import {
@@ -1613,7 +1615,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [authModalIntent, setAuthModalIntent] = useState<"default" | "promo">("default");
   const [promoHandoffPending, setPromoHandoffPending] = useState(hasPendingPromoHandoff);
   const [promoHandoffMismatch, setPromoHandoffMismatch] = useState(false);
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackEntryPoint, setFeedbackEntryPoint] = useState<FeedbackEntryPoint | null>(null);
+  const feedbackModalOpen = feedbackEntryPoint !== null;
   const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   /** The trial-end sheet opens by itself at most once per launch. */
@@ -10020,6 +10023,48 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       },
     }));
   }, []);
+  // Shared by the Dev settings debug log and feedback diagnostics, so both read
+  // the same AI and device-sync state.
+  const buildAiDebugLogInput = useCallback((): AiDebugLogInput => ({
+    route: hasSelectedAiClassificationProvider ? selectedClassificationRoute : "disabled",
+    connectionStatus: aiConnectionStatus,
+    cloud: {
+      isSupabaseConfigured,
+      hasRequiredAccountAuth,
+      canUseCloudAiClassification,
+      entitlement: billingEntitlement,
+      entitlementLoading: billingEntitlementLoading,
+      entitlementError: billingEntitlementError,
+    },
+    local: {
+      providerLabel: localAiConnectionProviderLabel,
+      providerStatus: localAiProviderStatus,
+    },
+    classification: {
+      actionLoading: classificationActionLoading,
+      summary: classificationSummary,
+      observedFailure: localAiConnectionPersistentFailure,
+    },
+    usage: {
+      day: aiClassificationUsageDay,
+      summary: aiClassificationUsage,
+    },
+  }), [aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, classificationActionLoading, classificationSummary, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, isSupabaseConfigured, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, selectedClassificationRoute]);
+  const buildDeviceSyncDebugLogInput = useCallback((): DeviceSyncDebugInput => ({
+    featureVisible: deviceSyncFeatureVisible,
+    optedIn: deviceSyncEnabled,
+    gateActive: deviceSyncActive,
+    accountResetPending: deviceSyncAccountResetPending,
+    gates: {
+      accountScopeReady: deviceSyncAccountId !== null && deviceSyncPreferenceOwnerId === deviceSyncAccountId,
+      cloudOnline: isCloudOnline,
+      supabaseConfigured: isSupabaseConfigured,
+      signedIn: isPolicySignedIn,
+      billingEligible: billingEntitlement?.canUseApp === true,
+    },
+    status: deviceSyncStatus,
+    cycleRecord: findDeviceSyncCycleRecord(readDeviceSyncCycleRecords(), deviceSyncUserScopeKey),
+  }), [billingEntitlement, deviceSyncAccountId, deviceSyncAccountResetPending, deviceSyncActive, deviceSyncEnabled, deviceSyncFeatureVisible, deviceSyncPreferenceOwnerId, deviceSyncStatus, deviceSyncUserScopeKey, isCloudOnline, isPolicySignedIn, isSupabaseConfigured]);
   const handleOpenDebugLogs = useCallback(async () => {
     const snapshotForDebug = status?.running === true
       ? await trackerClient.getCurrentSnapshot().catch((snapshotError: unknown) => {
@@ -10060,50 +10105,48 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       segments,
       historySegments,
       leaderboardSegments,
-      ai: {
-        route: hasSelectedAiClassificationProvider ? selectedClassificationRoute : "disabled",
-        connectionStatus: aiConnectionStatus,
-        cloud: {
-          isSupabaseConfigured,
-          hasRequiredAccountAuth,
-          canUseCloudAiClassification,
-          entitlement: billingEntitlement,
-          entitlementLoading: billingEntitlementLoading,
-          entitlementError: billingEntitlementError,
-        },
-        local: {
-          providerLabel: localAiConnectionProviderLabel,
-          providerStatus: localAiProviderStatus,
-        },
-        classification: {
-          actionLoading: classificationActionLoading,
-          summary: classificationSummary,
-          observedFailure: localAiConnectionPersistentFailure,
-        },
-        usage: {
-          day: aiClassificationUsageDay,
-          summary: aiClassificationUsage,
-        },
-      },
-      deviceSync: {
-        featureVisible: deviceSyncFeatureVisible,
-        optedIn: deviceSyncEnabled,
-        gateActive: deviceSyncActive,
-        accountResetPending: deviceSyncAccountResetPending,
-        gates: {
-          accountScopeReady: deviceSyncAccountId !== null && deviceSyncPreferenceOwnerId === deviceSyncAccountId,
-          cloudOnline: isCloudOnline,
-          supabaseConfigured: isSupabaseConfigured,
-          signedIn: isPolicySignedIn,
-          billingEligible: billingEntitlement?.canUseApp === true,
-        },
-        status: deviceSyncStatus,
-        cycleRecord: findDeviceSyncCycleRecord(readDeviceSyncCycleRecords(), deviceSyncUserScopeKey),
-      },
+      ai: buildAiDebugLogInput(),
+      deviceSync: buildDeviceSyncDebugLogInput(),
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, deviceSyncAccountId, deviceSyncAccountResetPending, deviceSyncActive, deviceSyncEnabled, deviceSyncFeatureVisible, deviceSyncPreferenceOwnerId, deviceSyncStatus, deviceSyncUserScopeKey, driftAlarmTrayStatus, effectiveEnhancedContextSettings, endOfDayReviewMinute, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, historySegments, isCloudOnline, isPolicySignedIn, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedClassificationRoute, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, appThemeColorOverrides, buildAiDebugLogInput, buildDeviceSyncDebugLogInput, categoryColorOverrides, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, endOfDayReviewMinute, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, historySegments, leaderboardSegments, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  const collectFeedbackDiagnosticsFor = useCallback((entryPoint: FeedbackEntryPoint) => collectFeedbackDiagnostics({
+    entryPoint,
+    app: {
+      version: BUILD_INFO.version,
+      commit: BUILD_INFO.shortCommit,
+      channel: import.meta.env.VITE_DRIFTY_CHANNEL?.trim() || null,
+      platform: hostPlatform,
+      language: localization.effectiveLanguage,
+      devModeEnabled: DEV_SETTINGS_ENABLED && devModeEnabled,
+      visibleError: error,
+    },
+    tracker: { status, accessibilityGranted, accessibilityRequired },
+    todaySegments: segments,
+    ai: buildAiDebugLogInput(),
+    aiSetup: {
+      provider: localAiSetup.provider,
+      driftyRoute: localAiSetup.driftyRoute,
+      managedLocalModelId: localAiSetup.managedLocalModelId,
+      openRouterModel: localAiSetup.openRouterModel,
+      openRouterFallbackModelCount: localAiSetup.openRouterFallbackModels.length,
+      hasOpenRouterKey: localAiSetup.openRouterApiKey.trim().length > 0,
+      selfHostedModel: localAiSetup.selfHostedModel,
+      selfHostedBaseUrl: localAiSetup.selfHostedBaseUrl,
+      hasSelfHostedKey: localAiSetup.selfHostedApiKey.trim().length > 0,
+      customEndpointCredentialState,
+    },
+    nudges: {
+      driftAlarmEnabled: driftAlertsRuntimeEnabled,
+      automaticCloseEnabled,
+      petModeEnabled,
+      quietHoursActive,
+      notificationsEnabled: macosNotificationEnabled,
+      trayState: driftAlarmTrayState,
+    },
+    deviceSync: buildDeviceSyncDebugLogInput(),
+  }), [accessibilityGranted, accessibilityRequired, automaticCloseEnabled, buildAiDebugLogInput, buildDeviceSyncDebugLogInput, customEndpointCredentialState, devModeEnabled, driftAlarmTrayState, driftAlertsRuntimeEnabled, error, hostPlatform, localAiSetup, localization.effectiveLanguage, macosNotificationEnabled, petModeEnabled, quietHoursActive, segments, status]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -10723,7 +10766,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onBack={handleSettingsBack}
           onDevSubsectionChange={handleDevSettingsSubsectionChange}
           onSectionChange={setSettingsSection}
-          onSendFeedback={() => setFeedbackModalOpen(true)}
+          onSendFeedback={() => setFeedbackEntryPoint("settings_sidebar")}
         />
       ) : (
         <aside id="app-sidebar" className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
@@ -10871,7 +10914,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               handleManualCheckForUpdates();
             }}
             onFeedback={() => {
-              setFeedbackModalOpen(true);
+              setFeedbackEntryPoint("account_menu");
               setAccountMenuOpen(false);
             }}
             onInviteFriends={friendInvite ? () => {
@@ -11730,9 +11773,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         />
       ) : null}</ModalPresence>
 
-      <ModalPresence>{feedbackModalOpen ? (
+      <ModalPresence>{feedbackEntryPoint !== null ? (
         <Suspense fallback={null}>
-          <LazyFeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} />
+          <LazyFeedbackModal
+            initialEmail={user?.email ?? ""}
+            onClose={() => setFeedbackEntryPoint(null)}
+            collectDiagnostics={() => collectFeedbackDiagnosticsFor(feedbackEntryPoint)}
+          />
         </Suspense>
       ) : null}</ModalPresence>
       <ModalPresence>{whatsNewOpen ? (

@@ -319,6 +319,12 @@ const SUPPORTED_BROWSER_NAMES = [
 ];
 
 const SUPPORTED_BROWSER_NAME_SET: ReadonlySet<string> = new Set(SUPPORTED_BROWSER_NAMES);
+
+/** True for the browsers the tracker knows by name; anything else may be a user-installed app. */
+export function isSupportedBrowserName(value: string | null | undefined): boolean {
+  return typeof value === "string" && SUPPORTED_BROWSER_NAME_SET.has(value);
+}
+
 const MISSING_DIAGNOSTIC_VALUE = "missing";
 const MAX_BROWSER_AUTOMATION_ERROR_LENGTH = 240;
 const MAX_ENHANCED_CONTEXT_DEBUG_EVENTS = 100;
@@ -684,7 +690,7 @@ function buildBrowserHistoryFallbackSummary(currentSnapshot: ReturnType<typeof b
   };
 }
 
-function buildFrontmostCaptureDiagnostics(
+export function buildFrontmostCaptureDiagnostics(
   source: BrowserCaptureDiagnosticsSource,
   segments: readonly ActivitySegment[],
 ): FrontmostCaptureDiagnostics {
@@ -749,7 +755,7 @@ function buildFrontmostCaptureDiagnostics(
   };
 }
 
-function buildBrowserCaptureDiagnostics(
+export function buildBrowserCaptureDiagnostics(
   source: BrowserCaptureDiagnosticsSource,
   segments: readonly ActivitySegment[],
 ): BrowserCaptureDiagnostics {

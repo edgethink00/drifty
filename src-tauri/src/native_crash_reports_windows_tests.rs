@@ -482,3 +482,38 @@ fn the_onedir_tracker_below_the_app_counts_as_this_install() {
     assert_eq!(forwarded, 2);
     assert_eq!(sent, [tracker, host]);
 }
+#[test]
+fn feedback_summaries_name_the_process_code_and_module_of_this_install_only() {
+    let archive = tempfile::tempdir().unwrap();
+    let id = "11111111-2222-4333-8444-555555555555";
+    write_report(
+        archive.path(),
+        "BEX64_drifty.exe_d19a0e58_cab_1",
+        &fail_fast_report(INSTALL_DIR, id),
+    );
+    write_report(
+        archive.path(),
+        "BEX64_drifty.exe_4eb44325_cab_3",
+        &fail_fast_report(
+            r"C:\Users\jane\qa\drifty-candidate",
+            "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+        ),
+    );
+
+    let summaries = summarize_recent_reports(
+        &[archive.path().to_path_buf()],
+        &PathBuf::from(INSTALL_DIR),
+        SystemTime::now(),
+    );
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].incident_id, id);
+    assert_eq!(
+        summaries[0].kind,
+        "drifty.exe BEX64 0xc0000409 in ucrtbase.dll"
+    );
+    assert_eq!(summaries[0].app_version.as_deref(), Some("1.12.2.0"));
+    assert_eq!(summaries[0].occurred_at_ms, EVENT_UNIX_SECONDS * 1000);
+    let serialized = serde_json::to_string(&summaries).unwrap();
+    assert!(!serialized.contains("jane"), "{serialized}");
+}

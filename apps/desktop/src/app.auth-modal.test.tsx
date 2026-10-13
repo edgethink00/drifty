@@ -633,12 +633,16 @@ describe("App auth modal", () => {
       expect(submitFeedback).toHaveBeenCalledTimes(1);
     });
     const payload = submitFeedback.mock.calls[0]?.[0];
-    expect(payload).toEqual({
+    const { diagnostics, ...explicitFields } = payload;
+    expect(explicitFields).toEqual({
       email: "alex@example.com",
       message: "The timer froze after wake.",
       attachments: [{ filename: "wake-bug.png", contentType: "image/png", content: "aW1hZ2UtYnl0ZXM=", size: 11 }],
     });
-    expect(Object.keys(payload).sort()).toEqual(["attachments", "email", "message"]);
+    expect(Object.keys(payload).sort()).toEqual(["attachments", "diagnostics", "email", "message"]);
+    // Diagnostics stay checked by default and record where the report started.
+    expect(diagnostics).toMatchObject({ schemaVersion: 1, entryPoint: "account_menu" });
+    expect(JSON.stringify(diagnostics)).not.toContain("alex@example.com");
     expect((await within(dialog).findByRole("status")).textContent).toMatch(/we got your feedback/i);
     expect(within(dialog).queryByRole("button", { name: /^sent$/i })).toBeNull();
     // Two accessible "Close" controls exist after sending: the circular modal-x

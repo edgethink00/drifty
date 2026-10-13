@@ -54,6 +54,7 @@
     "allow-developer-check-pre-release-update",
     "allow-developer-install-pre-release-update",
     "allow-developer-tools-get-status",
+    "allow-feedback-diagnostics-get-native",
     "allow-developer-tools-install-cli",
     "allow-developer-tools-uninstall-cli",
     "allow-developer-tools-install-codex-skill",

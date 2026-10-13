@@ -31,10 +31,14 @@ pub fn init_native_sentry() -> Option<sentry::ClientInitGuard> {
 /// Other crates' logs and lower levels stay off.
 pub(crate) struct RuntimeErrorLog {
     last_error: Mutex<Option<String>>,
+    /// The same error kept after a setup failure has consumed it, so a
+    /// feedback report can still say what the windowing crates last reported.
+    latest_error: Mutex<Option<String>>,
 }
 
 static RUNTIME_ERROR_LOG: RuntimeErrorLog = RuntimeErrorLog {
     last_error: Mutex::new(None),
+    latest_error: Mutex::new(None),
 };
 
 impl RuntimeErrorLog {
@@ -43,6 +47,9 @@ impl RuntimeErrorLog {
         eprintln!("[{target}] {message}");
         if let Ok(mut last_error) = self.last_error.lock() {
             *last_error = Some(message.clone());
+        }
+        if let Ok(mut latest_error) = self.latest_error.lock() {
+            *latest_error = Some(message.clone());
         }
         sentry::Hub::main().add_breadcrumb(sentry::Breadcrumb {
             category: Some(format!("log.{target}")),
@@ -54,6 +61,13 @@ impl RuntimeErrorLog {
 
     fn take_last_error(&self) -> Option<String> {
         self.last_error.lock().ok().and_then(|mut last_error| last_error.take())
+    }
+
+    fn latest_error(&self) -> Option<String> {
+        self.latest_error
+            .lock()
+            .ok()
+            .and_then(|latest_error| latest_error.clone())
     }
 }
 
@@ -97,6 +111,12 @@ pub(crate) fn install_runtime_error_log() {
 /// The most recent windowing error logged since the previous call.
 pub(crate) fn take_last_runtime_error() -> Option<String> {
     RUNTIME_ERROR_LOG.take_last_error()
+}
+
+/// The most recent windowing error of this session, redacted, without
+/// clearing it. Used only by a feedback report the person chose to send.
+pub(crate) fn latest_runtime_error() -> Option<String> {
+    RUNTIME_ERROR_LOG.latest_error()
 }
 
 /// Tags every native event with the WebView2 runtime the machine actually has,
@@ -492,6 +512,7 @@ mod tests {
     fn runtime_error_log_keeps_only_redacted_windowing_errors() {
         let logger = RuntimeErrorLog {
             last_error: Mutex::new(None),
+            latest_error: Mutex::new(None),
         };
 
         log_error(&logger, "drifty_lib", log::Level::Error, "not a runtime error");
@@ -510,6 +531,11 @@ mod tests {
             Some(r"failed to create webview: WebView2 error at C:\Users\[user]\AppData\Local\so.drifty.windows\EBWebView")
         );
         assert_eq!(logger.take_last_error(), None, "each error is reported once");
+        assert_eq!(
+            logger.latest_error().as_deref(),
+            Some(r"failed to create webview: WebView2 error at C:\Users\[user]\AppData\Local\so.drifty.windows\EBWebView"),
+            "feedback still sees the consumed error"
+        );
 
         log_error(&logger, "tao::platform_impl", log::Level::Error, &"x".repeat(1_000));
         let long = logger.take_last_error().expect("tao error kept");
