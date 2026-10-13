@@ -172,7 +172,8 @@
 }
 
 .memory-list > * + *,
-.memory-card:not(.memory-card--padded) > * + * {
+/* Empty and error cards are a title over its description, not separate rows. */
+.memory-card:not(.memory-card--padded):not(.memory-card--empty) > * + * {
   border-top: 1px solid var(--line);
 }
 

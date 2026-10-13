@@ -1,5 +1,5 @@
 import { useSettingsSearch } from "./SettingsSearchContext";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   readLivingSoulForUser,
@@ -22,9 +22,19 @@ type AiSetupSupportSectionsProps = {
   readonly workProfileSaving: boolean;
   readonly memorySnapshotVersion: number;
   readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
-  readonly onSaveWorkProfile: () => void | Promise<void>;
+  readonly onSaveWorkProfile: () => Promise<boolean>;
   readonly onWorkProfileDraftChange: (value: WorkProfileSettings) => void;
+  readonly onResetWorkProfileDraft: () => void;
 };
+
+const PROFILE_SAVED_NOTICE_MS = 5000;
+
+function sameWorkProfile(left: WorkProfileSettings, right: WorkProfileSettings): boolean {
+  return left.workDescription.trim() === right.workDescription.trim()
+    && left.workActivityOther.trim() === right.workActivityOther.trim()
+    && left.workActivities.length === right.workActivities.length
+    && left.workActivities.every((activity, index) => activity === right.workActivities[index]);
+}
 
 type MemoryLoadState =
   | { readonly status: "loading"; readonly document: null }
@@ -41,13 +51,58 @@ export function AiSetupSupportSections({
   memorySuggestionProvider = null,
   onSaveWorkProfile,
   onWorkProfileDraftChange,
+  onResetWorkProfileDraft,
 }: AiSetupSupportSectionsProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [editorExpanded, setEditorExpanded] = useState(false);
+  const [editorFocusRequest, setEditorFocusRequest] = useState(0);
+  const [profileSavedNotice, setProfileSavedNotice] = useState(false);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreEditFocusRef = useRef(false);
+  // The draft lives in the parent panel and outlives this view, so a draft left
+  // behind by switching sections must not resurface when the editor reopens.
+  const resetDraftRef = useRef(onResetWorkProfileDraft);
+  resetDraftRef.current = onResetWorkProfileDraft;
   const { request } = useSettingsSearch();
+  useEffect(() => {
+    resetDraftRef.current();
+  }, []);
+  // While mounted, a closed editor always holds the saved profile (every close
+  // path resets or saves), so a search reveal must not wipe an open edit.
   useEffect(() => {
     if (request?.entry.reveal === "work-profile") setEditorExpanded(true);
   }, [request]);
+  useEffect(() => {
+    if (editorExpanded || !restoreEditFocusRef.current) return;
+    restoreEditFocusRef.current = false;
+    editButtonRef.current?.focus();
+  }, [editorExpanded]);
+  useEffect(() => {
+    if (!profileSavedNotice) return;
+    const timer = window.setTimeout(() => setProfileSavedNotice(false), PROFILE_SAVED_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [profileSavedNotice]);
+
+  const openEditor = () => {
+    onResetWorkProfileDraft();
+    setProfileSavedNotice(false);
+    setEditorExpanded(true);
+    setEditorFocusRequest((current) => current + 1);
+  };
+  const closeEditor = () => {
+    restoreEditFocusRef.current = true;
+    setEditorExpanded(false);
+  };
+  const cancelEditor = () => {
+    if (workProfileSaving) return;
+    onResetWorkProfileDraft();
+    closeEditor();
+  };
+  const saveEditor = async () => {
+    if (!(await onSaveWorkProfile())) return;
+    setProfileSavedNotice(true);
+    closeEditor();
+  };
   const [memory, setMemory] = useState<MemoryLoadState>({ status: "loading", document: null });
 
   useEffect(() => {
@@ -112,6 +167,7 @@ export function AiSetupSupportSections({
   }
   const editorPanelId = "ai-setup-memory-work-profile-editor";
   const editorButtonId = "ai-setup-memory-work-profile-edit";
+  const workProfileChanged = !sameWorkProfile(workProfileDraft, savedWorkProfile);
   return (
     // A plain div with only aria-label is ignored by screen readers, so the
     // Memory overview carries a real region role.
@@ -119,48 +175,58 @@ export function AiSetupSupportSections({
       <section className="memory-section" aria-labelledby="ai-memory-profile-title">
         <div className="memory-section__head">
           <h4 id="ai-memory-profile-title" className="ai-setup-provider-heading">{t("settings.ai.memoryWorkContextLabel")}</h4>
+          <div className="memory-section__aside">
+            <span className="memory-section__count" role="status">
+              {profileSavedNotice ? t("settings.ai.workProfileSaved") : ""}
+            </span>
+          </div>
         </div>
         <div className="memory-card memory-card--padded" data-setting-id="settings.ai.workProfile">
-          <div className="memory-profile__bar">
-            {editorExpanded ? null : hasProfile ? (
-              <div className="memory-profile__body">
-                {activityLabels.length > 0 ? (
-                  <div className="ai-memory-tags" role="list" aria-label={t("settings.ai.selectedWorkActivities")}>
-                    {activityLabels.map((activity) => <span key={activity} role="listitem">{activity}</span>)}
-                  </div>
-                ) : null}
-                <p className="memory-profile__text">
-                  {savedWorkProfile.workDescription.trim() || t("settings.ai.memoryProfileNoDescription")}
-                </p>
-              </div>
-            ) : (
-              <div className="memory-profile__body">
-                <p className="memory-card__title">{t("settings.ai.memoryProfileEmptyTitle")}</p>
-                <p className="memory-card__text">{t("settings.ai.memoryProfileEmptyDescription")}</p>
-              </div>
-            )}
-            <button
-              id={editorButtonId}
-              type="button"
-              className="settings-btn"
-              aria-controls={editorPanelId}
-              aria-expanded={editorExpanded}
-              onClick={() => setEditorExpanded((current) => !current)}
-            >
-              {editorExpanded ? t("settings.ai.memoryCloseEditor") : t("common.edit")}
-            </button>
-          </div>
+          {editorExpanded ? null : (
+            <div className="memory-profile__bar">
+              {hasProfile ? (
+                <div className="memory-profile__body">
+                  {activityLabels.length > 0 ? (
+                    <div className="ai-memory-tags" role="list" aria-label={t("settings.ai.selectedWorkActivities")}>
+                      {activityLabels.map((activity) => <span key={activity} role="listitem">{activity}</span>)}
+                    </div>
+                  ) : null}
+                  <p className="memory-profile__text">
+                    {savedWorkProfile.workDescription.trim() || t("settings.ai.memoryProfileNoDescription")}
+                  </p>
+                </div>
+              ) : (
+                <div className="memory-profile__body">
+                  <p className="memory-card__title">{t("settings.ai.memoryProfileEmptyTitle")}</p>
+                  <p className="memory-card__text">{t("settings.ai.memoryProfileEmptyDescription")}</p>
+                </div>
+              )}
+              <button
+                ref={editButtonRef}
+                id={editorButtonId}
+                type="button"
+                className="settings-btn"
+                aria-controls={editorPanelId}
+                onClick={openEditor}
+              >
+                {hasProfile ? t("common.edit") : t("settings.ai.memoryProfileAdd")}
+              </button>
+            </div>
+          )}
           <CollapsiblePanel
             contentClassName="ai-memory-editor"
             expanded={editorExpanded}
             id={editorPanelId}
-            labelledBy={editorButtonId}
+            labelledBy="ai-memory-profile-title"
           >
             <AiSetupWorkProfileSection
               workProfileDraft={workProfileDraft}
               workProfileMessage={workProfileMessage}
               workProfileSaving={workProfileSaving}
-              onSaveWorkProfile={onSaveWorkProfile}
+              canSave={workProfileChanged}
+              focusRequest={editorFocusRequest}
+              onSaveWorkProfile={saveEditor}
+              onCancel={cancelEditor}
               onWorkProfileDraftChange={onWorkProfileDraftChange}
             />
           </CollapsiblePanel>

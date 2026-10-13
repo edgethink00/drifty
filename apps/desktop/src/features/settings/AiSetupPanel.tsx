@@ -409,6 +409,7 @@ export function AiSetupPanel({
               memorySnapshotVersion={workProfileSettings.memorySnapshotVersion}
               onSaveWorkProfile={workProfileSettings.handleSaveWorkProfile}
               onWorkProfileDraftChange={workProfileSettings.handleWorkProfileDraftChange}
+              onResetWorkProfileDraft={workProfileSettings.resetWorkProfileDraft}
             />
           </div>
         </section>

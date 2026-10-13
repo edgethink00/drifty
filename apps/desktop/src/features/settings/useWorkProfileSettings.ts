@@ -40,23 +40,24 @@ export function useWorkProfileSettings(workProfileUserId: string) {
     setMemorySnapshotVersion(0);
   }, [workProfileUserId]);
 
-  const handleSaveWorkProfile = useCallback(async () => {
+  // Resolves true once the profile is stored locally for the account still on
+  // screen, so the editor can close; false keeps it open.
+  const handleSaveWorkProfile = useCallback(async (): Promise<boolean> => {
     // A second click while the first save is still syncing would issue a
     // duplicate Soul write. The button is disabled for the same window, so
     // this guard is a safety net rather than a silent drop of user intent.
-    if (savingRef.current) return;
+    if (savingRef.current) return false;
     const targetUserId = workProfileUserId;
     savingRef.current = true;
     setWorkProfileSaving(true);
     const savedState = saveUserWorkProfileSettings(targetUserId, workProfileDraft);
-    setWorkProfileMessage(
-      savedState ? t("settings.ai.workProfileSaved") : t("settings.ai.workProfileSaveHint"),
-    );
     if (!savedState) {
+      setWorkProfileMessage(t("settings.ai.workProfileSaveHint"));
       savingRef.current = false;
       setWorkProfileSaving(false);
-      return;
+      return false;
     }
+    setWorkProfileMessage(null);
 
     const nextWorkProfile = readUserWorkProfileSettings(targetUserId);
     setSavedWorkProfile(nextWorkProfile);
@@ -64,20 +65,28 @@ export function useWorkProfileSettings(workProfileUserId: string) {
 
     try {
       await synchronizeLivingSoulDeclaredContextForUser(targetUserId, savedState);
-      if (!mountedRef.current || activeUserIdRef.current !== targetUserId) return;
-      setMemorySnapshotVersion((current) => current + 1);
+      if (mountedRef.current && activeUserIdRef.current === targetUserId) {
+        setMemorySnapshotVersion((current) => current + 1);
+      }
     } catch (error) {
       console.warn("Unable to synchronize Living Soul work context.", error);
     } finally {
       savingRef.current = false;
       if (mountedRef.current) setWorkProfileSaving(false);
     }
+    return activeUserIdRef.current === targetUserId;
   }, [t, workProfileDraft, workProfileUserId]);
 
   const handleWorkProfileDraftChange = (value: WorkProfileSettings) => {
     setWorkProfileDraft(value);
     setWorkProfileMessage(null);
   };
+
+  // Editing always starts from, and cancelling returns to, the saved profile.
+  const resetWorkProfileDraft = useCallback(() => {
+    setWorkProfileDraft(savedWorkProfile);
+    setWorkProfileMessage(null);
+  }, [savedWorkProfile]);
 
   return {
     savedWorkProfile,
@@ -87,5 +96,6 @@ export function useWorkProfileSettings(workProfileUserId: string) {
     memorySnapshotVersion,
     handleSaveWorkProfile,
     handleWorkProfileDraftChange,
+    resetWorkProfileDraft,
   };
 }

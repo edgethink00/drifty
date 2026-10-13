@@ -185,9 +185,25 @@
 .ai-setup-personalization__footer {
   align-items: center;
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
   justify-content: flex-end;
   min-width: 0;
+}
+
+/* Save is the editor's commit action next to Cancel. The shared
+   `.settings-btn--primary` fill is overridden later in the settings cascade,
+   so restate it under this footer, as the classification rule form does. */
+.ai-setup-personalization__footer .settings-btn.settings-btn--primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--canvas);
+  font-weight: 600;
+}
+
+.ai-setup-personalization__footer .settings-btn.settings-btn--primary:hover:not(:disabled) {
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: var(--canvas);
 }
 
 .ai-setup-personalization__footer p {

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 import {
   MAIN_ACTIVITY_OPTIONS,
   MAX_MAIN_ACTIVITY_SELECTIONS,
@@ -17,7 +19,12 @@ type AiSetupWorkProfileSectionProps = {
   readonly workProfileDraft: WorkProfileSettings;
   readonly workProfileMessage: string | null;
   readonly workProfileSaving: boolean;
+  /** False while the draft still matches the saved profile. */
+  readonly canSave: boolean;
+  /** Increments each time the editor opens; moves focus to the first choice. */
+  readonly focusRequest: number;
   readonly onSaveWorkProfile: () => void | Promise<void>;
+  readonly onCancel: () => void;
   readonly onWorkProfileDraftChange: (value: WorkProfileSettings) => void;
 };
 
@@ -25,10 +32,20 @@ export function AiSetupWorkProfileSection({
   workProfileDraft,
   workProfileMessage,
   workProfileSaving,
+  canSave,
+  focusRequest,
   onSaveWorkProfile,
+  onCancel,
   onWorkProfileDraftChange,
 }: AiSetupWorkProfileSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const choicesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusRequest === 0) return;
+    // The panel is still growing open here; scrolling to the clipped choice
+    // would jump the page, and the user just clicked right above it.
+    choicesRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
+  }, [focusRequest]);
   const selectedActivities = workProfileDraft.workActivities;
   const hasMaximumWorkActivities = selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS;
   const visibleActivities = [
@@ -51,7 +68,17 @@ export function AiSetupWorkProfileSection({
   };
 
   return (
-    <section className="ai-setup-personalization" aria-label={t("settings.ai.personalizationAria")}>
+    <section
+      className="ai-setup-personalization"
+      aria-label={t("settings.ai.personalizationAria")}
+      onKeyDown={(event) => {
+        // Escape also ends an IME composition (Korean, Japanese); only a plain
+        // Escape cancels the edit.
+        if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+        event.stopPropagation();
+        onCancel();
+      }}
+    >
       <div className="ai-setup-work-profile-panel">
         <div className="ai-setup-work-profile-panel__editor">
           <div className="ai-setup-work-intro-row">
@@ -65,6 +92,7 @@ export function AiSetupWorkProfileSection({
             ) : null}
           </div>
           <div
+            ref={choicesRef}
             className="ai-setup-work-choices"
             role="group"
             aria-label={t("settings.ai.workActivities")}
@@ -123,10 +151,18 @@ export function AiSetupWorkProfileSection({
               type="button"
               className="settings-btn"
               disabled={workProfileSaving}
+              onClick={onCancel}
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              className="settings-btn settings-btn--primary"
+              disabled={workProfileSaving || !canSave}
               aria-busy={workProfileSaving}
               onClick={() => void onSaveWorkProfile()}
             >
-              <ActionLabel busy={workProfileSaving} busyLabel={t("settings.ai.savingWorkProfile")}>{t("settings.ai.saveWorkProfile")}</ActionLabel>
+              <ActionLabel busy={workProfileSaving} busyLabel={t("settings.ai.savingWorkProfile")}>{t("common.save")}</ActionLabel>
             </button>
           </div>
         </div>

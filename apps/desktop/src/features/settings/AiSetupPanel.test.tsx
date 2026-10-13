@@ -191,9 +191,11 @@ describe("AiSetupPanel", () => {
     expect(within(memoryOverview).getByText("Writing")).toBeTruthy();
     expect(within(memoryOverview).getByRole("heading", { name: "Learned patterns" })).toBeTruthy();
     const editButton = within(memoryOverview).getByRole("button", { name: /^Edit$/i });
-    expect(editButton.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(editButton);
-    expect(editButton.getAttribute("aria-expanded")).toBe("true");
+    // The editor replaces the summary and takes focus on its first choice.
+    expect(within(memoryOverview).queryByRole("button", { name: /^Edit$/i })).toBeNull();
+    expect(document.activeElement?.textContent).toBe("Coding");
+    expect((within(memoryOverview).getByRole("button", { name: /^Save$/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("region", { name: /^Model being used$/i })).toBeNull();
     expect(screen.queryByText("Coding, Writing in Product development")).toBeNull();
     expect(screen.queryByText(/User work profile:/i)).toBeNull();
@@ -215,7 +217,7 @@ describe("AiSetupPanel", () => {
     fireEvent.change(workDescription, { target: { value: "I build product features and help customers." } });
 
     expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /save work profile/i }));
+    fireEvent.click(within(memoryOverview).getByRole("button", { name: /^Save$/ }));
 
     const savedState = JSON.parse(window.localStorage.getItem(storageKey) ?? "{}") as Record<string, unknown>;
     expect(savedState).toMatchObject({
@@ -227,14 +229,57 @@ describe("AiSetupPanel", () => {
       workDomainOther: "",
       workDescription: "I build product features and help customers.",
     });
-    expect(screen.getByRole("status").textContent).toContain("Memory updated");
-    // Collapsing the editor returns the row to its saved-value summary.
-    fireEvent.click(within(memoryOverview).getByRole("button", { name: /close editor/i }));
-    const savedActivities = within(memoryOverview).getByLabelText("Selected work activities");
+    // A successful save closes the editor back to the saved-value summary.
+    const savedActivities = await within(memoryOverview).findByLabelText("Selected work activities");
+    expect(within(memoryOverview).getByText("Saved. Used from the next classification.")).toBeTruthy();
+    expect(document.activeElement).toBe(within(memoryOverview).getByRole("button", { name: /^Edit$/i }));
     expect(within(savedActivities).getByText("Data Analysis")).toBeTruthy();
     expect(within(savedActivities).getByText("Designing")).toBeTruthy();
     expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
     expect(screen.queryByText(/User work profile:/i)).toBeNull();
+  });
+
+  it("discards an unsaved work profile draft on cancel and when the editor reopens", async () => {
+    window.localStorage.setItem(getUserOnboardingStorageKey("local"), JSON.stringify({
+      version: 2,
+      completed: true,
+      displayName: "",
+      workType: "Coding",
+      workTypeOther: "",
+      workDomain: null,
+      workDomainOther: "",
+      jobType: "Coding",
+      jobTypeOther: "",
+      workDescription: "",
+      driftAlarmEnabled: false,
+      extremeNudgeEnabled: false,
+      focusGoalHours: null,
+      driftThresholdMinutes: null,
+      purpose: null,
+      completedAt: "2026-06-15T00:00:00.000Z",
+    }));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    const memoryOverview = screen.getByLabelText(/Drifty Memory overview/i);
+    fireEvent.click(await within(memoryOverview).findByRole("button", { name: /^Edit$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Designing" }));
+    expect((within(memoryOverview).getByRole("button", { name: /^Save$/ }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(within(memoryOverview).getByRole("button", { name: /^Cancel$/ }));
+    const savedActivities = within(memoryOverview).getByLabelText("Selected work activities");
+    expect(within(savedActivities).queryByText("Designing")).toBeNull();
+    expect(document.activeElement).toBe(within(memoryOverview).getByRole("button", { name: /^Edit$/i }));
+
+    fireEvent.click(within(memoryOverview).getByRole("button", { name: /^Edit$/i }));
+    expect(screen.getByRole("button", { name: "Designing" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Designing" }));
+    // Escape that ends a Korean IME composition must not discard the editor.
+    fireEvent.keyDown(screen.getByLabelText(/tell us more about your work/i), { key: "Escape", isComposing: true });
+    expect(within(memoryOverview).queryByRole("button", { name: /^Edit$/i })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Designing" }), { key: "Escape" });
+    expect(within(memoryOverview).getByRole("button", { name: /^Edit$/i })).toBeTruthy();
+    expect(JSON.parse(window.localStorage.getItem(getUserOnboardingStorageKey("local")) ?? "{}")).toMatchObject({ jobType: "Coding" });
   });
 
   it("shows the current Living Soul revision and learned pattern summaries", async () => {
@@ -532,7 +577,7 @@ describe("AiSetupPanel", () => {
     expect(screen.queryByRole("button", { name: /Privacy review/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /AI privacy review/i })).toBeNull();
     expect(screen.getByRole("heading", { name: "Work profile" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Add work$/i })).toBeTruthy();
   });
 });
 
