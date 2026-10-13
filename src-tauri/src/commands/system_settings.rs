@@ -315,6 +315,7 @@ fn focus_target_browser_tab_script_for_result(
                 r#"{handlers}
 set targetUrl to "{site_url}"
 set targetDomain to "{site_domain}"
+if not (application "{browser_name}" is running) then return "not_found"
 tell application "{browser_name}"
   repeat with browserWindow in windows
     repeat with tabIndex from 1 to count of tabs of browserWindow
@@ -334,6 +335,7 @@ end tell"#
                 r#"{handlers}
 set targetUrl to "{site_url}"
 set targetDomain to "{site_domain}"
+if not (application "{browser_name}" is running) then return "not_found"
 tell application "{browser_name}"
   repeat with browserWindow in windows
     repeat with tabIndex from 1 to count of tabs of browserWindow
@@ -354,6 +356,7 @@ end tell"#
             r#"{handlers}
 set targetUrl to "{site_url}"
 set targetDomain to "{site_domain}"
+if not (application "{browser_name}" is running) then return "not_found"
 tell application "{browser_name}"
   repeat with browserWindow in windows
     repeat with tabIndex from 1 to count of tabs of browserWindow
@@ -373,6 +376,7 @@ end tell"#
             r#"{handlers}
 set targetUrl to "{site_url}"
 set targetDomain to "{site_domain}"
+if not (application "{browser_name}" is running) then return "not_found"
 tell application "{browser_name}"
   repeat with browserWindow in windows
     repeat with tabIndex from 1 to count of tabs of browserWindow
@@ -632,6 +636,31 @@ mod tests {
         assert!(script.contains("return \"found_browser_tab\""));
         assert!(!script.contains("set active tab index"));
         assert!(!script.contains("activate"));
+    }
+
+    #[test]
+    fn focus_target_browser_tab_scripts_do_not_launch_closed_browsers() {
+        for browser_name in ["Google Chrome", "Safari"] {
+            for script in [
+                focus_target_browser_tab_script(browser_name, "https://docs.drifty.so/work", None),
+                focus_target_browser_tab_exists_script(
+                    browser_name,
+                    "https://docs.drifty.so/work",
+                    None,
+                ),
+            ] {
+                let guard = format!(
+                    "if not (application \"{browser_name}\" is running) then return \"not_found\""
+                );
+                assert!(script.contains(&guard));
+                assert!(
+                    script.find(&guard).unwrap()
+                        < script
+                            .find(&format!("tell application \"{browser_name}\""))
+                            .unwrap()
+                );
+            }
+        }
     }
 
     #[test]
