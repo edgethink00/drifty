@@ -295,7 +295,8 @@ class NativeSnapshotTests(unittest.TestCase):
         self.mock('refine_safari_url', side_effect=lambda browser, *args: browser)
         for app, bundle in (('Safari', 'com.apple.Safari'), ('Firefox', 'org.mozilla.firefox'),
                             ('Firefox Developer Edition', 'org.mozilla.firefoxdeveloperedition'),
-                            ('Zen', 'app.zen-browser.zen'), ('Floorp', 'app.floorp.Floorp')):
+                            ('Zen', 'app.zen-browser.zen'), ('Floorp', 'app.floorp.Floorp'),
+                            ('LibreWolf', 'net.librewolf.librewolf'), ('Waterfox', 'net.waterfox.waterfox')):
             with self.subTest(app=app):
                 self.identity.return_value = FrontmostApplication(app, bundle, 42)
                 self.title.return_value = (app, bundle, 'Course page', 42)
@@ -316,7 +317,8 @@ class NativeSnapshotTests(unittest.TestCase):
         self.wake.side_effect = lambda pid: order.append(('tree', pid))
         self.browser.side_effect = lambda app, *args: order.append(('address', app)) or metadata
         for app, bundle in (('Firefox', 'org.mozilla.firefox'), ('Firefox Developer Edition', 'org.mozilla.firefoxdeveloperedition'),
-                            ('Zen', 'app.zen-browser.zen'), ('Floorp', 'app.floorp.Floorp')):
+                            ('Zen', 'app.zen-browser.zen'), ('Floorp', 'app.floorp.Floorp'),
+                            ('LibreWolf', 'net.librewolf.librewolf'), ('Waterfox', 'net.waterfox.waterfox')):
             with self.subTest(app=app):
                 order.clear()
                 self.identity.return_value = FrontmostApplication(app, bundle, 42)

@@ -342,6 +342,21 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result.browser_automation_status, "granted")
         self.assertIn('process "Floorp"', mock_run.call_args.args[0])
 
+    def test_librewolf_and_waterfox_use_the_firefox_address_field(self) -> None:
+        for app in ("LibreWolf", "Waterfox"):
+            with self.subTest(app=app), patch(
+                "app.tracker.macos_workspace._run_osascript",
+                return_value="https://example.com/current\nCurrent page",
+            ) as run:
+                result = _browser_metadata(app)
+                self.assertEqual(result.browser_name, app)
+                self.assertEqual(result.site_url, "https://example.com/current")
+                self.assertEqual(result.ax_window_title, "Current page")
+                self.assertEqual(result.match_state, "accessibility-address-bar")
+                run.assert_called_once()
+                self.assertIn('process "' + app + '"', run.call_args.args[0])
+                self.assertIn('my scanKnownFirefoxAddressBar(targetWindow)', run.call_args.args[0])
+
     def test_zen_uses_ax_address_bar_capture_directly(self) -> None:
         with patch(
             "app.tracker.macos_workspace._run_osascript",

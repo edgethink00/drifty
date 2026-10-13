@@ -14,6 +14,8 @@ _CANONICAL_MACOS_APP_NAMES_BY_BUNDLE_ID: Final = {
     "org.mozilla.firefoxdeveloperedition": "Firefox Developer Edition",
     "app.zen-browser.zen": "Zen",
     "app.floorp.floorp": "Floorp",
+    "net.librewolf.librewolf": "LibreWolf",
+    "net.waterfox.waterfox": "Waterfox",
 }
 
 

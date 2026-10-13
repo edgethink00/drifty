@@ -34,6 +34,7 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         self.assertTrue(is_live_uia_browser("Google Chrome Beta"))
         self.assertTrue(is_live_uia_browser("Google Chrome Dev"))
         self.assertTrue(is_live_uia_browser("Google Chrome Canary"))
+        self.assertTrue(is_live_uia_browser("Comet"))
         self.assertTrue(is_live_uia_browser("Microsoft Edge"))
         self.assertTrue(is_live_uia_browser("Brave Browser"))
         self.assertTrue(is_live_uia_browser("Opera"))

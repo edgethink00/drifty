@@ -49,10 +49,11 @@ export function normalizeBrowserContentClues(value: unknown): BrowserContentClue
   };
 }
 
-// Firefox Developer Edition, Zen and Floorp share Firefox's identity proof.
+// Firefox-family browsers share the focused-window identity proof.
 // Bundle IDs are matched exactly; Floorp's carries a capital letter.
 const ADDRESS_BAR_CONTENT_BUNDLES: ReadonlySet<string> = new Set([
   "com.apple.Safari", "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp",
+  "net.librewolf.librewolf", "net.waterfox.waterfox",
 ]);
 
 /** A historical observation must belong to this segment, never a reused page cache. */

@@ -128,6 +128,11 @@ class MacosWorkspaceTests(unittest.TestCase):
                 self.assertIn('"front-fallback"', script)
                 self.assertIn('"matched"', script)
 
+    def test_librewolf_and_waterfox_executable_names_are_canonical(self) -> None:
+        self.assertEqual(_canonical_macos_app_name("librewolf", "net.librewolf.librewolf"), "LibreWolf")
+        self.assertEqual(_canonical_macos_app_name("waterfox", "net.waterfox.waterfox"), "Waterfox")
+        self.assertEqual(_canonical_macos_app_name("waterfox", "other.bundle"), "waterfox")
+
     def test_browser_metadata_matrix_for_supported_browsers(self) -> None:
         cases = [
             "Safari",
@@ -140,6 +145,8 @@ class MacosWorkspaceTests(unittest.TestCase):
             "Firefox",
             "Firefox Developer Edition",
             "Floorp",
+            "LibreWolf",
+            "Waterfox",
             "Opera",
             "Vivaldi",
             "Whale",
@@ -157,7 +164,7 @@ class MacosWorkspaceTests(unittest.TestCase):
                 ) as mock_run:
                     result = _browser_metadata(app_name)
 
-                if app_name in {'Safari', 'Firefox', 'Firefox Developer Edition', 'Floorp', 'Zen'}:
+                if app_name in {'Safari', 'Firefox', 'Firefox Developer Edition', 'Floorp', 'LibreWolf', 'Waterfox', 'Zen'}:
                     expected = BrowserMetadata(
                         browser_name=app_name,
                         site_domain='example.com',

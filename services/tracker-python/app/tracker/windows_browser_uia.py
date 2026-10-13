@@ -60,6 +60,7 @@ _SUPPORTED_BROWSERS = {
     "Google Chrome Canary",
     "Microsoft Edge",
     "Brave Browser",
+    "Comet",
     "Opera",
     "Vivaldi",
     "Whale",

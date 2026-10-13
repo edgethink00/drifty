@@ -26,7 +26,7 @@ from app.tracker.chatgpt_session import packaged_helper_path
 EXTENSION_ORIGIN = "chrome-extension://neihkehcijfcfplmfomahlimejiiledi/"
 # Read from the address bar instead of scripting; the helper binds their page
 # clues to the focused window's exact title through accessibility. Firefox
-# Developer Edition, Zen and Floorp share Firefox's identity proof.
+# Firefox-family browsers share the same focused-window identity proof.
 ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari"}) | FIREFOX_FAMILY_BUNDLES
 BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "ai.perplexity.comet"}) | ADDRESS_BAR_CONTENT_BUNDLES
 MAX_MESSAGE_BYTES = 32768

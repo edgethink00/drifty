@@ -327,9 +327,11 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
         "Floorp",
         "Firefox",
         "Firefox Developer Edition",
+        "LibreWolf",
         "Google Chrome Canary",
         "Safari",
         "Safari Technology Preview",
+        "Waterfox",
         "Zen",
     }:
         fallback = _accessibility_address_bar_metadata(app_name, run_osascript)

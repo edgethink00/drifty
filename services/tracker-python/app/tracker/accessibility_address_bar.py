@@ -23,14 +23,16 @@ AX_ADDRESS_BAR_BROWSER_APPS: Final = CHROMIUM_BROWSER_APPS | {
     "Floorp",
     "Firefox",
     "Firefox Developer Edition",
+    "LibreWolf",
     "Safari",
     "Safari Technology Preview",
+    "Waterfox",
     "Zen",
 }
 
 AX_NO_PROCESS: Final = "AX_NO_PROCESS"
 # Firefox-family browsers whose address field is found by DOM id first.
-_FIREFOX_DOM_ADDRESS_BAR_APPS: Final = frozenset({"Firefox", "Firefox Developer Edition", "Floorp", "Zen"})
+_FIREFOX_DOM_ADDRESS_BAR_APPS: Final = frozenset({"Firefox", "Firefox Developer Edition", "Floorp", "LibreWolf", "Waterfox", "Zen"})
 AX_NO_FRONT_WINDOW: Final = "AX_NO_FRONT_WINDOW"
 AX_NO_ADDRESS_FIELD: Final = "AX_NO_ADDRESS_FIELD"
 
