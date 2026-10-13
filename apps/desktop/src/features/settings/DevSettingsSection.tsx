@@ -146,10 +146,13 @@ type DevSettingsSectionProps = {
   readonly profileBetaEnabled: boolean;
   readonly agentsBetaEnabled: boolean;
   readonly navigationRefreshEnabled: boolean;
+  /** Dev preview of Longest streak and the pattern tiles in the Your Day Breakdown. */
+  readonly breakdownPatternsPreviewEnabled: boolean;
   readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onAgentsBetaChange: (enabled: boolean) => void;
   readonly onNavigationRefreshChange: (enabled: boolean) => void;
+  readonly onBreakdownPatternsPreviewChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
   readonly onResetDemoDashboardReplaySettings?: () => void;
@@ -227,10 +230,12 @@ export function DevSettingsSection({
   profileBetaEnabled,
   agentsBetaEnabled,
   navigationRefreshEnabled,
+  breakdownPatternsPreviewEnabled,
   onTeamsBetaChange,
   onProfileBetaChange,
   onAgentsBetaChange,
   onNavigationRefreshChange,
+  onBreakdownPatternsPreviewChange,
   onPreviewDashboardAiUnavailableCase,
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
@@ -732,6 +737,15 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={navigationRefreshEnabled} onChange={onNavigationRefreshChange} ariaLabel="Toggle navigation refresh" />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Breakdown patterns</div>
+            <div className="desc">Preview Longest streak and the Top focus, Top drift, Drift streak and Switches tiles in the Your Day Breakdown. Off keeps the current six tiles.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={breakdownPatternsPreviewEnabled} onChange={onBreakdownPatternsPreviewChange} ariaLabel="Toggle Breakdown patterns preview" />
           </div>
         </div>
         <div className="settings-row">

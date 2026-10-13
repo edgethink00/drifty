@@ -15,6 +15,7 @@ import {
 } from "@drifty/domain";
 import type { CompanionDayReviewLayout } from "./companionPillLayout";
 import type { LeaderboardCelebration } from "./companionLeaderboardMilestones";
+import { joinProductivityRuns, longestProductivityRun, toProductivityRunPart } from "../../lib/productivityRuns";
 import type {
   ClassificationAvailabilityReason,
   ClassificationProviderRoute,
@@ -271,17 +272,17 @@ export function sumPendingEndOfDayReviewSeconds(
 }
 
 const DEEP_SESSION_MIN_SECONDS = 45 * 60;
-const FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
 
 export function buildEndOfDayReviewDailySignals(
   segments: ActivitySegment[],
   classificationOptions?: ClassificationOptions,
 ): EndOfDayReviewDailySignals {
-  const focusSegments = segments
+  const focusSourceSegments = segments
     .filter((segment) => {
       const classification = classifyActivityDetailed(segment, classificationOptions);
       return classification.category !== "unknown" && classification.productivity === "focus";
-    })
+    });
+  const focusSegments = focusSourceSegments
     .map((segment) => ({
       startedAt: new Date(segment.startedAt),
       endedAt: new Date(segment.endedAt),
@@ -290,30 +291,12 @@ export function buildEndOfDayReviewDailySignals(
     .filter((segment) => Number.isFinite(segment.startedAt.getTime()) && Number.isFinite(segment.endedAt.getTime()))
     .sort((left, right) => left.startedAt.getTime() - right.startedAt.getTime());
 
-  const focusRuns: Array<{ seconds: number; startedAtMs: number }> = [];
-  let runEndMs = 0;
-  let runSeconds = 0;
-  let runStartMs = 0;
-  for (const segment of focusSegments) {
-    const startMs = segment.startedAt.getTime();
-    const endMs = Math.max(startMs, segment.endedAt.getTime());
-    if (runSeconds > 0 && startMs > runEndMs + FOCUS_RUN_MAX_GAP_MS) {
-      focusRuns.push({ seconds: runSeconds, startedAtMs: runStartMs });
-      runSeconds = 0;
-    }
-    if (runSeconds === 0) runStartMs = startMs;
-    runSeconds += segment.durationSeconds;
-    runEndMs = Math.max(runEndMs, endMs);
-  }
-  if (runSeconds > 0) focusRuns.push({ seconds: runSeconds, startedAtMs: runStartMs });
-
+  /* Breakdown's Longest streak uses this same run rule. */
+  const focusRuns = joinProductivityRuns(focusSourceSegments.map(toProductivityRunPart));
   const deepRuns = focusRuns.filter((run) => run.seconds >= DEEP_SESSION_MIN_SECONDS);
   /* Ties go to the earlier run, so the caption points at the first time the
      day reached its best stretch. */
-  const longestRun = focusRuns.reduce<{ seconds: number; startedAtMs: number } | null>(
-    (best, run) => (best === null || run.seconds > best.seconds ? run : best),
-    null,
-  );
+  const longestRun = longestProductivityRun(focusRuns);
   const focusByHour = new Map<number, number>();
   for (const segment of focusSegments) {
     let cursorMs = segment.startedAt.getTime();
@@ -336,7 +319,7 @@ export function buildEndOfDayReviewDailySignals(
   return {
     deepSessionCount: deepRuns.length,
     longestFocusRunSeconds: longestRun?.seconds ?? 0,
-    longestFocusRunStartedAt: longestRun ? new Date(longestRun.startedAtMs).toISOString() : null,
+    longestFocusRunStartedAt: longestRun ? new Date(longestRun.startMs).toISOString() : null,
     peakHourLabel: peakDate ? `${String(peakDate.getHours()).padStart(2, "0")}:00` : null,
     peakHourFocusSeconds: Math.round(peak?.[1] ?? 0),
   };

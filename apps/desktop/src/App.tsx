@@ -429,6 +429,8 @@ import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeri
 import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
+import { buildDayPatternMetrics, EMPTY_DAY_PATTERN_METRICS } from "./features/dashboard/dayPatternMetrics";
+import { DayBreakdownPatterns } from "./features/dashboard/DayBreakdownPatterns";
 import { applyFocusDriftReplayReveal, buildFocusDriftChart } from "./features/dashboard/focusDriftChart";
 import { buildFocusRatePercent } from "./features/classification/classificationFocusRate";
 import {
@@ -453,7 +455,7 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { useLeaderboardSeriesPrewarm } from "./features/leaderboard/useLeaderboardSeriesPrewarm";
@@ -623,6 +625,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     || resolveInitialDevModeEnabled();
   const initialNavigationRefreshEnabled = initialDevModeEnabled
     && resolveInitialNavigationRefreshEnabled();
+  const initialBreakdownPatternsPreviewEnabled = initialDevModeEnabled
+    && resolveInitialBreakdownPatternsPreviewEnabled();
   useEffect(() => {
     readContextualGuardAuditEvents();
   }, []);
@@ -801,6 +805,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
   const [navigationRefreshEnabled, setNavigationRefreshEnabled] = useState(initialNavigationRefreshEnabled);
+  const [breakdownPatternsPreviewEnabled, setBreakdownPatternsPreviewEnabled] = useState(initialBreakdownPatternsPreviewEnabled);
   const floatingCompanionDevSupported = hostPlatform === "macos";
   const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(
     () => floatingCompanionDevSupported && resolveInitialFloatingCompanionDevEnabled(),
@@ -831,6 +836,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
   const canUseNavigationRefresh = DEV_SETTINGS_ENABLED && devModeEnabled && navigationRefreshEnabled;
+  const canUseBreakdownPatternsPreview = DEV_SETTINGS_ENABLED && devModeEnabled && breakdownPatternsPreviewEnabled;
   const canOpenAgentsBeta = DEV_SETTINGS_ENABLED && devModeEnabled && agentsBetaEnabled;
   const canOpenAgents = canUseNavigationRefresh || canOpenAgentsBeta;
   const sshAgentSourceSync = useSshAgentSourceSyncController({
@@ -5106,6 +5112,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (profileBetaEnabled) setProfileBetaEnabled(false);
     if (agentsBetaEnabled) setAgentsBetaEnabled(false);
     if (navigationRefreshEnabled) setNavigationRefreshEnabled(false);
+    if (breakdownPatternsPreviewEnabled) setBreakdownPatternsPreviewEnabled(false);
     if (floatingCompanionDevEnabled) setFloatingCompanionDevEnabled(false);
     if (devWebAccountPreviewEnabled) setDevWebAccountPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
@@ -5115,7 +5122,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [agentsBetaEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [agentsBetaEnabled, breakdownPatternsPreviewEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     if (!floatingCompanionDevSupported) {
@@ -5142,6 +5149,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     persistNavigationRefreshEnabled(canUseNavigationRefresh);
   }, [canUseNavigationRefresh]);
+
+  useEffect(() => {
+    persistBreakdownPatternsPreviewEnabled(canUseBreakdownPatternsPreview);
+  }, [canUseBreakdownPatternsPreview]);
 
   useLayoutEffect(() => {
     if (canOpenAgents) return;
@@ -8772,6 +8783,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
+  // Same segments and options as the Breakdown productivity ring, so the Dev
+  // preview's Longest streak and pattern tiles agree with its Focus and Drift totals.
+  const dayPatternMetrics = useMemo(
+    () => (canUseBreakdownPatternsPreview && dashPeriod === "Today"
+      ? buildDayPatternMetrics(effectiveDashboardSegments, dashboardClassificationOptions)
+      : EMPTY_DAY_PATTERN_METRICS),
+    [canUseBreakdownPatternsPreview, dashPeriod, dashboardClassificationOptions, effectiveDashboardSegments],
+  );
   const dashboardFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const previousWeekFocusSeconds = dashPeriod === "Week" && dashboardPreviousWeekFocusLoad?.key === dashboardPreviousWeekFocusKey
     ? dashboardPreviousWeekFocusLoad.focusSeconds
@@ -10102,7 +10121,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     />
   );
 
-  const dayBreakdownTiles = (
+  // Dev preview only: Longest streak and the pattern tiles replace the KPI
+  // tiles while Dev mode and its Breakdown patterns flag are both on.
+  const dayBreakdownTiles = canUseBreakdownPatternsPreview ? (
+    <DayBreakdownPatterns metrics={dayPatternMetrics} />
+  ) : (
     <FocusDriftSummaryTiles
       activeHourCount={activeHourCount}
       averageSessionMinutes={averageSessionMinutes}
@@ -11418,10 +11441,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     profileBetaEnabled={profileBetaEnabled}
                     agentsBetaEnabled={agentsBetaEnabled}
                     navigationRefreshEnabled={navigationRefreshEnabled}
+                    breakdownPatternsPreviewEnabled={breakdownPatternsPreviewEnabled}
                     onTeamsBetaChange={setTeamsBetaEnabled}
                     onProfileBetaChange={setProfileBetaEnabled}
                     onAgentsBetaChange={setAgentsBetaEnabled}
                     onNavigationRefreshChange={setNavigationRefreshEnabled}
+                    onBreakdownPatternsPreviewChange={setBreakdownPatternsPreviewEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}
                     onResetDemoDashboardReplaySettings={handleResetDemoDashboardReplaySettings}

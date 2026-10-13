@@ -514,6 +514,15 @@ it("shows the local automatic close ledger in Diagnostics and refreshes it", () 
     expect(props.onNavigationRefreshChange).toHaveBeenCalledWith(true);
   });
 
+  it("changes the Breakdown patterns preview through its Dev flag", () => {
+    const props = renderProductionDevSettings({ activeSubsection: "flags" });
+
+    expect(screen.getByText("Breakdown patterns")).toBeTruthy();
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle Breakdown patterns preview" }));
+
+    expect(props.onBreakdownPatternsPreviewChange).toHaveBeenCalledWith(true);
+  });
+
   it("moves between Dev tabs with standard tablist arrow keys", () => {
     const props = renderProductionDevSettings();
     const diagnosticsTab = screen.getByRole("tab", { name: "Diagnostics" });

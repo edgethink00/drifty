@@ -2391,6 +2391,82 @@
   text-wrap: balance;
 }
 
+/* Your Day Breakdown: an app or site name fills a pattern tile's value, so it
+   ends in an ellipsis (with the full name as its title) instead of wrapping. */
+.week-v2-grid--day .week-v2-side__content .day-patterns .metric-tile strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Longest streak: one bar per focus run on the day's recorded hours. Width is
+   when the run happened, height is how long it lasted, and only the longest
+   run takes the solid Focus color. */
+.day-streak__chart {
+  position: relative;
+  height: 34px;
+  margin-top: 10px;
+}
+
+.day-streak__chart::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--line-strong) 70%, transparent);
+}
+
+.day-streak__bar {
+  position: absolute;
+  bottom: 2px;
+  min-width: 4px;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in srgb, var(--productivity-focus) 34%, transparent);
+}
+
+.day-streak__bar--longest {
+  background: var(--productivity-focus);
+}
+
+.day-streak__labels {
+  position: relative;
+  height: 15px;
+  margin-top: 6px;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
+}
+
+.day-streak__labels > span {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+}
+
+.day-streak__edge {
+  left: 0;
+}
+
+.day-streak__edge--end {
+  right: 0;
+  left: auto;
+}
+
+.day-streak__range {
+  color: var(--text);
+}
+
+.day-streak__empty {
+  margin: 10px 0 0;
+  color: var(--text-soft);
+  font-size: 0.75rem;
+}
+
 /* ── Your Week: flat calendar content inside the white panel; its legend +
    scroller form their own bordered inner block (below), and the breakdown is
    a second bordered inner block. */

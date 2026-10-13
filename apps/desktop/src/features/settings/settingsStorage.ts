@@ -31,6 +31,7 @@ export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
 export const AGENTS_BETA_STORAGE_KEY = "drifty.dev.agentsBeta";
 export const NAVIGATION_REFRESH_STORAGE_KEY = "drifty.dev.navigationRefresh";
+export const BREAKDOWN_PATTERNS_PREVIEW_STORAGE_KEY = "drifty.dev.breakdownPatternsPreview";
 export const WINDOWS_BLUR_STORAGE_KEY = "drifty.windowsBlur.v1";
 export const LEGACY_WINDOWS_BLUR_PREVIEW_STORAGE_KEY = "drifty.dev.windowsBlurPreview";
 export const FLOATING_COMPANION_DEV_STORAGE_KEY = "drifty.dev.floatingCompanion";
@@ -563,6 +564,25 @@ export function persistNavigationRefreshEnabled(enabled: boolean): void {
   }
 }
 
+/** Breakdown patterns are a Dev opt-in. "1" previews Longest streak and the pattern tiles on Your Day. */
+export function resolveInitialBreakdownPatternsPreviewEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(BREAKDOWN_PATTERNS_PREVIEW_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function persistBreakdownPatternsPreviewEnabled(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(BREAKDOWN_PATTERNS_PREVIEW_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Persistence is optional; the dashboard keeps its default tiles.
+  }
+}
+
 /** Default-on independently of Dev mode; preserve every explicit Preview choice. */
 export function resolveInitialWindowsBlurEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -705,4 +725,3 @@ function writeStoredBoolean(storageKey: string, enabled: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(storageKey, enabled ? "1" : "0");
 }
-
