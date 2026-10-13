@@ -146,10 +146,10 @@ function TrackerActionIcon() {
   return (
     <svg className="account-tracker-action-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
       <g className="account-tracker-action-icon--pause">
-        <rect x="2.5" y="2" width="2.25" height="8" rx="0.8" />
-        <rect x="7.25" y="2" width="2.25" height="8" rx="0.8" />
+        <rect x="2.9" y="2" width="2.2" height="8" rx="1.1" />
+        <rect x="6.9" y="2" width="2.2" height="8" rx="1.1" />
       </g>
-      <path className="account-tracker-action-icon--play" d="M3 1.8 10 6 3 10.2Z" />
+      <path className="account-tracker-action-icon--play" d="M3.6 2.6c0-.62.68-1 1.2-.67l4.7 3.4c.47.33.47 1.02 0 1.34l-4.7 3.4a.8.8 0 0 1-1.2-.67Z" />
       <rect className="account-tracker-action-icon--stop" x="3" y="3" width="6" height="6" rx="1" />
     </svg>
   );
