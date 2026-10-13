@@ -2552,8 +2552,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (profileDailyProductivity !== null) setLeaderboardSeriesPrewarmed(true);
   }, [profileDailyProductivity]);
   const effectiveDailyProductivity = useMemo(() => {
-    if (profileDailyProductivity && profileDailyProductivity.length >= 2) return profileDailyProductivity;
     if (!leaderboardUsesPreviewProfile) return profileDailyProductivity;
+    // A browser preview has no tracker, so its series arrives as zeros; the
+    // sample week keeps the rail and share card readable there.
+    if (profileDailyProductivity && profileDailyProductivity.length >= 2 && profileDailyProductivity.some((point) => point.focus > 0)) return profileDailyProductivity;
     const points: DailyProductivityPoint[] = [];
     const focusMinutes = [25, 38, 32, 54, 42, 68, 52];
     for (let i = 6; i >= 0; i--) {
@@ -2570,6 +2572,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     return points;
   }, [leaderboardUsesPreviewProfile, leaderboardWindowEndDay, profileDailyProductivity]);
+  // Stable while the sheet is open, so the card does not re-render on every tracker tick.
+  const leaderboardShareCardContext = useMemo(() => ({
+    accountScope: shareAccountScope,
+    comparisonWindowKey: `${leaderboardWindowEndDay}:${startOfDayMinutes}`,
+    theme,
+    windowEndDay: leaderboardWindowEndDay,
+    onJoinLeaderboard: handleLeaderboardOptIn,
+  }), [handleLeaderboardOptIn, leaderboardWindowEndDay, shareAccountScope, startOfDayMinutes, theme]);
   const aiClassificationProviderKey = selectedLocalAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
     : canUseSelectedCloudAiClassification
@@ -11029,7 +11039,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             publicProfile={{
               card: focusCard,
               dailyProductivity: effectiveDailyProductivity,
-              draft: profileDraft,
+              // The preview renders a joined user (#6), and joining publishes the
+              // page, so its draft is public like a real participant's.
+              draft: leaderboardUsesPreviewProfile ? { ...profileDraft, isPublic: true } : profileDraft,
               focusSeconds7d: localRollingFocusSeconds,
               localMetricsStatus: leaderboardLocalMetricsStatus,
               isPreviewProfile: leaderboardUsesPreviewProfile,
@@ -11042,6 +11054,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               onCopyProfileLink: () => void handleShareLeaderboardProfile(),
               onEditProfile: openProfileEditor,
               onEnsureProfile: handleSaveProfile,
+              shareCard: leaderboardShareCardContext,
             }}
             statusMessage={leaderboardStatusMessage}
             statusTone={leaderboardStatusTone}

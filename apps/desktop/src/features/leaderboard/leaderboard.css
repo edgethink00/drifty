@@ -467,23 +467,6 @@
   max-width: 28ch;
 }
 
-.leaderboard-share-toast {
-  position: fixed;
-  right: clamp(1rem, 3vw, 2rem);
-  bottom: clamp(1rem, 3vw, 2rem);
-  z-index: 120;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--float-card-radius);
-  box-shadow: var(--float-card-shadow);
-  color: var(--text);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.4;
-  max-width: min(320px, calc(100vw - 2rem));
-  padding: 0.78rem 0.95rem;
-  animation: floating-notice-enter 480ms var(--ease-float-in) both;
-}
-
 .leaderboard-toolbar {
   display: grid;
   align-items: center;
@@ -752,12 +735,6 @@
   gap: 0.16rem;
   justify-content: end;
   text-align: right;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .leaderboard-share-toast {
-    animation: none;
-  }
 }
 
 .leaderboard-row__meta--compact .leaderboard-stat strong {

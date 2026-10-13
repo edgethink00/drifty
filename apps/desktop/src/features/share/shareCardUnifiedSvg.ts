@@ -24,7 +24,8 @@ export type UnifiedShareStoryId =
   | "S1"
   | "X6"
   | "X4"
-  | "X5";
+  | "X5"
+  | "WR4";
 
 export type ShareCardTheme = "light" | "dark";
 export type ShareCardLanguage = "en" | "ko";
@@ -64,6 +65,9 @@ export const UNIFIED_STORY_OPTIONS: ReadonlyArray<{
   // Exact placement is the only leaderboard-gated story. Keep it after the
   // shareable local stories so people do not encounter a lock first.
   { value: "R4", label: "Place Rank" },
+  // The weekly placement is offered only where the card covers the weekly rank
+  // window (the leaderboard sheet); a calendar-week dashboard card never matches it.
+  { value: "WR4", label: "Weekly Place Rank" },
 ];
 
 type UnifiedMetrics = {
@@ -211,6 +215,10 @@ function deriveWeekMetrics(data: ShareWeekCardData, liveRanks?: ShareCardLiveRan
     WEEK_RANK_SAMPLE_SIZE: estimate?.sampleSize ?? 0,
     RANK_IS_LIVE: Boolean(weekRank),
     WEEK_RANK_IS_LIVE: Boolean(weekRank),
+    LIVE_RANK_PERCENT: weekRank?.topPercent ?? 100,
+    RANK_PLACE: weekRank?.rank ?? 0,
+    WEEK_RANK_PLACE: weekRank?.rank ?? 0,
+    TOTAL_USERS: weekRank?.participantCount ?? 0,
     IS_CURRENT_PERIOD: data.isCurrentPeriod,
     WEEK_LABEL: data.weekLabel,
     WEEK_MINUTES: weekMinutes,
@@ -566,6 +574,22 @@ function rankStatement(p, id) { if (RANK === null) return wideStatement(p, id); 
 
 
 function headCount(p, id) {
+  return placeRankCard(p, id, {
+    title: localized("Today's focus rank", "오늘의 집중 순위"),
+    caption: localized('in today’s focus ranking.', '오늘 집중 순위 기준입니다.'),
+    name: localized('Head Count', '집중 순위 카드'),
+  });
+}
+
+function weeklyHeadCount(p, id) {
+  return placeRankCard(p, id, {
+    title: localized("This week's focus rank", "이번 주 집중 순위"),
+    caption: localized('in this week’s focus ranking.', '이번 주 집중 순위 기준입니다.'),
+    name: localized('Weekly Head Count', '주간 집중 순위 카드'),
+  });
+}
+
+function placeRankCard(p, id, copy: { readonly title: string; readonly caption: string; readonly name: string }) {
   // Place number stays primary; cohort size sits beside it as a number: #11 / 2,858
   const place = placeLabel();
   const total = totalUsersLabel();
@@ -573,14 +597,14 @@ function headCount(p, id) {
   const placeApproxW = Math.max(180, place.length * 92);
   const scopeX = 112 + placeApproxW + 18;
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, localized("Today's focus rank", "오늘의 집중 순위"))}
+  ${chromeTitle(p, copy.title)}
   ${panel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   ${tx(112, 430 + RANK_DY, place, { font: F.serif, size: placeSize, fill: p.ink, spacing: -9 })}
   ${tx(scopeX, 430 + RANK_DY, `/ ${total}`, { font: F.sans, size: 42, floor: 42, fill: p.soft, spacing: -0.4 })}
   <rect x="120" y="${486 + RANK_DY}" width="252" height="58" rx="29" fill="${p.olive}"/>
   ${tx(246, 526 + RANK_DY, localized(`TOP ${pctLabel(LIVE_RANK_PERCENT)}%`, `상위 ${pctLabel(LIVE_RANK_PERCENT)}%`), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 1.6, anchor: 'middle' })}
-  ${tx(120, 620 + RANK_DY, localized('in today’s focus ranking.', '오늘 집중 순위 기준입니다.'), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5 })}
-  ${footer(p)}`, localized('Head Count', '집중 순위 카드'));
+  ${tx(120, 620 + RANK_DY, copy.caption, { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5 })}
+  ${footer(p)}`, copy.name);
 }
 
 
@@ -1158,6 +1182,7 @@ const RENDERERS: Record<UnifiedShareStoryId, (p: typeof light, id: string) => st
   WR1: weeklyCurve,
   R2: rankStatement,
   R4: headCount,
+  WR4: weeklyHeadCount,
   F1: wideStatement,
   C1: comboFocus,
   W5: weekAverage,
@@ -1263,6 +1288,11 @@ export function renderLockedShareRankSvg(options: {
   readonly period: "daily" | "weekly";
   readonly lookIndex?: number;
   readonly language?: ShareCardLanguage;
+  /**
+   * "join" asks a non-member to join. "pending" is for a member whose live rank
+   * is loading or not yet published for this window, who has nothing to join.
+   */
+  readonly reason?: "join" | "pending";
 }): string {
   const theme = options.theme ?? "light";
   const lookIndex = options.lookIndex ?? 0;
@@ -1270,13 +1300,20 @@ export function renderLockedShareRankSvg(options: {
   const palette = applyLook(theme, lookIndex);
   const title = options.period === "daily" ? localized("Today's focus rank", "오늘의 집중 순위") : localized("This week's focus rank", "이번 주 집중 순위");
   const scope = options.period === "daily" ? localized("today", "오늘") : localized("this week", "이번 주");
+  const pending = options.reason === "pending";
+  const headline = pending
+    ? localized('Rank updating', '순위 갱신 중')
+    : localized('Join the leaderboard', '리더보드에 참여하세요');
+  const detail = pending
+    ? localized(`Your rank for ${scope} shows after the next refresh.`, `다음 갱신 후 ${scope} 순위가 표시됩니다.`)
+    : localized(`to reveal your live focus rank for ${scope}.`, `${scope}의 실시간 집중 순위를 확인할 수 있습니다.`);
   return unwrapSvg(wrap(palette, `locked-rank-${options.period}-${theme}`, `${wash(`locked-rank-${options.period}-${theme}`)}
   ${chromeTitle(palette, title)}
   ${panel(palette, `locked-rank-${options.period}-${theme}`, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   <circle cx="600" cy="380" r="42" fill="${palette.pale}"/>
   <path d="M582 382v-14c0-10 8-18 18-18s18 8 18 18v14" fill="none" stroke="${palette.olive}" stroke-width="7" stroke-linecap="round"/>
   <rect x="576" y="378" width="48" height="42" rx="9" fill="${palette.olive}"/>
-  ${tx(600, 508, localized('Join the leaderboard', '리더보드에 참여하세요'), { font: F.serif, size: 76, fill: palette.ink, spacing: -2.4, anchor: 'middle' })}
-  ${tx(600, 572, localized(`to reveal your live focus rank for ${scope}.`, `${scope}의 실시간 집중 순위를 확인할 수 있습니다.`), { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: palette.soft, anchor: 'middle' })}
+  ${tx(600, 508, headline, { font: F.serif, size: 76, fill: palette.ink, spacing: -2.4, anchor: 'middle' })}
+  ${tx(600, 572, detail, { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: palette.soft, anchor: 'middle' })}
   ${footer(palette)}`, localized('Locked focus rank', '잠긴 집중 순위')));
 }

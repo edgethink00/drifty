@@ -121,6 +121,7 @@ describe("renderShareCardSvg", () => {
       "X4",
       "X5",
       "R4",
+      "WR4",
     ]);
   });
 
@@ -304,6 +305,34 @@ describe("renderShareCardSvg", () => {
 });
 
 describe("renderShareWeekCardSvg", () => {
+  it("asks only a non-member to join on a locked rank card", () => {
+    const join = renderLockedShareRankSvg({ theme: "light", period: "weekly" });
+    const pending = renderLockedShareRankSvg({ theme: "light", period: "weekly", reason: "pending" });
+
+    expect(join).toContain("Join the leaderboard");
+    expect(pending).toContain("Rank updating");
+    expect(pending).not.toContain("Join the leaderboard");
+  });
+
+  it("renders the live weekly placement for a card covering the weekly rank window", () => {
+    const svg = renderShareWeekCardSvg({
+      communityModels: MODELS,
+      data: WEEK,
+      format: "landscape",
+      theme: "light",
+      story: "WR4",
+      liveRanks: {
+        daily: null,
+        weekly: { rank: 6, participantCount: 50, topPercent: 12, windowStartDay: "2026-07-13", windowEndDay: "2026-07-19" },
+      },
+    });
+
+    expect(svg).toContain("This week's focus rank");
+    expect(svg).toContain(">#6<");
+    expect(svg).toContain(">/ 50<");
+    expect(svg).toContain("TOP 12%");
+  });
+
   it("renders the weekly unified percentile curve card", () => {
     const svg = renderShareWeekCardSvg({ communityModels: MODELS, data: WEEK, format: "landscape", theme: "dark", story: "WR1" });
     expect(svg).toContain(`viewBox="0 0 ${SHARE_CARD_UNIFIED_SIZE.width} ${SHARE_CARD_UNIFIED_SIZE.height}"`);

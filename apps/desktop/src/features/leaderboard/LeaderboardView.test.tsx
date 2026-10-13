@@ -9,6 +9,13 @@ import type { FocusCardControls } from "../share/useFocusCard";
 
 type TestProps = Parameters<typeof LeaderboardView>[0];
 const PUBLIC_ID = "9f3a1b2c-0000-4d5e-8f6a-1b2c3d4e5f60";
+const shareCardModalMock = vi.hoisted(() => ({ props: [] as unknown[] }));
+vi.mock("../share/ShareCardModal", () => ({
+  ShareCardModal: (props: unknown) => {
+    shareCardModalMock.props.push(props);
+    return <div role="dialog" aria-label="Share card" />;
+  },
+}));
 
 afterEach(() => {
   cleanup();
@@ -89,6 +96,13 @@ function makePublicProfile(overrides: Partial<NonNullable<TestProps["publicProfi
     onCopyProfileLink: vi.fn(),
     onEditProfile: vi.fn(),
     onEnsureProfile: vi.fn().mockResolvedValue(true),
+    shareCard: {
+      accountScope: "user-1",
+      comparisonWindowKey: "2026-10-13:0",
+      theme: "light",
+      windowEndDay: "2026-10-13",
+      onJoinLeaderboard: vi.fn().mockResolvedValue(undefined),
+    },
     ...overrides,
   };
 }
@@ -1215,5 +1229,101 @@ describe("LeaderboardView", () => {
 
     renderView({ isOptedIn: true, isLoading: false, ownRank: null, publicProfile: makePublicProfile() });
     expect(screen.getByText(/not ranked/i)).toBeTruthy();
+  });
+});
+
+describe("LeaderboardView share card", () => {
+  const WINDOW_END = "2026-10-13";
+  const PROFILE_URL = `https://drifty.so/profile/?id=${PUBLIC_ID}`;
+  const WEEK = ["2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13"];
+  let writeText: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    shareCardModalMock.props.length = 0;
+    writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  });
+
+  function shareProfile(overrides: Partial<NonNullable<TestProps["publicProfile"]>> = {}) {
+    return makePublicProfile({
+      dailyProductivity: WEEK.map((day, index) => ({ day, focus: (index + 1) * 600, drift: 120, neutral: 60 })),
+      shareCard: {
+        accountScope: "user-1",
+        comparisonWindowKey: `${WINDOW_END}:0`,
+        theme: "light",
+        windowEndDay: WINDOW_END,
+        onJoinLeaderboard: vi.fn().mockResolvedValue(undefined),
+      },
+      ...overrides,
+    });
+  }
+
+  function lastModalProps() {
+    return shareCardModalMock.props[shareCardModalMock.props.length - 1] as {
+      card: { kind: "day" | "week"; data: Record<string, unknown> };
+      storyIds: readonly string[];
+      profileLinkUrl: string | null;
+      accountScope: string | null;
+      comparisonWindowKey: string;
+    };
+  }
+
+  it("opens the share card sheet for the weekly rank window instead of copying a link", () => {
+    renderView({ isOptedIn: true, activePeriod: "weekly", ownRank: 6, ownParticipantCount: 50, publicProfile: shareProfile() });
+
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
+
+    expect(screen.getByRole("dialog", { name: "Share card" })).toBeTruthy();
+    expect(writeText).not.toHaveBeenCalled();
+    const props = lastModalProps();
+    expect(props.card.kind).toBe("week");
+    expect(props.card.data).toMatchObject({ startDay: "2026-10-07", endDay: WINDOW_END, focusSeconds: 28 * 600 });
+    expect(props.storyIds).toEqual(["WR4", "WR1", "W5", "X5"]);
+    expect(props.profileLinkUrl).toBe(PROFILE_URL);
+    expect(props.accountScope).toBe("user-1");
+    expect(props.comparisonWindowKey).toBe(`${WINDOW_END}:0`);
+  });
+
+  it("shares today's card, leading with the exact placement, on the daily board", () => {
+    renderView({ isOptedIn: true, activePeriod: "daily", ownRank: 6, ownParticipantCount: 50, publicProfile: shareProfile() });
+
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
+
+    const props = lastModalProps();
+    expect(props.card.kind).toBe("day");
+    expect(props.card.data).toMatchObject({ day: WINDOW_END, focusSeconds: 7 * 600, deltaSeconds: 600 });
+    expect(props.storyIds[0]).toBe("R4");
+    expect(props.storyIds).not.toContain("X4");
+  });
+
+  it("falls back to the weekly card on the monthly board", () => {
+    renderView({ isOptedIn: true, activePeriod: "monthly", publicProfile: shareProfile() });
+
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
+
+    expect(lastModalProps().card.kind).toBe("week");
+  });
+
+  it("offers no profile link while the public page is off", () => {
+    const profile = shareProfile();
+    renderView({ isOptedIn: true, publicProfile: { ...profile, draft: { ...profile.draft, isPublic: false } } });
+
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
+
+    expect(lastModalProps().profileLinkUrl).toBeNull();
+  });
+
+  it("waits for the daily series before Share can open", () => {
+    renderView({ isOptedIn: true, publicProfile: shareProfile({ dailyProductivity: null }) });
+
+    expect((screen.getByRole("button", { name: /^share$/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("lets a ranked member share the place card when the daily series is unavailable", () => {
+    renderView({ isOptedIn: true, activePeriod: "weekly", ownRank: 6, ownParticipantCount: 50, publicProfile: shareProfile({ dailyProductivity: null }) });
+
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
+
+    expect(lastModalProps().storyIds).toEqual(["WR4"]);
   });
 });

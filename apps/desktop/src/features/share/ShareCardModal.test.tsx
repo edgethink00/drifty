@@ -415,3 +415,83 @@ it("keeps live-rank lookup enabled when navigating to a local card", async () =>
   fireEvent.click(screen.getByRole("radio", { name: "Curve Card" }));
   expect(vi.mocked(useShareCardLiveRanks)).toHaveBeenLastCalledWith(true, null, "");
 });
+
+describe("ShareCardModal leaderboard options", () => {
+  const PROFILE_URL = "https://drifty.so/profile/?id=9f3a1b2c-0000-4d5e-8f6a-1b2c3d4e5f60";
+
+  it("offers only the requested stories, in the requested order", () => {
+    render(<ShareCardModal card={card} defaultTheme="light" storyIds={["R4", "R2", "WR1"]} onClose={vi.fn()} />);
+
+    // Categories (X4) is absent from the caller's list, and WR1 is not a day story.
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual(["Place Rank", "Rank Statement"]);
+  });
+
+  it("copies the profile link only from its own button and adds it to the post", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(<ShareCardModal card={card} defaultTheme="light" profileLinkUrl={PROFILE_URL} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy profile link" }));
+    await screen.findByRole("button", { name: "Profile link copied" });
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(PROFILE_URL);
+
+    fireEvent.click(screen.getByRole("button", { name: "X" }));
+    await waitFor(() => expect(exportMocks.openShareComposer).toHaveBeenCalledTimes(1));
+    expect(new URL(exportMocks.openShareComposer.mock.calls[0]?.[0]).searchParams.get("text")).toContain(PROFILE_URL);
+  });
+
+  it("shows no profile link action without a live public page", () => {
+    renderModal();
+
+    expect(screen.queryByRole("button", { name: "Copy profile link" })).toBeNull();
+  });
+
+  it("offers the weekly placement only when the caller asks for it, and locks it without a matching weekly rank", () => {
+    const weekCard = {
+      kind: "week" as const,
+      data: {
+        startDay: "2026-08-01", endDay: "2026-08-07", comparisonDay: "2026-08-07",
+        weekLabel: "Week 31", rangeLabel: "Aug 1–7", totalSeconds: 36_000, focusSeconds: 30_000,
+        isCurrentPeriod: true, avgDailyFocusSeconds: 4_000, focusPercent: 83,
+        productivitySlices: [{ key: "focus" as const, seconds: 30_000, ratio: 0.83 }],
+        deltaSeconds: null, days: [], bestDayLabel: null, longestFocusSeconds: 0, slices: [],
+      },
+    };
+    const { unmount } = render(<ShareCardModal card={weekCard} defaultTheme="light" onClose={vi.fn()} />);
+    expect(screen.queryByRole("radio", { name: "Weekly Place Rank" })).toBeNull();
+    unmount();
+
+    render(<ShareCardModal card={weekCard} defaultTheme="light" storyIds={["WR4", "WR1"]} onJoinLeaderboard={async () => {}} onClose={vi.fn()} />);
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual(["Weekly Place Rank", "Weekly Curve"]);
+    // The mocked weekly rank is not joined, so the exact weekly card cannot be exported.
+    expect((screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain("Join the leaderboard");
+  });
+
+  it("tells a member whose weekly rank covers another window that it is updating, not to join", () => {
+    rankMocks.state = {
+      daily: rankMocks.state.daily,
+      weekly: {
+        availability: "ready",
+        rank: { rank: 6, participantCount: 50, topPercent: 12, windowStartDay: "2026-07-31", windowEndDay: "2026-08-06" },
+      },
+    };
+    const weekCard = {
+      kind: "week" as const,
+      data: {
+        startDay: "2026-08-01", endDay: "2026-08-07", comparisonDay: "2026-08-07",
+        weekLabel: "Week 31", rangeLabel: "Aug 1–7", totalSeconds: 36_000, focusSeconds: 30_000,
+        isCurrentPeriod: true, avgDailyFocusSeconds: 4_000, focusPercent: 83,
+        productivitySlices: [{ key: "focus" as const, seconds: 30_000, ratio: 0.83 }],
+        deltaSeconds: null, days: [], bestDayLabel: null, longestFocusSeconds: 0, slices: [],
+      },
+    };
+    render(<ShareCardModal card={weekCard} defaultTheme="light" storyIds={["WR4"]} onJoinLeaderboard={async () => {}} onClose={vi.fn()} />);
+
+    const calls = exportMocks.shareCardSvgDataUrl.mock.calls;
+    const svg = String(calls[calls.length - 1]?.[0] ?? "");
+    expect(svg).toContain("Rank updating");
+    expect(svg).not.toContain("Join the leaderboard");
+    expect(screen.queryByRole("button", { name: "Join leaderboard" })).toBeNull();
+  });
+});

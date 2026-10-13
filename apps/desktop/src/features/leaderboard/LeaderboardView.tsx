@@ -1,13 +1,16 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ActionLabel } from "../../components/ActionLabel";
 import { formatLocalizedDuration } from "../../lib/formatting";
-import { normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
+import { buildPublicProfileUrl, normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
+import { ShareCardModal } from "../share/ShareCardModal";
+import type { ShareCardTheme } from "../share/shareCardSvg";
 import type { FocusCardControls } from "../share/useFocusCard";
 import { LeaderboardBoard } from "./LeaderboardBoard";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
 import { ProfileAvatar, StateBlock } from "./leaderboardViewHelpers";
 import { RankEmbedsModal } from "./RankEmbedsModal";
+import { buildLeaderboardShareCard, leaderboardShareStoryIds } from "./leaderboardShareCard";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { LeaderboardSparkline } from "./LeaderboardSparkline";
@@ -30,6 +33,18 @@ export type LeaderboardPublicProfileControls = {
   readonly onCopyProfileLink: () => void;
   readonly onEditProfile: () => void;
   readonly onEnsureProfile: () => Promise<boolean>;
+  /** What the Share card sheet needs beyond the rail's own data; Share stays hidden without it. */
+  readonly shareCard?: LeaderboardShareCardContext;
+};
+
+export type LeaderboardShareCardContext = {
+  readonly accountScope: string | null;
+  /** Same key the dashboard sheet uses, so both share one live-rank cache entry. */
+  readonly comparisonWindowKey: string;
+  readonly theme: ShareCardTheme;
+  /** Logical today; the leaderboard windows end on this day. */
+  readonly windowEndDay: string;
+  readonly onJoinLeaderboard: () => Promise<void>;
 };
 
 export type LeaderboardViewProps = {
@@ -97,6 +112,7 @@ export function LeaderboardView({
   const { effectiveLanguage, t } = useLocalization();
   const [searchQuery, setSearchQuery] = useState("");
   const [rankEmbedOpen, setRankEmbedOpen] = useState(false);
+  const [shareCardOpen, setShareCardOpen] = useState(false);
   const previewName = resolvePublicNamePreview(profileDisplayName, email, effectiveLanguage);
   // Display names are intentionally non-unique. Only the authenticated own-entry
   // RPC rank may associate a public row with this account.
@@ -136,6 +152,28 @@ export function LeaderboardView({
     if (!trimmedSearchQuery) return leaderboard;
     return leaderboard.filter((row) => row.display_name.toLowerCase().includes(trimmedSearchQuery) || String(row.rank).includes(trimmedSearchQuery));
   }, [leaderboard, trimmedSearchQuery]);
+  const shareContext = publicProfile?.shareCard ?? null;
+  // The card is assembled only while the sheet is open, from the same daily
+  // aggregates the rail charts; it never reads activity rows. If that series is
+  // still loading or failed, a ranked member can still share the place card.
+  const shareHasRank = isOptedIn && ownRank !== null && publiclyValid !== false;
+  const shareHasSeries = dailyProductivity !== null;
+  const shareAvailable = shareHasSeries || shareHasRank;
+  // Depend on the window end only: the context object also carries callbacks
+  // that change with profile state and would rebuild an open card.
+  const shareWindowEndDay = shareContext?.windowEndDay ?? null;
+  const shareCard = useMemo(() => (
+    shareCardOpen && shareWindowEndDay && shareAvailable
+      ? buildLeaderboardShareCard({ period: activePeriod, windowEndDay: shareWindowEndDay, dailyProductivity: dailyProductivity ?? [] })
+      : null
+  ), [activePeriod, dailyProductivity, shareAvailable, shareCardOpen, shareWindowEndDay]);
+  const shareStoryIds = useMemo(
+    () => (shareCard ? leaderboardShareStoryIds(shareCard, shareHasRank, shareHasSeries) : undefined),
+    [shareCard, shareHasRank, shareHasSeries],
+  );
+  const profileLinkUrl = publicProfile?.publicId && publicProfile.draft.isPublic
+    ? buildPublicProfileUrl(publicProfile.publicId)
+    : null;
 
   if (!isSupabaseEnabled) {
     return <section className="leaderboard-panel" aria-label={t("leaderboard.title")}><StateBlock eyebrow={t("leaderboard.syncRequired")} title={t("leaderboard.unavailable")} detail={t("leaderboard.unavailableDetail")} /></section>;
@@ -309,12 +347,14 @@ export function LeaderboardView({
                   </button>
                   {!isParticipationResolved ? (
                     <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
-                  ) : isOptedIn ? (
+                  ) : isOptedIn && shareContext ? (
                     <button
                       type="button"
                       className="app-btn app-btn--quiet profile-btn hero-action-btn"
-                      onClick={publicProfile?.onCopyProfileLink}
-                      disabled={!publicProfile?.onCopyProfileLink}
+                      aria-haspopup="dialog"
+                      disabled={!shareAvailable}
+                      title={!shareAvailable ? t("leaderboard.calculatingThirtyDays") : undefined}
+                      onClick={() => setShareCardOpen(true)}
                     >
                       <ShareIcon />
                       {t("leaderboard.share")}
@@ -448,7 +488,6 @@ export function LeaderboardView({
             onSelectProfile={onSelectProfile}
           />
         </div>
-        {!isLoading && publicProfile?.shareMessage ? <div className="leaderboard-share-toast" role="status">{publicProfile.shareMessage}</div> : null}
       </div>
 
       <ModalPresence>
@@ -464,6 +503,21 @@ export function LeaderboardView({
           rank={currentUserRank}
           onClose={() => setRankEmbedOpen(false)}
         />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {!isLoading && shareCard && shareContext ? (
+          <ShareCardModal
+            key={`${shareContext.accountScope ?? "signed-out"}:${shareCard.kind}`}
+            card={shareCard}
+            defaultTheme={shareContext.theme}
+            accountScope={shareContext.accountScope}
+            comparisonWindowKey={shareContext.comparisonWindowKey}
+            storyIds={shareStoryIds}
+            profileLinkUrl={profileLinkUrl}
+            onJoinLeaderboard={shareContext.onJoinLeaderboard}
+            onClose={() => setShareCardOpen(false)}
+          />
         ) : null}
       </ModalPresence>
     </section>

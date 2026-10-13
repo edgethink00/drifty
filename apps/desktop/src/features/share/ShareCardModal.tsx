@@ -27,6 +27,7 @@ import { detectHostPlatform, type HostPlatform } from "../../lib/api/accessibili
 
 import { useShareCardPreview } from "./useShareCardPreview";
 import { describeActionError } from "../../lib/actionErrors";
+import { copyTextToClipboard } from "../../lib/clipboard";
 
 export type ShareCardModalCard =
   | { readonly kind: "day"; readonly data: ShareCardData }
@@ -39,6 +40,14 @@ type ShareCardModalProps = {
   readonly accountScope?: string | null;
   readonly comparisonWindowKey?: string;
   readonly onJoinLeaderboard?: () => Promise<void>;
+  /**
+   * Stories to offer, in order. Callers whose card lacks some aggregates (the
+   * leaderboard has no category totals) narrow the list; the default follows
+   * the card kind.
+   */
+  readonly storyIds?: readonly UnifiedShareStoryId[];
+  /** A live public profile URL. Adds a "Copy profile link" action and joins the post caption. */
+  readonly profileLinkUrl?: string | null;
   readonly onClose: () => void;
 };
 
@@ -47,10 +56,15 @@ const SHARE_CARD_FORMAT = "landscape" as const;
 
 const DAY_STORIES = new Set<UnifiedShareStoryId>(["R1c", "R2", "R4", "F1", "C1", "X4", "X5"]);
 const WEEK_STORIES = new Set<UnifiedShareStoryId>(["WR1", "W5", "X4", "X5"]);
-// Estimates require a fresh real-participant model. Only Place Rank claims
-// an exact live position and therefore needs leaderboard opt-in.
+// The weekly placement is exact only when the card covers the weekly rank
+// window, so callers opt in through `storyIds` (the leaderboard does); the
+// calendar-week dashboard card would always show it locked.
+const WEEK_OPT_IN_STORIES = new Set<UnifiedShareStoryId>([...WEEK_STORIES, "WR4"]);
+// Estimates require a fresh real-participant model. Only the place-rank stories
+// claim an exact live position and therefore need leaderboard opt-in.
 const EXACT_RANK_STORY_PERIOD: Partial<Record<UnifiedShareStoryId, "daily" | "weekly">> = {
   R4: "daily",
+  WR4: "weekly",
 };
 const LIVE_RANK_STORY_PERIOD: Partial<Record<UnifiedShareStoryId, "daily" | "weekly">> = {
   R1c: "daily",
@@ -58,6 +72,7 @@ const LIVE_RANK_STORY_PERIOD: Partial<Record<UnifiedShareStoryId, "daily" | "wee
   C1: "daily",
   R4: "daily",
   WR1: "weekly",
+  WR4: "weekly",
 };
 
 type ExportState =
@@ -84,7 +99,14 @@ function rankMatchesCard(
   return rank.rank.windowStartDay === card.data.startDay && rank.rank.windowEndDay === card.data.endDay;
 }
 
-function storyOptionsForCard(card: ShareCardModalCard) {
+function storyOptionsForCard(card: ShareCardModalCard, storyIds?: readonly UnifiedShareStoryId[]) {
+  if (storyIds && storyIds.length > 0) {
+    const allowed = card.kind === "day" ? DAY_STORIES : WEEK_OPT_IN_STORIES;
+    return storyIds
+      .filter((id) => allowed.has(id))
+      .map((id) => STORY_OPTIONS.find((option) => option.value === id))
+      .filter((option): option is (typeof STORY_OPTIONS)[number] => option !== undefined);
+  }
   return STORY_OPTIONS.filter((option) => (
     card.kind === "day" ? DAY_STORIES.has(option.value) : WEEK_STORIES.has(option.value)
   ));
@@ -112,12 +134,13 @@ function rankGateForStory(
   return { detail: t("share.rankUnavailable"), action: null };
 }
 
-export function ShareCardModal({ card, defaultTheme, accountScope = null, comparisonWindowKey = "", onJoinLeaderboard, onClose }: ShareCardModalProps) {
+export function ShareCardModal({ card, defaultTheme, accountScope = null, comparisonWindowKey = "", onJoinLeaderboard, storyIds, profileLinkUrl = null, onClose }: ShareCardModalProps) {
   const { effectiveLanguage, t } = useLocalization();
   const hostPlatform = useMemo(() => detectHostPlatform(), []);
   const [selectedStoryId, setSelectedStoryId] = useState<UnifiedShareStoryId | null>(null);
   const [exportState, setExportState] = useState<ExportState>({ kind: "idle" });
   const [joiningLeaderboard, setJoiningLeaderboard] = useState(false);
+  const [profileLinkState, setProfileLinkState] = useState<"idle" | "copied" | "error">("idle");
   const exportGenerationRef = useRef(0);
   const exportTarget = `${card.kind === "day" ? card.data.day : card.data.startDay + ":" + card.data.endDay}:${defaultTheme}:${accountScope}:${comparisonWindowKey}`;
   useEffect(() => {
@@ -126,7 +149,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
     setExportState((current) => current.kind === "working" ? current : { kind: "idle" });
     return () => { exportGenerationRef.current += 1; };
   }, [exportTarget]);
-  const storyOptions = useMemo(() => storyOptionsForCard(card), [card]);
+  const storyOptions = useMemo(() => storyOptionsForCard(card, storyIds), [card, storyIds]);
   const storyOption = storyOptions.find((option) => option.value === selectedStoryId) ?? storyOptions[0] ?? STORY_OPTIONS[0];
   const storyIndex = Math.max(0, storyOptions.findIndex((option) => option.value === storyOption.value));
   const rankStoryPeriod = EXACT_RANK_STORY_PERIOD[storyOption.value];
@@ -137,6 +160,9 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   const { models: communityModels, loading: communityModelsLoading } = useShareCardCommunityModels();
   const rankGate = rankGateForStory(card, storyOption.value, liveRankState, t);
   const lockedRankPeriod = rankGate && rankStoryPeriod ? rankStoryPeriod : null;
+  // Only a non-member is asked to join; a member's rank is loading or not yet
+  // published for this window.
+  const lockedRankReason = rankGate?.action === "join" ? "join" : "pending";
   const matchingLiveRanks = useMemo<ShareCardLiveRanks>(() => ({
     daily: card.kind === "day" && rankMatchesCard(card, liveRankState.daily) ? liveRankState.daily.rank : null,
     weekly: card.kind === "week" && rankMatchesCard(card, liveRankState.weekly) ? liveRankState.weekly.rank : null,
@@ -154,12 +180,13 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
         period: lockedRankPeriod,
         lookIndex: storyIndex,
         language: "en",
+        reason: lockedRankReason,
       });
     }
     return card.kind === "week"
       ? renderShareWeekCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks, communityModels })
       : renderShareCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks, communityModels });
-  }, [card, defaultTheme, matchingLiveRanks, communityModels, lockedRankPeriod, storyIndex, storyOption.value]);
+  }, [card, defaultTheme, matchingLiveRanks, communityModels, lockedRankPeriod, lockedRankReason, storyIndex, storyOption.value]);
   const previewAlt = card.kind === "week"
     ? t("share.previewWeekAria", { week: card.data.weekLabel, range: card.data.rangeLabel })
     : t("share.previewDayAria", { day: `${card.data.weekdayLabel} ${card.data.dateLabel}` });
@@ -176,13 +203,27 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   const exportSize = SHARE_CARD_EXPORT_SIZES[SHARE_CARD_FORMAT] ?? SHARE_CARD_UNIFIED_SIZE;
   const working = exportState.kind === "working";
   const actionsDisabled = working || lockedRankPeriod !== null || comparisonLoading || preview.pending;
-  const caption = buildShareCardCaption();
+  const caption = profileLinkUrl ? `${buildShareCardCaption()}\n${profileLinkUrl}` : buildShareCardCaption();
 
   useEffect(() => {
     if (exportState.kind === "idle" || exportState.kind === "working" || exportState.kind === "error") return;
     const timeout = window.setTimeout(() => setExportState({ kind: "idle" }), 3_400);
     return () => window.clearTimeout(timeout);
   }, [exportState]);
+
+  useEffect(() => {
+    if (profileLinkState !== "copied") return;
+    const timeout = window.setTimeout(() => setProfileLinkState("idle"), 2_000);
+    return () => window.clearTimeout(timeout);
+  }, [profileLinkState]);
+
+  const handleCopyProfileLink = () => {
+    if (!profileLinkUrl) return;
+    // Called directly from the click so WebKit keeps the user gesture.
+    copyTextToClipboard(profileLinkUrl)
+      .then(() => setProfileLinkState("copied"))
+      .catch(() => setProfileLinkState("error"));
+  };
 
   const selectStory = (nextIndex: number) => {
     if (working || storyOptions.length === 0) return;
@@ -382,6 +423,16 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
               {/* A failed export reports under the buttons that retry it. The
                   dialog's top is anchored, so the line only extends the bottom edge. */}
               {exportState.kind === "error" ? <p className="share-card-outcome" role="alert" title={exportState.detail ?? undefined}>{exportState.message}{exportState.detail ? <span className="sr-only"> {exportState.detail}</span> : null}</p> : null}
+              {profileLinkUrl ? (
+                <div className="share-card-profile-link">
+                  <button type="button" className="share-card-profile-link__button" onClick={handleCopyProfileLink}>
+                    {profileLinkState === "copied" ? <CheckIcon /> : <LinkIcon />}
+                    <span>{profileLinkState === "copied" ? t("share.profileLinkCopied") : t("share.copyProfileLink")}</span>
+                  </button>
+                  <span className="sr-only" role="status">{profileLinkState === "copied" ? t("share.profileLinkCopied") : ""}</span>
+                  {profileLinkState === "error" ? <p className="share-card-outcome" role="alert">{t("share.profileLinkError")}</p> : null}
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
@@ -432,6 +483,23 @@ function CopyIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M9 8h10v11H9zM5 16H3V4h11v2" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1" />
+      <path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m5 12.5 4.5 4.5L19 7.5" />
     </svg>
   );
 }
