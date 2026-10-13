@@ -2613,10 +2613,14 @@ def handle_request(raw_request: str):
     request = None
     try:
         request = json.loads(raw_request)
-        print(json.dumps(_dispatch(request)))
+        serialized = json.dumps(_dispatch(request))
     except Exception as exc:
         capture_tracker_exception(exc, {"phase": "request", "command": _safe_request_command(request)})
-        print(json.dumps(response(False, error=str(exc))))
+        serialized = json.dumps(response(False, error=str(exc)))
+    # A completed command is not a failed command when its caller disconnects.
+    # Use the same response-write boundary as the persistent server, including
+    # flushing buffered short responses before Python's shutdown flush.
+    _write_response_line(serialized)
 
 
 def serve():
@@ -2653,17 +2657,23 @@ def serve():
         if request_id is not None:
             envelope = {**envelope, "id": request_id}
         serialized = json.dumps(envelope)
-        try:
-            sys.stdout.write(serialized)
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-        except OSError as exc:
-            if not _is_closed_serve_pipe(exc):
-                raise
+        if not _write_response_line(serialized):
             # There is no reader for this response. Stop before dispatching any
             # more requests; a completed mutation must never be replayed here.
-            _detach_closed_stdout()
             return
+
+
+def _write_response_line(serialized: str) -> bool:
+    try:
+        sys.stdout.write(serialized)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+    except OSError as exc:
+        if not _is_closed_serve_pipe(exc):
+            raise
+        _detach_closed_stdout()
+        return False
+    return True
 
 
 def _is_closed_serve_pipe(error: OSError) -> bool:

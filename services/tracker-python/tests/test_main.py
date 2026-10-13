@@ -3950,6 +3950,85 @@ assert not captures, captures
                     process.communicate(timeout=5)
 
 
+class RequestResponsePipeTests(unittest.TestCase):
+    def test_command_errors_still_return_an_error_envelope_and_are_reported(self):
+        error = BrokenPipeError(32, "handler failure")
+        output = io.StringIO()
+        with patch.object(tracker_main, "COMMANDS", {"fail": MagicMock(side_effect=error)}), patch.object(
+            tracker_main.sys, "stdout", output
+        ), patch.object(tracker_main, "capture_tracker_exception") as capture, patch.object(
+            tracker_main, "_detach_closed_stdout"
+        ) as detach:
+            tracker_main.handle_request('{"command":"fail"}')
+        self.assertFalse(json.loads(output.getvalue())["ok"])
+        capture.assert_called_once_with(error, {"phase": "request", "command": "fail"})
+        detach.assert_not_called()
+
+    def test_response_io_errors_are_not_reported_as_command_failures(self):
+        for platform, pipe, error, disconnected in (
+            ("darwin", True, BrokenPipeError(32, "closed pipe"), True),
+            ("win32", True, OSError(22, "closed pipe"), True),
+            ("darwin", True, OSError(22, "unrelated error"), False),
+            ("win32", False, OSError(22, "regular file error"), False),
+            ("win32", True, OSError(5, "I/O error"), False),
+        ):
+            with self.subTest(platform=platform, pipe=pipe, errno=error.errno):
+                output = MagicMock()
+                output.write.side_effect = error
+                output.fileno.return_value = 123
+                command = MagicMock(return_value=tracker_main.response(True))
+                with patch.object(tracker_main, "COMMANDS", {"mutate": command}), patch.object(
+                    tracker_main.sys, "stdout", output
+                ), patch.object(tracker_main.sys, "platform", platform), patch.object(
+                    tracker_main.os, "fstat", return_value=SimpleNamespace(st_mode=stat.S_IFIFO if pipe else stat.S_IFREG)
+                ), patch.object(tracker_main, "capture_tracker_exception") as capture, patch.object(
+                    tracker_main, "_detach_closed_stdout"
+                ) as detach:
+                    if disconnected:
+                        tracker_main.handle_request('{"command":"mutate"}')
+                        detach.assert_called_once_with()
+                    else:
+                        with self.assertRaises(OSError) as raised:
+                            tracker_main.handle_request('{"command":"mutate"}')
+                        self.assertIs(raised.exception, error)
+                        detach.assert_not_called()
+                command.assert_called_once_with({})
+                capture.assert_not_called()
+
+    def test_real_closed_request_pipe_exits_zero_without_replaying_or_reporting_the_command(self):
+        code = r'''
+import sys
+from app import main
+calls = []
+captures = []
+def mutate(payload):
+    calls.append(payload)
+    return main.response(True, 'x' * int(sys.argv[1]))
+main.COMMANDS = {'mutate': mutate}
+main.capture_tracker_exception = lambda *args: captures.append(args)
+main.handle_request('{"command":"mutate"}')
+assert len(calls) == 1, calls
+assert not captures, captures
+'''
+        environment = dict(os.environ, PYTHONPATH=str(SERVICE_ROOT))
+        for key in ("SENTRY_DSN", "DRIFTY_TRACKER_SENTRY_DSN"):
+            environment.pop(key, None)
+        for size in (0, 262144):
+            with self.subTest(size=size):
+                process = subprocess.Popen([sys.executable, "-c", code, str(size)],
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
+                try:
+                    process.stdout.close()
+                    process.stdout = None
+                    _, stderr = process.communicate(timeout=20)
+                    self.assertEqual(process.returncode, 0, stderr.decode(errors="replace"))
+                    self.assertEqual(stderr, b"")
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                    process.communicate(timeout=5)
+
+
 class BrowserHistoryBackfillUpgradeTests(unittest.TestCase):
     """Exercise persisted captures through normal reopen and a real daemon tick."""
 
