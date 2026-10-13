@@ -84,6 +84,9 @@ def browser_script(app_name: str) -> str | None:
             fallback_title="title of active tab of window 1",
         )
 
+    if app_name == "Dia":
+        return _dia_window_script()
+
     if app_name == "Firefox":
         return f"""
         tell application "System Events"
@@ -243,6 +246,38 @@ def _tab_matching_script(
             set matchedTitle to {fallback_title}
           end if
           return matchedUrl & linefeed & matchedTitle & linefeed & matchState & linefeed & axTitle
+        end tell
+    '''
+
+
+def _dia_window_script() -> str:
+    # Dia 1.52 shortens its accessibility window title ("asyncio - Asynch...")
+    # and exposes no window mode or bounds, so the shared title match cannot
+    # bind a tab. The focused window's accessibility identifier carries the
+    # scripting window id instead: bigBrowserWindow_<id> for a normal window,
+    # bigIncognitoBrowserWindow_<id> for incognito. URL and title are read
+    # from exactly that window in either mode, like every other browser.
+    return f'''
+        set axTitle to ""
+        set axIdentifier to ""
+        tell application "System Events"
+          try
+            set frontProc to first application process whose frontmost is true
+            if name of frontProc is not equal to "Dia" then return "STALE"
+            tell frontProc
+              if not (exists front window) then return "{_NO_SCRIPTABLE_WINDOW}"
+              set axTitle to name of front window
+              set axIdentifier to value of attribute "AXIdentifier" of front window
+            end tell
+          end try
+        end tell
+        set windowId to ""
+        if axIdentifier starts with "bigBrowserWindow_" then set windowId to text 18 thru -1 of axIdentifier
+        if axIdentifier starts with "bigIncognitoBrowserWindow_" then set windowId to text 27 thru -1 of axIdentifier
+        if windowId is "" then return "{_NO_SCRIPTABLE_WINDOW}"
+        tell application "Dia"
+          set w to window id windowId
+          return (URL of active tab of w) & linefeed & (title of active tab of w) & linefeed & "matched" & linefeed & axTitle
         end tell
     '''
 

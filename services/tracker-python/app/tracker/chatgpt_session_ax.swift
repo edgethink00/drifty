@@ -98,7 +98,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // window-title label, so they share its identity proof. Bundle
         // identifiers are compared exactly; Floorp's carries a capital letter.
         let geckoBundles = ["org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp"]
-        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "com.apple.Safari"] + geckoBundles
+        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "com.apple.Safari"] + geckoBundles
         // Safari and the Firefox family expose no scripting window mode; they
         // are admitted through their own accessibility identity below and never
         // receive Apple Events.
@@ -110,6 +110,14 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // window then binds through the exact tab title and the single web
         // area's URL, and its own frame locates the native window.
         let arc = CommandLine.arguments[3] == "company.thebrowser.Browser"
+        // Dia 1.52 has no window mode or bounds and shortens its AX window
+        // title. Its scripting window id appears in the focused AX window's
+        // identifier: bigBrowserWindow_<id> for a normal window and
+        // bigIncognitoBrowserWindow_<id> for incognito, in any UI language.
+        // Requiring the normal identifier for the scripted window binds the
+        // exact window and rejects incognito; an incognito scripting window
+        // also has no active profile, which is checked as well.
+        let dia = CommandLine.arguments[3] == "company.thebrowser.dia"
         guard let pid = Int32(CommandLine.arguments[2]), pid > 0,
               let milliseconds = Double(CommandLine.arguments[6]), milliseconds > 0,
               AXIsProcessTrusted(),
@@ -157,13 +165,19 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
                       (reply.paramDescriptor(forKeyword: code("errn"))?.int32Value ?? 0) == 0 else { return nil }
                 return reply.paramDescriptor(forKeyword: code("----"))
             }
-            guard let mode = read("mode", scriptWindow)?.stringValue, mode == "normal",
-                  let windowID = read("ID  ", scriptWindow)?.stringValue, !windowID.isEmpty,
+            var mode = "normal"
+            if dia {
+                guard let profile = read("acPr", scriptWindow), profile.descriptorType == typeObjectSpecifier else { return nil }
+            } else {
+                guard let scriptedMode = read("mode", scriptWindow)?.stringValue, scriptedMode == "normal" else { return nil }
+                mode = scriptedMode
+            }
+            guard let windowID = read("ID  ", scriptWindow)?.stringValue, !windowID.isEmpty,
                   let title = read("pnam", scriptWindow)?.stringValue, !title.isEmpty,
                   let tabID = read("ID  ", tab)?.stringValue, !tabID.isEmpty,
                   let currentURL = read("URL ", tab)?.stringValue, currentURL == url.absoluteString,
                   let tabTitle = read("pnam", tab)?.stringValue, tabTitle == CommandLine.arguments[5] else { return nil }
-            if arc { return Identity(mode: mode, windowID: windowID, title: title, tabID: tabID, url: currentURL, tabTitle: tabTitle, bounds: .zero) }
+            if arc || dia { return Identity(mode: mode, windowID: windowID, title: title, tabID: tabID, url: currentURL, tabTitle: tabTitle, bounds: .zero) }
             guard let bounds = read("pbnd", scriptWindow), bounds.descriptorType == typeQDRectangle,
                   bounds.data.count == 4 * MemoryLayout<Int16>.size else { return nil }
             // Native core/getd returns a QuickDraw rectangle, not the list
@@ -336,8 +350,10 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // tab title already matched to the caller, plus any browser/profile labels.
         // Keep the scripting window name in the before/after identity proof.
         let nativeTitle = string(window, "AXTitle")
-        guard chromiumWindowTitleMatches(nativeTitle, tabTitle: before.tabTitle), let windowBounds = rectangle(window),
-              arc || sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
+        let windowBound = dia ? string(window, "AXIdentifier") == "bigBrowserWindow_" + before.windowID
+            : chromiumWindowTitleMatches(nativeTitle, tabTitle: before.tabTitle)
+        guard windowBound, let windowBounds = rectangle(window),
+              arc || dia || sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
         watch(window, ["AXUIElementDestroyed", "AXMoved", "AXResized"])
         var areas: [AXUIElement] = []; var locateCount = 0; var incomplete = false
         // Vivaldi draws its own interface as one web document and nests each

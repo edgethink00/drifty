@@ -382,6 +382,37 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result.match_state, "matched")
         self.assertIn('tell application "Whale"', mock_run.call_args.args[0])
 
+    def test_dia_reads_the_tab_of_the_window_its_accessibility_identifier_names(self) -> None:
+        # Dia 1.52 shortens the accessibility window title, so the tab is
+        # found through the window id inside the focused window's identifier.
+        script = _browser_script("Dia")
+        self.assertIsNotNone(script)
+        self.assertIn('value of attribute "AXIdentifier" of front window', script)
+        self.assertIn('starts with "bigBrowserWindow_" then set windowId to text 18 thru -1', script)
+        self.assertIn('starts with "bigIncognitoBrowserWindow_" then set windowId to text 27 thru -1', script)
+        self.assertEqual(len("bigBrowserWindow_") + 1, 18)
+        self.assertEqual(len("bigIncognitoBrowserWindow_") + 1, 27)
+        self.assertIn("set w to window id windowId", script)
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="https://docs.python.org/3/library/asyncio.html\nasyncio \u2014 Asynchronous I/O\nmatched\nasyncio \u2014 Asynch\u2026",
+        ):
+            result = _browser_metadata("Dia")
+        self.assertEqual(result.browser_name, "Dia")
+        self.assertEqual(result.site_url, "https://docs.python.org/3/library/asyncio.html")
+        self.assertEqual(result.site_title, "asyncio \u2014 Asynchronous I/O")
+        self.assertEqual(result.match_state, "matched")
+        self.assertEqual(result.browser_automation_status, "granted")
+
+    def test_dia_without_a_known_window_identifier_reports_no_window(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="NO_SCRIPTABLE_WINDOW",
+        ):
+            result = _browser_metadata("Dia")
+        self.assertIsNone(result.site_url)
+        self.assertEqual(result.browser_automation_status, "unavailable")
+
     def test_whale_falls_back_to_its_address_bar_when_tab_scripting_fails(self) -> None:
         with patch(
             "app.tracker.macos_workspace._run_osascript",
