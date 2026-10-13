@@ -103,6 +103,12 @@ try {
     'Test-GeckoPrivateWindow',
     'Test-ClassToken',
     'Find-FocusedTopLevelDocument',
+    'Get-DocumentValue',
+    'Get-DocumentChain',
+    'Select-VivaldiPage',
+    'Read-VivaldiPage',
+    'Get-VivaldiWindowPrivacy',
+    'Test-WhalePrivateWindow',
     'Read-TopLevelDocument'
   )
   foreach ($functionName in $requiredFunctions) {
@@ -130,6 +136,10 @@ try {
     $documentType
   )
   $privateIndicatorCondition = 'synthetic private indicator condition'
+  $vivaldiPrivateCondition = 'synthetic Vivaldi private indicator condition'
+  $vivaldiInterfaceUrl = 'chrome-extension://mpognobbkildjkofajifpdfhcoklimli/window.html'
+  $toolBarCondition = 'synthetic toolbar condition'
+  $vivaldiChromeCondition = 'synthetic Vivaldi toolbar or indicator condition'
 
   Assert-Equal 'explicit-http-preserved' (Test-ExplicitHttpUrl 'http://127.0.0.1:4173/Docs/?Q=Case#Fragment') $true
   Assert-Equal 'explicit-https-preserved' (Test-ExplicitHttpUrl 'https://example.com/Path/') $true
@@ -307,6 +317,88 @@ try {
     return [pscustomobject]@{ Left = [double]::PositiveInfinity; Top = [double]::PositiveInfinity; Width = [double]::NegativeInfinity; Height = [double]::NegativeInfinity }
   }
   Assert-Equal 'gecko-persistently-empty-rectangle-refused' (Read-TopLevelDocument $ffRoot $walker $documentCondition $null 'gecko').error 'document geometry unavailable'
+
+  # Vivaldi (measured 8.2): the interface is one top-level Document whose
+  # page sits two URL-less webview Documents deeper. Focus is usually in the page.
+  $vRoot = New-TestElement 'vr' $windowType
+  $interface = New-TestElement 'vi' $documentType $false $null $vRoot @() $vivaldiInterfaceUrl
+  $webview = New-TestElement 'vw' $documentType $false $null $interface @() ''
+  $guest = New-TestElement 'vg' $documentType $false $null $webview @() ''
+  $vPage = New-TestElement 'vp' $documentType $false $null $guest @() 'https://doc.rust-lang.org/book/'
+  $vRoot.Children = @($interface, $webview, $guest, $vPage)
+  Assert-Equal 'vivaldi-unbuilt-interface-refused' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').found $false
+  $addressBar = New-TestElement 'vt' ([System.Windows.Automation.ControlType]::ToolBar) $false $null $interface @() '' $true $false '' 'toolbar toolbar-mainbar toolbar-addressbar toolbar-visible'
+  $vRoot.Children = @($interface, $addressBar, $webview, $guest, $vPage)
+  Assert-Equal 'vivaldi-page-inside-interface' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').url 'https://doc.rust-lang.org/book/'
+  Assert-Equal 'chromium-rules-refuse-the-vivaldi-interface' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'chromium').found $false
+  $vFocus = New-TestElement 'vf' $paneType $false $null $vPage
+  Assert-Equal 'vivaldi-focused-page' (Read-TopLevelDocument $vRoot $walker $documentCondition $vFocus 'vivaldi').url 'https://doc.rust-lang.org/book/'
+  $frame = New-TestElement 'vx' $documentType $false $null $vPage @() 'https://ads.example/frame'
+  $frameFocus = New-TestElement 'vy' $paneType $false $null $frame
+  Assert-Equal 'vivaldi-focus-in-an-iframe-reads-the-page' (Read-TopLevelDocument $vRoot $walker $documentCondition $frameFocus 'vivaldi').url 'https://doc.rust-lang.org/book/'
+  $addressFocus = New-TestElement 'va' $paneType $false $null $interface
+  Assert-Equal 'vivaldi-address-bar-focus-falls-back-to-the-page' (Read-TopLevelDocument $vRoot $walker $documentCondition $addressFocus 'vivaldi').url 'https://doc.rust-lang.org/book/'
+  $vRoot.Children = @($interface, $addressBar, $webview, $guest, $vPage, $frame)
+  Assert-Equal 'vivaldi-page-iframe-is-not-a-second-page' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').url 'https://doc.rust-lang.org/book/'
+  $hiddenTab = New-TestElement 'vh' $documentType $true $null $guest @() 'https://example.com/background'
+  $vRoot.Children = @($interface, $addressBar, $webview, $guest, $hiddenTab, $vPage)
+  Assert-Equal 'vivaldi-background-tab-skipped' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').url 'https://doc.rust-lang.org/book/'
+  $panelView = New-TestElement 'vpv' $documentType $false $null $interface @() ''
+  $panelPage = New-TestElement 'vpp' $documentType $false $null $panelView @() 'https://en.wikipedia.org/'
+  $vRoot.Children = @($interface, $addressBar, $webview, $guest, $vPage, $panelView, $panelPage)
+  Assert-Equal 'vivaldi-web-panel-makes-the-page-ambiguous' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').error 'multiple visible top-level documents'
+  $internal = New-TestElement 'vin' $documentType $false $null $guest @() 'chrome://vivaldi-webui/startpage'
+  $vRoot.Children = @($interface, $addressBar, $webview, $guest, $internal)
+  Assert-Equal 'vivaldi-internal-page-refused' (Read-TopLevelDocument $vRoot $walker $documentCondition $null 'vivaldi').error 'document URL unavailable'
+  $vRoot.Children = @($interface, $addressBar, $webview, $guest, $vPage)
+  $interface.TestValue = 'chrome-extension://other/window.html'
+  Assert-Equal 'vivaldi-other-interface-refused' (Read-TopLevelDocument $vRoot $walker $documentCondition $vFocus 'vivaldi').found $false
+  $interface.TestValue = $vivaldiInterfaceUrl
+  $indicator = New-TestElement 'vpm' ([System.Windows.Automation.ControlType]::Group) $false $null $addressBar @() '' $true $false '' 'UrlBar-PrivateWindowIndicator'
+  $vRoot.Children = @($interface, $addressBar, $indicator, $webview, $guest, $vPage)
+  $vPrivate = Read-TopLevelDocument $vRoot $walker $documentCondition $vFocus 'vivaldi'
+  Assert-Equal 'vivaldi-private-window-not-found' $vPrivate.found $false
+  Assert-Equal 'vivaldi-private-window-flagged' $vPrivate.privacy 'private'
+  Assert-Equal 'vivaldi-private-window-has-no-url' $vPrivate.url ''
+  $vRoot.Children = @($interface, $indicator, $webview, $guest, $vPage)
+  $vUnproven = Read-TopLevelDocument $vRoot $walker $documentCondition $vFocus 'vivaldi'
+  Assert-Equal 'vivaldi-indicator-without-address-bar-still-refused' $vUnproven.found $false
+
+  # Whale (measured 5.39): a private window has the same title; only the
+  # profile button's localized name differs. The labels come from the host.
+  $labelAssignment = $ast.FindAll(
+    {
+      param($node)
+      $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left.Extent.Text -eq '$whaleIncognitoLabels'
+    },
+    $true
+  ) | Select-Object -First 1
+  if ($null -eq $labelAssignment) { throw 'Whale incognito labels missing' }
+  Invoke-Expression $labelAssignment.Extent.Text
+  $avatarButtonCondition = 'synthetic avatar button condition'
+  $koreanIncognito = -join ([char[]](0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC, 0xB97C, 0x20, 0xC0AC, 0xC6A9, 0x20, 0xC911, 0xC785, 0xB2C8, 0xB2E4, 0x2E))
+  $wRoot = New-TestElement 'wr' $windowType
+  $wPage = New-TestElement 'wp' $documentType $false $null $wRoot @() 'https://doc.rust-lang.org/book/'
+  $wRoot.Children = @($wPage)
+  Assert-Equal 'whale-without-profile-button-reads-the-page' (Read-TopLevelDocument $wRoot $walker $documentCondition $null 'whale').url 'https://doc.rust-lang.org/book/'
+  $wAvatar = New-TestElement 'wa' ([System.Windows.Automation.ControlType]::Button) $false $null $wRoot @() '' $true $false 'view_57082' 'AvatarToolbarButton'
+  $wAvatar.Current | Add-Member NoteProperty Name ([string][char]0xB098)
+  $wRoot.PrivateMarker = $wAvatar
+  Assert-Equal 'whale-korean-normal-profile-reads-the-page' (Read-TopLevelDocument $wRoot $walker $documentCondition $null 'whale').url 'https://doc.rust-lang.org/book/'
+  $wAvatar.Current.Name = 'You'
+  Assert-Equal 'whale-english-normal-profile-reads-the-page' (Read-TopLevelDocument $wRoot $walker $documentCondition $null 'whale').url 'https://doc.rust-lang.org/book/'
+  $wAvatar.Current.Name = $koreanIncognito
+  $wKorean = Read-TopLevelDocument $wRoot $walker $documentCondition $null 'whale'
+  Assert-Equal 'whale-korean-incognito-not-found' $wKorean.found $false
+  Assert-Equal 'whale-korean-incognito-flagged' $wKorean.privacy 'private'
+  Assert-Equal 'whale-korean-incognito-has-no-url' $wKorean.url ''
+  $wAvatar.Current.Name = "You're Incognito"
+  $wEnglish = Read-TopLevelDocument $wRoot $walker $documentCondition $null 'whale'
+  Assert-Equal 'whale-english-incognito-flagged' $wEnglish.privacy 'private'
+  Assert-Equal 'whale-english-incognito-has-no-url' $wEnglish.url ''
+  Assert-Equal 'chromium-ignores-whale-profile-button' (Read-TopLevelDocument $wRoot $walker $documentCondition $null 'chromium').url 'https://doc.rust-lang.org/book/'
+  $wRoot.PrivateMarker = $null
 } catch {
   Add-Case 'suite-execution' $false $_.Exception.Message
 }

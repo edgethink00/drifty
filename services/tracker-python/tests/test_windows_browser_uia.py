@@ -37,6 +37,8 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         self.assertTrue(is_live_uia_browser("Microsoft Edge"))
         self.assertTrue(is_live_uia_browser("Brave Browser"))
         self.assertTrue(is_live_uia_browser("Opera"))
+        self.assertTrue(is_live_uia_browser("Vivaldi"))
+        self.assertTrue(is_live_uia_browser("Whale"))
         self.assertTrue(is_live_uia_browser("Firefox"))
         self.assertTrue(is_live_uia_browser("Floorp"))
         self.assertTrue(is_live_uia_browser("LibreWolf"))
@@ -58,7 +60,50 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         # Firefox 157 shows an indicator button and the private-session button instead.
         self.assertIn("'private-browsing-indicator-button toolbarbutton-1'", script)
         self.assertIn("$auto::AutomationIdProperty, 'reset-pbm-toolbar-button'", script)
-        self.assertIn("^READ ([0-9]+)(?: (chromium|gecko))?$", script)
+        self.assertIn("^READ ([0-9]+)(?: (chromium|gecko|vivaldi|whale))?$", script)
+
+    def test_vivaldi_requests_its_interface_page_rules(self) -> None:
+        self.assertEqual(windows_browser_uia._uia_family("Vivaldi"), "vivaldi")
+
+        class FakeInput:
+            def __init__(self) -> None:
+                self.writes: list[str] = []
+
+            def write(self, value: str) -> None:
+                self.writes.append(value)
+
+            def flush(self) -> None:
+                pass
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdin = FakeInput()
+                self.stdout = object()
+
+            def poll(self) -> None:
+                return None
+
+        host = object.__new__(windows_browser_uia._WindowsUiaHost)
+        host._process = FakeProcess()
+        host._has_completed_request = True
+        with patch.object(windows_browser_uia, "_readline_with_timeout", return_value='{"found":true,"url":"https://example.com/","error":""}'):
+            result = host.read(303, "vivaldi")
+        self.assertEqual(host._process.stdin.writes, ["READ 303 vivaldi\n"])
+        self.assertEqual(result.url, "https://example.com/")
+        self.assertEqual(result.privacy_state, "unknown")
+        script = windows_browser_uia._POWERSHELL_UIA_HOST
+        self.assertIn("$vivaldiInterfaceUrl = 'chrome-extension://mpognobbkildjkofajifpdfhcoklimli/window.html'", script)
+        self.assertIn("$auto::ClassNameProperty, 'UrlBar-PrivateWindowIndicator')", script)
+
+    def test_whale_requests_its_private_window_check(self) -> None:
+        self.assertEqual(windows_browser_uia._uia_family("Whale"), "whale")
+        self.assertEqual(windows_browser_uia._uia_family("Google Chrome"), "chromium")
+        script = windows_browser_uia._POWERSHELL_UIA_HOST
+        self.assertIn("$auto::ClassNameProperty, 'AvatarToolbarButton')", script)
+        # The Korean label is spelled with code points so the host stays ASCII.
+        self.assertTrue(script.isascii())
+        self.assertIn("0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC", script)
+        self.assertEqual("".join(map(chr, (0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC))), "시크릿 모드")
 
     def test_private_window_reply_carries_no_page(self) -> None:
         result = parse_uia_response(
@@ -188,7 +233,10 @@ class WindowsBrowserUiaTests(unittest.TestCase):
         # never touches editable fields, text ranges or the clipboard.
         script = windows_browser_uia._POWERSHELL_UIA_HOST.split("$script:ClueReaderSource = @'", 1)[0]
         self.assertNotIn("ControlType]::Edit", script)
-        self.assertNotIn("ControlType]::ToolBar", script)
+        # Vivaldi's privacy probe only proves its address bar toolbar exists; it reads no value there.
+        self.assertEqual(script.count("ControlType]::ToolBar"), 1)
+        privacy_probe = script.split("function Get-VivaldiWindowPrivacy", 1)[1].split("\nfunction ", 1)[0]
+        self.assertNotIn("Pattern", privacy_probe)
         self.assertNotIn("TextPattern", script)
         self.assertNotIn("Clipboard", script)
         self.assertNotIn("DriftyTrackerBrowserClues", script)

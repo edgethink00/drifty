@@ -61,6 +61,8 @@ _SUPPORTED_BROWSERS = {
     "Microsoft Edge",
     "Brave Browser",
     "Opera",
+    "Vivaldi",
+    "Whale",
     "Firefox",
     "Firefox Developer Edition",
     "Floorp",
@@ -72,6 +74,10 @@ _SUPPORTED_BROWSERS = {
 # tab panels, and browser-owned panels as other Documents under the window.
 # Floorp 12.18, LibreWolf 156, Waterfox 6.7, and Zen 1.22 measured the same way.
 _GECKO_BROWSERS = {"Firefox", "Firefox Developer Edition", "Floorp", "LibreWolf", "Waterfox", "Zen"}
+# Vivaldi nests every page inside its own interface document (measured 8.2).
+_VIVALDI_BROWSERS = {"Vivaldi"}
+# Whale titles private windows like normal ones; its profile button names them (measured 5.39).
+_WHALE_BROWSERS = {"Whale"}
 
 _POWERSHELL_UIA_HOST = r"""
 $ErrorActionPreference = 'Stop'
@@ -101,6 +107,30 @@ $privateIndicatorCondition = New-Object System.Windows.Automation.OrCondition(
   (New-Object System.Windows.Automation.PropertyCondition($auto::ClassNameProperty, 'private-browsing-indicator-label')),
   (New-Object System.Windows.Automation.PropertyCondition($auto::ClassNameProperty, 'private-browsing-indicator-button toolbarbutton-1')),
   (New-Object System.Windows.Automation.PropertyCondition($auto::AutomationIdProperty, 'reset-pbm-toolbar-button')))
+# Vivaldi draws its whole interface as one web document (this built-in page)
+# and nests each tab's page inside it under URL-less webview Documents. Only a
+# private window shows the address bar's private-window indicator class, which
+# is language independent (measured 8.2 on Windows; macOS uses the same class).
+# Vivaldi builds that interface tree only after a client asks for it, so the
+# indicator's absence counts only once the address bar toolbar itself is present.
+$vivaldiInterfaceUrl = 'chrome-extension://mpognobbkildjkofajifpdfhcoklimli/window.html'
+$vivaldiPrivateCondition = New-Object System.Windows.Automation.PropertyCondition(
+  $auto::ClassNameProperty, 'UrlBar-PrivateWindowIndicator')
+$toolBarCondition = New-Object System.Windows.Automation.PropertyCondition(
+  $auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::ToolBar)
+# One tree walk finds both the toolbars and the indicator.
+$vivaldiChromeCondition = New-Object System.Windows.Automation.OrCondition($toolBarCondition, $vivaldiPrivateCondition)
+# Whale 5.39 gives a private window the same title as a normal one. Only its
+# profile button differs, and that name is localized. Measured: the Korean UI
+# says "secret mode is in use" (the first label spells "secret mode" in Hangul)
+# and the English UI says "You're Incognito"; a normal window shows the profile
+# name. The button precedes the page in the tree. Other UI languages stay
+# undetected, as Chrome incognito already is on Windows.
+$avatarButtonCondition = New-Object System.Windows.Automation.PropertyCondition(
+  $auto::ClassNameProperty, 'AvatarToolbarButton')
+$whaleIncognitoLabels = @(
+  (-join ([char[]](0xC2DC, 0xD06C, 0xB9BF, 0x20, 0xBAA8, 0xB4DC))),
+  'Incognito')
 
 function Test-SameAutomationElement($left, $right) {
   try {
@@ -195,6 +225,90 @@ function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement, [stri
   return $document
 }
 
+function Get-DocumentValue($document) {
+  $valuePattern = $null
+  if (-not $document.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$valuePattern)) { return '' }
+  return [string]$valuePattern.Current.Value
+}
+
+# Documents from $start up to this exact window, innermost first.
+function Get-DocumentChain($start, $root, $treeWalker) {
+  $chain = New-Object System.Collections.ArrayList
+  $cursor = $start
+  for ($depth = 0; $depth -lt 96 -and $null -ne $cursor; $depth++) {
+    if (Test-SameAutomationElement $cursor $root) { return ,$chain }
+    if ($cursor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) { break }
+    if ($cursor.Current.ControlType -eq [System.Windows.Automation.ControlType]::Document) { [void]$chain.Add($cursor) }
+    $cursor = $treeWalker.GetParent($cursor)
+  }
+  throw 'document ancestry unavailable'
+}
+
+# A Vivaldi page is the first Document with a value inside the window's
+# interface document, below only URL-less webview Documents.
+function Select-VivaldiPage($chain) {
+  $last = $chain.Count - 1
+  if ($last -lt 1 -or -not [string]::Equals((Get-DocumentValue $chain[$last]), $vivaldiInterfaceUrl, [StringComparison]::Ordinal)) {
+    return $null
+  }
+  for ($i = $last - 1; $i -ge 0; $i--) {
+    if (-not [string]::IsNullOrEmpty((Get-DocumentValue $chain[$i]))) { return $chain[$i] }
+  }
+  return $null
+}
+
+function Read-VivaldiPage($root, $treeWalker, $condition, $focusedElement, $rootRect) {
+  if ($null -ne $focusedElement) {
+    $focusedPage = Select-VivaldiPage (Get-DocumentChain $focusedElement $root $treeWalker)
+    if ($null -ne $focusedPage) {
+      $focusedUrl = Read-ValidatedDocumentUrl $focusedPage $rootRect
+      $script:lastPage = $focusedPage
+      return $focusedUrl
+    }
+  }
+  # Focus in the address bar or a panel: exactly one visible page must remain.
+  $count = 0
+  $url = ''
+  $selected = $null
+  foreach ($document in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+    $offscreen = $document.Current.IsOffscreen
+    if ($offscreen -eq $true) { continue }
+    if ($offscreen -ne $false) { throw 'document visibility unavailable' }
+    $page = Select-VivaldiPage (Get-DocumentChain $document $root $treeWalker)
+    if ($null -eq $page -or -not (Test-SameAutomationElement $page $document)) { continue }
+    $count++
+    if ($count -gt 1) { throw 'multiple visible top-level documents' }
+    $url = Read-ValidatedDocumentUrl $document $rootRect
+    $selected = $document
+  }
+  if ($count -ne 1) { throw 'document URL unavailable' }
+  $script:lastPage = $selected
+  return $url
+}
+
+# 'private' or 'normal' only when the address bar is present; otherwise 'unknown'.
+function Get-VivaldiWindowPrivacy($root) {
+  $addressBar = $false
+  $private = $false
+  foreach ($element in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $vivaldiChromeCondition)) {
+    if (Test-ClassToken $element 'UrlBar-PrivateWindowIndicator') { $private = $true }
+    elseif (Test-ClassToken $element 'toolbar-addressbar') { $addressBar = $true }
+  }
+  if (-not $addressBar) { return 'unknown' }
+  if ($private) { return 'private' }
+  return 'normal'
+}
+
+function Test-WhalePrivateWindow($root) {
+  $button = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $avatarButtonCondition)
+  if ($null -eq $button) { return $false }
+  $name = [string]$button.Current.Name
+  foreach ($label in $whaleIncognitoLabels) {
+    if ($name.IndexOf($label, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+  }
+  return $false
+}
+
 function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement = $null, [string]$family = 'chromium') {
   # The private indicator can establish a Gecko private window. Its absence
   # cannot prove a normal window when an accessibility provider is incomplete.
@@ -209,6 +323,20 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
           [double]::IsInfinity([double]$component)) { throw 'document geometry unavailable' }
     }
     if ($rootRect.Width -le 0 -or $rootRect.Height -le 0) { throw 'document geometry unavailable' }
+    if ($family -eq 'vivaldi') {
+      # Select the page first: that focus query also makes Vivaldi build its interface tree.
+      $vivaldiUrl = Read-VivaldiPage $root $treeWalker $condition $focusedElement $rootRect
+      $vivaldiPrivacy = Get-VivaldiWindowPrivacy $root
+      if ($vivaldiPrivacy -ne 'normal') { $script:lastPage = $null }
+      if ($vivaldiPrivacy -eq 'private') {
+        return [pscustomobject]@{ found = $false; url = ''; error = 'private browsing window'; privacy = 'private' }
+      }
+      if ($vivaldiPrivacy -ne 'normal') { throw 'document URL unavailable' }
+      return [pscustomobject]@{ found = $true; url = $vivaldiUrl; error = ''; privacy = $privacy }
+    }
+    if ($family -eq 'whale' -and (Test-WhalePrivateWindow $root)) {
+      return [pscustomobject]@{ found = $false; url = ''; error = 'private browsing window'; privacy = 'private' }
+    }
     $requiredAncestorId = ''
     $requiredAncestorClass = ''
     if ($family -eq 'gecko') {
@@ -371,7 +499,7 @@ while ($true) {
       Read-Clues ([IntPtr][long]$Matches[1]) ([int]$Matches[2]) | ConvertTo-Json -Compress
       continue
     }
-    if ($line -notmatch '^READ ([0-9]+)(?: (chromium|gecko))?$') {
+    if ($line -notmatch '^READ ([0-9]+)(?: (chromium|gecko|vivaldi|whale))?$') {
       [pscustomobject]@{ found = $false; url = ''; error = 'invalid request' } | ConvertTo-Json -Compress
       continue
     }
@@ -718,7 +846,11 @@ def is_live_uia_browser(app_name: str | None) -> bool:
 
 
 def _uia_family(app_name: str | None) -> str:
-    return "gecko" if app_name in _GECKO_BROWSERS else "chromium"
+    if app_name in _GECKO_BROWSERS:
+        return "gecko"
+    if app_name in _VIVALDI_BROWSERS:
+        return "vivaldi"
+    return "whale" if app_name in _WHALE_BROWSERS else "chromium"
 
 
 def normalize_uia_url(value: str | None) -> str | None:
@@ -916,7 +1048,7 @@ class _WindowsUiaHost:
     def read(self, hwnd: int, family: str = "chromium") -> WindowsBrowserUiaResult:
         if self._process.poll() is not None or self._process.stdin is None or self._process.stdout is None:
             raise RuntimeError("Windows UIA host is not running.")
-        if family not in {"chromium", "gecko"}:
+        if family not in {"chromium", "gecko", "vivaldi", "whale"}:
             raise ValueError("Unsupported Windows UIA browser family.")
         self._process.stdin.write(f"READ {int(hwnd)} {family}\n")
         self._process.stdin.flush()
