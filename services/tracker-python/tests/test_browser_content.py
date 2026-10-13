@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.tracker.browser_content import (
+    BROWSER_BUNDLES,
     CONTENT_EXCLUDED_HOSTS,
     CONTENT_EXCLUDED_PATH,
     capture_browser_content,
@@ -42,6 +43,17 @@ class BrowserContentTests(unittest.TestCase):
         self.assertEqual(tuple(re.findall(r'"([^"]+)"', hosts_line)), CONTENT_EXCLUDED_HOSTS)
         path_pattern = re.search(r'url\.path\.range\(of: #"(.+?)"#', swift).group(1)
         self.assertEqual(path_pattern, CONTENT_EXCLUDED_PATH.pattern)
+
+    def test_page_clue_browsers_match_the_macos_helper_allowlist(self):
+        import re
+        swift = (Path(__file__).resolve().parents[1] / "app/tracker/chatgpt_session_ax.swift").read_text(encoding="utf-8")
+        sample = swift.split("func sample()", 1)[1]
+        gecko = re.findall(r'"([^"]+)"', next(line for line in sample.splitlines() if "let geckoBundles = [" in line))
+        allowed = re.findall(r'"([^"]+)"', next(line for line in sample.splitlines() if "let allowed = [" in line))
+        self.assertEqual(set(allowed) | set(gecko), set(BROWSER_BUNDLES))
+        # Arc's scripting window class is WiND and it has no bounds property.
+        self.assertIn("company.thebrowser.Browser", BROWSER_BUNDLES)
+        self.assertIn('specifier(arc ? "WiND" : "cwin"', sample)
 
     def test_message_mail_chat_editor_and_account_pages_are_excluded(self):
         for url in ("https://mail.google.com/mail/u/0/#inbox", "https://app.slack.com/client/T1/C2",

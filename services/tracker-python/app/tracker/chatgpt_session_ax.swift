@@ -98,12 +98,18 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // window-title label, so they share its identity proof. Bundle
         // identifiers are compared exactly; Floorp's carries a capital letter.
         let geckoBundles = ["org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp"]
-        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "com.apple.Safari"] + geckoBundles
+        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "com.apple.Safari"] + geckoBundles
         // Safari and the Firefox family expose no scripting window mode; they
         // are admitted through their own accessibility identity below and never
         // receive Apple Events.
         let safari = CommandLine.arguments[3] == "com.apple.Safari", gecko = geckoBundles.contains(CommandLine.arguments[3])
         let addressBar = safari || gecko
+        // Arc names its scripting window class WiND (Chrome: cwin) and has no
+        // window bounds property. Its scripting identity still proves normal
+        // mode, window, tab, URL and title before and after; the focused AX
+        // window then binds through the exact tab title and the single web
+        // area's URL, and its own frame locates the native window.
+        let arc = CommandLine.arguments[3] == "company.thebrowser.Browser"
         guard let pid = Int32(CommandLine.arguments[2]), pid > 0,
               let milliseconds = Double(CommandLine.arguments[6]), milliseconds > 0,
               AXIsProcessTrusted(),
@@ -131,7 +137,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             record.setDescriptor(container, forKeyword: code("from"))
             return record.coerce(toDescriptorType: code("obj "))
         }
-        guard let scriptWindow = specifier("cwin", "indx", NSAppleEventDescriptor(int32: 1), NSAppleEventDescriptor.null()) else { return nil }
+        guard let scriptWindow = specifier(arc ? "WiND" : "cwin", "indx", NSAppleEventDescriptor(int32: 1), NSAppleEventDescriptor.null()) else { return nil }
         func property(_ name: String, _ container: NSAppleEventDescriptor) -> NSAppleEventDescriptor? {
             specifier("prop", "prop", NSAppleEventDescriptor(typeCode: code(name)), container)
         }
@@ -156,8 +162,9 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
                   let title = read("pnam", scriptWindow)?.stringValue, !title.isEmpty,
                   let tabID = read("ID  ", tab)?.stringValue, !tabID.isEmpty,
                   let currentURL = read("URL ", tab)?.stringValue, currentURL == url.absoluteString,
-                  let tabTitle = read("pnam", tab)?.stringValue, tabTitle == CommandLine.arguments[5],
-                  let bounds = read("pbnd", scriptWindow), bounds.descriptorType == typeQDRectangle,
+                  let tabTitle = read("pnam", tab)?.stringValue, tabTitle == CommandLine.arguments[5] else { return nil }
+            if arc { return Identity(mode: mode, windowID: windowID, title: title, tabID: tabID, url: currentURL, tabTitle: tabTitle, bounds: .zero) }
+            guard let bounds = read("pbnd", scriptWindow), bounds.descriptorType == typeQDRectangle,
                   bounds.data.count == 4 * MemoryLayout<Int16>.size else { return nil }
             // Native core/getd returns a QuickDraw rectangle, not the list
             // produced by AppleScript's language-level bounds coercion.
@@ -330,7 +337,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // Keep the scripting window name in the before/after identity proof.
         let nativeTitle = string(window, "AXTitle")
         guard chromiumWindowTitleMatches(nativeTitle, tabTitle: before.tabTitle), let windowBounds = rectangle(window),
-              sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
+              arc || sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
         watch(window, ["AXUIElementDestroyed", "AXMoved", "AXResized"])
         var areas: [AXUIElement] = []; var locateCount = 0; var incomplete = false
         // Vivaldi draws its own interface as one web document and nests each

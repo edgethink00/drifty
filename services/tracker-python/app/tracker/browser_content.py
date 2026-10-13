@@ -28,7 +28,7 @@ EXTENSION_ORIGIN = "chrome-extension://neihkehcijfcfplmfomahlimejiiledi/"
 # clues to the focused window's exact title through accessibility. Firefox
 # Developer Edition, Zen and Floorp share Firefox's identity proof.
 ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari"}) | FIREFOX_FAMILY_BUNDLES
-BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi"}) | ADDRESS_BAR_CONTENT_BUNDLES
+BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser"}) | ADDRESS_BAR_CONTENT_BUNDLES
 MAX_MESSAGE_BYTES = 32768
 # Message, mail, AI chat and document-editor sites, and sign-in/payment/account
 # paths, never yield page clues. The macOS helper (chatgpt_session_ax.swift)
