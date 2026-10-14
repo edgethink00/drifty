@@ -70,7 +70,7 @@ fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn create_initial_window(app: &tauri::AppHandle) {
+pub(crate) fn create_initial_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     // Unlike Tauri's default configured-window setup, a UI failure must not
     // return from app setup before the tray and activated tracker can start.
     let started = std::time::Instant::now();
@@ -81,11 +81,32 @@ pub(crate) fn create_initial_window(app: &tauri::AppHandle) {
         result.is_ok(),
         started.elapsed().as_millis()
     );
-    if let Err(error) = result {
+    if let Err(error) = &result {
         let report = format!("Main window setup failed: {error}");
         eprintln!("[startup] {report}");
         sentry::capture_message(&report, sentry::Level::Error);
     }
+    result
+}
+
+/// Tauri 2.12 caches runtime availability when it creates the event loop.
+/// Further WebViews cannot succeed after this particular creation failure and
+/// each release-mode attempt would show another native installation dialog.
+/// Other main-window errors must still permit independent auxiliary setup.
+#[cfg(any(test, target_os = "windows"))]
+pub(crate) fn auxiliary_setup_is_available(initial: &tauri::Result<()>) -> bool {
+    match initial {
+        Err(tauri::Error::Runtime(error)) => !missing_runtime_message(&error.to_string()),
+        _ => true,
+    }
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn missing_runtime_message(message: &str) -> bool {
+    // Exact Display value of tauri-runtime 2.12's WebviewRuntimeNotInstalled.
+    // Avoid grouping native-handle, access, or other WebView creation errors
+    // into a missing-runtime diagnosis.
+    message == "Could not find the webview runtime, make sure it is installed"
 }
 
 #[cfg(target_os = "windows")]
@@ -147,6 +168,29 @@ fn show_native_guidance(korean: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_known_runtime_error_blocks_auxiliary_setup() {
+        assert!(missing_runtime_message(
+            "Could not find the webview runtime, make sure it is installed"
+        ));
+        for message in [
+            "the underlying handle is not available",
+            "failed to create webview: WebView2 error: 0x8007139F",
+            "access is denied",
+            "Could not find the webview runtime",
+        ] {
+            assert!(!missing_runtime_message(message), "{message}");
+        }
+        assert!(auxiliary_setup_is_available(&Ok(())));
+        assert!(auxiliary_setup_is_available(&Err(
+            tauri::Error::InvalidWindowHandle
+        )));
+        // A message from an unrelated error family is not runtime evidence.
+        assert!(auxiliary_setup_is_available(&Err(tauri::Error::Io(
+            std::io::Error::other("Could not find the webview runtime, make sure it is installed")
+        ))));
+    }
 
     #[test]
     fn concurrent_open_requests_share_one_recovery_and_can_retry_after_completion() {

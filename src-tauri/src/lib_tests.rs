@@ -540,7 +540,7 @@ fn failing_overlay_setup<R: Runtime>(app: &tauri::App<R>, label: &str) -> tauri:
 fn auxiliary_window_setup_failure_keeps_launching_without_that_overlay() {
     let app = tauri::test::mock_app();
 
-    let result = setup_auxiliary_window(&app, "pet-mode", true, |app| {
+    let result = setup_auxiliary_window(&app, "pet-mode", true, true, |app| {
         failing_overlay_setup(app, "pet-mode")
     });
 
@@ -551,7 +551,7 @@ fn auxiliary_window_setup_failure_keeps_launching_without_that_overlay() {
 fn auxiliary_window_setup_failure_still_stops_launch_without_recovery() {
     let app = tauri::test::mock_app();
 
-    let result = setup_auxiliary_window(&app, "pet-mode", false, |app| {
+    let result = setup_auxiliary_window(&app, "pet-mode", false, true, |app| {
         failing_overlay_setup(app, "pet-mode")
     });
 
@@ -562,13 +562,55 @@ fn auxiliary_window_setup_failure_still_stops_launch_without_recovery() {
 fn auxiliary_window_setup_success_keeps_the_overlay() {
     let app = tauri::test::mock_app();
 
-    let result = setup_auxiliary_window(&app, "watcher-peek", true, |app| {
+    let result = setup_auxiliary_window(&app, "watcher-peek", true, true, |app| {
         tauri::WebviewWindowBuilder::new(app, "watcher-peek", Default::default()).build()?;
         Ok(())
     });
 
     assert!(result.is_ok());
     assert!(app.get_webview_window("watcher-peek").is_some());
+}
+
+#[test]
+fn missing_runtime_skips_every_auxiliary_webview_without_aborting_setup() {
+    let app = tauri::test::mock_app();
+    let attempts = std::cell::Cell::new(0);
+    for label in [
+        "watcher-peek",
+        "companion-pill",
+        "pet-mode",
+        "pet-quick-controls",
+    ] {
+        let result = setup_auxiliary_window(&app, label, true, false, |app| {
+            attempts.set(attempts.get() + 1);
+            failing_overlay_setup(app, label)
+        });
+        assert!(
+            result.is_ok(),
+            "runtime failure must not abort tray/tracker setup"
+        );
+    }
+    assert_eq!(attempts.get(), 0, "no repeated creation/dialog attempts");
+    for label in [
+        "watcher-peek",
+        "companion-pill",
+        "pet-mode",
+        "pet-quick-controls",
+    ] {
+        assert!(app.get_webview_window(label).is_none());
+    }
+}
+
+#[test]
+fn missing_runtime_hint_does_not_override_strict_setup_failure() {
+    let app = tauri::test::mock_app();
+    let attempted = std::cell::Cell::new(false);
+    let result = setup_auxiliary_window(&app, "pet-mode", false, false, |_| {
+        attempted.set(true);
+        Err(tauri::Error::InvalidWindowHandle)
+    });
+    assert!(attempted.get());
+    assert!(matches!(result, Err(tauri::Error::InvalidWindowHandle)));
 }
 
 #[test]
