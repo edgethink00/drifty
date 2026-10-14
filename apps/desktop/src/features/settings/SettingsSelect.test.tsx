@@ -45,6 +45,21 @@ function renderSelect() {
 }
 
 describe("SettingsSelect row actions", () => {
+  it("keeps keyboard dismissal available when a pointer click does not focus the trigger", () => {
+    renderSelect();
+    const trigger = screen.getByRole("combobox", { name: "AI model" });
+
+    // WebKit does not focus buttons on pointer click. Dispatching the key to
+    // the actual focused element reproduces that path instead of assuming focus.
+    fireEvent.click(trigger);
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("keeps focus and progress in the popup when a download action disables and is replaced", async () => {
     const onChange = vi.fn();
     let focusAtDownloadStart: Element | null = null;

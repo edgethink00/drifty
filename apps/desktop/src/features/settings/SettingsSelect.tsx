@@ -295,6 +295,9 @@ export function SettingsSelect<TValue extends string>({
 
   function openMenu() {
     if (disabled) return;
+    // WebKit pointer clicks do not focus buttons. Keep keyboard navigation
+    // and dismissal on the combobox without moving the page underneath it.
+    triggerRef.current?.focus({ preventScroll: true });
     setActiveIndex(activeIndexForOptions(options, selectedIndex));
     setIsOpen(true);
   }
