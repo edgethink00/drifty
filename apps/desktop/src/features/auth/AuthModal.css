@@ -9,6 +9,11 @@
   padding-right: 2.5rem;
 }
 
+/* Edge/WebView2 also adds an eye; keep the labeled app control as the only one. */
+.auth-modal .auth-modal__password-control input::-ms-reveal {
+  display: none;
+}
+
 .auth-modal__text-action,
 .auth-modal__connection-retry {
   appearance: none;
