@@ -1390,7 +1390,22 @@ def save_classifications(payload: dict):
     classifications = payload.get("classifications", [])
     if not isinstance(classifications, list):
         return response(False, error="classifications must be a list")
-    saved = database().save_classifications(classifications)
+    db = database()
+    try:
+        saved = db.save_classifications(classifications)
+    except sqlite3.OperationalError as exc:
+        code = getattr(exc, "sqlite_errorcode", None)
+        # BUSY is external writer contention; LOCKED and other failures need
+        # their original error. System Python 3.9 has no sqlite_errorcode.
+        busy = (code & 0xFF) == 5 if code is not None else str(exc).lower() == "database is locked"
+        if not busy or db.connect().in_transaction:
+            raise
+        # The storage context rolled back the entire batch, including review
+        # audit/counters. Retry only this local save once; guards are rechecked
+        # against current rows and no provider request is repeated. Two normal
+        # 5s busy waits plus this delay fit within the 30s tracker RPC budget.
+        time.sleep(0.15)
+        saved = db.save_classifications(classifications)
     return response(True, {"saved": saved})
 
 
