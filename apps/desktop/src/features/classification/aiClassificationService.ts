@@ -1481,6 +1481,7 @@ async function classifyLivePayloadWithCloudAi(
     const requestRevision = cloudAiRequestBackoffs.revision(cloudAccess.requestKey);
     const { data, error } = await cloudClient.functions.invoke("classify-activity", {
       body: await withCloudDevicePayload(cloudClassificationRequestBody([payload], workProfile, memoryContext)),
+      timeout: CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS,
     });
 
     if (error) {

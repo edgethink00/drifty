@@ -3025,12 +3025,63 @@ describe("runAiClassification cloud contract", () => {
             durationSeconds: 300,
           })],
         }),
+        timeout: 60_000,
       });
       expect(saveClassifications).not.toHaveBeenCalled();
     } finally {
       cleanupServiceMocks();
     }
   });
+
+  it("times out a stalled live Cloud request without saving and accepts the next request", async () => {
+    const segment = createUnknownSegment(1, { id: "42" });
+    let releasePending: (() => void) | undefined;
+    let firstResult: ReturnType<typeof classifyLiveActivityWithAi> | undefined;
+    try {
+      const { classifyLiveActivityWithAi: classify, invoke, saveClassifications } = await importServiceWithSegments([segment]);
+      const { createClient } = await import("@supabase/supabase-js");
+      vi.useFakeTimers();
+      let recover = false;
+      const fetch = vi.fn<typeof globalThis.fetch>((_url, init) => {
+        if (recover) return Promise.resolve(Response.json({
+          results: [{ id: segment.id, category: "workspace", productivity: "focus", confidence: 0.8, reason: "Recovered" }],
+        }));
+        return new Promise((_resolve, reject) => {
+          releasePending = () => reject(new DOMException("Synthetic request aborted", "AbortError"));
+          init?.signal?.addEventListener("abort", releasePending, { once: true });
+        });
+      });
+      const sdk = createClient("https://qa.invalid", "synthetic-qa-placeholder", {
+        accessToken: async () => "synthetic-qa-placeholder",
+        global: { fetch },
+      });
+      invoke.mockImplementation(sdk.functions.invoke.bind(sdk.functions));
+      let settled = false;
+      firstResult = classify(segment, { persistLiveResult: true });
+      void firstResult.then(() => { settled = true; });
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1), { interval: 1 });
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(settled).toBe(true);
+      expect(await firstResult).toMatchObject({ kind: "unavailable" });
+      expect(saveClassifications).not.toHaveBeenCalled();
+      expect(invoke).toHaveBeenCalledTimes(1);
+
+      recover = true;
+      const recovered = await classify(segment, { persistLiveResult: true });
+      expect(recovered.kind).toBe("classified");
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      releasePending?.();
+      await firstResult;
+      vi.useRealTimers();
+      cleanupServiceMocks();
+    }
+  });
+
 
   it("saves supplied live segment classifications when persistence is requested", async () => {
     const segment = createUnknownSegment(1, {
