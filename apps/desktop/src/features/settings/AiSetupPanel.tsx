@@ -1,7 +1,7 @@
 import type { MemorySuggestionProvider } from "./useMemorySuggestions";
 import { useSettingsSearch } from "./SettingsSearchContext";
 import { useEffect, useRef, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
@@ -26,8 +26,8 @@ import {
 } from "./localAiSetup";
 import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
-import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
 import { IntelligenceSetupPanel } from "./IntelligenceSetupPanel";
+import type { AiSettingsSection } from "./SettingsSidebar";
 import {
   ANALYSIS_AI_SETUP_STORAGE_KEY,
   toPersistedAnalysisAiSetup,
@@ -43,7 +43,15 @@ import { canStartIndividualCheckout } from "../billing/billingEligibility";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
+const AI_SECTION_TITLE_KEYS = {
+  aiSetup: "settings.ai.classification",
+  intelligence: "settings.ai.intelligence",
+  memory: "settings.ai.profile",
+} as const satisfies Record<AiSettingsSection, string>;
+
 export type AiSetupPanelProps = {
+  /** Which AI settings section the sidebar opened: classification model, project analysis model, or Memory. */
+  readonly section: AiSettingsSection;
   readonly cloudTrialAvailable?: boolean;
   readonly cloudTrialStarting?: boolean;
   readonly cloudTrialError?: string | null;
@@ -65,15 +73,12 @@ export type AiSetupPanelProps = {
   readonly workProfileUserId: string;
   /** Provider that writes Memory suggestions (local, bring-your-own or Drifty Cloud); null when none is selected. */
   readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
+  /** My classifications, shown as the Memory section's last block. */
+  readonly memoryRulesSection?: ReactNode;
   readonly analysisSetup: AnalysisAiSetupState;
   readonly effectiveAnalysisSetup?: AnalysisAiSetupState;
   readonly onAnalysisProviderVisible?: (provider: AnalysisAiSetupState["provider"]) => void;
   readonly analysisOpenRouterConnected: boolean;
-  /** Show the Intelligence tab (project-classification preview). Dev-gated. */
-  readonly showIntelligenceTab: boolean;
-  /** One-shot: open this tab on arrival (e.g. Projects → AI setup lands on Intelligence). */
-  readonly requestedTab?: AiSetupPanelTab | null;
-  readonly onRequestedTabConsumed?: () => void;
   readonly onAnalysisChange: (next: AnalysisAiSetupState) => void;
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
@@ -82,6 +87,7 @@ export type AiSetupPanelProps = {
 };
 
 export function AiSetupPanel({
+  section,
   cloudTrialAvailable = false,
   cloudTrialStarting = false,
   cloudTrialError = null,
@@ -100,13 +106,11 @@ export function AiSetupPanel({
   shouldShowCloudCheckoutPlans,
   workProfileUserId,
   memorySuggestionProvider,
+  memoryRulesSection,
   analysisSetup,
   effectiveAnalysisSetup,
   onAnalysisProviderVisible,
   analysisOpenRouterConnected,
-  showIntelligenceTab,
-  requestedTab = null,
-  onRequestedTabConsumed,
   onAnalysisChange,
   onDialogOpenChange,
   onLocalAiSetupChange,
@@ -119,13 +123,11 @@ export function AiSetupPanel({
   // Which provider panel is expanded. Defaults to the active provider — Drifty on
   // a fresh install, or OpenRouter once the user has switched their primary to it.
   const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => sectionForProvider(localAiSetup.provider));
-  const [activePanelTab, setActivePanelTab] = useState<AiSetupPanelTab>("providers");
   useEffect(() => {
     if (!searchRequest || searchRequest.entry.section !== "aiSetup") return;
-    const { aiTab, aiProvider } = searchRequest.entry;
-    if (aiTab && (aiTab !== "intelligence" || showIntelligenceTab)) setActivePanelTab(aiTab);
+    const { aiProvider } = searchRequest.entry;
     if (aiProvider) setExpandedSection(aiProvider);
-  }, [searchRequest, showIntelligenceTab]);
+  }, [searchRequest]);
   const driftyRoute = localAiSetup.driftyRoute;
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
   // The Drifty provider has no card any more — its cloud/local models are managed
@@ -228,19 +230,6 @@ export function AiSetupPanel({
     return () => onDialogOpenChange(false);
   }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
 
-  // Externally requested tab (one-shot), e.g. the Projects page's "AI setup".
-  useEffect(() => {
-    if (!requestedTab) return;
-    if (requestedTab !== "intelligence" || showIntelligenceTab) setActivePanelTab(requestedTab);
-    onRequestedTabConsumed?.();
-  }, [requestedTab, showIntelligenceTab, onRequestedTabConsumed]);
-
-  // If the Intelligence preview is switched off while its tab is open, fall back
-  // to Classification so the panel never shows an orphaned tab.
-  useEffect(() => {
-    if (!showIntelligenceTab && activePanelTab === "intelligence") setActivePanelTab("providers");
-  }, [showIntelligenceTab, activePanelTab]);
-
   useEffect(() => {
     if (isCloudRouteSelected && connectionTestKind === "error") return;
     preserveCloudProbeErrorRef.current = false;
@@ -302,21 +291,20 @@ export function AiSetupPanel({
   return (
     <div className="settings-block ai-setup-panel">
       <div className="ai-setup-panel__header">
-        <h3>{t("settings.section.aiSetup")}</h3>
+        <h3>{t(AI_SECTION_TITLE_KEYS[section])}</h3>
       </div>
 
-      {cloudTrialAvailable && !cloudNeedsPlanCheck && !cloudStatusRefreshing ? <div className="settings-row">
+      {section !== "memory" && cloudTrialAvailable && !cloudNeedsPlanCheck && !cloudStatusRefreshing ? <div className="settings-row">
         <div><div className="lbl">{t("billing.trialActivation.available")}</div><div className="desc">{t("billing.trialActivation.availableBody")}</div></div>
         <button type="button" className="settings-btn primary" disabled={cloudSubscribeActionDisabled || !onStartCloudTrial}
-          aria-busy={cloudTrialStarting} onClick={() => void handleCloudSetup(activePanelTab === "intelligence" ? "intelligence" : "classification")}>
+          aria-busy={cloudTrialStarting} onClick={() => void handleCloudSetup(section === "intelligence" ? "intelligence" : "classification")}>
           {cloudSubscribeActionLabel}
         </button>
       </div> : null}
-      {cloudTrialError || trialRequestError ? <p role="alert" className="account-plan-notice__error">{cloudTrialError || trialRequestError}</p> : null}
-      <AiSetupPanelTabs activeTab={activePanelTab} onChange={setActivePanelTab} showIntelligenceTab={showIntelligenceTab} />
+      {section !== "memory" && (cloudTrialError || trialRequestError) ? <p role="alert" className="account-plan-notice__error">{cloudTrialError || trialRequestError}</p> : null}
 
-      {activePanelTab === "providers" ? (
-        <section id="ai-setup-panel-tab-providers" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.providers")}>
+      {section === "aiSetup" ? (
+        <section className="ai-setup-tab-panel" aria-label={t("settings.ai.providers")}>
           <div data-setting-id="settings.ai.modelBeingUsed">
           <AiSetupModelBeingUsed
             actionModelId={managedLocalAi.actionModelId}
@@ -377,8 +365,8 @@ export function AiSetupPanel({
             </div>
           </AiSetupConnectionDetails>
         </section>
-      ) : activePanelTab === "intelligence" && showIntelligenceTab ? (
-        <section data-setting-id="settings.ai.intelligence" id="ai-setup-panel-tab-intelligence" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.intelligence")}>
+      ) : section === "intelligence" ? (
+        <section data-setting-id="settings.ai.intelligence" className="ai-setup-tab-panel" aria-label={t("settings.ai.intelligence")}>
           <IntelligenceSetupPanel
             setup={analysisSetup}
             effectiveSetup={effectiveAnalysisSetup}
@@ -397,7 +385,7 @@ export function AiSetupPanel({
           />
         </section>
       ) : (
-        <section id="ai-setup-panel-tab-profile" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.profile")}>
+        <section className="ai-setup-tab-panel" aria-label={t("settings.ai.profile")}>
           <div className="ai-setup-support-zone" aria-label={t("settings.ai.promptSettings")}>
             <AiSetupSupportSections
               workProfileUserId={workProfileUserId}
@@ -410,6 +398,7 @@ export function AiSetupPanel({
               onSaveWorkProfile={workProfileSettings.handleSaveWorkProfile}
               onWorkProfileDraftChange={workProfileSettings.handleWorkProfileDraftChange}
               onResetWorkProfileDraft={workProfileSettings.resetWorkProfileDraft}
+              rulesSection={memoryRulesSection}
             />
           </div>
         </section>

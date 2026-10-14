@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock, showPanelSection } from "./AiSetupPanel.testHarness";
 import { ANALYSIS_AI_SETUP_STORAGE_KEY, DEFAULT_ANALYSIS_AI_SETUP } from "./analysisModelSetup";
 import { DEFAULT_LOCAL_AI_SETUP, LOCAL_AI_SETUP_STORAGE_KEY } from "./localAiSetup";
 
@@ -194,7 +194,7 @@ describe("AiSetupPanel Cloud setup", () => {
     const onAnalysisChange = vi.fn();
     const rendered = renderPanel({ cloudTrialAvailable: true, currentBillingPlan: "free", billingEntitlementStatus: "locked", onStartCloudTrial, onAnalysisChange });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Intelligence" }));
+    showPanelSection("intelligence");
     fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
     expect(onStartCloudTrial).toHaveBeenCalledOnce();
     rendered.unmount();
@@ -250,7 +250,7 @@ describe("AiSetupPanel Cloud setup", () => {
       initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openrouter" },
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Intelligence" }));
+    showPanelSection("intelligence");
     fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
 
     await screen.findByRole("alert");

@@ -1,9 +1,10 @@
 import type { MemorySuggestionProvider } from "./useMemorySuggestions";
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { vi } from "vitest";
 
 import { AiSetupPanel } from "./AiSetupPanel";
+import type { AiSettingsSection } from "./SettingsSidebar";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 import { DEFAULT_ANALYSIS_AI_SETUP, type AnalysisAiSetupState } from "./analysisModelSetup";
@@ -135,6 +136,15 @@ function runtimeModelForId(modelId: string): string {
 
 export { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock };
 
+let showMountedPanelSection: ((section: AiSettingsSection) => void) | null = null;
+
+/** Moves the most recently mounted panel to another AI settings section, as the settings sidebar does. */
+export function showPanelSection(section: AiSettingsSection) {
+  if (!showMountedPanelSection) throw new AiSetupPanelTestHarnessError("AI setup panel test harness is not mounted.");
+  const show = showMountedPanelSection;
+  act(() => show(section));
+}
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
 }));
@@ -144,6 +154,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 }));
 
 export function renderPanel({
+  section: initialSection = "aiSetup",
   connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI", memoryLabel: null, issueKind: null },
   currentBillingPlan = "individual",
   billingEntitlementStatus = currentBillingPlan === "free" ? "locked" : "active",
@@ -161,6 +172,7 @@ export function renderPanel({
   initialAnalysisSetup = DEFAULT_ANALYSIS_AI_SETUP,
   memorySuggestionProvider = null,
 }: {
+  readonly section?: AiSettingsSection;
   readonly connectionStatus?: AiConnectionStatus;
   readonly currentBillingPlan?: "free" | "individual" | null;
   readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
@@ -186,6 +198,8 @@ export function renderPanel({
   let observedSetup = initialSetup;
 
   function Harness() {
+    const [section, setSection] = useState<AiSettingsSection>(initialSection);
+    showMountedPanelSection = setSection;
     const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(initialSetup);
     observedSetup = localAiSetup;
     const [currentConnectionStatus, setCurrentConnectionStatus] = useState<AiConnectionStatus>(connectionStatus);
@@ -197,6 +211,7 @@ export function renderPanel({
 
     return (
       <AiSetupPanel
+        section={section}
         cloudTrialAvailable={cloudTrialAvailable}
         {...(onStartCloudTrial ? { onStartCloudTrial } : {})}
         billingCheckoutLoadingInterval={null}
@@ -217,7 +232,6 @@ export function renderPanel({
         memorySuggestionProvider={memorySuggestionProvider}
         analysisSetup={initialAnalysisSetup}
         analysisOpenRouterConnected={false}
-        showIntelligenceTab
         onAnalysisChange={onAnalysisChange}
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={onLocalAiSetupChange ?? setLocalAiSetup}

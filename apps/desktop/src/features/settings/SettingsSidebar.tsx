@@ -8,7 +8,19 @@ import type { DevSettingsSubsection } from "./devSettingsNavigation";
 
 export const DRIFTY_DISCORD_INVITE_URL = "https://discord.gg/NxcubTe2KD";
 
-export type SettingsSection = "account" | "sync" | "general" | "appearance" | "pet" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
+export type SettingsSection = "account" | "sync" | "general" | "appearance" | "pet" | "aiSetup" | "intelligence" | "memory" | "notifications" | "privacy" | "developer" | "dev";
+
+/**
+ * The AI settings sections that one AI setup panel renders: the classification
+ * model ("aiSetup", kept as the id the AI status entry points already open), the
+ * project-analysis (Intelligence) model, and Memory. They share connection keys,
+ * so the panel stays mounted while the user moves between them.
+ */
+export type AiSettingsSection = Extract<SettingsSection, "aiSetup" | "intelligence" | "memory">;
+
+export function isAiSettingsSection(section: SettingsSection): section is AiSettingsSection {
+  return section === "aiSetup" || section === "intelligence" || section === "memory";
+}
 
 const SETTINGS_NAV_GROUPS = [
   {
@@ -28,8 +40,9 @@ const SETTINGS_NAV_GROUPS = [
     id: "ai",
     labelKey: "settings.sidebar.groupAi",
     items: [
-      { id: "aiSetup", labelKey: "settings.section.aiSetup" },
-      { id: "classification", labelKey: "classification.rules.title" },
+      { id: "aiSetup", labelKey: "settings.ai.classification" },
+      { id: "intelligence", labelKey: "settings.ai.intelligence" },
+      { id: "memory", labelKey: "settings.ai.profile" },
     ],
   },
   {
@@ -62,9 +75,12 @@ function SettingsSectionIcon({ section }: { section: SettingsSection }) {
       return (<svg {...props}><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" /><circle cx="13.5" cy="6.5" r=".5" fill="currentColor" /><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" /><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" /><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /></svg>);
     case "aiSetup":
       return <AiMarkIcon />;
-    case "classification":
-      // Lucide tag: https://lucide.dev/icons/tag. General keeps the slider glyph.
-      return (<svg {...props}><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></svg>);
+    case "intelligence":
+      // Lucide lightbulb: https://lucide.dev/icons/lightbulb
+      return (<svg {...props}><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" /><path d="M9 18h6" /><path d="M10 22h4" /></svg>);
+    case "memory":
+      // Lucide book-open: https://lucide.dev/icons/book-open
+      return (<svg {...props}><path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" /></svg>);
     case "notifications":
       return (<svg {...props}><path d="M6 9a6 6 0 0 1 12 0c0 4.5 1.5 5.5 2 6H4c.5-.5 2-1.5 2-6" /><path d="M10.2 19a1.9 1.9 0 0 0 3.6 0" /></svg>);
     case "privacy":
@@ -83,6 +99,8 @@ type SettingsSidebarProps = {
   /** Sections holding a required item the user must act on, such as a missing OS permission. */
   readonly sectionsNeedingAttention?: ReadonlyArray<SettingsSection>;
   readonly showDevSection: boolean;
+  /** Hide the project-analysis section when the project-classification feature is off. */
+  readonly showIntelligenceSection?: boolean;
   readonly onBack: () => void;
   readonly onDevSubsectionChange?: (section: DevSettingsSubsection) => void;
   readonly onSectionChange: (section: SettingsSection) => void;
@@ -114,6 +132,7 @@ export function SettingsSidebar({
   isCollapsed,
   sectionsNeedingAttention = [],
   showDevSection,
+  showIntelligenceSection = true,
   onBack,
   onSectionChange,
   onSendFeedback,
@@ -121,7 +140,7 @@ export function SettingsSidebar({
   const visibleNavGroups = SETTINGS_NAV_GROUPS
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => item.id !== "dev" || showDevSection),
+      items: group.items.filter((item) => (item.id !== "dev" || showDevSection) && (item.id !== "intelligence" || showIntelligenceSection)),
     }))
     .filter((group) => group.items.length > 0);
   const { t } = useLocalization();

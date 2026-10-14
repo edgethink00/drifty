@@ -9,7 +9,7 @@ import {
   readSuggestionStore, writeSuggestionStore, type StoredSuggestion,
 } from "../classification/memorySuggestionStore";
 import { isMemorySuggestionJobRunning } from "../classification/memorySuggestionJob";
-import { invokeMock, renderPanel, resetManagedStatusMock } from "./AiSetupPanel.testHarness";
+import { invokeMock, renderPanel, resetManagedStatusMock, showPanelSection } from "./AiSetupPanel.testHarness";
 
 const { getTimelineMock, completeMock, cloudCompleteMock } = vi.hoisted(() => ({ getTimelineMock: vi.fn(), completeMock: vi.fn(), cloudCompleteMock: vi.fn() }));
 const { captureMock } = vi.hoisted(() => ({ captureMock: vi.fn() }));
@@ -60,7 +60,7 @@ function answering(summary: string) {
 }
 
 async function openMemory() {
-  fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
+  showPanelSection("memory");
 }
 
 describe("suggested Memory", () => {

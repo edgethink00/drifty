@@ -146,7 +146,7 @@ export function ClassificationRulesManager({
   const effectiveDomainRuleMode = domainRuleMode === "url" && exactUrlAvailable ? "url" : "domain";
 
   return (
-    <div data-setting-id="classification.rules.title" className="settings-section settings-section--classification classification-rules-manager">
+    <div data-setting-id="classification.rules.title" className="settings-section--classification classification-rules-manager">
       <ClassificationSavedRulesList
         feedback={classificationRulesError ? (
           <div className="classification-rules-manager__notice classification-rules-manager__notice--error" role="alert">{localizeSettingsError(classificationRulesError, effectiveLanguage, t)}</div>

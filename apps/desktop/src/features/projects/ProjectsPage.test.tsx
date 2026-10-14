@@ -248,9 +248,9 @@ describe("ProjectsPage", () => {
     expect(screen.getByRole("alert").textContent).toBe("Nothing to analyze in this range.");
   });
 
-  it("localizes the empty project-pass result and points to the current settings tab", () => {
+  it("localizes the empty project-pass result and points to the Intelligence settings section", () => {
     render(<LocalizationTestProvider language="ko"><ProjectsPage {...baseProps({ runError: PROJECT_PASS_NO_RESULTS_MESSAGE })} /></LocalizationTestProvider>);
 
-    expect(screen.getByRole("alert").textContent).toBe("분석 모델이 결과를 돌려주지 않았어요. AI 설정 › AI 분석에서 API 키와 모델을 확인한 뒤 다시 시도해 주세요.");
+    expect(screen.getByRole("alert").textContent).toBe("분석 모델이 결과를 돌려주지 않았어요. 설정 › Intelligence에서 API 키와 모델을 확인한 뒤 다시 시도해 주세요.");
   });
 });

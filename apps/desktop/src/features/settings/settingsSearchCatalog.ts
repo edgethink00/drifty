@@ -9,7 +9,6 @@ export type SettingsSearchEntry = {
   readonly descriptionKey?: TranslationKey;
   readonly keywords?: string;
   readonly reveal?: string;
-  readonly aiTab?: "providers" | "intelligence" | "profile";
   readonly aiProvider?: "openrouter" | "custom";
   readonly devSubsection?: DevSettingsSubsection;
   readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite";
@@ -25,8 +24,9 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, TranslationKey> = 
   "account": "settings.section.account",
   "sync": "settings.section.sync",
   "privacy": "settings.section.privacy",
-  "aiSetup": "settings.section.aiSetup",
-  "classification": "classification.rules.title",
+  "aiSetup": "settings.ai.classification",
+  "intelligence": "settings.ai.intelligence",
+  "memory": "settings.ai.profile",
   "developer": "settings.section.developer",
   "dev": "common.dev"
 };
@@ -364,13 +364,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "classification.rules.title",
-    section: "classification",
+    section: "memory",
     titleKey: "classification.rules.title",
     keywords: "수동 분류 규칙 수정 사이트 앱 custom manual classification rules",
   },
   {
     id: "settings.classification.addDomain",
-    section: "classification",
+    section: "memory",
     titleKey: "settings.classification.addDomain",
     keywords: "도메인 사이트 URL 규칙 website domain rule",
     descriptionKey: "settings.classification.addDomainDescription",
@@ -378,7 +378,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "settings.classification.addApp",
-    section: "classification",
+    section: "memory",
     titleKey: "settings.classification.addApp",
     keywords: "앱 프로그램 규칙 application app rule",
     descriptionKey: "settings.classification.addAppDescription",
@@ -389,14 +389,12 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: "aiSetup",
     titleKey: "settings.ai.modelBeingUsed",
     keywords: "AI 모델 로컬 클라우드 다운로드 LLM model local cloud provider",
-    aiTab: "providers",
   },
   {
     id: "settings.ai.openRouterApiKey",
     section: "aiSetup",
     titleKey: "settings.ai.openRouterApiKey",
     keywords: "API 키 API key OpenRouter BYOK 연결 인증",
-    aiTab: "providers",
     aiProvider: "openrouter",
   },
   {
@@ -404,31 +402,27 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: "aiSetup",
     titleKey: "settings.ai.customEndpoint",
     keywords: "커스텀 서버 엔드포인트 Ollama LM Studio URL API 키 custom endpoint self hosted",
-    aiTab: "providers",
     aiProvider: "custom",
   },
   {
     id: "settings.ai.intelligence",
-    section: "aiSetup",
+    section: "intelligence",
     titleKey: "settings.ai.intelligence",
-    keywords: "프로젝트 분석 모델 project analysis intelligence",
-    aiTab: "intelligence",
+    keywords: "프로젝트 분석 모델 AI 분석 project analysis intelligence",
     gate: "intelligence",
   },
   {
     id: "settings.ai.workProfile",
-    section: "aiSetup",
+    section: "memory",
     titleKey: "settings.ai.workProfile",
     keywords: "업무 프로필 직업 하는 일 work profile job context",
-    aiTab: "profile",
     reveal: "work-profile",
   },
   {
     id: "settings.ai.memoryHeroTitle",
-    section: "aiSetup",
+    section: "memory",
     titleKey: "settings.ai.memoryHeroTitle",
     keywords: "메모리 기억 학습 memory learned patterns Soul",
-    aiTab: "profile",
   },
   ...DEV_SETTINGS_SUBSECTIONS.map((subsection): SettingsSearchEntry => ({
     id: `dev-${subsection.id}`, section: "dev", titleKey: subsection.labelKey,

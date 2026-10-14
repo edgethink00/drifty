@@ -1,5 +1,6 @@
 import { useSettingsSearch } from "./SettingsSearchContext";
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   readLivingSoulForUser,
@@ -25,6 +26,8 @@ type AiSetupSupportSectionsProps = {
   readonly onSaveWorkProfile: () => Promise<boolean>;
   readonly onWorkProfileDraftChange: (value: WorkProfileSettings) => void;
   readonly onResetWorkProfileDraft: () => void;
+  /** My classifications, rendered as Memory's last section (fixed choices that apply ahead of AI). */
+  readonly rulesSection?: ReactNode;
 };
 
 const PROFILE_SAVED_NOTICE_MS = 5000;
@@ -52,6 +55,7 @@ export function AiSetupSupportSections({
   onSaveWorkProfile,
   onWorkProfileDraftChange,
   onResetWorkProfileDraft,
+  rulesSection = null,
 }: AiSetupSupportSectionsProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [editorExpanded, setEditorExpanded] = useState(false);
@@ -272,6 +276,7 @@ export function AiSetupSupportSections({
             ) : null}
           </div>
         </div>
+        <p className="memory-section__desc">{t("settings.ai.memoryCorrectionsHint")}</p>
         {memory.status === "loading" ? (
           <div className="memory-card memory-card--empty">
             <p className="memory-card__text">{t("settings.ai.memoryLoading")}</p>
@@ -301,6 +306,7 @@ export function AiSetupSupportSections({
           </div>
         )}
       </section>
+      {rulesSection}
     </section>
   );
 }

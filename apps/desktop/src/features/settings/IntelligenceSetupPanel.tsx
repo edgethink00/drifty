@@ -51,9 +51,9 @@ type CloudBilling = {
 };
 
 /**
- * "Intelligence" tab of the AI setup panel — configures the heavy analysis
- * (project pass) model. It deliberately mirrors the Classification providers
- * tab: a "Model being used" summary card on top, then a stack of expandable
+ * Settings › Intelligence — configures the heavy
+ * analysis (project pass) model. It deliberately mirrors the Classification
+ * section: a "Model being used" summary card on top, then a stack of expandable
  * provider cards. Every card maps to a real analysis provider: Drifty Cloud,
  * OpenRouter, direct OpenAI + Anthropic keys, and an OpenAI-compatible custom
  * endpoint.

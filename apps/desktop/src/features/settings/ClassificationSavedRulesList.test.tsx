@@ -23,7 +23,7 @@ describe("saved classification management", () => {
     setup([]);
     expect(screen.getByText("No ongoing classifications yet")).toBeTruthy();
     expect(screen.queryByText("0 classifications")).toBeNull();
-    expect(screen.getByText(/^Classifications that keep applying to matching records\.$/)).toBeTruthy();
+    expect(screen.getByText(/^Always applied, ahead of AI\. Saved only on this device\.$/)).toBeTruthy();
     expect(screen.queryByText(/One-time edits are not listed/)).toBeNull();
   });
   it("edits a legacy exact-page choice without changing its match or disabled state", async () => {

@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { synchronizeLivingSoulDeclaredContextForUser, updateLivingSoulLearnedState, readLivingSoulForUser } from "../classification/livingSoul";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
-import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock, showPanelSection } from "./AiSetupPanel.testHarness";
 import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
 
 const { testCloudAiConnectionMock } = vi.hoisted(() => ({
@@ -35,10 +35,10 @@ describe("AiSetupPanel", () => {
 
   it("editing the shared key in Intelligence preserves the Classification provider and model", () => {
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: "Intelligence" }));
+    showPanelSection("intelligence");
     fireEvent.click(screen.getByRole("button", { name: "OpenRouter setup row" }));
     fireEvent.change(screen.getByLabelText("OpenRouter API key"), { target: { value: "shared-test-key" } });
-    fireEvent.click(screen.getByRole("tab", { name: "Classification" }));
+    showPanelSection("aiSetup");
     const summary = screen.getByRole("region", { name: "Model being used" });
     expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("Drifty");
     expect(within(summary).getByRole("combobox", { name: "AI model" }).textContent).toContain("Drifty Cloud");
@@ -61,10 +61,9 @@ describe("AiSetupPanel", () => {
       },
     });
 
-    const setupTabs = screen.getByRole("tablist", { name: /AI setup sections/i });
-    expect(within(setupTabs).getByRole("tab", { name: /^Classification$/i }).getAttribute("aria-selected")).toBe("true");
-    expect(within(setupTabs).getByRole("tab", { name: /^Intelligence$/i }).getAttribute("aria-selected")).toBe("false");
-    expect(within(setupTabs).getByRole("tab", { name: /^Memory$/i }).getAttribute("aria-selected")).toBe("false");
+    // The sidebar picks the AI section, so the panel shows its title and no internal tabs.
+    expect(screen.getByRole("heading", { name: /^Classification$/ })).toBeTruthy();
+    expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Work profile$/i })).toBeNull();
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
@@ -183,7 +182,7 @@ describe("AiSetupPanel", () => {
 
     renderPanel();
 
-    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    showPanelSection("memory");
     const memoryOverview = screen.getByLabelText(/Drifty Memory overview/i);
     expect(within(memoryOverview).getByRole("heading", { name: "Work profile" })).toBeTruthy();
     expect(await within(memoryOverview).findByText("Coding")).toBeTruthy();
@@ -260,7 +259,7 @@ describe("AiSetupPanel", () => {
     }));
 
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    showPanelSection("memory");
     const memoryOverview = screen.getByLabelText(/Drifty Memory overview/i);
     fireEvent.click(await within(memoryOverview).findByRole("button", { name: /^Edit$/i }));
     fireEvent.click(screen.getByRole("button", { name: "Designing" }));
@@ -284,7 +283,7 @@ describe("AiSetupPanel", () => {
 
   it("names the missing initial setup instead of asking for activities the user already chose", () => {
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    showPanelSection("memory");
     const memoryOverview = screen.getByLabelText(/Drifty Memory overview/i);
     fireEvent.click(within(memoryOverview).getByRole("button", { name: /^Add work$/i }));
     fireEvent.click(screen.getByRole("button", { name: "Designing" }));
@@ -328,7 +327,7 @@ describe("AiSetupPanel", () => {
     ].join("\n"));
 
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    showPanelSection("memory");
 
     expect(await screen.findByText("Product research before implementation is usually work support.")).toBeTruthy();
     expect(screen.getByText("Product research before implementation is usually work support.")).toBeTruthy();
@@ -359,7 +358,7 @@ describe("AiSetupPanel", () => {
       learned: { workSupport: [{ summary, confidence: "low", evidenceCount: 1, lastObservedAt: "2026-10-04T00:00:00.000Z" }], drift: [], ambiguities: [] },
       feedbackAt: "2026-10-04T00:00:00.000Z" });
     const panel = renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
+    showPanelSection("memory");
     const card = await screen.findByRole("article", { name: summary });
     await waitFor(() => expect(within(card).getByRole("button", { name: "Right" })).not.toHaveProperty("disabled", true));
     fireEvent.click(within(card).getByRole("button", { name: "Right" }));
@@ -370,7 +369,7 @@ describe("AiSetupPanel", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
     panel.unmount();
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
+    showPanelSection("memory");
     const excluded = await screen.findByText("Excluded patterns · 1");
     fireEvent.click(excluded);
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
@@ -388,7 +387,7 @@ describe("AiSetupPanel", () => {
     await updateLivingSoulLearnedState({ ownerId: "local", expectedRevision: initial.document.revision,
       learned: { workSupport: [pattern(first)], drift: [], ambiguities: [] }, feedbackAt: "2026-10-04T00:00:00.000Z" });
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
+    showPanelSection("memory");
     const card = await screen.findByRole("article", { name: first });
     await waitFor(() => expect(within(card).getByRole("button", { name: "Right" })).not.toHaveProperty("disabled", true));
 
@@ -456,7 +455,7 @@ describe("AiSetupPanel", () => {
     ].join("\n"));
 
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    showPanelSection("memory");
 
     // An aria-label on a plain div is dropped by screen readers, so these
     // groupings must keep real roles rather than labels alone.
@@ -478,7 +477,7 @@ describe("AiSetupPanel", () => {
     ].join("\n"));
 
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    showPanelSection("memory");
 
     // Claiming "Ready to learn" here would tell the user nothing is stored yet,
     // while saved learning actually exists on disk and cannot be read.
@@ -587,7 +586,7 @@ describe("AiSetupPanel", () => {
   it("keeps the AI privacy review out of Memory", () => {
     renderPanel();
 
-    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    showPanelSection("memory");
     expect(screen.queryByRole("button", { name: /Privacy review/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /AI privacy review/i })).toBeNull();
     expect(screen.getByRole("heading", { name: "Work profile" })).toBeTruthy();

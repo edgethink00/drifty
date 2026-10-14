@@ -39,6 +39,21 @@
   margin: 0;
 }
 
+/* One line under a heading that says how the section is used (AI hint vs fixed choice). */
+.memory-section__desc {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+  margin: 0;
+  padding-left: 0.5rem;
+  word-break: keep-all;
+}
+
+.content--settings .ai-memory .classification-rule-saved-block > .classification-rule-list-intro {
+  margin-bottom: var(--space-2);
+  padding-left: 0.5rem;
+}
+
 /* Mirrors the heading's left indent so the count lines up with the card's right edge. */
 .memory-section__aside {
   align-items: center;

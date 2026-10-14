@@ -222,11 +222,8 @@ describe("Settings content styles", () => {
     expect(actionRule).toContain("min-width: 0;");
   });
 
-  it("presents AI setup internal tabs as compact pill controls", () => {
+  it("styles the AI setup panel and its model selectors", () => {
     const aiSetupStyles = readAiSetupStyles();
-    const tabListRule = cssRule(aiSetupStyles, ".ai-setup-panel-tabs");
-    const tabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab");
-    const activeTabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab.is-active");
     const tabPanelRule = cssRule(aiSetupStyles, ".ai-setup-tab-panel");
     const panelRule = cssRule(aiSetupStyles, ".ai-setup-panel");
     const panelDarkRule = cssRule(aiSetupStyles, ':root[data-theme="dark"] .ai-setup-panel');
@@ -240,9 +237,6 @@ describe("Settings content styles", () => {
     const selectIconActionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--icon");
     const selectActionsContainerRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-actions");
 
-    expectRuleToContain(tabListRule, ["background: color-mix(in srgb, var(--bg-2) 38%, transparent);", "gap: 0.16rem;", "padding: 0.16rem;", "width: fit-content;"]);
-    expectRuleToContain(tabRule, ["border: 1px solid transparent;", "border-radius: 9px;", "font-size: 0.76rem;", "min-height: 1.66rem;"]);
-    expectRuleToContain(activeTabRule, ["background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));", "color: var(--text);"]);
     expect(tabPanelRule).toContain("gap: var(--space-4);");
     expect(panelRule).toContain("--cloud-action: #344622;");
     expect(panelDarkRule).toContain("--cloud-action: #5a7042;");

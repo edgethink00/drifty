@@ -67,15 +67,16 @@ export function ClassificationSavedRulesList({
   return (
     <div className="settings-block classification-rule-saved-block">
       <h3 id="classification-saved-rules-heading">{t("classification.rules.title")}</h3>
+      {/* Like Memory's other sections, one line under the heading says how these are used. */}
+      <div className="classification-rule-list-intro">
+        <p className="classification-rules-manager__intro">
+          {t("classification.rules.description")}{" "}
+          <button type="button" className="classification-rules-manager__help-toggle" aria-expanded={helpOpen} aria-controls={helpId} onClick={() => setHelpOpen((open) => !open)}>{t("classification.rules.help")}</button>
+        </p>
+        <p id={helpId} className="classification-rules-manager__help" hidden={!helpOpen}>{t("settings.classification.savedRulesDescription")}</p>
+      </div>
       {feedback}
       <section className="settings-row settings-row--group-start settings-row--group-end classification-rule-list-section" aria-labelledby="classification-saved-rules-heading">
-        <div className="classification-rule-list-intro">
-          <p className="classification-rules-manager__intro">
-            {t("classification.rules.description")}{" "}
-            <button type="button" className="classification-rules-manager__help-toggle" aria-expanded={helpOpen} aria-controls={helpId} onClick={() => setHelpOpen((open) => !open)}>{t("classification.rules.help")}</button>
-          </p>
-          <p id={helpId} className="classification-rules-manager__help" hidden={!helpOpen}>{t("settings.classification.savedRulesDescription")}</p>
-        </div>
         <div className="classification-rule-list-head">
           {/* The empty state already says there are none; "0 classifications" above it only repeats that. */}
           <span className="classification-rule-list-count" role="status">{!hasError && !classificationRulesLoading && (classificationRules.length > 0 || query) ? t(query ? "classification.rules.count" : "classification.rules.totalCount", { count: visibleRules.length, total: classificationRules.length }) : null}</span>

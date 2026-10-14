@@ -406,6 +406,18 @@
   font-weight: 700;
 }
 
+/* My classifications is Memory's last section, so its heading is a section
+   heading like Work profile rather than the page title it was on its own page. */
+.content--settings .settings-section .ai-memory .settings-block.classification-rule-saved-block > h3 {
+  display: flex;
+  align-items: center;
+  min-height: var(--settings-action-height);
+  margin: 0 0 var(--space-2);
+  color: var(--text-soft);
+  font-size: 0.94rem;
+  font-weight: 620;
+}
+
 /* AI setup: drop the outer settings-block box so the section reads like General
    (a soft title above clean content rather than a card nested inside a card). */
 .content--settings .settings-section--ai-setup .ai-setup-panel {

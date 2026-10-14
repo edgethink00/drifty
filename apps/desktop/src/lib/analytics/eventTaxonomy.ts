@@ -42,6 +42,8 @@ export const SETTINGS_SECTIONS = [
   "pet",
   "classification",
   "aiSetup",
+  "intelligence",
+  "memory",
   "notifications",
   "privacy",
   "developer",

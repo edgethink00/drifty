@@ -25,6 +25,14 @@ describe("settings search", () => {
     expect(searchSettings("there-is-no-such-setting-928", publicAvailability)).toEqual([]);
   });
 
+  it("lands AI results on their own AI settings section", () => {
+    const sectionFor = (query: string, id: string) => searchSettings(query, publicAvailability).find((entry) => entry.id === id)?.section;
+    expect(sectionFor("OpenRouter", "settings.ai.openRouterApiKey")).toBe("aiSetup");
+    expect(sectionFor("프로젝트 분석", "settings.ai.intelligence")).toBe("intelligence");
+    expect(sectionFor("업무 프로필", "settings.ai.workProfile")).toBe("memory");
+    expect(sectionFor("memory", "settings.ai.memoryHeroTitle")).toBe("memory");
+  });
+
   it("omits gated destinations from search, including Dev in production", () => {
     const enabled = { dev: true, intelligence: true, windows: true, backgroundUpdates: true, signedIn: true, deviceSync: true };
     const disabled = { dev: false, intelligence: false, windows: false, backgroundUpdates: false, signedIn: false, deviceSync: false };

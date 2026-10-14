@@ -45,8 +45,9 @@ describe("SettingsSidebar", () => {
       "Privacy & Data",
     ]);
     expect(within(aiGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "AI setup",
-      "My classifications",
+      "Classification",
+      "Intelligence",
+      "Memory",
     ]);
     const advancedGroup = screen.getByRole("group", { name: /^Advanced$/ });
     expect(within(advancedGroup).getAllByRole("button").map((button) => button.textContent)).toEqual(["Agents & CLI"]);
@@ -66,6 +67,23 @@ describe("SettingsSidebar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Back$/ }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens each AI settings section from its own rail item and hides Intelligence when the feature is off", () => {
+    const onSectionChange = vi.fn<(section: SettingsSection) => void>();
+    const { rerender } = render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="intelligence" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={onSectionChange} />);
+
+    const aiGroup = screen.getByRole("group", { name: /^AI$/ });
+    expect(within(aiGroup).getByRole("button", { name: /^Intelligence$/ }).getAttribute("aria-current")).toBe("page");
+    fireEvent.click(within(aiGroup).getByRole("button", { name: /^Classification$/ }));
+    fireEvent.click(within(aiGroup).getByRole("button", { name: /^Memory$/ }));
+    expect(onSectionChange.mock.calls.map(([section]) => section)).toEqual(["aiSetup", "memory"]);
+
+    rerender(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="aiSetup" isCollapsed={false} showDevSection={false} showIntelligenceSection={false} onBack={vi.fn()} onSectionChange={onSectionChange} />);
+    expect(within(screen.getByRole("group", { name: /^AI$/ })).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Classification",
+      "Memory",
+    ]);
   });
 
   it("marks a section that needs attention without changing its name", () => {
@@ -201,12 +219,4 @@ describe("SettingsSidebar", () => {
     expect(appearanceIcon?.innerHTML).not.toContain("M12 3.5a8.5 8.5 0 0 1 0 17z");
   });
 
-  it("draws My classifications with its own glyph instead of the General sliders", () => {
-    render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="general" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
-
-    const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
-    const iconMarkup = (name: RegExp) => within(settingsNav).getByRole("button", { name }).querySelector(".settings-nav-item__icon svg")?.innerHTML;
-
-    expect(iconMarkup(/^My classifications$/)).not.toBe(iconMarkup(/^General$/));
-  });
 });
