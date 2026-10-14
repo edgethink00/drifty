@@ -30,7 +30,19 @@ def target(url: str):
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
             or parsed.port not in (None, 443) or len(url) > 4096):
         raise ValueError("Unsupported public URL")
-    host = parsed.hostname.encode("idna").decode("ascii")
+    host = parsed.hostname
+    if host.isascii():
+        # Match the standard IDNA codec's ASCII branch without importing its
+        # Unicode tables in each disposable frozen reader. Keep label checks,
+        # including the permitted final empty label for a trailing root dot.
+        labels = host.split(".")
+        for label in labels[:-1]:
+            if not 0 < len(label) < 64:
+                raise UnicodeError("label empty or too long")
+        if len(labels[-1]) >= 64:
+            raise UnicodeError("label too long")
+    else:
+        host = host.encode("idna").decode("ascii")
     return parsed, host
 
 
@@ -58,9 +70,11 @@ class PinnedHTTPSConnection(http.client.HTTPSConnection):
 
     def connect(self):
         # Literal IP prevents a second hostname resolution; SNI/cert check keep host.
-        sock = socket.create_connection((self.address, 443), self.timeout)
+        # Both names were validated/IDNA-normalized already. Bytes avoid loading
+        # the Unicode IDNA codec again in socket/ssl, with the same ASCII names.
+        sock = socket.create_connection((self.address.encode("ascii"), 443), self.timeout)
         try:
-            self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+            self.sock = self._context.wrap_socket(sock, server_hostname=self.host.encode("ascii"))
         except BaseException:
             sock.close()
             raise
@@ -79,7 +93,7 @@ def fetch_description(url: str, seconds: float, *, resolver=socket.getaddrinfo,
             parsed, host = target(url)
             if host != original_host:
                 return None
-            addresses = resolver(host, 443, type=socket.SOCK_STREAM)
+            addresses = resolver(host.encode("ascii"), 443, type=socket.SOCK_STREAM)
             if not addresses or not all(address_check(item[4][0]) for item in addresses):
                 return None
             remaining = deadline-time.monotonic()

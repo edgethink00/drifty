@@ -14,7 +14,34 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from app.tracker.browser_public_description import fetch_description, public_address
+from app.tracker.browser_public_description import fetch_description, public_address, target
+
+
+class PublicDescriptionTargetTests(unittest.TestCase):
+    def test_ascii_and_unicode_hosts_match_standard_idna_results_and_rejections(self):
+        hosts = ["example.com", "EXAMPLE.COM.", "localhost", "xn--bcher-kva.example", "bücher.example", "한국.example",
+                 "example..com", ".example.com", ".", "a" * 63 + ".example", "a" * 64 + ".example",
+                 "example." + "b" * 64, "1.2.3.4", "[2606:4700:4700::1111]"]
+        hosts += [left + "." + right + dot for left in ("a", "xn--a", "_test", "a"*63, "a"*64)
+                  for right in ("com", "", "b"*63, "b"*64) for dot in ("", ".")]
+        from urllib.parse import urlsplit
+        for host in hosts:
+            with self.subTest(host=host):
+                url = "https://" + host + "/course"
+                parsed = urlsplit(url)
+                try:
+                    expected = parsed.hostname.encode("idna").decode("ascii")
+                except UnicodeError:
+                    with self.assertRaises(UnicodeError): target(url)
+                else:
+                    self.assertEqual(target(url), (parsed, expected))
+
+    def test_ascii_target_keeps_idna_unicode_module_unloaded_in_a_fresh_reader(self):
+        root = Path(__file__).parents[1]
+        code = "import sys,json;sys.path.insert(0," + repr(str(root)) + ");from app.tracker.browser_public_description import target;before='encodings.idna' in sys.modules;target('https://example.com/course');print(json.dumps([before,'encodings.idna' in sys.modules]))"
+        result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [False, False])
 
 
 @unittest.skipUnless(shutil.which("openssl"), "Owned TLS fixture requires OpenSSL CLI")
@@ -98,8 +125,8 @@ class PublicDescriptionTests(unittest.TestCase):
 
     def test_real_tls_pins_checked_address_preserves_host_and_has_no_credentials(self):
         self.assertEqual(self.fetch("/normal?course=2#fragment"), "Public course summary")
-        self.assertEqual(self.resolved, [("fixture.test", 443)])
-        self.assertEqual(self.connected, [("8.8.8.8", 443)])
+        self.assertEqual(self.resolved, [(b"fixture.test", 443)])
+        self.assertEqual(self.connected, [(b"8.8.8.8", 443)])
         path, headers = self.requests[0]
         self.assertEqual(path, "/normal?course=2")
         self.assertEqual(headers["Host"], "fixture.test")
@@ -107,6 +134,26 @@ class PublicDescriptionTests(unittest.TestCase):
 
     def test_certificate_validation_is_not_disabled(self):
         self.assertIsNone(self.fetch(context=ssl.create_default_context()))
+        self.assertEqual(self.requests, [])
+
+    def test_ascii_sni_keeps_hostname_checks_and_matches_the_requested_host(self):
+        from app.tracker.browser_public_description import PinnedHTTPSConnection
+        calls = []
+        original_wrap = self.context.wrap_socket
+        def wrap(sock, **kwargs):
+            calls.append(kwargs["server_hostname"])
+            return original_wrap(sock, **kwargs)
+        with patch.object(self.context, "wrap_socket", side_effect=wrap):
+            self.assertEqual(self.fetch(), "Public course summary")
+        self.assertEqual(calls, [b"fixture.test"])
+        self.assertTrue(self.context.check_hostname)
+        self.assertEqual(self.context.verify_mode, ssl.CERT_REQUIRED)
+        self.requests.clear()
+        real_connect = socket.create_connection
+        with patch("app.tracker.browser_public_description.socket.create_connection", side_effect=lambda *args: real_connect((b"127.0.0.1", self.server.server_port), .3)):
+            # Trusted certificate, wrong hostname: rejection must precede any GET.
+            self.assertIsNone(fetch_description("https://wrong.test/normal", .3,
+                resolver=lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))], context=self.context))
         self.assertEqual(self.requests, [])
 
     def test_private_and_special_addresses_never_connect(self):
