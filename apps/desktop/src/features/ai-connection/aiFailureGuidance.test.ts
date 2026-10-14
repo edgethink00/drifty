@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS } from "../localization/translations";
 import type { AiConnectionIssueKind } from "./aiConnectionHealth";
 import {
-  AI_FAILURE_TRACKING_CONTINUES_KEY,
   aiFailureGuidance,
   aiFailureGuidanceKeys,
   aiFailureResolvesWithoutUser,
@@ -61,10 +60,10 @@ describe("aiFailureGuidance", () => {
     }
   });
 
-  it("always closes with the tracking-continues reassurance", () => {
+  it("describes AI failures without asserting activity recording is running", () => {
     for (const kind of ALL_ISSUE_KINDS) {
       const keys = aiFailureGuidanceKeys(kind);
-      expect(keys[keys.length - 1]).toBe(AI_FAILURE_TRACKING_CONTINUES_KEY);
+      expect(keys).not.toContain("settings.ai.failure.trackingContinues");
       expect(keys[0]).toBe(aiFailureGuidance(kind).headlineKey);
     }
   });

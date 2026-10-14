@@ -823,7 +823,7 @@ describe("App AI classification controls", () => {
       name: /AI connection: Connected, Drifty Cloud\. Open AI settings/i,
     })).toBeTruthy();
     expect(screen.queryByRole("button", {
-      name: /AI connection: Connection issue, Drifty Cloud\. Open AI settings/i,
+      name: /AI connection: Connection issue, Drifty Cloud\. View recording and AI status/i,
     })).toBeNull();
   });
 

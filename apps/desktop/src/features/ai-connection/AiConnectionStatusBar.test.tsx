@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Auto-cleanup isn't unmounting between cases here, so the broad "open ai
@@ -186,7 +186,7 @@ describe("AiConnectionStatusBar", () => {
     expect(status.getAttribute("data-tone")).toBe("error");
   });
 
-  it("opens AI settings when clicked", () => {
+  it("opens a recording diagnosis before the existing AI settings action", () => {
     const onOpenSettings = vi.fn();
     render(
       <AiConnectionStatusBar
@@ -201,8 +201,11 @@ describe("AiConnectionStatusBar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /open ai settings/i }));
-
+    fireEvent.click(screen.getByRole("button", { name: /view recording and ai status/i }));
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Recording and AI" })).toBeTruthy();
+    expect(screen.getByText("Recording status is unconfirmed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "AI settings" }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
@@ -270,5 +273,92 @@ describe("AiConnectionStatusBar on the AI setup page", () => {
     rerender(<AiConnectionStatusBar status={status} onOpenSettings={vi.fn()} settingsOpen />);
     expect(screen.queryByText("Open settings")).toBeNull();
     expect(screen.getByRole("button", { name: "AI setup needed" })).toBeTruthy();
+  });
+});
+
+const networkIssue = { tone: "warning" as const, label: "Connection issue", providerLabel: "Custom provider", memoryLabel: null, issueKind: "network" as const };
+
+describe("recording recovery popover", () => {
+  it("checks recording once on entry and reflects tracker changes without losing the diagnosis", async () => {
+    const onCheckRecordingStatus = vi.fn(async () => undefined);
+    const onRecordingAction = vi.fn();
+    const props = { status: networkIssue, onOpenSettings: vi.fn(), onCheckRecordingStatus, onRecordingAction };
+    const { rerender } = render(<AiConnectionStatusBar {...props} recordingHealth={{ kind: "paused", action: "resume" }} />);
+    fireEvent.click(screen.getByRole("button", { name: /view recording/i }));
+    await waitFor(() => expect(screen.getByText("Recording is paused")).toBeTruthy());
+    expect(onCheckRecordingStatus).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Resume recording" }));
+    expect(onRecordingAction).toHaveBeenCalledWith("resume");
+    rerender(<AiConnectionStatusBar {...props} recordingHealth={{ kind: "recording", action: null }} />);
+    expect(await screen.findByText("Recent activity recorded")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Resume recording" })).toBeNull();
+    expect(onCheckRecordingStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps keyboard focus in the panel while a recording action is pending", async () => {
+    let finish: (() => void) | undefined;
+    const onRecordingAction = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<AiConnectionStatusBar status={networkIssue} onOpenSettings={vi.fn()} onRecordingAction={onRecordingAction} recordingHealth={{ kind: "paused", action: "resume" }} />);
+    fireEvent.click(screen.getByRole("button", { name: /view recording/i }));
+    const panel = screen.getByRole("dialog");
+    const resume = screen.getByRole("button", { name: "Resume recording" });
+    resume.focus();
+    fireEvent.click(resume);
+    expect(document.activeElement).toBe(panel);
+    expect(screen.getByText("Checking recording status…")).toBeTruthy();
+    finish?.();
+    await waitFor(() => expect(screen.queryByText("Checking recording status…")).toBeNull());
+    expect(document.activeElement).toBe(panel);
+  });
+
+  it("returns focus on Escape and dismisses on an outside click without stealing focus", async () => {
+    render(<><AiConnectionStatusBar status={networkIssue} onOpenSettings={vi.fn()} /><button>Outside</button></>);
+    const trigger = screen.getByRole("button", { name: /view recording/i });
+    fireEvent.click(trigger);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("dialog")));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    const outside = screen.getByRole("button", { name: "Outside" });
+    fireEvent.pointerDown(outside);
+    outside.focus();
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("closes when keyboard focus leaves the nonmodal panel", () => {
+    render(<><AiConnectionStatusBar status={networkIssue} onOpenSettings={vi.fn()} /><button>Outside</button></>);
+    const trigger = screen.getByRole("button", { name: /view recording/i });
+    fireEvent.click(trigger);
+    fireEvent.focusIn(screen.getByRole("button", { name: "Outside" }));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it.each(["recovered", "provider", "navigation"])("dismisses the old diagnosis after %s changes", (change) => {
+    const props = { status: networkIssue, onOpenSettings: vi.fn(), navigationKey: "dashboard" };
+    const { rerender } = render(<AiConnectionStatusBar {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /view recording/i }));
+    rerender(<AiConnectionStatusBar {...props}
+      status={change === "recovered" ? { ...networkIssue, issueKind: null } : change === "provider" ? { ...networkIssue, providerLabel: "New provider" } : networkIssue}
+      navigationKey={change === "navigation" ? "settings" : "dashboard"} />);
+    expect(screen.getByRole("button", { name: /AI connection/i }).getAttribute("aria-expanded")).not.toBe("true");
+  });
+
+  it("keeps self-resolving failures quiet and does not invent a classification retry", () => {
+    render(<AiConnectionStatusBar status={{ ...networkIssue, issueKind: "rate_limited", label: "Rate limited" }} onOpenSettings={vi.fn()} recordingHealth={{ kind: "idle", action: null }} />);
+    fireEvent.click(screen.getByRole("button", { name: /view recording/i }));
+    const panel = screen.getByRole("dialog");
+    expect(within(panel).queryByRole("button")).toBeNull();
+    expect(within(panel).getByText("Waiting for activity")).toBeTruthy();
+  });
+
+  it("keeps healthy pills linked directly to settings", () => {
+    const onOpenSettings = vi.fn();
+    render(<AiConnectionStatusBar status={{ ...networkIssue, issueKind: null, label: "Connected" }} onOpenSettings={onOpenSettings} />);
+    fireEvent.click(screen.getByRole("button", { name: /open ai settings/i }));
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

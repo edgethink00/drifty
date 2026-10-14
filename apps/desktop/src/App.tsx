@@ -66,6 +66,8 @@ import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus, type AiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
+import { resolveRecordingHealth, type RecordingRecoveryAction } from "./features/ai-connection/recordingHealth";
+import { useRecordingObservation } from "./features/ai-connection/useRecordingObservation";
 import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "./features/ai-connection/managedLocalAiRuntimeStatus";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
 import { readDayNotePreview } from "./features/day-note/dayNoteGate";
@@ -699,6 +701,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [sidebarCollapsed, setSidebarCollapsed] = useState(resolveInitialSidebarCollapsed);
   const [selectedDay, setSelectedDay] = useState(() => logicalTodayIsoDate(resolveInitialStartOfDayMinutes()));
   const [status, setStatus] = useState<TrackerStatus | null>(null);
+  const { beginRequest: beginRecordingCheck, acceptStatus: acceptRecordingStatus, acceptCapture: acceptRecordingCapture, statusFresh: recordingStatusFresh, captureFresh: recordingCaptureFresh, now: recordingCheckedNow } = useRecordingObservation(status?.lastEventAt);
   const [trackerPausePending, setTrackerPausePending] = useState(false);
   const trackerPauseIntentRef = useRef(false);
   trackerPauseIntentRef.current = trackerPausePending || status?.trackingPaused === true;
@@ -4013,15 +4016,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
         : Promise.resolve<SiteDuration[] | null>(null);
 
+      const recordingRequest = isForegroundRefresh ? beginRecordingCheck() : null;
       const statusRequest = isForegroundRefresh
         ? trackerClient.getStatus().then((nextStatus) => {
           if (
             refreshRequestRef.current !== requestId
             || trackerMutationGenerationRef.current !== trackerMutationGeneration
           ) return nextStatus;
+          if (recordingRequest !== null) acceptRecordingStatus(recordingRequest, nextStatus);
           setStatus(nextStatus);
           setAccessibilityGranted(nextStatus.accessibilityGranted);
           return nextStatus;
+        }).catch((error) => {
+          if (refreshRequestRef.current === requestId
+            && trackerMutationGenerationRef.current === trackerMutationGeneration
+            && recordingRequest !== null) acceptRecordingStatus(recordingRequest, null);
+          throw error;
         })
         : Promise.resolve(status);
 
@@ -4783,6 +4793,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     liveTailRefreshInFlightRef.current = true;
     const trackerMutationGeneration = trackerMutationGenerationRef.current;
+    const recordingRequest = beginRecordingCheck();
     try {
       const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
       const cursor = latestActivitySegmentCursor(segmentsRef.current);
@@ -4797,6 +4808,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         || trackerMutationGenerationRef.current !== trackerMutationGeneration
       ) return false;
 
+      acceptRecordingCapture(recordingRequest, liveTail.trackerMode !== "unavailable");
       setStatus((current) => {
         if (!current) return current;
         return {
@@ -4817,13 +4829,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       }
       return true;
     } catch (error) {
+      if (selectedDayRef.current === day && trackerMutationGenerationRef.current === trackerMutationGeneration) {
+        acceptRecordingCapture(recordingRequest, false);
+      }
       const message = error instanceof Error ? error.message : "unknown error";
       console.warn("Failed to refresh focused live tracker tail", message);
       return false;
     } finally {
       liveTailRefreshInFlightRef.current = false;
     }
-  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes, beginRecordingCheck, acceptRecordingCapture]);
 
   const refreshWindowsLiveSnapshot = useCallback(async (): Promise<void> => {
     if (hostPlatform !== "windows" || status?.running !== true || shouldBlockLocalTrackerAccess) return;
@@ -9684,6 +9699,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     try {
       const nextStatus = await trackerClient.start();
       if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+      acceptRecordingStatus(beginRecordingCheck(), nextStatus);
       setStatus(nextStatus);
       setAccessibilityGranted(nextStatus.accessibilityGranted);
       // Startup may have restored a pause after the renderer read an older
@@ -9709,6 +9725,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         message: "Activity tracking could not start. Try starting it again.",
       }));
       if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+      acceptRecordingStatus(beginRecordingCheck(), nextStatus);
       setStatus(nextStatus);
       setAccessibilityGranted(nextStatus.accessibilityGranted);
       capturePostHogEvent("tracker_action", {
@@ -9729,11 +9746,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setError(null);
     const trackerMutationGeneration = trackerMutationGenerationRef.current + 1;
     trackerMutationGenerationRef.current = trackerMutationGeneration;
+    acceptRecordingStatus(beginRecordingCheck(), null);
     let nextStatus: TrackerStatus;
     try {
       nextStatus = await trackerClient.start({ resumePaused: true });
     } catch (startError) {
       if (trackerMutationGenerationRef.current !== trackerMutationGeneration) throw startError;
+      acceptRecordingStatus(beginRecordingCheck(), null);
       const message = toErrorMessage(startError);
       setError(message);
       capturePostHogEvent("tracker_action", {
@@ -9745,6 +9764,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
 
     if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+    acceptRecordingStatus(beginRecordingCheck(), nextStatus);
     setStatus(nextStatus);
     setAccessibilityGranted(nextStatus.accessibilityGranted);
     if (nextStatus.trackerMode === "degraded" || nextStatus.running !== true) {
@@ -9777,6 +9797,26 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
   }
 
+  async function handleCheckRecordingStatus() {
+    if (!isTauriRuntime() || shouldBlockLocalTrackerAccess || isDashboardDemoReplayActive) return;
+    const generation = trackerMutationGenerationRef.current;
+    const request = beginRecordingCheck();
+    const nextStatus = await trackerClient.getStatus().catch(() => null);
+    if (generation !== trackerMutationGenerationRef.current) return;
+    if (!acceptRecordingStatus(request, nextStatus)) return;
+    if (nextStatus) {
+      setStatus(nextStatus);
+      setAccessibilityGranted(nextStatus.accessibilityGranted);
+    }
+  }
+
+  async function handleRecordingRecovery(action: RecordingRecoveryAction) {
+    if (action === "settings") openSettingsTab();
+    else if (action === "resume") await handleStartTracking();
+    else if (action === "pause") await handleStopTracking();
+    else await handleCheckRecordingStatus();
+  }
+
   async function handleCheckAccessibility() {
     const nextStatus = await accessibilityClient.getStatus();
     setAccessibilityGranted(nextStatus.granted);
@@ -9807,6 +9847,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     try {
       const nextStatus = await trackerClient.stop();
       if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+      acceptRecordingStatus(beginRecordingCheck(), nextStatus);
       setStatus(nextStatus);
       setAccessibilityGranted(nextStatus.accessibilityGranted);
       if (!nextStatus.running) setCurrentSnapshot(null);
@@ -9822,10 +9863,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const reconciledStatus = await trackerClient.getStatus().catch(() => null);
       if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
       if (reconciledStatus) {
+        acceptRecordingStatus(beginRecordingCheck(), reconciledStatus);
         setStatus(reconciledStatus);
         setAccessibilityGranted(reconciledStatus.accessibilityGranted);
         if (!reconciledStatus.running) setCurrentSnapshot(null);
       }
+      if (!reconciledStatus) acceptRecordingStatus(beginRecordingCheck(), null);
       const reconciledTrackerMode = reconciledStatus?.trackerMode ?? null;
       const didConfirmPaused = reconciledStatus?.running === false
         && reconciledTrackerMode !== "unavailable"
@@ -10475,6 +10518,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     : openAiSetupSettings;
   const chromeAiStatusAria = trialEndFollowUpKey !== null ? localization.t("ai.connection.trialEndedAria") : undefined;
+  const chromeRecordingHealth = resolveRecordingHealth({
+    native: isTauriRuntime(),
+    preview: isPreviewSurface || isDashboardDemoReplayActive || shouldBlockLocalTrackerAccess,
+    status,
+    statusFresh: recordingStatusFresh,
+    captureFresh: recordingCaptureFresh,
+    pausePending: trackerPausePending,
+    accessibilityRequired,
+    captureGap: liveCaptureGapExpired,
+    now: recordingCheckedNow,
+  });
   // The daily notice waits for other notices, alerts and dialogs, and shows on today's dashboard only.
   const trialEndNoticeVisible = trialEndStage === "notice" && unclassifiedTodaySeconds !== null
     && activeTab === "dashboard" && !upgradePlanModalOpen && !onboardingOpen && !isDashboardDemoReplayActive
@@ -10547,6 +10601,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           try {
             const nextStatus = await trackerClient.start();
             if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+            acceptRecordingStatus(beginRecordingCheck(), nextStatus);
             setStatus(nextStatus);
             setAccessibilityGranted(nextStatus.accessibilityGranted);
             if (nextStatus.trackingPaused) return;
@@ -10710,7 +10765,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           )}
           trailing={(
             <>
-              <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && settingsSection === "aiSetup"} />
+              <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && settingsSection === "aiSetup"}
+                recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
+                onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
               {titlebarUpdateVersion ? (
                 <TopbarUpdateButton
                   onInstall={() => void handleInstallUpdate()}
@@ -10744,7 +10801,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && settingsSection === "aiSetup"} />
+          <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && settingsSection === "aiSetup"}
+                recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
+                onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
           {titlebarUpdateVersion ? (
             <TopbarUpdateButton
               onInstall={() => void handleInstallUpdate()}

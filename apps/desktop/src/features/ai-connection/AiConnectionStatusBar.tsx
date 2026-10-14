@@ -1,3 +1,9 @@
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
+import type { RecordingHealth, RecordingRecoveryAction } from "./recordingHealth";
+import { aiFailureGuidance } from "./aiFailureGuidance";
+import "./ai-connection-recovery.css";
 import type { AiConnectionIssueKind } from "./aiConnectionHealth";
 import { aiFailureGuidanceKeys } from "./aiFailureGuidance";
 import { localizeAiStatusLabel } from "../localization/aiStatusTranslations";
@@ -130,27 +136,106 @@ export function AiConnectionStatusBar({
   onOpenSettings,
   ariaLabel,
   settingsOpen = false,
+  recordingHealth = { kind: "unknown", action: null },
+  onCheckRecordingStatus,
+  onRecordingAction,
+  navigationKey,
 }: {
   readonly status: AiConnectionStatus;
   readonly onOpenSettings: () => void;
-  /** Replaces the default "… Open AI settings" name when the pill leads somewhere else. */
   readonly ariaLabel?: string;
-  /** AI setup is already on screen, so "Open settings" would point at the page the person is reading. */
   readonly settingsOpen?: boolean;
+  readonly recordingHealth?: RecordingHealth;
+  readonly onCheckRecordingStatus?: () => Promise<void>;
+  readonly onRecordingAction?: (action: RecordingRecoveryAction) => void | Promise<void>;
+  readonly navigationKey?: string;
 }) {
   const { t } = useLocalization();
+  const [open, setOpen] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [position, setPosition] = useState<CSSProperties>({ visibility: "hidden" });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const checkGeneration = useRef(0);
+  const titleId = useId();
+  const panelId = useId();
   const statusLabel = localizeAiStatusLabel(status.label, t);
   const providerLabel = localizeAiStatusLabel(status.providerLabel, t);
-  const showsOpenSettings = status.providerLabel === "Open settings";
-  const hideProvider = settingsOpen && showsOpenSettings;
+  const hideProvider = settingsOpen && status.providerLabel === "Open settings";
   const memoryAria = status.memoryLabel ? t("ai.connection.memoryAria", { memory: status.memoryLabel }) : "";
-  // The pill only has room for a two-word label, so the cause, the recovery
-  // step, and the local-data reassurance move to the title. With aria-label
-  // supplying the accessible name, title becomes the accessible description,
-  // so assistive technology reads it without a draft-spec aria-description.
   const failureExplanation = status.issueKind
     ? aiFailureGuidanceKeys(status.issueKind).map((key) => t(key)).join(" ")
     : undefined;
+  const guidance = status.issueKind ? aiFailureGuidance(status.issueKind) : null;
+  const recordingLabel = t(`ai.recovery.recording.${recordingHealth.kind}`);
+  const close = useCallback((restoreFocus = false) => {
+    checkGeneration.current += 1;
+    setOpen(false);
+    setChecking(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  }, []);
+  const checkRecording = () => {
+    if (!onCheckRecordingStatus) return;
+    const generation = ++checkGeneration.current;
+    if (panelRef.current?.contains(document.activeElement)) panelRef.current.focus();
+    setChecking(true);
+    void onCheckRecordingStatus().catch(() => undefined).finally(() => {
+      if (generation === checkGeneration.current) setChecking(false);
+    });
+  };
+
+  // A recovered issue, provider switch, or navigation dismisses the old diagnosis.
+  useEffect(() => {
+    close(Boolean(panelRef.current?.contains(document.activeElement)));
+  }, [status.issueKind, status.providerLabel, navigationKey, close]);
+  useEffect(() => () => { checkGeneration.current += 1; }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const anchor = triggerRef.current?.getBoundingClientRect();
+      const panel = panelRef.current;
+      if (!anchor || !panel) return;
+      const pad = 12;
+      const width = Math.min(336, window.innerWidth - pad * 2);
+      const top = Math.max(pad, Math.min(anchor.bottom + 8, window.innerHeight - pad - panel.offsetHeight));
+      setPosition({ top, left: Math.max(pad, Math.min(anchor.right - width, window.innerWidth - width - pad)), width });
+    };
+    place();
+    const focusFrame = window.requestAnimationFrame(() => panelRef.current?.focus());
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(place) : null;
+    if (panelRef.current) observer?.observe(panelRef.current);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const isInside = (target: EventTarget | null) => target instanceof Node
+      && (triggerRef.current?.contains(target) || panelRef.current?.contains(target));
+    const pointerDown = (event: PointerEvent) => { if (!isInside(event.target)) close(); };
+    const focusIn = (event: FocusEvent) => { if (!isInside(event.target)) close(); };
+    const keyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    };
+    document.addEventListener("pointerdown", pointerDown);
+    document.addEventListener("focusin", focusIn);
+    document.addEventListener("keydown", keyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", pointerDown);
+      document.removeEventListener("focusin", focusIn);
+      document.removeEventListener("keydown", keyDown, true);
+    };
+  }, [open, close]);
 
   return (
     <>
@@ -160,18 +245,58 @@ export function AiConnectionStatusBar({
         </span>
       ) : null}
       <button
+        ref={triggerRef}
         type="button"
         className="ai-connection-status"
-        aria-label={hideProvider ? statusLabel : ariaLabel ?? t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
+        aria-label={hideProvider ? statusLabel : ariaLabel ?? t(status.issueKind ? "ai.connection.recoveryAria" : "ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
+        aria-haspopup={status.issueKind ? "dialog" : undefined}
+        aria-expanded={status.issueKind ? open : undefined}
+        aria-controls={open ? panelId : undefined}
         title={failureExplanation}
         data-tone={status.tone}
         data-activity={status.activity ?? undefined}
-        onClick={onOpenSettings}
+        onClick={() => {
+          if (!status.issueKind) { onOpenSettings(); return; }
+          if (open) { close(); return; }
+          setOpen(true);
+          checkRecording();
+        }}
       >
         <span className="ai-connection-status__dot" aria-hidden="true" />
         <span className="ai-connection-status__label">{statusLabel}</span>
         {hideProvider ? null : <span className="ai-connection-status__provider">{providerLabel}</span>}
       </button>
+      {createPortal(<AnchoredPresence>{open && guidance ? (
+        <div ref={panelRef} id={panelId} role="dialog" aria-labelledby={titleId} tabIndex={-1} className="ai-connection-recovery" style={position}>
+          <h2 id={titleId}>{t("ai.recovery.title")}</h2>
+          <section aria-label={t("ai.recovery.recording")}>
+            <h3>{t("ai.recovery.recording")}</h3>
+            <p role="status">{checking ? t("ai.recovery.checking") : recordingLabel}</p>
+            {!checking && recordingHealth.action && (onRecordingAction || recordingHealth.action === "check" && onCheckRecordingStatus) ? (
+              <button type="button" className="ai-connection-recovery__action" onClick={() => {
+                const action = recordingHealth.action;
+                if (!action) return;
+                if (action === "check") { checkRecording(); return; }
+                if (action === "settings") { close(); void onRecordingAction?.(action); return; }
+                panelRef.current?.focus();
+                const generation = ++checkGeneration.current;
+                setChecking(true);
+                void Promise.resolve(onRecordingAction?.(action)).catch(() => undefined).finally(() => {
+                  if (generation === checkGeneration.current) setChecking(false);
+                });
+              }}>{t(`ai.recovery.action.${recordingHealth.action}`)}</button>
+            ) : null}
+          </section>
+          <section aria-label={t("ai.recovery.analysis")}>
+            <h3>{t("ai.recovery.analysis")}</h3>
+            {status.issueKind && status.label !== labelForIssueKind(status.issueKind) ? <p>{statusLabel}</p> : null}
+            <p className="ai-connection-recovery__detail">{t(guidance.headlineKey)}</p>
+            {guidance.needsUserAction ? (
+              <button type="button" className="ai-connection-recovery__action" onClick={() => { close(); onOpenSettings(); }}>{t("ai.recovery.settings")}</button>
+            ) : null}
+          </section>
+        </div>
+      ) : null}</AnchoredPresence>, document.body)}
     </>
   );
 }

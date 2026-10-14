@@ -90,18 +90,6 @@ const AI_FAILURE_GUIDANCE: Readonly<Record<AiConnectionIssueKind, AiFailureGuida
 };
 
 /**
- * Shared reassurance appended to every failure explanation. Local activity
- * capture is independent of AI classification, so the question worth answering
- * is whether collection stopped, not whether stored history survived.
- *
- * The dashboard recovery overlay carries the same message, but it only appears
- * for unconfigured and billing-locked routes; `resolveDashboardAiUnavailableState`
- * returns null once a connected route goes `degraded`. For the failures this
- * module covers, the pill is the only surface saying it.
- */
-export const AI_FAILURE_TRACKING_CONTINUES_KEY: TranslationKey = "settings.ai.failure.trackingContinues";
-
-/**
  * True when the failure resolves on its own. The sidebar recovery card uses
  * this to decide whether to appear at all; the pill uses it to decide whether
  * to offer a next step.
@@ -118,6 +106,6 @@ export function aiFailureGuidance(kind: AiConnectionIssueKind): AiFailureGuidanc
 export function aiFailureGuidanceKeys(kind: AiConnectionIssueKind): readonly TranslationKey[] {
   const guidance = AI_FAILURE_GUIDANCE[kind];
   return guidance.nextStepKey
-    ? [guidance.headlineKey, guidance.nextStepKey, AI_FAILURE_TRACKING_CONTINUES_KEY]
-    : [guidance.headlineKey, AI_FAILURE_TRACKING_CONTINUES_KEY];
+    ? [guidance.headlineKey, guidance.nextStepKey]
+    : [guidance.headlineKey];
 }
