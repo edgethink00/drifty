@@ -463,23 +463,44 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         let title = clean(before.tabTitle, 500).lowercased()
         struct Chunk { let raw: String; let bounds: CGRect; let heading: Bool; let ordinal: Int }
         var chunks: [Chunk] = []; var assemblyVisits = 0
-        func admittedText(_ element: AXUIElement) -> (String, CGRect)? {
+        func admittedText(_ element: AXUIElement, _ inlineGroups: [AXUIElement] = []) -> (String, CGRect)? {
             guard let bounds = rectangle(element), bounds.width >= 4, bounds.height >= 4,
                   viewport.contains(bounds) else { return nil }
             var hit: AXUIElement?
             guard AXUIElementCopyElementAtPosition(application, Float(bounds.midX), Float(bounds.midY), &hit) == .success,
-                  let hit = hit, CFEqual(hit, element) else { return nil }
+                  let middle = hit else { return nil }
+            var ownsText = CFEqual(middle, element)
+            // A wrapped inline leaf's bounding-box center can fall between its
+            // lines. Only a known inline group may trigger six bounded probes;
+            // an unrelated element never grants admission. The selected probe
+            // must still hit this exact static-text leaf, with all bounds visible.
+            if !ownsText, inlineGroups.contains(where: { CFEqual($0, middle) }) {
+                let insetY = min(8, bounds.height / 4), insetX = min(8, bounds.width / 4)
+                let points = [(bounds.midX,bounds.minY+insetY), (bounds.midX,bounds.maxY-insetY),
+                              (bounds.minX+insetX,bounds.minY+insetY), (bounds.maxX-insetX,bounds.minY+insetY),
+                              (bounds.minX+insetX,bounds.maxY-insetY), (bounds.maxX-insetX,bounds.maxY-insetY)]
+                for (x,y) in points {
+                    pump()
+                    let remaining = deadline-ProcessInfo.processInfo.systemUptime
+                    guard !changes.invalidated, remaining > 0 else { break }
+                    AXUIElementSetMessagingTimeout(application, Float(min(0.025, remaining)))
+                    var alternate: AXUIElement?
+                    if AXUIElementCopyElementAtPosition(application, Float(x), Float(y), &alternate) == .success,
+                       let alternate = alternate, CFEqual(alternate, element) { ownsText = true; break }
+                }
+            }
+            guard ownsText else { return nil }
             return (string(element, "AXValue"), bounds)
         }
         // Assemble only a bounded inline subtree; every leaf must pass admission.
         // A clipped leaf or an AX hit owned by another element rejects the group.
         // AX-hidden overlays are not proof of pixel occlusion (see the study).
         // Never join neighboring blocks/columns, inputs, controls or iframes.
-        func assemble(_ element: AXUIElement, _ depth: Int) -> (String, CGRect)? {
+        func assemble(_ element: AXUIElement, _ depth: Int, _ inlineGroups: [AXUIElement] = []) -> (String, CGRect)? {
             guard depth < 5, assemblyVisits < 600 else { return nil }
             assemblyVisits += 1
             let role = string(element, "AXRole")
-            if role == "AXStaticText" { return admittedText(element) }
+            if role == "AXStaticText" { return admittedText(element, inlineGroups) }
             let subrole = string(element, "AXSubrole")
             let inlineStyles: Set<String> = ["AXCodeStyleGroup", "AXStrongStyleGroup", "AXEmphasisStyleGroup"]
             guard role == "AXLink" || role == "AXHeading" || (role == "AXGroup" && inlineStyles.contains(subrole)),
@@ -487,7 +508,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
                   children.count <= 64 else { return nil }
             var text = ""; var bounds = CGRect.null; var previous: CGRect?
             for child in children {
-                guard let part = assemble(child, depth + 1), text.utf16.count + part.0.utf16.count <= 2048 else { return nil }
+                guard let part = assemble(child, depth + 1, role == "AXGroup" ? inlineGroups + [element] : inlineGroups), text.utf16.count + part.0.utf16.count <= 2048 else { return nil }
                 if let last = previous, !text.isEmpty, text.last?.isWhitespace == false,
                    part.0.first?.isWhitespace == false,
                    (part.1.minY >= last.maxY - 2 || part.1.minX >= last.maxX + 3) { text += " " }
@@ -507,7 +528,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             }
             var text = ""; var bounds = CGRect.null; var previous: CGRect?
             for child in children {
-                guard let part = assemble(child, 0), text.utf16.count + part.0.utf16.count <= 2048 else { return nil }
+                guard let part = assemble(child, 0, [element]), text.utf16.count + part.0.utf16.count <= 2048 else { return nil }
                 if let last = previous, !text.isEmpty, text.last?.isWhitespace == false,
                    part.0.first?.isWhitespace == false,
                    (part.1.minY >= last.maxY - 2 || part.1.minX >= last.maxX + 3) { text += " " }
@@ -515,7 +536,36 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             }
             return (text, bounds)
         }
-        func walk(_ index: Int, _ depth: Int, _ heading: Bool) {
+        func inlineRuns(_ element: AXUIElement) -> [(String, CGRect)]? {
+            guard let children = attribute(element, "AXChildren") as? [AXUIElement],
+                  !children.isEmpty, children.count <= 64 else { return nil }
+            let styles: Set<String> = ["AXCodeStyleGroup", "AXStrongStyleGroup", "AXEmphasisStyleGroup"]
+            var groups: [[AXUIElement]] = [[]]; var hasBoundary = false
+            for child in children {
+                let role = string(child,"AXRole"), subrole = string(child,"AXSubrole")
+                if role == "AXButton" || (role == "AXGroup" && ["AXSuperscriptStyleGroup", "AXSubscriptStyleGroup"].contains(subrole)) {
+                    hasBoundary = true
+                    if !groups[groups.count-1].isEmpty { groups.append([]) }
+                } else if role == "AXStaticText" || role == "AXLink" || (role == "AXGroup" && styles.contains(subrole)) {
+                    groups[groups.count-1].append(child)
+                } else { return nil }
+            }
+            guard hasBoundary else { return nil }
+            var result: [(String, CGRect)] = []
+            for group in groups where !group.isEmpty {
+                var text = ""; var bounds = CGRect.null; var previous: CGRect?
+                for child in group {
+                    guard let part = assemble(child, 0, [element]), text.utf16.count + part.0.utf16.count <= 2048 else { return nil }
+                    if let last = previous, !text.isEmpty, text.last?.isWhitespace == false,
+                       part.0.first?.isWhitespace == false,
+                       (part.1.minY >= last.maxY - 2 || part.1.minX >= last.maxX + 3) { text += " " }
+                    text += part.0; bounds = bounds.union(part.1); previous = part.1
+                }
+                result.append((text,bounds))
+            }
+            return result.isEmpty ? nil : result
+        }
+        func walk(_ index: Int, _ depth: Int, _ heading: Bool, _ inlineGroups: [AXUIElement] = []) {
             guard depth < 24, visited < 8192 else { incomplete = true; return }
             visited += 1
             let node = plan[index]
@@ -530,16 +580,32 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             if inputRoles.contains(role) || (role == "AXWebArea" && !CFEqual(element, area)) { return }
             if excludedLandmarks.contains(subrole) { return }
             let isHeading = heading || role == "AXHeading"
-            if role == "AXHeading" || (role == "AXGroup" && subrole.isEmpty) {
+            if role == "AXHeading" || (role == "AXGroup" && (subrole.isEmpty || subrole == "AXDocumentNote")) {
                 if let part = block(element) {
                     chunks.append(Chunk(raw: part.0, bounds: part.1, heading: isHeading, ordinal: chunks.count)); return
                 }
+                if !isHeading, role == "AXGroup", let runs = inlineRuns(element) {
+                    for part in runs { chunks.append(Chunk(raw: part.0, bounds: part.1, heading: false, ordinal: chunks.count)) }
+                    for childIndex in node.children {
+                        let child = plan[childIndex]
+                        if child.role == "AXButton" || (child.role == "AXGroup" && ["AXSuperscriptStyleGroup", "AXSubscriptStyleGroup"].contains(child.subrole)) { walk(childIndex, depth + 1, false) }
+                    }
+                    return
+                }
             }
             if role == "AXStaticText" {
-                if let part = admittedText(element) { chunks.append(Chunk(raw: part.0, bounds: part.1, heading: isHeading, ordinal: chunks.count)) }
+                if let part = admittedText(element, inlineGroups) { chunks.append(Chunk(raw: part.0, bounds: part.1, heading: isHeading, ordinal: chunks.count)) }
                 return
             }
-            for child in node.children { walk(child, depth + 1, isHeading) }
+            let inlineStyles: Set<String> = ["AXCodeStyleGroup", "AXStrongStyleGroup", "AXEmphasisStyleGroup"]
+            let plainInline = role == "AXGroup" && (subrole.isEmpty || subrole == "AXDocumentNote") && node.children.count <= 64 && node.children.allSatisfy {
+                let child = plan[$0]
+                return child.role == "AXStaticText" || child.role == "AXLink" || child.role == "AXButton" ||
+                    (child.role == "AXGroup" && (inlineStyles.contains(child.subrole) || ["AXSuperscriptStyleGroup", "AXSubscriptStyleGroup"].contains(child.subrole)))
+            }
+            let styleInline = role == "AXGroup" && inlineStyles.contains(subrole) && node.children.count <= 64
+            let groups = plainInline ? [element] : (styleInline ? inlineGroups + [element] : (role == "AXLink" ? inlineGroups : []))
+            for child in node.children { walk(child, depth + 1, isHeading, groups) }
         }
         for root in mains.isEmpty ? [areaIndex] : mains { walk(root, 0, false) }
         // Prefer earlier screen blocks over AX traversal order (a floated code
