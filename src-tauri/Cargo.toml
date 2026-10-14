@@ -1,6 +1,6 @@
 [package]
 name = "drifty"
-version = "1.12.5"
+version = "1.12.6"
 description = "Tauri 2 time-tracking shell for Drifty"
 authors = ["EdgeThink"]
 edition = "2021"
