@@ -119,7 +119,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // so they share its focused-window identity proof. Bundle
         // identifiers are compared exactly; Floorp's carries a capital letter.
         let geckoBundles = ["org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "app.zen-browser.zen", "app.floorp.Floorp", "net.librewolf.librewolf", "net.waterfox.waterfox"]
-        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "ai.perplexity.comet", "com.apple.Safari", "com.apple.SafariTechnologyPreview"] + geckoBundles
+        let allowed = ["com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "ai.perplexity.comet", "com.operasoftware.Opera", "com.apple.Safari", "com.apple.SafariTechnologyPreview"] + geckoBundles
         // Safari and the Firefox family expose no scripting window mode; they
         // are admitted through their own accessibility identity below and never
         // receive Apple Events.
@@ -130,6 +130,8 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         // mode, window, tab, URL and title before and after; the focused AX
         // window then binds through the exact tab title and the single web
         // area's URL, and its own frame locates the native window.
+        let descriptionOnly = CommandLine.arguments[3] == "com.operasoftware.Opera"
+        guard !descriptionOnly || (CommandLine.arguments.count == 8 && CommandLine.arguments[7] == "--public-description-only-stdio") else { return nil }
         let arc = CommandLine.arguments[3] == "company.thebrowser.Browser"
         // Dia 1.52 has no window mode or bounds and shortens its AX window
         // title. Its scripting window id appears in the focused AX window's
@@ -233,8 +235,12 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         let source = AXObserverGetRunLoopSource(observer)
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .defaultMode)
         defer { CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .defaultMode) }
-        func watch(_ element: AXUIElement, _ notifications: [String]) {
-            for name in notifications { _ = AXObserverAddNotification(observer, element, name as CFString, Unmanaged.passUnretained(changes).toOpaque()) }
+        @discardableResult func watch(_ element: AXUIElement, _ notifications: [String]) -> Bool {
+            var registered = false
+            for name in notifications {
+                if AXObserverAddNotification(observer, element, name as CFString, Unmanaged.passUnretained(changes).toOpaque()) == .success { registered = true }
+            }
+            return registered
         }
         watch(application, ["AXFocusedWindowChanged", "AXFocusedUIElementChanged"])
         func pump() { CFRunLoopRunInMode(.defaultMode, 0, true) }
@@ -386,6 +392,53 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
         guard windowBound, let windowBounds = rectangle(window),
               arc || dia || sameBounds(windowBounds, before.bounds), let windowID = nativeWindowID(windowBounds) else { return nil }
         watch(window, ["AXUIElementDestroyed", "AXMoved", "AXResized"])
+        if descriptionOnly {
+            // Opera exposes its native window/tab chrome but no page web area
+            // in the tested read-only route. This mode admits only the anonymous
+            // public author's description; it never reads page or input values.
+            // Other browsers keep their existing whole-page H/B admission.
+            guard url.scheme == "https", string(window, "AXSubrole") == "AXStandardWindow" else { return nil }
+            var visited = 0, complete = true, sensitive = false, tabSelectionWatched = false
+            func inspectChrome(_ element: AXUIElement, _ depth: Int) {
+                guard depth < 24, visited < 8192 else { complete = false; return }
+                visited += 1
+                let (role, subrole, children, _) = shape(element)
+                guard !role.isEmpty else { complete = false; return }
+                if role == "AXSecureTextField" || subrole == "AXSecureTextField" || role == "AXTextArea" { sensitive = true; return }
+                if role == "AXTabGroup" {
+                    let watched = watch(element, ["AXSelectedChildrenChanged", "AXValueChanged"])
+                    tabSelectionWatched = tabSelectionWatched || watched
+                }
+                if role == "AXRadioButton" { watch(element, ["AXValueChanged"]) }
+                if ["AXTextField", "AXSearchField", "AXComboBox"].contains(role) { return }
+                if children == nil && ["AXWebArea", "AXGroup", "AXScrollArea", "AXTabGroup"].contains(role) { complete = false; return }
+                for child in children ?? [] { inspectChrome(child, depth + 1) }
+            }
+            inspectChrome(window, 0)
+            watch(window, ["AXTitleChanged"])
+            func stillCurrent() -> Bool {
+                pump()
+                guard complete, !sensitive, tabSelectionWatched, !changes.invalidated,
+                      let current = currentIdentity(), current == before,
+                      NSWorkspace.shared.frontmostApplication?.processIdentifier == pid, birth() == processBirth,
+                      let focused = attribute(application, "AXFocusedWindow"), CFEqual(focused, window),
+                      string(window, "AXTitle") == nativeTitle, rectangle(window) == windowBounds,
+                      nativeWindowID(windowBounds) == windowID else { return false }
+                pump()
+                return !changes.invalidated && ProcessInfo.processInfo.systemUptime < deadline
+            }
+            let readerUntil = deadline - 0.15
+            guard stillCurrent(), readerUntil - ProcessInfo.processInfo.systemUptime > 0.06 else { return nil }
+            let request: [String: Any] = ["phase": "publicDescriptionOnly", "version": 1, "pid": Int(pid),
+                "bundleId": CommandLine.arguments[3], "pageUrl": before.url, "pageTitle": before.tabTitle,
+                "clues": [:] as [String: Any], "lookupBudgetMs": max(1, Int((readerUntil - ProcessInfo.processInfo.systemUptime)*1000))]
+            guard let data = try? JSONSerialization.data(withJSONObject: request) else { return nil }
+            print(String(decoding: data, as: UTF8.self)); fflush(stdout)
+            guard let description = readDescriptionReply(deadline: readerUntil, valid: { !changes.invalidated }),
+                  stillCurrent() else { return nil }
+            return ["version": 1, "pid": Int(pid), "bundleId": CommandLine.arguments[3],
+                "pageUrl": before.url, "pageTitle": before.tabTitle, "clues": ["description": description]]
+        }
         var areas: [AXUIElement] = []; var locateCount = 0; var incomplete = false
         // Vivaldi draws its own interface as one web document and nests each
         // tab's page inside it. Search through only that built-in document;

@@ -108,6 +108,63 @@ class NativeBrowserContentTests(unittest.TestCase):
                 self.assertIsNone(capture_browser_content(**self.arguments, run_command=run))
                 self.assertEqual(len(calls), 1)
 
+    def opera_capture(self, *, preface_change=None, result_clues=None, reader_reply=None):
+        calls = []
+        arguments = dict(self.arguments, bundle_id="com.operasoftware.Opera")
+        result = dict(self.reply, bundleId=arguments["bundle_id"], clues={"description": "Public summary"})
+        if result_clues is not None:
+            result["clues"] = result_clues
+        def run(command, **options):
+            calls.append(command)
+            if "reply" in options:
+                self.assertEqual(command[-1], "--public-description-only-stdio")
+                preface = dict(result, phase="publicDescriptionOnly", clues={}, lookupBudgetMs=300)
+                preface.update(preface_change or {})
+                options["reply"](json.dumps(preface))
+                return json.dumps(result)
+            return json.dumps({"description": "Public summary"} if reader_reply is None else reader_reply)
+        return capture_browser_content(**arguments, run_command=run), calls
+
+    def test_opera_description_only_admits_empty_native_clues_and_existing_d_contract(self):
+        result, calls = self.opera_capture()
+        self.assertEqual(result, dict(version=1, collectedAt=self.arguments["observed_at"],
+                                     pageUrl=self.arguments["page_url"], pageTitle="Course", description="Public summary"))
+        self.assertEqual(len(calls), 2)
+
+    def test_description_only_cannot_relax_other_browser_or_identity_admission(self):
+        for change in ({"phase": "description"}, {"bundleId": "com.google.Chrome"},
+                       {"pageUrl": "https://other.org"}, {"pageTitle": "Other"}, {"pid": 43},
+                       {"lookupBudgetMs": 0}, {"clues": {"headings": ["Unexpected heading"]}}):
+            with self.subTest(change=change):
+                result, calls = self.opera_capture(preface_change=change)
+                self.assertIsNone(result)
+                self.assertEqual(len(calls), 1)
+        calls = []
+        def run(command, **options):
+            calls.append(command)
+            options["reply"](json.dumps(dict(self.reply, phase="description", clues={}, lookupBudgetMs=300)))
+            return json.dumps(self.reply)
+        self.assertIsNone(capture_browser_content(**self.arguments, run_command=run))
+        self.assertEqual(len(calls), 1)
+
+    def test_opera_never_emits_body_or_unsolicited_description(self):
+        for clues in ({}, {"description": "Other summary"}, {"headings": ["Unexpected"]},
+                      {"description": "Public summary", "visibleTopic": ["Unexpected body"]}):
+            with self.subTest(clues=clues):
+                self.assertIsNone(self.opera_capture(result_clues=clues)[0])
+        for reply in ("null", {"description": "x" * 161}, {"description": "Unrelated summary"}):
+            with self.subTest(reply=reply):
+                self.assertIsNone(self.opera_capture(reader_reply=reply)[0])
+
+    def test_opera_disabled_http_and_excluded_pages_start_neither_helper_nor_reader(self):
+        run = Mock()
+        arguments = dict(self.arguments, bundle_id="com.operasoftware.Opera")
+        for url in ("http://example.org/course", "https://example.org/login", "https://mail.google.com/"):
+            self.assertIsNone(capture_browser_content(**dict(arguments, page_url=url), run_command=run))
+        with patch.dict("os.environ", {"DRIFTY_BROWSER_CONTENT_CONTEXT": "0"}):
+            self.assertIsNone(capture_browser_content(**arguments, run_command=run))
+        run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

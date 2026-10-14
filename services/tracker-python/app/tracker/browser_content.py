@@ -28,7 +28,8 @@ EXTENSION_ORIGIN = "chrome-extension://neihkehcijfcfplmfomahlimejiiledi/"
 # clues to the focused window's exact title through accessibility. Firefox
 # Firefox-family browsers share the same focused-window identity proof.
 ADDRESS_BAR_CONTENT_BUNDLES = frozenset({"com.apple.Safari", "com.apple.SafariTechnologyPreview"}) | FIREFOX_FAMILY_BUNDLES
-BROWSER_BUNDLES = frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "ai.perplexity.comet"}) | ADDRESS_BAR_CONTENT_BUNDLES
+PUBLIC_DESCRIPTION_ONLY_BUNDLES = frozenset({"com.operasoftware.Opera"})
+BROWSER_BUNDLES = PUBLIC_DESCRIPTION_ONLY_BUNDLES | frozenset({"com.google.Chrome", "com.google.Chrome.canary", "com.google.Chrome.forTesting", "com.google.chrome.for.testing", "org.chromium.Chromium", "com.microsoft.edgemac", "com.brave.Browser", "com.naver.Whale", "com.vivaldi.Vivaldi", "company.thebrowser.Browser", "company.thebrowser.dia", "ai.perplexity.comet"}) | ADDRESS_BAR_CONTENT_BUNDLES
 MAX_MESSAGE_BYTES = 32768
 # Message, mail, AI chat and document-editor sites, and sign-in/payment/account
 # paths, never yield page clues. The macOS helper (chatgpt_session_ax.swift)
@@ -157,6 +158,7 @@ def capture_browser_content(*, pid: int, bundle_id: str | None, page_url: str | 
     The helper checks already-granted Automation permission without prompting,
     verifies normal-window mode and exact browser/window/URL identity, and emits
     bounded headings/text and optionally an anonymous public description.
+    Opera uses a distinct description-only admission, never a body fallback.
     Unavailable optional context preserves tracking.
     """
     if (os.environ.get("DRIFTY_BROWSER_CONTENT_CONTEXT") != "1" or sys.platform != "darwin"
@@ -171,25 +173,35 @@ def capture_browser_content(*, pid: int, bundle_id: str | None, page_url: str | 
             return None
         if url.scheme not in {"http", "https"} or not url.hostname or len(page_url or "") > 4096:
             return None
+        description_only = bundle_id in PUBLIC_DESCRIPTION_ONLY_BUNDLES
+        if description_only and (url.scheme != "https" or content_excluded_url(page_url)):
+            return None
         helper = helper_path or packaged_helper_path()
         if helper is None:
             return None
         allowance = min(timeout, 0.65)
         reader = ([sys.executable, "browser-public-description"] if getattr(sys, "frozen", False)
                   else [sys.executable, str(Path(__file__).with_name("browser_public_description.py"))])
+        description_flag = "--public-description-only-stdio" if description_only else "--description-stdio"
+        accepted_description = None
         command = [str(helper), "--browser-content", str(pid), bundle_id,
-                   page_url, page_title, str(max(1, int(allowance * 1000) - 30)), "--description-stdio"]
+                   page_url, page_title, str(max(1, int(allowance * 1000) - 30)), description_flag]
         started = time.monotonic()
         cancelled = lambda: policy_snapshot() != policy
         def reply(line):
+            nonlocal accepted_description
             preface = json.loads(line)
-            if not isinstance(preface, dict) or preface.get("phase") != "description":
+            expected_phase = "publicDescriptionOnly" if description_only else "description"
+            if not isinstance(preface, dict) or preface.get("phase") != expected_phase:
+                if description_only:
+                    raise ValueError("Invalid native public-description-only admission")
                 return None
             if (set(preface) != {"phase", "version", "pid", "bundleId", "pageUrl", "pageTitle", "clues", "lookupBudgetMs"}
                     or type(preface["version"]) is not int or preface["version"] != 1 or type(preface["pid"]) is not int or preface["pid"] != pid
                     or preface["bundleId"] != bundle_id or preface["pageUrl"] != page_url or preface["pageTitle"] != page_title
                     or type(preface["lookupBudgetMs"]) is not int or not 0 < preface["lookupBudgetMs"] <= 620
-                    or not normalize_clues(preface["clues"]) or "description" in preface["clues"]):
+                    or (preface["clues"] != {} if description_only else
+                        not normalize_clues(preface["clues"]) or "description" in preface["clues"])):
                 raise ValueError("Invalid native description admission")
             # End before the native wait does, leaving time to deliver null on
             # timeout and preserve its already-admitted H/B observation.
@@ -201,6 +213,7 @@ def capture_browser_content(*, pid: int, bundle_id: str | None, page_url: str | 
                 response = run(reader+[page_url, str(max(1, int(remaining*1000)))], timeout=remaining, cancelled=cancelled)
                 data = json.loads(response)
                 if isinstance(data, dict) and set(data) == {"description"} and normalize_clues(data):
+                    accepted_description = data["description"]
                     return json.dumps(data)
             except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError, UnicodeError):
                 pass
@@ -223,6 +236,8 @@ def capture_browser_content(*, pid: int, bundle_id: str | None, page_url: str | 
                 or result["bundleId"] != bundle_id or result["pageUrl"] != page_url or result["pageTitle"] != page_title):
             return None
         clues = normalize_clues(result["clues"])
+        if description_only and (not accepted_description or clues != {"description": accepted_description}):
+            return None
         return normalize_context({"version": 1, "collectedAt": observed_at,
                                   "pageUrl": page_url, "pageTitle": page_title, **clues}) if clues else None
     except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError, TypeError, UnicodeError):

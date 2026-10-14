@@ -23,13 +23,14 @@ def native_fixture_source():
     return source + '''let args=CommandLine.arguments
 let invalidated=ProcessInfo.processInfo.environment["QA_NATIVE_INVALIDATED_PATH"] ?? "/absent"
 let mode=ProcessInfo.processInfo.environment["QA_NATIVE_MODE"] ?? "normal"
-var clues:[String:Any]=["headings":["Current heading"],"visibleTopic":["Current body"]]
+let descriptionOnly=args[7]=="--public-description-only-stdio"
+var clues:[String:Any]=descriptionOnly ? [:] : ["headings":["Current heading"],"visibleTopic":["Current body"]]
 var result:[String:Any]=["version":1,"pid":Int(args[2])!,"bundleId":args[3],"pageUrl":args[4],"pageTitle":args[5],"clues":clues]
 func emit(_ value:Any){if let data=try?JSONSerialization.data(withJSONObject:value,options:[.fragmentsAllowed]){print(String(decoding:data,as:UTF8.self));fflush(stdout)}}
 if mode=="private"{emit(NSNull());exit(0)}
 if mode=="no-lookup"{emit(result);exit(0)}
 let until=ProcessInfo.processInfo.systemUptime+Double(args[6])!/1000-0.15
-var preface=result;preface["phase"]="description";preface["lookupBudgetMs"]=max(1,Int((until-ProcessInfo.processInfo.systemUptime)*1000))
+var preface=result;preface["phase"]=descriptionOnly ? "publicDescriptionOnly" : "description";preface["lookupBudgetMs"]=max(1,Int((until-ProcessInfo.processInfo.systemUptime)*1000))
 emit(preface)
 if let text=readDescriptionReply(deadline:until,valid:{!FileManager.default.fileExists(atPath:invalidated)}){clues["description"]=text;result["clues"]=clues}
 if FileManager.default.fileExists(atPath:invalidated){emit(NSNull())}else{emit(result)}
@@ -127,6 +128,27 @@ class NativeDescriptionTransportTests(unittest.TestCase):
         thread.join(2)
         self.assertEqual(errors,[]);self.assertFalse(thread.is_alive());self.assertIsNone(result)
         self.assert_stopped();self.assertFalse(self.scope._children)
+
+    def test_opera_real_stdio_success_and_failed_reader_never_create_body_context(self):
+        self.arguments["bundle_id"] = "com.operasoftware.Opera"
+        result = self.run_capture("print(json.dumps({'description':'Public summary'}),flush=True)")
+        self.assertEqual({k: result[k] for k in ('description',)}, {'description': 'Public summary'})
+        self.assertNotIn('headings', result); self.assertNotIn('visibleTopic', result)
+        self.assert_stopped()
+        for code in ("time.sleep(60)", "print('null')", "print('not-json')"):
+            with self.subTest(code=code):
+                self.scope.deadline = time.monotonic()+2
+                self.assertIsNone(self.run_capture(code))
+                self.assert_stopped()
+
+    def test_opera_real_stdio_invalidation_discards_description(self):
+        self.arguments["bundle_id"] = "com.operasoftware.Opera"
+        self.assertIsNone(self.run_capture('Path('+repr(str(self.invalidated))+').touch();time.sleep(.05);print(json.dumps({"description":"Late description"}))'))
+        self.assert_stopped()
+
+    def test_opera_cross_process_off_on_cancels_owned_reader(self):
+        self.arguments["bundle_id"] = "com.operasoftware.Opera"
+        self.test_cross_process_setting_off_on_during_lookup_cancels_both_helpers()
 
 
 if __name__ == '__main__':
