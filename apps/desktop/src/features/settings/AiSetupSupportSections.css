@@ -39,19 +39,21 @@
   margin: 0;
 }
 
-/* One line under a heading that says how the section is used (AI hint vs fixed choice). */
-.memory-section__desc {
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.45;
-  margin: 0;
-  padding-left: 0.5rem;
-  word-break: keep-all;
+/* My classifications: heading left and count right on one line, then the card
+   at the same gap as the other Memory sections. */
+.content--settings .ai-memory .classification-rule-saved-block {
+  align-items: center;
+  column-gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: var(--space-2);
 }
 
-.content--settings .ai-memory .classification-rule-saved-block > .classification-rule-list-intro {
-  margin-bottom: var(--space-2);
-  padding-left: 0.5rem;
+.content--settings .ai-memory .classification-rule-saved-block > :not(h3, .classification-rule-saved-count) {
+  grid-column: 1 / -1;
+}
+
+.content--settings .ai-memory .classification-rule-saved-count {
+  margin-right: 0.5rem;
 }
 
 /* Mirrors the heading's left indent so the count lines up with the card's right edge. */

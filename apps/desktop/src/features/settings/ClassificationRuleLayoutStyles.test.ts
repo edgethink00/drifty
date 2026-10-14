@@ -14,35 +14,18 @@ function cssRuleExact(styles: string, selector: string): string {
 }
 
 describe("Classification rule layout styles", () => {
-  it("keeps address and scope in separate fields above the classification controls", () => {
-    const styles = readAppStyles();
-    const gridRule = cssRule(styles, ".classification-rules-manager .classification-rule-form__grid");
-    expect(gridRule).toContain('"target target target target" "category productivity action ."');
-    expect(styles).toContain('"target target target target" "scope scope scope scope" "category productivity action ."');
-    expect(cssRuleExact(styles, ".classification-rule-mode-control .settings-mode-option span")).toContain("white-space: nowrap;");
-  });
-
-  it("keeps Domain rule fields responsive after the feature override import", () => {
-    const styles = readAppStyles();
-
-    expect(styles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
-    expect(styles).toContain('"target" "category" "productivity" "action"');
-    expect(styles).toContain("grid-template-columns: minmax(0, 1fr);");
-    expect(styles).toContain('"productivity"');
-  });
-
   it("uses the UI face for classification prose and reserves mono for typed data", () => {
     const styles = readAppStyles();
-    const labelRule = cssRule(styles, ".classification-rule-field span,\n.classification-rule-field label,\n.classification-rule-hint,\n.classification-rule-copy,\n.classification-rule-selected,\n.classification-rule-candidates__heading");
+    const labelRule = cssRule(styles, ".classification-rule-field span,\n.classification-rule-field label,\n.classification-rule-hint,\n.classification-rule-copy");
     const inputRule = cssRule(styles, ".settings-section--classification .classification-rule-field .settings-input");
 
     expect(labelRule).toContain("font-family: var(--font-ui);");
     expect(inputRule).toContain("font-family: var(--font-mono);");
   });
 
-  it("keeps the primary save button filled inside the classification card", () => {
+  it("keeps the primary save button filled inside the add form", () => {
     const styles = readAppStyles();
-    const primaryRule = cssRule(styles, ".settings-section--classification .classification-rule-form__grid .settings-btn--primary");
+    const primaryRule = cssRuleExact(styles, ".settings-section--classification .classification-rule-composer .settings-btn--primary");
 
     expect(primaryRule).toContain("background: var(--text);");
     expect(primaryRule).toContain("color: var(--canvas);");

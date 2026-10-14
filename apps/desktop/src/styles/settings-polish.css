@@ -412,7 +412,7 @@
   display: flex;
   align-items: center;
   min-height: var(--settings-action-height);
-  margin: 0 0 var(--space-2);
+  margin: 0;
   color: var(--text-soft);
   font-size: 0.94rem;
   font-weight: 620;
@@ -2740,23 +2740,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   --classification-rule-control-height: 2.35rem;
 }
 
-.settings-section--classification .classification-rule-form {
-  align-items: start;
-  gap: var(--space-4);
-}
-
-.classification-rule-form__grid {
-  align-items: end;
-  display: grid;
-  gap: var(--space-2);
-  grid-template-columns: minmax(14rem, 1.35fr) minmax(8.5rem, 0.7fr) minmax(9rem, 0.75fr) minmax(9rem, 0.75fr) minmax(9rem, auto);
-  width: 100%;
-}
-
-.classification-rule-form__grid--app {
-  grid-template-columns: minmax(15rem, 1.35fr) minmax(10rem, 0.8fr) minmax(10rem, 0.8fr) minmax(10rem, auto);
-}
-
 .classification-rule-field {
   display: grid;
   gap: var(--space-1);
@@ -2768,9 +2751,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 .classification-rule-field span,
 .classification-rule-field label,
 .classification-rule-hint,
-.classification-rule-copy,
-.classification-rule-selected,
-.classification-rule-candidates__heading {
+.classification-rule-copy {
   color: var(--text-soft);
   font-family: var(--font-ui);
   font-size: var(--type-setting-desc-size);
@@ -2867,28 +2848,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   cursor: pointer;
 }
 
-.classification-rule-form__grid .settings-btn {
-  min-height: var(--classification-rule-control-height);
-  justify-content: center;
-  white-space: nowrap;
-}
-
-/* This card's only commit action should read as the primary one. The shared
-   `.settings-btn--primary` fill is overridden later in the settings cascade,
-   so restate it under the classification scope. */
-.settings-section--classification .classification-rule-form__grid .settings-btn--primary {
-  border-color: var(--text);
-  background: var(--text);
-  color: var(--canvas);
-  font-weight: 600;
-}
-
-.settings-section--classification .classification-rule-form__grid .settings-btn--primary:hover:not(:disabled) {
-  border-color: var(--text-muted);
-  background: var(--text-muted);
-  color: var(--canvas);
-}
-
 /* Category and Productivity are different axes but rendered identically, which
    reads as "pick the same thing twice". Productivity is an ordered scale, so it
    gets a bar mark; Category keeps the round swatch. */
@@ -2912,130 +2871,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   margin-left: var(--space-1);
   translate: 0 -0.04rem;
   vertical-align: middle;
-}
-
-.classification-rule-mode-control {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-height: var(--classification-rule-control-height);
-  width: 100%;
-}
-
-.classification-rule-mode-control .settings-mode-option {
-  min-width: 0;
-}
-
-.classification-rule-selected {
-  margin: 0;
-}
-
-.classification-rule-selected--url {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.classification-rule-search {
-  position: relative;
-  z-index: 3;
-}
-
-.classification-rule-search:focus-within {
-  z-index: 24;
-}
-
-.classification-rule-candidates {
-  display: grid;
-  gap: var(--space-1);
-  width: 100%;
-}
-
-.classification-rule-search__popover {
-  position: absolute;
-  top: calc(100% + var(--space-2));
-  right: 0;
-  left: 0;
-  z-index: 25;
-  max-height: min(18rem, calc(100vh - 12rem));
-  padding: var(--space-1);
-  overflow-y: auto;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface-strong) 42%, transparent)),
-    var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.classification-rule-candidates__heading {
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
-}
-
-.classification-rule-candidate {
-  align-items: center;
-  border: 1px solid var(--classification-rule-control-border);
-  border-radius: var(--radius-md);
-  background: var(--classification-rule-control-bg);
-  color: var(--text);
-  display: flex;
-  gap: var(--space-2);
-  justify-content: space-between;
-  min-width: 0;
-  padding: var(--space-1) var(--space-2);
-  text-align: left;
-  width: 100%;
-}
-
-.classification-rule-candidate:hover,
-.classification-rule-candidate.is-selected {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface));
-  transform: none;
-}
-
-.classification-rule-candidate:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
-  outline: 2px solid var(--settings-focus-ring);
-  outline-offset: 2px;
-}
-
-.classification-rule-candidate__identity,
-.classification-rule-candidate__usage,
-.classification-rule-candidate__text {
-  align-items: center;
-  display: flex;
-  min-width: 0;
-}
-
-.classification-rule-candidate__identity {
-  gap: var(--space-2);
-}
-
-.classification-rule-candidate__text,
-.classification-rule-candidate__usage {
-  align-items: flex-start;
-  display: grid;
-  gap: 0.125rem;
-}
-
-.classification-rule-candidate__usage {
-  flex: 0 0 auto;
-  justify-items: end;
-  text-align: right;
-}
-
-.classification-rule-candidate strong {
-  color: var(--text);
-  font-size: var(--type-setting-label-size);
-  font-weight: 650;
-  overflow-wrap: anywhere;
-}
-
-.classification-rule-candidate small,
-.classification-rule-candidate em {
-  color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  font-style: normal;
 }
 
 .classification-rule-saved-block {
@@ -3313,30 +3148,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 .classification-rule-list-shell .classification-rule-hint {
   margin: 0;
   padding: var(--space-3);
-}
-
-@media (max-width: 1100px) {
-  .classification-rule-form__grid,
-  .classification-rule-form__grid--app {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .classification-rule-form__grid,
-  .classification-rule-form__grid--app {
-    align-items: stretch;
-  }
-
-  .classification-rule-form__grid > .classification-rule-field:first-child,
-  .classification-rule-form__grid > .settings-btn {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 720px) {
-  .classification-rule-form__grid,
-  .classification-rule-form__grid--app {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (forced-colors: active) {

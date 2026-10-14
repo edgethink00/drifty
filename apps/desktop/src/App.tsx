@@ -1238,49 +1238,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setLocalAiSetup,
   } = useAiSetupController();
   const {
-    appRuleCategory,
-    appRuleDisplayName,
-    appRuleProductivity,
-    appRuleSearch,
-    appRuleSearchPanelOpen,
-    appRuleSearchRef,
-    appRuleTargetValue,
     classificationRuleApplyResult,
-    classificationRuleCandidates,
-    classificationRuleCandidatesLoading,
     classificationRuleDeletingId,
     classificationRuleMessage,
     classificationRuleSavingKind,
     classificationRules,
     classificationRulesError,
     classificationRulesLoading,
-    domainRuleCandidates,
-    domainRuleCandidatesLoading,
-    domainRuleCategory,
-    domainRuleInput,
-    domainRuleMode,
-    domainRuleProductivity,
-    domainRuleSearchPanelOpen,
-    domainRuleSearchRef,
-    handleAppRuleSearchBlur,
-    handleAppRuleSearchFocus,
     handleDeleteClassificationRule,
-    handleDomainRuleSearchBlur,
-    handleDomainRuleSearchFocus,
-    handleSaveAppRule,
-    handleSaveDomainRule,
-    handleSelectClassificationCandidate,
-    handleSelectDomainRuleCandidate,
     handleToggleClassificationRule,
     loadClassificationRules,
     saveClassificationRule,
-    setAppRuleCategory,
-    setAppRuleProductivity,
-    setDomainRuleCategory,
-    setDomainRuleMode,
-    setDomainRuleProductivity,
-    updateAppRuleSearch,
-    updateDomainRuleInput,
   } = useClassificationRulesController({
     managerOpen: activeTab === "settings" && settingsSection === "memory",
     t: localization.t,
@@ -11530,18 +11498,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                       <ClassificationRulesManager
                         onSaveRule={saveClassificationRule}
                         appIcons={appIcons}
-                        appRuleCategory={appRuleCategory}
-                        appRuleDisplayName={appRuleDisplayName}
-                        appRuleProductivity={appRuleProductivity}
-                        appRuleSearch={appRuleSearch}
-                        appRuleSearchPanelOpen={appRuleSearchPanelOpen}
-                        appRuleSearchRef={appRuleSearchRef}
-                        appRuleTargetValue={appRuleTargetValue}
                         appThemeColorOverrides={appThemeColorOverrides}
                         categoryColorOverrides={categoryColorOverrides}
                         classificationRuleApplyResult={classificationRuleApplyResult}
-                        classificationRuleCandidates={classificationRuleCandidates}
-                        classificationRuleCandidatesLoading={classificationRuleCandidatesLoading}
                         classificationRuleDeletingId={classificationRuleDeletingId}
                         classificationRuleMessage={classificationRuleMessage}
                         classificationRuleSavingKind={classificationRuleSavingKind}
@@ -11549,31 +11508,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                         classificationRules={classificationRules}
                         classificationRulesError={classificationRulesError}
                         classificationRulesLoading={classificationRulesLoading}
-                        domainRuleCandidates={domainRuleCandidates}
-                        domainRuleCandidatesLoading={domainRuleCandidatesLoading}
-                        domainRuleCategory={domainRuleCategory}
-                        domainRuleInput={domainRuleInput}
-                        domainRuleMode={domainRuleMode}
-                        domainRuleProductivity={domainRuleProductivity}
-                        domainRuleSearchPanelOpen={domainRuleSearchPanelOpen}
-                        domainRuleSearchRef={domainRuleSearchRef}
-                        onAppRuleCategoryChange={setAppRuleCategory}
-                        onAppRuleProductivityChange={setAppRuleProductivity}
-                        onAppRuleSearchBlur={handleAppRuleSearchBlur}
-                        onAppRuleSearchChange={updateAppRuleSearch}
-                        onAppRuleSearchFocus={handleAppRuleSearchFocus}
                         onDeleteClassificationRule={(rule) => void handleDeleteClassificationRule(rule)}
-                        onDomainRuleCategoryChange={setDomainRuleCategory}
-                        onDomainRuleInputChange={updateDomainRuleInput}
-                        onDomainRuleModeChange={setDomainRuleMode}
-                        onDomainRuleProductivityChange={setDomainRuleProductivity}
-                        onDomainRuleSearchBlur={handleDomainRuleSearchBlur}
-                        onDomainRuleSearchFocus={handleDomainRuleSearchFocus}
                         onLoadClassificationRules={() => void loadClassificationRules()}
-                        onSaveAppRule={() => void handleSaveAppRule()}
-                        onSaveDomainRule={() => void handleSaveDomainRule()}
-                        onSelectClassificationCandidate={handleSelectClassificationCandidate}
-                        onSelectDomainRuleCandidate={handleSelectDomainRuleCandidate}
                         onToggleClassificationRule={(rule, enabled) => void handleToggleClassificationRule(rule, enabled)}
                       />
                     ) : null}

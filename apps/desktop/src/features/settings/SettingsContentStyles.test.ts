@@ -112,17 +112,6 @@ describe("Settings content styles", () => {
     expect(activeRules.every((rule) => rule.includes("box-shadow: none;"))).toBe(true);
   });
 
-  it("keeps focused classification rule suggestions above adjacent rule fields", () => {
-    const styles = readAppStyles();
-    const searchRule = cssRule(styles, ".classification-rule-search");
-    const focusedSearchRule = cssRule(styles, ".classification-rule-search:focus-within");
-    const popoverRule = cssRule(styles, ".classification-rule-search__popover");
-
-    expect(searchRule).toContain("z-index: 3;");
-    expect(focusedSearchRule).toContain("z-index: 24;");
-    expect(popoverRule).toContain("z-index: 25;");
-  });
-
   it("keeps select option fills balanced while reserving a second column only for in-flow actions", () => {
     const styles = readAppStyles();
     const optionRowRule = cssRule(styles, ".settings-select-control__option-row");
@@ -155,14 +144,11 @@ describe("Settings content styles", () => {
     ]);
   });
 
-  it("keeps exact URL classification rule controls compact and readable", () => {
+  it("keeps exact URL classification rule text readable", () => {
     const styles = readAppStyles();
-    const modeControlRule = cssRule(styles, ".classification-rule-mode-control");
-    const selectedUrlRule = cssRule(styles, ".classification-rule-selected--url");
+    const selectedUrlRule = cssRule(styles, ".classification-rule-composer__note");
     const correctionDetailRule = cssRule(styles, ".classification-correction__match");
 
-    expect(modeControlRule).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
-    expect(modeControlRule).toContain("width: 100%;");
     expect(selectedUrlRule).toContain("overflow-wrap: anywhere;");
     expect(correctionDetailRule).toContain("overflow-wrap: anywhere;");
     expect(correctionDetailRule).toContain("white-space: normal;");

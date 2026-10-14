@@ -204,6 +204,8 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
         onClick={() => void review(rejected[undoHash].kind, rejected[undoHash].pattern.summary, "restore")}>{t("settings.ai.memoryUndo")}</button> : null}
     </div> : null}
     <div className="memory-card">
+      {/* How these are used sits inside the card, like the Suggested disclosure. */}
+      {patterns.length > 0 ? <p className="memory-card__note">{t("settings.ai.memoryCorrectionsHint")}</p> : null}
       {patterns.length === 0 ? <p className="memory-card--empty memory-card__text">{t("settings.ai.memoryNoActive")}</p> : <div className="memory-list">
         {primary.map(renderRow)}
         {extra.length > 0 ? <div className="memory-more" data-open={showAll}>

@@ -276,7 +276,6 @@ export function AiSetupSupportSections({
             ) : null}
           </div>
         </div>
-        <p className="memory-section__desc">{t("settings.ai.memoryCorrectionsHint")}</p>
         {memory.status === "loading" ? (
           <div className="memory-card memory-card--empty">
             <p className="memory-card__text">{t("settings.ai.memoryLoading")}</p>

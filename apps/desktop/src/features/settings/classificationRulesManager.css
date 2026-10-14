@@ -1,37 +1,12 @@
 /* Reuse the Settings page, section, group and control styles. */
-.classification-rules-manager__add > summary {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  cursor: pointer;
-  padding: 0.72rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--settings-row-card-bg);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: var(--type-setting-label-size);
-  list-style: none;
-}
-.classification-rules-manager__add > summary::-webkit-details-marker { display: none; }
-.classification-rules-manager__add > summary::before {
-  content: "";
-  width: 0.4rem;
-  height: 0.4rem;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-}
-.classification-rules-manager__add[open] > summary { margin-bottom: var(--space-3); }
-.classification-rules-manager__add[open] > summary::before { transform: rotate(45deg); }
-.classification-rules-manager__add > summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
-}
 .classification-rules-manager .classification-rule-list-head {
   align-items: center;
 }
 .classification-rule-list-intro { display: grid; gap: var(--space-2); }
+/* Empty list: one short line on how to add, left-aligned like the rows it stands in for. */
+.classification-rule-empty { display: grid; gap: 0.2rem; padding: var(--space-3) var(--space-4); }
+.classification-rule-empty__title { margin: 0; color: var(--text); font-family: var(--font-ui); font-size: var(--type-setting-label-size); font-weight: 560; }
+.classification-rule-empty__text { margin: 0; color: var(--text-soft); font-family: var(--font-ui); font-size: var(--type-setting-desc-size); line-height: 1.5; word-break: keep-all; }
 .classification-rules-manager__intro,
 .classification-rules-manager__help {
   margin: 0;

@@ -40,6 +40,10 @@ type ClassificationSavedRulesListProps = {
   readonly onDeleteClassificationRule: (rule: ClassificationRule) => void;
   readonly onLoadClassificationRules: () => void;
   readonly onToggleClassificationRule: (rule: ClassificationRule, enabled: boolean) => void;
+  /** The add row or open add form, last in the card like a list's "add item" line. */
+  readonly addControl?: ReactNode;
+  /** A just-saved rule scrolls into view and briefly stands out. */
+  readonly highlightRuleId?: string | null;
 };
 
 export function ClassificationSavedRulesList({
@@ -57,6 +61,8 @@ export function ClassificationSavedRulesList({
   onDeleteClassificationRule,
   onLoadClassificationRules,
   onToggleClassificationRule,
+  addControl = null,
+  highlightRuleId = null,
 }: ClassificationSavedRulesListProps) {
   const { t } = useLocalization();
   const [search, setSearch] = useState("");
@@ -64,33 +70,40 @@ export function ClassificationSavedRulesList({
   const helpId = useId();
   const query = search.trim().toLocaleLowerCase();
   const visibleRules = classificationRules.filter((rule) => !query || classificationRuleSearchText(rule, classificationRuleSegments, t).includes(query));
+  const countLabel = !hasError && !classificationRulesLoading && (classificationRules.length > 0 || query)
+    ? t(query ? "classification.rules.count" : "classification.rules.totalCount", { count: visibleRules.length, total: classificationRules.length })
+    : null;
   return (
     <div className="settings-block classification-rule-saved-block">
+      {/* Heading left, count right, like Memory's other sections. The h3 stays a
+          direct child: settings blocks style their rows as cards through it. */}
       <h3 id="classification-saved-rules-heading">{t("classification.rules.title")}</h3>
-      {/* Like Memory's other sections, one line under the heading says how these are used. */}
-      <div className="classification-rule-list-intro">
-        <p className="classification-rules-manager__intro">
-          {t("classification.rules.description")}{" "}
-          <button type="button" className="classification-rules-manager__help-toggle" aria-expanded={helpOpen} aria-controls={helpId} onClick={() => setHelpOpen((open) => !open)}>{t("classification.rules.help")}</button>
-        </p>
-        <p id={helpId} className="classification-rules-manager__help" hidden={!helpOpen}>{t("settings.classification.savedRulesDescription")}</p>
-      </div>
+      {/* The empty state already says there are none; "0 classifications" beside it only repeats that. */}
+      <span className="classification-rule-list-count classification-rule-saved-count" role="status">{countLabel}</span>
       {feedback}
       <section className="settings-row settings-row--group-start settings-row--group-end classification-rule-list-section" aria-labelledby="classification-saved-rules-heading">
-        <div className="classification-rule-list-head">
-          {/* The empty state already says there are none; "0 classifications" above it only repeats that. */}
-          <span className="classification-rule-list-count" role="status">{!hasError && !classificationRulesLoading && (classificationRules.length > 0 || query) ? t(query ? "classification.rules.count" : "classification.rules.totalCount", { count: visibleRules.length, total: classificationRules.length }) : null}</span>
-          <div className="classification-rule-list-tools">
-            {classificationRules.length > 8 || search ? <input type="search" className="settings-input" aria-label={t("classification.rules.search")} placeholder={t("classification.rules.search")} value={search} onChange={(event) => setSearch(event.target.value)} /> : null}
-            {hasError ? <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>{t("common.retry")}</button> : null}
-          </div>
+        {/* The one line on how these apply sits inside the card it describes. */}
+        <div className="classification-rule-list-intro">
+          <p className="classification-rules-manager__intro">
+            {t("classification.rules.description")}{" "}
+            <button type="button" className="classification-rules-manager__help-toggle" aria-expanded={helpOpen} aria-controls={helpId} onClick={() => setHelpOpen((open) => !open)}>{t("classification.rules.help")}</button>
+          </p>
+          <p id={helpId} className="classification-rules-manager__help" hidden={!helpOpen}>{t("settings.classification.savedRulesDescription")}</p>
         </div>
+        {classificationRules.length > 8 || search || hasError ? (
+          <div className="classification-rule-list-head">
+            <div className="classification-rule-list-tools">
+              {classificationRules.length > 8 || search ? <input type="search" className="settings-input" aria-label={t("classification.rules.search")} placeholder={t("classification.rules.search")} value={search} onChange={(event) => setSearch(event.target.value)} /> : null}
+              {hasError ? <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>{t("common.retry")}</button> : null}
+            </div>
+          </div>
+        ) : null}
         {(!hasError || visibleRules.length > 0 || classificationRulesLoading) ? <div className="classification-rule-list-shell">
           {classificationRulesLoading ? <p className="classification-rule-hint">{t("settings.classification.loadingRules")}</p> : null}
           {!hasError && !classificationRulesLoading && classificationRules.length === 0 ? (
-            <div className="empty-state classification-rule-empty">
-              <strong>{t("settings.classification.noCustomRules")}</strong>
-              <p>{t("settings.classification.noRulesDescription")}</p>
+            <div className="classification-rule-empty">
+              <p className="classification-rule-empty__title">{t("settings.classification.noCustomRules")}</p>
+              <p className="classification-rule-empty__text">{t("classification.rules.emptyHint")}</p>
             </div>
           ) : null}
           {query && visibleRules.length === 0 && classificationRules.length > 0 ? <p className="classification-rule-hint" role="status">{t("classification.rules.noSearchResults")}</p> : null}
@@ -107,6 +120,7 @@ export function ClassificationSavedRulesList({
                   classificationRuleDeletingId={classificationRuleDeletingId}
                   classificationRuleSegments={classificationRuleSegments}
                   rule={rule}
+                  highlighted={rule.id === highlightRuleId}
                   t={t}
                   onDeleteClassificationRule={onDeleteClassificationRule}
                   onToggleClassificationRule={onToggleClassificationRule}
@@ -115,6 +129,7 @@ export function ClassificationSavedRulesList({
             </div>
           ) : null}
         </div> : null}
+        {addControl}
       </section>
     </div>
   );
@@ -130,6 +145,7 @@ type ClassificationSavedRuleCardProps = {
   readonly classificationRuleDeletingId: string | null;
   readonly classificationRuleSegments: readonly ActivitySegment[];
   readonly rule: ClassificationRule;
+  readonly highlighted: boolean;
   readonly t: LocalizationController["t"];
   readonly onDeleteClassificationRule: (rule: ClassificationRule) => void;
   readonly onToggleClassificationRule: (rule: ClassificationRule, enabled: boolean) => void;
@@ -144,6 +160,7 @@ function ClassificationSavedRuleCard({
   classificationRuleDeletingId,
   classificationRuleSegments,
   rule,
+  highlighted,
   t,
   onDeleteClassificationRule,
   onToggleClassificationRule,
@@ -155,6 +172,7 @@ function ClassificationSavedRuleCard({
   const [productivity, setProductivity] = useState(rule.productivity);
   const menuSlot = useRef<HTMLSpanElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
+  const cardRef = useRef<HTMLElement>(null);
   const busy = saving || classificationRuleDeletingId !== null;
   const presentation = classificationRulePresentation(rule, classificationRuleSegments, t);
   const metadataLabel = [localizedCategoryLabel(rule.category, t), localizedProductivityLabel(rule.productivity, t), presentation.scopeLabel].join(" · ");
@@ -179,6 +197,10 @@ function ClassificationSavedRuleCard({
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (highlighted) cardRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [highlighted]);
+
   // The chosen item disappears with its menu, so focus returns to the persistent trigger.
   const closeMenuToTrigger = () => {
     menuTrigger.current?.focus({ preventScroll: true });
@@ -186,7 +208,7 @@ function ClassificationSavedRuleCard({
   };
 
   return (
-    <article className={`classification-rule-card${rule.enabled ? "" : " is-disabled"}`} aria-label={t("settings.classification.ruleCardAria", { type: presentation.scopeLabel, value: presentation.fullLabel })}>
+    <article ref={cardRef} className={`classification-rule-card${rule.enabled ? "" : " is-disabled"}${highlighted ? " is-new" : ""}`} aria-label={t("settings.classification.ruleCardAria", { type: presentation.scopeLabel, value: presentation.fullLabel })}>
       <div className="classification-rule-card__main">
         <span className="classification-rule-card__icon">
           {rule.targetKind === "site" ? <SiteFavicon domain={rule.targetValue} size={20} /> : <AppGlyph appName={presentation.name} iconSrc={classificationRuleAppIconSrc(rule, appIcons)} size="sm" />}

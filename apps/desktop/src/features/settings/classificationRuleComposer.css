@@ -1,0 +1,168 @@
+/* My classifications ends with an "add" line, like a list's last row. It opens
+   one form that searches recorded apps and sites together (most used first)
+   and accepts a typed address, then asks for the category and focus. */
+.classification-rule-add { min-width: 0; }
+
+/* No rule above it: the list box already ends there. The row lines its "+" and
+   label up with the rows' icon and name columns, and fills on hover so it reads
+   as a button on the card's gray surface. */
+.classification-rule-add__row {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem 0.55rem calc(var(--space-3) + 1px);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-label-size);
+  font-weight: 540;
+  text-align: left;
+  cursor: pointer;
+}
+.classification-rule-add__icon { display: grid; place-items: center; line-height: 0; }
+.classification-rule-add__icon svg { width: 0.95rem; height: 0.95rem; }
+.classification-rule-add__row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.classification-rule-add__row:focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: -2px; }
+
+.classification-rule-composer {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  scroll-margin: var(--space-6, 2rem);
+}
+
+.classification-rule-composer__search { position: relative; display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.classification-rule-composer__search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.75rem;
+  width: 16px;
+  height: 16px;
+  color: var(--text-soft);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.content--settings .classification-rule-composer__search .settings-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: calc(var(--settings-control-height) * 1.15);
+  padding-left: 2.2rem;
+  font-family: var(--font-ui);
+}
+.content--settings .classification-rule-composer .settings-btn {
+  width: auto;
+  min-width: 5rem;
+  height: calc(var(--settings-control-height) * 1.15);
+  min-height: calc(var(--settings-control-height) * 1.15);
+  padding-inline: var(--space-3);
+}
+/* The form's only commit action reads as primary; the shared fill is overridden later in the settings cascade. */
+.settings-section--classification .classification-rule-composer .settings-btn--primary {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--canvas);
+  font-weight: 600;
+}
+.settings-section--classification .classification-rule-composer .settings-btn--primary:hover:not(:disabled) { border-color: var(--text-muted); background: var(--text-muted); color: var(--canvas); }
+
+.classification-rule-composer__options {
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.classification-rule-composer__option {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto 3.6rem;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.classification-rule-composer__option:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.classification-rule-composer__option:focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: -2px; }
+.classification-rule-composer__option:disabled { cursor: default; opacity: 0.5; }
+
+.classification-rule-composer__icon { display: inline-grid; place-items: center; width: 22px; height: 22px; line-height: 0; }
+.classification-rule-composer__icon :is(.app-glyph, .app-icon) { width: 20px; min-width: 20px; height: 20px; border-radius: var(--radius-sm); }
+.classification-rule-composer__icon .site-favicon { border-radius: var(--radius-sm); }
+.classification-rule-composer__name { min-width: 0; overflow: hidden; color: var(--text); font-size: var(--type-setting-label-size); text-overflow: ellipsis; white-space: nowrap; }
+.classification-rule-composer__kind {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  white-space: nowrap;
+}
+.classification-rule-composer__usage { color: var(--text-soft); font-size: var(--type-caption-size); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.classification-rule-composer__hint { margin: 0; padding: 8px 10px; color: var(--text-soft); font-size: var(--type-setting-desc-size); line-height: 1.5; word-break: keep-all; }
+
+.classification-rule-composer__target { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.classification-rule-composer__target .classification-rule-composer__name { font-weight: 600; }
+.classification-rule-composer__change {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-desc-size);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-soft) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.classification-rule-composer__change:hover:not(:disabled) { color: var(--text); }
+.classification-rule-composer__fields { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); min-width: 0; }
+/* Two short options side by side at the pickers' height, never wrapping. */
+.content--settings .classification-rule-composer__scope .settings-mode-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, max-content);
+  width: max-content;
+  height: var(--classification-rule-control-height);
+  padding: var(--space-1);
+}
+.content--settings .classification-rule-composer__scope .settings-mode-option { min-width: 0; min-height: 0; padding-inline: var(--space-3); }
+.classification-rule-composer__scope .settings-mode-option span { color: inherit; white-space: nowrap; }
+.classification-rule-composer__actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.classification-rule-composer__note {
+  margin: 0;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.classification-rule-composer__note--warn { color: var(--warn); }
+
+@media (max-width: 560px) {
+  .classification-rule-composer__option { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .classification-rule-composer__usage { display: none; }
+  .classification-rule-composer__actions { margin-left: 0; }
+}
+
+/* A rule saved from the add form briefly stands out where it lands. */
+.classification-rule-card.is-new { animation: classification-rule-new 2.6s ease-out; }
+@keyframes classification-rule-new {
+  0%, 35% { background-color: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
+  100% { background-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .classification-rule-card.is-new { animation: none; background-color: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+}

@@ -15,8 +15,8 @@
 @import "./styles/companion-pill.css";
 @import "./styles/visual-parity.css";
 @import "./styles/trends.css";
-@import "./features/settings/classificationRuleLayout.css";
 @import "./features/settings/classificationRulesManager.css";
+@import "./features/settings/classificationRuleComposer.css";
 @import "./styles/help-trigger.css";
 /* Shared badge primitive: feature CSS may set tone/size, not the base recipe. */
 @import "./styles/ui-badge.css";
