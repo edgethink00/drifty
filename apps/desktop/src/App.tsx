@@ -2229,6 +2229,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     void refresh(undefined, { foreground: false });
   };
   useEffect(() => {
+    // Restoring saved auth is not sign-out. Keep received history and cursors
+    // until the account resolves; deviceSyncActive is already false while loading.
+    if (authStatus === "loading") return;
     const identityGeneration = deviceSyncToggleGenerationRef.current + 1;
     deviceSyncToggleGenerationRef.current = identityGeneration;
     retireLegacyDeviceSyncEnabledPreference();
@@ -2271,7 +2274,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         if (isCurrent()) setDeviceSyncPreferenceOwnerId(null);
       }
     })();
-  }, [deviceSyncAccountId]);
+  }, [authStatus, deviceSyncAccountId]);
   const handleRemoteSegmentsApplied = useCallback(() => {
     deviceSyncRefreshRef.current?.();
   }, []);
