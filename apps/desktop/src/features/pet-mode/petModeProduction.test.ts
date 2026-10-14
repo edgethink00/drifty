@@ -183,8 +183,11 @@ describe("pet quick-controls material", () => {
   it("keeps the native material appearance aligned with the app theme", () => {
     expect(petQuickControlsRustContract).toContain("fn sync_pet_quick_controls_theme");
     expect(petQuickControlsRustContract).toContain('state.theme == "dark"');
-    expect(petQuickControlsRustContract).toContain("Theme::Dark");
-    expect(petQuickControlsRustContract).toContain("Theme::Light");
+    expect(petQuickControlsRustContract).toContain("native_theme_choice(dark, follow_system)");
+    expect(petQuickControlsRustContract).toContain("state.follow_system");
+    // The shared choice is exercised for both explicit palettes and System in
+    // window_chrome's Rust tests; the pet must use it rather than repin the app.
+    expect(petQuickControlsRustContract).toContain("window.set_theme(theme)");
   });
 });
 

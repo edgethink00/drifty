@@ -29,7 +29,7 @@ export interface MainWindowMaterialStatus {
  * as a flat opaque panel instead of glass. Windows also returns the material it
  * successfully activated so CSS never exposes a transparent fallback window.
  */
-export async function setMainWindowThemeAppearance(dark: boolean, windowsBlurPreviewEnabled = false): Promise<MainWindowMaterialStatus | null> {
+export async function setMainWindowThemeAppearance(dark: boolean, windowsBlurPreviewEnabled = false, followSystem = false): Promise<MainWindowMaterialStatus | null> {
   if (!isTauriRuntime()) return null;
-  return invoke<MainWindowMaterialStatus>("window_set_theme_appearance", { dark, windowsBlurPreviewEnabled });
+  return invoke<MainWindowMaterialStatus>("window_set_theme_appearance", { dark, windowsBlurPreviewEnabled, followSystem });
 }

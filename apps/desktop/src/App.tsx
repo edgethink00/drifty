@@ -1,3 +1,4 @@
+import { useAppTheme } from "./features/settings/useAppTheme";
 import type { DeleteHistoryRangeResult } from "@drifty/domain";
 import { setShareCardRankAccountScope } from "./features/share/shareCardRankCache";
 import { canOfferPromoCode, canStartCloudTrial } from "./features/billing/billingEligibility";
@@ -462,9 +463,9 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
-import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
+import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek } from "./features/settings/settingsStorage";
 import { useLeaderboardSeriesPrewarm } from "./features/leaderboard/useLeaderboardSeriesPrewarm";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
@@ -690,11 +691,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const isDeferredTabBodyReady = useDeferredTabBodyReady(activeTab);
   const canNavigateBack = navigationHistory.index > 0;
   const canNavigateForward = navigationHistory.index < navigationHistory.entries.length - 1;
-  const [theme, setTheme] = useState<ThemeMode>(resolveInitialTheme);
-  const [darkPalettePreview, setDarkPalettePreview] = useState(resolveInitialDarkPalettePreview);
+  const { theme, themePreference, setThemePreference } = useAppTheme();
   const toggleTheme = useCallback(() => {
-    setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
-  }, []);
+    setThemePreference(theme === "dark" ? "light" : "dark");
+  }, [theme, setThemePreference]);
+  const [darkPalettePreview, setDarkPalettePreview] = useState(resolveInitialDarkPalettePreview);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(resolveInitialSidebarCollapsed);
   const [selectedDay, setSelectedDay] = useState(() => logicalTodayIsoDate(resolveInitialStartOfDayMinutes()));
   const [status, setStatus] = useState<TrackerStatus | null>(null);
@@ -5077,7 +5078,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
     let disposed = false;
     // The window chrome has to follow the app theme. Windows stays on its
     // opaque boot shell until Rust confirms both transparency and its theme.
@@ -5096,7 +5096,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     let appearanceRequest = 0;
     const applyAppearance = () => {
       const request = ++appearanceRequest;
-      void setMainWindowThemeAppearance(theme === "dark", hostPlatform === "windows" && windowsBlurEnabled).then((materialStatus) => {
+      void setMainWindowThemeAppearance(theme === "dark", hostPlatform === "windows" && windowsBlurEnabled, themePreference === "system").then((materialStatus) => {
         if (disposed || request !== appearanceRequest || hostPlatform !== "windows") return;
         const root = document.documentElement;
         const nativeBlurActive = root.dataset.windowsNativeBlur === "active";
@@ -5120,7 +5120,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       window.removeEventListener("drifty-windows-blur-system-change", applyAppearance);
       window.removeEventListener("drifty-windows-appearance-ready", applyAppearance);
     };
-  }, [hostPlatform, theme, windowsBlurEnabled]);
+  }, [hostPlatform, theme, themePreference, windowsBlurEnabled]);
 
   const handleWindowsBlurEnabledChange = useCallback((enabled: boolean) => {
     // Disabled blur must never expose an unblurred transparent frame while IPC catches up.
@@ -7816,8 +7816,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       } : null,
       language: localization.effectiveLanguage,
       theme,
+      followSystem: themePreference === "system",
     }).catch(() => undefined);
-  }, [activeAutomaticCloseOverride, automaticCloseEnabled, automaticCloseSavedEnabled, localization.effectiveLanguage, petModeActive, theme]);
+  }, [activeAutomaticCloseOverride, automaticCloseEnabled, automaticCloseSavedEnabled, localization.effectiveLanguage, petModeActive, theme, themePreference]);
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
@@ -10687,6 +10688,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       {hostPlatform === "windows" ? (
         <WindowsTitlebar
           leading={(
+            <>
             <div className={windowsTitlebarNavClassName} role="group" aria-label={localization.t("shell.windowNavigation")}>
               {!isSettingsTab ? (
                 <WindowSidebarToggle
@@ -10704,6 +10706,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 </button>
               </span>
             </div>
+            <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
+            </>
           )}
           trailing={(
             <>
@@ -11481,12 +11485,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onWindowsBlurEnabledChange={handleWindowsBlurEnabledChange}
                     appThemeColorOverrides={appThemeColorOverrides}
                     categoryColorOverrides={categoryColorOverrides}
-                    theme={theme}
+                    theme={themePreference}
                     onAppThemeColorChange={handleAppThemeColorChange}
                     onAppThemeColorReset={handleAppThemeColorReset}
                     onCategoryColorChange={handleCategoryColorChange}
                     onCategoryColorReset={handleCategoryColorReset}
-                    onThemeChange={setTheme}
+                    onThemeChange={setThemePreference}
                   />
                 )}
                 {settingsSection === "aiSetup" && (

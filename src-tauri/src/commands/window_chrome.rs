@@ -831,6 +831,7 @@ pub fn window_set_theme_appearance(
     material_state: State<'_, MainWindowMaterialState>,
     dark: bool,
     windows_blur_preview_enabled: bool,
+    follow_system: Option<bool>,
 ) -> Result<MainWindowMaterialStatus, String> {
     #[cfg(target_os = "windows")]
     {
@@ -902,7 +903,7 @@ pub fn window_set_theme_appearance(
             return;
         };
         // Appearance is cosmetic; a failure must not take down theming.
-        let _ = window.set_theme(Some(if dark { Theme::Dark } else { Theme::Light }));
+        let _ = window.set_theme(native_theme_choice(dark, follow_system.unwrap_or(false)));
     })
     .map_err(|error| error.to_string())?;
     #[cfg(target_os = "windows")]
@@ -923,6 +924,14 @@ pub fn window_set_theme_appearance(
     }
     #[cfg(not(target_os = "windows"))]
     Ok(material_state.read())
+}
+
+pub(super) fn native_theme_choice(dark: bool, follow_system: bool) -> Option<Theme> {
+    if follow_system {
+        None
+    } else {
+        Some(if dark { Theme::Dark } else { Theme::Light })
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -981,6 +990,20 @@ pub fn window_show_system_menu(app: AppHandle) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_theme_choice_preserves_system_following_and_explicit_palettes() {
+        assert_eq!(super::native_theme_choice(false, true), None);
+        assert_eq!(super::native_theme_choice(true, true), None);
+        assert_eq!(
+            super::native_theme_choice(false, false),
+            Some(tauri::Theme::Light)
+        );
+        assert_eq!(
+            super::native_theme_choice(true, false),
+            Some(tauri::Theme::Dark)
+        );
+    }
+
     use super::*;
 
     #[test]

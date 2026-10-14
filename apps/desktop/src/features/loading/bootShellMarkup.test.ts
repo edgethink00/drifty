@@ -1,8 +1,27 @@
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 
 describe("boot shell markup", () => {
   const indexSource = readFileSync("index.html", "utf8");
+
+  it("resolves System before first paint while preserving saved Light/Dark", () => {
+    const script = indexSource.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    expect(script).toBeTruthy();
+    for (const saved of [null, "system", "light", "dark"]) {
+      for (const systemDark of [false, true]) {
+        const root = { dataset: {} as Record<string, string>, style: {} as Record<string, string> };
+        runInNewContext(script!, {
+          document: { documentElement: root },
+          window: { localStorage: { getItem: () => saved }, location: { search: "" }, matchMedia: () => ({ matches: systemDark }) },
+          navigator: { platform: "MacIntel", userAgent: "" }, URLSearchParams,
+        });
+        const expected = saved === "light" || saved === "dark" ? saved : systemDark ? "dark" : "light";
+        expect(root.dataset.theme).toBe(expected);
+        expect(root.style.colorScheme).toBe(expected);
+      }
+    }
+  });
 
   it("renders the Drifty symbol with accessible and delayed visible loading copy", () => {
     const shellStart = indexSource.indexOf('<div id="boot-shell"');

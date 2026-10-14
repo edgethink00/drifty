@@ -79,6 +79,8 @@ pub struct PetQuickControlsState {
     pub automatic_close_override: Option<PetQuickControlsAutomaticCloseOverride>,
     pub language: String,
     pub theme: String,
+    #[serde(default)]
+    pub follow_system: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -484,20 +486,26 @@ fn apply_pet_quick_controls_material(window: &WebviewWindow) {
 }
 
 #[cfg(target_os = "macos")]
-fn sync_pet_quick_controls_theme(app: &AppHandle, window: &WebviewWindow, dark: bool) {
+fn sync_pet_quick_controls_theme(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    dark: bool,
+    follow_system: bool,
+) {
     use objc2::MainThreadMarker;
-    use tauri::Theme;
-
-    let theme = Some(if dark { Theme::Dark } else { Theme::Light });
+    let theme = super::window_chrome::native_theme_choice(dark, follow_system);
     if MainThreadMarker::new().is_some() {
         let _ = window.set_theme(theme);
         return;
     }
 
     let window = window.clone();
-    if let Err(error) = app.run_on_main_thread(crate::panic_guard::contained("pet_quick_controls::sync_pet_quick_controls_theme", move || {
-        let _ = window.set_theme(theme);
-    })) {
+    if let Err(error) = app.run_on_main_thread(crate::panic_guard::contained(
+        "pet_quick_controls::sync_pet_quick_controls_theme",
+        move || {
+            let _ = window.set_theme(theme);
+        },
+    )) {
         // Appearance is cosmetic and the CSS theme remains authoritative for
         // text and tint even if AppKit cannot update this frame.
         eprintln!("[pet-quick-controls] native theme sync unavailable: {error}");
@@ -699,8 +707,12 @@ fn sync_pet_quick_controls_state(
         return Ok(());
     };
     #[cfg(target_os = "macos")]
-    if previous_state.as_ref().map(|previous| &previous.theme) != Some(&state.theme) {
-        sync_pet_quick_controls_theme(&app, &window, state.theme == "dark");
+    if previous_state
+        .as_ref()
+        .map(|previous| (&previous.theme, previous.follow_system))
+        != Some((&state.theme, state.follow_system))
+    {
+        sync_pet_quick_controls_theme(&app, &window, state.theme == "dark", state.follow_system);
     }
     let controls_width = prepare_pet_quick_controls_size(&window, &state)?;
     // Settings changed elsewhere may require a wider resting toolbar. Own
@@ -819,9 +831,12 @@ fn macos_cursor_inside_window(app: &AppHandle, window: &WebviewWindow) -> Result
 
     let window_for_main = window.clone();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    app.run_on_main_thread(crate::panic_guard::contained("pet_quick_controls::macos_cursor_inside_window", move || {
-        let _ = sender.send(macos_cursor_inside_window_on_main_thread(&window_for_main));
-    }))
+    app.run_on_main_thread(crate::panic_guard::contained(
+        "pet_quick_controls::macos_cursor_inside_window",
+        move || {
+            let _ = sender.send(macos_cursor_inside_window_on_main_thread(&window_for_main));
+        },
+    ))
     .map_err(|error| error.to_string())?;
     receiver
         .recv_timeout(std::time::Duration::from_millis(250))
@@ -1021,6 +1036,7 @@ mod tests {
             automatic_close_override: override_state,
             language: language.to_string(),
             theme: "light".to_string(),
+            follow_system: false,
         }
     }
 
@@ -1089,6 +1105,7 @@ mod tests {
             }),
             language: "ko".to_string(),
             theme: "dark".to_string(),
+            follow_system: false,
         };
 
         assert_eq!(
@@ -1103,6 +1120,7 @@ mod tests {
                 },
                 "language": "ko",
                 "theme": "dark",
+                "followSystem": false,
             })
         );
     }
@@ -1115,6 +1133,7 @@ mod tests {
             automatic_close_override: None,
             language: "en".to_string(),
             theme: "light".to_string(),
+            follow_system: false,
         };
         let unsupported_language = PetQuickControlsState {
             language: "ja".to_string(),

@@ -1,3 +1,4 @@
+import { useAppTheme } from "../settings/useAppTheme";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
@@ -61,8 +62,6 @@ import {
   type NativeCompanionTransitionEvent,
 } from "./watcherBridge";
 
-const COMPANION_THEME_STORAGE_KEY = "drifty.theme";
-const COMPANION_DEFAULT_THEME = "light";
 const COMPANION_MOMENT_QUEUE_GAP_MS = 700;
 
 function containsFreshEndOfDayReview(events: readonly CompanionPillMomentEvent[]): boolean {
@@ -70,6 +69,9 @@ function containsFreshEndOfDayReview(events: readonly CompanionPillMomentEvent[]
 }
 
 export function CompanionWindowApp() {
+  const previewTheme = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("driftyCompanionTheme") : null;
+  useAppTheme(previewTheme === "light" || previewTheme === "dark" ? previewTheme : undefined);
+
   const { t } = useLocalization();
   const [peekEvent, setPeekEvent] = useState<WatcherPeekEvent | null>(null);
   const [momentEvent, setMomentEvent] = useState<CompanionPillMomentEvent | null>(resolveDevelopmentPreviewMoment);
@@ -291,18 +293,7 @@ export function CompanionWindowApp() {
   }, [momentEvent]);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem(COMPANION_THEME_STORAGE_KEY);
-    const previewTheme = import.meta.env.DEV
-      ? new URLSearchParams(window.location.search).get("driftyCompanionTheme")
-      : null;
-    const theme = previewTheme === "light" || previewTheme === "dark"
-      ? previewTheme
-      : savedTheme === "light" || savedTheme === "dark"
-        ? savedTheme
-        : COMPANION_DEFAULT_THEME;
     document.documentElement.dataset.surface = "companion";
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
     return () => {
       delete document.documentElement.dataset.surface;
     };

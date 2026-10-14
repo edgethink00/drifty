@@ -7,15 +7,14 @@
     <title>Drifty</title>
     <script>
       (() => {
-        const defaultTheme = "dark";
-
         window.__DRIFTY_RESOLVE_BOOT_THEME__ = () => {
           try {
             const savedTheme = window.localStorage.getItem("drifty.theme");
             if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
           } catch (_error) {}
 
-          return defaultTheme;
+          return typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark" : "light";
         };
 
         window.__DRIFTY_RESOLVE_BOOT_SURFACE__ = () => {

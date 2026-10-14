@@ -772,6 +772,7 @@ export type PetQuickControlsStatePayload = {
   readonly automaticCloseOverride: PetQuickControlsAutomaticCloseOverridePayload | null;
   readonly language: "en" | "ko";
   readonly theme: "light" | "dark";
+  readonly followSystem?: boolean;
 };
 
 function isPetQuickControlsAutomaticCloseOverridePayload(
@@ -797,7 +798,8 @@ function isPetQuickControlsStatePayload(value: unknown): value is PetQuickContro
     && (payload.automaticCloseOverride === null
       || isPetQuickControlsAutomaticCloseOverridePayload(payload.automaticCloseOverride))
     && (payload.language === "en" || payload.language === "ko")
-    && (payload.theme === "light" || payload.theme === "dark");
+    && (payload.theme === "light" || payload.theme === "dark")
+    && (payload.followSystem === undefined || typeof payload.followSystem === "boolean");
 }
 
 function isPetQuickControlsAction(value: unknown): value is PetQuickControlsAction {

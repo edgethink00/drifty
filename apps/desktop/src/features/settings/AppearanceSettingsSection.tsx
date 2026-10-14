@@ -3,7 +3,7 @@ import { AppIconSettingsRow } from "./AppIconSettingsRow";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import type { ActivityCategory } from "@drifty/domain";
 import { AccentColorControl, CategoryColorControls, ProductivityColorControls, type AppThemeColorKey } from "./SettingsColorControls";
-import type { AppThemeColorOverrides, CategoryColorOverrides, ThemeMode } from "./settingsStorage";
+import type { AppThemeColorOverrides, CategoryColorOverrides, ThemePreference } from "./settingsStorage";
 import {
   APP_THEME_ACCENT_COLOR_OPTIONS,
   APP_THEME_PRODUCTIVITY_COLOR_OPTIONS,
@@ -15,7 +15,7 @@ import { SettingsSelect } from "./SettingsSelect";
 type AppearanceSettingsSectionProps = {
   readonly appThemeColorOverrides: AppThemeColorOverrides;
   readonly categoryColorOverrides: CategoryColorOverrides;
-  readonly theme: ThemeMode;
+  readonly theme: ThemePreference;
   readonly hostPlatform: HostPlatform;
   readonly windowsBlurEnabled: boolean;
   readonly onWindowsBlurEnabledChange: (enabled: boolean) => void;
@@ -23,7 +23,7 @@ type AppearanceSettingsSectionProps = {
   readonly onAppThemeColorReset: (key: AppThemeColorKey) => void;
   readonly onCategoryColorChange: (key: ActivityCategory, value: string) => void;
   readonly onCategoryColorReset: (key: ActivityCategory) => void;
-  readonly onThemeChange: (theme: ThemeMode) => void;
+  readonly onThemeChange: (theme: ThemePreference) => void;
 };
 
 /**
@@ -53,6 +53,7 @@ export function AppearanceSettingsSection({
           ariaLabel={t("settings.appearance.theme")}
           value={theme}
           options={[
+            { value: "system", label: t("settings.appearance.system") },
             { value: "light", label: t("settings.appearance.light") },
             { value: "dark", label: t("settings.appearance.dark") },
           ]}

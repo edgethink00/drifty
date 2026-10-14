@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { THEME_STORAGE_KEY, resolveInitialTheme } from "../settings/settingsStorage";
+import { THEME_STORAGE_KEY } from "../settings/settingsStorage";
+import { useAppTheme } from "../settings/useAppTheme";
 import { DISPLAY_LANGUAGE_STORAGE_KEY, LEGACY_DISPLAY_LANGUAGE_STORAGE_KEY, resolveInitialDisplayLanguage, type DisplayLanguage } from "../localization/languagePreference";
 import { EXTREME_NUDGE_STORAGE_KEY } from "../companion/extremeNudgeData";
 import { DRIFT_ALERTS_STORAGE_KEY } from "../companion/driftAlarmData";
@@ -55,7 +56,7 @@ function activeOverride(
 export function PetModeQuickControlsWindowApp() {
   const [language, setLanguage] = useState<DisplayLanguage>(resolveInitialDisplayLanguage);
   const [presenceMode] = usePetPresenceMode();
-  const [theme, setTheme] = useState(resolveInitialTheme);
+  const { theme, syncNativeTheme } = useAppTheme();
   const [automaticCloseSavedEnabled, setAutomaticCloseSavedEnabled] = useState(resolveAutomaticCloseEnabled);
   const [automaticCloseOverride, setAutomaticCloseOverride] = useState<PetQuickControlsAutomaticCloseOverridePayload | null>(
     resolveInitialAutomaticCloseOverride,
@@ -151,7 +152,6 @@ export function PetModeQuickControlsWindowApp() {
       const savedEnabled = resolveAutomaticCloseEnabled();
       const override = resolveInitialAutomaticCloseOverride();
       setLanguage(nextLanguage);
-      setTheme(resolveInitialTheme());
       setAutomaticCloseSavedEnabled(savedEnabled);
       setAutomaticCloseOverride(override);
       setAutomaticCloseEnabled(resolveEffectiveAutomaticCloseEnabled(savedEnabled, override));
@@ -178,7 +178,7 @@ export function PetModeQuickControlsWindowApp() {
       setAutomaticCloseSavedEnabled(state.automaticCloseSavedEnabled);
       setAutomaticCloseOverride(nextOverride);
       setLanguage(state.language);
-      setTheme(state.theme);
+      syncNativeTheme(state.theme, state.followSystem);
       applyPausedAcknowledgement(nextOverride);
     }).then((nextUnlisten) => {
       if (disposed) nextUnlisten?.();
@@ -193,7 +193,7 @@ export function PetModeQuickControlsWindowApp() {
       }
       clearPendingPauseTimer();
     };
-  }, [clearPendingPauseTimer]);
+  }, [clearPendingPauseTimer, syncNativeTheme]);
 
   useEffect(() => {
     if (phase !== "acknowledging") {

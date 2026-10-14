@@ -1,3 +1,4 @@
+import { useAppTheme } from "../settings/useAppTheme";
 import { useCallback, useEffect, useState } from "react";
 import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
@@ -24,18 +25,13 @@ import {
 import { companionEventIdentity } from "./companionEventIdentity";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 
-const WATCHER_THEME_STORAGE_KEY = "drifty.theme";
-const WATCHER_DEFAULT_THEME = "light";
 
 export function WatcherWindowApp() {
+  useAppTheme();
   const [event, setEvent] = useState<CompanionPillWindowEvent | null>(null);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem(WATCHER_THEME_STORAGE_KEY);
-    const theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : WATCHER_DEFAULT_THEME;
     document.documentElement.dataset.surface = "watcher";
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
     return () => {
       delete document.documentElement.dataset.surface;
     };

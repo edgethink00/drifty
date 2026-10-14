@@ -449,7 +449,8 @@
 }
 
 :root[data-platform="windows"] .window-sidebar-toggle--titlebar,
-:root[data-platform="windows"] .windows-titlebar-nav-button {
+:root[data-platform="windows"] .windows-titlebar-nav-button,
+:root[data-platform="windows"] .window-theme-toggle {
   pointer-events: auto;
 }
 

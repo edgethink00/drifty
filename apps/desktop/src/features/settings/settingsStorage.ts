@@ -3,6 +3,7 @@ import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel }
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 
 export type ThemeMode = "light" | "dark";
+export type ThemePreference = ThemeMode | "system";
 
 export type StartOfWeek = "sunday" | "monday" | "saturday";
 
@@ -296,7 +297,7 @@ export function applyAppThemeColorOverrides(target: CSSStyleDeclaration, overrid
   }
 }
 
-export const DEFAULT_THEME: ThemeMode = "light";
+export const DEFAULT_THEME: ThemePreference = "system";
 
 export function isHexColor(value: string): boolean {
   return HEX_COLOR_PATTERN.test(value);
@@ -427,12 +428,25 @@ export function resolveInitialAppThemeColorOverrides(): AppThemeColorOverrides {
   return readColorOverrideMap(APP_THEME_COLOR_STORAGE_KEY, APP_THEME_COLOR_OPTIONS.map((option) => option.key));
 }
 
-export function resolveInitialTheme(): ThemeMode {
+export function resolveInitialThemePreference(): ThemePreference {
   if (typeof window === "undefined") return DEFAULT_THEME;
-  const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (saved === "light" || saved === "dark") { applyThemeToDocument(saved); return saved; }
-  applyThemeToDocument(DEFAULT_THEME);
+  try {
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === "light" || saved === "dark" || saved === "system") return saved;
+  } catch { /* A blocked preference store must not prevent startup. */ }
   return DEFAULT_THEME;
+}
+
+export function resolveSystemTheme(): ThemeMode {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+export function resolveInitialTheme(): ThemeMode {
+  const preference = resolveInitialThemePreference();
+  const theme = preference === "system" ? resolveSystemTheme() : preference;
+  applyThemeToDocument(theme);
+  return theme;
 }
 
 export function resolveInitialSidebarCollapsed(): boolean {

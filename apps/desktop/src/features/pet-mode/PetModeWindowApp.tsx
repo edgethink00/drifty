@@ -1,3 +1,4 @@
+import { useAppTheme } from "../settings/useAppTheme";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
@@ -212,6 +213,7 @@ function resolveRenderablePetModeSize(): PetModeSize {
 }
 
 export function PetModeWindowApp() {
+  useAppTheme();
   // The native window is created hidden and normally has time to mount before
   // the main app restores the persisted setting. Starting in the matching pose
   // also covers the cold-start race where the native entry event arrives before
