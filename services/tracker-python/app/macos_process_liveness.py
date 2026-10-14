@@ -14,6 +14,7 @@ headers. Python's select module owns the kevent ABI.
 from __future__ import annotations
 
 import ctypes
+import errno
 import math
 import os
 import select
@@ -29,6 +30,10 @@ _PROC_PIDTBSDINFO = 3
 _PROC_FLAG_INEXIT = 4
 _MAX_PID = 0x7FFFFFFF  # Darwin pid_t is signed int32_t.
 _MAX_CREATION_TIME = 0xFFFFFFFFFFFFFFFF
+
+
+class _OwnerExited(RuntimeError):
+    """A native identity read proved the process no longer exists."""
 
 
 class _ProcBsdInfo(ctypes.Structure):
@@ -74,9 +79,13 @@ def macos_process_creation_time(pid: int) -> int:
         libproc.proc_pidinfo.restype = ctypes.c_int
         info = _ProcBsdInfo()
         size = ctypes.sizeof(info)
+        ctypes.set_errno(0)
         returned = libproc.proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(info), size)
+        read_errno = ctypes.get_errno()
     except (OSError, AttributeError) as error:
         raise RuntimeError("tracker owning app process identity is unavailable") from error
+    if returned == 0 and read_errno == errno.ESRCH:
+        raise _OwnerExited("tracker owning app process identity is unavailable")
     if (returned != size or info.pbi_pid != pid or info.pbi_flags & _PROC_FLAG_INEXIT
             or info.pbi_start_tvusec >= 1_000_000):
         raise RuntimeError("tracker owning app process identity is unavailable")
@@ -177,7 +186,14 @@ def tracker_app_owner() -> Iterator[MacOSProcessOwner | None]:
     pid, creation_time = int(raw_pid), int(raw_creation)
     if not 0 < pid <= _MAX_PID or not 0 < creation_time <= _MAX_CREATION_TIME:
         raise RuntimeError("tracker owning app process identity is invalid")
-    owner = _open_macos_process_owner(pid, creation_time)
+    try:
+        owner = _open_macos_process_owner(pid, creation_time)
+    except _OwnerExited:
+        # The app can exit before the delayed daemon binds. Yield a permanently
+        # dead owner so daemon() returns before locks, storage or capture. None
+        # would grant standalone capture authority. Other identity failures and
+        # PID replacements still raise; never turn them into a live owner.
+        owner = MacOSProcessOwner(None)
     try:
         yield owner
     finally:

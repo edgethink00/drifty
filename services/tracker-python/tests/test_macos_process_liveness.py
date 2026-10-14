@@ -18,6 +18,57 @@ from app import macos_process_liveness as liveness
 
 
 class MacTrackerOwnerTests(unittest.TestCase):
+    def test_missing_owner_is_not_admitted_but_other_identity_failures_still_raise(self):
+        for error_number in (errno.ESRCH, errno.EACCES, 0):
+            api = MagicMock()
+            native_select, _ = self.native_select()
+
+            def missing_process(*args):
+                ctypes.set_errno(error_number)
+                return 0
+
+            api.proc_pidinfo.side_effect = missing_process
+            with self.subTest(errno=error_number), patch.object(liveness.sys, "platform", "darwin"), \
+                    patch.dict(os.environ, {
+                        liveness.TRACKER_APP_PID_ENV: "42",
+                        liveness.TRACKER_APP_CREATION_TIME_ENV: "77",
+                    }, clear=True), patch.object(liveness.ctypes, "CDLL", return_value=api), \
+                    patch.object(liveness, "select", native_select):
+                if error_number == errno.ESRCH:
+                    with liveness.tracker_app_owner() as owner:
+                        self.assertIsNotNone(owner)
+                        self.assertFalse(owner.is_alive())
+                        self.assertTrue(owner.wait_until_exit(0))
+                else:
+                    with self.assertRaisesRegex(RuntimeError, "identity is unavailable"):
+                        with liveness.tracker_app_owner():
+                            self.fail("unreadable identity admitted")
+                native_select.kqueue.assert_not_called()
+
+    def test_stale_errno_does_not_turn_an_unknown_identity_failure_into_owner_exit(self):
+        api = MagicMock()
+        api.proc_pidinfo.return_value = 0
+        ctypes.set_errno(errno.ESRCH)
+        with patch.object(liveness.sys, "platform", "darwin"), patch.object(
+            liveness.ctypes, "CDLL", return_value=api
+        ), self.assertRaisesRegex(RuntimeError, "identity is unavailable"):
+            liveness.macos_process_creation_time(42)
+        self.assertEqual(ctypes.get_errno(), 0)
+
+    def test_missing_owner_after_registration_closes_the_original_queue(self):
+        api, queue = self.native_select()
+        with patch.object(liveness.sys, "platform", "darwin"), patch.dict(os.environ, {
+            liveness.TRACKER_APP_PID_ENV: "42",
+            liveness.TRACKER_APP_CREATION_TIME_ENV: "77",
+        }, clear=True), patch.object(liveness, "select", api), patch.object(
+            liveness, "macos_process_creation_time", side_effect=[77, liveness._OwnerExited()]
+        ):
+            with liveness.tracker_app_owner() as owner:
+                self.assertFalse(owner.is_alive())
+                self.assertTrue(owner.wait_until_exit(1))
+                owner.close()
+            queue.close.assert_called_once_with()
+
     def native_select(self):
         queue = MagicMock()
         queue.control.return_value = []
@@ -171,6 +222,23 @@ class MacTrackerOwnerTests(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "darwin", "requires native macOS libproc and kqueue")
 class NativeMacTrackerOwnerTests(unittest.TestCase):
+    def test_native_daemon_start_after_owner_exit_returns_before_lock_database_or_capture(self):
+        from app import main
+
+        child = self.child()
+        created = liveness.macos_process_creation_time(child.pid)
+        self.exit_child(child)
+        with patch.dict(os.environ, {
+            liveness.TRACKER_APP_PID_ENV: str(child.pid),
+            liveness.TRACKER_APP_CREATION_TIME_ENV: str(created),
+        }), patch.object(main, "_acquire_tracker_daemon_lock") as lock, patch.object(
+            main, "database"
+        ) as database, patch.object(main, "_daemon_tick") as capture:
+            main.daemon()
+        lock.assert_not_called()
+        database.assert_not_called()
+        capture.assert_not_called()
+
     def child(self):
         child = subprocess.Popen(
             [sys.executable, "-c", "import sys; sys.stdin.buffer.read(1)"],
