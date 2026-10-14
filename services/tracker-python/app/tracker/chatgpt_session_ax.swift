@@ -107,6 +107,50 @@ func chromiumFrontWindowNumber(_ rows: [(number: Int?, bounds: CGRect?)], matchi
     return number
 }
 
+// Exact built-in addresses observed before and after Comet's sidecar redirect.
+func cometBuiltInSidecarURL(_ address: String?) -> Bool {
+    address == "https://www.perplexity.ai/sidecar?copilot=true"
+        || address == "https://www.perplexity.ai/sidecar/?copilot=true"
+        || address == "https://www.perplexity.ai/sidecar"
+}
+
+// Native structure observed in Comet 154's loaded, then closed assistant.
+// Callers first bind two roots to the exact current page and built-in sidecar.
+// Return a fresh fingerprint only when the current page covers that stale root
+// and all nine sampled positions are actually owned by the current document.
+func cometClosedSidecarProof<Node>(area: Node, sidecar: Node, windowBounds: CGRect,
+    parent: (Node) -> Node?, role: (Node) -> String, classes: (Node) -> [String]?,
+    children: (Node) -> [Node]?, bounds: (Node) -> CGRect?, same: (Node, Node) -> Bool,
+    hitArea: (CGPoint) -> Node?) -> (chrome: Node, scroll: Node, children: [Node], main: CGRect, side: CGRect)? {
+    func nativeClass(_ e: Node, _ name: String) -> Bool { role(e) == "AXGroup" && classes(e) == [name] }
+    guard let scroll = parent(area), role(scroll) == "AXScrollArea",
+          let container = parent(scroll), nativeClass(container, "ContentsContainerView"),
+          let contents = parent(container), nativeClass(contents, "MultiContentsView"),
+          let chrome = parent(contents), nativeClass(chrome, "PerplexityBrowserView"),
+          let sideScroll = parent(sidecar), role(sideScroll) == "AXScrollArea",
+          let sideChrome = parent(sideScroll), same(sideChrome, chrome),
+          let contentChildren = children(contents), contentChildren.count == 1, same(contentChildren[0], container),
+          let chromeChildren = children(chrome), chromeChildren.contains(where: { same($0, contents) }),
+          chromeChildren.contains(where: { same($0, sideScroll) }),
+          let main = bounds(area), let side = bounds(sidecar), bounds(contents) == main,
+          [main, side].allSatisfy({ !$0.isNull && !$0.isEmpty && $0.minX.isFinite && $0.minY.isFinite && $0.width.isFinite && $0.height.isFinite }),
+          main.contains(side), windowBounds.contains(main), windowBounds.contains(side) else { return nil }
+    for child in chromeChildren {
+        let r = role(child)
+        guard !r.isEmpty else { return nil }
+        if r == "AXGroup" {
+            guard let c = classes(child), !c.contains("PerplexitySidecarViewImpl") else { return nil }
+        }
+    }
+    for fx in [0.1, 0.5, 0.9] {
+        for fy in [0.1, 0.5, 0.9] {
+            guard let hit = hitArea(CGPoint(x: side.minX + side.width*fx, y: side.minY + side.height*fy)),
+                  same(hit, area) else { return nil }
+        }
+    }
+    return (chrome, sideScroll, chromeChildren, main, side)
+}
+
 // Browser-owned scripting metadata admits a normal window before any page text
 // is read. This command never executes browser JavaScript, requests permission,
 // captures pixels or consumes an extension/socket. With an explicit product
@@ -440,6 +484,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
                 "pageUrl": before.url, "pageTitle": before.tabTitle, "clues": ["description": description]]
         }
         var areas: [AXUIElement] = []; var locateCount = 0; var incomplete = false
+        var requireCompleteChrome = false
         // Vivaldi draws its own interface as one web document and nests each
         // tab's page inside it. Search through only that built-in document;
         // the page must still be the single other web area with the tab's URL.
@@ -452,6 +497,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             guard depth < locateDepth, locateCount < locateLimit else { incomplete = true; return }
             locateCount += 1
             let role = string(element, "AXRole")
+            if requireCompleteChrome, role.isEmpty { incomplete = true; return }
             if role == "AXWebArea" {
                 let value = attribute(element, "AXURL")
                 let address = (value as? URL)?.absoluteString ?? value as? String
@@ -460,12 +506,79 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             if interfaceDocument != nil, (attribute(element, "AXDOMClassList") as? [String])?.contains("UrlBar-PrivateWindowIndicator") == true {
                 privateIndicator = true; return
             }
-            guard let children = attribute(element, "AXChildren") as? [AXUIElement] else { return }
+            guard let children = attribute(element, "AXChildren") as? [AXUIElement] else {
+                if requireCompleteChrome, ["AXWindow", "AXGroup", "AXScrollArea", "AXToolbar", "AXTabGroup"].contains(role) { incomplete = true }
+                return
+            }
             for child in children { locate(child, depth + 1) }
         }
         locate(window, 0)
-        guard !incomplete, !privateIndicator, areas.count == 1 else { return nil }
-        let area = areas[0]
+        guard !incomplete, !privateIndicator else { return nil }
+        var retainedSidecar: AXUIElement?
+        var retainedSidecarURL: String?
+        let area: AXUIElement
+        if areas.count == 1 { area = areas[0] }
+        else {
+            // Comet retains the closed assistant's AXScrollArea as a direct
+            // chrome child. Its URL and stale positive bounds do not prove it
+            // is closed: require the native hierarchy and current hit owner.
+            guard CommandLine.arguments[3] == "ai.perplexity.comet", areas.count == 2 else { return nil }
+            let current = areas.filter {
+                let v = attribute($0, "AXURL")
+                return sameAddress((v as? URL)?.absoluteString ?? v as? String, before.url)
+            }
+            guard current.count == 1, let other = areas.first(where: { !CFEqual($0, current[0]) }) else { return nil }
+            let address = attribute(other, "AXURL")
+            let sideURL = (address as? URL)?.absoluteString ?? address as? String
+            guard cometBuiltInSidecarURL(sideURL) else { return nil }
+            area = current[0]; retainedSidecar = other; retainedSidecarURL = sideURL
+            watch(other, ["AXUIElementDestroyed", "AXLoadComplete", "AXLayoutComplete", "AXSelectedChildrenChanged", "AXValueChanged"])
+        }
+        var admittedChromeChildren: [AXUIElement]?
+        var admittedMainBounds: CGRect?, admittedSidecarBounds: CGRect?
+        func retainedSidecarCovered() -> Bool {
+            guard let sidecar = retainedSidecar else { return true }
+            // Re-enumerate all chrome roots on every check, including after D.
+            // A new pane must not be hidden by the original two-root decision.
+            areas = []; locateCount = 0; incomplete = false; requireCompleteChrome = true
+            locate(window, 0); requireCompleteChrome = false
+            guard !incomplete, areas.count == 2, areas.contains(where: { CFEqual($0, area) }),
+                  areas.contains(where: { CFEqual($0, sidecar) }) else { return false }
+            let address = attribute(sidecar, "AXURL")
+            guard ((address as? URL)?.absoluteString ?? address as? String) == retainedSidecarURL else { return false }
+            func parent(_ e: AXUIElement) -> AXUIElement? {
+                guard let p = attribute(e, "AXParent"), CFGetTypeID(p) == AXUIElementGetTypeID() else { return nil }
+                return (p as! AXUIElement)
+            }
+            let proof = cometClosedSidecarProof(area: area, sidecar: sidecar, windowBounds: windowBounds,
+                parent: parent, role: { string($0, "AXRole") },
+                classes: { attribute($0, "AXDOMClassList") as? [String] },
+                children: { attribute($0, "AXChildren") as? [AXUIElement] }, bounds: rectangle,
+                same: { CFEqual($0, $1) }, hitArea: { point in
+                    guard !changes.invalidated, ProcessInfo.processInfo.systemUptime < deadline else { return nil }
+                    var hit: AXUIElement?
+                    guard AXUIElementCopyElementAtPosition(application, Float(point.x), Float(point.y), &hit) == .success else { return nil }
+                    var cursor = hit
+                    for _ in 0..<24 {
+                        guard let current = cursor else { return nil }
+                        if string(current, "AXRole") == "AXWebArea" { return current }
+                        cursor = parent(current)
+                    }
+                    return nil
+                })
+            guard let proof = proof else { return false }
+            if let old = admittedChromeChildren {
+                guard old.count == proof.children.count, zip(old, proof.children).allSatisfy({ CFEqual($0.0, $0.1) }),
+                      admittedMainBounds == proof.main, admittedSidecarBounds == proof.side else { return false }
+            } else {
+                admittedChromeChildren = proof.children; admittedMainBounds = proof.main; admittedSidecarBounds = proof.side
+                watch(proof.chrome, ["AXUIElementDestroyed", "AXLayoutComplete", "AXSelectedChildrenChanged"])
+                watch(proof.scroll, ["AXUIElementDestroyed", "AXLayoutComplete"])
+            }
+            pump()
+            return !changes.invalidated && ProcessInfo.processInfo.systemUptime < deadline
+        }
+        guard retainedSidecarCovered() else { return nil }
         func areaURL() -> String? { let v = attribute(area, "AXURL"); return (v as? URL)?.absoluteString ?? v as? String }
         guard sameAddress(areaURL(), before.url), let areaBounds = rectangle(area) else { return nil }
         watch(area, ["AXUIElementDestroyed", "AXLoadComplete", "AXLayoutComplete", "AXSelectedChildrenChanged", "AXValueChanged"])
@@ -684,7 +797,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
               NSWorkspace.shared.frontmostApplication?.processIdentifier == pid, birth() == processBirth,
               let finalWindow = attribute(application, "AXFocusedWindow"), CFEqual(finalWindow, window),
               string(window, "AXTitle") == nativeTitle, nativeWindowID(windowBounds) == windowID,
-              rectangle(window) == windowBounds, sameAddress(areaURL(), before.url) else { return nil }
+              rectangle(window) == windowBounds, sameAddress(areaURL(), before.url), retainedSidecarCovered() else { return nil }
         var description: String?
         let descriptionCap = min(160, max(0, 240-headings.reduce(0) { $0+$1.utf16.count }))
         let readerUntil = deadline-0.15 // Preserve time for a second native identity check.
@@ -706,7 +819,7 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
                   NSWorkspace.shared.frontmostApplication?.processIdentifier == pid, birth() == processBirth,
                   let finalWindow = attribute(application, "AXFocusedWindow"), CFEqual(finalWindow, window),
                   string(window, "AXTitle") == nativeTitle, rectangle(window) == windowBounds,
-                  nativeWindowID(windowBounds) == windowID, sameAddress(areaURL(), before.url) else { return nil }
+                  nativeWindowID(windowBounds) == windowID, sameAddress(areaURL(), before.url), retainedSidecarCovered() else { return nil }
         }
         pump()
         guard !changes.invalidated, ProcessInfo.processInfo.systemUptime < deadline else { return nil }
