@@ -53,22 +53,75 @@ describe("CommandBar", () => {
     ]);
   });
 
-  it("uses Calendar, Agents, then Review order when the navigation refresh is on", () => {
+  it("places Agents between Insights and History when its beta is enabled", () => {
     render(
       <LocalizationTestProvider language="en">
-        <CommandBar includeProjects navigationRefreshEnabled onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar includeProjects includeAgents navigationRefreshEnabled onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
     const navigation = screen.getByRole("group", { name: "Navigate" });
     expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "CalendarToday at a glance⌘1",
-      "AgentsLocal agent sessions and output⌘2",
-      "ProjectsTime grouped by project⌘3",
-      "ClassificationActivity breakdown⌘4",
-      "InsightsUsage and focus rhythm⌘5",
+      "ProjectsTime grouped by project⌘2",
+      "ClassificationActivity breakdown⌘3",
+      "InsightsUsage and focus rhythm⌘4",
+      "AgentsLocal agent sessions and output⌘5",
       "HistoryLocal records⌘6",
       "LeaderboardGlobal focus leaderboard⌘7",
+      "SettingsApp preferences⌘,",
+    ]);
+  });
+
+  it.each([false, true])("keeps Agents hidden without its beta opt-in (refresh %s)", (navigationRefreshEnabled) => {
+    render(
+      <LocalizationTestProvider language="en">
+        <CommandBar includeProjects navigationRefreshEnabled={navigationRefreshEnabled} onDismiss={vi.fn()} onNavigate={vi.fn()} />
+      </LocalizationTestProvider>,
+    );
+
+    const navigation = screen.getByRole("group", { name: "Navigate" });
+    expect(within(navigation).queryByText(/Agents/)).toBeNull();
+    expect(within(navigation).getByText("Insights").closest("button")?.textContent).toBe("InsightsUsage and focus rhythm⌘4");
+    expect(within(navigation).getByText("History").closest("button")?.textContent).toBe("HistoryLocal records⌘5");
+  });
+
+  it("offers Your Agents after Dashboard in the legacy layout when opted in", () => {
+    const onNavigate = vi.fn();
+    render(
+      <LocalizationTestProvider language="en">
+        <CommandBar includeProjects includeAgents onDismiss={vi.fn()} onNavigate={onNavigate} />
+      </LocalizationTestProvider>,
+    );
+    const navigation = screen.getByRole("group", { name: "Navigate" });
+    expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "DashboardToday at a glance⌘1",
+      "Your AgentsLocal agent sessions and output⌘2",
+      "ClassificationActivity breakdown⌘3",
+      "ProjectsTime grouped by project⌘4",
+      "InsightsUsage and focus rhythm⌘5",
+      "HistoryLocal records⌘6",
+      "SocialGlobal focus leaderboard⌘7",
+      "SettingsApp preferences⌘,",
+    ]);
+    fireEvent.click(within(navigation).getByText("Your Agents"));
+    expect(onNavigate).toHaveBeenCalledWith("agents");
+  });
+
+  it("keeps refreshed navigation hints sequential when Projects is unavailable", () => {
+    render(
+      <LocalizationTestProvider language="en">
+        <CommandBar includeProjects={false} includeAgents navigationRefreshEnabled onDismiss={vi.fn()} onNavigate={vi.fn()} />
+      </LocalizationTestProvider>,
+    );
+    const navigation = screen.getByRole("group", { name: "Navigate" });
+    expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "CalendarToday at a glance⌘1",
+      "ClassificationActivity breakdown⌘2",
+      "InsightsUsage and focus rhythm⌘3",
+      "AgentsLocal agent sessions and output⌘4",
+      "HistoryLocal records⌘5",
+      "LeaderboardGlobal focus leaderboard⌘6",
       "SettingsApp preferences⌘,",
     ]);
   });
@@ -76,7 +129,7 @@ describe("CommandBar", () => {
   it("uses Korean labels for global navigation", () => {
     render(
       <LocalizationTestProvider language="ko">
-        <CommandBar navigationRefreshEnabled includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar navigationRefreshEnabled includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
@@ -127,7 +180,7 @@ describe("CommandBar", () => {
   it("filters command items based on search query", async () => {
     render(
       <LocalizationTestProvider language="ko">
-        <CommandBar navigationRefreshEnabled includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar navigationRefreshEnabled includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
@@ -142,7 +195,7 @@ describe("CommandBar", () => {
   it("shows empty state when no commands match query", async () => {
     render(
       <LocalizationTestProvider language="ko">
-        <CommandBar navigationRefreshEnabled includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar navigationRefreshEnabled includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
@@ -157,7 +210,7 @@ describe("CommandBar", () => {
     const onNavigate = vi.fn();
     render(
       <LocalizationTestProvider language="ko">
-        <CommandBar navigationRefreshEnabled includeProjects onDismiss={vi.fn()} onNavigate={onNavigate} />
+        <CommandBar navigationRefreshEnabled includeAgents includeProjects onDismiss={vi.fn()} onNavigate={onNavigate} />
       </LocalizationTestProvider>,
     );
 
@@ -167,8 +220,11 @@ describe("CommandBar", () => {
     const calendarBtn = screen.getByRole("button", { name: "캘린더 오늘 한눈에 보기" });
     expect(calendarBtn.getAttribute("data-selected")).toBe("true");
 
-    // ArrowDown follows the primary navigation order to Agents
-    fireEvent.keyDown(searchInput, { key: "ArrowDown" });
+    // Keyboard traversal follows Calendar → Projects → Classification → Insights → Agents.
+    for (const label of ["프로젝트", "분류", "인사이트", "에이전트"]) {
+      fireEvent.keyDown(searchInput, { key: "ArrowDown" });
+      expect(within(screen.getByRole("group", { name: "이동" })).getByText(label).closest("button")?.getAttribute("data-selected")).toBe("true");
+    }
     const agentsBtn = screen.getByRole("button", { name: "에이전트 로컬 에이전트 세션과 결과" });
     expect(agentsBtn.getAttribute("data-selected")).toBe("true");
 

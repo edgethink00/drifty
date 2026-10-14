@@ -626,7 +626,7 @@ export function persistWindowsBlurEnabled(enabled: boolean): void {
   }
 }
 
-/** Your Agents remains independently available in the legacy navigation. */
+/** Your Agents is an independent opt-in in both navigation layouts. */
 export function resolveInitialAgentsBetaEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(AGENTS_BETA_STORAGE_KEY) === "1";

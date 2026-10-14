@@ -874,7 +874,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const canUseNavigationRefresh = DEV_SETTINGS_ENABLED && devModeEnabled && navigationRefreshEnabled;
   const canUseBreakdownPatternsPreview = DEV_SETTINGS_ENABLED && devModeEnabled && breakdownPatternsPreviewEnabled;
   const canOpenAgentsBeta = DEV_SETTINGS_ENABLED && devModeEnabled && agentsBetaEnabled;
-  const canOpenAgents = canUseNavigationRefresh || canOpenAgentsBeta;
+  const canOpenAgents = canOpenAgentsBeta;
   const sshAgentSourceSync = useSshAgentSourceSyncController({
     enabled: canOpenAgents && isTauriRuntime(),
   });
@@ -11732,6 +11732,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       <ModalPresence>{cmdOpen ? (
         <CommandBar
           includeProjects={projectClassificationFeatureEnabled}
+          includeAgents={canOpenAgents}
           navigationRefreshEnabled={canUseNavigationRefresh}
           onDismiss={() => setCmdOpen(false)}
           onNavigate={handleCmdNav}

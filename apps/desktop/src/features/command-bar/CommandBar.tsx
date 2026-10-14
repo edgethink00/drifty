@@ -10,6 +10,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 
 export interface CommandBarProps {
   readonly includeProjects: boolean;
+  readonly includeAgents?: boolean;
   readonly navigationRefreshEnabled?: boolean;
   readonly onDismiss: () => void;
   readonly onNavigate: (tabId: TabId) => void;
@@ -149,6 +150,7 @@ function renderCommandIcon(icon: string): ReactNode {
 
 export function CommandBar({
   includeProjects,
+  includeAgents = false,
   navigationRefreshEnabled = false,
   onDismiss,
   onNavigate,
@@ -179,31 +181,29 @@ export function CommandBar({
         section: "navigation",
         label: t(navigationRefreshEnabled ? "nav.calendar" : "nav.group.dashboard"),
         sub: t("command.dashboardSub"),
-        shortcut: "⌘1",
         icon: navigationRefreshEnabled ? "calendar" : "dashboard",
         keywords: ["today", "calendar", "dashboard", "overview", "home", "오늘", "캘린더", "대시보드", "홈"],
         onSelect: () => onNavigate("dashboard"),
       },
     ];
 
-    if (navigationRefreshEnabled) {
-      items.push({
-        id: "nav-agents",
-        section: "navigation",
-        label: t("nav.agents"),
-        sub: t("command.agentsSub"),
-        shortcut: "⌘2",
-        icon: "agents",
-        keywords: ["agents", "cli", "sessions", "에이전트", "세션"],
-        onSelect: () => onNavigate("agents"),
-      });
-    } else {
+    const agentsItem: CommandItem = {
+      id: "nav-agents",
+      section: "navigation",
+      label: t(navigationRefreshEnabled ? "nav.agents" : "nav.yourAgents"),
+      sub: t("command.agentsSub"),
+      icon: "agents",
+      keywords: ["agents", "cli", "sessions", "에이전트", "세션"],
+      onSelect: () => onNavigate("agents"),
+    };
+
+    if (!navigationRefreshEnabled) {
+      if (includeAgents) items.push(agentsItem);
       items.push({
         id: "nav-classification",
         section: "navigation",
         label: t("nav.classification"),
         sub: t("command.classificationSub"),
-        shortcut: "⌘2",
         icon: "classification",
         keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
         onSelect: () => onNavigate("classification"),
@@ -216,7 +216,6 @@ export function CommandBar({
         section: "navigation",
         label: t("nav.projects"),
         sub: t("command.projectsSub"),
-        shortcut: "⌘3",
         icon: "projects",
         keywords: ["project", "time", "프로젝트", "작업"],
         onSelect: () => onNavigate("projects"),
@@ -229,7 +228,6 @@ export function CommandBar({
         section: "navigation",
         label: t("nav.classification"),
         sub: t("command.classificationSub"),
-        shortcut: includeProjects ? "⌘4" : "⌘3",
         icon: "classification",
         keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
         onSelect: () => onNavigate("classification"),
@@ -242,21 +240,18 @@ export function CommandBar({
         section: "navigation",
         label: t("nav.trends"),
         sub: t("command.trendsSub"),
-        shortcut: navigationRefreshEnabled
-          ? (includeProjects ? "⌘5" : "⌘4")
-          : (includeProjects ? "⌘4" : "⌘3"),
         icon: "trends",
         keywords: ["insights", "focus", "trends", "stats", "chart", "트렌드", "인사이트", "통계"],
         onSelect: () => onNavigate("trends"),
       },
+    );
+    if (navigationRefreshEnabled && includeAgents) items.push(agentsItem);
+    items.push(
       {
         id: "nav-history",
         section: "navigation",
         label: t("nav.history"),
         sub: t("command.historySub"),
-        shortcut: navigationRefreshEnabled
-          ? (includeProjects ? "⌘6" : "⌘5")
-          : (includeProjects ? "⌘5" : "⌘4"),
         icon: "history",
         keywords: ["records", "history", "timeline", "log", "기록", "로그", "히스토리"],
         onSelect: () => onNavigate("history"),
@@ -266,9 +261,6 @@ export function CommandBar({
         section: "navigation",
         label: t(navigationRefreshEnabled ? "nav.leaderboard" : "nav.group.social"),
         sub: t("command.socialSub"),
-        shortcut: navigationRefreshEnabled
-          ? (includeProjects ? "⌘7" : "⌘6")
-          : (includeProjects ? "⌘6" : "⌘5"),
         icon: "leaderboard",
         keywords: ["social", "rank", "leaderboard", "global", "리더보드", "소셜", "랭킹", "순위"],
         onSelect: () => onNavigate("leaderboard"),
@@ -277,8 +269,8 @@ export function CommandBar({
         id: "nav-settings",
         section: "navigation",
         label: t("common.settings"),
-        sub: t("command.settingsSub"),
         shortcut: "⌘,",
+        sub: t("command.settingsSub"),
         icon: "settings",
         keywords: ["preferences", "settings", "config", "설정", "환경설정"],
         onSelect: () => onNavigate("settings"),
@@ -355,9 +347,12 @@ export function CommandBar({
       },
     );
 
-    return items;
+    return items.map((item, index) => item.section === "navigation" && item.id !== "nav-settings"
+      ? { ...item, shortcut: `⌘${index + 1}` }
+      : item);
   }, [
     includeProjects,
+    includeAgents,
     navigationRefreshEnabled,
     isTrackingRunning,
     onNavigate,

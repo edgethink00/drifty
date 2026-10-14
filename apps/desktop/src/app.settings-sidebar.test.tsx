@@ -246,12 +246,12 @@ describe("App settings sidebar", () => {
     const primaryNav = await screen.findByRole("navigation", { name: /primary navigation/i });
     expect(within(primaryNav).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "Calendar",
-      "Agents",
       "Projects",
       "Classification",
       "Insights",
       "History",
     ]);
+    expect(screen.queryByRole("button", { name: /^Agents$/i })).toBeNull();
     expect(screen.getByRole("group", { name: /^Flow$/i })).toBeTruthy();
     expect(screen.getByRole("group", { name: /^Review$/i })).toBeTruthy();
     expect(screen.getByText("Social")).toBeTruthy();

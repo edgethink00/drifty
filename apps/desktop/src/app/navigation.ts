@@ -45,13 +45,13 @@ export type NavItem = {
 
 export const flowNav: NavItem[] = [
   { id: "dashboard", labelKey: "nav.calendar", icon: "calendar" },
-  { id: "agents", labelKey: "nav.agents", icon: "agents" },
   { id: "projects", labelKey: "nav.projects", icon: "projects" },
 ];
 
 export const reviewNav: NavItem[] = [
   { id: "classification", labelKey: "nav.classification", icon: "classification" },
   { id: "trends", labelKey: "nav.trends", icon: "trends" },
+  { id: "agents", labelKey: "nav.agents", icon: "agents" },
   { id: "history", labelKey: "nav.history", icon: "history" },
 ];
 

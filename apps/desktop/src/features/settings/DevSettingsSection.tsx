@@ -739,7 +739,7 @@ export function DevSettingsSection({
         <div className="settings-row">
           <div>
             <div className="lbl">Navigation refresh</div>
-            <div className="desc">Preview Flow, Review, and Social, with Calendar Day/Week in the page and promoted Agents. Off keeps Your Day / Your Week under Dashboard, Activity, and Social.</div>
+            <div className="desc">Preview Flow, Review, and Social, with Calendar Day/Week in the page. Your Agents has its own beta toggle. Off keeps Your Day / Your Week under Dashboard, Activity, and Social.</div>
           </div>
           <div className="ctrl">
             <Toggle checked={navigationRefreshEnabled} onChange={onNavigationRefreshChange} ariaLabel="Toggle navigation refresh" />
@@ -766,7 +766,7 @@ export function DevSettingsSection({
         <div className="settings-row">
           <div>
             <div className="lbl">Your Agents (beta)</div>
-            <div className="desc">Show Your Agents under Dashboard when the navigation refresh is off. The refreshed navigation promotes Agents automatically.</div>
+            <div className="desc">Show Your Agents under Dashboard, or Agents after Insights in Review when the navigation refresh is on. Independent of the navigation refresh; Dev-mode opt-in.</div>
           </div>
           <div className="ctrl">
             <Toggle checked={agentsBetaEnabled} onChange={onAgentsBetaChange} ariaLabel="Toggle Your Agents beta" />

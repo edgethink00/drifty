@@ -4,14 +4,14 @@ import { activityNav, flowNav, primaryNav, replaceNavigationHistoryTab, reviewNa
 
 describe("navigation groups", () => {
   it("keeps Flow and Review destinations explicit instead of index slices", () => {
-    expect(flowNav.map((item) => item.id)).toEqual(["dashboard", "agents", "projects"]);
-    expect(reviewNav.map((item) => item.id)).toEqual(["classification", "trends", "history"]);
+    expect(flowNav.map((item) => item.id)).toEqual(["dashboard", "projects"]);
+    expect(reviewNav.map((item) => item.id)).toEqual(["classification", "trends", "agents", "history"]);
     expect(primaryNav.map((item) => item.id)).toEqual([
       "dashboard",
-      "agents",
       "projects",
       "classification",
       "trends",
+      "agents",
       "history",
     ]);
     expect(activityNav.map((item) => item.id)).toEqual(["classification", "projects", "trends", "history"]);

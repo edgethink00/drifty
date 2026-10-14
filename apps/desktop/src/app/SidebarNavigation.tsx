@@ -138,7 +138,7 @@ function RefreshedNavigation(props: SidebarNavigationProps) {
           aria-labelledby="sidebar-nav-group-review"
         >
           <div id="sidebar-nav-group-review" className="nav-label">{props.t("nav.group.review")}</div>
-          {reviewNav.map((item) => (
+          {reviewNav.filter((item) => props.canOpenAgentsBeta || item.id !== "agents").map((item) => (
             <SidebarNavButton
               key={item.id}
               active={props.activeTab === item.id}
