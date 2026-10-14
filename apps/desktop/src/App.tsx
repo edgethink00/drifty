@@ -3987,8 +3987,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
         : Promise.resolve<SiteDuration[] | null>(null);
 
-      const recordingRequest = isForegroundRefresh ? beginRecordingCheck() : null;
-      const statusRequest = isForegroundRefresh
+      // A restored sync scope can supersede the first foreground refresh before
+      // its status arrives. Load the missing status in that background refresh
+      // too; later background refreshes keep their cheap timeline-only path.
+      const shouldLoadTrackerStatus = isForegroundRefresh || status === null;
+      const recordingRequest = shouldLoadTrackerStatus ? beginRecordingCheck() : null;
+      const statusRequest = shouldLoadTrackerStatus
         ? trackerClient.getStatus().then((nextStatus) => {
           if (
             refreshRequestRef.current !== requestId
