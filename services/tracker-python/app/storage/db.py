@@ -1450,7 +1450,6 @@ class TrackerDatabase:
         backfill_cutoff = datetime.fromtimestamp(
             observed_at_seconds - config.max_age_seconds, tz=timezone.utc
         ).isoformat()
-        results: list[BrowserHistoryBackfillResult] = []
         with self.connect() as conn:
             rows = conn.execute(
                 """
@@ -1472,24 +1471,42 @@ class TrackerDatabase:
                 (backfill_cutoff,),
             ).fetchall()
 
-            for row in rows:
-                segment_age_seconds = observed_at_seconds - self._timestamp_seconds(row["ended_at"])
-                if segment_age_seconds < 0 or segment_age_seconds > config.max_age_seconds:
-                    continue
-                if not is_retryable_window_title(row["window_title"]):
-                    continue
+        # History resolution may copy/read another application's database. Do
+        # all of it before the first UPDATE so a slow lookup cannot hold our
+        # writer reservation and block capture or serve-process classification.
+        # Staging the complete batch also preserves rollback on resolver errors.
+        pending: list[tuple[sqlite3.Row, BrowserMetadata, str]] = []
+        confidence = 0.45
+        for row in rows:
+            segment_age_seconds = observed_at_seconds - self._timestamp_seconds(row["ended_at"])
+            if segment_age_seconds < 0 or segment_age_seconds > config.max_age_seconds:
+                continue
+            if not is_retryable_window_title(row["window_title"]):
+                continue
 
-                raw_context = self._raw_context_dict(row["raw_context_json"])
-                if raw_context.get("browser_history_status") != "no_match":
-                    continue
+            raw_context = self._raw_context_dict(row["raw_context_json"])
+            if raw_context.get("browser_history_status") != "no_match":
+                continue
 
-                metadata = resolve_browser_history(row["app_name"], row["window_title"], row["ended_at"])
-                if metadata.match_state != "browser-history-title" or metadata.site_url is None:
-                    continue
+            metadata = resolve_browser_history(row["app_name"], row["window_title"], row["ended_at"])
+            if metadata.match_state != "browser-history-title" or metadata.site_url is None:
+                continue
+            pending.append((
+                row, metadata,
+                self._backfilled_raw_context_json(raw_context, metadata, confidence, config.observed_at),
+            ))
 
+        results: list[BrowserHistoryBackfillResult] = []
+        if not pending:
+            return results
+        with self.connect() as conn:
+            for row, metadata, raw_context_json in pending:
                 segment_id = int(row["id"])
-                confidence = 0.45
-                conn.execute(
+                # Capture, sync, deletion or enrichment may have changed this
+                # snapshot during the lookups. Check its input and the context
+                # we replace atomically with the UPDATE; a skipped row can be
+                # considered again on the next tick with its current contents.
+                cursor = conn.execute(
                     """
                     UPDATE activity_segments
                     SET browser_name = ?,
@@ -1503,6 +1520,24 @@ class TrackerDatabase:
                         confidence = ?,
                         raw_context_json = ?
                     WHERE id = ?
+                      AND started_at IS ?
+                      AND ended_at IS ?
+                      AND duration_seconds IS ?
+                      AND app_name IS ?
+                      AND bundle_id IS ?
+                      AND window_title IS ?
+                      AND platform IS ?
+                      AND source IS ?
+                      AND browser_name IS ?
+                      AND site_source IS ?
+                      AND confidence IS ?
+                      AND raw_context_json IS ?
+                      AND site_domain IS NULL
+                      AND site_title IS NULL
+                      AND site_url IS NULL
+                      AND youtube_video_id IS NULL
+                      AND youtube_playlist_id IS NULL
+                      AND youtube_is_shorts IS NULL
                     """,
                     (
                         metadata.browser_name,
@@ -1514,10 +1549,24 @@ class TrackerDatabase:
                         self._optional_bool_int(metadata.youtube_is_shorts),
                         metadata.match_state,
                         confidence,
-                        self._backfilled_raw_context_json(raw_context, metadata, confidence, config.observed_at),
+                        raw_context_json,
                         segment_id,
+                        row["started_at"],
+                        row["ended_at"],
+                        row["duration_seconds"],
+                        row["app_name"],
+                        row["bundle_id"],
+                        row["window_title"],
+                        row["platform"],
+                        row["source"],
+                        row["browser_name"],
+                        row["site_source"],
+                        row["confidence"],
+                        row["raw_context_json"],
                     ),
                 )
+                if not cursor.rowcount:
+                    continue
                 conn.execute(
                     "UPDATE activity_classifications SET stale = 1 WHERE segment_id = ?",
                     (segment_id,),
