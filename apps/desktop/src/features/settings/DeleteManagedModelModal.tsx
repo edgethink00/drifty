@@ -1,4 +1,5 @@
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { KeyHint } from "../../components/KeyHint";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 
 import { useLocalization } from "../localization/LocalizationContext";
@@ -45,6 +46,7 @@ export function DeleteManagedModelModal({ modelLabel, deleting, onCancel, onConf
         <div className="ai-delete-model-modal__actions">
           <button type="button" className="modal-btn modal-btn--ghost" disabled={deleting} onClick={onCancel}>
             {t("settings.ai.deleteModelConfirmCancel")}
+            <KeyHint shortcut="escape" />
           </button>
           <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} aria-busy={deleting} onClick={onConfirm}>
             <ActionLabel busy={deleting} busyLabel={t("settings.ai.deleteModelDeleting")}>{t("settings.ai.deleteModel")}</ActionLabel>

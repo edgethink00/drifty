@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import type { Project, ProjectInput } from "@drifty/domain";
 import { firstUnusedProjectColor } from "../settings/projectPalette";
 import { ActionLabel } from "../../components/ActionLabel";
@@ -97,6 +99,8 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
     onClose();
   };
   const overlayDismiss = useOverlayDismiss(requestClose, { disabled: isBusy, keepOpen: hasUnsavedInput });
+  // The description is multi-line: Enter in the name saves, ⌘/Ctrl+Enter saves from either field.
+  useModalSubmitShortcut(dialogRef, "modEnter", () => void handleSave(), { disabled: !canSave });
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
@@ -133,9 +137,10 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
         </fieldset>
         <div className="modal-foot">
           {saveError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={saveError.detail ?? saveError.message}>{saveError.message}{saveError.detail ? <span className="sr-only"> {saveError.detail}</span> : null}</p> : null}
-          <button type="button" className="modal-btn modal-btn--ghost" onClick={requestClose} disabled={isBusy}>{t("common.cancel")}</button>
+          <button type="button" className="modal-btn modal-btn--ghost" onClick={requestClose} disabled={isBusy}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
           <button type="button" className="modal-btn modal-btn--primary" onClick={() => void handleSave()} disabled={!canSave} aria-busy={saving}>
             <ActionLabel busy={saving} busyLabel={t("common.saving")}>{t(isEditing ? "projects.editor.saveChanges" : "projects.create")}</ActionLabel>
+            <KeyHint shortcut="modEnter" />
           </button>
         </div>
       </section>

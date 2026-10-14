@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useSiteIcon } from "../../components/SiteIconContext";
@@ -56,7 +57,7 @@ export function AutomaticCloseConfirmDialog({ onCancel, onConfirm, petEnabled = 
         </p>
         <p className="guide-close-confirm__warn"><AlertIcon />{t("postOnboarding.closeConfirm.unsaved")}</p>
         <div className="guide-close-confirm__actions">
-          <button type="button" className="modal-btn modal-btn--ghost" data-intro-confirm-cancel onClick={onCancel}>{t("onboarding.extreme.keepOff")}</button>
+          <button type="button" className="modal-btn modal-btn--ghost" data-intro-confirm-cancel onClick={onCancel}>{t("onboarding.extreme.keepOff")}<KeyHint shortcut="escape" /></button>
           <button type="button" className="modal-btn modal-btn--primary" data-intro-confirm-allow onClick={onConfirm}>{t("postOnboarding.closeConfirm.turnOn")}</button>
         </div>
       </div>

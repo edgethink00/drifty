@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import type { Project } from "@drifty/domain";
 import { ActionLabel } from "../../components/ActionLabel";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
@@ -86,6 +87,7 @@ export function ProjectDeleteConfirmation({
           ) : null}
           <button type="button" className="modal-btn modal-btn--ghost" data-project-delete-cancel disabled={deleting} onClick={onCancel}>
             {t("common.cancel")}
+            <KeyHint shortcut="escape" />
           </button>
           <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} aria-busy={deleting} onClick={onConfirm}>
             <ActionLabel busy={deleting} busyLabel={t("projects.deleteConfirm.deleting")}>{t("projects.deleteConfirm.delete")}</ActionLabel>

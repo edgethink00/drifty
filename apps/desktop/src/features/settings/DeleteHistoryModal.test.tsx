@@ -198,3 +198,139 @@ describe("DeleteHistoryModal completion", () => {
     });
   });
 });
+
+describe("DeleteHistoryModal explicit keyboard deletion", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    deleteHistoryRange.mockReset().mockResolvedValue(counts);
+    clearIconCaches.mockReset().mockResolvedValue({ reclaimedBytes: 0 });
+    document.documentElement.dataset.platform = "macos";
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    delete document.documentElement.dataset.platform;
+  });
+
+  function openHistory(onDeleted: () => Promise<void> | void = vi.fn()) {
+    const onClose = vi.fn();
+    const onCompleted = vi.fn();
+    render(<Harness onClose={onClose} onDeleted={onDeleted} onCompleted={onCompleted} />);
+    return { onClose, onCompleted };
+  }
+
+  it.each([
+    ["macos", { metaKey: true }, "⌘↵", "Meta+Enter"],
+    ["windows", { ctrlKey: true }, "Ctrl+Enter", "Control+Enter"],
+  ] as const)("advertises and executes the explicit shortcut on %s after choosing a range", async (platform, modifier, label, ariaKeys) => {
+    document.documentElement.dataset.platform = platform;
+    const { onCompleted } = openHistory();
+    const range = screen.getByRole("combobox", { name: "Delete range" });
+    const button = screen.getByRole("button", { name: "Delete permanently" });
+    expect(button.getAttribute("aria-keyshortcuts")).toBe(ariaKeys);
+    expect(button.querySelector(".key-hint")?.textContent).toBe(label);
+
+    // A range choice restores focus to the closed picker, the common path
+    // immediately before invoking the advertised deletion shortcut.
+    fireEvent.click(range);
+    fireEvent.click(screen.getByRole("option", { name: "Last 7 days" }));
+    await act(async () => fireEvent.keyDown(range, { key: "Enter", ...modifier }));
+    expect(deleteHistoryRange).toHaveBeenCalledTimes(1);
+    expect(deleteHistoryRange).toHaveBeenCalledWith(expect.objectContaining({ dryRun: false }));
+    expect(onCompleted).toHaveBeenCalledExactlyOnceWith(counts);
+  });
+
+  it("leaves plain Enter and an open range picker to their own controls", async () => {
+    openHistory();
+    const range = screen.getByRole("combobox", { name: "Delete range" });
+    const cancels = screen.getAllByRole("button", { name: "Cancel" });
+    const cancel = cancels[cancels.length - 1];
+    expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
+    expect(fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" })).toBe(true);
+    fireEvent.keyDown(range, { key: "Enter" });
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    fireEvent.keyDown(range, { key: "ArrowDown" });
+    fireEvent.keyDown(range, { key: "Enter", metaKey: true });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(range.textContent).toContain("Last 7 days");
+    expect(deleteHistoryRange).not.toHaveBeenCalled();
+  });
+
+  it("requires two distinct presses for all time and rejects held Enter repeats", async () => {
+    const { onCompleted } = openHistory();
+    fireEvent.click(screen.getByRole("combobox", { name: "Delete range" }));
+    fireEvent.click(screen.getByRole("option", { name: "All time" }));
+    const range = screen.getByRole("combobox", { name: "Delete range" });
+    await act(async () => fireEvent.keyDown(range, { key: "Enter", metaKey: true }));
+    expect(deleteHistoryRange).not.toHaveBeenCalled();
+    const confirmation = screen.getByRole("button", { name: "Click again to confirm" });
+    expect(confirmation.querySelector(".key-hint")?.textContent).toBe("⌘↵");
+    for (const modifier of [{ metaKey: true }, { ctrlKey: true }, {}]) {
+      expect(fireEvent.keyDown(confirmation, { key: "Enter", repeat: true, ...modifier })).toBe(false);
+    }
+    expect(deleteHistoryRange).not.toHaveBeenCalled();
+    await act(async () => fireEvent.keyDown(confirmation, { key: "Enter", metaKey: true }));
+    expect(deleteHistoryRange).toHaveBeenCalledTimes(1);
+    expect(clearIconCaches).toHaveBeenCalledTimes(1);
+    expect(onCompleted).toHaveBeenCalledExactlyOnceWith(counts);
+  });
+
+  it("re-arms after the confirmation expires or its range changes", () => {
+    openHistory();
+    const range = screen.getByRole("combobox", { name: "Delete range" });
+    fireEvent.click(range);
+    fireEvent.click(screen.getByRole("option", { name: "All time" }));
+    fireEvent.keyDown(range, { key: "Enter", metaKey: true });
+    expect(screen.getByRole("button", { name: "Click again to confirm" })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(3_000));
+    fireEvent.keyDown(range, { key: "Enter", metaKey: true });
+    expect(deleteHistoryRange).not.toHaveBeenCalled();
+    fireEvent.click(range);
+    fireEvent.click(screen.getByRole("option", { name: "Today" }));
+    fireEvent.click(range);
+    fireEvent.click(screen.getByRole("option", { name: "All time" }));
+    fireEvent.keyDown(range, { key: "Enter", metaKey: true });
+    expect(screen.getByRole("button", { name: "Click again to confirm" })).toBeTruthy();
+    expect(deleteHistoryRange).not.toHaveBeenCalled();
+  });
+
+  it("keeps the hint disabled for invalid dates and never deletes on IME Enter", async () => {
+    openHistory();
+    fireEvent.click(screen.getByRole("combobox", { name: "Delete range" }));
+    fireEvent.click(screen.getByRole("option", { name: "Custom range" }));
+    const from = screen.getByLabelText("From");
+    const to = screen.getByLabelText("To");
+    const deletion = screen.getByRole("button", { name: "Delete permanently" });
+    expect(deletion).toHaveProperty("disabled", true);
+    expect(deletion.querySelector(".key-hint")?.textContent).toBe("⌘↵");
+    fireEvent.keyDown(from, { key: "Enter", metaKey: true });
+    fireEvent.change(from, { target: { value: "2026-01-10" } });
+    fireEvent.change(to, { target: { value: "2026-01-09" } });
+    fireEvent.keyDown(to, { key: "Enter", metaKey: true });
+    expect(deleteHistoryRange).not.toHaveBeenCalled();
+    fireEvent.change(to, { target: { value: "2026-01-11" } });
+    expect(fireEvent.keyDown(to, { key: "Enter" })).toBe(true);
+    fireEvent.keyDown(to, { key: "Enter", metaKey: true, isComposing: true });
+    fireEvent.keyDown(to, { key: "Enter", metaKey: true, keyCode: 229 });
+    expect(deleteHistoryRange).not.toHaveBeenCalled();
+    await act(async () => fireEvent.keyDown(to, { key: "Enter", metaKey: true }));
+    expect(deleteHistoryRange).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ start: "2026-01-10", end: "2026-01-11" }));
+  });
+
+  it("blocks additional keyboard deletion while pending and during refresh recovery", async () => {
+    let finishWrite!: (result: typeof counts) => void;
+    deleteHistoryRange.mockReturnValue(new Promise(resolve => { finishWrite = resolve; }));
+    const onDeleted = vi.fn().mockRejectedValue(new Error("View unavailable"));
+    openHistory(onDeleted);
+    const dialog = screen.getByRole("dialog");
+    await act(async () => fireEvent.keyDown(dialog, { key: "Enter", metaKey: true }));
+    fireEvent.keyDown(dialog, { key: "Enter", metaKey: true });
+    expect(deleteHistoryRange).toHaveBeenCalledTimes(1);
+    await act(async () => finishWrite(counts));
+    const retry = screen.getByRole("button", { name: "Refresh view" });
+    expect(document.activeElement).toBe(retry);
+    fireEvent.keyDown(retry, { key: "Enter", metaKey: true });
+    expect(deleteHistoryRange).toHaveBeenCalledTimes(1);
+    expect(onDeleted).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Delete permanently" })).toBeNull();
+  });
+});

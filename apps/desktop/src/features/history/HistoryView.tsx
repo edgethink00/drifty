@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty/domain";
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
@@ -81,6 +82,7 @@ function HistoryDeleteConfirmation({ deleting, recordCount, error, onCancel, onC
             onClick={onCancel}
           >
             {t("common.cancel")}
+            <KeyHint shortcut="escape" />
           </button>
           <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} aria-busy={deleting} onClick={onConfirm}>
             <ActionLabel busy={deleting} busyLabel={t("settings.deleteHistory.deleting")}>{t("history.deleteRecords")}</ActionLabel>

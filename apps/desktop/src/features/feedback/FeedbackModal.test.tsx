@@ -127,4 +127,19 @@ describe("FeedbackModal", () => {
     );
     expect(screen.getByRole("checkbox", { name: "디버그 로그 포함" })).toHaveProperty("checked", true);
   });
+  it("sends with ⌘/Ctrl+Enter from the message while plain Enter stays a newline", async () => {
+    vi.mocked(submitFeedback).mockClear();
+    vi.mocked(submitFeedback).mockImplementationOnce(() => new Promise(() => {}));
+    render(<FeedbackModal initialEmail="person@example.com" onClose={vi.fn()} collectDiagnostics={vi.fn().mockResolvedValue(diagnostics)} />);
+    const message = screen.getByRole("textbox", { name: "Message" });
+    fireEvent.change(message, { target: { value: "Keep this note" } });
+    expect(screen.getByRole("button", { name: "Send" }).getAttribute("aria-keyshortcuts")).toBe("Meta+Enter");
+
+    fireEvent.keyDown(message, { key: "Enter" });
+    expect(submitFeedback).not.toHaveBeenCalled();
+
+    await act(async () => { fireEvent.keyDown(message, { key: "Enter", ctrlKey: true }); });
+    expect(submitFeedback).toHaveBeenCalledTimes(1);
+  });
+
 });

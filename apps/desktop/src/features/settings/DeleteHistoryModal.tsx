@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import { shiftIsoDate } from "@drifty/domain";
 import type { DeleteHistoryRangeResult, DeleteHistoryRangeScopes } from "@drifty/domain";
 
@@ -9,6 +10,7 @@ import type { SettingsSelectOption } from "./SettingsSelect";
 import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import "./DeleteHistoryModal.css";
@@ -117,6 +119,8 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
     if (completed) onCompleted(completed);
   };
 
+  useModalSubmitShortcut(dialogRef, "modEnter", () => void handleDelete(), { disabled: !canDelete });
+
   const retryRefresh = async () => {
     if (requestInFlight.current || !deletedResult) return;
     requestInFlight.current = true;
@@ -146,6 +150,14 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
         role="dialog"
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
+        onKeyDownCapture={(event) => {
+          // A held Enter must not arm a full wipe and then confirm it through
+          // repeat events, including the focused button's native Enter action.
+          if (event.key === "Enter" && event.repeat) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
       >
         <ModalCloseButton disabled={deleting} label={t("settings.deleteHistory.cancel")} onClick={onClose} />
         <div className="modal-head">
@@ -179,6 +191,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
               </button>
               <button className="modal-btn modal-btn--ghost" disabled={deleting} type="button" onClick={onClose}>
                 {t("settings.deleteHistory.close")}
+                <KeyHint shortcut="escape" />
               </button>
             </div>
           </>
@@ -230,6 +243,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
               )}
               <button className="modal-btn modal-btn--ghost" disabled={deleting} type="button" onClick={onClose}>
                 {t("settings.deleteHistory.cancel")}
+                <KeyHint shortcut="escape" />
               </button>
               <button
                 aria-busy={deleting}
@@ -245,6 +259,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
                 >
                   {armed ? t("settings.deleteHistory.confirmAgain") : t("settings.deleteHistory.deletePermanently")}
                 </ActionLabel>
+                <KeyHint shortcut="modEnter" />
               </button>
             </div>
           </>

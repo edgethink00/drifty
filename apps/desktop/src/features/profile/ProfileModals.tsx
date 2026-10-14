@@ -1,4 +1,6 @@
 import type { LeaderboardRow } from "../leaderboard/leaderboardService";
+import { KeyHint } from "../../components/KeyHint";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import { getLeaderboardPeriodFocusLabel } from "../leaderboard/leaderboardWindow";
 import { getDailyAverageSeconds, ProfileAvatar } from "../leaderboard/leaderboardViewHelpers";
 import { getLeaderFocusSeconds, getLeaderShareRatio, getRankGap, getRankTier, getTopPercentile } from "../leaderboard/leaderboardStanding";
@@ -211,6 +213,8 @@ export function EditProfileModal({
   }, [profileDraft, profileError, profileSaving]);
   const hasUnsavedInput = savedDraft !== null && !sameEditableProfile(profileDraft, savedDraft);
   const overlayDismiss = useOverlayDismiss(onClose, { disabled: profileSaving, keepOpen: hasUnsavedInput });
+  // The bio is multi-line: Enter in a one-line field saves, ⌘/Ctrl+Enter saves from any field.
+  useModalSubmitShortcut(dialogRef, "modEnter", onSave, { disabled: profileLoading || profileSaving });
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
@@ -284,8 +288,8 @@ export function EditProfileModal({
         {profileMessage ? <p className="capture-recency">{profileMessage}</p> : null}
 
         <div className="modal-foot profile-editor-modal__actions">
-          <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("common.cancel")}</button>
-          <button type="button" className="modal-btn modal-btn--primary" onClick={onSave} disabled={profileLoading || profileSaving} aria-busy={profileSaving}><ActionLabel busy={profileSaving} busyLabel={t("common.saving")}>{t("profile.editor.save")}</ActionLabel></button>
+          <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
+          <button type="button" className="modal-btn modal-btn--primary" onClick={onSave} disabled={profileLoading || profileSaving} aria-busy={profileSaving}><ActionLabel busy={profileSaving} busyLabel={t("common.saving")}>{t("profile.editor.save")}</ActionLabel><KeyHint shortcut="modEnter" /></button>
         </div>
       </section>
     </div>

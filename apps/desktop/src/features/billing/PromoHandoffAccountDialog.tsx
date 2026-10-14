@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
@@ -67,6 +68,7 @@ export function PromoHandoffAccountDialog({
             onClick={onKeepAccount}
           >
             {t("promoHandoff.keepAccount")}
+            <KeyHint shortcut="escape" />
           </button>
         </div>
       </section>

@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import {
   buildBreakReturnAlarmEvent,
   buildDriftAlarmEvent,
@@ -59,6 +61,7 @@ export function DriftAlarmCopySettings({
 }) {
   const { effectiveLanguage, t } = useLocalization();
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const editorRef = useRef<HTMLElement>(null);
   const [activeSectionKey, setActiveSectionKey] = useState<DriftAlarmCopySectionKey>("drift");
   const [draftCopy, setDraftCopy] = useState(value);
   const activeSection = selectCopySection(activeSectionKey);
@@ -93,6 +96,7 @@ export function DriftAlarmCopySettings({
     onChange(diffDriftAlarmCopyOverrides(draftCopy, defaults));
     setIsEditorOpen(false);
   };
+  useModalSubmitShortcut(editorRef, "enter", saveEditor, { disabled: !isEditorOpen });
 
   const updateField = (key: keyof DriftAlarmCopySettingsValue, nextValue: string) => {
     setDraftCopy((currentValue) => ({ ...currentValue, [key]: nextValue }));
@@ -115,6 +119,7 @@ export function DriftAlarmCopySettings({
         {isEditorOpen ? (
         <div className="auth-modal__overlay drift-copy-modal__overlay" {...overlayDismiss}>
           <section
+            ref={editorRef}
             className="auth-modal modal-shell drift-copy-modal"
             data-modal-variant="workspace"
             role="dialog"
@@ -173,9 +178,11 @@ export function DriftAlarmCopySettings({
                   <div className="drift-copy-editor__commit-actions">
                     <button type="button" className="modal-btn modal-btn--ghost" onClick={cancelEditor}>
                       {t("settings.alarmCopy.cancel")}
+                      <KeyHint shortcut="escape" />
                     </button>
                     <button type="button" className="modal-btn modal-btn--primary" onClick={saveEditor}>
                       {t("settings.alarmCopy.save")}
+                      <KeyHint shortcut="enter" />
                     </button>
                   </div>
                 </div>

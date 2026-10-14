@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
 
 import type { BillingEntitlement } from "../billing/billingService";
 import type { CloudDeviceRecord } from "./cloudDeviceService";
@@ -148,6 +149,7 @@ export function CloudDeviceManagementPanel({
             <div className="cloud-device-confirm__actions">
               <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setPendingRemovalDevice(null)}>
                 {t("settings.cloudDevices.cancel")}
+                <KeyHint shortcut="escape" />
               </button>
               <button
                 type="button"

@@ -1,4 +1,5 @@
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { KeyHint } from "../../components/KeyHint";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -39,6 +40,7 @@ export function AiPrivacyDetailsModal({ onClose }: { readonly onClose: () => voi
         <div className="modal-foot">
           <button type="button" className="modal-btn modal-btn--primary" onClick={onClose}>
             {t("settings.aiPrivacy.detailsClose")}
+            <KeyHint shortcut="escape" />
           </button>
         </div>
       </section>

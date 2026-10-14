@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import { useAuth } from "./AuthContext";
 import { AUTH_PASSWORD_POLICY, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { describeAuthError } from "./authErrorMessages";
@@ -92,8 +93,17 @@ export function AuthModal({
   const promoOnboardingDialogRef = useRef<HTMLElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const inlineRef = useRef<HTMLElement>(null);
+  const emailFormRef = useRef<HTMLFormElement>(null);
   const isRecoveryAwaiting = passwordRecoveryState?.phase === "awaiting-new-password";
   const isRecoveryView = authView === "forgot-password" || isRecoveryAwaiting;
+  const isCloudUnavailable = cloudConnectionStatus === "offline" || cloudConnectionStatus === "checking";
+  const isBusy = isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || isRecoverySubmitting || status === "loading";
+  // Auth forms keep their uncluttered button design while using the same
+  // explicit submit chord as other forms. requestSubmit preserves validation
+  // and the active form's handler; plain Enter stays with native submission.
+  useModalSubmitShortcut(emailFormRef, "modEnter", () => emailFormRef.current?.requestSubmit(), {
+    disabled: !isEnabled || isBusy || isCloudUnavailable,
+  });
   useEffect(() => {
     if (!isRecoveryAwaiting) return;
     setFeedback(null);
@@ -301,8 +311,6 @@ export function AuthModal({
 
   const isSignUp = authMode === "sign-up";
   const submitLabel = isSignUp ? t("auth.modal.createAccount") : t("auth.modal.signIn");
-  const isCloudUnavailable = cloudConnectionStatus === "offline" || cloudConnectionStatus === "checking";
-  const isBusy = isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || isRecoverySubmitting || status === "loading";
   const isGoogleCallbackBusy = callbackStatus?.googleAction === "opening"
     || callbackStatus?.phase === "received"
     || callbackStatus?.phase === "exchanging"
@@ -436,7 +444,7 @@ export function AuthModal({
   ) : null;
   const emailAuthForm = (
     <>
-      <form className="auth-modal__form" onSubmit={(event) => void handleEmailSubmit(event)} noValidate>
+      <form ref={emailFormRef} className="auth-modal__form" onSubmit={(event) => void handleEmailSubmit(event)} noValidate>
         <label className="auth-modal__field" htmlFor="auth-email">
           <span>{t("auth.modal.email")}</span>
           <input
@@ -475,6 +483,7 @@ export function AuthModal({
           type="submit"
           className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
           disabled={isBusy || isCloudUnavailable}
+          aria-keyshortcuts="Enter Meta+Enter Control+Enter"
         >
           {isSubmitting ? (isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")) : submitLabel}
         </button>
@@ -499,7 +508,7 @@ export function AuthModal({
   const passwordRecoveryRequestForm = (
     <>
       <p className="auth-modal__recovery-copy">{t("auth.modal.recoveryDescription")}</p>
-      <form className="auth-modal__form" onSubmit={(event) => void handlePasswordRecoveryRequest(event)} noValidate>
+      <form ref={emailFormRef} className="auth-modal__form" onSubmit={(event) => void handlePasswordRecoveryRequest(event)} noValidate>
         <label className="auth-modal__field" htmlFor="auth-recovery-email">
           <span>{t("auth.modal.email")}</span>
           <input
@@ -516,6 +525,7 @@ export function AuthModal({
           type="submit"
           className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
           disabled={isBusy || isCloudUnavailable}
+          aria-keyshortcuts="Enter Meta+Enter Control+Enter"
         >
           {isRecoverySubmitting ? t("auth.modal.recoverySending") : t("auth.modal.recoverySend")}
         </button>
@@ -536,7 +546,7 @@ export function AuthModal({
     </>
   );
   const passwordResetForm = (
-    <form className="auth-modal__form" onSubmit={(event) => void handlePasswordUpdate(event)} noValidate>
+    <form ref={emailFormRef} className="auth-modal__form" onSubmit={(event) => void handlePasswordUpdate(event)} noValidate>
       {passwordInput({
         id: "auth-new-password",
         label: t("auth.modal.newPassword"),
@@ -555,6 +565,7 @@ export function AuthModal({
         type="submit"
         className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
         disabled={isBusy || isCloudUnavailable}
+        aria-keyshortcuts="Enter Meta+Enter Control+Enter"
       >
         {isRecoverySubmitting ? t("auth.modal.resettingPassword") : t("auth.modal.resetPassword")}
       </button>

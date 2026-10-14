@@ -1,4 +1,6 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -62,7 +64,10 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
   const previewUrlsRef = useRef<string[]>([]);
   useModalDismiss(onClose, { disabled: isSending });
   const dialogRef = useRef<HTMLElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
   useAnchoredDialog(dialogRef);
+  // The message is multi-line, so plain Enter there types a newline; ⌘/Ctrl+Enter sends.
+  useModalSubmitShortcut(dialogRef, "modEnter", () => formRef.current?.requestSubmit(), { disabled: isSending || isSent });
   const emailPrefilled = Boolean(initialEmail?.trim());
   // A sent form has nothing left to lose; until then a draft survives a stray click.
   const hasUnsavedInput = !isSent && (
@@ -230,7 +235,7 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
         ) : null}
 
         {isSent ? null : (
-          <form className="feedback-modal__form" onSubmit={handleSubmit} noValidate>
+          <form ref={formRef} className="feedback-modal__form" onSubmit={handleSubmit} noValidate>
             <div className="feedback-modal__field">
               <label className="feedback-modal__label" htmlFor="feedback-email">{t("feedback.email")}</label>
               <input
@@ -352,16 +357,20 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
                 ) : null}
               </div>
               {formError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={formError}>{formError}</p> : null}
-              <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose} disabled={isSending}>
-                {t("common.cancel")}
-              </button>
-              {/* "Sending…" is far wider than "Send": the spinner takes the
-                  button over instead, and the progress text goes to assistive
-                  technology only. */}
-              {isSending ? <span className="action-status" role="status">{t("feedback.sending")}</span> : null}
-              <button type="submit" className="modal-btn modal-btn--primary" disabled={isSending} aria-busy={isSending}>
-                <ActionLabel busy={isSending}>{t("feedback.send")}</ActionLabel>
-              </button>
+              <div className="feedback-modal__submit-actions">
+                <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose} disabled={isSending}>
+                  {t("common.cancel")}
+                  <KeyHint shortcut="escape" />
+                </button>
+                {/* "Sending…" is far wider than "Send": the spinner takes the
+                    button over instead, and the progress text goes to assistive
+                    technology only. */}
+                {isSending ? <span className="action-status" role="status">{t("feedback.sending")}</span> : null}
+                <button type="submit" className="modal-btn modal-btn--primary" disabled={isSending} aria-busy={isSending}>
+                  <ActionLabel busy={isSending}>{t("feedback.send")}</ActionLabel>
+                  <KeyHint shortcut="modEnter" />
+                </button>
+              </div>
             </div>
           </form>
         )}
@@ -373,6 +382,7 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
             </button>
             <button type="button" className="modal-btn modal-btn--primary" onClick={onClose} autoFocus>
               {t("feedback.closeAction")}
+              <KeyHint shortcut="escape" />
             </button>
           </div>
         ) : null}

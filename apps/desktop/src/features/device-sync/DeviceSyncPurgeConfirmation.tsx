@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { KeyHint } from "../../components/KeyHint";
 
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
@@ -44,6 +45,7 @@ export function DeviceSyncPurgeConfirmation({
             onClick={onCancel}
           >
             Cancel
+            <KeyHint shortcut="escape" />
           </button>
           <button
             type="button"

@@ -1,4 +1,5 @@
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
+import { KeyHint } from "../../components/KeyHint";
 import { useEffect, useId, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -191,7 +192,7 @@ function WindowsUpdatePrompt({ version, message, error, onDismiss, onInstall }: 
         {message ? <p className="windows-update-prompt__notes">{message}</p> : null}
         {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}
         <div className="windows-update-prompt__actions">
-          <button type="button" className="modal-btn modal-btn--ghost windows-update-prompt__later" onClick={onDismiss}>{t("updates.later")}</button>
+          <button type="button" className="modal-btn modal-btn--ghost windows-update-prompt__later" onClick={onDismiss}>{t("updates.later")}<KeyHint shortcut="escape" /></button>
           <button type="button" className="modal-btn modal-btn--primary" onClick={() => { onInstall(); onDismiss(); }}>{t("updates.install")}</button>
         </div>
       </section>

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -76,6 +78,7 @@ function ProjectEditorModal({
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
   const [color, setColor] = useState(project?.color || PROJECT_COLOR_SWATCHES[0].color);
+  const dialogRef = useRef<HTMLElement>(null);
 
   useModalDismiss(onClose, { disabled: actionLoading });
   const hasUnsavedInput = name !== (project?.name ?? "")
@@ -95,10 +98,12 @@ function ProjectEditorModal({
       onCreate({ name: trimmedName, description: description.trim(), color });
     }
   };
+  useModalSubmitShortcut(dialogRef, "modEnter", submit, { disabled: actionLoading || !name.trim() });
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
+        ref={dialogRef}
         className="auth-modal modal-shell profile-modal team-modal project-editor-modal"
         data-modal-variant="standard"
         role="dialog"
@@ -125,9 +130,10 @@ function ProjectEditorModal({
           />
           {actionError ? <p className="team-message team-message--error">{actionError}</p> : null}
           <div className="modal-foot team-modal__actions">
-            <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("common.cancel")}</button>
+            <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
             <button type="button" className="modal-btn modal-btn--primary" disabled={actionLoading || !name.trim()} onClick={submit}>
               {state.mode === "edit" ? t("team.editor.save") : t("team.editor.create")}
+              <KeyHint shortcut="modEnter" />
             </button>
           </div>
         </div>

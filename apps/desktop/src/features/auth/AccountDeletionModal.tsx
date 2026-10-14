@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { KeyHint } from "../../components/KeyHint";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
@@ -52,6 +54,8 @@ export function AccountDeletionModal({
     }
     setDeleting(false);
   };
+  // Typing the confirmation is the deliberate step, so Enter may finish it once it matches.
+  useModalSubmitShortcut(dialogRef, "enter", () => void handleDelete(), { disabled: !matches || deleting });
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
@@ -115,6 +119,7 @@ export function AccountDeletionModal({
           <span className="modal-foot__note" id="account-deletion-modal-no-undo">{t("settings.account.deleteNoUndo")}</span>
           <button className="modal-btn modal-btn--ghost" disabled={deleting} type="button" onClick={onClose}>
             {t("settings.account.deleteCancel")}
+            <KeyHint shortcut="escape" />
           </button>
           <button
             className="modal-btn modal-btn--danger"
@@ -124,6 +129,7 @@ export function AccountDeletionModal({
             onClick={() => void handleDelete()}
           >
             <ActionLabel busy={deleting} busyLabel={t("settings.account.deletingAccount")}>{t("settings.account.deletePermanently")}</ActionLabel>
+            <KeyHint shortcut="enter" />
           </button>
         </div>
       </section>

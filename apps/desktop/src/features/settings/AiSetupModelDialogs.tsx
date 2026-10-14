@@ -1,4 +1,5 @@
 import type { FormEvent } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import { useLocalization } from "../localization/LocalizationContext";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -80,7 +81,7 @@ export function OpenRouterModelDialog({
           <label htmlFor="openrouter-custom-model">{t("settings.ai.otherModel")}</label>
           <div>
             <input id="openrouter-custom-model" className="settings-input modal-code" aria-label={t("settings.ai.otherOpenRouterModelAria")} value={customModel} onChange={(event) => onCustomModelChange(event.target.value)} placeholder="provider/model-name" />
-            <button type="submit" className="modal-btn modal-btn--secondary">{t("settings.ai.addModel")}</button>
+            <button type="submit" className="modal-btn modal-btn--secondary">{t("settings.ai.addModel")}<KeyHint shortcut="enter" /></button>
           </div>
         </form>
       </section>

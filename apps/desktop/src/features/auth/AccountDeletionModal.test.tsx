@@ -218,4 +218,23 @@ describe("AccountDeletionModal", () => {
     expect(screen.getByRole("dialog").getAttribute("aria-busy")).toBe("false");
     expect(screen.getAllByRole("button", { name: /^Cancel$/i }).every((button) => !button.hasAttribute("disabled"))).toBe(true);
   });
+
+  it("finishes the typed confirmation with Enter only once it matches", async () => {
+    const onDelete = vi.fn().mockResolvedValue({ success: true, localDataRetained: true });
+    render(<AccountDeletionModal accountEmail="alex@example.com" onClose={vi.fn()} onDelete={onDelete} />);
+    const confirmation = screen.getByRole("textbox", { name: /Type alex@example.com to confirm/i });
+    const deleteButton = screen.getByRole("button", { name: /^Delete permanently$/i });
+    expect(deleteButton.getAttribute("aria-keyshortcuts")).toBe("Enter");
+
+    fireEvent.change(confirmation, { target: { value: "alex@example" } });
+    fireEvent.keyDown(confirmation, { key: "Enter" });
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.change(confirmation, { target: { value: "alex@example.com" } });
+    fireEvent.keyDown(confirmation, { key: "Enter", keyCode: 229 });
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(confirmation, { key: "Enter" });
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith("alex@example.com"));
+  });
 });

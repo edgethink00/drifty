@@ -102,4 +102,43 @@ describe("ProjectEditorModal", () => {
     resolveSave(true);
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
+
+  it("saves from the keyboard: Enter in the name, ⌘↵ from the description, never a newline", async () => {
+    const onSave = vi.fn(async () => true);
+    render(<ProjectEditorModal project={null} projects={[]} onSave={onSave} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    const name = within(dialog).getByLabelText("Name");
+    const description = within(dialog).getByLabelText("Description");
+
+    fireEvent.keyDown(name, { key: "Enter" });
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.change(name, { target: { value: "Launch review" } });
+    fireEvent.keyDown(description, { key: "Enter" });
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(description, { key: "Enter", metaKey: true });
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ name: "Launch review" }));
+  });
+
+  it("submits once with Enter from the name and shows each key on the action it presses", async () => {
+    const onSave = vi.fn(async () => true);
+    render(<ProjectEditorModal project={null} projects={[]} onSave={onSave} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    const create = within(dialog).getByRole("button", { name: "Create project" });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+
+    expect(create.getAttribute("aria-keyshortcuts")).toBe("Meta+Enter");
+    expect(create.textContent).toContain("⌘↵");
+    expect(cancel.getAttribute("aria-keyshortcuts")).toBe("Escape");
+
+    const name = within(dialog).getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Launch review" } });
+    fireEvent.keyDown(name, { key: "Enter", isComposing: true });
+    expect(onSave).not.toHaveBeenCalled();
+    fireEvent.keyDown(name, { key: "Enter" });
+    fireEvent.keyDown(name, { key: "Enter" });
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+  });
 });

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { KeyHint } from "../../components/KeyHint";
+import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { PageTabs, pageTabId } from "../../components/PageTabs";
@@ -97,6 +99,7 @@ export function TeamWorkspace({
   const disarmTimerRef = useRef<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addTab, setAddTab] = useState<"create" | "join">("create");
+  const addModalRef = useRef<HTMLElement>(null);
   const [teamName, setTeamName] = useState("");
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const switcherTriggerRef = useRef<HTMLButtonElement>(null);
@@ -293,6 +296,9 @@ export function TeamWorkspace({
     const accept = pendingInvite ? onAcceptPendingInvite : handleAcceptInvite;
     void accept({ inviteKey: key });
   };
+  useModalSubmitShortcut(addModalRef, "enter", addTab === "create" ? submitCreateTeam : submitJoin, {
+    disabled: !addOpen || teamActionLoading || !(addTab === "create" ? teamName : inviteKey).trim(),
+  });
 
   const regenerateInvite = async () => {
     if (!selectedTeam) return;
@@ -921,6 +927,7 @@ export function TeamWorkspace({
                       </button>
                       <button type="submit" className="modal-btn modal-btn--danger" disabled={!deleteNameMatches || teamActionLoading}>
                         {t("team.settings.deleteConfirm")}
+                        <KeyHint shortcut="enter" />
                       </button>
                     </div>
                   </form>
@@ -953,6 +960,7 @@ export function TeamWorkspace({
     return (
       <div className="auth-modal__overlay" {...addOverlayDismiss}>
         <section
+          ref={addModalRef}
           className="auth-modal modal-shell profile-modal team-modal team-editor-modal"
           data-modal-variant="standard"
           role="dialog"
@@ -998,17 +1006,15 @@ export function TeamWorkspace({
                     maxLength={120}
                     aria-label={t("team.add.name")}
                     onChange={(event) => setTeamName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") submitCreateTeam();
-                    }}
                   />
                   <p className="team-modal__hint">{t("team.add.adminHint")}</p>
                 </div>
                 {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
                 <div className="modal-foot team-modal__actions">
-                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}</button>
+                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
                   <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !teamName.trim()} onClick={submitCreateTeam}>
                     {t("team.add.create")}
+                    <KeyHint shortcut="enter" />
                   </button>
                 </div>
               </>
@@ -1023,17 +1029,15 @@ export function TeamWorkspace({
                     maxLength={500}
                     aria-label={t("team.add.inviteAria")}
                     onChange={(event) => setInviteKey(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") submitJoin();
-                    }}
                   />
                   <p className="team-modal__hint">{t("team.invite.sharingStartsLater")}</p>
                 </div>
                 {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
                 <div className="modal-foot team-modal__actions">
-                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}</button>
+                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
                   <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !inviteKey.trim()} onClick={submitJoin}>
                     {t("team.invite.join")}
+                    <KeyHint shortcut="enter" />
                   </button>
                 </div>
               </>

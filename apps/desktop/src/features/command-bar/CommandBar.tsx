@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import { type TabId } from "../../app/navigation";
 import { AiMarkIcon, AiReclassifyIcon } from "../../components/AiIcons";
 import { accessibilityClient } from "../../lib/api/accessibilityClient";
@@ -450,7 +451,7 @@ export function CommandBar({
             }}
             onKeyDown={handleKeyDown}
           />
-          <button type="button" className="esc-key" onClick={onDismiss}>esc</button>
+          <button type="button" className="esc-key" aria-label={t("command.close")} onClick={onDismiss}><KeyHint shortcut="escape" /></button>
         </div>
 
         <div className="cmd-list" role="listbox" aria-label={t("command.palette")}>
@@ -482,7 +483,7 @@ export function CommandBar({
                       <span className="cmd-sub">{item.sub}</span>
                     </span>
                     {showShortcuts && item.shortcut ? (
-                      <kbd className="cmd-kbd" aria-hidden="true">{item.shortcut}</kbd>
+                      <kbd className="key-hint cmd-kbd" aria-hidden="true">{item.shortcut}</kbd>
                     ) : null}
                   </button>
                 );

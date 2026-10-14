@@ -31,6 +31,8 @@
 }
 
 .cmd-box {
+  --cmd-list-inset: 6px;
+  --cmd-item-inset: 10px;
   width: 512px;
   max-width: calc(100vw - 32px);
   background: var(--surface);
@@ -42,6 +44,12 @@
   flex-direction: column;
 }
 
+/* Esc and navigation shortcuts share a column. The shared chip's tabular
+   numerals keep digit advances equal; the slot also accommodates Esc and ⌘,. */
+.cmd-box .key-hint {
+  min-width: 2rem;
+}
+
 :root[data-theme="dark"] .cmd-box {
   box-shadow: 0 22px 56px rgba(0, 0, 0, 0.45);
 }
@@ -51,7 +59,7 @@
   align-items: center;
   gap: 10px;
   height: 48px;
-  padding: 0 12px 0 14px;
+  padding: 0 calc(var(--cmd-list-inset) + var(--cmd-item-inset)) 0 14px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -89,34 +97,27 @@
   color: var(--text-soft);
 }
 
+/* The palette's close control is the shared Esc chip (`KeyHint`) in a bare
+   button, so it matches the key hints on dialog actions. */
 .cmd-input-row .esc-key {
-  font-family: var(--font-sans);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-soft);
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-  line-height: 1;
   appearance: none;
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  cursor: pointer;
 }
 
-:root[data-theme="dark"] .cmd-input-row .esc-key {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  border-color: var(--line);
-  color: var(--text-soft);
+.cmd-input-row .esc-key:hover {
+  color: var(--text);
 }
 
 .cmd-list {
   max-height: 440px;
   overflow-y: auto;
-  padding: 6px 6px 10px;
+  padding: 6px var(--cmd-list-inset) 10px;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -147,7 +148,7 @@
   gap: 10px;
   min-height: 40px;
   height: auto;
-  padding: 6px 10px;
+  padding: 6px var(--cmd-item-inset);
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;
@@ -240,24 +241,11 @@
   color: var(--text-soft);
 }
 
+/* The shared `.key-hint` chip (modal-chrome.css), tinted from the quieter
+   secondary ink so the shortcut column stays behind the command labels. */
 .cmd-item .cmd-kbd {
-  font-family: var(--font-sans);
-  font-size: 0.6875rem;
-  font-weight: 500;
   color: var(--text-soft);
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  padding: 2px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
-  flex-shrink: 0;
   margin-left: auto;
-}
-
-:root[data-theme="dark"] .cmd-item .cmd-kbd {
-  color: var(--text-soft);
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  border-color: var(--line);
 }
 
 .cmd-empty {
@@ -915,6 +903,7 @@ img.site-favicon { border-radius: 20%; }
 
 .feedback-modal__form {
   display: grid;
+  min-width: 0;
   gap: var(--space-2);
 }
 
@@ -1134,12 +1123,24 @@ img.site-favicon { border-radius: 20%; }
 }
 
 .auth-modal .feedback-modal__actions {
+  flex-wrap: wrap;
+  min-width: 0;
   border-top: 0;
   padding-top: 0;
 }
 
+.feedback-modal__submit-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
 .feedback-modal__attach-group {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: 2px;
   margin-right: auto;

@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import { ActionLabel } from "../../components/ActionLabel";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -58,6 +59,7 @@ export function ExcludedAppHistoryConfirmation({ appName, count, deleting, error
         <div className="excluded-app-history-modal__actions">
           <button type="button" className="modal-btn modal-btn--ghost" data-excluded-app-history-cancel disabled={deleting} onClick={onCancel}>
             {t("common.cancel")}
+            <KeyHint shortcut="escape" />
           </button>
           <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} aria-busy={deleting} onClick={onConfirm}>
             <ActionLabel busy={deleting} busyLabel={t("common.deleting")}>{t("settings.privacy.excludedAppsDeleteConfirm.confirm")}</ActionLabel>

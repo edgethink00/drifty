@@ -6,6 +6,7 @@ import type {
   SshAgentSourceListResult,
   SshAgentSourceTestResult,
 } from "@drifty/domain";
+import { KeyHint } from "../../components/KeyHint";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -478,6 +479,7 @@ export function SshAgentSourcesModal({
                   disabled={!normalizedManualHost || isBusy || sourceLimitReached}
                 >
                   {t("agents.ssh.connect")}
+                  <KeyHint shortcut="enter" />
                 </button>
               </form>
             ) : discovery !== null ? (

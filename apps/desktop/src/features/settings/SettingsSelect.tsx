@@ -327,6 +327,10 @@ export function SettingsSelect<TValue extends string>({
       return;
     }
 
+    // A closed picker leaves the dialog's explicit submit shortcut available.
+    // An open picker still owns Enter until its option has been chosen.
+    if (!isOpen && event.key === "Enter" && (event.metaKey || event.ctrlKey)) return;
+
     if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) keyboardNavigation.current = true;
     switch (event.key) {
       case "ArrowDown":

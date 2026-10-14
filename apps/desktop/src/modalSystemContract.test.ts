@@ -286,3 +286,98 @@ describe("modal overlays", () => {
     expect(sources.filter(({ text }) => text.includes("useOverlayDismiss(")).length).toBeGreaterThanOrEqual(19);
   });
 });
+
+describe("dialog key hints", () => {
+  /* Product decision 2026-10-13 "Dialog key hints": a key chip is always shown,
+   * and only on the button its key actually presses. Escape labels the action
+   * identical to the dialog's dismiss; Enter labels a one-line form's submit;
+   * ⌘/Ctrl+Enter labels the submit of a form with a multi-line field. Payment,
+   * consent and plain delete confirmations never take plain Enter; history-range
+   * deletion explicitly takes ⌘/Ctrl+Enter, and typed confirmations take Enter.
+   * This table is the agreed
+   * placement, so a dialog that gains or loses a hint has to change it here. */
+  type Shortcut = "escape" | "enter" | "modEnter";
+  const agreedHints: readonly (readonly [string, readonly Shortcut[]])[] = [
+    ["./features/projects/ProjectEditorModal.tsx", ["escape", "modEnter"]],
+    ["./features/team/TeamProjectsView.tsx", ["escape", "modEnter"]],
+    ["./features/profile/ProfileModals.tsx", ["escape", "modEnter"]],
+    ["./features/feedback/FeedbackModal.tsx", ["escape", "modEnter"]],
+    ["./features/team/TeamWorkspace.tsx", ["enter", "escape"]],
+    ["./features/companion/DriftAlarmCopySettings.tsx", ["enter", "escape"]],
+    ["./features/dev-signals/SshAgentSourcesModal.tsx", ["enter"]],
+    ["./features/settings/AiSetupModelDialogs.tsx", ["enter"]],
+    ["./features/auth/AccountDeletionModal.tsx", ["enter", "escape"]],
+    ["./features/billing/ProDecisionSheet.tsx", ["escape"]],
+    ["./features/device-sync/DeviceSyncSetupModal.tsx", ["escape"]],
+    ["./features/onboarding/AutomaticCloseConfirmDialog.tsx", ["escape"]],
+    ["./features/billing/PromoHandoffAccountDialog.tsx", ["escape"]],
+    ["./features/updates/AvailableUpdateDialog.tsx", ["escape"]],
+    ["./features/projects/ProjectDeleteConfirmation.tsx", ["escape"]],
+    ["./features/history/HistoryView.tsx", ["escape"]],
+    ["./features/settings/DeleteHistoryModal.tsx", ["escape", "modEnter"]],
+    ["./features/settings/ExcludedAppHistoryConfirmation.tsx", ["escape"]],
+    ["./features/device-sync/DeviceSyncPurgeConfirmation.tsx", ["escape"]],
+    ["./features/settings/DeleteManagedModelModal.tsx", ["escape"]],
+    ["./features/cloud-devices/CloudDeviceManagementPanel.tsx", ["escape"]],
+    ["./features/settings/AiPrivacyDetailsModal.tsx", ["escape"]],
+    ["./features/command-bar/CommandBar.tsx", ["escape"]],
+  ];
+  const typedConfirmations = ["./features/auth/AccountDeletionModal.tsx", "./features/team/TeamWorkspace.tsx"];
+  const hintsIn = (source: string): Shortcut[] =>
+    [...new Set([...source.matchAll(/<KeyHint shortcut="(\w+)"/g)].map((match) => match[1] as Shortcut))].sort();
+
+  it("places key hints exactly where the agreed table puts them", () => {
+    const discovered = productionComponentFiles().filter((file) => read(file).includes("<KeyHint "));
+
+    expect(discovered.slice().sort()).toEqual(agreedHints.map(([file]) => file).sort());
+    for (const [file, hints] of agreedHints) {
+      expect(hintsIn(read(file)), file).toEqual([...hints].sort());
+    }
+  });
+
+  it("binds every advertised key to a handler for that key", () => {
+    for (const [file, hints] of agreedHints) {
+      const source = read(file);
+      if (hints.includes("escape")) {
+        expect(/useModalDismiss\(|<ModalPresence[^>]*onDismiss=/.test(source), `${file} wires Escape`).toBe(true);
+      }
+      if (hints.includes("modEnter")) {
+        expect(source, `${file} wires ⌘/Ctrl+Enter`).toMatch(/useModalSubmitShortcut\([^;]*"modEnter"/);
+      }
+      if (hints.includes("enter")) {
+        const bound = /useModalSubmitShortcut\([^;]*"enter"/.test(source) || /<form[\s\S]*type="submit"/.test(source);
+        expect(bound, `${file} wires Enter`).toBe(true);
+      }
+    }
+  });
+
+  it("keeps Enter off payment, consent and other plain deletes, with an explicit history modifier shortcut", () => {
+    const enterHint = /<KeyHint shortcut="(?:enter|modEnter)"/;
+    for (const [file, hints] of agreedHints) {
+      if (hints.includes("enter") || hints.includes("modEnter")) continue;
+      expect(read(file), file).not.toMatch(enterHint);
+      expect(read(file), file).not.toContain("useModalSubmitShortcut(");
+    }
+    expect(read("./features/dashboard/DashboardAiRecoveryOverlay.tsx")).not.toContain("useModalSubmitShortcut(");
+
+    for (const file of productionComponentFiles()) {
+      const dangerButtons = [...read(file).matchAll(/<button\b[^>]*modal-btn--danger[\s\S]*?<\/button>/g)];
+      for (const [button] of dangerButtons.filter(([button]) => enterHint.test(button))) {
+        if (file === "./features/settings/DeleteHistoryModal.tsx") {
+          expect(hintsIn(button), "history deletion only advertises the modifier shortcut").toEqual(["modEnter"]);
+        } else {
+          expect(typedConfirmations, `${file} puts Enter on a destructive action`).toContain(file);
+        }
+      }
+    }
+  });
+
+  it("draws one chip for dialog actions and the command palette", () => {
+    const chrome = read("./styles/modal-chrome.css");
+    const surfaces = read("./styles/shared-surfaces.css");
+
+    expect(chrome).toMatch(/\.key-hint\s*\{[^}]*background: color-mix\(in srgb, currentColor 14%, transparent\);/);
+    expect(read("./features/command-bar/CommandBar.tsx")).toContain('className="key-hint cmd-kbd"');
+    expect(surfaces).not.toMatch(/\.cmd-kbd\s*\{[^}]*border:/);
+  });
+});

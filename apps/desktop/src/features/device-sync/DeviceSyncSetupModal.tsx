@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { KeyHint } from "../../components/KeyHint";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
@@ -33,6 +34,7 @@ export function DeviceSyncSetupModal({ mode, canEnable, onClose, onEnable }: {
             <div className="device-sync-setup-modal__actions">
               <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>
                 {t(mode === "enable" ? "common.cancel" : "settings.account.syncClose")}
+                <KeyHint shortcut="escape" />
               </button>
               {mode === "enable" ? (
                 <button type="button" className="modal-btn modal-btn--primary" disabled={!canEnable}

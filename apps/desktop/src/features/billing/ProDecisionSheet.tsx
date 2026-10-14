@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { KeyHint } from "../../components/KeyHint";
 import { createPortal } from "react-dom";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { ModalPresence } from "../../components/ModalPresence";
@@ -224,7 +225,7 @@ function DecisionSheet({
         ) : null}
         <footer className="modal-foot pro-sheet__foot">
           <p className="modal-foot__note">{t("billing.proSheet.footNoteShort")}</p>
-          <button type="button" className="modal-btn modal-btn--ghost" disabled={checkoutOpening} onClick={dismiss}>{t("billing.proSheet.later")}</button>
+          <button type="button" className="modal-btn modal-btn--ghost" disabled={checkoutOpening} onClick={dismiss}>{t("billing.proSheet.later")}<KeyHint shortcut="escape" /></button>
           <button type="button" className="modal-btn modal-btn--primary" disabled={billingPlansDisabled || checkoutOpening} onClick={startCheckout}>
             {checkoutLabel}
           </button>

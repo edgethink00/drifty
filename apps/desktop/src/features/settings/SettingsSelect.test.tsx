@@ -223,6 +223,24 @@ describe("SettingsSelect selected-row placement", () => {
 
 
 describe("SettingsSelect popup integration", () => {
+  it.each([{ metaKey: true }, { ctrlKey: true }])("passes modifier Enter to the dialog only when the picker is closed: %j", (modifier) => {
+    const onChange = vi.fn();
+    const handled: boolean[] = [];
+    render(<div onKeyDown={event => { if (event.key === "Enter") handled.push(event.defaultPrevented); }}>
+      <SettingsSelect ariaLabel="Range" value="today" options={[{ value: "today", label: "Today" }, { value: "all", label: "All time" }]} onChange={onChange} />
+    </div>);
+    const trigger = screen.getByRole("combobox", { name: "Range" });
+    expect(fireEvent.keyDown(trigger, { key: "Enter", ...modifier })).toBe(true);
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(handled).toEqual([false]);
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    expect(fireEvent.keyDown(trigger, { key: "Enter", ...modifier })).toBe(false);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("all");
+    expect(handled).toEqual([false, true, true]);
+  });
+
   it("renders no partial control when the option list is empty", () => {
     render(<SettingsSelect ariaLabel="Empty" value="" options={[]} onChange={vi.fn()} />);
     expect(screen.queryByRole("combobox", { name: "Empty" })).toBeNull();
