@@ -5050,17 +5050,26 @@ class TrackerDatabase:
         return "." in text and " " not in text
 
     def _matching_rule(self, segment: sqlite3.Row, rules: list[sqlite3.Row]) -> sqlite3.Row | None:
+        # Rule application keeps one atomic writer transaction. Normalize each
+        # captured field once per segment instead of repeating URL parsing for
+        # every rule while other tracker/settings writers are waiting.
+        surfaces: dict[str, str] = {}
+        details: dict[str, set[str]] = {}
         for rule in rules:
-            if not self._rule_surface_matches(segment, rule):
+            if not self._rule_surface_matches(segment, rule, surfaces):
                 continue
-            if rule["match_scope"] == "detail" and not self._rule_detail_matches(segment, rule):
+            if rule["match_scope"] == "detail" and not self._rule_detail_matches(segment, rule, details):
                 continue
             return rule
         return None
 
-    def _rule_surface_matches(self, segment: sqlite3.Row, rule: sqlite3.Row) -> bool:
+    def _rule_surface_matches(
+        self, segment: sqlite3.Row, rule: sqlite3.Row, normalized: dict[str, str],
+    ) -> bool:
         if rule["target_kind"] == "site":
-            host = self._normalize_site_target(segment["site_domain"] or segment["site_url"])
+            if "site" not in normalized:
+                normalized["site"] = self._normalize_site_target(segment["site_domain"] or segment["site_url"])
+            host = normalized["site"]
             target = rule["normalized_target_value"]
             return bool(host and (host == target or host.endswith(f".{target}")))
 
@@ -5068,13 +5077,20 @@ class TrackerDatabase:
         target = rule["target_value"]
         if (self._looks_like_bundle_id(target) or bundle_id) and bundle_id == target:
             return True
-        return self._normalize_app_target(segment["app_name"]) == rule["normalized_target_value"]
+        if "app" not in normalized:
+            normalized["app"] = self._normalize_app_target(segment["app_name"])
+        return normalized["app"] == rule["normalized_target_value"]
 
-    def _rule_detail_matches(self, segment: sqlite3.Row, rule: sqlite3.Row) -> bool:
+    def _rule_detail_matches(
+        self, segment: sqlite3.Row, rule: sqlite3.Row, normalized: dict[str, set[str]],
+    ) -> bool:
         normalized_detail_value = rule["normalized_detail_value"]
         if not normalized_detail_value:
             return False
-        return normalized_detail_value in self._normalized_segment_rule_details(segment, rule["detail_kind"])
+        detail_kind = rule["detail_kind"]
+        if detail_kind not in normalized:
+            normalized[detail_kind] = self._normalized_segment_rule_details(segment, detail_kind)
+        return normalized_detail_value in normalized[detail_kind]
 
     def _normalized_segment_rule_details(self, segment: sqlite3.Row, detail_kind: str) -> set[str]:
         if detail_kind == "siteUrl":
