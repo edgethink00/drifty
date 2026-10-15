@@ -14,6 +14,7 @@ import {
   WeeklyCategoryRow,
 } from "./InsightCards";
 import type { AttentionRhythmCell, InsightSourceLists, WeeklyBreakdownDay } from "./insightData";
+import type { InsightSourceItem, ProductivityAnalysisKind } from "./insightData";
 import { InsightsCoachPanel } from "./InsightsCoachPanel";
 import { buildInsightsCoachReadiness } from "./insightsReadiness";
 import { InsightsSummaryTiles } from "./InsightsSummaryTiles";
@@ -22,7 +23,9 @@ import { readDayNotePreview } from "../day-note/dayNoteGate";
 import type { InsightsTabId } from "./InsightsTabs";
 import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
 import { useLocalization } from "../localization/LocalizationContext";
-import { Suspense, lazy, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { InsightEvidencePanel } from "./InsightEvidencePanel";
+import { insightEvidenceKey as evidenceKey, type OpenInsightEvidence } from "./insightEvidence";
 
 // Dev-server design review for Your read. Vite replaces import.meta.env.DEV
 // with false in production builds, so the preview and its fixtures are not
@@ -58,6 +61,18 @@ type TrendsPageBodyProps = {
   readonly projectSegments: readonly ActivitySegment[];
   readonly projectSeries?: readonly WeeklyChartProjectSeriesItem[];
   readonly range: InsightRange;
+  /** The selected window as the range navigator shows it, e.g. "Oct 9–15". */
+  readonly rangeLabel?: string;
+  readonly startOfDayMinutes?: number;
+  /**
+   * The records open beside the lists. Kept by the page, not this body, so they
+   * stay open while a new range loads and the body is briefly replaced.
+   */
+  readonly evidence?: OpenInsightEvidence | null;
+  readonly onEvidenceChange?: Dispatch<SetStateAction<OpenInsightEvidence | null>>;
+  /** Whether opening should move focus to Back; false once it has, so a reload does not move it again. */
+  readonly evidenceAutoFocus?: boolean;
+  readonly onEvidenceFocused?: () => void;
   /** Where Your read puts its week navigator: the toolbar slot Your usage uses for its range. */
   readonly readToolbar?: HTMLElement | null;
   readonly segments: ActivitySegment[];
@@ -84,6 +99,12 @@ export function TrendsPageBody({
   projectSegments,
   projectSeries,
   range,
+  rangeLabel = "",
+  startOfDayMinutes = 0,
+  evidence = null,
+  onEvidenceChange,
+  evidenceAutoFocus = false,
+  onEvidenceFocused,
   readToolbar,
   segments,
   weekly,
@@ -106,6 +127,45 @@ export function TrendsPageBody({
   const calendarPlacement = requestedPlacement === "left-strip" || requestedPlacement === "right-top" || requestedPlacement === "original" ? requestedPlacement : "right-bottom";
   const calendarOnRight = calendarPlacement === "right-top" || calendarPlacement === "right-bottom";
   const fitWindow = arrangement === "k" && calendarOnRight && (typeof window === "undefined" || new URLSearchParams(window.location.search).get("usageLayout") !== "scroll");
+  const closeEvidence = useCallback(() => {
+    onEvidenceChange?.((current) => {
+      if (current) {
+        const key = evidenceKey(current.target);
+        // The row that opened the records gets focus back once the column returns.
+        window.requestAnimationFrame(() => {
+          const row = document.querySelector<HTMLElement>(`[data-insight-evidence-key="${CSS.escape(key)}"]`);
+          row?.focus({ preventScroll: true });
+        });
+      }
+      return null;
+    });
+  }, [onEvidenceChange]);
+
+  // Escape closes the records from anywhere on the page, unless something
+  // above it (a dialog, a menu) already used the key.
+  useEffect(() => {
+    if (!evidence) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector("[aria-modal='true']")) return;
+      closeEvidence();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeEvidence, evidence]);
+
+  const openEvidence = useCallback((variant: ProductivityAnalysisKind, list: keyof InsightSourceLists, item: InsightSourceItem) => {
+    onEvidenceChange?.((current) => {
+      const target = { variant, list, itemId: item.id };
+      // The open row closes its records; another row takes their place.
+      if (current && evidenceKey(current.target) === evidenceKey(target)) return null;
+      return { target, item, openedFromClosed: current === null };
+    });
+  }, [onEvidenceChange]);
+
+  const evidenceEnabled = activeTab === "usage" && arrangement === "k" && onEvidenceChange !== undefined;
+  const openDriftEvidence = useCallback((list: keyof InsightSourceLists, item: InsightSourceItem) => openEvidence("drift", list, item), [openEvidence]);
+  const openFocusEvidence = useCallback((list: keyof InsightSourceLists, item: InsightSourceItem) => openEvidence("focus", list, item), [openEvidence]);
 
   if (activeTab === "read" && isInsightsReadTabEnabled()) {
     return (
@@ -173,12 +233,43 @@ export function TrendsPageBody({
     ? <AlarmFollowThroughCard followThrough={alarmFollowThrough} />
     : null;
 
+  const activeEvidence = (variant: ProductivityAnalysisKind) => (
+    evidence && evidence.target.variant === variant ? { list: evidence.target.list, itemId: evidence.target.itemId } : null
+  );
   const sourcesBlock = (
     <div className="insight-grid productivity-insight-groups" aria-label={t("trends.chartsAria")}>
-      <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} pageSize={fitWindow ? 3 : undefined} />
-      <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} pageSize={fitWindow ? 3 : undefined} />
+      <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} pageSize={fitWindow ? 3 : undefined} activeEvidence={activeEvidence("drift")} onOpenEvidence={evidenceEnabled ? openDriftEvidence : undefined} />
+      <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} pageSize={fitWindow ? 3 : undefined} activeEvidence={activeEvidence("focus")} onOpenEvidence={evidenceEnabled ? openFocusEvidence : undefined} />
     </div>
   );
+
+  let evidencePanel: ReactNode = null;
+  if (evidence && evidenceEnabled) {
+    const lists = evidence.target.variant === "drift" ? driftSourceLists : focusSourceLists;
+    const currentItem = lists[evidence.target.list].find((entry) => entry.id === evidence.target.itemId) ?? evidence.item;
+    const listLabel = t(
+      evidence.target.list === "apps"
+        ? (evidence.target.variant === "drift" ? "trends.driftApps" : "trends.focusApps")
+        : (evidence.target.variant === "drift" ? "trends.driftAfterFocus" : "trends.focusBeforeDrift"),
+    );
+    evidencePanel = (
+      <InsightEvidencePanel
+        key={evidenceKey(evidence.target)}
+        target={evidence.target}
+        item={currentItem}
+        listLabel={listLabel}
+        rangeLabel={rangeLabel}
+        segments={segments}
+        classificationOptions={classificationOptions}
+        startOfDayMinutes={startOfDayMinutes}
+        appIcons={appIcons}
+        autoFocus={evidenceAutoFocus}
+        motion={evidence.openedFromClosed && evidenceAutoFocus ? "open" : "switch"}
+        onAutoFocused={onEvidenceFocused}
+        onClose={closeEvidence}
+      />
+    );
+  }
 
   const panelProps = {
     id: "insights-tabpanel-usage",
@@ -195,10 +286,11 @@ export function TrendsPageBody({
         {arrangement === "l" && <div className="insights-stacked__wide-chart">{weeklyBlock("chart")}</div>}
         <div className="insights-stacked__columns">
           {arrangement === "k" && <div className="insights-stacked__patterns">{showCalendar && !calendarOnRight && calendar}{alarmCard}{rhythmCard}{fitWindow && sourcesBlock}</div>}
-          <div className="insights-stacked__breakdown">
+          <div className={`insights-stacked__breakdown${evidencePanel ? " has-evidence" : ""}`}>
             {arrangement === "k" && showCalendar && calendarPlacement === "right-top" && calendar}
             {weeklyBlock(arrangement === "l" ? "rail" : "all")}
             {arrangement === "k" && showCalendar && calendarPlacement === "right-bottom" && calendar}
+            {evidencePanel}
           </div>
           {arrangement !== "k" && <div className="insights-stacked__patterns">{alarmCard}{rhythmCard}</div>}
         </div>

@@ -1,5 +1,6 @@
 import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
-import { Suspense, lazy, useState, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useRef, useState, type ReactNode } from "react";
+import type { OpenInsightEvidence } from "./insightEvidence";
 import { DateNavigator } from "../../components/DateNavigator";
 import type { AlarmFollowThrough } from "./alarmFollowThrough";
 import { INSIGHT_RANGE_OPTIONS, type InsightRange } from "../dashboard/dashboardPeriods";
@@ -88,6 +89,13 @@ export function TrendsPage({
   // Your read steps through its weekly reads with the same navigator, in the
   // same place; the read page fills this slot itself.
   const [readToolbar, setReadToolbar] = useState<HTMLDivElement | null>(null);
+  // The records behind a usage row stay open across range changes, which
+  // briefly replace the body while the new range loads.
+  const [evidence, setEvidence] = useState<OpenInsightEvidence | null>(null);
+  const [evidenceFocusDone, setEvidenceFocusDone] = useState<OpenInsightEvidence | null>(null);
+  const evidenceRef = useRef(evidence);
+  evidenceRef.current = evidence;
+  const markEvidenceFocused = useCallback(() => setEvidenceFocusDone(evidenceRef.current), []);
   const visibleTab = readTabEnabled && INSIGHTS_TABS.some((tab) => tab.id === activeTab) ? activeTab : "usage";
   const productivityTotals = {
     focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
@@ -152,6 +160,12 @@ export function TrendsPage({
             readToolbar={readToolbar}
             weekly={weeklyBreakdown}
             range={trendsRange}
+            rangeLabel={insightDateLabel}
+            evidence={evidence}
+            onEvidenceChange={setEvidence}
+            evidenceAutoFocus={evidence !== null && evidence.openedFromClosed && evidenceFocusDone !== evidence}
+            onEvidenceFocused={markEvidenceFocused}
+            startOfDayMinutes={calendarStartOfDayMinutes}
             categoryTotals={activeInsightCategoryTotals}
             productivityDurations={activeInsightProductivityTotals}
             segments={insightSegments}

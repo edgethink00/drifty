@@ -1,4 +1,4 @@
-import { buildAppUsageSummaries, categorizeActivity, classifyActivity } from "@drifty/domain";
+import { appUsageSummaryGroupKey, buildAppUsageSummaries, categorizeActivity, classifyActivity } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, ProductivityLabel } from "@drifty/domain";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatDuration, getLocalDaysBetween, localDateKey, weekdayOrderIndex } from "../../lib/formatting";
@@ -164,6 +164,11 @@ export type InsightSourceValueKind = "duration" | "count";
 
 export interface InsightSourceItem {
   id: string;
+  /**
+   * Which records the item counts. Duration items use the app usage group key;
+   * transition items use the surface identity of the switch's focus or drift side.
+   */
+  groupKey: string;
   label: string;
   seconds: number;
   count: number;
@@ -187,6 +192,7 @@ export function buildInsightSourceLists(
   const filtered = segments.filter((segment) => classifyActivity(segment, options).productivity === productivity);
   const toItem = (summary: ReturnType<typeof buildAppUsageSummaries>[number]): InsightSourceItem => ({
     id: `${summary.usageKind}:${summary.siteDomain ?? summary.appName}`,
+    groupKey: appUsageSummaryGroupKey(summary),
     label: summary.usageKind === "site" ? (summary.siteDomain ?? summary.appName) : summary.appName,
     seconds: summary.totalSeconds,
     count: summary.sessionCount,
@@ -204,24 +210,45 @@ export function buildInsightSourceLists(
 
 const DRIFT_RUN_MAX_GAP_SECONDS = 5 * 60;
 
+export type FocusDriftTransition = {
+  readonly focus: ActivitySegment;
+  readonly drift: ActivitySegment;
+};
+
+/**
+ * Each place where a focus record is directly followed by a drift record, in
+ * time order. "Drift after focus" counts the drift side of these switches and
+ * "Focus before drift" the focus side.
+ */
+export function listFocusDriftTransitions(
+  segments: readonly ActivitySegment[],
+  options?: ClassificationOptions,
+): FocusDriftTransition[] {
+  const transitions: FocusDriftTransition[] = [];
+  const sortedSegments = segments.slice().sort((left, right) => new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime());
+  for (let index = 0; index < sortedSegments.length - 1; index += 1) {
+    const focus = sortedSegments[index];
+    const drift = sortedSegments[index + 1];
+    if (classifyActivity(focus, options).productivity !== "focus") continue;
+    if (classifyActivity(drift, options).productivity !== "drift") continue;
+    transitions.push({ focus, drift });
+  }
+  return transitions;
+}
+
 export function buildFocusDriftTransitionItems(
   segments: ActivitySegment[],
   productivity: ProductivityLabel,
   options?: ClassificationOptions,
 ): InsightSourceItem[] {
   const accumulator = new Map<string, InsightSourceItem>();
-  const sortedSegments = segments.slice().sort((left, right) => new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime());
 
-  for (let index = 0; index < sortedSegments.length - 1; index += 1) {
-    const focusSegment = sortedSegments[index];
-    const driftSegment = sortedSegments[index + 1];
-    if (classifyActivity(focusSegment, options).productivity !== "focus") continue;
-    if (classifyActivity(driftSegment, options).productivity !== "drift") continue;
-
-    const segment = productivity === "drift" ? driftSegment : focusSegment;
+  for (const transition of listFocusDriftTransitions(segments, options)) {
+    const segment = productivity === "drift" ? transition.drift : transition.focus;
     const identity = getInsightSurfaceIdentity(segment);
     const current = accumulator.get(identity.id) ?? {
       id: identity.id,
+      groupKey: identity.id,
       label: identity.label,
       seconds: 0,
       count: 0,

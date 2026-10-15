@@ -1,7 +1,7 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { DONUT_CIRCUMFERENCE, NO_PROJECT_KEY, WEEKLY_BREAKDOWN_WEEKDAYS, buildDonutView, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./insightData";
-import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartMode, WeeklyChartProjectSeriesItem, WeeklyChartSegment } from "./insightData";
+import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceItem, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartMode, WeeklyChartProjectSeriesItem, WeeklyChartSegment } from "./insightData";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatLocalizedCompactDurationFromSeconds, localDateKey, weekdayOrderIndex } from "../../lib/formatting";
 import { buildProductivityPersona, classifyActivity, logicalDayIsoDateForDate } from "@drifty/domain";
@@ -16,6 +16,7 @@ import type { CompactClassificationHoverPayload, CompactClassificationHoverState
 import { useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import { INSIGHT_EVIDENCE_PANEL_ID } from "./insightEvidence";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -412,11 +413,17 @@ export function InsightSourceGroup({
   lists,
   appIcons,
   pageSize,
+  activeEvidence = null,
+  onOpenEvidence,
 }: {
   variant: ProductivityAnalysisKind;
   lists: InsightSourceLists;
   appIcons: AppIconMap;
   pageSize?: number;
+  /** The row whose records are open beside the lists, if any. */
+  activeEvidence?: { readonly list: keyof InsightSourceLists; readonly itemId: string } | null;
+  /** When given, each row opens the records it counts. */
+  onOpenEvidence?: (list: keyof InsightSourceLists, item: InsightSourceItem) => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
   const [pages, setPages] = useState({ apps: 0, topics: 0 });
@@ -455,19 +462,40 @@ export function InsightSourceGroup({
           </div>}
         </div>
         <div className="drift-time-trend__sources-items" style={toneStyle}>
-          {visibleItems.map((item, index) => (
-            <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={item.id}>
-              <span className="drift-time-trend__sources-rank" aria-hidden="true">{start + index + 1}</span>
-              <span className="drift-time-trend__sources-icon" aria-hidden="true">
-                {item.isSite && item.siteDomain
-                  ? <SiteFavicon domain={item.siteDomain} size={22} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
-                  : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
-              </span>
-              <span className="drift-time-trend__sources-name" title={item.label}>{item.label}</span>
-              <strong className="drift-time-trend__sources-value">{item.valueKind === "count" ? (effectiveLanguage === "ko" ? `${item.count}회` : `${item.count}x`) : formatLocalizedCompactDurationFromSeconds(item.seconds, effectiveLanguage)}</strong>
-              <div className="drift-source-bar"><div className="drift-source-bar__fill" style={{ width: `${Math.max((insightSourceValue(item) / maxValue) * 100, 3)}%` }} /></div>
-            </div>
-          ))}
+          {visibleItems.map((item, index) => {
+            const valueLabel = item.valueKind === "count" ? (effectiveLanguage === "ko" ? `${item.count}회` : `${item.count}x`) : formatLocalizedCompactDurationFromSeconds(item.seconds, effectiveLanguage);
+            const content = (
+              <>
+                <span className="drift-time-trend__sources-rank" aria-hidden="true">{start + index + 1}</span>
+                <span className="drift-time-trend__sources-icon" aria-hidden="true">
+                  {item.isSite && item.siteDomain
+                    ? <SiteFavicon domain={item.siteDomain} size={22} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
+                    : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
+                </span>
+                <span className="drift-time-trend__sources-name" title={item.label}>{item.label}</span>
+                <strong className="drift-time-trend__sources-value">{valueLabel}</strong>
+                <span className="drift-source-bar" aria-hidden="true"><span className="drift-source-bar__fill" style={{ width: `${Math.max((insightSourceValue(item) / maxValue) * 100, 3)}%` }} /></span>
+              </>
+            );
+            if (!onOpenEvidence) {
+              return <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={item.id}>{content}</div>;
+            }
+            const isActive = activeEvidence?.list === kind && activeEvidence.itemId === item.id;
+            return (
+              <button
+                type="button"
+                className={`drift-time-trend__sources-item drift-time-trend__sources-item--app drift-time-trend__sources-item--evidence${isActive ? " is-active" : ""}`}
+                key={item.id}
+                data-insight-evidence-key={`${variant}:${kind}:${item.id}`}
+                aria-label={`${item.label}, ${valueLabel}. ${t("trends.evidence.open", { label: item.label })}`}
+                aria-expanded={isActive}
+                aria-controls={isActive ? INSIGHT_EVIDENCE_PANEL_ID : undefined}
+                onClick={() => onOpenEvidence(kind, item)}
+              >
+                {content}
+              </button>
+            );
+          })}
           {items.length === 0 ? <EmptyState title={emptyTitle} detail={emptyDetail} /> : null}
         </div>
       </div>

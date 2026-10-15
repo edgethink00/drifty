@@ -195,6 +195,22 @@ export function groupSegmentsByApp(segments: ActivitySegment[]): AppDuration[] {
   return Array.from(totals.values()).sort((left, right) => right.durationSeconds - left.durationSeconds);
 }
 
+/**
+ * The row an activity segment counts toward in app usage lists. Sites group by
+ * domain (or page title when the domain is missing), case-insensitively; apps
+ * group by name. Anything that needs to show the records behind one of those
+ * rows must use this key so the records add up to the row.
+ */
+export function appUsageGroupKey(segment: ActivitySegment, groupBy: "app" | "activity" = "activity"): string {
+  const siteLabel = groupBy === "activity" ? normalizedSiteDomain(segment) ?? normalizedSiteTitle(segment) : null;
+  return siteLabel ? `site:${siteLabel.toLowerCase()}` : `app:${segment.appName}`;
+}
+
+/** The {@link appUsageGroupKey} of a summary built by {@link buildAppUsageSummaries}. */
+export function appUsageSummaryGroupKey(summary: Pick<AppUsageSummary, "appName" | "usageKind">): string {
+  return summary.usageKind === "site" ? `site:${summary.appName.toLowerCase()}` : `app:${summary.appName}`;
+}
+
 export function buildAppUsageSummaries(
   segments: ActivitySegment[],
   options: { limit?: number; groupBy?: "app" | "activity" } = {},
@@ -229,7 +245,7 @@ export function buildAppUsageSummaries(
     const siteDomain = groupBy === "activity" ? normalizedSiteDomain(segment) : null;
     const siteTitle = groupBy === "activity" ? normalizedSiteTitle(segment) : null;
     const siteLabel = siteDomain ?? siteTitle;
-    const groupKey = siteLabel ? `site:${siteLabel.toLowerCase()}` : `app:${segment.appName}`;
+    const groupKey = appUsageGroupKey(segment, groupBy);
     const existing = totals.get(groupKey) ?? {
       appName: siteLabel ?? segment.appName,
       bundleId: siteLabel ? null : segment.bundleId ?? null,
