@@ -84,22 +84,14 @@ def apply_developer_diagnostics_defaults() -> None:
 
 def save_developer_diagnostics(db: TrackerDatabase, payload: JsonObject) -> DeveloperDiagnosticsResponse:
     settings = settings_from_payload(payload)
-    save_content_setting(db, payload.get("browserContentContextEnabled") is True)
-    db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, bool_meta(settings.force_chromium_ax_capture))
-    db.set_meta(
-        FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,
-        bool_meta(settings.force_frontmost_fallback_capture),
-    )
-    db.set_meta(
-        FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY,
-        bool_meta(settings.force_browser_history_url_fallback),
-    )
-    db.set_meta(ENHANCED_CONTEXT_ENABLED_META_KEY, bool_meta(settings.enhanced_context_enabled))
-    db.set_meta(
-        ENHANCED_CONTEXT_CAPTURE_LOCAL_META_KEY,
-        bool_meta(settings.enhanced_context_capture_local),
-    )
-    db.set_meta(ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY, ",".join(settings.enhanced_context_source_families))
+    save_content_setting(db, payload.get("browserContentContextEnabled") is True, meta_updates=(
+        (FORCE_CHROMIUM_AX_CAPTURE_META_KEY, bool_meta(settings.force_chromium_ax_capture)),
+        (FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY, bool_meta(settings.force_frontmost_fallback_capture)),
+        (FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY, bool_meta(settings.force_browser_history_url_fallback)),
+        (ENHANCED_CONTEXT_ENABLED_META_KEY, bool_meta(settings.enhanced_context_enabled)),
+        (ENHANCED_CONTEXT_CAPTURE_LOCAL_META_KEY, bool_meta(settings.enhanced_context_capture_local)),
+        (ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY, ",".join(settings.enhanced_context_source_families)),
+    ))
     apply_developer_diagnostics_env(db)
     return response_from_settings(settings)
 

@@ -2195,9 +2195,12 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.apply_classification_rules.assert_called_once_with("2026-04-06T00:00:00", "2026-04-07T00:00:00")
 
     def test_set_developer_diagnostics_persists_frontmost_fallback_capture_flag(self) -> None:
-        mock_db = MagicMock()
+        temp = TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        db = TrackerDatabase(Path(temp.name) / "tracker.sqlite3", perform_maintenance=False)
+        self.addCleanup(db.close)
 
-        with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+        with patch.object(tracker_main, "database", return_value=db), patch.object(
             developer_diagnostics, "apply_developer_diagnostics_env"
         ) as apply_env:
             result = tracker_main.set_developer_diagnostics({
@@ -2221,16 +2224,14 @@ class TrackerMainTests(unittest.TestCase):
                 "enhancedContextSourceFamilies": ["document_knowledge", "calendar_meeting"],
             },
         )
-        mock_db.set_meta.assert_any_call(tracker_main.FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true")
-        mock_db.set_meta.assert_any_call(tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY, "true")
-        mock_db.set_meta.assert_any_call(tracker_main.FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY, "true")
-        mock_db.set_meta.assert_any_call(tracker_main.ENHANCED_CONTEXT_ENABLED_META_KEY, "true")
-        mock_db.set_meta.assert_any_call(tracker_main.ENHANCED_CONTEXT_CAPTURE_LOCAL_META_KEY, "false")
-        mock_db.set_meta.assert_any_call(
-            tracker_main.ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY,
-            "document_knowledge,calendar_meeting",
-        )
-        apply_env.assert_called_once_with(mock_db)
+        self.assertEqual(db.get_meta(tracker_main.FORCE_CHROMIUM_AX_CAPTURE_META_KEY), "true")
+        self.assertEqual(db.get_meta(tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY), "true")
+        self.assertEqual(db.get_meta(tracker_main.FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY), "true")
+        self.assertEqual(db.get_meta(tracker_main.ENHANCED_CONTEXT_ENABLED_META_KEY), "true")
+        self.assertEqual(db.get_meta(tracker_main.ENHANCED_CONTEXT_CAPTURE_LOCAL_META_KEY), "false")
+        self.assertEqual(db.get_meta(tracker_main.ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY),
+                         "document_knowledge,calendar_meeting")
+        apply_env.assert_called_once_with(db)
 
     def test_apply_developer_diagnostics_env_sets_frontmost_fallback_capture_env(self) -> None:
         mock_db = MagicMock()

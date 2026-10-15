@@ -30,7 +30,7 @@ def policy_snapshot():
         return None
 
 
-def save_content_setting(db, enabled):
+def save_content_setting(db, enabled, *, meta_updates=()):
     # Both fields commit together, including OFF->ON during one in-flight sample.
     with db.connect() as conn:
         previous = conn.execute("SELECT value FROM tracker_meta WHERE key=?", (ENABLED_KEY,)).fetchone()
@@ -38,4 +38,7 @@ def save_content_setting(db, enabled):
         entries = [(ENABLED_KEY, "true" if enabled else "false")]
         if old != entries[0][1]:
             entries.append((REVISION_KEY, uuid.uuid4().hex))
+        # A diagnostics save includes its other flags in this transaction so
+        # a later write failure cannot leave only the content policy changed.
+        entries.extend(meta_updates)
         conn.executemany("INSERT INTO tracker_meta(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", entries)
