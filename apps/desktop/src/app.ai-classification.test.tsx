@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY } from "./features/settings/settingsStorage";
+import { beginClassificationRun, endClassificationRun } from "./features/classification/classificationActivity";
 
 // Browser fixtures have no native store. A keyless endpoint has a confirmed
 // absent key, rather than a failed OS read; failed reads are covered separately.
@@ -504,6 +505,79 @@ describe("App AI classification controls", () => {
         metrics: { ...selectedDayMetrics, classifiedSegments: 100, unclassifiedSegments: 0 },
       } satisfies AiClassificationSummary;
     });
+  });
+
+  it("runs the selected local provider when the AI command is chosen", async () => {
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({
+      provider: "self_hosted",
+      selfHostedBaseUrl: "http://localhost:11434/v1",
+      selfHostedModel: "llama3.1:8b",
+    }));
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(1));
+    const [query, , options] = aiClassificationMocks.runAiClassification.mock.calls[0];
+    expect(timelineQueryIncludesDay(query, currentAutoClassificationDay())).toBe(true);
+    expect(options).toEqual(expect.objectContaining({
+      localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.1:8b" },
+      persistenceAllowed: expect.any(Function),
+    }));
+  });
+
+  it("does not start another AI run when the command is chosen while one is pending", async () => {
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({
+      provider: "self_hosted",
+      selfHostedBaseUrl: "http://localhost:11434/v1",
+      selfHostedModel: "llama3.1:8b",
+    }));
+    let finishRun!: (summary: AiClassificationSummary) => void;
+    aiClassificationMocks.runAiClassification.mockImplementation(() => new Promise<AiClassificationSummary>((resolve) => { finishRun = resolve; }));
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
+    await waitFor(() => expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
+    expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(1);
+    await act(async () => { finishRun({ status: "empty", selectedSegments: 0, savedRecords: 0, message: "No unclassified activity." }); });
+  });
+
+  it("does not overlap an existing classification job when the AI command is chosen", async () => {
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({
+      provider: "self_hosted",
+      selfHostedBaseUrl: "http://localhost:11434/v1",
+      selfHostedModel: "llama3.1:8b",
+    }));
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    act(() => beginClassificationRun());
+    try {
+      fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+      fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
+      expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
+    } finally {
+      act(() => endClassificationRun());
+    }
+  });
+
+  it("does not start an AI request from the command without an available provider", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    markOnboardingCompleted("local");
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
+    expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
+    expect(aiClassificationMocks.runAiClassificationUntilEmpty).not.toHaveBeenCalled();
   });
 
   it("does not read AI classification usage while refreshing dashboard dates", async () => {

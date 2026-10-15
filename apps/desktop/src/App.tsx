@@ -9890,7 +9890,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       return;
     }
 
-    if (aiClassificationInFlightRef.current) return;
+    if (aiClassificationInFlightRef.current || preparingFirstDay || getClassificationActivitySnapshot().running) return;
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
@@ -11757,6 +11757,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           }}
           onReclassifyRecent={() => {
             handleCmdNav("classification");
+            void handleRunAiClassificationNow();
           }}
         />
       ) : null}</ModalPresence>
