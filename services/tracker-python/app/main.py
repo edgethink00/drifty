@@ -39,6 +39,7 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "browser-publ
 from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
+from app.storage.database_maintenance import initialize_closed_wal_sidecars
 from app.tracker.app_exclusion import match_app_exclusion, redact_snapshot
 from app.platform_locks import (
     lock_exclusive,
@@ -298,9 +299,18 @@ def _status_database():
         return
     db = TrackerDatabase(DB_PATH, read_only=True)
     try:
-        has_metadata = db.connect().execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tracker_meta'"
-        ).fetchone()
+        metadata_query = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tracker_meta'"
+        try:
+            has_metadata = db.connect().execute(metadata_query).fetchone()
+        except sqlite3.OperationalError as error:
+            if str(error) != "unable to open database file":
+                raise
+            db.close()
+            if not initialize_closed_wal_sidecars(DB_PATH):
+                raise
+            # Retry once with the original read-only contract. Never run full
+            # startup maintenance just to read an established database's status.
+            has_metadata = db.connect().execute(metadata_query).fetchone()
         if has_metadata:
             yield db
         else:

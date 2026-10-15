@@ -177,6 +177,27 @@ def _wal_sidecars_can_be_initialized(path: Path) -> bool:
     return header[:16] == b"SQLite format 3\x00" and header[18:20] == b"\x02\x02"
 
 
+def initialize_closed_wal_sidecars(path: Path) -> bool:
+    """Let SQLite recreate missing WAL files without changing rows or schema."""
+    if not _is_regular_file(path):
+        return False
+    try:
+        Path(f"{path}-journal").stat()
+    except FileNotFoundError:
+        pass
+    else:
+        # Status must not enter rollback recovery or disturb its evidence.
+        return False
+    if not _wal_sidecars_can_be_initialized(path):
+        return False
+    # `rw` cannot create a missing source. Query-only still permits SQLite's
+    # internal WAL setup, while rejecting application writes and migrations.
+    with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=rw", uri=True)) as connection:
+        connection.execute("PRAGMA query_only = ON")
+        connection.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone()
+    return True
+
+
 def _quick_check_database(path: Path, *, immutable: bool, mode: str) -> bool:
     if not _is_regular_file(path):
         return False
