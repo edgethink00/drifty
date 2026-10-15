@@ -1,4 +1,5 @@
 import type { MemorySuggestion, SuggestionEvidence, SuggestionKind } from "./memorySuggestions";
+import { AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 
 /**
  * Pending suggested memories, kept in local storage per owner. They are not part
@@ -53,15 +54,21 @@ const MAX_EXAMPLE_TITLE_CHARS = 120;
 const FILED_AS = ["focus", "neutral", "drift", "unclassified"] as const;
 
 const EMPTY_STATE: SuggestionStoreState = { version: 1, lastRunAt: null, retryAfter: null, suggestions: [], declined: [] };
+const STORAGE_PREFIX = "drifty:memory-suggestions:v1:";
 
 export function suggestionStoreKey(ownerId: string): string {
-  return "drifty:memory-suggestions:v1:" + ownerId;
+  return STORAGE_PREFIX + ownerId;
 }
 
 export function readSuggestionStore(ownerId: string): SuggestionStoreState {
   try {
     const raw = window.localStorage.getItem(suggestionStoreKey(ownerId));
-    return raw ? parseSuggestionStore(JSON.parse(raw)) ?? EMPTY_STATE : EMPTY_STATE;
+    const state = raw ? parseSuggestionStore(JSON.parse(raw)) ?? EMPTY_STATE : EMPTY_STATE;
+    const visible = withoutDisallowedExamples(state);
+    if (visible !== state) {
+      try { window.localStorage.setItem(suggestionStoreKey(ownerId), JSON.stringify(visible)); } catch { /* Still withhold titles from the caller. */ }
+    }
+    return visible;
   } catch {
     return EMPTY_STATE;
   }
@@ -69,10 +76,57 @@ export function readSuggestionStore(ownerId: string): SuggestionStoreState {
 
 export function writeSuggestionStore(ownerId: string, state: SuggestionStoreState): void {
   try {
-    window.localStorage.setItem(suggestionStoreKey(ownerId), JSON.stringify(state));
+    window.localStorage.setItem(suggestionStoreKey(ownerId), JSON.stringify(withoutDisallowedExamples(state)));
   } catch {
     // Suggestions are regenerable; a full or unavailable store only costs a rerun.
   }
+}
+
+export function memorySuggestionExamplesAllowed(): boolean {
+  const { optional } = readAiPrivacyRequestSettings();
+  return optional.windowTitle && optional.contentContext;
+}
+
+function withoutDisallowedExamples(state: SuggestionStoreState): SuggestionStoreState {
+  if (memorySuggestionExamplesAllowed() || !state.suggestions.some(suggestion => suggestion.examples !== undefined)) return state;
+  return { ...state, suggestions: state.suggestions.map(({ examples: _examples, ...suggestion }) => suggestion) };
+}
+
+/** Scrub every previously used owner, including stores not currently on screen. */
+export function synchronizeMemorySuggestionExamplePrivacy(): void {
+  if (memorySuggestionExamplesAllowed()) return;
+  try {
+    const storage = window.localStorage;
+    const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index));
+    for (const key of keys) {
+      if (!key?.startsWith(STORAGE_PREFIX)) continue;
+      const raw = storage.getItem(key);
+      if (!raw) continue;
+      try {
+        const value: unknown = JSON.parse(raw);
+        if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.suggestions)) continue;
+        let changed = false;
+        const suggestions = value.suggestions.map((suggestion: unknown) => {
+          if (!isRecord(suggestion) || !("examples" in suggestion)) return suggestion;
+          const { examples: _examples, ...rest } = suggestion;
+          changed = true;
+          return rest;
+        });
+        // Preserve all other fields; this is a privacy scrub, not a schema migration.
+        if (changed) storage.setItem(key, JSON.stringify({ ...value, suggestions }));
+      } catch { /* Leave an unreadable store to its existing recovery path. */ }
+    }
+  } catch { /* Reads and writes still withhold examples if storage is unavailable. */ }
+}
+
+export function installMemorySuggestionExamplePrivacySync(): () => void {
+  synchronizeMemorySuggestionExamplePrivacy();
+  window.addEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, synchronizeMemorySuggestionExamplePrivacy);
+  window.addEventListener("storage", synchronizeMemorySuggestionExamplePrivacy);
+  return () => {
+    window.removeEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, synchronizeMemorySuggestionExamplePrivacy);
+    window.removeEventListener("storage", synchronizeMemorySuggestionExamplePrivacy);
+  };
 }
 
 /** False only while waiting out the retry delay after an unreachable provider. */

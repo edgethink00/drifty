@@ -9,6 +9,7 @@ import {
   readSuggestionStore, writeSuggestionStore, type StoredSuggestion,
 } from "../classification/memorySuggestionStore";
 import { isMemorySuggestionJobRunning } from "../classification/memorySuggestionJob";
+import { readAiPrivacyRequestSettings, saveAiPrivacyRequestSettings } from "./aiPrivacyRequestSettings";
 import { invokeMock, renderPanel, resetManagedStatusMock, showPanelSection } from "./AiSetupPanel.testHarness";
 
 const { getTimelineMock, completeMock, cloudCompleteMock } = vi.hoisted(() => ({ getTimelineMock: vi.fn(), completeMock: vi.fn(), cloudCompleteMock: vi.fn() }));
@@ -73,6 +74,20 @@ describe("suggested Memory", () => {
     cloudCompleteMock.mockReset();
     captureMock.mockReset();
     await synchronizeLivingSoulDeclaredContextForUser("local");
+  });
+
+  it("removes an already-open example after title sharing is disabled, preserving the suggestion", async () => {
+    const suggestion = pending({examples: [{title: "Synthetic private title", filedAs: "focus", minutes: 5}]});
+    seedPending(suggestion);
+    renderPanel(); await openMemory();
+    const row = await screen.findByRole("article", {name: suggestion.summary});
+    fireEvent.click(within(row).getByRole("button", {name: "Details"}));
+    expect(within(row).getByText("Synthetic private title")).toBeTruthy();
+    const settings = readAiPrivacyRequestSettings();
+    saveAiPrivacyRequestSettings({...settings, optional: {...settings.optional, windowTitle: false}});
+    await waitFor(() => expect(screen.queryByText("Synthetic private title")).toBeNull());
+    expect(screen.getByRole("article", {name: suggestion.summary})).toBeTruthy();
+    expect(readSuggestionStore("local").suggestions[0]!.examples).toBeUndefined();
   });
 
   it("adds an accepted suggestion as a confirmed memory and clears it from the suggestions", async () => {

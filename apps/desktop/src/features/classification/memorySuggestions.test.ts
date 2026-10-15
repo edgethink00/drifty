@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, ProductivityLabel, StoredClassificationSource } from "@drifty/domain";
 
 import {
+  trackedSecondsSince,
   aggregateSuggestionSurfaces,
   buildSuggestionPrompt,
   detectSuggestionClusters,
@@ -78,9 +79,27 @@ describe("aggregateSuggestionSurfaces", () => {
       segment({ seconds: 10, label: "focus" }),
       segment({ excluded: true, label: "focus" }),
       segment({ startedAt: "2026-07-20T00:00:00.000Z", label: "focus" }),
-      segment({ startedAt: "2026-07-12T23:59:00.000Z", label: "focus" }),
+      segment({ startedAt: "2026-07-12T23:49:00.000Z", label: "focus" }),
     ], WINDOW);
     expect(surfaces).toEqual([]);
+  });
+
+  it("clips crossing samples for both the new-activity gate and candidate evidence", () => {
+    const crossing = { ...segment({ label: "focus", seconds: 14405 }), startedAt: "2026-07-12T23:00:00.000Z", endedAt: "2026-07-13T03:00:00.000Z" };
+    const until = "2026-07-13T03:00:05.000Z";
+    expect(trackedSecondsSince([crossing], WINDOW.since, until)).toBe(10805);
+    expect(aggregateSuggestionSurfaces([crossing], {since: WINDOW.since, until})[0]).toMatchObject({ minutes: 180.1, days: 1, dayKeys: ["2026-07-13"] });
+    expect(crossing.durationSeconds).toBe(14405);
+    expect(crossing.startedAt).toBe("2026-07-12T23:00:00.000Z");
+  });
+
+  it("counts overlapping devices once and keeps sparse sample density at a watermark", () => {
+    const sparse = { ...segment({label: "focus", seconds: 60}), startedAt: "2026-07-13T00:00:00.000Z", endedAt: "2026-07-13T01:00:00.000Z", deviceId: "mac" };
+    const other = { ...sparse, id: "windows", deviceId: "windows" };
+    const since = "2026-07-13T00:30:00.000Z";
+    expect(trackedSecondsSince([sparse], since)).toBe(30);
+    expect(trackedSecondsSince([sparse, other], since)).toBe(30);
+    expect(aggregateSuggestionSurfaces([sparse, other], {since, until: WINDOW.until})[0]?.minutes).toBe(0.5);
   });
 
   it("marks unclassified activity", () => {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { StoredSuggestion } from "../classification/memorySuggestionStore";
+import { memorySuggestionExamplesAllowed, type StoredSuggestion } from "../classification/memorySuggestionStore";
 import { localizedProductivityLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 import { MemoryIcon } from "./memoryIcons";
@@ -27,7 +27,7 @@ export function MemorySuggestionList({ suggestions, busy, onAccept, onDecline }:
         const place = suggestion.domain ? suggestion.app + " / " + suggestion.domain : suggestion.app;
         const open = Boolean(expanded[suggestion.id]);
         const detailId = "memory-suggestion-" + suggestion.id.replace(/[^a-z0-9]/gi, "").slice(0, 32);
-        const examples = suggestion.examples ?? [];
+        const examples = memorySuggestionExamplesAllowed() ? suggestion.examples ?? [] : [];
         return <article className="memory-row" key={suggestion.id} aria-label={suggestion.summary}>
           <p className="memory-row__summary">{suggestion.summary}</p>
           <div className="memory-row__meta">

@@ -2,6 +2,7 @@ import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drif
 import { describe, expect, it } from "vitest";
 import { buildInsightEvidence } from "./insightEvidence";
 import { buildInsightSourceLists } from "./insightData";
+import { selectInsightSegments } from "./insightSegments";
 
 type SegmentInput = {
   readonly id: string;
@@ -105,5 +106,39 @@ describe("insight evidence", () => {
     const item = buildInsightSourceLists(segments, "drift").apps[0]!;
     const evidence = buildInsightEvidence([], { variant: "drift", list: "apps", itemId: item.id }, item, undefined);
     expect(evidence).toMatchObject({ kind: "records", totalSeconds: 0, recordCount: 0, days: [] });
+  });
+
+  it("uses clipped display bounds at the selected window's logical-day boundary", () => {
+    const raw = segment({id: "crossing", start: "12T03:00", minutes: 120, ...code});
+    const input = selectInsightSegments({historySegments: [raw], selectedDaySegments: [], range: {start: new Date("2026-10-12T04:00:00").toISOString(), end: new Date("2026-10-13T03:59:59").toISOString()}, endExclusiveMs: new Date("2026-10-13T04:00:00").getTime()});
+    const item = buildInsightSourceLists(input, "focus").apps[0]!;
+    const evidence = buildInsightEvidence(input, {variant: "focus", list: "apps", itemId: item.id}, item, undefined, 240);
+    expect(evidence.totalSeconds).toBe(3600);
+    expect(evidence.days.map(day => day.dayKey)).toEqual(["2026-10-12"]);
+    if (evidence.kind !== "records") throw new Error("expected records");
+    expect(evidence.days[0]!.entries[0]).toMatchObject({segmentIds: [raw.id], startedAt: new Date("2026-10-12T04:00:00").toISOString(), endedAt: raw.endedAt});
+    expect(raw.startedAt).toBe("2026-10-12T03:00:00.000");
+    expect(raw.durationSeconds).toBe(7200);
+  });
+
+  it("splits an overnight record and never merges stretches across logical days", () => {
+    const raw = [segment({id: "crossing", start: "12T03:30", minutes: 60, ...code}), segment({id: "next", start: "12T04:30", minutes: 30, ...code})];
+    const item = buildInsightSourceLists(raw, "focus").apps[0]!;
+    const evidence = buildInsightEvidence(raw, {variant: "focus", list: "apps", itemId: item.id}, item, undefined, 240);
+    expect(evidence.totalSeconds).toBe(5400);
+    expect(evidence.days.map(day => [day.dayKey, day.totalSeconds])).toEqual([["2026-10-12", 3600], ["2026-10-11", 1800]]);
+    if (evidence.kind !== "records") throw new Error("expected records");
+    expect(evidence.recordCount).toBe(2);
+    expect(evidence.days[0]!.entries[0]!.segmentIds).toEqual(["crossing", "next"]);
+    expect(evidence.days[1]!.entries[0]!.segmentIds).toEqual(["crossing"]);
+  });
+
+  it("conserves sparse captured time across calendar days including DST", () => {
+    const raw = {...segment({id: "sparse", start: "31T23:30", minutes: 60, ...code}), startedAt: new Date("2026-10-31T23:30:00").toISOString(), endedAt: new Date("2026-11-02T00:30:00").toISOString(), durationSeconds: 3600};
+    const item = buildInsightSourceLists([raw], "focus").apps[0]!;
+    const evidence = buildInsightEvidence([raw], {variant: "focus", list: "apps", itemId: item.id}, item, undefined);
+    expect(evidence.days.map(day => day.dayKey)).toEqual(["2026-11-02", "2026-11-01", "2026-10-31"]);
+    expect(evidence.totalSeconds).toBeCloseTo(3600, 8);
+    expect(evidence.days.every(day => day.totalSeconds < 3600)).toBe(true);
   });
 });

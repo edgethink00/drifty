@@ -1,10 +1,13 @@
 import {
   aggregateDeviceElapsedTime,
+  activityTimeBounds,
   appUsageGroupKey,
   classifyActivity,
+  clipDeviceElapsedTimeSegment,
   isExcludedSegment,
   isFailedForegroundCaptureSegment,
   logicalDayIsoDateForDate,
+  logicalDayEndExclusiveMs,
   type ActivityCategory,
   type ActivitySegment,
   type ClassificationOptions,
@@ -128,12 +131,34 @@ function buildRecordEvidence(
     && appUsageGroupKey(segment) === groupKey
   ));
 
-  const records = mergeRecords(matching, options);
-  const days = groupByDay(records, (record) => record.startedAt, (record) => record.durationSeconds, startOfDayMinutes);
+  const recordsByDay = new Map<string, ActivitySegment[]>();
+  for (const segment of matching) {
+    const bounds = activityTimeBounds(segment);
+    if (!Number.isFinite(bounds.start) || !Number.isFinite(bounds.end)) continue;
+    let cursor = bounds.start;
+    while (cursor < bounds.end) {
+      const day = logicalDayIsoDateForDate(new Date(cursor), startOfDayMinutes);
+      const end = Math.min(bounds.end, logicalDayEndExclusiveMs(day, startOfDayMinutes));
+      if (!(end > cursor)) break;
+      const clipped = clipDeviceElapsedTimeSegment(segment, { start: cursor, end });
+      if (clipped.durationSeconds > 0) {
+        const entries = recordsByDay.get(day) ?? [];
+        // Display bounds only: input captures remain intact, and segmentIds
+        // still resolve back to those original records.
+        entries.push({ ...clipped, startedAt: new Date(cursor).toISOString(), endedAt: new Date(end).toISOString() });
+        recordsByDay.set(day, entries);
+      }
+      cursor = end;
+    }
+  }
+  const days = [...recordsByDay.entries()].sort(([left], [right]) => right.localeCompare(left)).map(([dayKey, segments]) => {
+    const entries = mergeRecords(segments, options);
+    return { dayKey, entries, totalSeconds: entries.reduce((sum, record) => sum + record.durationSeconds, 0) };
+  });
   return {
     kind: "records",
-    totalSeconds: records.reduce((sum, record) => sum + record.durationSeconds, 0),
-    recordCount: records.length,
+    totalSeconds: days.reduce((sum, day) => sum + day.totalSeconds, 0),
+    recordCount: days.reduce((sum, day) => sum + day.entries.length, 0),
     days,
   };
 }
@@ -193,7 +218,7 @@ function mergeRecords(segments: readonly ActivitySegment[], options: Classificat
       && previous.category === category
       && Date.parse(segment.startedAt) - Date.parse(previous.endedAt) <= RECORD_MERGE_GAP_MS
     ) {
-      previous.segmentIds.push(segment.id);
+      if (!previous.segmentIds.includes(segment.id)) previous.segmentIds.push(segment.id);
       previous.durationSeconds += segment.durationSeconds;
       if (segment.endedAt > previous.endedAt) previous.endedAt = segment.endedAt;
       continue;

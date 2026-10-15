@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createCloudSuggestionCompleter } from "./memorySuggestionCloud";
+import { CLOUD_MEMORY_SUGGESTION_TIMEOUT_MS, createCloudSuggestionCompleter } from "./memorySuggestionCloud";
 import type { SuggestionCluster } from "./memorySuggestions";
 
-const { invoke, withDevice } = vi.hoisted(() => ({ invoke: vi.fn(), withDevice: vi.fn() }));
-vi.mock("../../lib/supabase/client", () => ({ supabase: { functions: { invoke } } }));
+const { invoke, withDevice, session } = vi.hoisted(() => ({ invoke: vi.fn(), withDevice: vi.fn(), session: vi.fn() }));
+vi.mock("../../lib/supabase/client", () => ({ supabase: { functions: { invoke }, auth: {getSession: session} } }));
 vi.mock("../cloud-devices/cloudDeviceIdentity", () => ({ withCloudDevicePayload: withDevice }));
 
 const cluster = {
@@ -76,4 +76,38 @@ it("rechecks consent after native device identity preparation", async () => {
   finish({ cloudDevice: "synthetic" });
   await expect(result).resolves.toBeNull();
   expect(invoke).not.toHaveBeenCalled();
+});
+
+describe("Cloud Memory deadline and owner", () => {
+  beforeEach(() => {
+    invoke.mockReset(); session.mockReset();
+    withDevice.mockReset().mockImplementation(async body => body);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("does not start a late request after device preparation times out", async () => {
+    vi.useFakeTimers();
+    let finish!: (body: unknown) => void;
+    withDevice.mockImplementation(() => new Promise(resolve => {finish = resolve;}));
+    const result = createCloudSuggestionCompleter()({prompt: "p", cluster, language: "en", showTitles: true});
+    await vi.advanceTimersByTimeAsync(CLOUD_MEMORY_SUGGESTION_TIMEOUT_MS);
+    expect(await result).toBeNull();
+    finish({synthetic: true}); await vi.advanceTimersByTimeAsync(0);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("pins a verified owner's request authorization instead of using later shared SDK auth", async () => {
+    session.mockResolvedValue({data: {session: {user: {id: "a"}, access_token: "synthetic-a"}}, error: null});
+    invoke.mockResolvedValue({data: {skip: true}, error: null});
+    expect(await createCloudSuggestionCompleter(() => true, "a")({prompt: "p", cluster, language: "en", showTitles: true})).toBe('{"skip":true}');
+    expect(invoke.mock.calls[0]![1]).toMatchObject({headers: {Authorization: "Bearer synthetic-a"}, timeout: CLOUD_MEMORY_SUGGESTION_TIMEOUT_MS, signal: expect.any(AbortSignal)});
+  });
+
+  it("does not send under another owner's current session", async () => {
+    session.mockResolvedValue({data: {session: {user: {id: "b"}, access_token: "synthetic-b"}}, error: null});
+    const changed = vi.fn();
+    expect(await createCloudSuggestionCompleter(() => true, "a", changed)({prompt: "p", cluster, language: "en", showTitles: true})).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(changed).toHaveBeenCalledOnce();
+  });
 });

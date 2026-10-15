@@ -89,7 +89,8 @@ describe("runMemorySuggestionJobIfDue", () => {
 
     // 21 new hours after the run: the full week is read again.
     const fresh = Array.from({ length: 3 }, (_, index) => ({ ...mixedSegments()[index], id: "new" + index,
-      startedAt: new Date(NOW.getTime() + (index + 1) * 3_600_000).toISOString(), durationSeconds: 7 * 3600 }));
+      startedAt: new Date(NOW.getTime() + (index + 1) * 3_600_000).toISOString(),
+      endedAt: new Date(NOW.getTime() + (index + 8) * 3_600_000).toISOString(), durationSeconds: 7 * 3600 }));
     ranges.length = 0;
     const withFresh = async (range: { start: string; end: string }) => { ranges.push(range); return [...mixedSegments(), ...fresh]; };
     await expect(runMemorySuggestionJobIfDue({ ownerId: "local", provider, language: "en", now: later, loadSegments: withFresh })).resolves.toBe("ran");

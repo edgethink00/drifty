@@ -6,6 +6,8 @@ import {
   type LivingSoulDocument,
 } from "../classification/livingSoul";
 import type { SuggestionLanguage } from "../classification/memorySuggestions";
+import { AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT } from "./aiPrivacyRequestSettings";
+import { useMemorySuggestionScope } from "./useMemorySuggestionScope";
 import {
   MEMORY_SUGGESTIONS_CHANGED_EVENT,
   isMemorySuggestionJobRunning,
@@ -48,6 +50,7 @@ export function useMemorySuggestions({ ownerId, provider, language, document }: 
   documentRef.current = document;
   const providerRef = useRef(provider);
   providerRef.current = provider;
+  const isCurrent = useMemorySuggestionScope(ownerId, provider, provider !== null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
@@ -61,7 +64,13 @@ export function useMemorySuggestions({ ownerId, provider, language, document }: 
       if (!detail?.ownerId || detail.ownerId === ownerId) refresh();
     };
     window.addEventListener(MEMORY_SUGGESTIONS_CHANGED_EVENT, onChange);
-    return () => window.removeEventListener(MEMORY_SUGGESTIONS_CHANGED_EVENT, onChange);
+    window.addEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(MEMORY_SUGGESTIONS_CHANGED_EVENT, onChange);
+      window.removeEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
   }, [ownerId]);
 
   const ready = document !== null;
@@ -69,8 +78,8 @@ export function useMemorySuggestions({ ownerId, provider, language, document }: 
   useEffect(() => {
     const selected = providerRef.current;
     if (!ready || !selected) return;
-    void runMemorySuggestionJobIfDue({ ownerId, provider: selected, language });
-  }, [ready, providerKind, ownerId, language]);
+    void runMemorySuggestionJobIfDue({ ownerId, provider: selected, language, isCurrent });
+  }, [ready, providerKind, ownerId, language, isCurrent]);
 
   const accept = useCallback(async (id: string): Promise<SuggestionAcceptResult> => {
     const suggestion = readSuggestionStore(ownerId).suggestions.find((entry) => entry.id === id);

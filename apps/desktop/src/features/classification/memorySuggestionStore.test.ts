@@ -5,8 +5,10 @@ import {
   declineSuggestion, readSuggestionStore, recordSuggestionRun, removeSuggestion, shouldRunSuggestions,
   suggestionStoreKey, writeSuggestionStore, recordFailedSuggestionRun, SUGGESTION_RETRY_AFTER_FAILURE_MS, MAX_PENDING_SUGGESTIONS,
   pickSuggestionExamples, toStoredSuggestion,
+  installMemorySuggestionExamplePrivacySync,
   type StoredSuggestion, type SuggestionStoreState,
 } from "./memorySuggestionStore";
+import { readAiPrivacyRequestSettings, saveAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 
 const NOW = new Date("2026-10-04T09:00:00.000Z");
 function stored(id: string, summary = "Sentence for " + id + " goes here."): StoredSuggestion {
@@ -16,6 +18,37 @@ function stored(id: string, summary = "Sentence for " + id + " goes here."): Sto
 const empty: SuggestionStoreState = { version: 1, lastRunAt: null, retryAfter: null, suggestions: [], declined: [] };
 
 beforeEach(() => window.localStorage.clear());
+
+it.each(["windowTitle", "contentContext"] as const)("scrubs every owner's old examples when %s is revoked and never revives them", key => {
+  const suggestion = {...stored("work:a"), examples: [{title: "Synthetic private title", filedAs: "focus" as const, minutes: 30}]};
+  const state = {...empty, lastRunAt: NOW.toISOString(), retryAfter: "2026-10-04T10:00:00Z", declined: ["work:declined"], suggestions: [suggestion]};
+  for (const owner of ["a", "b"]) writeSuggestionStore(owner, state);
+  const stop = installMemorySuggestionExamplePrivacySync();
+  try {
+    const settings = readAiPrivacyRequestSettings();
+    saveAiPrivacyRequestSettings({...settings, optional: {...settings.optional, [key]: false}});
+    for (const owner of ["a", "b"]) {
+      expect(localStorage.getItem(suggestionStoreKey(owner))).not.toContain("Synthetic private title");
+      expect(readSuggestionStore(owner)).toEqual({...state, suggestions: [stored("work:a")]});
+    }
+    // A late writer carrying an older copy cannot restore examples.
+    writeSuggestionStore("a", state);
+    expect(localStorage.getItem(suggestionStoreKey("a"))).not.toContain("Synthetic private title");
+    saveAiPrivacyRequestSettings(settings);
+    expect(readSuggestionStore("a").suggestions[0]!.examples).toBeUndefined();
+  } finally { stop(); }
+});
+
+it("scrubs old stores at startup with title sharing already off", () => {
+  const settings = readAiPrivacyRequestSettings();
+  saveAiPrivacyRequestSettings({...settings, optional: {...settings.optional, windowTitle: false}});
+  localStorage.setItem(suggestionStoreKey("old-owner"), JSON.stringify({...empty, futureField: "preserve", suggestions: [{...stored("work:a"), examples: [{title: "Old private title", filedAs: "focus", minutes: 1}]}]}));
+  const stop = installMemorySuggestionExamplePrivacySync();
+  stop();
+  const raw = localStorage.getItem(suggestionStoreKey("old-owner"))!;
+  expect(raw).not.toContain("Old private title");
+  expect(JSON.parse(raw).futureField).toBe("preserve");
+});
 
 describe("suggestion store", () => {
   it("round-trips per owner and ignores corrupt or foreign data", () => {

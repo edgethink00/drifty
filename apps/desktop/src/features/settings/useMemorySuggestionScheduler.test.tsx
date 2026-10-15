@@ -18,11 +18,11 @@ describe("useMemorySuggestionScheduler", () => {
     vi.advanceTimersByTime(SUGGESTION_SCHEDULER_FIRST_CHECK_MS - 1);
     expect(runMock).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
-    expect(runMock).toHaveBeenLastCalledWith({ ownerId: "u1", provider, language: "ko" });
+    expect(runMock).toHaveBeenLastCalledWith({ ownerId: "u1", provider, language: "ko", isCurrent: expect.any(Function) });
     rerender({ language: "en" });
     vi.advanceTimersByTime(SUGGESTION_SCHEDULER_INTERVAL_MS);
     expect(runMock).toHaveBeenCalledTimes(2);
-    expect(runMock).toHaveBeenLastCalledWith({ ownerId: "u1", provider, language: "en" });
+    expect(runMock).toHaveBeenLastCalledWith({ ownerId: "u1", provider, language: "en", isCurrent: expect.any(Function) });
     unmount();
     vi.advanceTimersByTime(SUGGESTION_SCHEDULER_INTERVAL_MS * 3);
     expect(runMock).toHaveBeenCalledTimes(2);

@@ -2,7 +2,7 @@ import type { ActivitySegment } from "@drifty/domain";
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { capturePostHogDailyEvent, toCountBucket, toDailyDedupKey } from "../../lib/analytics/posthogClient";
-import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
+import { AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { readLivingSoulForUser, type LivingSoulDocument } from "./livingSoul";
 import type { LocalAiProviderConfig } from "./localAiProviderRequest";
 import {
@@ -91,6 +91,8 @@ export type RunMemorySuggestionJobInput = {
   readonly loadSegments?: (range: { readonly start: string; readonly end: string }) => Promise<readonly ActivitySegment[]>;
   /** Newly tracked hours since the previous run required before running again. */
   readonly minNewTrackedHours?: number;
+  /** The initiating view's owner/provider generation must still be active. */
+  readonly isCurrent?: () => boolean;
 };
 
 /**
@@ -114,9 +116,22 @@ export function runMemorySuggestionJobIfDue(input: RunMemorySuggestionJobInput):
 }
 
 async function runJob(input: RunMemorySuggestionJobInput, now: Date): Promise<MemorySuggestionJobOutcome> {
+  const settings = readAiPrivacyRequestSettings();
+  const privacy = { windowTitle: settings.optional.windowTitle, contentContext: settings.optional.contentContext };
+  let cancelled = false;
+  const canSend = () => {
+    const current = readAiPrivacyRequestSettings().optional;
+    cancelled ||= input.isCurrent?.() === false
+      || current.windowTitle !== privacy.windowTitle || current.contentContext !== privacy.contentContext;
+    return !cancelled;
+  };
+  const onPrivacyChange = () => { canSend(); };
+  if (typeof window !== "undefined") window.addEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, onPrivacyChange);
   try {
+    if (!canSend()) return "cancelled";
     // Accepting a suggestion writes into Soul.md, so there must be a readable one.
     const soul = await readLivingSoulForUser(input.ownerId);
+    if (!canSend()) return "cancelled";
     if (soul.state !== "ready") return "no_memory";
     const document = soul.context.document;
     const until = now.toISOString();
@@ -126,9 +141,11 @@ async function runJob(input: RunMemorySuggestionJobInput, now: Date): Promise<Me
     const lastRunAt = readSuggestionStore(input.ownerId).lastRunAt;
     const countFrom = lastRunAt && lastRunAt > since ? lastRunAt : since;
     const recent = await load({ start: countFrom, end: until });
+    if (!canSend()) return "cancelled";
     const requiredSeconds = (input.minNewTrackedHours ?? MIN_NEW_TRACKED_HOURS) * 3600;
-    if (trackedSecondsSince(recent, countFrom) < requiredSeconds) return "not_due";
+    if (trackedSecondsSince(recent, countFrom, until) < requiredSeconds) return "not_due";
     const segments = countFrom === since ? recent : await load({ start: since, end: until });
+    if (!canSend()) return "cancelled";
     const answered = settledSuggestionPlaces(document, readSuggestionStore(input.ownerId));
     const clusters = detectSuggestionClusters(aggregateSuggestionSurfaces(segments, { since, until }))
       .filter((cluster) => !answered.has(cluster.key));
@@ -136,16 +153,8 @@ async function runJob(input: RunMemorySuggestionJobInput, now: Date): Promise<Me
       ...Object.values(document.learned).flat().map((pattern) => pattern.summary),
       ...Object.values(document.memoryControls?.rejectedPatterns ?? {}).map((entry) => entry.pattern.summary),
     ];
-    const settings = readAiPrivacyRequestSettings();
-    const privacy = { windowTitle: settings.optional.windowTitle, contentContext: settings.optional.contentContext };
-    let cancelled = false;
-    const canSend = () => {
-      const current = readAiPrivacyRequestSettings().optional;
-      cancelled ||= current.windowTitle !== privacy.windowTitle || current.contentContext !== privacy.contentContext;
-      return !cancelled;
-    };
     const complete = input.provider.kind === "cloud"
-      ? createCloudSuggestionCompleter(canSend)
+      ? createCloudSuggestionCompleter(canSend, input.ownerId, () => { cancelled = true; })
       : createLocalSuggestionCompleter(input.provider.provider, canSend);
     const result = clusters.length === 0
       ? { suggestions: [], rejected: [] }
@@ -173,7 +182,9 @@ async function runJob(input: RunMemorySuggestionJobInput, now: Date): Promise<Me
     return retryableFailure ? "failed" : "ran";
   } catch {
     // Not recorded, so the next check tries again.
-    return "failed";
+    return canSend() ? "failed" : "cancelled";
+  } finally {
+    if (typeof window !== "undefined") window.removeEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, onPrivacyChange);
   }
 }
 

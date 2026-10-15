@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 
 import type { SuggestionLanguage } from "../classification/memorySuggestions";
 import { runMemorySuggestionJobIfDue, type MemorySuggestionProvider } from "../classification/memorySuggestionJob";
+import { installMemorySuggestionExamplePrivacySync } from "../classification/memorySuggestionStore";
+import { useMemorySuggestionScope } from "./useMemorySuggestionScope";
 
 export const SUGGESTION_SCHEDULER_FIRST_CHECK_MS = 90 * 1000;
 export const SUGGESTION_SCHEDULER_INTERVAL_MS = 30 * 60 * 1000;
@@ -21,12 +23,14 @@ export function useMemorySuggestionScheduler(input: {
   const latest = useRef(input);
   latest.current = input;
   const active = input.enabled && input.provider !== null;
+  const isCurrent = useMemorySuggestionScope(input.ownerId, input.provider, active);
+  useEffect(installMemorySuggestionExamplePrivacySync, []);
   useEffect(() => {
     if (!active) return;
     const check = () => {
       const { ownerId, provider, language, enabled } = latest.current;
       if (!enabled || !provider) return;
-      void runMemorySuggestionJobIfDue({ ownerId, provider, language });
+      void runMemorySuggestionJobIfDue({ ownerId, provider, language, isCurrent });
     };
     const first = window.setTimeout(check, SUGGESTION_SCHEDULER_FIRST_CHECK_MS);
     const interval = window.setInterval(check, SUGGESTION_SCHEDULER_INTERVAL_MS);
@@ -34,6 +38,6 @@ export function useMemorySuggestionScheduler(input: {
       window.clearTimeout(first);
       window.clearInterval(interval);
     };
-  }, [active, input.ownerId]);
+  }, [active, input.ownerId, isCurrent]);
 }
 

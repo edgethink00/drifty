@@ -1,4 +1,4 @@
-import type { ActivitySegment, ProductivityLabel } from "@drifty/domain";
+import { activitySecondsWithinInterval, activityTimeBounds, aggregateDeviceElapsedTime, isExcludedSegment, isFailedForegroundCaptureSegment, type ActivitySegment, type ProductivityLabel } from "@drifty/domain";
 
 /**
  * Suggested Memory: candidate patterns found in ordinary activity.
@@ -129,11 +129,15 @@ const NOISE_PATTERNS: readonly RegExp[] = [
   /\s*🔊/g,
 ];
 
-/** Seconds of tracked, non-excluded activity that started at or after `since`. */
-export function trackedSecondsSince(segments: readonly ActivitySegment[], since: string): number {
-  return segments.reduce((total, segment) => (
-    segment.startedAt >= since && !segment.exclusionSource ? total + Math.max(0, segment.durationSeconds) : total
-  ), 0);
+/** Recorded elapsed time after the watermark, including crossing captures. */
+export function trackedSecondsSince(segments: readonly ActivitySegment[], since: string, until?: string): number {
+  const start = Date.parse(since);
+  const end = until ? Date.parse(until) : Infinity;
+  return suggestionSegments(segments).reduce((total, segment) => total + activitySecondsWithinInterval(segment, start, end), 0);
+}
+
+function suggestionSegments(segments: readonly ActivitySegment[]): ActivitySegment[] {
+  return aggregateDeviceElapsedTime(segments.filter(segment => !isExcludedSegment(segment) && !isFailedForegroundCaptureSegment(segment)));
 }
 
 export function normalizeSuggestionTitle(value: string | null | undefined): string {
@@ -165,10 +169,11 @@ export function aggregateSuggestionSurfaces(
     reasons: Map<string, number>;
   };
   const surfaces = new Map<string, Accumulator>();
-  for (const segment of segments) {
-    if (segment.durationSeconds < MIN_SEGMENT_SECONDS) continue;
-    if (segment.exclusionSource) continue;
-    if (segment.startedAt < window.since || segment.startedAt >= window.until) continue;
+  const start = Date.parse(window.since);
+  const end = Date.parse(window.until);
+  for (const segment of suggestionSegments(segments)) {
+    const seconds = activitySecondsWithinInterval(segment, start, end);
+    if (seconds < MIN_SEGMENT_SECONDS) continue;
     const domain = segment.siteDomain?.trim() ?? "";
     const title = normalizeSuggestionTitle(segment.siteTitle || segment.youtubeTitle || segment.windowTitle);
     const key = [segment.appName, domain, title].join("\u0000");
@@ -180,17 +185,17 @@ export function aggregateSuggestionSurfaces(
       };
       surfaces.set(key, surface);
     }
-    surface.seconds += segment.durationSeconds;
+    surface.seconds += seconds;
     surface.blocks += 1;
-    surface.days.add(localDay(segment.startedAt));
+    surface.days.add(localDay(new Date(Math.max(start, activityTimeBounds(segment).start)).toISOString()));
     const classification = segment.classification;
     if (classification) {
-      surface.byLabel[classification.productivity] += segment.durationSeconds;
-      surface.classifiedSeconds += segment.durationSeconds;
+      surface.byLabel[classification.productivity] += seconds;
+      surface.classifiedSeconds += seconds;
       if (MODEL_FILED_SOURCES.has(classification.source)) {
-        surface.modelFiledSeconds += segment.durationSeconds;
+        surface.modelFiledSeconds += seconds;
         const confidence = Number.isFinite(classification.confidence) ? Math.min(1, Math.max(0, classification.confidence)) : 0.5;
-        surface.modelConfidenceSeconds += confidence * segment.durationSeconds;
+        surface.modelConfidenceSeconds += confidence * seconds;
       }
       const reason = classification.reason?.trim();
       if (reason) surface.reasons.set(reason.slice(0, 80), (surface.reasons.get(reason.slice(0, 80)) ?? 0) + 1);
