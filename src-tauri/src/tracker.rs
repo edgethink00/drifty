@@ -299,6 +299,14 @@ fn confirm_current_runtime_running_with_reads(
                 );
             }
             Err(error @ TrackerError::ServeTimedOut(_)) => return Err(error),
+            Err(TrackerError::TrackerReturnedError(message))
+                if message == "'verify_current_runtime_running'" =>
+            {
+                // Legacy sidecars return this KeyError when the identity command
+                // is absent. Repeating it cannot confirm the running runtime;
+                // preserve the original start failure without more probes.
+                return Err(TrackerError::TrackerReturnedError(message));
+            }
             Err(error) => last_error = error,
         }
     }
@@ -3254,6 +3262,65 @@ done
         );
         assert!(missing.is_err());
         assert_eq!(absent_reads, START_RECOVERY_PROBE_ATTEMPTS);
+    }
+
+    #[test]
+    fn start_recovery_does_not_repeat_an_unsupported_identity_command() {
+        let mut reads = 0;
+        let result = reconcile_start_result_with_status(
+            Err(TrackerError::CommandFailed("original start reply lost".into())),
+            || {
+                confirm_current_runtime_running_with_reads(
+                    || true,
+                    || {
+                        reads += 1;
+                        // Exact request envelope returned by a frozen legacy
+                        // tracker that has no identity-verification command.
+                        parse_envelope::<bool>(
+                            br#"{"ok":false,"data":null,"error":"'verify_current_runtime_running'"}"#,
+                        )
+                    },
+                    || panic!("an unsupported identity command cannot authorize status"),
+                    |_| panic!("an unsupported command must not schedule another attempt"),
+                )
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(TrackerError::CommandFailed(message)) if message == "original start reply lost"
+        ));
+        assert_eq!(reads, 1);
+    }
+
+    #[test]
+    fn start_recovery_still_retries_transient_identity_errors() {
+        for first_error in [
+            TrackerError::CommandFailed("temporary launch failure".into()),
+            TrackerError::TrackerReturnedError("database is locked".into()),
+            TrackerError::TrackerReturnedError("'another_key'".into()),
+        ] {
+            let mut first_error = Some(first_error);
+            let mut reads = 0;
+            let mut waits = 0;
+            let result = confirm_current_runtime_running_with_reads(
+                || true,
+                || {
+                    reads += 1;
+                    first_error.take().map_or(Ok(true), Err)
+                },
+                || {
+                    Ok(serde_json::from_value(json!({
+                        "running": true,
+                        "accessibilityGranted": false,
+                    }))
+                    .expect("valid tracker status"))
+                },
+                |_| waits += 1,
+            );
+            assert!(result.expect("a transient failure may recover").running);
+            assert_eq!(reads, 2);
+            assert_eq!(waits, 1);
+        }
     }
 
     #[test]
