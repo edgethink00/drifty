@@ -85,6 +85,8 @@ def _run_osascript(script: str) -> str:
         )
     except subprocess.TimeoutExpired as error:
         raise RuntimeError("osascript timed out") from error
+    except OSError as error:
+        raise RuntimeError(f"osascript could not start (OS error {error.errno})") from error
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "osascript failed")
     return result.stdout.strip()
@@ -103,6 +105,8 @@ def _run_command(command: list[str], timeout: float = COMMAND_TIMEOUT_SECONDS) -
         )
     except subprocess.TimeoutExpired as error:
         raise RuntimeError("command timed out") from error
+    except OSError as error:
+        raise RuntimeError(f"capture command could not start (OS error {error.errno})") from error
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "command failed")
     return result.stdout.strip()
