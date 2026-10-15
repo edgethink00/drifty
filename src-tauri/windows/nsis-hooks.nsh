@@ -51,9 +51,17 @@ Function DriftyStopTrackerForUpdate
     IfErrors 0 drifty_tracker_open
     System::Call 'kernel32::GetTickCount()i .R7'
     IntOp $R7 $R7 - $R6
-    IntCmp $R7 ${DRIFTY_TRACKER_REAP_MS} drifty_tracker_released 0 drifty_tracker_released
+    IntCmp $R7 ${DRIFTY_TRACKER_REAP_MS} drifty_tracker_locked 0 drifty_tracker_locked
     Sleep 250
     Goto drifty_tracker_reap
+  drifty_tracker_locked:
+    ; A failed taskkill or another file holder must not let silent NSIS skip
+    ; the tracker and report success with mismatched app/tracker versions.
+    IfSilent drifty_tracker_abort 0
+    MessageBox MB_ICONSTOP "Drifty's tracker is still in use. Close Drifty and retry the update. No new app files were copied."
+  drifty_tracker_abort:
+    SetErrorLevel 2
+    Abort "Drifty tracker is still in use; update cancelled before copying files."
   drifty_tracker_open:
     FileClose $R8
   drifty_tracker_released:
