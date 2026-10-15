@@ -219,7 +219,7 @@ describe("buildRollingFocusSeconds", () => {
     expect(total).toBe(0);
   });
 
-  it("keeps timestamp clipping for ordinary segments", () => {
+  it("preserves sparse recorded focus instead of filling its timestamp span", () => {
     const total = buildRollingFocusSeconds(
       [
         makeSegment(
@@ -238,6 +238,6 @@ describe("buildRollingFocusSeconds", () => {
       "2026-04-06",
     );
 
-    expect(total).toBe(10 * 60);
+    expect(total).toBe(5);
   });
 });

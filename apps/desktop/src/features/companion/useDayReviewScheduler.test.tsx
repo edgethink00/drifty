@@ -12,6 +12,7 @@ import { DEFAULT_QUIET_HOURS } from "./quietHours";
 import {
   useDayReviewScheduler,
   type DayReviewDeliveryResult,
+  type DayReviewPresentationRequest,
   type UseDayReviewSchedulerOptions,
 } from "./useDayReviewScheduler";
 
@@ -45,7 +46,7 @@ type Harness = {
 };
 
 function harness(overrides: Partial<UseDayReviewSchedulerOptions> = {}, delivery: DayReviewDeliveryResult = "delivered"): Harness {
-  const present = vi.fn().mockResolvedValue(delivery);
+  const present = vi.fn(async (request: DayReviewPresentationRequest) => request.commitPresentation() ? delivery : "cancelled");
   const loadDaySegments = vi.fn().mockResolvedValue([segment("focus", 4 * 3600)]);
   const readUserActive = vi.fn().mockResolvedValue(true);
   return {
@@ -259,7 +260,7 @@ describe("useDayReviewScheduler", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(present).not.toHaveBeenCalled();
-    expect(readDayReviewRecord(DAY)).toMatchObject({ status: "pending" });
+    expect(readDayReviewRecord(DAY)).toBeNull();
   });
 
   it("never schedules on a preview surface or while inactive", async () => {
@@ -276,6 +277,59 @@ describe("useDayReviewScheduler", () => {
     await tick();
     expect(inactive.present).not.toHaveBeenCalled();
   });
+  it.each(["review time", "quiet hours", "disabled", "expiry", "unmounted"] as const)("cancels preparation after %s changes without spending a delivery", async (change) => {
+    vi.setSystemTime(new Date(2026, 9, 3, 20, 5));
+    const { options, present } = harness();
+    let commit: (() => boolean) | undefined;
+    let complete: ((result: DayReviewDeliveryResult) => void) | undefined;
+    present.mockImplementation((request: DayReviewPresentationRequest) => {
+      commit = request.commitPresentation;
+      return new Promise<DayReviewDeliveryResult>((resolve) => { complete = resolve; });
+    });
+    const { rerender, unmount } = render(<Host options={options} />);
+    await flush();
+    expect(commit).toBeDefined();
+    expect(readDayReviewRecord(DAY)).toBeNull();
+    if (change === "review time") rerender(<Host options={{ ...options, reviewMinute: 23 * 60 }} />);
+    if (change === "quiet hours") rerender(<Host options={{ ...options, quietHours: { enabled: true, startMinute: 20 * 60, endMinute: 22 * 60 } }} />);
+    if (change === "disabled") rerender(<Host options={{ ...options, dayReviewEnabled: false }} />);
+    if (change === "expiry") vi.setSystemTime(new Date(2026, 9, 4, 3));
+    if (change === "unmounted") unmount();
+    await act(async () => { expect(commit?.()).toBe(false); complete?.("cancelled"); });
+    expect(readDayReviewRecord(DAY)?.presentations ?? 0).toBe(0);
+    if (change === "unmounted") return;
+    vi.setSystemTime(new Date(2026, 9, 3, 20, 5));
+    present.mockImplementation(async (request: DayReviewPresentationRequest) => request.commitPresentation() ? "delivered" : "cancelled");
+    rerender(<Host options={options} />);
+    await tick();
+    expect(readDayReviewRecord(DAY)).toMatchObject({ status: "presented", presentations: 1 });
+    act(() => recordDayReviewUnseen(DAY));
+    await tick();
+    expect(readDayReviewRecord(DAY)).toMatchObject({ status: "presented", presentations: 2 });
+    act(() => recordDayReviewUnseen(DAY));
+    await tick();
+    expect(readDayReviewRecord(DAY)).toMatchObject({ status: "closed", closedReason: "presentation_limit" });
+  });
+
+  it("reserves one attempt for native plus plugin checks and refunds an unsent cancellation", async () => {
+    vi.setSystemTime(new Date(2026, 9, 3, 20, 5));
+    const { options, present } = harness();
+    present.mockImplementation(async (request: DayReviewPresentationRequest) => {
+      expect(request.commitPresentation()).toBe(true);
+      expect(request.commitPresentation()).toBe(true);
+      expect(readDayReviewRecord(DAY)?.presentations).toBe(1);
+      return "cancelled";
+    });
+    render(<Host options={options} />);
+    await flush();
+    expect(readDayReviewRecord(DAY)).toMatchObject({ status: "pending", presentations: 0 });
+    present.mockImplementation(async (request: DayReviewPresentationRequest) => request.commitPresentation() ? "failed" : "cancelled");
+    await tick(2);
+    expect(readDayReviewRecord(DAY)).toMatchObject({ status: "pending", presentations: 2 });
+    await tick();
+    expect(readDayReviewRecord(DAY)).toMatchObject({ status: "closed", closedReason: "presentation_limit" });
+  });
+
 });
 
 

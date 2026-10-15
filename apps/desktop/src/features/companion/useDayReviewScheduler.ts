@@ -5,6 +5,9 @@ import { isInstallDayReviewEligible } from "../onboarding/initialExperiencePolic
 import { sumEndOfDayReviewTrackedSeconds } from "./endOfDayReviewData";
 import {
   DAY_REVIEW_TICK_INTERVAL_MS,
+  createDayReviewRecord,
+  writeDayReviewRecord,
+  type DayReviewRecord,
   acknowledgeDayReview,
   appendDayReviewDecision,
   closeDayReview,
@@ -35,12 +38,15 @@ export type DayReviewDeliveryResult =
   | "delivered"
   | "dropped_expired"
   | "dropped_surface_disabled"
+  | "cancelled"
   | "failed";
 
 export type DayReviewPresentationRequest = {
   readonly day: string;
   readonly segments: ActivitySegment[];
   readonly expiresAt: string;
+  /** Check after preparation, immediately before each native/plugin send. Rechecks share one attempt. */
+  readonly commitPresentation: () => boolean;
 };
 
 export type UseDayReviewSchedulerOptions = {
@@ -76,13 +82,18 @@ export function useDayReviewScheduler(options: UseDayReviewSchedulerOptions): Da
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const evaluateNow = useCallback(async () => {
     const current = optionsRef.current;
     if (!current.active || inFlightRef.current) return;
     inFlightRef.current = true;
     try {
-      await evaluateDayReview(current, () => optionsRef.current);
+      await evaluateDayReview(current, () => mountedRef.current ? optionsRef.current : { ...optionsRef.current, active: false });
     } finally {
       inFlightRef.current = false;
     }
@@ -196,46 +207,78 @@ async function applyDayReviewDecision(
   }
   if (decision.action !== "present") return;
 
-  /* Mark the attempt before handing the card over so a tick that lands during
-     the asynchronous build cannot queue a second card for the same day. */
-  recordDayReviewPresentation(day, now.toISOString());
   let segments = context.segments;
   if (segments === null) {
     try {
       segments = await options.loadDaySegments(day);
     } catch {
-      revertDayReviewPresentation(day);
       return;
     }
   }
-  /* The build is asynchronous. Re-read the live settings at the commit
-     boundary so a review switched off, a moved day boundary, or a window
-     that closed meanwhile cannot hand a stale card to the surface. */
-  const latest = context.latestOptions();
-  const window = resolveDayReviewWindow(day, latest.reviewMinute, latest.startOfDayMinutes);
-  const commitNow = (latest.now ?? defaultNow)();
-  if (!latest.active
-    || !latest.dayReviewEnabled
-    || latest.startOfDayMinutes !== options.startOfDayMinutes
-    || dayReviewLogicalDay(commitNow, latest.startOfDayMinutes) !== day
-    || commitNow.getTime() >= window.endMs) {
-    revertDayReviewPresentation(day);
-    return;
-  }
+  const preparedTrackedSeconds = trackedSeconds ?? sumEndOfDayReviewTrackedSeconds(segments);
+  const expiresAt = resolveDayReviewWindow(day, options.reviewMinute, options.startOfDayMinutes).endMs;
+  let committed = false;
+  let previousRecord: DayReviewRecord | null = null;
+  let reservation: DayReviewRecord | null = null;
+  const ownsReservation = (record: DayReviewRecord | null) => reservation !== null && record?.status === "presented"
+    && record.lastPresentedAt === reservation.lastPresentedAt && record.presentations === reservation.presentations
+    && !record.expiredUnseen;
+  const canPresent = () => {
+    const latest = context.latestOptions();
+    const commitNow = (latest.now ?? defaultNow)();
+    if (!latest.active
+      || latest.startOfDayMinutes !== options.startOfDayMinutes
+      || dayReviewLogicalDay(commitNow, latest.startOfDayMinutes) !== day
+      || commitNow.getTime() >= expiresAt) return false;
+    const record = readDayReviewRecord(day);
+    const latestDecision = resolveDayReviewDecision({
+      nowMs: commitNow.getTime(), day,
+      reviewMinute: latest.reviewMinute,
+      startOfDayMinutes: latest.startOfDayMinutes,
+      enabled: latest.dayReviewEnabled,
+      previewSurface: latest.previewSurface,
+      installDayEligible: isInstallDayReviewEligible(latest.onboardingCompletedAt, day, latest.startOfDayMinutes),
+      quietHoursActive: isQuietHoursActiveAt(commitNow, latest.quietHours),
+      userActive: true,
+      trackedSeconds: preparedTrackedSeconds,
+      record: committed && ownsReservation(record) ? previousRecord : record,
+    });
+    if (latestDecision.action === "close") closeDayReview(day, latestDecision.reason);
+    return latestDecision.action === "present";
+  };
+  if (!canPresent()) return;
   let result: DayReviewDeliveryResult;
   try {
-    result = await options.present({ day, segments, expiresAt: new Date(window.endMs).toISOString() });
+    result = await options.present({
+      day, segments, expiresAt: new Date(expiresAt).toISOString(),
+      commitPresentation: () => {
+        if (!canPresent()) return false;
+        if (committed) return true;
+        // Preparation consumes no delivery allowance. Reserve only at the
+        // actual send boundary; the in-flight guard already prevents a second build.
+        previousRecord = readDayReviewRecord(day);
+        committed = true;
+        reservation = recordDayReviewPresentation(day, (context.latestOptions().now ?? defaultNow)().toISOString());
+        return true;
+      },
+    });
   } catch {
     result = "failed";
   }
+  if (!committed) return;
   switch (result) {
     case "displayed":
-      acknowledgeDayReview(day, (options.now ?? defaultNow)().toISOString());
+      acknowledgeDayReview(day, (context.latestOptions().now ?? defaultNow)().toISOString());
       return;
     case "delivered":
       return;
     case "dropped_surface_disabled":
       closeDayReview(day, "surface_disabled");
+      return;
+    case "cancelled":
+      // The native path was unavailable and the fallback was cancelled before
+      // sending. Restore the allowance only while this request still owns it.
+      if (ownsReservation(readDayReviewRecord(day))) writeDayReviewRecord(previousRecord ?? createDayReviewRecord(day));
       return;
     case "dropped_expired":
     case "failed":

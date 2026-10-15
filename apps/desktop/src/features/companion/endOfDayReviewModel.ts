@@ -1,8 +1,12 @@
 import type { CloudQuotaRecovery } from "../classification/cloudQuotaGuidance";
 import {
+  aggregateDeviceElapsedTime,
+  activityTimeBounds,
+  activitySecondsWithinInterval,
   buildAppUsageSummaries,
   buildProductivityDurations,
   classifyActivityDetailed,
+  clipDeviceElapsedTimeSegment,
   isBrowserHistoryImportSegment,
   isFailedForegroundCaptureSegment,
   logicalDayEndExclusiveMs,
@@ -137,22 +141,19 @@ export function buildEndOfDayReviewComparison({
   classificationOptions?: ClassificationOptions;
   startOfDayMinutes?: number;
 }): EndOfDayReviewComparison | undefined {
-  const observed = previousDaySegments.filter((segment) => !isBrowserHistoryImportSegment(segment) && !isFailedForegroundCaptureSegment(segment));
+  const observed = aggregateDeviceElapsedTime(previousDaySegments.filter((segment) => !isBrowserHistoryImportSegment(segment) && !isFailedForegroundCaptureSegment(segment)));
   const observedSeconds = observed.reduce((total, segment) => total + Math.max(0, segment.durationSeconds), 0);
   if (observedSeconds < END_OF_DAY_REVIEW_COMPARISON_MIN_OBSERVED_SECONDS) return undefined;
   const previousDay = shiftIsoDate(day, -1);
   const elapsedMs = Date.parse(generatedAt) - logicalDayStartMs(day, startOfDayMinutes);
   if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return undefined;
   const previousDayEndMs = logicalDayEndExclusiveMs(previousDay, startOfDayMinutes);
-  const cutoffMs = Math.min(logicalDayStartMs(previousDay, startOfDayMinutes) + elapsedMs, previousDayEndMs);
-  const clipped = observed.flatMap((segment) => {
-    const startMs = Date.parse(segment.startedAt);
-    const endMs = Date.parse(segment.endedAt);
-    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= cutoffMs) return [];
-    if (endMs <= cutoffMs) return [segment];
-    const share = endMs > startMs ? (cutoffMs - startMs) / (endMs - startMs) : 0;
-    return [{ ...segment, endedAt: new Date(cutoffMs).toISOString(), durationSeconds: segment.durationSeconds * share }];
-  });
+  // Compare the same local clock, even when DST makes these days differ in length.
+  const previousClock = new Date(generatedAt);
+  previousClock.setDate(previousClock.getDate() - 1);
+  const cutoffMs = Math.min(previousClock.getTime(), previousDayEndMs);
+  const window = { start: logicalDayStartMs(previousDay, startOfDayMinutes), end: cutoffMs };
+  const clipped = observed.map((segment) => clipDeviceElapsedTimeSegment(segment, window));
   const previous = buildProductivityDurations(clipped, classificationOptions);
   const secondsOf = (label: "focus" | "drift" | "neutral") => previous.find((entry) => entry.productivity === label)?.totalSeconds ?? 0;
   return {
@@ -187,6 +188,7 @@ export function buildEndOfDayReviewSummary({
   assessment?: EndOfDayReviewPendingAssessment;
   isMock?: boolean;
 }): EndOfDayReviewEvent {
+  segments = aggregateDeviceElapsedTime(segments);
   const totalSeconds = segments.reduce((total, segment) => total + segment.durationSeconds, 0);
   const productivityDurations = buildProductivityDurations(segments, classificationOptions);
   const focusSeconds = productivityDurations.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
@@ -263,7 +265,7 @@ export function sumPendingEndOfDayReviewSeconds(
 ): number {
   const cutoffMs = unavailableSince ? new Date(unavailableSince).getTime() : Number.NEGATIVE_INFINITY;
   const hasValidCutoff = Number.isFinite(cutoffMs);
-  return segments.reduce((total, segment) => {
+  return aggregateDeviceElapsedTime(segments).reduce((total, segment) => {
     const startedAtMs = new Date(segment.startedAt).getTime();
     if (hasValidCutoff && (!Number.isFinite(startedAtMs) || startedAtMs < cutoffMs)) return total;
     if (classifyActivityDetailed(segment, classificationOptions).category !== "unknown") return total;
@@ -277,15 +279,16 @@ export function buildEndOfDayReviewDailySignals(
   segments: ActivitySegment[],
   classificationOptions?: ClassificationOptions,
 ): EndOfDayReviewDailySignals {
-  const focusSourceSegments = segments
+  const focusSourceSegments = aggregateDeviceElapsedTime(segments)
     .filter((segment) => {
       const classification = classifyActivityDetailed(segment, classificationOptions);
       return classification.category !== "unknown" && classification.productivity === "focus";
     });
   const focusSegments = focusSourceSegments
     .map((segment) => ({
-      startedAt: new Date(segment.startedAt),
-      endedAt: new Date(segment.endedAt),
+      source: segment,
+      startedAt: new Date(activityTimeBounds(segment).start),
+      endedAt: new Date(activityTimeBounds(segment).end),
       durationSeconds: Math.max(0, segment.durationSeconds),
     }))
     .filter((segment) => Number.isFinite(segment.startedAt.getTime()) && Number.isFinite(segment.endedAt.getTime()))
@@ -303,10 +306,11 @@ export function buildEndOfDayReviewDailySignals(
     const endMs = Math.max(cursorMs, segment.endedAt.getTime());
     while (cursorMs < endMs) {
       const hour = new Date(cursorMs);
-      hour.setMinutes(0, 0, 0);
-      const hourStartMs = hour.getTime();
+      // Subtract within the current offset: setMinutes(0) can jump backward
+      // into the first occurrence of a repeated hour when DST ends.
+      const hourStartMs = cursorMs - (hour.getMinutes() * 60 + hour.getSeconds()) * 1000 - hour.getMilliseconds();
       const hourEndMs = hourStartMs + 60 * 60 * 1000;
-      const overlapSeconds = Math.max(0, Math.min(endMs, hourEndMs) - cursorMs) / 1000;
+      const overlapSeconds = activitySecondsWithinInterval(segment.source, cursorMs, Math.min(endMs, hourEndMs));
       focusByHour.set(hourStartMs, (focusByHour.get(hourStartMs) ?? 0) + overlapSeconds);
       cursorMs = Math.min(endMs, hourEndMs);
     }

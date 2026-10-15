@@ -23,7 +23,7 @@ import type { EndOfDayReviewEvent, EndOfDayReviewPendingAssessment } from "./end
  * bundle keep the notification plugin, which cannot read permission.
  */
 
-export type DayReviewNotificationResult = "sent" | "denied" | "unavailable" | "failed";
+export type DayReviewNotificationResult = "sent" | "denied" | "unavailable" | "cancelled" | "failed";
 
 export type DayReviewNotificationContent = {
   readonly title: string;
@@ -93,12 +93,14 @@ export function buildDayReviewNotification(event: EndOfDayReviewEvent, language:
 export async function sendDayReviewNotification(
   event: EndOfDayReviewEvent,
   language: DisplayLanguage,
+  commitPresentation: () => boolean = () => true,
 ): Promise<DayReviewNotificationResult> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return "unavailable";
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     if (getCurrentWindow().label !== "main") return "unavailable";
     const content = buildDayReviewNotification(event, language);
+    if (!commitPresentation()) return "cancelled";
     const native = await sendNativeNotification({
       /* One per day: sending the same day again replaces it in Notification Center. */
       identifier: "drifty.day-review." + event.day,
@@ -109,6 +111,7 @@ export async function sendDayReviewNotification(
     if (native === "denied") return "denied";
     if (native === "notDetermined") return "failed";
     const { invoke } = await import("@tauri-apps/api/core");
+    if (!commitPresentation()) return "cancelled";
     await invoke("plugin:notification|notify", { options: { title: content.title, body: content.body } });
     return "sent";
   } catch {

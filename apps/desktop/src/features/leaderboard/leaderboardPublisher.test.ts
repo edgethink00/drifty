@@ -84,6 +84,21 @@ describe("leaderboardPublisher", () => {
     expect(result.payloads[0]?.payloadKey).not.toContain("siteTitle");
   });
 
+  it("publishes captured sampling totals while excluding remote device history", async () => {
+    const today = todayIsoDate();
+    // 361 five-second snapshots cover a 30-minute timestamp span, including
+    // the first positive sample. Publication must retain all 1805 seconds.
+    const local = { ...makeSegment(today, 1800), durationSeconds: 1805 };
+    const input = { profileDisplayName: "Alex", leaderboardWindowEndDay: today, timezone: "Asia/Seoul", startOfDayMinutes: 0, showAiClassificationImpact: false };
+    getTimeline.mockResolvedValueOnce([local]);
+    const before = await buildLeaderboardPublishPayloads(input);
+    getTimeline.mockResolvedValueOnce([local, { ...local, id: "remote", deviceId: "pc", platform: "windows" }]);
+    const after = await buildLeaderboardPublishPayloads(input);
+    expect(before.payloads.map((payload) => payload.focusSeconds)).toEqual([1805, 1805, 1805]);
+    expect(after).toEqual(before);
+    expect(after.segmentCount).toBe(1);
+  });
+
   it("excludes browser history import estimates from published focus totals", async () => {
     const today = todayIsoDate();
     getTimeline.mockResolvedValue([

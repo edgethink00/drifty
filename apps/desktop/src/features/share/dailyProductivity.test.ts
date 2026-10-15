@@ -126,6 +126,15 @@ describe("Profile daily productivity uses elapsed time across devices", () => {
     expect(buildDailyProductivitySeries([point], day, day, {}, 0)[0].focus).toBe(5);
   });
 
+  it.each([1805, 900])("keeps a sampled day's %i seconds unchanged when a remote day is added", (durationSeconds) => {
+    const local = { ...record("local", "mac", 0, 1800), durationSeconds };
+    const remote = { ...record("remote", "pc", 0, 60), startedAt: new Date(2026, 9, 5, 9).toISOString(), endedAt: new Date(2026, 9, 5, 9, 1).toISOString() };
+    const before = buildDailyProductivitySeries([local], day, "2026-10-05", {}, 0);
+    const after = buildDailyProductivitySeries([local, remote], day, "2026-10-05", {}, 0);
+    expect(before[0].focus).toBe(durationSeconds);
+    expect(after[0]).toEqual(before[0]);
+  });
+
   it("retains an uncontested single-device day's sampling semantics", () => {
     const records = [record("local-a", "mac", 0, 60), record("local-b", "mac", 0, 60),
       { ...record("elsewhere", "pc", 0, 60), startedAt: new Date(2026, 9, 5, 9).toISOString(), endedAt: new Date(2026, 9, 5, 9, 1).toISOString() }];

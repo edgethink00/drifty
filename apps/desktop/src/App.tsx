@@ -3365,7 +3365,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     const { assessment: requestedAssessment, ...rawReviewInput } = input;
     const reviewInput = {
       ...rawReviewInput,
-      segments: rawReviewInput.segments.filter((segment) => !isFailedForegroundCaptureSegment(segment)),
+      segments: aggregateDeviceElapsedTime(rawReviewInput.segments.filter((segment) => !isFailedForegroundCaptureSegment(segment))),
     };
     const resolveCurrentInput = () => {
       const currentAvailability = classificationAvailabilityRef.current;
@@ -8339,7 +8339,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
        says why. One that cannot be sent for another reason shows no card in
        its place; the scheduler tries once more within its presentation
        allowance and then lets the evening pass. */
-    const delivery = await sendDayReviewNotification(deliveredEvent, companionLanguage);
+    const delivery = await sendDayReviewNotification(deliveredEvent, companionLanguage, request.commitPresentation);
+    if (delivery === "cancelled") return "cancelled";
     if (delivery === "sent") return "displayed";
     if (delivery === "denied") return "dropped_surface_disabled";
     return "failed";

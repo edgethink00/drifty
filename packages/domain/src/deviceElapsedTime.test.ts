@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "./activity";
 import { filterSegmentsByDevice } from "./activity";
-import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, clipDeviceElapsedTimeSegment } from "./deviceElapsedTime";
+import { aggregateDeviceElapsedTime, activityTimeBounds, activitySecondsWithinInterval, clipDeviceElapsedTimeSegment } from "./deviceElapsedTime";
 import { buildAppUsageSummaries, buildCategoryDurations, buildDailyTotals, buildFlowBlocks, buildFlowBlocksForIntervals, buildProductivityDurations, buildRollingFocusSeconds, logicalDayStartMs, totalDurationSeconds } from "./aggregation";
 import { buildPersonalProjectSliceProjection } from "./projectWindowAssignments";
 import { capturedActivityDurationSeconds } from "./capturedActivityDuration";
@@ -108,6 +108,22 @@ describe("cross-device elapsed time", () => {
     expect(projected[0]).toBe(records[0]);
     expect(projected[1]).toBe(records[1]);
     expect(totalDurationSeconds(records)).toBe(3605);
+  });
+
+  it.each([1805, 900])("keeps interval buckets on the same %i-second sampled basis across device counts", durationSeconds => {
+    const local = { ...segment("sampled", 0, 30), durationSeconds };
+    const original = JSON.stringify(local);
+    const start = Date.parse(local.startedAt);
+    const queryEnd = start + 2 * 86_400_000;
+    const projected = aggregateDeviceElapsedTime([local, segment("elsewhere", 1440, 1, "pc")])[0];
+    const { start: projectedStart, end: projectedEnd } = activityTimeBounds(projected);
+    expect(activityTimeBounds(local)).toEqual({ start: projectedStart, end: projectedEnd });
+    expect(activitySecondsWithinInterval(local, start, queryEnd)).toBe(durationSeconds);
+    expect(activitySecondsWithinInterval(projected, start, queryEnd)).toBeCloseTo(durationSeconds);
+    const cut = start + 900_000;
+    expect(activitySecondsWithinInterval(local, start, cut)).toBeCloseTo(activitySecondsWithinInterval(projected, start, cut));
+    expect(activitySecondsWithinInterval(local, start, cut) + activitySecondsWithinInterval(local, cut, queryEnd)).toBeCloseTo(durationSeconds);
+    expect(JSON.stringify(local)).toBe(original);
   });
 
   it("keeps an uncontested device's original sampling total independent of other devices elsewhere in the period", () => {

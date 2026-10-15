@@ -1,3 +1,4 @@
+import { aggregateDeviceElapsedTime } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
 import {
@@ -255,5 +256,35 @@ describe("buildEndOfDayReviewDailySignals", () => {
     expect(pending.comparison).toBeUndefined();
     expect(pending.dailySignals).toBeUndefined();
     expect(pending.leaderboardCelebration).toBeUndefined();
+  });
+});
+
+
+describe("Day Review device allocations", () => {
+  it("uses one elapsed budget for totals, categories, sources, runs, and hourly signals", () => {
+    const local = localSegment(reviewDay, 9, 120, "focus");
+    const records = [local, { ...local, id: "pc", deviceId: "pc", platform: "windows" as const }];
+    const original = JSON.stringify(records);
+    const event = buildReviewEvent(records);
+    expect(event).toMatchObject({
+      totalSeconds: 7200, focusSeconds: 7200, unclassifiedSeconds: 0,
+      dailySignals: { longestFocusRunSeconds: 7200, peakHourFocusSeconds: 3600, deepSessionCount: 1 },
+    });
+    expect(event.categorySummaries).toEqual([expect.objectContaining({ durationSeconds: 7200, percent: 100 })]);
+    expect(event.sourceSummaries).toEqual([expect.objectContaining({ durationSeconds: 7200, percent: 100 })]);
+    expect(buildReviewEvent(aggregateDeviceElapsedTime(records))).toEqual(event);
+    expect(JSON.stringify(records)).toBe(original);
+  });
+
+  it("clips yesterday's exact device allocation instead of scaling its whole-day share", () => {
+    const records = [localSegment(reviewDay, 9, 240, "focus"), { ...localSegment(reviewDay, 11, 120, "focus"), id: "pc", deviceId: "pc" }];
+    const compare = (previousDaySegments: ActivitySegment[]) => buildEndOfDayReviewComparison({
+      day: "2026-04-07", generatedAt: new Date("2026-04-07T12:00:00").toISOString(),
+      previousDaySegments, current: { focusSeconds: 10800, driftSeconds: 0, neutralSeconds: 0 },
+    });
+    expect(compare(records)).toEqual({ focusDeltaSeconds: 0, driftDeltaSeconds: 0, otherDeltaSeconds: 0, scope: "sameTime" });
+    expect(compare(aggregateDeviceElapsedTime(records))).toEqual(compare(records));
+    const thin = records.map((record) => ({ ...record, startedAt: records[1].startedAt, durationSeconds: 7200 }));
+    expect(compare(thin)).toBeUndefined();
   });
 });

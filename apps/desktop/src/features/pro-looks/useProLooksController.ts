@@ -89,6 +89,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   latest.current = input;
 
   const [appIcon, setAppIcon] = useState<AppIconVariantId | null>(null);
+  const [iconSaving, setIconSaving] = useState(false);
   const [appIconFailure, setAppIconFailure] = useState<{ reason: unknown } | null>(null);
   const [keptCoat] = useState(() => resolveKeptCoat());
   const [popover, setPopover] = useState<ProLooksPopover | null>(null);
@@ -98,6 +99,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   const [trialStartFailed, setTrialStartFailed] = useState<ProLook["kind"] | null>(null);
   const [unlockedLook, setUnlockedLook] = useState<ProLook | null>(null);
   const [reverted, setRevertedState] = useState<RevertedLooks | null>(() => readRevertedLooks());
+  const revertedRef = useRef(reverted);
   const iconRequest = useRef(0);
   const sawFlow = useRef(false);
   const pendingRef = useRef(pending);
@@ -105,6 +107,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
 
   const setReverted = useCallback((next: RevertedLooks | null) => {
     const value = next && (next.icon || next.coat) ? next : null;
+    revertedRef.current = value;
     writeRevertedLooks(value);
     setRevertedState(value);
   }, []);
@@ -127,13 +130,29 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
     };
   }, [appIconsSupported]);
 
-  const saveAppIcon = useCallback((variant: AppIconVariantId, previous: AppIconVariantId | null) => {
+  const forgetReverted = useCallback((kind: ProLook["kind"], expected: string | undefined) => {
+    const current = revertedRef.current;
+    if (current?.[kind] && current[kind] === expected) setReverted({ ...current, [kind]: undefined });
+  }, [setReverted]);
+
+  const saveAppIcon = useCallback((variant: AppIconVariantId, previous: AppIconVariantId | null, onSaved?: () => void) => {
     const request = ++iconRequest.current;
+    setIconSaving(true);
     setAppIcon(variant);
     setAppIconFailure(null);
-    setAppIconVariant(variant).catch((reason: unknown) => {
+    void setAppIconVariant(variant).then((saved) => {
       if (request !== iconRequest.current) return;
-      setAppIcon(previous);
+      setAppIcon(saved);
+      setIconSaving(false);
+      onSaved?.();
+    }).catch(async (reason: unknown) => {
+      if (request !== iconRequest.current) return;
+      // IPC can fail after the native preference was written. Read the saved
+      // value before rolling the picker back, and ignore superseded replies.
+      const saved = await getAppIconVariant().catch(() => previous);
+      if (request !== iconRequest.current) return;
+      setAppIcon(saved);
+      setIconSaving(false);
       setAppIconFailure({ reason });
     });
   }, []);
@@ -149,14 +168,18 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   );
 
   const apply = useCallback((look: ProLook) => {
+    const remembered = revertedRef.current?.[look.kind];
     if (look.kind === "icon") {
-      if (look.id !== appIcon) saveAppIcon(look.id, appIcon);
-    } else if (look.id !== coat) {
-      setCoat(look.id);
+      // A failed save must keep the remembered choice. A later explicit pick
+      // is also the retry path after an automatic save failed.
+      if (look.id !== appIcon || appIconFailure) {
+        saveAppIcon(look.id, appIcon, () => forgetReverted("icon", remembered));
+      } else if (!iconSaving) forgetReverted("icon", remembered);
+    } else {
+      if (look.id !== coat) setCoat(look.id);
+      forgetReverted("coat", remembered);
     }
-    // A look chosen now replaces whatever the end of Pro put away.
-    if (reverted?.[look.kind]) setReverted({ ...reverted, [look.kind]: undefined });
-  }, [appIcon, coat, reverted, saveAppIcon, setCoat, setReverted]);
+  }, [appIcon, appIconFailure, coat, forgetReverted, iconSaving, saveAppIcon, setCoat]);
 
   const endFlow = useCallback(() => {
     setPending(null);
@@ -299,7 +322,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
     if (pending || !isKnownWithoutPro(access)) return;
     const next: { icon?: AppIconVariantId; coat?: PetModeCoat } = { ...(reverted ?? {}) };
     let changed = false;
-    if (appIconsSupported && appIcon !== null && !FREE_APP_ICONS.has(appIcon)) {
+    if (appIconsSupported && appIcon !== null && !FREE_APP_ICONS.has(appIcon) && !iconSaving && !appIconFailure) {
       next.icon = appIcon;
       saveAppIcon(FREE_FALLBACK_APP_ICON, appIcon);
       changed = true;
@@ -310,17 +333,21 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
       changed = true;
     }
     if (changed) setReverted(next);
-  }, [access, appIcon, appIconsSupported, coat, keptCoat, pending, reverted, saveAppIcon, setCoat, setReverted]);
+  }, [access, appIcon, appIconFailure, appIconsSupported, coat, iconSaving, keptCoat, pending, reverted, saveAppIcon, setCoat, setReverted]);
 
   useEffect(() => {
     if (access.state !== "open" || !reverted) return;
-    if (reverted.icon && appIconsSupported) {
-      if (appIcon === null) return;
-      if (appIcon === FREE_FALLBACK_APP_ICON) saveAppIcon(reverted.icon, appIcon);
+    if (reverted.icon && appIconsSupported && appIcon !== null && !iconSaving && !appIconFailure) {
+      const remembered = reverted.icon;
+      if (appIcon === FREE_FALLBACK_APP_ICON) {
+        saveAppIcon(remembered, appIcon, () => forgetReverted("icon", remembered));
+      } else forgetReverted("icon", remembered);
     }
-    if (reverted.coat && coat === FREE_FALLBACK_PET_COAT) setCoat(reverted.coat);
-    setReverted(null);
-  }, [access.state, appIcon, appIconsSupported, coat, reverted, saveAppIcon, setCoat, setReverted]);
+    if (reverted.coat) {
+      if (coat === FREE_FALLBACK_PET_COAT) setCoat(reverted.coat);
+      forgetReverted("coat", reverted.coat);
+    }
+  }, [access.state, appIcon, appIconFailure, appIconsSupported, coat, forgetReverted, iconSaving, reverted, saveAppIcon, setCoat]);
 
   // The try-on lasts while its bubble is open, or while the unlock it started
   // is still under way.

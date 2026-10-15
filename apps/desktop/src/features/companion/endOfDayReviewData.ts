@@ -1,5 +1,5 @@
 import type { EndOfDayReviewEvent, EndOfDayReviewPendingAssessment } from "./endOfDayReviewModel";
-import { isBrowserHistoryImportSegment, isFailedForegroundCaptureSegment } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, isBrowserHistoryImportSegment, isFailedForegroundCaptureSegment } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ProductivityLabel } from "@drifty/domain";
 import {
   DAILY_LEADERBOARD_CHECKPOINT_MINUTE,
@@ -41,9 +41,10 @@ export const END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS = 3 * 60 * 60;
 export function sumEndOfDayReviewTrackedSeconds(segments: readonly ActivitySegment[]): number {
   // Imported history reconstructs the dashboard, but it was not observed by
   // Drifty after installation and cannot make a thin install day review-ready.
-  return segments.reduce(
+  const observed = segments.filter((segment) => !isBrowserHistoryImportSegment(segment) && !isFailedForegroundCaptureSegment(segment));
+  return aggregateDeviceElapsedTime(observed).reduce(
     (total, segment) => total + (
-      isBrowserHistoryImportSegment(segment) || isFailedForegroundCaptureSegment(segment) || !Number.isFinite(segment.durationSeconds)
+      !Number.isFinite(segment.durationSeconds)
         ? 0
         : Math.max(0, segment.durationSeconds)
     ),

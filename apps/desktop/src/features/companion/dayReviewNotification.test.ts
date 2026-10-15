@@ -122,4 +122,24 @@ describe("Day Review notification", () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     await expect(sendDayReviewNotification(review, "en")).resolves.toBe("unavailable");
   });
+  it("cancels after module preparation without invoking the OS", async () => {
+    const commit = vi.fn(() => false);
+    await expect(sendDayReviewNotification(review, "en", commit)).resolves.toBe("cancelled");
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(pluginMocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("rechecks before plugin fallback after an asynchronous unavailable reply", async () => {
+    let eligible = true;
+    let reply: ((value: string) => void) | undefined;
+    pluginMocks.invoke.mockImplementation(() => new Promise((resolve) => { reply = resolve; }));
+    const pending = sendDayReviewNotification(review, "en", () => eligible);
+    await vi.waitFor(() => expect(reply).toBeDefined());
+    eligible = false;
+    reply?.("unavailable");
+    await expect(pending).resolves.toBe("cancelled");
+    expect(pluginMocks.invoke).toHaveBeenCalledTimes(1);
+    expect(pluginMocks.invoke).not.toHaveBeenCalledWith("plugin:notification|notify", expect.anything());
+  });
+
 });

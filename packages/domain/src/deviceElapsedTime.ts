@@ -93,20 +93,18 @@ export function aggregateDeviceElapsedTime(segments: readonly ActivitySegment[])
 
 /** Timestamp bounds for bucket clipping, including derived point samples. */
 export function activityTimeBounds(segment: ActivitySegment): { start: number; end: number } {
-  const projection = (segment as ProjectedSegment)[elapsedProjection];
-  return projection ?? { start: Date.parse(segment.startedAt), end: Date.parse(segment.endedAt) };
+  return sampledActivityTimeBounds(segment);
 }
 
-/** Exact allocated time within a day/hour/bucket. Legacy single-device spans
- * keep their existing rounded timestamp semantics. Do not round each weighted
+/** Recorded or allocated time within a day/hour/bucket. Use the same sampled
+ * basis with or without other devices in the queried period. Do not round each weighted
  * contribution: three devices must still sum to exactly one elapsed minute. */
 export function activitySecondsWithinInterval(segment: ActivitySegment, start: number, end: number): number {
   const projection = (segment as ProjectedSegment)[elapsedProjection];
   if (projection) return projection.intervals.reduce((total, interval) => total
     + Math.max(0, Math.min(end, interval.end) - Math.max(start, interval.start)) / 1000 * interval.rate, 0);
-  const bounds = activityTimeBounds(segment);
-  const overlap = Math.min(end, bounds.end) - Math.max(start, bounds.start);
-  return Number.isFinite(overlap) ? Math.max(0, Math.round(overlap / 1000)) : 0;
+  const seconds = sampledActivitySecondsWithinInterval(segment, start, end);
+  return Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
 }
 
 /** Clip display time to a logical window, or to a virtual project slice.
