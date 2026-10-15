@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -50,7 +51,8 @@ class FrozenArchiveTests(unittest.TestCase):
         self.assertTrue(pin_frozen_archive())
         snapshot = Path(self.reader._filename)
         self.assertEqual(snapshot.parent, self.extraction)
-        self.assertEqual(snapshot.stat().st_mode & 0o777, 0o600)
+        if os.name == "posix":
+            self.assertEqual(snapshot.stat().st_mode & 0o777, 0o600)
         self.assertNotEqual(snapshot.stat().st_ino, original_stat.st_ino)
         self.assertEqual(self.executable.stat().st_mode, original_stat.st_mode)
         self.assertEqual(self.reader._start_offset, 7)
