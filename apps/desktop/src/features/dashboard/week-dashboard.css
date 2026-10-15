@@ -3675,3 +3675,41 @@
   color: rgb(255 255 255 / 0.86);
   opacity: 1;
 }
+
+/* Compact Your Day trend chrome. Its measured height saving is transferred
+   into the flow grid by useDayChartHeightTransfer, preserving the column's
+   total height at fractional-pixel precision. Other chart hosts keep theirs. */
+.day-split__main[data-day-chart-density="compact"] .dashboard-insight-stack > .insight-chart-panel {
+  padding-top: 7px;
+  padding-bottom: 8px;
+}
+
+.day-split__main[data-day-chart-density="compact"] .insight-chart-panel .insight-panel-head {
+  margin-bottom: 2px;
+}
+
+.day-split__main[data-day-chart-density="compact"] .insight-panel-head .chip {
+  padding: 0 7px;
+  font-size: 0.75rem;
+  line-height: 1.0625rem;
+}
+
+.day-split__main[data-day-chart-density="compact"] .focus-drift__scale span {
+  transform: translate(5px, -50%);
+}
+
+.day-split__main[data-day-chart-density="compact"] .focus-drift__scale span:first-child {
+  transform: translate(5px, calc(-50% + 2px));
+}
+
+.day-split__main[data-day-chart-density="compact"] .focus-drift__scale span:nth-child(2) {
+  transform: translate(5px, calc(-50% + 1px));
+}
+
+.day-split__main[data-day-chart-density="compact"] .flow-chart-grid {
+  grid-template-rows: repeat(var(--flow-row-count), minmax(0, 1fr));
+}
+
+.content--dashboard .day-split__main[data-day-chart-density="compact"] .flow-breakdown-layout__chart .flow-cell {
+  min-height: 0;
+}

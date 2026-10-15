@@ -1,11 +1,12 @@
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { classifiedDashboardSegmentIds } from "./hasClassifiedDashboardResult";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { ModalPresence } from "../../components/ModalPresence";
 import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, ProductivityDuration, ProductivityLabel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
+import { useDayChartHeightTransfer } from "./useDayChartHeightTransfer";
 import { FlowChartView } from "../flow-chart/FlowChartView";
 import { YOUR_DAY_FLOW_INTERVAL_MINUTES } from "../flow-chart/flowChartDetailPreference";
 import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
@@ -195,6 +196,8 @@ export function DashboardPage({
   onDeleteDashboardActivity,
 }: DashboardPageProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const dayMainRef = useRef<HTMLDivElement>(null);
+  useDayChartHeightTransfer(dayMainRef, dashPeriod === "Today" && !initialDataLoading);
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
   const [shareCardOpen, setShareCardOpen] = useState(false);
   // Shared by the Day view and WeekDashboard: the Breakdown side panel is one
@@ -417,7 +420,7 @@ export function DashboardPage({
         />
       ) : (
         <div className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}`}>
-          <div className="day-split__main">
+          <div className="day-split__main" ref={dayMainRef}>
             {headInsideBlock ? pageHead : null}
             {/* Always render the flow chart frame — with the fixed legend and
                 time axis and an empty grid when there's no data — so a data-less
