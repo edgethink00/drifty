@@ -2183,6 +2183,7 @@ class TrackerDatabase:
         *,
         refresh_recovery_backup: bool = True,
         expected_capture_timings: dict[int, CaptureTiming] | None = None,
+        _claim_sync_deletion: Callable[[sqlite3.Connection], bool] | None = None,
     ) -> int:
         normalized_ids = sorted({
             int(segment_id)
@@ -2205,6 +2206,8 @@ class TrackerDatabase:
                     # would let daemon writers change those references before the
                     # first DELETE acquires SQLite's write lock.
                     conn.execute("BEGIN IMMEDIATE")
+                if _claim_sync_deletion is not None and not _claim_sync_deletion(conn):
+                    return 0
                 rows: list[sqlite3.Row] = []
                 columns = "*" if expected_capture_timings is not None else "id, segment_uid, youtube_video_id"
                 for start in range(0, len(normalized_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
@@ -2277,6 +2280,7 @@ class TrackerDatabase:
         record_tombstone: bool = True,
         *,
         refresh_recovery_backup: bool = True,
+        _claim_sync_deletion: Callable[[sqlite3.Connection], bool] | None = None,
     ) -> dict[str, Any]:
         scopes = scopes or {}
         delete_activity = bool(scopes.get("activity"))
@@ -2315,6 +2319,8 @@ class TrackerDatabase:
                     # Counts, recovery invalidation, deletes and the sync tombstone
                     # must describe one snapshot while daemon/provider writers wait.
                     conn.execute("BEGIN IMMEDIATE")
+                if not dry_run and _claim_sync_deletion is not None and not _claim_sync_deletion(conn):
+                    return
                 if delete_activity:
                     activity_segments = int(
                         conn.execute(
@@ -2819,6 +2825,20 @@ class TrackerDatabase:
                     skipped += 1
                     continue
 
+                deletion_claimed: bool | None = None
+
+                def claim_deletion(conn: sqlite3.Connection) -> bool:
+                    nonlocal deletion_claimed
+                    # The marker and deletion commit together. A crash cannot
+                    # replay a completed range over newly captured activity,
+                    # and a failed deletion rolls its marker back as well.
+                    cursor = conn.execute(
+                        "INSERT OR IGNORE INTO applied_sync_deletions (deletion_uid, applied_at) VALUES (?, ?)",
+                        (deletion_uid, timestamp),
+                    )
+                    deletion_claimed = cursor.rowcount > 0
+                    return deletion_claimed
+
                 if kind == "range":
                     # Replaying a remote deletion must not record a fresh tombstone, or two
                     # synced devices would ping-pong the same deletion forever.
@@ -2829,6 +2849,7 @@ class TrackerDatabase:
                         scopes={"activity": True},
                         record_tombstone=False,
                         refresh_recovery_backup=False,
+                        _claim_sync_deletion=claim_deletion,
                     )
                 else:
                     segment_uids = [uid for uid in (deletion.get("segmentUids") or []) if isinstance(uid, str) and uid]
@@ -2854,14 +2875,17 @@ class TrackerDatabase:
                                 ids,
                                 record_tombstone=False,
                                 refresh_recovery_backup=False,
+                                _claim_sync_deletion=claim_deletion,
                             )
 
-                with self.connect() as conn:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO applied_sync_deletions (deletion_uid, applied_at) VALUES (?, ?)",
-                        (deletion_uid, timestamp),
-                    )
-                applied += 1
+                if deletion_claimed is None:
+                    # Empty UID tombstones have no activity mutation to join.
+                    with self.connect() as conn:
+                        claim_deletion(conn)
+                if deletion_claimed:
+                    applied += 1
+                else:
+                    skipped += 1
         finally:
             if recovery_backup_due:
                 # A sync page may contain up to hundreds of tombstones. One
