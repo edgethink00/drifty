@@ -4160,13 +4160,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (!draft) return;
     setClassificationCorrectionNotice(null);
     setClassificationCorrectionDraft(draft);
-    if (effectiveScope !== "surface" && rowId) {
-      setExpandedClassificationActivityRows((current) => {
-        const next = new Set(current);
-        next.add(rowId);
-        return next;
-      });
-    }
+    // The editor floats beside its pencil and names the row itself, so the row
+    // keeps whatever expansion the user chose: opening it never pushes the list
+    // down or leaves a row expanded behind it.
   }
 
   function updateClassificationCorrectionDraft(next: Partial<Pick<ClassificationCorrectionDraft, "category" | "productivity">>) {

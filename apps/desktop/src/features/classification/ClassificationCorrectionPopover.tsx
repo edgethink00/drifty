@@ -10,6 +10,14 @@ import { ActionLabel } from "../../components/ActionLabel";
 export const CLASSIFICATION_CORRECTION_POPOVER_WIDTH = 296;
 export const CLASSIFICATION_CORRECTION_POPOVER_GAP = 8;
 export const CLASSIFICATION_CORRECTION_POPOVER_VIEWPORT_PADDING = 12;
+/**
+ * Height of the from → to row (10px margin + 28px row). It only appears once
+ * something changed, so placement always counts it. A card that opens above its
+ * pencil also keeps the row's space empty until then: otherwise the first pick
+ * would either push the options up from under the pointer or leave the card
+ * floating a row's height away from the pencil it belongs to.
+ */
+export const CLASSIFICATION_CORRECTION_CHANGE_ROW_HEIGHT = 38;
 
 export type ClassificationCorrectionPopoverPlacement = {
   readonly left: number;
@@ -130,7 +138,9 @@ export function ClassificationCorrectionPopover({
 
   const updatePlacement = useCallback(() => {
     if (!cardRef.current) return;
-    const height = cardRef.current.getBoundingClientRect().height;
+    const measured = cardRef.current.getBoundingClientRect().height;
+    const rowCounted = changed || cardRef.current.dataset.reserveChange === "true";
+    const height = rowCounted ? measured : measured + CLASSIFICATION_CORRECTION_CHANGE_ROW_HEIGHT;
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     if (!anchorElement) {
       setPlacement(getClassificationCorrectionPopoverFallbackPlacement(CLASSIFICATION_CORRECTION_POPOVER_WIDTH, height, viewport));
@@ -143,7 +153,7 @@ export function ClassificationCorrectionPopover({
       height,
       viewport,
     ));
-  }, [anchorElement]);
+  }, [anchorElement, changed]);
 
   // Throttle scroll/resize repositioning to one layout read per frame so
   // fast-scrolling the panel body doesn't trigger dozens of redundant calls.
@@ -215,6 +225,7 @@ export function ClassificationCorrectionPopover({
       aria-label={ariaLabel}
       data-positioned={String(placement !== null)}
       data-side={placement?.side ?? "below"}
+      data-reserve-change={String(!changed && placement?.side === "above")}
       style={style}
     >
       <header className="classification-correction__header">
@@ -270,7 +281,7 @@ export function ClassificationCorrectionPopover({
       <div className="classification-correction__section">
         <span className="classification-correction__section-label">{t("common.productivity")}</span>
         <div
-          className="classification-correction__productivity"
+          className="classification-correction__palette classification-correction__palette--productivity"
           role="radiogroup"
           aria-label={t("common.productivity")}
           onKeyDown={(event) => {
@@ -292,7 +303,7 @@ export function ClassificationCorrectionPopover({
                 aria-checked={selected}
                 tabIndex={selected ? 0 : -1}
                 disabled={saving}
-                className="classification-correction__segment"
+                className="classification-correction__chip"
                 data-selected={String(selected)}
                 data-value={productivity}
                 style={{ "--chip-tone": PRODUCTIVITY_COLORS[productivity] } as CSSProperties}
@@ -306,9 +317,11 @@ export function ClassificationCorrectionPopover({
         </div>
       </div>
 
-      <div className="classification-correction__change" data-changed={String(changed)} aria-live="polite">
+      {/* Nothing to say until something changed: the selected chips already show
+          the current classification, and Apply stays disabled. */}
+      <div className="classification-correction__change-slot" aria-live="polite">
         {changed ? (
-          <>
+          <div className="classification-correction__change">
             <span className="classification-correction__change-from">
               {localizedCategoryLabel(originalCategory, t)} · {localizedProductivityLabel(originalProductivity, t)}
             </span>
@@ -316,10 +329,8 @@ export function ClassificationCorrectionPopover({
             <span className="classification-correction__change-to">
               {localizedCategoryLabel(draft.category, t)} · {localizedProductivityLabel(draft.productivity, t)}
             </span>
-          </>
-        ) : (
-          <span className="classification-correction__change-idle">{t("classification.correction.unchanged")}</span>
-        )}
+          </div>
+        ) : null}
       </div>
 
       {notice?.kind === "error" ? (
@@ -331,8 +342,8 @@ export function ClassificationCorrectionPopover({
       <footer className="classification-correction__footer">
         <p className="classification-correction__scope-note">{scopeDescription}</p>
         <div className="classification-correction__actions">
-          <button type="button" className="app-btn app-btn--quiet app-btn--compact classification-correction__ghost-button" onClick={onCancel} disabled={saving}>{t("common.cancel")}</button>
-          <button type="button" className="app-btn app-btn--primary app-btn--compact classification-correction__save-button" onClick={onSave} disabled={saving || !changed} aria-busy={saving}>
+          <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={onCancel} disabled={saving}>{t("common.cancel")}</button>
+          <button type="button" className="app-btn app-btn--primary app-btn--compact" onClick={onSave} disabled={saving || !changed} aria-busy={saving}>
             <ActionLabel busy={saving} busyLabel={t("classification.correction.applying")}>{t("classification.correction.apply")}</ActionLabel>
           </button>
         </div>

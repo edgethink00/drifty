@@ -106,6 +106,20 @@ function localizedCorrectionDetailLabel(
   }
 }
 
+/**
+ * The same label inside a sentence ("This window title only"). English field
+ * labels are title-cased; proper nouns and acronyms keep their capitals.
+ */
+function inlineCorrectionDetailLabel(
+  detailKind: ClassificationCorrectionDraft["detailKind"],
+  t: LocalizationController["t"],
+  language: string,
+): string {
+  const label = localizedCorrectionDetailLabel(detailKind, t);
+  if (language !== "en" || detailKind === "youtubeTitle" || detailKind === "siteUrl") return label;
+  return label.charAt(0).toLocaleLowerCase("en") + label.slice(1);
+}
+
 function localizeClassificationSummaryValue(value: string, language: "en" | "ko"): string {
   if (language === "en") return value;
   const labels: Readonly<Record<string, string>> = {
@@ -229,7 +243,7 @@ export function ClassificationPage({
       ? (draft.rowId ? detailCorrectionButtonRefs.current.get(draft.rowId) ?? null : null)
       : surfaceCorrectionButtonRef.current;
     const targetLabel = draft.displayLabel ?? draft.targetValue;
-    const detailKindLabel = localizedCorrectionDetailLabel(draft.detailKind, t);
+    const detailKindLabel = inlineCorrectionDetailLabel(draft.detailKind, t, effectiveLanguage);
     const surfaceKindLabel = t(selectedClassificationSourceSummary.usageKind === "site" ? "classification.domain" : "classification.app");
     const recordCount = correctedRow?.count ?? 0;
     const scopeDescription = isRecordsCorrection

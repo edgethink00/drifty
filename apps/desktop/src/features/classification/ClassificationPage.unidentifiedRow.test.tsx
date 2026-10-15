@@ -131,6 +131,6 @@ describe("classification activity list, unnamed captures", () => {
     // Hidden until placed is how the old silent failure looked; assert it landed.
     expect(dialog.getAttribute("data-positioned")).toBe("true");
     expect(screen.getByText("이 기록만")).toBeTruthy();
-    expect(screen.getByText(/이 기록 2건에만 적용합니다/)).toBeTruthy();
+    expect(screen.getByText(/이 기록 2건만 바뀝니다/)).toBeTruthy();
   });
 });

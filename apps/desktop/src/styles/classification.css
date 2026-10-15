@@ -607,6 +607,9 @@
   --correction-border: color-mix(in srgb, var(--line-strong) 82%, transparent);
   --correction-divider: var(--line);
   --correction-highlight: color-mix(in srgb, white 38%, transparent);
+  /* Same quiet fills as the Week inspector's choices. */
+  --correction-choice-bg: color-mix(in srgb, var(--text) 3.5%, transparent);
+  --correction-choice-hover-bg: color-mix(in srgb, var(--text) 5%, transparent);
   position: fixed;
   z-index: var(--z-settings-popover);
   box-sizing: border-box;
@@ -642,6 +645,8 @@
   --correction-border: color-mix(in srgb, var(--text) 16%, transparent);
   --correction-divider: color-mix(in srgb, var(--text) 9%, transparent);
   --correction-highlight: color-mix(in srgb, white 8%, transparent);
+  --correction-choice-bg: color-mix(in srgb, var(--text) 6.5%, transparent);
+  --correction-choice-hover-bg: color-mix(in srgb, var(--text) 8%, transparent);
   background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
   box-shadow:
     0 24px 58px color-mix(in srgb, black 42%, transparent),
@@ -710,13 +715,12 @@
   max-width: 100%;
   padding: 1px 6px;
   overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--correction-tone) 14%, var(--surface));
-  color: color-mix(in srgb, var(--correction-tone) 55%, var(--text));
+  border-radius: var(--radius-pill);
+  background: var(--correction-choice-bg);
+  color: var(--text-muted);
   font-size: 0.6875rem;
-  font-weight: 620;
+  font-weight: 600;
   line-height: 1.4;
-  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -738,7 +742,7 @@
 }
 
 .classification-correction__close:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+  background: var(--bg-2);
   color: var(--text);
 }
 
@@ -772,18 +776,24 @@
   min-width: 0;
 }
 
-.classification-correction__chip,
-.classification-correction__segment {
+.classification-correction__palette--productivity {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* One option button for both groups, quiet at rest like the Week inspector's
+   list, then that inspector chip's tint once chosen, so a selection reads the
+   same in both groups. */
+.classification-correction__chip {
   --chip-tone: var(--correction-tone);
   appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  min-height: 28px;
+  height: 1.75rem;
   padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   font-size: 0.71875rem;
@@ -791,70 +801,62 @@
   line-height: 1;
   text-align: left;
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast);
 }
 
-.classification-correction__chip > span,
-.classification-correction__segment > span {
+.classification-correction__chip > span {
   overflow: hidden;
   min-width: 0;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.classification-correction__chip i,
-.classification-correction__segment i {
+.classification-correction__chip i {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
+  width: 0.48rem;
+  height: 0.48rem;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--chip-tone) 72%, var(--surface));
-  transition: background var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.classification-correction__chip:hover:not(:disabled),
-.classification-correction__segment:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  color: var(--text);
-}
-
-.classification-correction__chip[data-selected="true"],
-.classification-correction__segment[data-selected="true"] {
-  border-color: color-mix(in srgb, var(--chip-tone) 42%, var(--line-strong));
-  background: color-mix(in srgb, var(--chip-tone) 13%, var(--surface));
-  color: var(--text);
-  font-weight: 640;
-}
-
-.classification-correction__chip[data-selected="true"] i,
-.classification-correction__segment[data-selected="true"] i {
   background: var(--chip-tone);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chip-tone) 22%, transparent);
 }
 
-.classification-correction__productivity {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2px;
-  padding: 2px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--text) 4%, transparent);
+.classification-correction__chip:hover:not(:disabled):not([data-selected="true"]) {
+  background: var(--correction-choice-hover-bg);
+  color: var(--text);
 }
 
-.classification-correction__segment {
-  justify-content: center;
-  min-height: 26px;
-  border-radius: 7px;
+.classification-correction__chip[data-selected="true"] {
+  background: color-mix(in srgb, var(--chip-tone) 15%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip-tone) 42%, transparent);
+  /* Plain ink: a gray Neutral label tinted toward its own tone read as disabled. */
+  color: var(--text);
+  font-weight: 620;
 }
 
-.classification-correction__segment[data-selected="true"] {
-  border-color: transparent;
-  background: var(--surface);
-  box-shadow: 0 1px 2px color-mix(in srgb, black 10%, transparent), 0 0 0 1px color-mix(in srgb, var(--chip-tone) 28%, transparent);
+:root[data-theme="dark"] .classification-correction__chip[data-selected="true"] {
+  background: color-mix(in srgb, var(--chip-tone) 20%, var(--surface-strong));
 }
 
-:root[data-theme="dark"] .classification-correction__segment[data-selected="true"] {
-  background: color-mix(in srgb, var(--surface-strong) 70%, var(--text) 6%);
+/* Controls in the card stay put under the pointer; the global button lift
+   would make a grid of options jitter. */
+.classification-correction button:hover:not(:disabled) {
+  transform: none;
+}
+
+/* Empty until something changed. Placement already counts this row
+   (CLASSIFICATION_CORRECTION_CHANGE_ROW_HEIGHT), so it never shifts the card. */
+.classification-correction__change-slot {
+  min-width: 0;
+  padding: 10px 12px 0;
+}
+
+.classification-correction__change-slot:empty {
+  padding: 0;
+}
+
+.classification-correction[data-reserve-change="true"] .classification-correction__change-slot {
+  height: 38px;
+  padding: 0;
 }
 
 .classification-correction__change {
@@ -863,18 +865,18 @@
   gap: 6px;
   min-width: 0;
   min-height: 28px;
-  margin: 10px 12px 0;
   padding: 0 8px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--text) 3%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--correction-choice-bg);
   color: var(--text-soft);
   font-size: 0.6875rem;
   line-height: 1.3;
+  animation: classification-correction-change-in 140ms var(--ease-out-quart);
 }
 
-.classification-correction__change[data-changed="true"] {
-  background: color-mix(in srgb, var(--correction-tone) 10%, var(--surface));
-  color: var(--text-muted);
+@keyframes classification-correction-change-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
 }
 
 .classification-correction__change > span {
@@ -931,46 +933,16 @@
   line-height: 1.4;
 }
 
+/* Stock compact app buttons: same height, type and hover as other toolbars. */
 .classification-correction__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
-.classification-correction__actions > .app-btn {
-  height: 1.75rem;
-  min-height: 1.75rem;
-  padding: 0 var(--space-3);
-  border-radius: 8px;
-  font-size: 0.71875rem;
-  line-height: 1;
-  transform: none;
-}
-
-.classification-correction__actions > .app-btn:hover:not(:disabled) {
-  transform: none;
-}
-
-.app-btn.classification-correction__ghost-button {
-  border-color: transparent;
-  background: transparent;
-  color: var(--text-soft);
-  font-weight: 600;
-}
-
-.app-btn.classification-correction__ghost-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  color: var(--text);
-}
-
-.app-btn.classification-correction__save-button {
-  gap: 6px;
-}
-
 .classification-correction__chip:focus-visible,
-.classification-correction__segment:focus-visible,
 .classification-correction__close:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: -2px;
@@ -997,7 +969,7 @@
   min-height: 1.75rem;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-soft);
   opacity: 0.72;
@@ -1006,10 +978,6 @@
 
 .classification-correction__surface-button:hover:not(:disabled),
 .classification-correction__surface-button[data-active="true"] {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--classification-selected-tone) 12%, var(--surface));
-  color: var(--text);
-  transform: none;
   opacity: 1;
 }
 
@@ -1046,12 +1014,15 @@
   opacity: 1;
 }
 
+.classification-correction__surface-button:hover:not(:disabled),
 .classification-correction__detail-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+  background: var(--bg-2);
   color: var(--text);
   transform: none;
 }
 
+/* The pencil whose editor is open, header or row alike. */
+.classification-correction__surface-button[data-active="true"],
 .classification-correction__detail-button[data-active="true"] {
   border-color: color-mix(in srgb, var(--classification-selected-tone) 40%, var(--line-strong));
   background: color-mix(in srgb, var(--classification-selected-tone) 12%, var(--surface));
@@ -1123,6 +1094,7 @@
 @media (prefers-reduced-motion: reduce) {
   .classification-correction,
   .classification-correction[data-positioned="true"],
+  .classification-correction__change,
   .classification-correction-result,
   .classification-panel-view__activity-row[data-recently-corrected="true"],
   .classification-panel-view__detail-top[data-recently-corrected="true"] .panel-header {
