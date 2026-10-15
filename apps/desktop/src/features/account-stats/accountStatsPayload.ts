@@ -22,7 +22,7 @@ import type { ActivitySegment, ClassificationOptions, ProductivityLabel } from "
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
 import { getLeaderboardWindowStartDay } from "../leaderboard/leaderboardWindow";
-import { readCategoryProductivityPreferences } from "../settings/categoryCustomizationStore";
+import { readCategoryProductivityPreferences, readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import {
   buildCategoryBreakdown7d,
   buildHourlyFocusPattern,
@@ -84,6 +84,7 @@ export interface AccountStatsInput {
   readonly builtInHeuristicsUnavailableSince?: string | null;
   /** Category productivity preferences; read from Settings by the tracker entry point. */
   readonly categoryProductivity?: ClassificationOptions["categoryProductivity"];
+  readonly deletedCategories?: ClassificationOptions["deletedCategories"];
 }
 
 function bucketSeconds(durations: ReturnType<typeof buildProductivityDurations>, label: ProductivityLabel): number {
@@ -115,6 +116,7 @@ export function buildAccountStatsPayload(monthSegments: ActivitySegment[], input
     includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
     categoryProductivity: input.categoryProductivity,
+    deletedCategories: input.deletedCategories,
   };
 
   const focus7d = Math.round(buildRollingFocusSeconds(monthSegments, weekStartDay, input.windowEndDay, options, sod));
@@ -170,5 +172,6 @@ export async function buildAccountStatsPayloadFromTracker(input: AccountStatsInp
   return buildAccountStatsPayload(monthSegments, {
     ...input,
     categoryProductivity: input.categoryProductivity ?? readCategoryProductivityPreferences(),
+    deletedCategories: input.deletedCategories ?? readDeletedCategoryCutoffs(),
   });
 }

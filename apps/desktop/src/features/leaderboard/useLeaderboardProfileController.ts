@@ -28,7 +28,7 @@ import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useCategoryCustomizations } from "../settings/categoryCustomizationStore";
-import { categoryProductivityPreferences } from "@drifty/domain";
+import { categoryProductivityPreferences, deletedCategoryCutoffs } from "@drifty/domain";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
 import type { CloudQuotaRecovery } from "../classification/cloudQuotaGuidance";
 import type { LocalizationController } from "../localization/LocalizationContext";
@@ -516,6 +516,7 @@ export function useLeaderboardProfileController({
   );
   const categoryCustomizations = useCategoryCustomizations();
   const categoryProductivity = useMemo(() => categoryProductivityPreferences(categoryCustomizations), [categoryCustomizations]);
+  const deletedCategories = useMemo(() => deletedCategoryCutoffs(categoryCustomizations), [categoryCustomizations]);
   const leaderboardClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
       fallbackCandidates: publishableLeaderboardSegments,
@@ -523,8 +524,9 @@ export function useLeaderboardProfileController({
       includeBuiltInHeuristics,
       builtInHeuristicsUnavailableSince,
       categoryProductivity,
+      deletedCategories,
     }),
-    [builtInHeuristicsUnavailableSince, categoryProductivity, includeBuiltInHeuristics, publishableLeaderboardSegments, showAiClassificationImpact],
+    [builtInHeuristicsUnavailableSince, categoryProductivity, deletedCategories, includeBuiltInHeuristics, publishableLeaderboardSegments, showAiClassificationImpact],
   );
   const localRollingFocusSeconds = useMemo(
     () => leaderboardLocalMetricsStatus === "ready" && leaderboardLocalMetricsScopeRef.current === leaderboardLocalMetricsScopeKey

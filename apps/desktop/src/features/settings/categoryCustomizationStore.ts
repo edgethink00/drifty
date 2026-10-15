@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   categoryNameOverrides,
   categoryProductivityPreferences,
+  deletedCategories,
+  deletedCategoryCutoffs,
   productivityNameOverrides,
+  type ActivityCategory,
   type CategoryCustomizations,
   type CategoryProductivityPreferences,
   type ProductivityCustomizations,
@@ -50,6 +53,11 @@ export function readCategoryProductivityPreferences(): CategoryProductivityPrefe
   return categoryProductivityPreferences(readCategoryCustomizations());
 }
 
+/** Deleted categories with their deletion time, for publishers outside React state. */
+export function readDeletedCategoryCutoffs(): ReturnType<typeof deletedCategoryCutoffs> {
+  return deletedCategoryCutoffs(readCategoryCustomizations());
+}
+
 /**
  * Identity of the in-app label overrides: custom category names and custom
  * productivity names. The localization providers parse it back.
@@ -58,4 +66,11 @@ export function useCategoryNameOverrideKey(): string {
   const categories = categoryNameOverrides(useCategoryCustomizations());
   const productivity = productivityNameOverrides(useProductivityCustomizations());
   return JSON.stringify({ categories, productivity });
+}
+
+
+/** Categories the user deleted. Pickers leave them out, except an item's current value. */
+export function useDeletedCategories(): ReadonlySet<ActivityCategory> {
+  const customizations = useCategoryCustomizations();
+  return useMemo(() => new Set(deletedCategories(customizations)), [customizations]);
 }

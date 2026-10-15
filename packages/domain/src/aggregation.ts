@@ -924,10 +924,43 @@ export function classifyActivity(segment: ActivitySegment, options?: Classificat
 }
 
 export function classifyActivityDetailed(segment: ActivitySegment, options?: ClassificationOptions): ActivityClassificationDetail {
-  return applyCategoryProductivityPreference(
-    resolveActivityClassificationDetail(segment, options),
-    options?.categoryProductivity,
+  return applyDeletedCategory(
+    segment,
+    applyCategoryProductivityPreference(
+      resolveActivityClassificationDetail(segment, options),
+      options?.categoryProductivity,
+    ),
+    options?.deletedCategories,
   );
+}
+
+/**
+ * Deleting a category means "stop using it from now on": activity that started
+ * at or after the deletion is not filed under it, so it reads as unclassified
+ * until the classifier picks one of the remaining categories. Earlier records
+ * and manual corrections keep it.
+ */
+function applyDeletedCategory(
+  segment: ActivitySegment,
+  classification: ActivityClassificationDetail,
+  deletedCategories: ClassificationOptions["deletedCategories"],
+): ActivityClassificationDetail {
+  if (!deletedCategories || classification.source === "manual") return classification;
+  if (!isCategoryDeletedAt(classification.category, segment.startedAt, deletedCategories)) return classification;
+  return unknownDetail(classification.surface, "Category deleted on this device");
+}
+
+/** Whether activity starting at startedAt falls after the category's deletion. */
+export function isCategoryDeletedAt(
+  category: ActivityCategory,
+  startedAt: string,
+  deletedCategories: ClassificationOptions["deletedCategories"],
+): boolean {
+  const deletedAt = deletedCategories?.[category];
+  if (!deletedAt) return false;
+  const deletedMs = Date.parse(deletedAt);
+  const startedMs = Date.parse(startedAt);
+  return Number.isFinite(deletedMs) && Number.isFinite(startedMs) && startedMs >= deletedMs;
 }
 
 /**

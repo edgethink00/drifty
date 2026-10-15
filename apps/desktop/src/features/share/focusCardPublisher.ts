@@ -22,7 +22,7 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
 import { getLeaderboardWindowStartDay } from "../leaderboard/leaderboardWindow";
 import { buildDailyProductivitySeries } from "./dailyProductivity";
-import { readCategoryProductivityPreferences } from "../settings/categoryCustomizationStore";
+import { readCategoryProductivityPreferences, readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 
 export interface DailyFocusPoint {
   readonly day: string;
@@ -71,6 +71,7 @@ export interface FocusCardInput {
   readonly builtInHeuristicsUnavailableSince?: string | null;
   /** Category productivity preferences; read from Settings by the tracker entry point. */
   readonly categoryProductivity?: ClassificationOptions["categoryProductivity"];
+  readonly deletedCategories?: ClassificationOptions["deletedCategories"];
   /** Per-detail opt-ins, all default OFF: a detail is computed and attached only when its flag is on. */
   readonly shareCategoryBreakdown?: boolean;
   readonly shareHourlyPattern?: boolean;
@@ -165,6 +166,7 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
     includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
     categoryProductivity: input.categoryProductivity,
+    deletedCategories: input.deletedCategories,
   };
 
   const focus7d = Math.round(buildRollingFocusSeconds(publishableMonthSegments, weekStartDay, input.windowEndDay, options, sod));
@@ -224,5 +226,6 @@ export async function buildFocusCardPayloadFromTracker(input: FocusCardInput): P
   return buildFocusCardPayload(monthSegments, {
     ...input,
     categoryProductivity: input.categoryProductivity ?? readCategoryProductivityPreferences(),
+    deletedCategories: input.deletedCategories ?? readDeletedCategoryCutoffs(),
   });
 }

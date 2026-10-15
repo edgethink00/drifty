@@ -189,6 +189,7 @@ export function buildLiveWatcherSnapshot(
         builtInHeuristicsUnavailableSince: classificationOptions?.builtInHeuristicsUnavailableSince,
         rules: classificationOptions?.rules,
         categoryProductivity: classificationOptions?.categoryProductivity,
+        deletedCategories: classificationOptions?.deletedCategories,
         fallbackCandidates: [liveIdentity],
       },
       active?.uncapturedSeconds ?? 0,

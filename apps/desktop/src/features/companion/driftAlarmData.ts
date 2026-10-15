@@ -181,6 +181,7 @@ export function buildDriftAlarmCandidates({
       segments,
       minimumDurationSeconds,
       categoryProductivity: currentClassificationOptions.categoryProductivity,
+      deletedCategories: currentClassificationOptions.deletedCategories,
     });
     if (sustainedSocialCandidate) return [sustainedSocialCandidate];
 
@@ -235,6 +236,7 @@ export function buildDriftAlarmCandidates({
       segments,
       minimumDurationSeconds,
       categoryProductivity: classificationOptions.categoryProductivity,
+      deletedCategories: classificationOptions.deletedCategories,
     });
     if (sustainedSocialCandidate) return [sustainedSocialCandidate];
     return [];
@@ -372,6 +374,7 @@ function buildSustainedSocialDwellCandidate(input: {
   readonly segments: readonly ActivitySegment[];
   readonly minimumDurationSeconds: number;
   readonly categoryProductivity?: ClassificationOptions["categoryProductivity"];
+  readonly deletedCategories?: ClassificationOptions["deletedCategories"];
 }): DriftAlarmCandidate | null {
   // Only triggers when normal classification could not resolve the segment
   // as drift — i.e. it came back unknown/neutral, typically because the

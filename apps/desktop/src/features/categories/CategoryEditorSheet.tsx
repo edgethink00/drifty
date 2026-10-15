@@ -157,6 +157,8 @@ export type CategoryEditorSheetProps = {
   readonly showProjects: boolean;
   readonly projects: readonly Project[];
   readonly projectsBusy?: boolean;
+  /** Enabled app/site rules per category; deleting a category turns them off, which its strip says. */
+  readonly ruleCountByCategory?: Readonly<Partial<Record<ActivityCategory, number>>>;
   /** Each project's time in the latest seven days (the Projects list's column); the delete confirmation names it. Null while loading. */
   readonly projectRecentSeconds?: ReadonlyMap<string, number> | null;
   readonly onSaveDefinitions: (changes: DefinitionChanges) => Promise<void> | void;
@@ -210,6 +212,7 @@ export function CategoryEditorSheet({
   projects,
   projectsBusy = false,
   projectRecentSeconds,
+  ruleCountByCategory,
   onSaveDefinitions,
   onCategoryColorChange,
   onCategoryColorReset,
@@ -263,7 +266,9 @@ export function CategoryEditorSheet({
   const [newProductivity, setNewProductivity] = useState<readonly NewDefinitionDraft[]>([]);
   // Browser preview: built-in items marked for deletion, by definition key,
   // and categories fixed to a drafted productivity level.
+  // Categories deleted, and saved-deleted ones restored, in this sitting; both are drafts until Save.
   const [deletedKeys, setDeletedKeys] = useState<readonly string[]>([]);
+  const [restoredKeys, setRestoredKeys] = useState<readonly string[]>([]);
   const [draftPins, setDraftPins] = useState<Readonly<Partial<Record<ActivityCategory, string>>>>({});
   const [definitionDrafts, setDefinitionDrafts] = useState<Record<string, DefinitionValue>>({});
   const [projectDrafts, setProjectDrafts] = useState<Record<string, ProjectValue>>(opening.drafts);
@@ -381,7 +386,7 @@ export function CategoryEditorSheet({
 
   const draftedDefinitionKeys = Object.keys(definitionDrafts);
   const draftedProjectKeys = Object.keys(projectDrafts);
-  const dirty = draftedDefinitionKeys.length > 0 || draftedProjectKeys.length > 0;
+  const dirty = draftedDefinitionKeys.length > 0 || draftedProjectKeys.length > 0 || deletedKeys.length > 0 || restoredKeys.length > 0;
   const locked = saving || statusChanging;
 
   const applyColor = (target: DefinitionSelection, color: string) => {
@@ -421,11 +426,29 @@ export function CategoryEditorSheet({
       const target = parseDefinitionKey(key);
       const saved = savedDefinition(target);
       if (normalizeHex(draft.color) !== normalizeHex(saved.color)) applyColor(target, draft.color);
-      if (!textChanged(draft, saved)) continue;
+      if (!textChanged(draft, saved) || deletedKeys.includes(key)) continue;
       definitionsChanged = true;
       if (target.group === "category") categories[target.key] = categoryCustomizationFrom(draft, builtInName(target), builtInDefinition(target));
       else productivity[target.key] = productivityCustomizationFrom(draft, builtInName(target), builtInDefinition(target));
     }
+    // A deletion keeps the category's saved name, color, and words for past
+    // records and stamps when it stopped being used; a restore removes the stamp.
+    const deletedAt = new Date().toISOString();
+    for (const key of deletedKeys) {
+      const target = parseDefinitionKey(key);
+      if (target.group !== "category") continue;
+      categories[target.key] = { ...(categoryCustomizations[target.key] ?? {}), deletedAt };
+      definitionsChanged = true;
+    }
+    for (const key of restoredKeys) {
+      const target = parseDefinitionKey(key);
+      if (target.group !== "category" || deletedKeys.includes(key)) continue;
+      const { deletedAt: _restored, ...rest } = (categories[target.key] ?? categoryCustomizations[target.key] ?? {}) as CategoryCustomization;
+      categories[target.key] = Object.keys(rest).length > 0 ? rest : null;
+      definitionsChanged = true;
+    }
+    setDeletedKeys([]);
+    setRestoredKeys([]);
     setDefinitionDrafts({});
     // Saving writes the definitions at once. A changed description applies to
     // activity classified from then on; nothing past is reclassified.
@@ -528,7 +551,12 @@ export function CategoryEditorSheet({
 
   // Productivity levels ("lanes") are the built-in labels, which stay, plus in
   // the browser preview drafted ones; a deleted category drops out everywhere.
-  const isDeleted = (target: DefinitionSelection) => deletedKeys.includes(definitionKey(target));
+  // A category deleted in an earlier sitting stays out of the list (and the
+  // classifier) until it is restored; one deleted now shows as a strip.
+  const savedDeleted = (category: ActivityCategory) => Boolean(categoryCustomizations[category]?.deletedAt)
+    && !restoredKeys.includes(definitionKey({ group: "category", key: category }));
+  const isDeleted = (target: DefinitionSelection) => deletedKeys.includes(definitionKey(target))
+    || (target.group === "category" && savedDeleted(target.key));
   const liveCategories = LISTED_CATEGORIES.filter((category) => !isDeleted({ group: "category", key: category }));
   const isBuiltInLane = (lane: string): lane is ProductivityLabel => (LISTED_PRODUCTIVITY as readonly string[]).includes(lane);
   const draftedLane = (lane: string) => newProductivity.find((draft) => draft.key === lane);
@@ -748,7 +776,12 @@ export function CategoryEditorSheet({
       <div className="category-editor__deleted">
         <span className="category-editor__swatch" aria-hidden="true" />
         <span className="category-editor__deleted-name">{definitionName(target)}</span>
-        <span className="category-editor__deleted-note">{t("categoryEditor.deletePending")}</span>
+        <span className="category-editor__deleted-note">
+          {t("categoryEditor.deletePending")}
+          {target.group === "category" && (ruleCountByCategory?.[target.key] ?? 0) > 0
+            ? t("categoryEditor.deleteRulesOff", { count: ruleCountByCategory?.[target.key] ?? 0 })
+            : null}
+        </span>
         <QuietButton icon={<ResetIcon />} label={t("categoryEditor.undoDelete")} onClick={() => setDeletedKeys((previous) => previous.filter((key) => key !== definitionKey(target)))} />
       </div>
     </li>
@@ -763,7 +796,7 @@ export function CategoryEditorSheet({
   const definitionCard = (target: DefinitionSelection) => {
     const id = selectionId(target);
     const value = currentDefinition(target);
-    if (isDeleted(target)) return deletedCard(target);
+    if (deletedKeys.includes(definitionKey(target))) return deletedCard(target);
     if (editing && editingNew === null && sameSelection(target, selection)) return editingCard(id, value.color, definitionName(target), renderDefinitionPane(target));
     // A category's row is its name and description; where it counts lives on
     // the productivity tab's cards.
@@ -773,7 +806,7 @@ export function CategoryEditorSheet({
       color: value.color,
       name: definitionName(target),
       detail: value.description.trim() && value.description.trim() !== builtInDefinition(target).trim() ? value.description.trim() : undefined,
-      drafted: definitionKey(target) in definitionDrafts,
+      drafted: definitionKey(target) in definitionDrafts || restoredKeys.includes(definitionKey(target)),
       extra: members.length > 0 ? (
         <span className="category-editor__tags">
           {members.map((category) => categoryTag(category, { auto: pinnedLane(category) !== target.key }))}
@@ -933,7 +966,7 @@ export function CategoryEditorSheet({
           />
           {target.group === "productivity" ? laneField(target.key) : null}
           {/* The last category stays: activity always lands in one. */}
-          {allowStructureEdits && target.group === "category" && liveCategories.length + newCategories.length > 1 ? (
+          {target.group === "category" && liveCategories.length + newCategories.length > 1 ? (
             <div className="category-editor__pane-foot">
               <QuietButton icon={<TrashIcon />} label={t("categoryEditor.delete")} danger disabled={locked} onClick={() => deleteDefinition(target)} />
             </div>
@@ -997,7 +1030,7 @@ export function CategoryEditorSheet({
 
   // The footer stays quiet about saving; only the browser preview warns that
   // its adding and deleting are not saved.
-  const structurePreviewPending = allowStructureEdits && newCategories.length + newProductivity.length + deletedKeys.length > 0;
+  const structurePreviewPending = allowStructureEdits && newCategories.length + newProductivity.length > 0;
 
   const initialFocus = opening.newKeys.length > 0
     ? "#category-editor-project-" + opening.newKeys[0] + "-name"
@@ -1068,7 +1101,7 @@ export function CategoryEditorSheet({
   const cards = activeGroup === "productivity"
     ? [...LISTED_PRODUCTIVITY.map((key) => definitionCard({ group: "productivity", key })), ...newProductivity.map((draft) => newDefinitionCard("productivity", draft))]
     : activeGroup === "category"
-      ? [...LISTED_CATEGORIES.map((key) => definitionCard({ group: "category", key })), ...newCategories.map((draft) => newDefinitionCard("category", draft))]
+      ? [...LISTED_CATEGORIES.filter((key) => !savedDeleted(key)).map((key) => definitionCard({ group: "category", key })), ...newCategories.map((draft) => newDefinitionCard("category", draft))]
       : [...activeProjects.map((project) => projectCard(project.id)), ...newProjectKeys.map((key) => projectCard(key))];
   const noProjectsYet = activeGroup === "project" && cards.length === 0 && archivedProjects.length === 0;
   // On a locked, empty tab the lock screen holds the way forward.
@@ -1121,6 +1154,25 @@ export function CategoryEditorSheet({
               <p>{t("categoryEditor.noProjects")}</p>
             </div>
           )
+        ) : null}
+        {activeGroup === "category" && LISTED_CATEGORIES.some(savedDeleted) ? (
+          <>
+            <span className="category-editor__section-label">{t("categoryEditor.deletedCategories")}</span>
+            <ul className="category-editor__cards" aria-label={t("categoryEditor.deletedCategories")}>
+              {LISTED_CATEGORIES.filter(savedDeleted).map((category) => {
+                const target: DefinitionSelection = { group: "category", key: category };
+                return (
+                  <li key={selectionId(target)} className="category-editor__card is-deleted" style={toneStyle(currentDefinition(target).color)} data-card={selectionId(target)}>
+                    <div className="category-editor__deleted">
+                      <span className="category-editor__swatch" aria-hidden="true" />
+                      <span className="category-editor__deleted-name">{definitionName(target)}</span>
+                      <QuietButton icon={<ResetIcon />} label={t("categoryEditor.restoreDeleted")} disabled={locked} onClick={() => setRestoredKeys((previous) => [...previous, definitionKey(target)])} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         ) : null}
         {activeGroup === "project" && archivedProjects.length > 0 ? (
           <>

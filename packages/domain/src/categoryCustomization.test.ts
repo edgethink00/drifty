@@ -8,11 +8,13 @@ import {
   categoryProductivityPreferences,
   classificationGuidanceChanged,
   classificationGuidanceFromCustomizations,
+  deletedCategories,
+  deletedCategoryCutoffs,
   normalizeCategoryCustomizations,
   normalizeProductivityCustomizations,
   productivityNameOverrides,
 } from "./categoryCustomization";
-import { normalizeLiveCategoryGuidance } from "./liveClassificationPolicy";
+import { hasLiveCategoryDescriptions, liveCategoryGuidancePromptLines, normalizeLiveCategoryGuidance } from "./liveClassificationPolicy";
 import { buildLiveClassificationPrompt, LIVE_CATEGORY_DEFINITIONS, LIVE_INTENT_FIRST_RUBRIC } from "./liveClassificationPrompt";
 import { isContentDependentYouTubeActivity } from "./youtubeClassification";
 
@@ -95,6 +97,51 @@ describe("category productivity preference", () => {
 
     expect(manual.productivity).toBe("drift");
     expect(ruled).toMatchObject({ source: "rule", productivity: "drift" });
+  });
+});
+
+describe("deleted categories", () => {
+  const deletedAt = "2026-10-15T12:00:00.000Z";
+  const options = { deletedCategories: { entertainment: deletedAt } };
+  const watched = (startedAt: string, source: "llm" | "manual" = "llm") => segment({
+    startedAt,
+    siteDomain: "example.tv",
+    classification: { category: "entertainment", productivity: "drift", source, confidence: 0.8 },
+  });
+
+  it("keeps the deletion time and drops the category from the model's guidance", () => {
+    const customizations = normalizeCategoryCustomizations({
+      entertainment: { description: "영화와 드라마", deletedAt },
+      learning: { description: "WWDC 세션" },
+    });
+
+    expect(customizations.entertainment).toEqual({ description: "영화와 드라마", deletedAt });
+    expect(deletedCategoryCutoffs(customizations)).toEqual({ entertainment: deletedAt });
+    expect(deletedCategories(customizations)).toEqual(["entertainment"]);
+    expect(categoryGuidanceFromCustomizations(customizations).map((entry) => "category" in entry ? entry.category : null)).toEqual(["learning"]);
+  });
+
+  it("files activity from the deletion on as unclassified, and keeps earlier records", () => {
+    expect(classifyActivityDetailed(watched("2026-10-15T12:30:00.000Z"), options)).toMatchObject({ category: "unknown", source: "unknown" });
+    expect(classifyActivityDetailed(watched("2026-10-15T11:30:00.000Z"), options)).toMatchObject({ category: "entertainment", productivity: "drift" });
+  });
+
+  it("tells the classifier not to return a deleted category, without any written text", () => {
+    const guidance = classificationGuidanceFromCustomizations(
+      { entertainment: { description: "영화와 드라마", deletedAt } },
+      {},
+    );
+
+    expect(guidance).toEqual([{ category: "entertainment", removed: true }]);
+    expect(hasLiveCategoryDescriptions(guidance)).toBe(false);
+    expect(liveCategoryGuidancePromptLines(guidance).join("\n")).toContain('<user_removed_categories>["entertainment"]</user_removed_categories>');
+    expect(liveCategoryGuidancePromptLines(guidance, { includeCategories: false })).toEqual([]);
+    // A reader that predates removals drops entries without a description.
+    expect(normalizeLiveCategoryGuidance([{ category: "entertainment" }])).toEqual([]);
+  });
+
+  it("never overrides a manual correction", () => {
+    expect(classifyActivityDetailed(watched("2026-10-15T12:30:00.000Z", "manual"), options)).toMatchObject({ category: "entertainment", source: "manual" });
   });
 });
 

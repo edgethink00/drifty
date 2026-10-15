@@ -30,6 +30,12 @@ export interface CategoryCustomization {
   readonly description?: string;
   /** Fixed productivity for this category; absent keeps Drifty's judgment. */
   readonly productivity?: ProductivityLabel;
+  /**
+   * When the user deleted the category (ISO time). It is not used for activity
+   * from then on, while earlier records keep its name and color; restoring it
+   * removes the time.
+   */
+  readonly deletedAt?: string;
 }
 
 export type CategoryCustomizations = Readonly<Partial<Record<ActivityCategory, CategoryCustomization>>>;
@@ -61,11 +67,15 @@ export function normalizeCategoryCustomization(value: unknown): CategoryCustomiz
   const name = cleanCategoryName(record.name);
   const description = cleanCategoryDescription(record.description);
   const productivity = isProductivityLabel(record.productivity) ? record.productivity : null;
-  if (!name && !description && !productivity) return null;
+  const deletedAt = typeof record.deletedAt === "string" && Number.isFinite(Date.parse(record.deletedAt))
+    ? new Date(record.deletedAt).toISOString()
+    : null;
+  if (!name && !description && !productivity && !deletedAt) return null;
   return {
     ...(name ? { name } : {}),
     ...(description ? { description } : {}),
     ...(productivity ? { productivity } : {}),
+    ...(deletedAt ? { deletedAt } : {}),
   };
 }
 
@@ -80,12 +90,15 @@ export function normalizeCategoryCustomizations(value: unknown): CategoryCustomi
   return result;
 }
 
-/** The model-facing guidance: only categories with a description, plus their custom name. */
+/**
+ * The model-facing guidance: only categories with a description, plus their
+ * custom name. A deleted category is no longer offered, so its words are not sent.
+ */
 export function categoryGuidanceFromCustomizations(customizations: CategoryCustomizations): LiveCategoryGuidance[] {
   return normalizeLiveCategoryGuidance(
     CUSTOMIZABLE_CATEGORIES.flatMap((category) => {
       const entry = customizations[category];
-      if (!entry?.description) return [];
+      if (!entry?.description || entry.deletedAt) return [];
       return [{ category, ...(entry.name ? { name: entry.name } : {}), description: entry.description }];
     }),
   );
@@ -98,6 +111,21 @@ export function categoryProductivityPreferences(customizations: CategoryCustomiz
     if (productivity) result[category] = productivity;
   }
   return result;
+}
+
+/** Each deleted category with the time it was deleted, for classification options. */
+export function deletedCategoryCutoffs(customizations: CategoryCustomizations): Readonly<Partial<Record<ActivityCategory, string>>> {
+  const result: Partial<Record<ActivityCategory, string>> = {};
+  for (const category of CUSTOMIZABLE_CATEGORIES) {
+    const deletedAt = customizations[category]?.deletedAt;
+    if (deletedAt) result[category] = deletedAt;
+  }
+  return result;
+}
+
+/** Deleted categories, which the classifier is no longer offered. */
+export function deletedCategories(customizations: CategoryCustomizations): ActivityCategory[] {
+  return CUSTOMIZABLE_CATEGORIES.filter((category) => Boolean(customizations[category]?.deletedAt));
 }
 
 export function categoryNameOverrides(customizations: CategoryCustomizations): Readonly<Partial<Record<ActivityCategory, string>>> {
@@ -168,7 +196,7 @@ export function productivityNameOverrides(customizations: ProductivityCustomizat
 
 /**
  * Everything the classification model reads from the user's definitions:
- * described categories, then described productivity labels.
+ * described categories, described productivity labels, and deleted categories.
  */
 export function classificationGuidanceFromCustomizations(
   categories: CategoryCustomizations,
@@ -176,6 +204,8 @@ export function classificationGuidanceFromCustomizations(
 ): LiveCategoryGuidance[] {
   return normalizeLiveCategoryGuidance([
     ...categoryGuidanceFromCustomizations(categories),
+    // Deleted categories: the model must not return them for new activity.
+    ...deletedCategories(categories).map((category) => ({ category, removed: true as const })),
     ...CUSTOMIZABLE_PRODUCTIVITY_LABELS.flatMap((label) => {
       const entry = productivity[label];
       if (!entry?.description) return [];

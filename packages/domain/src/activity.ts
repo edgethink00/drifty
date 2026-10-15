@@ -81,6 +81,13 @@ export interface ClassificationOptions {
    * user rule, which already carry the user's explicit productivity.
    */
   categoryProductivity?: Readonly<Partial<Record<ActivityCategory, ProductivityLabel>>>;
+  /**
+   * Categories the user deleted, with the time each was deleted. Activity that
+   * starts at or after that time is not filed under it (it resolves as
+   * unclassified so the classifier picks another category), while earlier
+   * records keep it. A manual correction still wins.
+   */
+  deletedCategories?: Readonly<Partial<Record<ActivityCategory, string>>>;
 }
 
 export interface ActivitySegment {

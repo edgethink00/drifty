@@ -9,7 +9,7 @@ import {
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
-import { readCategoryProductivityPreferences } from "../settings/categoryCustomizationStore";
+import { readCategoryProductivityPreferences, readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { buildLeaderboardAutoPublishPayloadKey } from "./leaderboardAutoPublishState";
 import { getLeaderboardWindowStartDay } from "./leaderboardWindow";
 import {
@@ -58,6 +58,7 @@ export type PublishLeaderboardPeriodsInput = {
   readonly builtInHeuristicsUnavailableSince?: string | null;
   /** Category productivity preferences; read from Settings when omitted. */
   readonly categoryProductivity?: ClassificationOptions["categoryProductivity"];
+  readonly deletedCategories?: ClassificationOptions["deletedCategories"];
   /** Revalidate mutable publication policy after local payload construction. */
   readonly publicationAllowed: () => boolean;
   /** Specific reason if publication is blocked by the assessment gate. */
@@ -98,6 +99,7 @@ export async function buildLeaderboardPublishPayloads(
       ...input,
       leaderboardWindowEndDay,
       categoryProductivity: input.categoryProductivity ?? readCategoryProductivityPreferences(),
+      deletedCategories: input.deletedCategories ?? readDeletedCategoryCutoffs(),
     })),
   };
 }
@@ -128,6 +130,7 @@ export async function buildLeaderboardCheckpointPayload(
     includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
     categoryProductivity: readCategoryProductivityPreferences(),
+    deletedCategories: readDeletedCategoryCutoffs(),
   });
 }
 
@@ -196,6 +199,7 @@ function buildLeaderboardPublishPayload(
     includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
     categoryProductivity: input.categoryProductivity,
+    deletedCategories: input.deletedCategories,
   }, input.startOfDayMinutes);
 
   return {

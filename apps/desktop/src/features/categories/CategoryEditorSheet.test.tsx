@@ -521,13 +521,42 @@ describe("CategoryEditorSheet", () => {
     expect(within(pane()).getByRole("button", { name: "추가 취소" })).toBeTruthy();
   });
 
-  it("offers no adding or deleting of levels and categories outside the preview", () => {
+  it("deletes categories but adds nothing outside the preview, and never deletes a built-in level", () => {
     renderSheet();
 
-    expect(within(pane()).queryByRole("button", { name: "삭제" })).toBeNull();
+    expect(within(pane()).getByRole("button", { name: "삭제" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "새 카테고리" })).toBeNull();
     fireEvent.click(tab("생산성"));
     expect(screen.queryByRole("button", { name: "새 단계" })).toBeNull();
+    openCard("집중");
+    expect(within(pane()).queryByRole("button", { name: "삭제" })).toBeNull();
+  });
+
+  it("saves a deleted category with the time it stopped being used, and says which rules turn off", async () => {
+    const props = renderSheet({ initialTarget: { group: "category" }, ruleCountByCategory: { shopping: 2 } });
+
+    openCard("쇼핑");
+    fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+    expect(screen.getByText("저장하면 새 활동에는 쓰지 않아요 · 규칙 2개도 꺼져요")).toBeTruthy();
+    await save();
+
+    expect(props.onSaveDefinitions).toHaveBeenCalledWith({ categories: { shopping: { deletedAt: expect.any(String) } }, productivity: {} });
+  });
+
+  it("keeps deleted categories apart and restores one on save", async () => {
+    const props = renderSheet({
+      initialTarget: { group: "category" },
+      categoryCustomizations: { shopping: { name: "장보기", deletedAt: "2026-10-15T12:00:00.000Z" } },
+    });
+
+    expect(card("장보기")).toBeUndefined();
+    const deleted = screen.getByRole("list", { name: "삭제함" });
+    expect(within(deleted).getByText("장보기")).toBeTruthy();
+    fireEvent.click(within(deleted).getByRole("button", { name: "복원" }));
+    expect(card("장보기")).toBeTruthy();
+    await save();
+
+    expect(props.onSaveDefinitions).toHaveBeenCalledWith({ categories: { shopping: { name: "장보기" } }, productivity: {} });
   });
 
   it("puts a category under a productivity label from that label's card", async () => {

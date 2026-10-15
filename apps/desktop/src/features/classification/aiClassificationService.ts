@@ -1,7 +1,8 @@
 import { browserContentCluesForSegment, normalizeBrowserContentClues } from "@drifty/domain";
+import { readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD, enhancedRetryImproves, retryEvidenceForRecord } from "./enhancedContextRetryPolicy";
 import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
-import { classificationGuidanceFromCustomizations, isContentDependentYouTubeActivity, isExcludedSegment } from "@drifty/domain";
+import { classificationGuidanceFromCustomizations, hasLiveCategoryDescriptions, isContentDependentYouTubeActivity, isExcludedSegment } from "@drifty/domain";
 import type {
   AdaptiveContentContext,
   ActivityCategory,
@@ -1058,9 +1059,11 @@ function toDeterministicClassificationRecords(segments: ActivitySegment[], paylo
     // A YouTube video's built-in answer comes from its official category,
     // which a user's category description can legitimately overrule. Let the
     // classifier read it; Shorts, music, feeds, and browse pages stay rules.
-    if ((sourcePayload.categoryGuidance?.length ?? 0) > 0 && isContentDependentYouTubeActivity(segment)) return [];
+    if (hasLiveCategoryDescriptions(sourcePayload.categoryGuidance) && isContentDependentYouTubeActivity(segment)) return [];
 
-    const classification = classifyActivityDetailed(segment, { includeAiClassifications: false });
+    // A deleted category's built-in answer is not used for activity after the
+    // deletion; it goes to the classifier, which is told not to return it.
+    const classification = classifyActivityDetailed(segment, { includeAiClassifications: false, deletedCategories: readDeletedCategoryCutoffs() });
     if (classification.category === "unknown") {
       const systemRecord = toSystemSkippedClassificationRecord(segment, sourcePayload, classifiedAt);
       return systemRecord ? [systemRecord] : [];
