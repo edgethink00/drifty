@@ -17,6 +17,7 @@ import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
 import { getLeaderboardWindowStartDay } from "../leaderboard/leaderboardWindow";
+import { readCategoryProductivityPreferences } from "../settings/categoryCustomizationStore";
 
 export interface DailyProductivityPoint {
   readonly day: string;
@@ -107,7 +108,7 @@ export function useDailyProductivitySeries(input: UseDailyProductivityInput): Da
           segments,
           startDay,
           windowEndDay,
-          { fallbackCandidates: segments, includeAiClassifications, includeBuiltInHeuristics, builtInHeuristicsUnavailableSince },
+          { fallbackCandidates: segments, includeAiClassifications, includeBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity: readCategoryProductivityPreferences() },
           startOfDayMinutes,
         );
         if (!cancelled) setSeries(next);

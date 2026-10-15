@@ -129,6 +129,24 @@ describe("sustained social dwell hard rule", () => {
     expect(buildCandidatesFromSegments(segments)).toHaveLength(0);
   });
 
+  it("follows the social media productivity the user fixed in Settings", () => {
+    const segments = [
+      segment("s1", 0, 20),
+      segment("s2", 20, 15),
+      segment("s3", 35, 15),
+      segment("s4", 50, 15),
+    ];
+    const candidatesFor = (productivity: "neutral" | "drift") => buildDriftAlarmCandidates({
+      segments,
+      currentSnapshot: null,
+      classificationOptions: { categoryProductivity: { social_media: productivity } },
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidatesFor("neutral")).toHaveLength(0);
+    expect(candidatesFor("drift")).toHaveLength(1);
+  });
+
   it("allows automatic close for sustained-social-dwell candidates", () => {
     const seg = segment("s1", 0, 20);
     expect(canApplyExtremeNudgeToSurface({

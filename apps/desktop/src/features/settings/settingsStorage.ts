@@ -1,5 +1,6 @@
 import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
 import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel } from "@drifty/domain";
+import { normalizeCategoryCustomizations, normalizeProductivityCustomizations, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 
 export type ThemeMode = "light" | "dark";
@@ -59,6 +60,21 @@ export const START_OF_DAY_STORAGE_KEY = "drifty.general.startOfDayMinutes";
 export const START_OF_WEEK_STORAGE_KEY = "drifty.general.startOfWeek";
 
 export const CATEGORY_COLOR_STORAGE_KEY = "drifty.theme.categoryColors.v1";
+
+/**
+ * Category names, descriptions, and productivity preferences (Settings →
+ * Categories). Device-local: names never leave this device, and descriptions are
+ * sent only to the user's classification provider.
+ */
+export const CATEGORY_CUSTOMIZATION_STORAGE_KEY = "drifty.categoryCustomizations.v1";
+/** Same-window change signal; other windows observe the storage event. */
+export const CATEGORY_CUSTOMIZATION_CHANGED_EVENT = "drifty:category-customizations-changed";
+/**
+ * Productivity label names and descriptions (the category editor's
+ * Productivity group). Same locality as category customizations, and the same
+ * change signal so every reader refreshes both together.
+ */
+export const PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY = "drifty.productivityCustomizations.v1";
 
 export const APP_THEME_COLOR_STORAGE_KEY = "drifty.theme.appColors.v1";
 
@@ -422,6 +438,52 @@ export function readColorOverrideMap<T extends string>(storageKey: string, allow
 
 export function resolveInitialCategoryColorOverrides(): CategoryColorOverrides {
   return readColorOverrideMap(CATEGORY_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS.map((option) => option.key));
+}
+
+export function readCategoryCustomizations(): CategoryCustomizations {
+  if (typeof window === "undefined") return {};
+  try {
+    const savedValue = window.localStorage.getItem(CATEGORY_CUSTOMIZATION_STORAGE_KEY);
+    if (!savedValue) return {};
+    return normalizeCategoryCustomizations(JSON.parse(savedValue));
+  } catch {
+    return {};
+  }
+}
+
+export function writeCategoryCustomizations(customizations: CategoryCustomizations): CategoryCustomizations {
+  const normalized = normalizeCategoryCustomizations(customizations);
+  if (typeof window === "undefined") return normalized;
+  if (Object.keys(normalized).length === 0) {
+    window.localStorage.removeItem(CATEGORY_CUSTOMIZATION_STORAGE_KEY);
+  } else {
+    window.localStorage.setItem(CATEGORY_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(normalized));
+  }
+  window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
+  return normalized;
+}
+
+export function readProductivityCustomizations(): ProductivityCustomizations {
+  if (typeof window === "undefined") return {};
+  try {
+    const savedValue = window.localStorage.getItem(PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY);
+    if (!savedValue) return {};
+    return normalizeProductivityCustomizations(JSON.parse(savedValue));
+  } catch {
+    return {};
+  }
+}
+
+export function writeProductivityCustomizations(customizations: ProductivityCustomizations): ProductivityCustomizations {
+  const normalized = normalizeProductivityCustomizations(customizations);
+  if (typeof window === "undefined") return normalized;
+  if (Object.keys(normalized).length === 0) {
+    window.localStorage.removeItem(PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY);
+  } else {
+    window.localStorage.setItem(PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(normalized));
+  }
+  window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
+  return normalized;
 }
 
 export function resolveInitialAppThemeColorOverrides(): AppThemeColorOverrides {

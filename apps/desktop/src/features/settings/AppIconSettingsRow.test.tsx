@@ -8,7 +8,7 @@ import type { PetModeCoat } from "../pet-mode/petModeData";
 import type { ProLooksAccess } from "../pro-looks/proLooks";
 import { ProLooksProvider, useProLooksController, type ProLooksControllerInput } from "../pro-looks/useProLooksController";
 import { AppIconSettingsRow } from "./AppIconSettingsRow";
-import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
+import { AppearanceSettingsBlock } from "./AppearanceSettingsBlock";
 
 const nativeIcon = vi.hoisted(() => ({
   get: vi.fn<() => Promise<string>>(),
@@ -114,17 +114,14 @@ describe("App icon setting", () => {
     const renderAppearance = (hostPlatform: HostPlatform) => render(
       <LocalizationTestProvider language="en">
         <Looks access={PRO} flow={flowSpies()} flowOpen={false}>
-          <AppearanceSettingsSection
+          <AppearanceSettingsBlock
             appThemeColorOverrides={{}}
-            categoryColorOverrides={{}}
             theme="light"
             hostPlatform={hostPlatform}
             windowsBlurEnabled={false}
             onWindowsBlurEnabledChange={vi.fn()}
             onAppThemeColorChange={vi.fn()}
             onAppThemeColorReset={vi.fn()}
-            onCategoryColorChange={vi.fn()}
-            onCategoryColorReset={vi.fn()}
             onThemeChange={vi.fn()}
           />
         </Looks>

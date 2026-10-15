@@ -2,7 +2,7 @@
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ActivitySegment } from "@drifty/domain";
+import type { ActivitySegment, Project } from "@drifty/domain";
 
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -10,6 +10,8 @@ import { PROJECT_PASS_NO_RESULTS_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX
 import { ProjectsPage, type ProjectsPageProps } from "./ProjectsPage";
 import { IDLE_PROJECT_AUTO_ANALYSIS } from "./projectAutoAnalysisState";
 import { NO_PROJECT_MATCH_COOLDOWN } from "./projectMatchCooldown";
+
+const DRIFTY: Project = { id: "p1", name: "Drifty", description: "Mac app", color: "#6366f1", status: "active", anchors: [], createdAt: "", updatedAt: "" };
 
 function baseProps(overrides: Partial<ProjectsPageProps> = {}): ProjectsPageProps {
   return {
@@ -32,153 +34,134 @@ function baseProps(overrides: Partial<ProjectsPageProps> = {}): ProjectsPageProp
     onTrendWindowChange: vi.fn(),
     onConfigureModel: vi.fn(),
     onOpenTrends: vi.fn(),
-    onSaveProject: vi.fn(),
-    onDeleteProject: vi.fn(),
+    onEditProject: vi.fn(),
     onRunAnalysis: vi.fn(),
     ...overrides,
   };
 }
 
-describe("ProjectsPage", () => {
-  it("opens a blank creation editor when requested from an existing project detail", async () => {
-    const projects = [{ id: "p1", name: "Drifty", description: "Mac app", color: "#6366f1", status: "active" as const, anchors: [], createdAt: "", updatedAt: "" }];
-    const onCreateRequestHandled = vi.fn();
-    const props = baseProps({ projects, onCreateRequestHandled });
-    const { rerender } = render(<ProjectsPage {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
+const status = () => screen.getByRole("group", { name: "Project matching model" });
+const openMenu = () => fireEvent.click(screen.getByRole("button", { name: "Matching options" }));
 
-    rerender(<ProjectsPage {...props} createRequested />);
-    const editor = await screen.findByRole("dialog", { name: "New project" });
-    expect((within(editor).getByLabelText("Name") as HTMLInputElement).value).toBe("");
-    expect(onCreateRequestHandled).toHaveBeenCalledOnce();
+describe("ProjectsPage", () => {
+  it("asks for the category editor from the header and from a project's detail", () => {
+    const props = baseProps({ projects: [DRIFTY] });
+    render(<ProjectsPage {...props} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    expect(props.onEditProject).toHaveBeenLastCalledWith(null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
+    expect(screen.queryByText("Active")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(props.onEditProject).toHaveBeenLastCalledWith(expect.objectContaining({ id: "p1" }));
   });
 
-  it("keeps assignment refresh loading on the button instead of showing chunk progress", () => {
-    render(
-      <ProjectsPage
-        {...baseProps({
-          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
-          running: true,
-        })}
-      />,
-    );
+  it("says nothing while matching is fine, keeping refresh and Intelligence settings in its menu", () => {
+    const props = baseProps({ projects: [DRIFTY] });
+    const { container } = render(<ProjectsPage {...props} />);
 
-    const analyzeButton = screen.getByRole("button", { name: "Refreshing…" });
-    expect(analyzeButton).toHaveProperty("disabled", true);
-    expect(screen.getByText("Ready")).toBeTruthy();
-    expect(screen.queryByText("Project model ready")).toBeNull();
-    expect(screen.getByRole("group", { name: "Project matching model" }).textContent).toContain("without changing live activity classification");
+    expect(container.querySelector(".projects-model-status")).toBeNull();
+    expect(status().textContent).toBe("");
+    openMenu();
+    expect(screen.getByRole("menuitem", { name: /^Intelligence settings/ }).textContent).toContain("Drifty Cloud");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Refresh latest 7 days" }));
+    expect(props.onRunAnalysis).toHaveBeenCalledTimes(1);
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Intelligence settings/ }));
+    expect(props.onConfigureModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a running refresh in the line and its menu item disabled", () => {
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], running: true })} />);
+
+    expect(within(status()).getByRole("status").textContent).toBe("Matching the latest 7 days…");
+    openMenu();
+    expect(screen.getByRole("menuitem", { name: "Refreshing…" })).toHaveProperty("disabled", true);
     expect(screen.queryByText(/chunk 1 of 3/i)).toBeNull();
-    expect(screen.queryByRole("status", { name: /Analyzing your activity/i })).toBeNull();
     expect(screen.getByRole("button", { name: /Explore in Insights/i })).toBeTruthy();
   });
 
-  it("reports automatic matching on the model card while a new project is analyzed", () => {
-    render(
-      <ProjectsPage
-        {...baseProps({
-          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
-          running: true,
-          autoAnalysis: { p1: "running" },
-        })}
-      />,
-    );
+  it("reports automatic matching while a new project is analyzed", () => {
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], running: true, autoAnalysis: { p1: "running" } })} />);
 
-    expect(screen.getByRole("button", { name: "Matching…" })).toHaveProperty("disabled", true);
-    expect(screen.getByText("Matching")).toBeTruthy();
+    expect(status().textContent).toContain("Matching the latest 7 days…");
+    openMenu();
+    expect(screen.getByRole("menuitem", { name: "Matching…" })).toHaveProperty("disabled", true);
   });
 
-  it("explains a paused automatic run instead of leaving the new project silent", () => {
-    render(
-      <ProjectsPage
-        {...baseProps({
-          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
-          autoAnalysis: { p1: "error" },
-        })}
-      />,
-    );
+  it("puts the retry in the line when automatic matching paused", () => {
+    const onRunAnalysis = vi.fn();
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], autoAnalysis: { p1: "error" }, onRunAnalysis })} />);
 
-    expect(screen.getByText(/Automatic matching paused/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Retry latest 7 days" })).toBeTruthy();
+    expect(status().textContent).toContain("Automatic matching paused");
+    fireEvent.click(within(status()).getByRole("button", { name: "Retry latest 7 days" }));
+    expect(onRunAnalysis).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for Intelligence settings in the line when the model is not ready", () => {
+    const onConfigureModel = vi.fn();
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], analysisConnected: false, onConfigureModel })} />);
+
+    expect(status().textContent).toContain("Intelligence needs setup");
+    fireEvent.click(within(status()).getByRole("button", { name: "Open settings" }));
+    expect(onConfigureModel).toHaveBeenCalledTimes(1);
   });
 
   it("lets a member with only team projects refresh assignments", () => {
     const onRunAnalysis = vi.fn();
     const { rerender } = render(<ProjectsPage {...baseProps({ onRunAnalysis })} />);
-    const disabled = screen.getByRole("button", { name: "Refresh latest 7 days" });
+    openMenu();
+    const disabled = screen.getByRole("menuitem", { name: "Refresh latest 7 days" });
     expect(disabled).toHaveProperty("disabled", true);
-    expect(screen.getByText(/Create at least one active project/i)).toBeTruthy();
+    expect(disabled.getAttribute("title")).toMatch(/Create at least one active project/i);
 
     // The pass matches against team projects too, so they enable it on their own.
     rerender(<ProjectsPage {...baseProps({ onRunAnalysis, activeTeamProjectCount: 1 })} />);
-    const enabled = screen.getByRole("button", { name: "Refresh latest 7 days" });
+    const enabled = screen.getByRole("menuitem", { name: "Refresh latest 7 days" });
     expect(enabled).toHaveProperty("disabled", false);
-    expect(screen.queryByText(/Create at least one active project/i)).toBeNull();
     fireEvent.click(enabled);
     expect(onRunAnalysis).toHaveBeenCalledTimes(1);
   });
 
   it("blocks a redundant refresh right after a completed pass", () => {
     const onRunAnalysis = vi.fn();
-    render(
-      <ProjectsPage
-        {...baseProps({
-          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
-          matchCooldown: { active: true, remainingSeconds: 72 },
-          onRunAnalysis,
-        })}
-      />,
-    );
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], matchCooldown: { active: true, remainingSeconds: 72 }, onRunAnalysis })} />);
 
-    const action = screen.getByRole("button", { name: /Just matched/i });
+    expect(status().textContent).toBe("");
+    openMenu();
+    const action = screen.getByRole("menuitem", { name: /Just matched/i });
     expect(action).toHaveProperty("disabled", true);
+    expect(action.getAttribute("title")).toMatch(/already up to date/i);
     fireEvent.click(action);
     expect(onRunAnalysis).not.toHaveBeenCalled();
-    expect(screen.getByText(/already up to date/i)).toBeTruthy();
-    // The readiness badge must not still claim "Ready" while the action is locked.
-    expect(screen.getByText("Up to date")).toBeTruthy();
-    expect(screen.queryByText("Ready")).toBeNull();
   });
 
   it("keeps a queued burst clickable even inside the cooldown window", () => {
-    render(
-      <ProjectsPage
-        {...baseProps({
-          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
-          autoAnalysis: { p1: "queued" },
-          matchCooldown: { active: true, remainingSeconds: 30 },
-        })}
-      />,
-    );
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], autoAnalysis: { p1: "queued" }, matchCooldown: { active: true, remainingSeconds: 30 } })} />);
 
-    expect(screen.getByRole("button", { name: "Match now" })).toHaveProperty("disabled", false);
+    expect(status().textContent).toContain("Matching soon");
+    expect(within(status()).getByRole("button", { name: "Match now" })).toHaveProperty("disabled", false);
   });
 
   it("keeps a failed run retryable even inside the cooldown window", () => {
-    render(
-      <ProjectsPage
-        {...baseProps({
-          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
-          autoAnalysis: { p1: "error" },
-          matchCooldown: { active: true, remainingSeconds: 30 },
-        })}
-      />,
-    );
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], autoAnalysis: { p1: "error" }, matchCooldown: { active: true, remainingSeconds: 30 } })} />);
 
-    expect(screen.getByRole("button", { name: "Retry latest 7 days" })).toHaveProperty("disabled", false);
+    expect(within(status()).getByRole("button", { name: "Retry latest 7 days" })).toHaveProperty("disabled", false);
   });
 
-  it("uses one seven-day window for the overview, project totals, and assignment refresh", () => {
+  it("uses one seven-day window for the overview, project totals, and the time that went to no project", () => {
     const onOpenTrends = vi.fn();
     const onTrendWindowChange = vi.fn();
     const trendSegments = [
       { id: "older", startedAt: "2026-06-28T09:00:00", endedAt: "2026-06-28T10:00:00", durationSeconds: 3600, appName: "App" },
       { id: "recent", startedAt: "2026-07-08T09:00:00", endedAt: "2026-07-08T11:00:00", durationSeconds: 7200, appName: "App" },
+      { id: "loose", startedAt: "2026-07-07T09:00:00", endedAt: "2026-07-07T10:00:00", durationSeconds: 3600, appName: "Safari" },
     ] as ActivitySegment[];
     render(
       <ProjectsPage
         {...baseProps({
-          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#6366f1", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
+          projects: [DRIFTY],
           trendSegments,
           trendProjectBySegmentId: new Map([["older", "p1"], ["recent", "p1"]]),
           trendLoadedRange: { startDay: "2026-07-02", endDay: "2026-07-08" },
@@ -189,46 +172,100 @@ describe("ProjectsPage", () => {
     );
 
     expect(onTrendWindowChange).toHaveBeenCalledWith({ startDay: "2026-07-02", endDay: "2026-07-08" });
-    expect(screen.getByRole("region", { name: /Latest 7 days project overview/i })).toBeTruthy();
+    // Under the list: the week's chart and, beside it, the split between projects only (no "No project").
+    const share = screen.getByRole("region", { name: "Project share · latest 7 days" });
+    expect(share.textContent).toContain("2h");
+    expect(share.textContent).toContain("100%");
+    expect(within(share).queryByText("No project")).toBeNull();
+    expect(screen.getByRole("img", { name: "Drifty, latest 7 days" })).toBeTruthy();
     const projectTable = screen.getByRole("region", { name: "Projects" });
     expect(within(projectTable).getByText("Time · Latest 7 days")).toBeTruthy();
     expect(within(projectTable).getByText("2h")).toBeTruthy();
     expect(within(projectTable).queryByText("3h")).toBeNull();
+    // Time with no project stays out of the project list (Insights shows it).
+    expect(within(projectTable).queryByText("No project")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Explore in Insights/i }));
     expect(onOpenTrends).toHaveBeenCalledTimes(1);
   });
 
-  it("pairs the project overview with a compact, non-pill model readiness card", () => {
+  it("starts an empty page with one title, one line and New project", () => {
+    const props = baseProps();
+    render(<ProjectsPage {...props} />);
+
+    expect(screen.getByRole("heading", { name: "Make your first project" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "New project" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    expect(props.onEditProject).toHaveBeenCalledWith(null);
+  });
+
+  it("puts one slim line over the ordinary empty page without Intelligence", () => {
+    const props = baseProps({ intelligenceLocked: true });
+    render(<ProjectsPage {...props} />);
+
+    const line = screen.getByText("Connect Intelligence and each project gathers its time").parentElement!;
+    fireEvent.click(within(line).getByRole("button", { name: "Connect" }));
+    expect(props.onConfigureModel).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", { name: "Make your first project" })).toBeTruthy();
+    // New project opens the editor, which shows its own lock.
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    expect(props.onEditProject).toHaveBeenCalledWith(null);
+    expect(screen.queryByRole("group", { name: "Project matching model" })).toBeNull();
+  });
+
+  it("says why projects stopped gathering time in one line over the list, with the way back", () => {
+    const onPickIntelligence = vi.fn();
+    const onConfigureModel = vi.fn();
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], intelligenceLocked: true, lockReason: "trial-ended", onPickIntelligence, onConfigureModel })} />);
+
+    const line = screen.getByText("Your trial ended, so new activity isn't gathered into projects").parentElement!;
+    fireEvent.click(within(line).getByRole("button", { name: "See Pro plans" }));
+    expect(onPickIntelligence).toHaveBeenCalledWith("cloud");
+    fireEvent.click(within(line).getByRole("button", { name: "Use my API key" }));
+    expect(onConfigureModel).toHaveBeenCalledTimes(1);
+    expect(status().textContent).toBe("");
+    expect(screen.getByRole("region", { name: "Projects" })).toBeTruthy();
+    // The editor keeps projects closed without Intelligence, so the page offers no way into it.
+    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit Drifty" })).toBeNull();
+    openMenu();
+    expect(screen.queryByRole("menuitem", { name: "Refresh latest 7 days" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Intelligence settings" })).toBeTruthy();
+  });
+
+  it("names a key that stopped working without leading to plans", () => {
+    const onConfigureModel = vi.fn();
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], intelligenceLocked: true, lockReason: "disconnected", onPickIntelligence: vi.fn(), onConfigureModel })} />);
+
+    const line = screen.getByText("Intelligence is disconnected, so new activity isn't gathered").parentElement!;
+    expect(within(line).queryByRole("button", { name: "See Pro plans" })).toBeNull();
+    fireEvent.click(within(line).getByRole("button", { name: "Reconnect" }));
+    expect(onConfigureModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("compares a project's time with the window before it", () => {
     const onTrendWindowChange = vi.fn();
     const trendSegments = [
-      { id: "recent", startedAt: "2026-07-08T09:00:00", endedAt: "2026-07-08T11:00:00", durationSeconds: 7200, appName: "App" },
+      { id: "now", startedAt: "2026-07-08T09:00:00", endedAt: "2026-07-08T11:00:00", durationSeconds: 7200, appName: "App" },
+      { id: "before", startedAt: "2026-06-28T09:00:00", endedAt: "2026-06-28T10:00:00", durationSeconds: 3600, appName: "App" },
     ] as ActivitySegment[];
-    const { container } = render(
-      <ProjectsPage
-        {...baseProps({
-          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#6366f1", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
-          trendSegments,
-          trendProjectBySegmentId: new Map([["recent", "p1"]]),
-          trendLoadedRange: { startDay: "2026-07-02", endDay: "2026-07-08" },
-          onTrendWindowChange,
-        })}
-      />,
-    );
+    const props = baseProps({
+      projects: [DRIFTY],
+      trendSegments,
+      trendProjectBySegmentId: new Map([["now", "p1"], ["before", "p1"]]),
+      trendLoadedRange: { startDay: "2026-07-02", endDay: "2026-07-08" },
+      onTrendWindowChange,
+    });
+    const { rerender } = render(<ProjectsPage {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
 
-    expect(onTrendWindowChange).toHaveBeenCalledWith({ startDay: "2026-07-02", endDay: "2026-07-08" });
-    expect(screen.getByRole("region", { name: /Latest 7 days project overview/i })).toBeTruthy();
-    expect(container.querySelector(".projects-overview-layout")).toBeTruthy();
-    expect(container.querySelectorAll(".projects-model-status")).toHaveLength(1);
-    expect(screen.getByText("Refresh scope")).toBeTruthy();
-    expect(screen.getByText("Ready")).toBeTruthy();
-    expect(container.querySelector(".projects-model-status__readiness-dot")).toBeTruthy();
-    expect(container.querySelector(".projects-model-status__chip")).toBeNull();
-    expect(screen.queryByText(/latest 14 days/i)).toBeNull();
+    // The detail loads the window before too, and compares once both are in.
+    expect(onTrendWindowChange).toHaveBeenLastCalledWith({ startDay: "2026-06-25", endDay: "2026-07-08" });
+    rerender(<ProjectsPage {...props} trendLoadedRange={{ startDay: "2026-06-25", endDay: "2026-07-08" }} />);
+    expect(screen.getByText("+1h vs. the previous 7 days")).toBeTruthy();
   });
 
   it("keeps project action errors visible in both the library and project detail", () => {
-    const project = { id: "p1", name: "Drifty", description: "Mac app", color: "#6366f1", status: "active" as const, anchors: [], createdAt: "", updatedAt: "" };
-    render(<ProjectsPage {...baseProps({ projects: [project], runError: "Could not save the project." })} />);
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], runError: "Could not save the project." })} />);
 
     expect(screen.getByRole("alert").textContent).toBe("Could not save the project.");
     fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));

@@ -3383,7 +3383,7 @@
   position: fixed;
   z-index: calc(var(--z-settings-popover) + 1);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
@@ -3436,6 +3436,53 @@
 
 .week-activity-inspector__picker[data-scrollable="true"] .week-activity-inspector__picker-options {
   overflow-y: auto;
+}
+
+/* The door to the category editor, under the options: the picker lists the
+   definitions, and this is where they are defined. */
+.week-activity-inspector__picker-foot {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid var(--line);
+}
+
+.week-activity-inspector__picker-manage {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  width: 100%;
+  min-height: 1.6875rem;
+  padding: 2px 6px 2px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.week-activity-inspector__picker-manage:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 4.5%, transparent);
+  color: var(--text);
+}
+
+.week-activity-inspector__picker-manage > svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.week-activity-inspector__picker-manage:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: -2px;
 }
 
 .week-activity-inspector__picker [role="option"] {

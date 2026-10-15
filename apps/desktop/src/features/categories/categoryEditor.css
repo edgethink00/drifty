@@ -1,0 +1,874 @@
+/* The category editor: one sheet for every definition Drifty sorts time by.
+   The title, the group tabs (categories, productivity, projects: the flow
+   chart's color-by switch) over the group's cards, Dayflow's way: the name
+   over its description, edited in place with the project editor's field
+   language; the footer holds what saving will do. Every value comes from
+   shared tokens, so the dark theme follows. */
+
+.category-editor {
+  width: min(38rem, calc(100vw - 3rem));
+  max-width: 38rem;
+}
+
+.category-editor__layout {
+  /* One height for every tab, so switching groups never resizes the sheet:
+     the list area holds the nine built-in categories as name-only rows (the
+     grouped list's 44px rows, its border, and the scroll area's top padding
+     and bottom fade). Longer lists and written descriptions scroll; a short
+     window shrinks the list area instead of the sheet running off screen. */
+  --category-editor-rows: 9;
+  --category-editor-list-height: calc(var(--category-editor-rows) * 2.75rem + 2px + 1.375rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: calc(100vh - 3rem - 2 * var(--modal-shell-inset) - 2px);
+}
+
+.category-editor__layout > * { flex: none; min-width: 0; }
+
+.category-editor .category-editor__head {
+  margin: 0 0 0.25rem;
+}
+
+.definition-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* ── Groups and cards ─────────────────────────────────────────────────── */
+
+/* The app's segmented control (.seg, the flow chart's color-by switch), a
+   step larger for a sheet. */
+.category-editor__tabs.seg {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.category-editor__tabs.seg button {
+  padding: 0.25rem 0.95rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.category-editor__tabs.seg button:focus-visible {
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 35%, transparent));
+  outline-offset: 1px;
+}
+
+/* Dayflow's list: one column of compact cards. Each card is a color dot, the
+   name over one line of its description, and a pencil that shows on hover;
+   editing turns the card into its form in place. The cards sit straight on
+   the sheet, with no well around them. */
+.category-editor__deck {
+  --category-editor-card: color-mix(in srgb, #fff 72%, var(--surface));
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 var(--category-editor-list-height);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The cards scroll and fade out at the edges, so a card cut by the edge reads
+   as "more below" instead of a clipped box. */
+.category-editor__deck-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-height: 0;
+  padding: 0.375rem 0.125rem 0.75rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 0.5rem, #000 calc(100% - 1rem), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 0.5rem, #000 calc(100% - 1rem), transparent 100%);
+}
+
+:root[data-theme="dark"] .category-editor__deck {
+  --category-editor-card: color-mix(in srgb, var(--text) 7%, var(--surface));
+}
+
+/* The list scrolls as a whole; the panel never squeezes to fit. */
+.category-editor__deck-scroll > * { flex: none; }
+
+/* One grouped list, the way system settings group rows: a single rounded
+   panel whose rows are split by hairlines that start at the name. */
+.category-editor__cards {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-radius: 14px;
+  background: var(--category-editor-card);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 4%, transparent);
+  list-style: none;
+}
+
+.category-editor__cards:empty { display: none; }
+
+.category-editor__empty {
+  margin: 0;
+  padding: 2.5rem 1rem;
+  color: var(--text-soft);
+  font-size: 0.875rem;
+  text-align: center;
+}
+.category-editor__empty > p { margin: 0; }
+
+.category-editor__section-label {
+  padding: 0.5rem 0.3rem 0;
+  color: var(--text-soft);
+  font: 600 0.72rem/1.2 var(--font-ui);
+}
+
+.category-editor__card {
+  /* One grid for the closed card and its open form: card edge, dot, gap. */
+  --card-inset: 0.9rem;
+  --card-dot: 9px;
+  --card-gap: 0.7rem;
+  --card-indent: calc(var(--card-dot) + var(--card-gap));
+  position: relative;
+  transition: background var(--transition-fast);
+}
+
+.category-editor__card + .category-editor__card::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: calc(var(--card-inset) + var(--card-indent));
+  height: 1px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  pointer-events: none;
+}
+
+.category-editor__card:not(.is-editing):not(.is-deleted):hover {
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
+}
+
+.category-editor__card-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--card-gap);
+  width: 100%;
+  /* A name-only card is one 44px row; a written description or the tags
+     under a productivity label add their lines. */
+  min-height: 2.75rem;
+  padding: 0.4rem 0.6rem 0.4rem var(--card-inset);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.category-editor__card-button:focus-visible {
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 45%, transparent));
+  outline-offset: -2px;
+}
+
+/* The item's color as a small dot, centred on the card like the pencil. */
+.category-editor__swatch {
+  align-self: center;
+  width: var(--card-dot, 9px);
+  height: var(--card-dot, 9px);
+  border-radius: var(--radius-pill);
+  background: var(--definition-tone);
+}
+
+.category-editor__card-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.category-editor__card-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font: 650 0.86rem/1.35 var(--font-ui);
+}
+
+.category-editor__card-detail {
+  overflow: hidden;
+  color: var(--text-muted, var(--text));
+  font: 460 0.78rem/1.35 var(--font-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The whole row opens the form. Its pencil keeps the shared pencil's size but
+   drops the plate, so nine of them stay light, and darkens with the row. */
+.category-editor .category-editor__card-pencil {
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 38%, transparent);
+  pointer-events: none;
+}
+
+.category-editor__card-button:hover .category-editor__card-pencil,
+.category-editor__card-button:focus-visible .category-editor__card-pencil {
+  background: transparent;
+  color: var(--text);
+}
+
+.category-editor__card.is-muted .category-editor__card-name { color: var(--text-soft); }
+.category-editor__card.is-muted .category-editor__swatch { opacity: 0.45; }
+
+/* A new item without a name yet: its stand-in title reads as a hint. */
+.category-editor__card-name.is-placeholder {
+  color: var(--text-soft);
+  font-weight: 560;
+}
+
+/* An item deleted in the browser preview stays in its place as a quiet,
+   struck-through strip with Undo until the sheet closes. */
+.category-editor__card.is-deleted {
+  background: color-mix(in srgb, var(--text) 2.5%, transparent);
+}
+
+.category-editor__deleted {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--card-gap);
+  min-height: 2.75rem;
+  padding: 0.25rem 0.6rem 0.25rem var(--card-inset);
+}
+
+.category-editor__deleted .category-editor__swatch {
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+.category-editor__deleted-name {
+  color: var(--text-soft);
+  font: 600 0.84rem/1.3 var(--font-ui);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-soft) 70%, transparent);
+}
+
+.category-editor__deleted-note {
+  color: var(--text-soft);
+  font: 500 0.74rem/1.3 var(--font-ui);
+}
+
+.category-editor__deleted .category-editor__quiet {
+  height: 1.75rem;
+  margin-left: 0;
+  font-size: 0.78rem;
+}
+
+.category-editor__chip-drafted {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* Category tags under a productivity label. */
+.category-editor__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+/* Fixed categories are tinted chips; ones Drifty decides per activity are
+   hairline outlines in muted ink. */
+.category-editor__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.3rem;
+  padding: 0 0.5rem 0 0.42rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--definition-tone, var(--text)) 14%, var(--surface));
+  color: var(--text);
+  font: 600 0.72rem/1 var(--font-ui);
+  white-space: nowrap;
+}
+
+.category-editor__tag.is-auto {
+  border-color: color-mix(in srgb, var(--text) 11%, transparent);
+  background: transparent;
+  color: var(--text-muted, var(--text));
+  font-weight: 560;
+}
+
+.category-editor__tag-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--definition-tone);
+}
+
+.category-editor__tag-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -0.3rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-soft);
+  font: 600 0.85rem/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.category-editor__tag-remove:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+
+.category-editor__tag--add {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--text) 20%, transparent);
+  background: transparent;
+  color: var(--text-muted, var(--text));
+  cursor: pointer;
+}
+
+.category-editor__tag--add:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.category-editor__tag--add:disabled { opacity: 0.45; cursor: default; }
+.category-editor__tag--add .definition-icon { width: 12px; height: 12px; }
+
+/* Categories that can be put under this label: a short vertical list that
+   opens under the tags, inside the card. */
+.category-editor__assign-list {
+  display: grid;
+  gap: 2px;
+  max-height: 15rem;
+  margin-top: 0.15rem;
+  padding: 0.35rem;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-radius: 10px;
+  background: var(--surface);
+  animation: category-editor-pane-in 140ms ease-out;
+}
+
+.category-editor__assign-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: 560 0.84rem/1.2 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.category-editor__assign-item:hover,
+.category-editor__assign-item:focus-visible { background: color-mix(in srgb, var(--text) 6%, transparent); outline: none; }
+
+.category-editor__assign-from {
+  color: var(--text-soft);
+  font: 520 0.72rem/1 var(--font-ui);
+}
+
+.category-editor__swatch--sm {
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  margin-top: 0;
+  box-shadow: none;
+}
+
+.category-editor__lane-field .category-editor__tags { margin-top: 0; }
+.category-editor__lane-field { display: grid; gap: 0.45rem; }
+
+/* Editing in place: the card lifts and becomes its form. The title row keeps
+   the closed card's dot and name where they were; every field and action
+   below starts on the card's own edge, the dot's left edge, and runs to the
+   same inset on the right, so the form has one left line. */
+.category-editor__card.is-editing {
+  scroll-margin-top: 0.5rem;
+  background: color-mix(in srgb, var(--definition-tone, var(--text)) 6%, var(--category-editor-card));
+}
+
+/* The open row's hairlines run the full width, so it reads as one block. */
+.category-editor__card.is-editing::before,
+.category-editor__card.is-editing + .category-editor__card::before { left: 0; }
+
+.category-editor__card-body {
+  /* The color button's round hit area, centred on the dot. */
+  --card-chip: 1.5rem;
+  --card-chip-overhang: calc((var(--card-chip) - var(--card-dot)) / 2);
+  padding: 0.375rem 0.9rem 0.9rem var(--card-inset);
+}
+
+.category-editor__card-body > .category-editor__pane-fields {
+  gap: 0.75rem;
+}
+
+.category-editor__card-body .project-editor-fields { gap: 0.95rem; }
+.category-editor__card-body .project-editor-field { gap: 0.4rem; }
+
+/* The name needs no label here: the field is the card's title. The label
+   stays for assistive tech. */
+.category-editor__card-body .project-editor-fields > .project-editor-field:first-child > .label-mono {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Title row: the color button's round hit area overhangs the card edge, so
+   the dot itself sits on that edge, where the closed card's dot was, and the
+   name where its name was.
+   It gives back a little of the space under it: the row is taller than its
+   text, and the next label should sit as close as the other fields do. */
+.category-editor__card-body .project-identity__frame,
+.category-editor__card-body .project-identity__frame:focus-within,
+.category-editor__card-body .project-identity.is-open .project-identity__frame {
+  gap: 0;
+  width: auto;
+  margin-left: calc(-1 * var(--card-chip-overhang));
+  margin-bottom: -0.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.category-editor__card-body .project-identity__chip {
+  display: inline-grid;
+  place-items: center;
+  width: var(--card-chip);
+  height: var(--card-chip);
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+}
+
+.category-editor__card-body .project-identity__chip:hover,
+.category-editor__card-body .project-identity.is-open .project-identity__chip { background: transparent; }
+
+.category-editor__card-body .project-identity__chevron { display: none; }
+
+/* The dot is the color button: its halo widens on hover and while the
+   palette is open. */
+.category-editor__card-body .project-identity__dot {
+  width: calc(var(--card-dot) + 1px);
+  height: calc(var(--card-dot) + 1px);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--swatch-color) 18%, transparent);
+  transition: box-shadow var(--transition-fast);
+}
+
+.category-editor__card-body .project-identity__chip:hover .project-identity__dot,
+.category-editor__card-body .project-identity.is-open .project-identity__dot {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--swatch-color) 24%, transparent);
+}
+
+/* The name is the title. Its text starts on the name edge; the hover and
+   focus wash reaches a little past it on both sides. */
+.category-editor__card-body .project-identity__input {
+  margin-left: calc(var(--card-gap) - var(--card-chip-overhang) - 0.4rem);
+  padding: 0.125rem 0.4rem;
+  border-radius: 7px;
+  font: 650 0.95rem/1.35 var(--font-ui);
+  letter-spacing: -0.005em;
+  transition: background var(--transition-fast);
+}
+
+.category-editor__card-body .project-identity__input:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 4%, transparent); }
+.category-editor__card-body .project-identity__input:focus { background: color-mix(in srgb, var(--text) 5.5%, transparent); }
+.category-editor__card-body .project-identity__input:disabled { color: var(--text); opacity: 1; }
+
+/* A built-in item's own name shows as the placeholder; in the title spot it
+   should read as the name, a step lighter than a custom one. */
+.category-editor__card-body .project-identity__input::placeholder { color: var(--text-muted, var(--text-soft)); }
+
+/* A new item's name field shows an example ("e.g. Reading") instead: light
+   gray and lighter weight, so it is not taken for a name already typed. */
+.category-editor__card.is-new .project-identity__input::placeholder {
+  color: color-mix(in srgb, var(--text-soft) 62%, transparent);
+  font-weight: 500;
+}
+
+/* Restore default at the end of the title row: quiet, no taller than the
+   name, so the row and the card keep their height when it shows up. */
+.category-editor__card-body .project-identity__frame .category-editor__quiet {
+  flex: none;
+  height: 1.5rem;
+  margin: 0 -0.35rem 0 0.75rem;
+  padding: 0 0.45rem;
+  border-radius: 7px;
+  font-size: 0.74rem;
+}
+
+.category-editor__card-body .project-identity__frame .category-editor__quiet .definition-icon { width: 13px; height: 13px; }
+
+/* The palette opens as its own small panel under the title, on the name edge. */
+.category-editor__card-body .project-identity__drawer {
+  margin-top: 0.65rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.category-editor__card-body .project-identity__caption {
+  font: 560 0.74rem/1.3 var(--font-ui);
+  letter-spacing: 0;
+}
+
+/* Field labels inside a card: small, quiet, in the card's own type. */
+.category-editor__card-body .label-mono {
+  color: var(--text-soft);
+  font: 560 0.74rem/1.3 var(--font-ui);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* The description is the field under the title, Dayflow's way, with no label
+   over it: the closed card already showed it under the name. The label (with
+   its AI mark) stays for assistive tech; the AI part shows when it matters,
+   in the footer's "saving reclassifies" note. */
+.category-editor__card-body .project-editor-field__label-mono {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Inside a card the writing field is three lines for every kind of item; it
+   is a note about the item, not a document. */
+.category-editor__card-body .project-editor-field__textarea {
+  height: 5rem;
+  min-height: 5rem;
+  border-radius: 10px;
+  font-size: 0.84rem;
+}
+
+.category-editor__card-body .category-editor__lane-field { gap: 0.4rem; }
+
+/* Actions (archive, delete, discard) sit on the name edge: the first one's
+   icon lines up with the fields above it. */
+.category-editor__card-body .category-editor__pane-foot { margin: -0.1rem 0 -0.35rem; }
+.category-editor__card-body .category-editor__quiet { height: 1.75rem; font-size: 0.78rem; }
+
+/* "+ New category / project" leads the footer row as the shared secondary
+   modal action, so it has Done's height and corners; the plus sits a little
+   closer to its label than a text-only button's padding. */
+.category-editor__add {
+  gap: 0.4rem;
+  padding-left: 0.75rem;
+}
+
+.category-editor__add .definition-icon { width: 14px; height: 14px; }
+
+/* ── Card form ────────────────────────────────────────────────────────── */
+
+.category-editor__pane-fields {
+  display: grid;
+  align-content: start;
+  gap: 1.1rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.category-editor__pane-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.category-editor__error {
+  margin: 0;
+  color: var(--warn);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.category-editor__quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-soft);
+  font: 600 var(--type-chip-size)/1 var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.category-editor__quiet:first-child { margin-left: -0.6rem; }
+.category-editor__quiet .definition-icon { width: 14px; height: 14px; }
+
+.category-editor__quiet:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.category-editor__quiet.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  color: var(--warn);
+}
+
+.category-editor__quiet:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+
+/* No rule over the footer: the list fades out above it. One row holds the
+   group's "+ New …" on the left and Done (or Cancel and Save) on the right,
+   with a note about saving next to the buttons when there is one. */
+.category-editor__foot {
+  flex: none;
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.category-editor__foot-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.category-editor__foot-note--warn { color: var(--warn); }
+
+/* ── Intelligence not connected ──
+   Projects get no time without the project model: the projects tab carries a
+   lock, and the band over a locked list links to Settings › Intelligence. */
+.category-editor__tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.category-editor__ai-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.category-editor__ai-note-text { min-width: 0; }
+
+.category-editor__ai-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.category-editor__ai-link .definition-icon { width: 12px; height: 12px; }
+.category-editor__ai-link:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 2px; }
+
+/* The band over a locked tab that still lists projects, inside the scroll area so the sheet keeps its height. */
+.category-editor__ai-note.is-lock {
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  color: color-mix(in srgb, var(--warn) 78%, var(--text));
+}
+.category-editor__ai-note.is-lock > .definition-icon { width: 13px; height: 13px; }
+
+/* A locked projects tab carries a small lock beside its name. */
+.category-editor__tab-lock { display: inline-flex; margin-left: 4px; vertical-align: -1px; opacity: 0.55; }
+.category-editor__tab-lock .definition-icon { width: 11px; height: 11px; }
+
+/* ── The lock on an empty projects tab: one title, one row per way in ── */
+.category-editor__lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 1rem;
+  color: var(--text-soft);
+  font-size: 0.875rem;
+  text-align: center;
+}
+.category-editor__lock p { margin: 0; }
+.category-editor__lock-title { color: var(--text); font-size: 1rem; font-weight: 600; letter-spacing: -0.005em; }
+
+/* An empty or locked projects tab sits in the middle of the list area, the way empty states and lock screens do. */
+.category-editor__deck-scroll > .category-editor__empty,
+.category-editor__deck-scroll > .category-editor__lock { margin-block: auto; }
+
+.category-editor__providers {
+  display: grid;
+  width: min(25rem, 100%);
+  margin-top: 0.7rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-radius: 14px;
+  background: var(--category-editor-card);
+  text-align: left;
+}
+.category-editor__provider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.85rem 0.35rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.category-editor__provider + .category-editor__provider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 2.95rem;
+  border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+/* Brand marks a step smaller than the Settings cards so five rows and the
+   action fit the fixed list area. */
+.category-editor__provider .ai-setup-brand-mark { flex: none; width: 1.55rem; height: 1.55rem; border-radius: 7px; }
+.category-editor__provider .ai-setup-brand-mark img,
+.category-editor__provider .ai-setup-brand-mark svg { width: 1.05rem; height: 1.05rem; }
+.category-editor__provider .ai-setup-brand-mark--anthropic svg { width: 1.1rem; height: 0.78rem; }
+.category-editor__provider:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 3.5%, transparent); }
+.category-editor__provider:focus-visible { outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 35%, transparent)); outline-offset: -2px; }
+.category-editor__provider-text { display: grid; flex: 1; min-width: 0; gap: 0; line-height: 1.3; }
+.category-editor__provider-name { font-size: 0.84rem; font-weight: 600; }
+.category-editor__provider-detail { color: var(--text-soft); font-size: 0.75rem; }
+
+/* A row is its own way in, so it ends in where it goes. */
+.category-editor__provider-chevron { display: inline-flex; flex: none; color: var(--text-soft); opacity: 0.7; }
+.category-editor__provider-chevron .definition-icon { width: 14px; height: 14px; }
+.category-editor__provider:hover:not(:disabled) .category-editor__provider-chevron { opacity: 1; }
+/* An action that happens right here (start the trial, connect a saved key) is
+   a grey pill, so the footer's Done stays the one black button; a row that
+   goes elsewhere ends in a chevron. */
+.category-editor__provider-pill,
+.category-editor__provider-ready {
+  flex: none;
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+.category-editor__provider[aria-busy="true"] { cursor: progress; }
+
+/* lock: project cards cannot be opened. */
+.category-editor__card-button:disabled { cursor: default; }
+.category-editor__card-button:disabled .category-editor__card-pencil { visibility: hidden; }
+
+/* ── Fields shared by productivity labels and categories ───────────────── */
+
+.definition-field__count {
+  justify-self: end;
+  color: var(--text-muted, var(--text-soft));
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+/* ── Doors into the editor ───────────────────────────────────────────── */
+
+.category-editor-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.category-editor-entry .definition-icon { width: 14px; height: 14px; }
+
+/* Doors into the editor use the shared plate pencil (components/pencil-plate.css). */
+.category-editor-pencil { vertical-align: middle; }
+
+/* The Classification page's door sits with the range controls. It carries the
+   categories' tag instead of a pencil: on that page the pencil corrects one
+   activity. */
+.category-editor-door {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.category-editor-door .definition-icon { width: 14px; height: 14px; }
+
+@keyframes category-editor-pane-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── Opening a card ────────────────────────────────────────────────────────
+   useCardMotion glides the card's height (an accordion); these rules shape
+   what happens inside it. The title stays put — it is the closed row's name,
+   now editable — and the fields under it fade in a beat after the row starts
+   to grow. */
+.category-editor__card.is-tweening { overflow: hidden; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .category-editor__card-body .project-editor-fields > *:not(:first-child),
+  .category-editor__card-body .category-editor__pane-foot {
+    animation: category-editor-fade-in 200ms 60ms ease-out both;
+  }
+  .category-editor__card { transition: background 240ms ease-out; }
+}
+
+@keyframes category-editor-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-editor__assign-list { animation: none; }
+}
+
+@media (max-width: 760px) {
+  .category-editor__layout { max-height: calc(100vh - 2rem - 2 * var(--modal-shell-inset) - 2px); }
+}

@@ -48,6 +48,8 @@ export type WeekDashboardDayModelCacheSettings = {
   readonly includeAiClassifications: boolean;
   readonly includeBuiltInHeuristics?: boolean;
   readonly startOfDayMinutes: number;
+  /** Serialized category productivity preferences; a change invalidates cached days. */
+  readonly categoryProductivityKey?: string;
 };
 
 type WeekDashboardDayModelCacheEntry = {
@@ -123,6 +125,7 @@ export function syncWeekDashboardDayModelCacheSettings(
     && previousSettings.includeAiClassifications === nextSettings.includeAiClassifications
     && previousSettings.includeBuiltInHeuristics === nextSettings.includeBuiltInHeuristics
     && previousSettings.startOfDayMinutes === nextSettings.startOfDayMinutes
+    && previousSettings.categoryProductivityKey === nextSettings.categoryProductivityKey
   ) {
     return previousSettings;
   }

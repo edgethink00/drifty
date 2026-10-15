@@ -1,4 +1,5 @@
 import type { TranslationKey } from "../localization/translations";
+import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import type { SettingsSection } from "./SettingsSidebar";
 import { DEV_SETTINGS_SUBSECTIONS, type DevSettingsSubsection } from "./devSettingsNavigation";
 
@@ -11,14 +12,16 @@ export type SettingsSearchEntry = {
   readonly reveal?: string;
   readonly aiProvider?: "openrouter" | "custom";
   readonly devSubsection?: DevSettingsSubsection;
+  /** Opens the category editor here; the General row that opens it is highlighted behind. */
+  readonly categoryEditor?: CategoryEditorTarget;
   readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite";
 };
 
 // Reuse visible labels and descriptions; aliases contain vocabulary only.
-// Each id is anchored on the owning row or block, never a setting value.
+// Each id is anchored on the owning row or block, never a setting value. Results
+// with categoryEditor open the editor instead of revealing a row.
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, TranslationKey> = {
   "general": "settings.section.general",
-  "appearance": "settings.section.appearance",
   "pet": "settings.pet.title",
   "notifications": "settings.section.notifications",
   "account": "settings.section.account",
@@ -87,45 +90,33 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     id: "settings.appearance.theme",
-    section: "appearance",
+    section: "general",
     titleKey: "settings.appearance.theme",
     keywords: "다크 모드 라이트 모드 dark mode light mode 테마",
     descriptionKey: "settings.appearance.themeDescription",
   },
   {
     id: "settings.appearance.windowsBlur",
-    section: "appearance",
+    section: "general",
     titleKey: "settings.windowsBlur.title",
     descriptionKey: "settings.windowsBlur.description",
     keywords: "블러 배경 투명 불투명 blur background transparency opaque",
     gate: "windows",
   },
   {
-    id: "settings.appearance.categoryColors",
-    section: "appearance",
-    titleKey: "settings.appearance.categoryColors",
-    keywords: "카테고리 색상 category color",
-  },
-  {
     id: "settings.appearance.accent",
-    section: "appearance",
+    section: "general",
     titleKey: "settings.appearance.accent",
     keywords: "강조색 포인트색 accent color",
     descriptionKey: "settings.appearance.accentDescription",
   },
   {
     id: "settings.appearance.appIcon",
-    section: "appearance",
+    section: "general",
     titleKey: "settings.appearance.appIcon",
     keywords: "앱 아이콘 로고 독 아이콘 변경 app icon logo dock",
     descriptionKey: "settings.appearance.appIconDescription",
     gate: "macos",
-  },
-  {
-    id: "settings.appearance.productivityColors",
-    section: "appearance",
-    titleKey: "settings.appearance.productivityColors",
-    keywords: "집중 딴짓 중립 색상 focus drift neutral colors",
   },
   {
     id: "settings.pet.show",
@@ -363,10 +354,40 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "스킬 파일 경로 agent skill path",
   },
   {
+    id: "settings.categories.title",
+    section: "general",
+    titleKey: "settings.categories.title",
+    keywords: "카테고리 이름 설명 기준 생산성 편집 category name description productivity edit",
+    descriptionKey: "categoryEditor.settingsRowDescription",
+    categoryEditor: { group: "category" },
+  },
+  {
+    id: "settings.categories.productivity",
+    section: "general",
+    titleKey: "settings.productivity.title",
+    keywords: "집중도 집중 중립 딴짓 생산성 색상 이름 설명 기준 focus neutral drift productivity color name description",
+    categoryEditor: { group: "productivity" },
+  },
+  {
+    id: "settings.categories.colors",
+    section: "general",
+    titleKey: "settings.appearance.categoryColors",
+    keywords: "카테고리 색상 색깔 컬러 category color colour",
+    categoryEditor: { group: "category" },
+  },
+  {
+    id: "settings.categories.projects",
+    section: "general",
+    titleKey: "settings.projects.title",
+    keywords: "프로젝트 이름 설명 색상 보관 삭제 새 프로젝트 project name description color archive delete new",
+    categoryEditor: { group: "project" },
+    gate: "intelligence",
+  },
+  {
     id: "classification.rules.title",
     section: "memory",
     titleKey: "classification.rules.title",
-    keywords: "수동 분류 규칙 수정 사이트 앱 custom manual classification rules",
+    keywords: "수동 분류 규칙 지정 수정 사이트 앱 custom manual classification rules",
   },
   {
     id: "classification.rules.add",

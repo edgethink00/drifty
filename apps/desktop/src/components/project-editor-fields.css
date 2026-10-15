@@ -121,6 +121,7 @@
 
 .project-identity__drawer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
   padding: 0.45rem var(--project-identity-inset) 0.6rem;
@@ -141,6 +142,60 @@
   font-size: 0.6875rem;
   letter-spacing: 0.04em;
   white-space: nowrap;
+}
+
+.project-identity__palette {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+/* A custom color: a dashed well with a plus, filled once a custom color is set. */
+.project-identity__custom {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.project-identity__custom svg {
+  width: 12px;
+  height: 12px;
+}
+
+.project-identity__custom:hover {
+  border-color: var(--text-soft);
+  color: var(--text);
+}
+
+.project-identity__custom:focus-within {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.project-identity__custom.is-selected {
+  border: 0;
+  background: var(--swatch-color);
+  box-shadow: 0 0 0 2px var(--bg-2), 0 0 0 3.5px var(--swatch-color);
+}
+
+.project-identity__custom.is-selected svg {
+  display: none;
+}
+
+.project-identity__custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .project-identity__caption-used {

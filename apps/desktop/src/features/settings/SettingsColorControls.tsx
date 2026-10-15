@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ActivityCategory } from "@drifty/domain";
 import { SettingsSelect } from "./SettingsSelect";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
-import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import { localizedProductivityLabel } from "../localization/activityTranslations";
 import { ColorSwatchGrid, swatchStyle, type SwatchItem } from "../../components/ColorSwatchGrid";
 import { BALANCED_PRESETS, normalizeHex, presetForColor, type BalancedPresetId } from "../../lib/colorPalette";
 
@@ -13,13 +12,6 @@ export type ColorOption<TKey extends string> = {
   readonly label: string;
   readonly cssVariable: string;
   readonly defaultColor: string;
-};
-
-type CategoryColorControlsProps = {
-  readonly options: readonly ColorOption<ActivityCategory>[];
-  readonly overrides: Partial<Record<ActivityCategory, string>>;
-  readonly onColorChange: (key: ActivityCategory, value: string) => void;
-  readonly onColorReset: (key: ActivityCategory) => void;
 };
 
 type ThemeColorControlsProps = {
@@ -291,21 +283,6 @@ function ColorRoleRow<TKey extends string>({
   );
 }
 
-export function CategoryColorControls({ options, overrides, onColorChange, onColorReset }: CategoryColorControlsProps) {
-  const { t } = useLocalization();
-  return (
-    <ColorRoleRow
-      settingId="settings.appearance.categoryColors"
-      title={t("settings.appearance.categoryColors")}
-      options={options.map((option) => ({ ...option, label: localizedCategoryLabel(option.key, t) }))}
-      overrides={overrides}
-      ariaType="category"
-      onColorChange={onColorChange}
-      onColorReset={onColorReset}
-    />
-  );
-}
-
 /** Accent: a single role, so it sits on the right like the theme select. */
 export function AccentColorControl({ accentOptions, overrides, onColorChange, onColorReset }: Omit<ThemeColorControlsProps, "productivityOptions">) {
   const { t } = useLocalization();
@@ -319,21 +296,6 @@ export function AccentColorControl({ accentOptions, overrides, onColorChange, on
       overrides={overrides}
       ariaType="theme"
       inline
-      onColorChange={onColorChange}
-      onColorReset={onColorReset}
-    />
-  );
-}
-
-export function ProductivityColorControls({ productivityOptions, overrides, onColorChange, onColorReset }: Omit<ThemeColorControlsProps, "accentOptions">) {
-  const { t } = useLocalization();
-  return (
-    <ColorRoleRow
-      settingId="settings.appearance.productivityColors"
-      title={t("settings.appearance.productivityColors")}
-      options={productivityOptions.map((option) => ({ ...option, label: localizedThemeColorOptionLabel(option.key, option.label, t) }))}
-      overrides={overrides}
-      ariaType="theme"
       onColorChange={onColorChange}
       onColorReset={onColorReset}
     />

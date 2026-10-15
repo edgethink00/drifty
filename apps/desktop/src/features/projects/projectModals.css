@@ -1,0 +1,45 @@
+/* The project deletion confirmation opens from the Projects page and from the
+   category editor, so its styles travel with the dialog instead of the page. */
+
+/* Project deletion confirmation: the compact auth-modal shell, like the other
+   delete confirmations. */
+.project-delete-modal {
+  max-width: 27rem;
+}
+
+.project-delete-modal .auth-modal__header {
+  margin-bottom: var(--space-4);
+}
+
+.project-delete-modal__detail {
+  display: grid;
+}
+
+.project-delete-modal__detail > p {
+  grid-area: 1 / 1;
+}
+
+.project-delete-modal__detail.has-error > p:first-child {
+  visibility: hidden;
+}
+
+.project-delete-modal .auth-modal__header .project-delete-modal__error {
+  color: var(--warn);
+}
+
+.project-delete-modal .auth-modal__header .project-delete-modal__matched {
+  margin-top: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-delete-modal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* The reversible alternative stands apart from the Cancel / Delete pair. */
+.project-delete-modal__archive {
+  margin-right: auto;
+}

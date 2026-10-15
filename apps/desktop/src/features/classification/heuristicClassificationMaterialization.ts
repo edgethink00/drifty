@@ -1,5 +1,6 @@
 import {
   classifyActivityDetailed,
+  isContentDependentYouTubeActivity,
   isSustainedYouTubeFeedPage,
   type ActivityClassificationRecord,
   type ActivitySegment,
@@ -21,6 +22,13 @@ export interface BuiltInHeuristicClassificationMaterializationInput {
   readonly segments: ActivitySegment[];
   readonly classificationOptions?: ClassificationOptions;
   readonly classifiedAt?: string;
+  /**
+   * While the user has category or productivity descriptions, a video decided
+   * only by YouTube's official category is left unstored so the classifier
+   * reads it with those descriptions, as runAiClassification does. Views still
+   * show the built-in answer until the classifier's arrives.
+   */
+  readonly leaveYouTubeVideosToClassifier?: boolean;
 }
 
 export interface BuiltInHeuristicClassificationMaterialization {
@@ -40,7 +48,7 @@ export function materializeBuiltInHeuristicClassifications(
   const classifications: ActivityClassificationRecord[] = [];
 
   const segments = input.segments.map((segment) => {
-    const classification = buildBuiltInHeuristicClassificationRecord(segment, input.classificationOptions, classifiedAt);
+    const classification = buildBuiltInHeuristicClassificationRecord(segment, input.classificationOptions, classifiedAt, input.leaveYouTubeVideosToClassifier === true);
     if (!classification) return segment;
 
     classifications.push(classification);
@@ -104,6 +112,7 @@ function buildBuiltInHeuristicClassificationRecord(
   segment: ActivitySegment,
   classificationOptions: ClassificationOptions | undefined,
   classifiedAt: string,
+  leaveYouTubeVideosToClassifier: boolean,
 ): ActivityClassificationRecord | null {
   if (!shouldMaterializeSegment(segment)) return null;
 
@@ -118,6 +127,7 @@ function buildBuiltInHeuristicClassificationRecord(
   // fall back to a sustained=drift / brief=unknown rule when there is no neighbor).
   // Materializing them as "unknown" here would lock them out of that inheritance.
   if (classification.source === "youtube" && classification.category === "unknown") return null;
+  if (leaveYouTubeVideosToClassifier && classification.source === "youtube" && isContentDependentYouTubeActivity(segment)) return null;
 
   return {
     segmentId: segment.id,

@@ -18,6 +18,8 @@ import { localizeSettingsError } from "../localization/settingsMessageTranslatio
 const NEW_RULE_HIGHLIGHT_MS = 2600;
 
 type ClassificationRulesManagerProps = {
+  /** A heading outside the manager that names the saved rules (the rules sheet's title). */
+  readonly headingId?: string;
   readonly onSaveRule: (input: ClassificationRuleInput) => Promise<boolean>;
   readonly appIcons: AppIconMap;
   readonly appThemeColorOverrides: AppThemeColorOverrides;
@@ -36,6 +38,7 @@ type ClassificationRulesManagerProps = {
 };
 
 export function ClassificationRulesManager({
+  headingId,
   onSaveRule,
   appIcons,
   appThemeColorOverrides,
@@ -78,6 +81,7 @@ export function ClassificationRulesManager({
   return (
     <div data-setting-id="classification.rules.title" className="settings-section--classification classification-rules-manager">
       <ClassificationSavedRulesList
+        headingId={headingId}
         feedback={classificationRulesError ? (
           <div className="classification-rules-manager__notice classification-rules-manager__notice--error" role="alert">{localizeSettingsError(classificationRulesError, effectiveLanguage, t)}</div>
         ) : classificationRuleMessage || classificationRuleApplyResult ? (

@@ -10,6 +10,7 @@ import type {
   Project,
   ProjectAssignmentRecord,
   ProjectAssignmentsSaveResult,
+  ProjectInput,
   SiteDuration,
   TimelinePage,
   TimelinePageQuery,
@@ -100,6 +101,19 @@ const PREVIEW_PROJECTS: readonly Project[] = [
 const previewClassificationOverrides = new Map<string, Pick<ActivityClassificationRecord, "category" | "productivity">>();
 const previewProjectOverrides = new Map<string, string | null>();
 const previewDeletedSegmentIds = new Set<string>();
+// Projects added, edited, archived or deleted in the browser preview. They
+// live in memory only and reset on reload, the way the other review edits do.
+// ?previewProjects=none starts with none, as for someone who has made none.
+function initialPreviewProjects(): Project[] {
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("previewProjects") === "none") return [];
+  return PREVIEW_PROJECTS.map(cloneProject);
+}
+let previewProjectStore: Project[] = initialPreviewProjects();
+let previewProjectSequence = 0;
+
+function cloneProject(project: Project): Project {
+  return { ...project, anchors: project.anchors.map((anchor) => ({ ...anchor })) };
+}
 
 function todayIsoDate() {
   return localDateKey(new Date());
@@ -327,20 +341,54 @@ function previewSegments(today = todayIsoDate()) {
 }
 
 export function previewProjects(): Project[] {
-  return PREVIEW_PROJECTS.map((project) => ({ ...project, anchors: [...project.anchors] }));
+  return previewProjectStore.map(cloneProject);
+}
+
+/** Mirrors the tracker's save: a trimmed name is required, an unknown id creates. */
+export function previewSaveProject(input: ProjectInput): Project {
+  const name = input.name.trim();
+  if (!name) throw new Error("name is required");
+  const now = new Date().toISOString();
+  const existing = input.id ? previewProjectStore.find((project) => project.id === input.id) : undefined;
+  if (!existing) previewProjectSequence += 1;
+  const saved: Project = {
+    id: existing?.id ?? input.id ?? `preview-project-new-${previewProjectSequence}`,
+    name,
+    description: input.description.trim(),
+    color: input.color?.trim() || existing?.color || PREVIEW_PROJECTS[0]!.color,
+    status: input.status ?? "active",
+    anchors: existing?.anchors ?? [],
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+  previewProjectStore = existing
+    ? previewProjectStore.map((project) => (project.id === saved.id ? saved : project))
+    : [...previewProjectStore, saved];
+  return cloneProject(saved);
+}
+
+/** Mirrors the tracker's delete: the project goes, and its matched time falls back to no project. */
+export function previewDeleteProject(id: string): { deleted: number } {
+  const before = previewProjectStore.length;
+  previewProjectStore = previewProjectStore.filter((project) => project.id !== id);
+  return { deleted: before - previewProjectStore.length };
 }
 
 export function previewProjectAssignments(query: TimelineQuery): ProjectAssignmentRecord[] {
-  return previewTimeline(query).map((segment) => ({
-    segmentId: segment.id,
-    projectId: previewProjectOverrides.has(segment.id)
+  const projectIds = new Set(previewProjectStore.map((project) => project.id));
+  return previewTimeline(query).map((segment) => {
+    const projectId = previewProjectOverrides.has(segment.id)
       ? previewProjectOverrides.get(segment.id) ?? null
-      : basePreviewProjectId(segment),
-    source: previewProjectOverrides.has(segment.id) ? "manual" : "ai",
-    confidence: previewProjectOverrides.has(segment.id) ? 1 : 0.9,
-    reason: previewProjectOverrides.has(segment.id) ? "Preview-only manual project correction" : "Preview fixture project",
-    assignedAt: segment.endedAt,
-  }));
+      : basePreviewProjectId(segment);
+    return {
+      segmentId: segment.id,
+      projectId: projectId !== null && projectIds.has(projectId) ? projectId : null,
+      source: previewProjectOverrides.has(segment.id) ? "manual" : "ai",
+      confidence: previewProjectOverrides.has(segment.id) ? 1 : 0.9,
+      reason: previewProjectOverrides.has(segment.id) ? "Preview-only manual project correction" : "Preview fixture project",
+      assignedAt: segment.endedAt,
+    };
+  });
 }
 
 export function previewSaveProjectAssignments(
@@ -377,6 +425,8 @@ export function resetPreviewMutations(): void {
   previewClassificationOverrides.clear();
   previewProjectOverrides.clear();
   previewDeletedSegmentIds.clear();
+  previewProjectStore = initialPreviewProjects();
+  previewProjectSequence = 0;
 }
 
 function inRange(segment: PreviewActivitySegment, query: TimelineQuery) {

@@ -108,6 +108,8 @@ export interface ActivityClassificationDetail extends ActivityClassification {
   confidence: number;
   reason: string;
   aiCached?: boolean | null;
+  /** True when the user's category productivity preference set `productivity`. */
+  productivityPreference?: boolean | null;
 }
 
 export type ProductivityPersonaId =
@@ -922,6 +924,29 @@ export function classifyActivity(segment: ActivitySegment, options?: Classificat
 }
 
 export function classifyActivityDetailed(segment: ActivitySegment, options?: ClassificationOptions): ActivityClassificationDetail {
+  return applyCategoryProductivityPreference(
+    resolveActivityClassificationDetail(segment, options),
+    options?.categoryProductivity,
+  );
+}
+
+/**
+ * Manual corrections and user rules already state the user's productivity for
+ * that exact activity, so a category-wide preference never overrides them.
+ */
+function applyCategoryProductivityPreference(
+  classification: ActivityClassificationDetail,
+  preferences: ClassificationOptions["categoryProductivity"],
+): ActivityClassificationDetail {
+  if (!preferences) return classification;
+  if (classification.source === "manual" || classification.source === "rule") return classification;
+  if (classification.category === "unknown") return classification;
+  const preferred = preferences[classification.category];
+  if (!preferred) return classification;
+  return { ...classification, productivity: preferred, productivityPreference: true };
+}
+
+function resolveActivityClassificationDetail(segment: ActivitySegment, options?: ClassificationOptions): ActivityClassificationDetail {
   if (isExcludedSegment(segment)) {
     return detail(
       { category: "unknown", productivity: "neutral" },
@@ -1669,6 +1694,7 @@ function buildEffectiveProductivityFromClassifiedSegments(
       const productivity = communicationEpisodeProductivity(episode, classifiedSegments, productivities);
       for (const item of episode) {
         if (item.classification.productivity !== "neutral") continue;
+        if (item.classification.productivityPreference) continue;
         changed = setEffectiveProductivity(productivities, item, productivity) || changed;
       }
     }
@@ -1676,6 +1702,7 @@ function buildEffectiveProductivityFromClassifiedSegments(
     for (const item of classifiedSegments) {
       if (item.classification.category !== "utility") continue;
       if (item.classification.productivity !== "neutral") continue;
+      if (item.classification.productivityPreference) continue;
       changed = setEffectiveProductivity(productivities, item, utilityProductivity(item, classifiedSegments, productivities)) || changed;
     }
 

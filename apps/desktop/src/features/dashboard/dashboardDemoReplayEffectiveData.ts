@@ -24,6 +24,7 @@ type SelectedDayDashboardClassificationOptionsInput = {
   readonly includeAiClassifications: boolean;
   readonly includeBuiltInHeuristics?: boolean;
   readonly rules: ClassificationOptions["rules"];
+  readonly categoryProductivity?: ClassificationOptions["categoryProductivity"];
 };
 
 export type DashboardDemoReplayEffectiveData = {
@@ -79,6 +80,7 @@ export function buildSelectedDayDashboardClassificationOptions(
     includeAiClassifications: input.includeAiClassifications,
     includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     rules: input.rules,
+    categoryProductivity: input.categoryProductivity,
   };
 }
 

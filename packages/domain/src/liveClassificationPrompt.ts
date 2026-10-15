@@ -15,7 +15,9 @@ import { BROWSER_CONTENT_GUIDANCE, normalizeBrowserContentClues } from "./browse
 import {
   LIVE_ACTIVITY_CATEGORIES,
   LIVE_PRODUCTIVITY_LABELS,
+  liveCategoryGuidancePromptLines,
   type LiveActivityCategory,
+  type LiveCategoryGuidance,
   type LiveClassificationMemoryContext,
   type LiveClassificationPromptItem,
   type LiveProductivityLabel,
@@ -92,6 +94,13 @@ export interface LiveClassificationPromptOptions {
   readonly productivityOnly?: boolean;
   /** Supply category concepts as latent guidance without requesting category output. */
   readonly latentCategoryGuidance?: boolean;
+  /**
+   * The user's own category and productivity definitions from Settings.
+   * Rendered right after the default category definitions; omitted entirely
+   * when empty so the production prompt stays byte-identical for users who
+   * wrote none. A productivity-only prompt keeps just the productivity part.
+   */
+  readonly categoryGuidance?: readonly LiveCategoryGuidance[];
 }
 
 // A-1: one-line gloss per category so boundaries aren't guessed.
@@ -207,6 +216,7 @@ export function buildLiveClassificationPrompt(
   const evidenceFirst = options.evidenceFirst === true;
   const omitReason = options.omitReason === true;
   const productivityOnly = options.productivityOnly === true;
+  const categoryGuidanceLines = liveCategoryGuidancePromptLines(options.categoryGuidance, { includeCategories: !productivityOnly });
   return [
     productivityOnly
       ? "Classify only the task intent of each activity. The caller derives productivity; do not classify category or explain."
@@ -243,18 +253,21 @@ export function buildLiveClassificationPrompt(
           ...(options.latentCategoryGuidance
             ? [LIVE_CATEGORY_DEFINITIONS, LIVE_PRODUCTIVITY_ONLY_ANCHORS]
             : []),
+          ...categoryGuidanceLines,
         ]
       : evidenceFirst
         ? [
             "Use only these work relations: direct_work, work_support, not_work, unknown.",
             "Use only these leisure evidence labels: explicit, absent.",
             LIVE_CATEGORY_DEFINITIONS,
+            ...categoryGuidanceLines,
             LIVE_EVIDENCE_FIRST_RUBRIC,
           ]
         : intentFirst
           ? [
               "Use only these intents: work_execution, work_support, informational, in_between, personal_admin, leisure, unknown.",
               LIVE_CATEGORY_DEFINITIONS,
+              ...categoryGuidanceLines,
               LIVE_INTENT_FIRST_RUBRIC,
               ...(options.contrastiveAnchors
                 ? [LIVE_INTENT_CONTRASTIVE_ANCHORS]
@@ -265,6 +278,7 @@ export function buildLiveClassificationPrompt(
               ...(options.includeDefinitions
                 ? [LIVE_CATEGORY_DEFINITIONS, LIVE_PRODUCTIVITY_DEFINITIONS]
                 : [V6_NEUTRAL_RUBRIC]),
+              ...categoryGuidanceLines,
               ...(options.couplingAnchors
                 ? [LIVE_COUPLING_ANCHORS_LINE[options.couplingAnchors]]
                 : []),

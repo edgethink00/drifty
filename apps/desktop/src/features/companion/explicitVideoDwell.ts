@@ -44,6 +44,9 @@ export function buildExplicitVideoDwellCandidate(input: {
 
   const category = normalizedHost(input.segment.siteDomain ?? "") === "youtube.com"
     ? "entertainment" as const : "social_media" as const;
+  // The user fixed this category's productivity in Settings; do not relabel it drift.
+  const preferred = input.classificationOptions.categoryProductivity?.[category];
+  if (preferred && preferred !== "drift") return null;
   return {
     alertKey: episode.episodeKey,
     episodeKey: episode.episodeKey,

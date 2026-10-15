@@ -6,6 +6,7 @@ import type { FlowColorMode } from "./FlowChartTypes";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import { CategoryEditorPencil } from "../categories/CategoryEditorPencil";
 
 type FlowCategoryGroup = {
   readonly productivity: ProductivityLabel;
@@ -18,6 +19,8 @@ type FlowChartLegendBaseProps = {
   readonly setHoveredLegend: Dispatch<SetStateAction<FlowLegendHoverState | null>>;
   readonly projectLegend?: readonly ProjectLegendEntry[];
   readonly ariaLabel?: string;
+  /** Opens the category editor on whatever the legend is showing. */
+  readonly onEdit?: () => void;
 };
 
 type FlowChartLegendProps = FlowChartLegendBaseProps & (
@@ -67,8 +70,10 @@ export function FlowChartLegend({
   ariaLabel,
   getAppBreakdown,
   hasUnclassified,
+  onEdit,
 }: FlowChartLegendProps) {
   const { t } = useLocalization();
+  const editPencil = onEdit ? <CategoryEditorPencil className="pencil-plate--sm flow-chart-legend__edit" label={t("categoryEditor.edit")} onClick={onEdit} /> : null;
   const categoryGroupLabel = (categories: readonly ActivityCategory[]) => categories.map((category) => localizedCategoryLabel(category, t)).join(", ");
   const categoryText = (category: ActivityCategory) => localizedCategoryLabel(category, t);
   const productivityText = (productivity: ProductivityLabel) => localizedProductivityLabel(productivity, t);
@@ -87,6 +92,7 @@ export function FlowChartLegend({
             </span>
           );
         })}
+        {editPencil}
       </div>
     );
   }
@@ -174,6 +180,7 @@ export function FlowChartLegend({
         })
       )}
       {unclassifiedLegend}
+      {editPencil}
     </div>
   );
 }

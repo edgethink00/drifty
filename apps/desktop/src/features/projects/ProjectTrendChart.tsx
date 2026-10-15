@@ -24,6 +24,8 @@ export interface ProjectTrendChartProps {
   /** Compact, fixed-window summary used on the project library. */
   readonly variant?: "detail" | "overview";
   readonly onOpenTrends?: () => void;
+  /** Leave out the legend where the names and colours already sit beside the chart. */
+  readonly legend?: boolean;
 }
 
 interface HoverRow {
@@ -121,7 +123,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
       <div className="insight-panel-head">
         <span className="label-mono">{isOverview ? t("projects.chart.allocation", { count: days }) : t("projects.chart.time", { span: localizedSpanLabel })}</span>
         <div className="ptc-panel__head-actions">
-          {view.series.length > 0 ? (
+          {props.legend !== false && view.series.length > 0 ? (
             <div className="insight-panel-head__legend">
               {view.series.map((item) => (
                 <span className={`chip ptc-chip${item.key === NO_PROJECT_KEY ? " ptc-chip--none" : ""}`} key={item.key}>

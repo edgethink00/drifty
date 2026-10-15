@@ -13,6 +13,10 @@ import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { ActionLabel } from "../../components/ActionLabel";
 
 type GeneralSettingsSectionProps = {
+  /** Theme and accent; Appearance folded into General once its colors moved to Categories. */
+  readonly appearance?: ReactNode;
+  /** The door to the category editor, right under appearance where colors used to be. */
+  readonly categories?: ReactNode;
   readonly backgroundUpdatesEnabled: boolean;
   readonly backgroundUpdatesSupported: boolean;
   /** Running app version shown beside the manual update check. */
@@ -38,6 +42,8 @@ type GeneralSettingsSectionProps = {
 };
 
 export function GeneralSettingsSection({
+  appearance = null,
+  categories = null,
   backgroundUpdatesEnabled,
   backgroundUpdatesSupported,
   currentVersion = null,
@@ -80,6 +86,8 @@ export function GeneralSettingsSection({
         <div data-setting-id="settings.general.startOfDay" className="settings-row"><label><div className="lbl">{t("settings.general.startOfDay")}</div><div className="desc">{t(hostPlatform === "windows" ? "settings.general.startOfDayDescriptionWindows" : "settings.general.startOfDayDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfDay")} value={startOfDayValue} options={startOfDayOptions} onChange={onStartOfDayChange} /></div></div>
         <div data-setting-id="settings.general.startOfWeek" className="settings-row"><label><div className="lbl">{t("settings.general.startOfWeek")}</div><div className="desc">{t("settings.general.startOfWeekDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfWeek")} value={startOfWeek} options={startOfWeekOptions} onChange={onStartOfWeekChange} /></div></div>
       </div>
+      {appearance}
+      {categories}
       <div className="settings-block"><h3>{t("settings.general.startup")}</h3>
         <StartupSettingsRow />
       </div>

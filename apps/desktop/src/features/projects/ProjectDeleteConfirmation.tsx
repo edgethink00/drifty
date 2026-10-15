@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import "./projectModals.css";
 import { KeyHint } from "../../components/KeyHint";
 import type { Project } from "@drifty/domain";
 import { ActionLabel } from "../../components/ActionLabel";

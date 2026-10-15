@@ -159,6 +159,7 @@ type WeekDashboardRenderOverrides = {
     productivity: ProductivityLabel,
   ) => Promise<void>;
   readonly onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
+  readonly onEditCategories?: (target: { readonly group: string; readonly key?: string }) => void;
 };
 
 function weekDashboardElement(overrides: WeekDashboardRenderOverrides = {}) {
@@ -601,6 +602,29 @@ describe("WeekDashboard activity inspector", () => {
     expect(screen.queryByRole("button", { name: "More actions for Design review" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
     expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+  });
+
+  it("opens the category editor from the legend and the picker", () => {
+    const onEditCategories = vi.fn();
+    renderWeekDashboard({
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      onClassifyActivity: vi.fn().mockResolvedValue(undefined),
+      onEditCategories,
+    });
+
+    fireEvent.click(within(screen.getByLabelText("Week category tones")).getByRole("button", { name: "Edit categories" }));
+    expect(onEditCategories).toHaveBeenLastCalledWith({ group: "category" });
+    // The breakdown titles carry no pencil; the legend and the picker are the doors.
+    expect(screen.queryByRole("button", { name: "Edit Productivity" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Change Category/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage Category" }));
+    // The editor is a dialog, so the inspector closes and hands over the picked category.
+    expect(onEditCategories).toHaveBeenLastCalledWith({ group: "category", key: "workspace" });
+    expect(screen.queryByRole("dialog", { name: "Design review" })).toBeNull();
+    expect(document.querySelector(".week-activity-inspector__picker")).toBeNull();
   });
 
   it("saves direct category and productivity choices immediately and keeps one-step undo", async () => {

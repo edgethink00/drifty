@@ -198,6 +198,8 @@ describe("PrivacySettingsSection", () => {
         // Project matching also sends what the user wrote when defining a project;
         // live classification does not, so it needs its own glossary entry.
         "Your project names and descriptions",
+        // Category descriptions are the other user-written text a provider can read.
+        "Your category and productivity descriptions",
       ]);
       // The channel name is a real outbound field; the glossary carries its coverage.
       expect(within(glossary).getByText(/YouTube channel name/i)).toBeTruthy();

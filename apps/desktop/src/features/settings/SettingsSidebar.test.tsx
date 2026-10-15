@@ -37,13 +37,13 @@ describe("SettingsSidebar", () => {
     // Permissions live at the end of General, so they no longer take a rail row.
     expect(within(personalGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "General",
-      "Appearance",
       "Desktop pet",
       "Companion & Alerts",
       "Account",
       "Sync",
       "Privacy & Data",
     ]);
+    // Categories open as their own editor (General has the door), so they take no rail row.
     expect(within(aiGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "Classification",
       "Intelligence",
@@ -87,19 +87,19 @@ describe("SettingsSidebar", () => {
   });
 
   it("marks a section that needs attention without changing its name", () => {
-    const { rerender } = render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="appearance" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+    const { rerender } = render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="pet" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
 
     const general = screen.getByRole("button", { name: /^General$/ });
     expect(general.querySelector(".settings-nav-item__attention")).toBeNull();
     expect(general.getAttribute("aria-describedby")).toBeNull();
 
-    rerender(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="appearance" isCollapsed={false} sectionsNeedingAttention={["general"]} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+    rerender(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="pet" isCollapsed={false} sectionsNeedingAttention={["general"]} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
 
     const flagged = screen.getByRole("button", { name: /^General$/ });
     expect(flagged.querySelector(".settings-nav-item__attention")).toBeTruthy();
     const descriptionId = flagged.getAttribute("aria-describedby");
     expect(descriptionId ? document.getElementById(descriptionId)?.textContent : null).toBe("A required permission is turned off");
-    expect(screen.getByRole("button", { name: /^Appearance$/ }).querySelector(".settings-nav-item__attention")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Desktop pet$/ }).querySelector(".settings-nav-item__attention")).toBeNull();
   });
 
   it("keeps Discord and feedback as rail exits instead of settings pages", () => {
@@ -196,7 +196,7 @@ describe("SettingsSidebar", () => {
   });
 
   it("gives every settings nav item a dedicated icon slot and label", () => {
-    render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="appearance" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+    render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="pet" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
 
     const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
     const navItems = within(settingsNav).getAllByRole("button");
@@ -208,15 +208,10 @@ describe("SettingsSidebar", () => {
     }
   });
 
-  it("uses the Lucide palette glyph for Appearance", () => {
-    render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="appearance" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+  it("folds Appearance into General instead of keeping its own page", () => {
+    render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="general" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
 
     const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
-    const appearanceButton = within(settingsNav).getByRole("button", { name: /^Appearance$/ });
-    const appearanceIcon = appearanceButton.querySelector(".settings-nav-item__icon svg");
-
-    expect(appearanceIcon?.innerHTML).toContain('d="M12 22a1 1 0 0 1 0-20');
-    expect(appearanceIcon?.innerHTML).not.toContain("M12 3.5a8.5 8.5 0 0 1 0 17z");
+    expect(within(settingsNav).queryByRole("button", { name: /^Appearance$/ })).toBeNull();
   });
-
 });

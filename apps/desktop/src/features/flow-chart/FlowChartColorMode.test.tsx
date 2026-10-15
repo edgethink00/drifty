@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FlowBlock } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -149,6 +149,32 @@ describe("FlowChartView color mode", () => {
     const legend = screen.getByLabelText("Flow chart tones");
     expect(within(legend).getByLabelText("Unclassified")).toBeTruthy();
     expect(legend.querySelector(".flow-chart-legend__group--unclassified .flow-chart-legend__label")?.textContent).toBe("Unclassified");
+  });
+
+  it("opens the category editor on the group the legend is colored by", () => {
+    const onEditCategories = vi.fn();
+    render(
+      <FlowChartView
+        blocks={[makeFlowBlock()]}
+        appIcons={{}}
+        projectModeAvailable
+        projectLegend={[{ projectId: "p1", name: "Drifty", color: "#6366f1" }]}
+        onEditCategories={onEditCategories}
+      />,
+    );
+
+    const legendPencil = () => screen.getByRole("button", { name: "Edit categories" });
+    expect(legendPencil().getAttribute("aria-haspopup")).toBe("dialog");
+    fireEvent.click(legendPencil());
+    expect(onEditCategories).toHaveBeenLastCalledWith({ group: "category" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+    fireEvent.click(legendPencil());
+    expect(onEditCategories).toHaveBeenLastCalledWith({ group: "productivity" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+    fireEvent.click(legendPencil());
+    expect(onEditCategories).toHaveBeenLastCalledWith({ group: "project" });
   });
 
   it("offers a Project color mode only when project data is available and colors cells by project", () => {

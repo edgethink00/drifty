@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Project } from "@drifty/domain";
 
-import { ProjectsManager, type ProjectsManagerProps } from "./ProjectsManager";
+import { ProjectsManager, PROJECT_SEARCH_FROM, type ProjectsManagerProps } from "./ProjectsManager";
 import { IDLE_PROJECT_AUTO_ANALYSIS } from "./projectAutoAnalysisState";
 
 function project(overrides: Partial<Project> = {}): Project {
@@ -30,124 +30,55 @@ function baseProps(overrides: Partial<ProjectsManagerProps> = {}): ProjectsManag
     totalSecondsByProject: new Map([["p1", 5 * 3600 + 30 * 60]]),
     lastActivityByProject: new Map([["p1", "2026-07-10"]]),
     totalCaption: "Latest 7 days",
+    today: "2026-07-11",
     autoAnalysis: IDLE_PROJECT_AUTO_ANALYSIS,
-    onSave: vi.fn(),
-    onDelete: vi.fn(),
+    onEditProject: vi.fn(),
     onOpenProject: vi.fn(),
     ...overrides,
   };
 }
 
 describe("ProjectsManager", () => {
-  it("waits for project loading before consuming a creation request", async () => {
-    const onCreateRequestHandled = vi.fn();
-    const props = baseProps({ createRequested: true, onCreateRequestHandled });
-    const { rerender } = render(<ProjectsManager {...props} busy />);
-    expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull();
-    expect(onCreateRequestHandled).not.toHaveBeenCalled();
+  it("hands a row's pencil to the category editor without opening the project", () => {
+    const props = baseProps();
+    render(<ProjectsManager {...props} />);
 
-    rerender(<ProjectsManager {...props} busy={false} />);
-    expect(await screen.findByRole("dialog", { name: "New project" })).toBeTruthy();
-    expect(onCreateRequestHandled).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Drifty" }));
+    expect(props.onEditProject).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", name: "Drifty" }));
+    expect(props.onOpenProject).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("keeps the row options menu on screen through its exit and takes it out of reach while it fades", async () => {
-    render(<ProjectsManager {...baseProps()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
-
-    const menu = screen.getByRole("menu", { name: "Project options" });
-    const boundary = menu.parentElement as HTMLElement;
-    await waitFor(() => expect(boundary.getAttribute("data-anchored-presence")).toBe("open"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
-
-    expect(boundary.getAttribute("data-anchored-presence")).toBe("exiting");
-    expect(boundary.inert).toBe(true);
-    expect(screen.queryByRole("menu", { name: "Project options" })).not.toBeNull();
-    await waitFor(() => expect(screen.queryByRole("menu", { name: "Project options" })).toBeNull());
-  });
-
-  it("keeps initial focus on Name after the modal has entered", async () => {
-    render(<ProjectsManager {...baseProps()} />);
-    const trigger = screen.getByRole("button", { name: "New project" });
-    trigger.focus();
-    fireEvent.click(trigger);
-    const dialog = screen.getByRole("dialog", { name: "New project" });
-    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
-    expect(document.activeElement).toBe(within(dialog).getByLabelText("Name"));
-    const close = within(dialog).getByRole("button", { name: "Close project editor" });
-    close.focus();
-    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Cancel" }));
-    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
-    expect(document.activeElement).toBe(close);
-  });
-
-  it.each(["Escape", "Cancel", "Save"])("restores New project focus after %s", async (action) => {
-    render(<ProjectsManager {...baseProps({ onSave: vi.fn(async () => true) })} />);
-    const trigger = screen.getByRole("button", { name: "New project" });
-    trigger.focus();
-    fireEvent.click(trigger);
-    const dialog = screen.getByRole("dialog", { name: "New project" });
-    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
-    if (action === "Escape") fireEvent.keyDown(window, { key: "Escape" });
-    else if (action === "Cancel") fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    else {
-      fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "QA project" } });
-      await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Create project" })); });
-    }
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(document.activeElement).toBe(trigger);
-  });
-
-  it.each(["Escape", "Cancel", "Save"])("restores the persistent row trigger after Edit %s", async (action) => {
-    render(<ProjectsManager {...baseProps({ onSave: vi.fn(async () => true) })} />);
-    const trigger = screen.getByRole("button", { name: "Options for Drifty" });
-    trigger.focus();
-    fireEvent.click(trigger);
-    const edit = screen.getByRole("menuitem", { name: "Edit" });
-    edit.focus();
-    fireEvent.click(edit);
-    const dialog = screen.getByRole("dialog", { name: "Edit project" });
-    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
-    expect(edit.isConnected).toBe(false);
-    if (action === "Escape") fireEvent.keyDown(window, { key: "Escape" });
-    else await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: action === "Save" ? "Save changes" : "Cancel" })); });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(document.activeElement).toBe(trigger);
-  });
-
-  it("renders a labeled project list with the fixed seven-day activity window", () => {
+  it("renders a labeled list with last activity in words and the fixed seven-day window", () => {
     render(<ProjectsManager {...baseProps()} />);
 
     const projectList = screen.getByRole("region", { name: "Projects" });
     expect(within(projectList).getByText("Last activity")).toBeTruthy();
     expect(within(projectList).getByText("Time · Latest 7 days")).toBeTruthy();
-    expect(within(projectList).queryAllByText("Latest 7 days")).toHaveLength(0);
     expect(within(projectList).getByText("Drifty")).toBeTruthy();
-    expect(within(projectList).getByText("Jul 10, 2026")).toBeTruthy();
-    expect(within(projectList).getByText("Active")).toBeTruthy();
+    expect(within(projectList).getByText("Yesterday")).toBeTruthy();
     expect(within(projectList).getByText("5h 30m")).toBeTruthy();
-    expect(within(projectList).queryByText(/signals?$/i)).toBeNull();
+    expect(within(projectList).queryByText("Active")).toBeNull();
+    expect(within(projectList).queryByText("Status")).toBeNull();
   });
 
-  it("reserves the status chip for archived projects so Active does not repeat the loudest treatment", () => {
+  it("says today, days ago within the week, and a short date before that", () => {
     render(<ProjectsManager {...baseProps({
-      projects: [project(), project({ id: "p2", name: "Blog relaunch", status: "archived", anchors: [] })],
+      projects: [project(), project({ id: "p2", name: "Blog" }), project({ id: "p3", name: "Old" })],
+      lastActivityByProject: new Map([["p1", "2026-07-11"], ["p2", "2026-07-08"], ["p3", "2026-06-30"]]),
     })} />);
 
-    const projectList = screen.getByRole("region", { name: "Projects" });
-    expect(within(projectList).getByText("Active").className).not.toContain("chip");
-    expect(within(projectList).getByText("Archived").className).toContain("chip");
+    expect(screen.getByText("Today")).toBeTruthy();
+    expect(screen.getByText("3 days ago")).toBeTruthy();
+    expect(screen.getByText("Jun 30")).toBeTruthy();
   });
 
-  it("opens the project detail on row click instead of expanding", () => {
+  it("opens the project detail on row click", () => {
     const props = baseProps();
     render(<ProjectsManager {...props} />);
 
     fireEvent.click(screen.getByText("Drifty"));
     expect(props.onOpenProject).toHaveBeenCalledWith("p1");
-    expect(screen.queryByRole("group", { name: "Details for Drifty" })).toBeNull();
   });
 
   it("exposes project details as a native primary action", () => {
@@ -161,95 +92,47 @@ describe("ProjectsManager", () => {
     expect(props.onOpenProject).toHaveBeenCalledWith("p1");
   });
 
-  it("opens the row menu and edits the project through the modal", () => {
-    const props = baseProps();
-    render(<ProjectsManager {...props} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
-    expect(props.onOpenProject).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
-
-    const dialog = screen.getByRole("dialog", { name: "Edit project" });
-    const nameInput = within(dialog).getByLabelText("Name") as HTMLInputElement;
-    expect(nameInput.value).toBe("Drifty");
-
-    fireEvent.change(nameInput, { target: { value: "Drifty Mac" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", name: "Drifty Mac", status: "active" }));
-  });
-
-  it("archives and deletes from the row menu", () => {
-    const props = baseProps();
-    render(<ProjectsManager {...props} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
-    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", status: "archived" }));
-
-    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-    // Deleting asks first: nothing is removed until the confirmation's button.
-    expect(props.onDelete).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("dialog", { name: "Delete “Drifty”?" });
-    expect(within(dialog).getByText("Latest 7 days: 5h 30m matched to this project")).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Delete project" }));
-    expect(props.onDelete).toHaveBeenCalledWith("p1");
-  });
-
-  it("keeps the delete confirmation open with a translated line when deletion fails", async () => {
-    const onDelete = vi.fn().mockResolvedValueOnce({ deleted: false, error: "database is locked" }).mockResolvedValueOnce(true);
-    render(<ProjectsManager {...baseProps({ onDelete })} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-    const dialog = screen.getByRole("dialog", { name: "Delete “Drifty”?" });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Delete project" }));
-
-    const alert = await within(dialog).findByRole("alert");
-    expect(alert.textContent).toBe("Could not delete the project. Try again.");
-    expect(alert.getAttribute("title")).toBe("database is locked");
-    expect(screen.getByRole("dialog", { name: "Delete “Drifty”?" })).toBe(dialog);
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Delete project" }));
-    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(within(dialog).queryByRole("alert")).toBeNull());
-  });
-
-  it("offers Archive in the delete confirmation for an active project only", () => {
-    const props = baseProps({
+  it("folds archived projects under the list", () => {
+    render(<ProjectsManager {...baseProps({
       projects: [project(), project({ id: "p2", name: "Blog relaunch", status: "archived", anchors: [] })],
-    });
-    render(<ProjectsManager {...props} />);
+    })} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-    fireEvent.click(screen.getByRole("button", { name: "Archive instead" }));
-    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", status: "archived" }));
-    expect(props.onDelete).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Options for Blog relaunch" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-    const archivedDialog = screen.getByRole("dialog", { name: "Delete “Blog relaunch”?" });
-    expect(within(archivedDialog).queryByRole("button", { name: "Archive instead" })).toBeNull();
-    fireEvent.click(within(archivedDialog).getByRole("button", { name: "Cancel" }));
-    expect(props.onDelete).not.toHaveBeenCalled();
-  });
-
-  it("filters rows by search query and status", () => {
-    const props = baseProps({
-      projects: [project(), project({ id: "p2", name: "Blog relaunch", status: "archived", anchors: [] })],
-    });
-    render(<ProjectsManager {...props} />);
-
-    fireEvent.change(screen.getByRole("textbox", { name: "Search project name" }), { target: { value: "blog" } });
-    expect(screen.queryByText("Drifty")).toBeNull();
-    expect(screen.getByText("Blog relaunch")).toBeTruthy();
-
-    fireEvent.change(screen.getByRole("textbox", { name: "Search project name" }), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("combobox", { name: "Filter by status" }));
-    fireEvent.click(screen.getByRole("option", { name: "Active" }));
-    expect(screen.getByText("Drifty")).toBeTruthy();
     expect(screen.queryByText("Blog relaunch")).toBeNull();
+    const toggle = screen.getByRole("button", { name: /Archived 1/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(within(screen.getByRole("region", { name: "Archived" })).getByText("Blog relaunch")).toBeTruthy();
+  });
+
+  it("shows the search only for a long list, and it reaches archived projects", () => {
+    const { unmount } = render(<ProjectsManager {...baseProps()} />);
+    expect(screen.queryByRole("textbox", { name: "Search project name" })).toBeNull();
+    unmount();
+
+    const many = Array.from({ length: PROJECT_SEARCH_FROM - 1 }, (_, index) => project({ id: "p" + index, name: "Work " + index }));
+    render(<ProjectsManager {...baseProps({ projects: [...many, project({ id: "pa", name: "Blog relaunch", status: "archived", anchors: [] })] })} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search project name" }), { target: { value: "blog" } });
+    expect(screen.queryByText("Work 0")).toBeNull();
+    expect(screen.getByText("Blog relaunch")).toBeTruthy();
+  });
+
+  it("draws each project's seven-day trend beside its time", () => {
+    render(<ProjectsManager {...baseProps({ dailySecondsByProject: new Map([["p1", [0, 600, 1200, 0, 3600, 1800, 900]]]) })} />);
+    expect(screen.getByRole("img", { name: "Drifty, latest 7 days" })).toBeTruthy();
+  });
+
+  it("offers to refine the description when matching found nothing", () => {
+    const props = baseProps({
+      projects: [project({ id: "p3", name: "Idle", anchors: [] })],
+      totalSecondsByProject: new Map(),
+      lastActivityByProject: new Map(),
+      autoAnalysis: { p3: "complete" },
+    });
+    render(<ProjectsManager {...props} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refine description" }));
+    expect(props.onEditProject).toHaveBeenCalledWith(expect.objectContaining({ id: "p3" }));
+    expect(props.onOpenProject).not.toHaveBeenCalled();
   });
 
   it("shows a dash and 0m for projects without activity in the window", () => {

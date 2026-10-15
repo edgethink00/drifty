@@ -75,6 +75,12 @@ export interface ClassificationOptions {
    */
   builtInHeuristicsUnavailableSince?: string | null;
   rules?: ClassificationRuleOption[];
+  /**
+   * Productivity the user fixed for a category in Settings. It applies to AI,
+   * stored, and built-in results but never overrides a manual correction or a
+   * user rule, which already carry the user's explicit productivity.
+   */
+  categoryProductivity?: Readonly<Partial<Record<ActivityCategory, ProductivityLabel>>>;
 }
 
 export interface ActivitySegment {

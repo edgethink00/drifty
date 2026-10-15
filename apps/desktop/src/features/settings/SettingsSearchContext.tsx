@@ -94,7 +94,8 @@ export function SettingsSearchDestination({ children }: { readonly children: Rea
 
   useEffect(() => {
     const root = rootRef.current;
-    if (!root || !request) return;
+    // A category editor result opens its dialog; focusing a row behind it would pull focus out.
+    if (!root || !request || request.entry.categoryEditor) return;
     let frame = 0;
     const visible = (node: HTMLElement) => {
       if (!node.isConnected || node.closest('[aria-hidden="true"], [hidden], [inert]')) return false;

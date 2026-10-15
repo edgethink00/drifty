@@ -12,6 +12,10 @@ import { NavChevronIcon } from "../../components/NavChevronIcon";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
+import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
+import { CategoryIcon, RulesIcon } from "../categories/definitionIcons";
+import { PencilGlyph } from "../../components/PencilGlyph";
+import "../categories/categoryEditor.css";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
 import {
   CLASSIFICATION_FOCUS_RATE_DESCRIPTION,
@@ -74,15 +78,11 @@ type ClassificationPageProps = {
   readonly onStartClassificationDetailCorrection: (rowId: string) => void;
   readonly onStartClassificationSurfaceCorrection: () => void;
   readonly onTodayClassificationRange: () => void;
+  /** Opens the category editor, where the categories this page sorts by are defined. */
+  readonly onEditCategories?: (target: CategoryEditorTarget) => void;
+  /** Opens the app and site rules, which corrections set to "Always" create. */
+  readonly onManageRules?: () => void;
 };
-
-function ClassificationEditGlyph() {
-  return (
-    <svg className="classification-correction__edit-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path d="M10.5 2.5l3 3L6 13l-3.5.5.5-3.5z" />
-    </svg>
-  );
-}
 
 function ClassificationCheckGlyph() {
   return (
@@ -201,6 +201,8 @@ export function ClassificationPage({
   onStartClassificationDetailCorrection,
   onStartClassificationSurfaceCorrection,
   onTodayClassificationRange,
+  onEditCategories,
+  onManageRules,
 }: ClassificationPageProps) {
   const { effectiveLanguage, t } = useLocalization();
   const sourceMetaLabel = (item: { readonly sessionCount: number; readonly averageSessionSeconds: number }) => `${item.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: item.sessionCount })} · ${t("classification.averageValue", { duration: formatLocalizedCompactDurationFromSeconds(item.averageSessionSeconds, effectiveLanguage) })}`;
@@ -283,6 +285,11 @@ export function ClassificationPage({
         onProductivityChange={onClassificationCorrectionProductivityChange}
         onSave={onSaveClassificationCorrection}
         onCancel={onCancelClassificationCorrection}
+        onEditCategories={onEditCategories ? () => {
+          // The editor opens as a dialog; the half-made correction does not wait under it.
+          onCancelClassificationCorrection();
+          onEditCategories({ group: "category", key: draft.category });
+        } : undefined}
       />
     );
   };
@@ -305,6 +312,28 @@ export function ClassificationPage({
           <h1>{t("classification.title")}</h1>
         </div>
         <div className="classification-range-controls">
+          {onEditCategories ? (
+            <button
+              type="button"
+              className="app-btn app-btn--secondary app-btn--compact category-editor-door"
+              aria-haspopup="dialog"
+              onClick={() => onEditCategories({ group: "category", key: effectiveClassifyCategoryId ?? undefined })}
+            >
+              <CategoryIcon />
+              {t("categoryEditor.edit")}
+            </button>
+          ) : null}
+          {onManageRules ? (
+            <button
+              type="button"
+              className="app-btn app-btn--secondary app-btn--compact category-editor-door"
+              aria-haspopup="dialog"
+              onClick={onManageRules}
+            >
+              <RulesIcon />
+              {t("classification.rules.title")}
+            </button>
+          ) : null}
           <div className="settings-mode-switch" role="radiogroup" aria-label={t("classification.rangeAria")}>
             {(["Day", "Week"] as const).map((range) => (
               <button
@@ -508,7 +537,7 @@ export function ClassificationPage({
                       <button
                         type="button"
                         ref={surfaceCorrectionButtonRef}
-                        className="app-btn app-btn--quiet app-btn--compact classification-correction__surface-button"
+                        className="pencil-plate classification-correction__surface-button"
                         aria-label={t("classification.correctSurface", { surface: t(selectedClassificationSourceSummary.usageKind === "site" ? "classification.domain" : "classification.app") })}
                         title={t("classification.correctSurface", { surface: t(selectedClassificationSourceSummary.usageKind === "site" ? "classification.domain" : "classification.app") })}
                         aria-expanded={classificationCorrectionDraft?.scope === "surface"}
@@ -516,7 +545,7 @@ export function ClassificationPage({
                         data-active={String(classificationCorrectionDraft?.scope === "surface")}
                         onClick={onStartClassificationSurfaceCorrection}
                       >
-                        <ClassificationEditGlyph />
+                        <PencilGlyph />
                         <span className="sr-only">{t("classification.reclassify")}</span>
                       </button>
                     </div>
@@ -582,7 +611,7 @@ export function ClassificationPage({
                               <button
                                 type="button"
                                 ref={registerDetailCorrectionButton(row.id)}
-                                className="app-btn app-btn--quiet app-btn--compact classification-correction__detail-button"
+                                className="pencil-plate pencil-plate--sm classification-correction__detail-button"
                                 aria-label={rowCorrectionLabel}
                                 title={rowCorrectionLabel}
                                 aria-expanded={isRowCorrecting}
@@ -590,7 +619,7 @@ export function ClassificationPage({
                                 data-active={String(isRowCorrecting)}
                                 onClick={() => onStartClassificationDetailCorrection(row.id)}
                               >
-                                <ClassificationEditGlyph />
+                                <PencilGlyph />
                                 <span className="sr-only">{t("classification.reclassify")}</span>
                               </button>
                             </div>

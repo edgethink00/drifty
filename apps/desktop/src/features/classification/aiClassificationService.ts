@@ -1,7 +1,7 @@
 import { browserContentCluesForSegment, normalizeBrowserContentClues } from "@drifty/domain";
 import { ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD, enhancedRetryImproves, retryEvidenceForRecord } from "./enhancedContextRetryPolicy";
 import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
-import { isExcludedSegment } from "@drifty/domain";
+import { classificationGuidanceFromCustomizations, isContentDependentYouTubeActivity, isExcludedSegment } from "@drifty/domain";
 import type {
   AdaptiveContentContext,
   ActivityCategory,
@@ -9,6 +9,7 @@ import type {
   ActivitySegment,
   ClassificationMetrics,
   LiveActivityIntent,
+  LiveCategoryGuidance,
   LiveClassificationMemoryContext,
   LiveClassificationPromptItem,
   UnclassifiedSegmentsQuery,
@@ -29,10 +30,10 @@ import {
   enhancedContextRetryEligibility,
   type ContentContextEgressSummary,
 } from "./contentContextEgressPolicy";
-import { MANAGED_LOCAL_AI_CLASSIFICATION_MAX_BATCH_SIZE, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES, toLocalProviderEnhancedRetryRequest, toLocalProviderRequest, type LocalAiProviderConfig, type LocalAiProviderEnhancedRetryRequestInput, type LocalAiProviderRequest, type MinimizedActivityPayload } from "./localAiProviderRequest";
+import { MANAGED_LOCAL_AI_CLASSIFICATION_MAX_BATCH_SIZE, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES, payloadCategoryGuidance, toLocalProviderEnhancedRetryRequest, toLocalProviderRequest, type LocalAiProviderConfig, type LocalAiProviderEnhancedRetryRequestInput, type LocalAiProviderRequest, type MinimizedActivityPayload } from "./localAiProviderRequest";
 import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
 import { readAiPrivacyRequestSettings, type AiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
-import { resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } from "../settings/settingsStorage";
+import { readCategoryCustomizations, readProductivityCustomizations, resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } from "../settings/settingsStorage";
 import { recordEnhancedContextDebugEvent, type EnhancedContextDebugReason, type EnhancedContextDebugStatus } from "../settings/debugLog";
 import { withClassificationActivity } from "./classificationActivity";
 import {
@@ -134,6 +135,8 @@ type EdgeClassificationResponse = {
   model?: unknown;
   latencyMs?: unknown;
   resultLatencyMsById?: unknown;
+  /** Set by a classify-activity deploy that read the request's categoryGuidance. */
+  categoryGuidanceApplied?: unknown;
 };
 
 // Granularity of AI classification:
@@ -225,10 +228,36 @@ export function expandClusterRecords(
       continue;
     }
     for (const member of members) {
-      expanded.push({ ...record, segmentId: member.segmentId, inputFingerprint: member.inputFingerprint });
+      expanded.push({ ...record, segmentId: member.segmentId, inputFingerprint: memberInputFingerprint(record, members, member) });
     }
   }
   return expanded;
+}
+
+/**
+ * Members inherit the representative's fingerprint scope: when the provider
+ * ignored category guidance, the representative was filed under its unguided
+ * fingerprint, so its members must be too.
+ */
+function memberInputFingerprint(
+  record: ActivityClassificationRecord,
+  members: readonly MinimizedActivityPayload[],
+  member: MinimizedActivityPayload,
+): string {
+  const representative = members.find((candidate) => candidate.segmentId === record.segmentId);
+  const representativeFiledUnguided = Boolean(representative?.baseInputFingerprint)
+    && representative?.baseInputFingerprint !== representative?.inputFingerprint
+    && record.inputFingerprint === representative?.baseInputFingerprint;
+  return representativeFiledUnguided ? member.baseInputFingerprint ?? member.inputFingerprint : member.inputFingerprint;
+}
+
+/**
+ * The user's category and productivity descriptions, read once per
+ * classification run so every payload fingerprint and every prompt in that
+ * run agree.
+ */
+export function readActiveCategoryGuidance(): LiveCategoryGuidance[] {
+  return classificationGuidanceFromCustomizations(readCategoryCustomizations(), readProductivityCustomizations());
 }
 
 export type LiveAiClassificationResult =
@@ -416,7 +445,8 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
     observePassiveLearning: options.allowProviderlessPersistence !== false,
   });
   const promptWorkProfile = memoryContext.soul ? null : workProfile;
-  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext)));
+  const categoryGuidance = readActiveCategoryGuidance();
+  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext, categoryGuidance)));
 
   if (payload.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
@@ -542,7 +572,8 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
     observePassiveLearning: options.allowProviderlessPersistence !== false,
   });
   const promptWorkProfile = memoryContext.soul ? null : workProfile;
-  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext)));
+  const categoryGuidance = readActiveCategoryGuidance();
+  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext, categoryGuidance)));
   const deterministicRecords = toDeterministicClassificationRecords(segments, payload);
   const deterministicSegmentIds = new Set(deterministicRecords.map((record) => record.segmentId));
   const inheritedResult = await collectInheritedYouTubeBrowseClassifications(segments, payload, deterministicSegmentIds);
@@ -664,7 +695,7 @@ export async function classifyLiveActivityWithAi(segment: ActivitySegment, optio
       contextSegments: options.contextSegments,
     });
     const promptWorkProfile = memoryContext.soul ? null : workProfile;
-    const payload = await toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext);
+    const payload = await toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext, readActiveCategoryGuidance());
     const systemRecord = toSystemSkippedClassificationRecord(segment, payload, new Date().toISOString());
     if (systemRecord) {
       await saveLiveClassificationIfRequested(
@@ -836,6 +867,7 @@ export async function toMinimizedPayload(
   workProfile: string | null,
   privacySettings: AiPrivacyRequestSettings,
   memoryContext: LiveClassificationMemoryContext,
+  categoryGuidance: readonly LiveCategoryGuidance[] = [],
 ): Promise<MinimizedActivityPayload> {
   const siteUrl = privacySettings.optional.siteUrl ? sanitizeProviderSiteUrl(segment.siteUrl) : null;
   const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
@@ -869,10 +901,18 @@ export async function toMinimizedPayload(
     memoryContext: classificationMemoryFingerprintMaterial(memoryContext, segment.id),
   };
   const contextFingerprint = await fingerprint(JSON.stringify({ memory: providerInput.memoryContext, ...(browserContext ? { browserContext } : {}) }));
+  // Guidance joins the fingerprint only when the user wrote some, so existing
+  // cached answers stay valid for everyone else. A guided answer can never be
+  // reused once the descriptions change, and vice versa.
+  const guided = categoryGuidance.length > 0;
+  const baseInputFingerprint = await fingerprint(JSON.stringify(providerInput));
+  const inputFingerprint = guided
+    ? await fingerprint(JSON.stringify({ ...providerInput, categoryGuidance }))
+    : baseInputFingerprint;
 
   return {
     segmentId: segment.id,
-    inputFingerprint: await fingerprint(JSON.stringify(providerInput)),
+    inputFingerprint,
     contextFingerprint,
     startedAt: segment.startedAt,
     endedAt: segment.endedAt,
@@ -890,6 +930,7 @@ export async function toMinimizedPayload(
     youtubeIsShorts: null,
     ...(redditCommunity ? { redditCommunity } : {}),
     ...(browserContext ? { browserContext } : {}),
+    ...(guided ? { categoryGuidance, baseInputFingerprint } : {}),
   };
 }
 
@@ -1013,6 +1054,11 @@ function toDeterministicClassificationRecords(segments: ActivitySegment[], paylo
   return segments.flatMap((segment): ActivityClassificationRecord[] => {
     const sourcePayload = payloadById.get(segment.id);
     if (!sourcePayload) return [];
+
+    // A YouTube video's built-in answer comes from its official category,
+    // which a user's category description can legitimately overrule. Let the
+    // classifier read it; Shorts, music, feeds, and browse pages stay rules.
+    if ((sourcePayload.categoryGuidance?.length ?? 0) > 0 && isContentDependentYouTubeActivity(segment)) return [];
 
     const classification = classifyActivityDetailed(segment, { includeAiClassifications: false });
     if (classification.category === "unknown") {
@@ -1302,6 +1348,8 @@ function toClassificationRecords(
     : null;
   const payloadById = new Map(payload.map((item) => [item.segmentId, item]));
   const classifiedAt = new Date().toISOString();
+  const providerAppliedGuidance = route === "local"
+    || (!Array.isArray(response) && response?.categoryGuidanceApplied === true);
 
   return classifications.flatMap((entry): ActivityClassificationRecord[] => {
     if (!entry || typeof entry !== "object") return [];
@@ -1331,7 +1379,7 @@ function toClassificationRecords(
     );
     const record: ActivityClassificationRecord = {
       segmentId,
-      inputFingerprint: typeof classification.inputFingerprint === "string" ? classification.inputFingerprint : sourcePayload.inputFingerprint,
+      inputFingerprint: recordInputFingerprint(classification, sourcePayload, providerAppliedGuidance),
       category: classification.category,
       productivity,
       source: "llm",
@@ -1365,6 +1413,20 @@ function toClassificationRecords(
     }
     return [record];
   });
+}
+
+function recordInputFingerprint(
+  classification: EdgeClassification,
+  sourcePayload: MinimizedActivityPayload,
+  providerAppliedGuidance: boolean,
+): string {
+  if ((sourcePayload.categoryGuidance?.length ?? 0) > 0 && !providerAppliedGuidance) {
+    // A classify-activity deploy that predates category guidance answered
+    // without it. File the answer under the unguided fingerprint so it is
+    // never reused as if the user's descriptions had been applied.
+    return sourcePayload.baseInputFingerprint ?? sourcePayload.inputFingerprint;
+  }
+  return typeof classification.inputFingerprint === "string" ? classification.inputFingerprint : sourcePayload.inputFingerprint;
 }
 
 async function collectReusableAiClassifications(unknownPayload: MinimizedActivityPayload[]): Promise<{ records: ActivityClassificationRecord[]; misses: MinimizedActivityPayload[] }> {
@@ -1632,13 +1694,15 @@ function cloudClassificationRequestBody(
 ) {
   const items = toEdgeClassificationRequestItems([...payloads]);
   const segmentIds = payloads.map((payload) => payload.segmentId);
+  const categoryGuidance = payloadCategoryGuidance(payloads);
   return {
     ...cloudApiClientMetadata,
     // Keep the legacy profile during a staggered app/Edge rollout. The v8.2
     // Edge function suppresses it when Soul is present, while an older Edge
     // can still classify with the profile instead of silently losing context.
     ...(workProfile ? { workProfile } : {}),
-    memoryContext: memoryContextForCloudRequest(memoryContext, segmentIds, items, workProfile),
+    ...(categoryGuidance.length > 0 ? { categoryGuidance } : {}),
+    memoryContext: memoryContextForCloudRequest(memoryContext, segmentIds, items, workProfile, categoryGuidance),
     items,
   };
 }
@@ -1648,10 +1712,12 @@ function memoryContextForCloudRequest(
   segmentIds: readonly string[],
   items: readonly Record<string, unknown>[],
   workProfile: string | null,
+  categoryGuidance: readonly LiveCategoryGuidance[],
 ): LiveClassificationMemoryContext {
   const baseBytes = new TextEncoder().encode(JSON.stringify({
     ...cloudApiClientMetadata,
     ...(workProfile ? { workProfile } : {}),
+    ...(categoryGuidance.length > 0 ? { categoryGuidance } : {}),
     memoryContext: null,
     items,
   })).byteLength;

@@ -11,13 +11,6 @@
   gap: 0.32rem;
 }
 
-.projects-page__heading-copy > p {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: 0.78rem;
-  line-height: 1.4;
-}
-
 /* The intro copy moved behind a "?" so it doesn't take a permanent block. */
 .projects-page__title {
   display: flex;
@@ -49,208 +42,9 @@
   white-space: nowrap;
 }
 
-.projects-help {
-  position: relative;
-  display: inline-flex;
-}
-
-/* Chrome comes from the shared `.help-trigger`; only the hover-through-wrapper
-   behaviour is local, so pointing anywhere in the group lights the trigger.
-   The shared hover still draws a stroked, solid pill; here the fill is a
-   faint wash so the `?` does not suddenly become a chip. */
-.projects-help:hover .projects-help__trigger,
-.projects-help:focus-within .projects-help__trigger {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  border-color: transparent;
-  color: color-mix(in srgb, var(--text) 72%, transparent);
-}
-
-.projects-help .projects-help__trigger:hover,
-.projects-help .projects-help__trigger:focus-visible {
-  border-color: transparent;
-}
-
-.projects-help__tip {
-  position: absolute;
-  /* Right of the `?`. A little overlap with the subtitle is fine; dropping
-     it under the heading copy severs the pointer-to-tip relationship. */
-  top: 0;
-  left: calc(100% + 0.45rem);
-  z-index: 30;
-  width: max-content;
-  max-width: 24rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface-strong) 65%, var(--surface));
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--text) 12%, transparent);
-  color: var(--text-soft);
-  font-size: 0.8rem;
-  line-height: 1.45;
-  opacity: 0;
-  transform: translateX(-3px);
-  pointer-events: none;
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
-}
-
-.projects-help:hover .projects-help__tip,
-.projects-help:focus-within .projects-help__tip {
-  opacity: 1;
-  transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .projects-help__tip {
-    transition: none;
-    transform: none;
-  }
-}
-
 .projects-page__run {
   white-space: nowrap;
   flex: none;
-}
-
-/* ── Analysis model strip ── */
-.projects-model-status {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.8rem 0.9rem;
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-
-.projects-model-status.is-disconnected {
-  border-color: color-mix(in srgb, var(--warn) 28%, var(--line));
-  background: color-mix(in srgb, var(--warn-soft) 24%, var(--surface));
-}
-
-.projects-model-status__info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.projects-model-status__label {
-  font-family: var(--font-mono);
-  font-size: 0.71875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-
-.projects-model-status__value {
-  max-width: 52rem;
-  font-size: 0.76rem;
-  line-height: 1.4;
-  color: var(--text-soft);
-}
-
-/* Model readiness is live state, not metadata, so it reads as a dot + label
-   instead of a capsule. The capsule variant this replaced sat next to a real
-   button and competed with it for the "clickable" affordance. */
-.projects-model-status__readiness {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.38rem;
-  color: var(--text-muted);
-  font-size: 0.71875rem;
-  font-weight: 560;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-.projects-model-status__readiness-dot {
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 50%;
-  background: var(--warn);
-}
-
-.projects-model-status__readiness.is-connected .projects-model-status__readiness-dot {
-  background: var(--accent);
-}
-
-.projects-model-status .app-btn {
-  flex: none;
-  white-space: nowrap;
-}
-
-.projects-model-status__reason {
-  grid-column: 1 / -1;
-  margin: -0.34rem 0 0;
-  color: var(--text-soft);
-  font-size: 0.76rem;
-  line-height: 1.35;
-}
-
-.projects-model-status__meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem;
-  margin: 0.65rem 0 0;
-}
-
-.projects-model-status__meta > div {
-  min-width: 0;
-  padding-top: 0.45rem;
-  border-top: 1px solid var(--line);
-}
-
-.projects-model-status__meta dt {
-  margin: 0 0 0.12rem;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.projects-model-status__meta dd {
-  margin: 0;
-  overflow: hidden;
-  color: var(--text);
-  font-size: 0.72rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.projects-model-status--card {
-  position: relative;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "info"
-    "actions";
-  align-content: start;
-  align-items: start;
-  padding: 0.85rem;
-  background: var(--stacked-column-plot-background);
-  box-shadow: var(--stacked-column-plot-shadow);
-}
-
-.projects-model-status--card .projects-model-status__info {
-  grid-area: info;
-  gap: 0.22rem;
-}
-
-.projects-model-status--card .projects-model-status__label {
-  padding-right: 7.5rem;
-}
-
-.projects-model-status--card .projects-model-status__readiness {
-  position: absolute;
-  top: 0.86rem;
-  right: 0.9rem;
-}
-
-.projects-model-status--card .projects-model-status__actions {
-  grid-area: actions;
-  justify-content: flex-start;
-  width: 100%;
 }
 
 /* ── Banners ── */
@@ -286,134 +80,12 @@
   margin-top: 0;
 }
 
-.projects-overview-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(17rem, 0.9fr);
-  align-items: stretch;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.projects-overview-layout .projects-charts {
-  margin-bottom: 0;
-}
-
 /* ── Unified project list + editor ── */
 .projects-manager {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   margin-bottom: 1rem;
-}
-
-/* Bottom zone: setup banners + the analysis-model strip (with Configure + Analyze). */
-.projects-page__footer {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-
-.projects-model-status__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  flex: none;
-}
-
-/* First-run state: teach the definition → matching workflow instead of leaving
-   a single sentence inside an otherwise empty table. */
-.projects-first-run {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-5);
-  min-height: 12rem;
-  padding: var(--space-6);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at 0 0, color-mix(in srgb, var(--accent-soft) 70%, transparent), transparent 36%),
-    var(--surface);
-}
-
-.projects-first-run__mark {
-  display: grid;
-  place-items: center;
-  width: 4.25rem;
-  height: 4.25rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
-  border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface));
-  color: var(--accent-strong);
-}
-
-.projects-first-run__mark svg {
-  width: 2rem;
-  height: 2rem;
-}
-
-.projects-first-run__copy {
-  display: grid;
-  gap: 0.5rem;
-  max-width: 46rem;
-}
-
-.projects-first-run__copy h2,
-.projects-first-run__copy p {
-  margin: 0;
-}
-
-.projects-first-run__copy h2 {
-  font-family: var(--font-display);
-  font-size: 1.12rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-
-.projects-first-run__copy p {
-  max-width: 62ch;
-  color: var(--text-soft);
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.projects-first-run__copy ol {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin: 0.25rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.projects-first-run__copy li {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
-  color: var(--text-soft);
-  font-size: 0.7rem;
-}
-
-.projects-first-run__copy li span {
-  display: grid;
-  place-items: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: var(--radius-pill);
-  background: var(--bg-2);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-}
-
-.projects-first-run__copy li strong {
-  font-weight: 560;
-}
-
-.project-editor-modal {
-  width: min(30rem, 92vw);
-  max-width: 30rem;
 }
 
 /* ── Project pass cost (dev) ── */
@@ -529,37 +201,6 @@
   white-space: nowrap;
 }
 
-@media (max-width: 760px) {
-  .projects-overview-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .projects-model-status {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .projects-model-status--card {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "info"
-      "readiness"
-      "actions";
-  }
-
-  .projects-model-status--card .projects-model-status__readiness {
-    grid-area: readiness;
-    justify-self: start;
-    position: static;
-  }
-
-  .projects-model-status--card .projects-model-status__label {
-    padding-right: 0;
-  }
-}
-
 .settings-row--project-pass-cost > div:first-child {
   width: 100%;
   min-width: 0;
@@ -610,28 +251,6 @@
   font-size: 0.8125rem;
 }
 
-/* Status filter uses the shared SettingsSelect control (10rem default width);
-   its trigger drops the settings-page control height to match the search input. */
-.projects-page .projects-status-filter {
-  align-self: stretch;
-}
-
-.projects-page .projects-status-filter .settings-select-control__trigger {
-  min-height: 0;
-  height: 100%;
-  padding-top: 0;
-  padding-bottom: 0;
-  border-radius: 8px;
-}
-
-.projects-page .projects-toolbar__spacer {
-  margin-left: auto;
-}
-
-.projects-page .projects-toolbar .app-btn--primary {
-  white-space: nowrap;
-}
-
 .projects-page .projects-table {
   border: 1px solid color-mix(in srgb, var(--line-strong) 46%, var(--line));
   border-radius: var(--radius-md);
@@ -642,7 +261,7 @@
 .projects-page .projects-table__head,
 .projects-page .projects-table__row {
   display: grid;
-  grid-template-columns: minmax(8rem, 1.7fr) minmax(5rem, 8.2rem) minmax(4.6rem, 6.2rem) minmax(8rem, 8.5rem) 2.2rem;
+  grid-template-columns: minmax(8rem, 1.7fr) minmax(5rem, 7rem) 5rem minmax(7rem, 8.5rem) 2.2rem;
   gap: var(--space-2);
   align-items: center;
   padding: 0.55rem var(--space-3);
@@ -745,26 +364,6 @@
   text-overflow: ellipsis;
 }
 
-.projects-page .pt-mono {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Status for a live project: same slot and type scale as the archived chip,
-   without the filled pill. See ProjectsManager for why only Archived is a chip. */
-.projects-page .pt-status {
-  font-family: var(--font-mono);
-  font-size: var(--type-chip-size);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .projects-page .pt-total {
   display: flex;
   align-items: center;
@@ -821,12 +420,6 @@
   .projects-page .projects-table__analysis-spinner {
     animation: none;
   }
-}
-
-.projects-page .pt-menu-slot {
-  position: relative;
-  display: grid;
-  place-items: center;
 }
 
 .projects-page .pt-more {
@@ -1031,19 +624,6 @@
 }
 
 @media (max-width: 760px) {
-  .projects-first-run {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
-
-  .projects-first-run__mark {
-    width: 3.5rem;
-    height: 3.5rem;
-  }
-
-  .projects-first-run > .app-btn {
-    justify-self: start;
-  }
 
   .project-detail__stats,
   .project-detail__sources {
@@ -1117,52 +697,251 @@
   color: var(--text-muted);
   font-size: 0.8rem;
 }
-.project-editor-modal__fields {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
 
-/* Project deletion confirmation: the compact auth-modal shell, like the other
-   delete confirmations. */
-.project-delete-modal {
-  max-width: 27rem;
-}
-
-.project-delete-modal .auth-modal__header {
-  margin-bottom: var(--space-4);
-}
-
-.project-delete-modal__detail {
-  display: grid;
-}
-
-.project-delete-modal__detail > p {
-  grid-area: 1 / 1;
-}
-
-.project-delete-modal__detail.has-error > p:first-child {
-  visibility: hidden;
-}
-
-.project-delete-modal .auth-modal__header .project-delete-modal__error {
-  color: var(--warn);
-}
-
-.project-delete-modal .auth-modal__header .project-delete-modal__matched {
-  margin-top: var(--space-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.project-delete-modal__actions {
+/* ── Header: matching status in one line beside "New project" ── */
+.projects-page__head-actions {
   display: flex;
+  flex: none;
   align-items: center;
-  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.projects-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.projects-status__dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.projects-status--attention .projects-status__dot { background: #c08a2c; }
+.projects-status--error .projects-status__dot { background: var(--warn); }
+.projects-status--off .projects-status__dot { background: color-mix(in srgb, var(--text) 28%, transparent); }
+.projects-status--error { color: var(--warn); }
+
+.projects-status .projects-table__analysis-spinner { margin: 0; }
+
+.projects-status__act {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.projects-status__act:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 2px; }
+
+.projects-status__more {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.projects-page .projects-status__more .pt-more { opacity: 0.7; }
+
+/* ── Empty page: one title, one line, one button ── */
+.projects-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: min(26rem, 58vh);
+  text-align: center;
+}
+
+.projects-empty { gap: 0.45rem; }
+
+.projects-empty h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.projects-empty p {
+  margin: 0 0 0.55rem;
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
+/* ── List: last activity in words, the pencil to the editor ── */
+.projects-page .pt-last {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.projects-page .pt-edit-slot {
+  display: grid;
+  place-items: center;
+}
+
+/* Archived projects fold under the list. */
+.projects-archived {
+  display: grid;
   gap: var(--space-2);
 }
 
-/* The reversible alternative stands apart from the Cancel / Delete pair. */
-.project-delete-modal__archive {
-  margin-right: auto;
+.projects-archived__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  justify-self: start;
+  padding: 0.2rem 0.1rem;
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
 }
+
+.projects-archived__toggle svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.16s ease;
+}
+
+.projects-archived__toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+.projects-archived__toggle:hover { color: var(--text); }
+
+/* The title and its actions share one line, centered on each other. */
+.projects-page__heading-copy { align-self: center; }
+
+/* Times line up on the right so they compare at a glance. */
+.projects-page .projects-table__head > span:nth-child(4) { text-align: right; }
+.projects-page .pt-total { justify-content: flex-end; }
+
+/* The menu names the model in use beside Intelligence settings. */
+.projects-page .pt-menu__hint {
+  margin-left: auto;
+  padding-left: 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* The header keeps one height whether or not "New project" shows. */
+.projects-page__head-actions { min-height: 2rem; }
+
+/* ── Trend line per row (7 days), between last activity and the time ── */
+.projects-page .pt-trend { display: flex; align-items: center; justify-content: center; }
+.projects-page .pt-spark { display: block; overflow: visible; }
+
+/* A project with nothing found yet offers to sharpen its description. */
+.projects-page .projects-table__refine {
+  margin-left: 0.45rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.projects-page .projects-table__refine:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── One slim line over the page: why projects stopped, or what connecting gives (no Intelligence yet) ── */
+.projects-stopped {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: var(--space-3);
+  padding: 0.6rem 0.95rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, #c08a2c 9%, var(--surface));
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+.projects-stopped__dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #c08a2c; }
+.projects-stopped__text { flex: 1; min-width: 0; }
+.projects-stopped__actions { display: flex; flex: none; align-items: center; gap: 1rem; }
+.projects-stopped__link,
+.projects-stopped__go { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.projects-stopped__link { color: var(--text-soft); }
+.projects-stopped__go { color: var(--text); font-weight: 650; }
+.projects-stopped__link:hover,
+.projects-stopped__go:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+
+
+/* The detail's change against the window before. */
+.project-detail__delta { display: block; margin-top: 0.2rem; color: var(--text-soft); font-size: 0.76rem; }
+.project-detail__delta.is-up { color: var(--accent); }
+
+/* Stat cards start at the top, so a card with a comparison line leaves the others' figures level. */
+.project-detail__stat { align-content: start; }
+
+/* ── Under the list: the week's chart and one panel beside it, half and half ── */
+.projects-overview-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 1rem;
+}
+.projects-overview-layout .projects-charts { margin-bottom: 0; }
+.projects-overview-layout .projects-charts > .ptc-panel { flex: 1; }
+/* Beside the panel the chart's plot takes the height the pair shares. */
+.projects-overview-layout .ptc-panel--overview { display: flex; flex-direction: column; }
+.projects-overview-layout .ptc-panel--overview .ptc-bars { display: flex; flex: 1; flex-direction: column; }
+.projects-overview-layout .ptc-panel--overview .ptc-bars__plot { flex: 1; height: auto; min-height: clamp(7.6rem, 12vw, 8.8rem); }
+@media (max-width: 960px) {
+  .projects-overview-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The split between projects beside the chart, the way the Today breakdown's
+   project ring shows it: projects only, the total in the head, the biggest
+   project's share in the middle. Same panel and head as the chart. */
+.projects-share.insight-chart-panel.editorial-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-top: 0;
+  padding-block: 0.65rem 0.72rem;
+}
+.projects-share .insight-panel-head { margin-bottom: 0.3rem; }
+.projects-share__total { color: var(--text); font-family: var(--font-mono); font-size: 0.72rem; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.projects-share .is-dim { opacity: 0.3; }
+.projects-share__legend li,
+.projects-share__arc { transition: opacity var(--transition-fast, 0.16s ease), stroke-width var(--transition-fast, 0.16s ease); }
+
+/* A dial beside its legend, centred in the panel's height; the ring a step
+   larger than the legend so neither leans on the other. */
+.projects-share__pair { display: grid; flex: 1; grid-template-columns: auto auto; align-items: center; justify-content: center; gap: clamp(1.4rem, 3vw, 2.2rem); padding: 0.2rem 0 0.3rem; }
+.projects-share__dial { position: relative; width: 6.5rem; aspect-ratio: 1; }
+.projects-share__dial svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.projects-share__track,
+.projects-share__arc { fill: none; stroke-width: 12; }
+.projects-share__track { stroke: color-mix(in srgb, var(--text) 7%, var(--surface)); }
+.projects-share__arc { stroke-linecap: butt; cursor: default; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.projects-share__arc:hover { stroke-width: 13.5; }
+.projects-share__center { position: absolute; inset: 50% auto auto 50%; display: grid; justify-items: center; gap: 0.14rem; width: 68%; transform: translate(-50%, -50%); pointer-events: none; text-align: center; }
+.projects-share__center strong { color: var(--text); font-family: var(--font-display); font-size: 1.2rem; font-weight: 650; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.projects-share__center span { max-width: 100%; overflow: hidden; color: var(--text-muted); font-size: 0.6875rem; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Legend: name, time, share a line, a step above the Today breakdown's
+   narrow column since this panel is half the page; a short column keeps the
+   numbers by their names, the share close to its time. */
+.projects-share__legend { display: grid; gap: 0.66rem; width: min(20rem, 100%); margin: 0; padding: 0; list-style: none; }
+.projects-share__legend li { display: grid; grid-template-columns: 0.66rem minmax(0, 1fr) auto 2.8rem; align-items: center; gap: 0.6rem; color: var(--text); font-size: 0.9rem; line-height: 1.15; cursor: default; }
+.projects-share__swatch { width: 0.66rem; height: 0.66rem; border-radius: 999px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 82%, transparent); }
+.projects-share__label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.projects-share__time,
+.projects-share__pct { color: var(--text-muted); font-family: var(--font-mono); font-weight: 560; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.projects-share__time { font-size: var(--type-button-size); }
+.projects-share__pct { color: var(--text); font-size: 0.9rem; font-weight: 650; }
+.projects-share__empty { margin: 0; color: var(--text-muted); font-size: 0.8rem; }
+

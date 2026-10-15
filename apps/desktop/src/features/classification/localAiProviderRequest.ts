@@ -5,7 +5,8 @@ import {
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
 } from "../settings/localAiSetup";
-import type { LiveClassificationMemoryContext } from "@drifty/domain";
+import { liveCategoryGuidancePromptLines } from "@drifty/domain";
+import type { LiveCategoryGuidance, LiveClassificationMemoryContext } from "@drifty/domain";
 import type { EnhancedContextProviderPayload } from "./contentContextEgressPolicy";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -92,7 +93,22 @@ export type MinimizedActivityPayload = {
   readonly youtubeIsShorts: boolean | null;
   readonly redditCommunity?: string;
   readonly browserContext?: BrowserContentClues;
+  /**
+   * User category guidance this item was fingerprinted with. One run reads the
+   * settings once, so every item in a request carries the same value; request
+   * builders take it from the items instead of re-reading settings.
+   */
+  readonly categoryGuidance?: readonly LiveCategoryGuidance[];
+  /** The fingerprint without guidance, used when a provider did not apply it. */
+  readonly baseInputFingerprint?: string;
 };
+
+/** Request-level guidance for a batch built from one run's payloads. */
+export function payloadCategoryGuidance(
+  payload: readonly Pick<MinimizedActivityPayload, "categoryGuidance">[],
+): readonly LiveCategoryGuidance[] {
+  return payload.find((item) => (item.categoryGuidance?.length ?? 0) > 0)?.categoryGuidance ?? [];
+}
 
 export type LocalAiProviderConfig =
   | { readonly provider: "managed_local"; readonly baseUrl: string; readonly model: string; readonly modelId: string }
@@ -350,6 +366,7 @@ export function buildClassificationPrompt(
   workProfile: string | null,
   enhancedRetryContext: EnhancedContextProviderPayload | null,
   memoryContext: LiveClassificationMemoryContext | null = null,
+  categoryGuidance: readonly LiveCategoryGuidance[] = payloadCategoryGuidance(payload),
 ): string {
   return [
     "Classify each activity into activity category, task intent, confidence, and short reason. The caller derives productivity from intent.",
@@ -367,6 +384,7 @@ export function buildClassificationPrompt(
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these intents: work_execution, work_support, informational, in_between, personal_admin, leisure, unknown.",
     CATEGORY_DEFINITIONS,
+    ...liveCategoryGuidancePromptLines(categoryGuidance),
     INTENT_FIRST_RUBRIC,
     ...matchedContextualDecisionGuidance(memoryContext),
     "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"intent\":string,\"confidence\":number,\"reason\":string}]}. Do not output productivity. Do not include raw titles, domains, or work profile details in the reason.",

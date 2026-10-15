@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AiFieldMark } from "./AiIcons";
 import { ColorSwatchGrid, swatchStyle, type SwatchItem } from "./ColorSwatchGrid";
 import "./project-editor-fields.css";
@@ -43,24 +43,53 @@ function localizedProjectColorName(name: string, t: LocalizationController["t"])
   }
 }
 
+/** One color in an identity palette. */
+export type IdentitySwatch = {
+  readonly color: string;
+  readonly label: string;
+  /** Who already uses this color, if anyone; shown as a ring and in the caption. */
+  readonly usedBy?: string;
+};
+
 /**
  * Name and mark are one identity, so the color chip leads the name field and
  * the palette opens inside the same frame — the chip is the exact dot the
- * project row will show. New projects arrive with a suggested color, so most
- * users never open this; the ones who do get one click and arrow keys.
+ * row will show. Projects and the category editor share this field; the
+ * categories pass their own palette and allow a custom color.
  */
-function ProjectIdentityField({
+export function ColorIdentityField({
   nameId,
   name,
+  placeholder,
+  maxLength = 120,
+  nameDisabled = false,
   color,
-  usedColors,
+  swatches,
+  selectedLabel,
+  chipAriaLabel,
+  usedCaption,
+  customColorAria,
+  trailing,
   onNameChange,
   onColorChange,
 }: {
   readonly nameId: string;
   readonly name: string;
+  readonly placeholder: string;
+  readonly maxLength?: number;
+  /** Shows the name without letting it change (a definition that keeps its built-in name). */
+  readonly nameDisabled?: boolean;
+  /** Normalized current color. */
   readonly color: string;
-  readonly usedColors?: ReadonlySet<string>;
+  readonly swatches: readonly IdentitySwatch[];
+  readonly selectedLabel: string;
+  readonly chipAriaLabel: string;
+  /** Short caption for a used color; defaults to the swatch's own usedBy text. */
+  readonly usedCaption?: string;
+  /** Set to offer a custom color well after the presets. */
+  readonly customColorAria?: string;
+  /** An action at the end of the name row, such as restoring an item's defaults. */
+  readonly trailing?: ReactNode;
   readonly onNameChange: (value: string) => void;
   readonly onColorChange: (value: string) => void;
 }): JSX.Element {
@@ -69,22 +98,14 @@ function ProjectIdentityField({
   const [hovered, setHovered] = useState<SwatchItem | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const chipRef = useRef<HTMLButtonElement | null>(null);
-
-  const value = normalizeProjectColor(color);
-  const used = new Set([...(usedColors ?? [])].map(normalizeProjectColor));
-  const usedTitle = t("projects.color.usedTitle");
-  const items: SwatchItem[] = PROJECT_COLOR_SWATCHES.map((swatch) => {
-    const isUsed = normalizeHex(swatch.color) !== value && used.has(normalizeHex(swatch.color));
-    return {
-      color: swatch.color,
-      label: localizedProjectColorName(swatch.name, t),
-      usedBy: isUsed ? usedTitle : undefined,
-    };
-  });
-  const selectedName = PROJECT_COLOR_SWATCHES.find((swatch) => normalizeHex(swatch.color) === value)?.name;
-  const selectedLabel = selectedName ? localizedProjectColorName(selectedName, t) : t("projects.color.custom");
+  const items: SwatchItem[] = swatches.map((swatch) => ({
+    color: swatch.color,
+    label: swatch.label,
+    usedBy: normalizeHex(swatch.color) !== color ? swatch.usedBy : undefined,
+  }));
+  const isCustom = !swatches.some((swatch) => normalizeHex(swatch.color) === color);
   const captionLabel = hovered ? hovered.label : selectedLabel;
-  const captionUsed = Boolean(hovered?.usedBy);
+  const captionUsed = hovered?.usedBy ? usedCaption ?? hovered.usedBy : undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -114,11 +135,11 @@ function ProjectIdentityField({
           type="button"
           className="project-identity__chip"
           aria-expanded={open}
-          aria-label={`${t("projects.editor.colorAria")} · ${selectedLabel}`}
+          aria-label={`${chipAriaLabel} · ${selectedLabel}`}
           title={`${selectedLabel} · ${t("projects.color.change")}`}
           onClick={() => setOpen((current) => !current)}
         >
-          <span className="project-identity__dot" style={swatchStyle(value)} aria-hidden="true" />
+          <span className="project-identity__dot" style={swatchStyle(color)} aria-hidden="true" />
           <span className="project-identity__chevron" aria-hidden="true" />
         </button>
         <input
@@ -126,33 +147,83 @@ function ProjectIdentityField({
           className="project-identity__input"
           type="text"
           value={name}
-          maxLength={120}
-          placeholder={t("projects.editor.namePlaceholder")}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          disabled={nameDisabled}
           onChange={(event) => onNameChange(event.target.value)}
         />
+        {trailing}
       </div>
       {open ? (
         <div className="project-identity__drawer">
-          <ColorSwatchGrid
-            items={items}
-            value={value}
-            columns={PROJECT_COLOR_SWATCHES.length}
-            ariaLabel={t("projects.editor.colorAria")}
-            autoFocus
-            onHover={setHovered}
-            onPick={(picked) => {
-              onColorChange(picked);
-              setOpen(false);
-              chipRef.current?.focus();
-            }}
-          />
+          <div className="project-identity__palette">
+            <ColorSwatchGrid
+              items={items}
+              value={color}
+              columns={Math.min(swatches.length, 11)}
+              ariaLabel={chipAriaLabel}
+              autoFocus
+              onHover={setHovered}
+              onPick={(picked) => {
+                onColorChange(picked);
+                setOpen(false);
+                chipRef.current?.focus();
+              }}
+            />
+            {customColorAria ? (
+              <label className={`project-identity__custom${isCustom ? " is-selected" : ""}`} style={swatchStyle(color)} title={t("projects.color.custom")}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+                <input type="color" aria-label={customColorAria} value={color} onChange={(event) => onColorChange(event.currentTarget.value.toLowerCase())} />
+              </label>
+            ) : null}
+          </div>
           <span className="project-identity__caption" aria-live="polite">
             {captionLabel}
-            {captionUsed ? <span className="project-identity__caption-used">{t("projects.color.usedShort")}</span> : null}
+            {captionUsed ? <span className="project-identity__caption-used">{captionUsed}</span> : null}
           </span>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ProjectIdentityField({
+  nameId,
+  name,
+  color,
+  usedColors,
+  onNameChange,
+  onColorChange,
+}: {
+  readonly nameId: string;
+  readonly name: string;
+  readonly color: string;
+  readonly usedColors?: ReadonlySet<string>;
+  readonly onNameChange: (value: string) => void;
+  readonly onColorChange: (value: string) => void;
+}): JSX.Element {
+  const { t } = useLocalization();
+  const value = normalizeProjectColor(color);
+  const used = new Set([...(usedColors ?? [])].map(normalizeProjectColor));
+  const swatches: IdentitySwatch[] = PROJECT_COLOR_SWATCHES.map((swatch) => ({
+    color: swatch.color,
+    label: localizedProjectColorName(swatch.name, t),
+    usedBy: used.has(normalizeHex(swatch.color)) ? t("projects.color.usedTitle") : undefined,
+  }));
+  const selectedName = PROJECT_COLOR_SWATCHES.find((swatch) => normalizeHex(swatch.color) === value)?.name;
+  return (
+    <ColorIdentityField
+      nameId={nameId}
+      name={name}
+      placeholder={t("projects.editor.namePlaceholder")}
+      color={value}
+      swatches={swatches}
+      selectedLabel={selectedName ? localizedProjectColorName(selectedName, t) : t("projects.color.custom")}
+      chipAriaLabel={t("projects.editor.colorAria")}
+      usedCaption={t("projects.color.usedShort")}
+      onNameChange={onNameChange}
+      onColorChange={onColorChange}
+    />
   );
 }
 

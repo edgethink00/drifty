@@ -48,18 +48,27 @@ describe("settings search", () => {
     expect(searchSettings("promo", disabled).some((entry) => entry.id === "settings.account.couponTitle")).toBe(false);
   });
 
-  it("finds Window blur in Windows Appearance with Dev mode off", () => {
+  it("finds Window blur in General's appearance block with Dev mode off", () => {
     const windows = { ...publicAvailability, windows: true };
     const result = searchSettings("블러", windows).find((entry) => entry.id === "settings.appearance.windowsBlur");
-    expect(result?.section).toBe("appearance");
+    expect(result?.section).toBe("general");
     expect(result?.devSubsection).toBeUndefined();
     expect(searchSettings("blur", publicAvailability).some((entry) => entry.id === "settings.appearance.windowsBlur")).toBe(false);
   });
 
-  it("finds the app icon picker in Mac Appearance only", () => {
+  it("opens the category editor on the group a definition result belongs to", () => {
+    const tabOf = (query: string, id: string) => searchSettings(query, { ...publicAvailability, intelligence: true }).find((entry) => entry.id === id);
+    expect(tabOf("딴짓", "settings.categories.productivity")).toMatchObject({ section: "general", categoryEditor: { group: "productivity" } });
+    expect(tabOf("카테고리 색상", "settings.categories.colors")).toMatchObject({ section: "general", categoryEditor: { group: "category" } });
+    expect(tabOf("project", "settings.categories.projects")).toMatchObject({ section: "general", categoryEditor: { group: "project" } });
+    expect(tabOf("도메인", "classification.rules.add")).toMatchObject({ section: "memory" });
+    expect(searchSettings("project", { ...publicAvailability, intelligence: false }).some((entry) => entry.id === "settings.categories.projects")).toBe(false);
+  });
+
+  it("finds the app icon picker in General's Appearance block on Mac only", () => {
     const mac = { ...publicAvailability, macos: true };
     for (const query of ["앱 아이콘", "로고", "Dock icon"]) {
-      expect(searchSettings(query, mac).find((entry) => entry.id === "settings.appearance.appIcon")?.section).toBe("appearance");
+      expect(searchSettings(query, mac).find((entry) => entry.id === "settings.appearance.appIcon")?.section).toBe("general");
     }
     expect(searchSettings("앱 아이콘", { ...publicAvailability, windows: true }).some((entry) => entry.id === "settings.appearance.appIcon")).toBe(false);
   });
@@ -280,14 +289,14 @@ describe("settings search", () => {
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
     function Harness() {
-      const [section, setSection] = useState<SettingsSection>("general");
+      const [section, setSection] = useState<SettingsSection>("pet");
       const [revision, setRevision] = useState(0);
       return <SettingsSearchProvider activeSection={section} availability={publicAvailability}
         onNavigate={(entry) => window.setTimeout(() => setSection(entry.section), 20)}>
         <SettingsSearch><nav /></SettingsSearch>
         <button onClick={() => setRevision((value) => value + 1)}>Remount destination</button>
         <SettingsSearchDestination key={revision}>
-          {section === "appearance" ? <div data-setting-id="settings.appearance.theme">Theme</div> : null}
+          {section === "general" ? <div data-setting-id="settings.appearance.theme">Theme</div> : null}
         </SettingsSearchDestination>
       </SettingsSearchProvider>;
     }

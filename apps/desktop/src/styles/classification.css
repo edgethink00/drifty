@@ -761,6 +761,41 @@
   padding: 9px 12px 0;
 }
 
+.classification-correction__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.classification-correction__edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  margin: -3px -6px -3px 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font: 600 0.6875rem/1 var(--font-ui);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.classification-correction__edit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.classification-correction__edit:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.classification-correction__edit .definition-icon { width: 11px; height: 11px; margin-right: -2px; }
+
 .classification-correction__section-label {
   color: var(--text-soft);
   font-size: 0.6875rem;
@@ -960,51 +995,21 @@
 
 /* Triggers stay compact and visible in their original positions. The popover
    itself provides the stronger scope and change context after activation. */
+/* The correction pencils are plate pencils (components/pencil-plate.css). The
+   surface pencil sits by the header total; the row pencils stay faint until the
+   row is hovered or holds focus, and both take the selected tone while open. */
 .classification-correction__surface-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  min-width: 1.75rem;
-  min-height: 1.75rem;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-soft);
-  opacity: 0.72;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+  margin-left: 2px;
 }
 
-.classification-correction__surface-button:hover:not(:disabled),
-.classification-correction__surface-button[data-active="true"] {
-  opacity: 1;
-}
-
-.classification-correction__edit-glyph {
-  width: 0.85rem;
-  height: 0.85rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.3;
+.classification-correction__surface-button[data-active="true"],
+.classification-correction__detail-button[data-active="true"] {
+  background: color-mix(in srgb, var(--classification-selected-tone) 78%, var(--text));
+  color: var(--surface);
 }
 
 .classification-correction__detail-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  min-width: 1.75rem;
-  min-height: 1.75rem;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-soft);
-  opacity: 0.42;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+  opacity: 0.45;
 }
 
 .classification-panel-view__activity-row:hover .classification-correction__detail-button,
@@ -1012,30 +1017,6 @@
 .classification-correction__detail-button:focus-visible,
 .classification-correction__detail-button[data-active="true"] {
   opacity: 1;
-}
-
-.classification-correction__surface-button:hover:not(:disabled),
-.classification-correction__detail-button:hover:not(:disabled) {
-  background: var(--bg-2);
-  color: var(--text);
-  transform: none;
-}
-
-/* The pencil whose editor is open, header or row alike. */
-.classification-correction__surface-button[data-active="true"],
-.classification-correction__detail-button[data-active="true"] {
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 40%, var(--line-strong));
-  background: color-mix(in srgb, var(--classification-selected-tone) 12%, var(--surface));
-  color: var(--text);
-}
-
-.app-btn.classification-correction__surface-button,
-.app-btn.classification-correction__detail-button {
-  transform: none;
-}
-
-.app-btn.classification-correction__detail-button {
-  padding: 0;
 }
 
 .classification-correction__surface-button:focus-visible,

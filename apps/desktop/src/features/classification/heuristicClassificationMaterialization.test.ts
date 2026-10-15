@@ -86,6 +86,36 @@ describe("materializeBuiltInHeuristicClassifications", () => {
     expect(result.segments.find((item) => item.id === "unknown")?.classification).toBeNull();
   });
 
+  it("leaves a YouTube video decided by its official category to the classifier while descriptions exist", () => {
+    const video = segment({
+      id: "video",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteUrl: "https://www.youtube.com/watch?v=abc",
+      youtubeVideoId: "abc",
+      youtubeCategory: "Education",
+    });
+    const shorts = segment({ ...video, id: "shorts", siteUrl: "https://www.youtube.com/shorts/xyz", youtubeVideoId: "xyz", youtubeIsShorts: true });
+    const app = segment({ id: "app", appName: "Xcode", bundleId: "com.apple.dt.xcode" });
+
+    const guided = materializeBuiltInHeuristicClassifications({
+      classifiedAt: CLASSIFIED_AT,
+      classificationOptions: { rules: [] },
+      segments: [video, shorts, app],
+      leaveYouTubeVideosToClassifier: true,
+    });
+    expect(guided.classifications.map((record) => record.segmentId)).toEqual(["shorts", "app"]);
+    expect(guided.segments.find((item) => item.id === "video")?.classification).toBeNull();
+
+    const unguided = materializeBuiltInHeuristicClassifications({
+      classifiedAt: CLASSIFIED_AT,
+      classificationOptions: { rules: [] },
+      segments: [video, shorts, app],
+    });
+    expect(unguided.classifications.map((record) => record.segmentId)).toEqual(["video", "shorts", "app"]);
+  });
+
   it("does not overwrite manual AI or persisted custom rule classifications", () => {
     const segments = [
       segment({ id: "manual", appName: "Xcode", classification: storedClassification("manual") }),

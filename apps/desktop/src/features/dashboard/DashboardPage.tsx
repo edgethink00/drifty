@@ -41,6 +41,7 @@ import { localizedCategoryLabel, localizedProductivityLabel } from "../localizat
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 import type { IndividualPricingQuote } from "../billing/individualPricing";
+import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
@@ -124,6 +125,8 @@ type DashboardPageProps = {
     projectId: string | null,
   ) => Promise<void>;
   readonly onDeleteDashboardActivity?: (segmentIds: readonly string[]) => Promise<void>;
+  /** Opens the category editor from the legend, the breakdown, and the activity inspector. */
+  readonly onEditCategories?: (target: CategoryEditorTarget) => void;
 };
 
 export function DashboardPage({
@@ -194,6 +197,7 @@ export function DashboardPage({
   onAssignDashboardProject,
   onClassifyDashboardActivity,
   onDeleteDashboardActivity,
+  onEditCategories,
 }: DashboardPageProps) {
   const { effectiveLanguage, t } = useLocalization();
   const dayMainRef = useRef<HTMLDivElement>(null);
@@ -404,6 +408,7 @@ export function DashboardPage({
           onAssignProject={onAssignDashboardProject}
           onClassifyActivity={onClassifyDashboardActivity}
           onDeleteActivity={onDeleteDashboardActivity}
+          onEditCategories={onEditCategories}
         />
       ) : initialDataLoading ? (
         <DashboardLoadingSkeleton
@@ -452,6 +457,7 @@ export function DashboardPage({
                   onAssignProject={onAssignDashboardProject}
                   onClassifyActivity={onClassifyDashboardActivity}
                   onDeleteActivity={onDeleteDashboardActivity}
+                  onEditCategories={onEditCategories}
                   classificationOptions={dashboardClassificationOptions}
                 />
               </div>

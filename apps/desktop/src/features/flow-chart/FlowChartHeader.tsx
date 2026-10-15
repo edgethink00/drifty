@@ -5,6 +5,7 @@ import type { FlowLegendHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
+import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 
 type FlowChartHeaderProps = {
   readonly blocks: readonly FlowBlock[];
@@ -14,7 +15,14 @@ type FlowChartHeaderProps = {
   readonly setHoveredLegend: Dispatch<SetStateAction<FlowLegendHoverState | null>>;
   readonly projectModeAvailable?: boolean;
   readonly projectLegend?: readonly ProjectLegendEntry[];
+  /** Opens the category editor on the group the chart is colored by. */
+  readonly onEditCategories?: (target: CategoryEditorTarget) => void;
 };
+
+/** The editor group a flow color mode shows. */
+export function categoryEditorGroupFor(colorMode: FlowColorMode): CategoryEditorTarget {
+  return { group: colorMode === "project" ? "project" : colorMode === "productivity" ? "productivity" : "category" };
+}
 
 export function FlowChartHeader({
   blocks,
@@ -24,11 +32,13 @@ export function FlowChartHeader({
   setHoveredLegend,
   projectModeAvailable = false,
   projectLegend,
+  onEditCategories,
 }: FlowChartHeaderProps) {
   const { t } = useLocalization();
+  // Productivity, categories, projects: the category editor's tab order.
   const baseColorModeOptions = [
-    { id: "category", label: t("dashboard.today.category") },
     { id: "productivity", label: t("dashboard.today.productivity") },
+    { id: "category", label: t("dashboard.today.category") },
   ] as const satisfies readonly { readonly id: FlowColorMode; readonly label: string }[];
   const projectColorModeOption = { id: "project", label: t("dashboard.today.project") } as const satisfies { readonly id: FlowColorMode; readonly label: string };
   const colorModeOptions = projectModeAvailable
@@ -58,6 +68,7 @@ export function FlowChartHeader({
           hoveredLegendCardRef={hoveredLegendCardRef}
           setHoveredLegend={setHoveredLegend}
           projectLegend={projectLegend}
+          onEdit={onEditCategories ? () => onEditCategories(categoryEditorGroupFor(colorMode)) : undefined}
         />
       </div>
     </div>

@@ -6,9 +6,10 @@ import {
   isPassiveSupportedSegment,
   isRemoteDeviceSegment,
 } from "@drifty/domain";
-import type { ActivitySegment } from "@drifty/domain";
+import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
+import { readCategoryProductivityPreferences } from "../settings/categoryCustomizationStore";
 import { buildLeaderboardAutoPublishPayloadKey } from "./leaderboardAutoPublishState";
 import { getLeaderboardWindowStartDay } from "./leaderboardWindow";
 import {
@@ -55,6 +56,8 @@ export type PublishLeaderboardPeriodsInput = {
   readonly showAiClassificationImpact: boolean;
   readonly includeBuiltInHeuristics?: boolean;
   readonly builtInHeuristicsUnavailableSince?: string | null;
+  /** Category productivity preferences; read from Settings when omitted. */
+  readonly categoryProductivity?: ClassificationOptions["categoryProductivity"];
   /** Revalidate mutable publication policy after local payload construction. */
   readonly publicationAllowed: () => boolean;
   /** Specific reason if publication is blocked by the assessment gate. */
@@ -94,6 +97,7 @@ export async function buildLeaderboardPublishPayloads(
     payloads: LEADERBOARD_PERIODS.map((period) => buildLeaderboardPublishPayload(period, allPeriodSegments, {
       ...input,
       leaderboardWindowEndDay,
+      categoryProductivity: input.categoryProductivity ?? readCategoryProductivityPreferences(),
     })),
   };
 }
@@ -123,6 +127,7 @@ export async function buildLeaderboardCheckpointPayload(
     showAiClassificationImpact: input.showAiClassificationImpact,
     includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
+    categoryProductivity: readCategoryProductivityPreferences(),
   });
 }
 
@@ -190,6 +195,7 @@ function buildLeaderboardPublishPayload(
     includeAiClassifications: input.showAiClassificationImpact,
     includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
+    categoryProductivity: input.categoryProductivity,
   }, input.startOfDayMinutes);
 
   return {

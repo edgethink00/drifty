@@ -66,10 +66,12 @@ import type {
 import {
   previewAppIcons,
   previewDeleteActivitySegments,
+  previewDeleteProject,
   previewHourlySummary,
   previewProjectAssignments,
   previewProjects,
   previewSaveClassifications,
+  previewSaveProject,
   previewSaveProjectAssignments,
   previewStatus,
   previewTimeline,
@@ -483,6 +485,7 @@ export const trackerClient: TrackerApi = {
     };
   },
   async saveProject(input: ProjectInput) {
+    if (shouldUsePreviewData()) return previewSaveProject(input);
     const result = await safeInvoke("tracker_save_project", { query: { input } });
     return result ?? {
       id: input.id ?? "",
@@ -496,6 +499,7 @@ export const trackerClient: TrackerApi = {
     };
   },
   async deleteProject(id: string) {
+    if (shouldUsePreviewData()) return previewDeleteProject(id);
     const result = await safeInvoke("tracker_delete_project", { query: { id } });
     return result ?? { deleted: 0 };
   },

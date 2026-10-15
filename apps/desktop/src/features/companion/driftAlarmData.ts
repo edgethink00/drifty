@@ -180,6 +180,7 @@ export function buildDriftAlarmCandidates({
       classification: currentClassification,
       segments,
       minimumDurationSeconds,
+      categoryProductivity: currentClassificationOptions.categoryProductivity,
     });
     if (sustainedSocialCandidate) return [sustainedSocialCandidate];
 
@@ -233,6 +234,7 @@ export function buildDriftAlarmCandidates({
       classification: latestClassification,
       segments,
       minimumDurationSeconds,
+      categoryProductivity: classificationOptions.categoryProductivity,
     });
     if (sustainedSocialCandidate) return [sustainedSocialCandidate];
     return [];
@@ -369,6 +371,7 @@ function buildSustainedSocialDwellCandidate(input: {
   readonly classification: ActivityClassificationDetail;
   readonly segments: readonly ActivitySegment[];
   readonly minimumDurationSeconds: number;
+  readonly categoryProductivity?: ClassificationOptions["categoryProductivity"];
 }): DriftAlarmCandidate | null {
   // Only triggers when normal classification could not resolve the segment
   // as drift — i.e. it came back unknown/neutral, typically because the
@@ -379,6 +382,9 @@ function buildSustainedSocialDwellCandidate(input: {
   // not override that intent.
   const src = input.classification.source;
   if (src === "manual" || src === "rule") return null;
+  // A productivity the user fixed for this category in Settings is the same
+  // kind of explicit decision.
+  if (input.classification.productivityPreference) return null;
 
   const isSocial = isSocialSite(input.segment.siteDomain) && !isPurposefulSocialSurface(input.segment);
   const isShorts = isYouTubeShortsSegment(input.segment);
@@ -407,6 +413,8 @@ function buildSustainedSocialDwellCandidate(input: {
   if (episode.durationSeconds < input.minimumDurationSeconds) return null;
 
   const category = isShorts && !isSocial ? "entertainment" as ActivityCategory : "social_media" as ActivityCategory;
+  const preferred = input.categoryProductivity?.[category];
+  if (preferred && preferred !== "drift") return null;
   const surfaceLabel = input.segment.siteDomain ?? "social site";
 
   return {

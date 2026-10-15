@@ -9,7 +9,7 @@ import { friendInviteAccountKey, useFriendInvite } from "./features/settings/fri
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ModalPresence } from "./components/ModalPresence";
 import { deleteHistorySelection } from "./features/history/historyDeletion";
-import type { ProjectSaveResult } from "./features/projects/ProjectEditorModal";
+import type { ProjectSaveResult } from "./features/projects/projectSaveResult";
 import type { ProjectDeleteResult } from "./features/projects/ProjectDeleteConfirmation";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -55,6 +55,7 @@ import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHisto
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
 import { IDLE_PROJECT_AUTO_ANALYSIS, projectsAwaitingAutoAnalysis, projectsBlockedOnModel, resolveProjectAutoAnalysisAfterPass, setProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./features/projects/projectAutoAnalysisState";
 import { NO_PROJECT_MATCH_COOLDOWN, resolveProjectMatchCooldown } from "./features/projects/projectMatchCooldown";
+import { PROJECT_LIBRARY_WINDOW_DAYS } from "./features/projects/projectDates";
 import { fetchOwnLeaderboardCheckpoint } from "./features/leaderboard/leaderboardService";
 import type { SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
@@ -104,7 +105,7 @@ import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_
 import { testCloudAiConnection } from "./features/settings/cloudAiConnectionTest";
 import { getClassificationActivitySnapshot, useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
-import { applyClassificationAvailabilityToAiStatus, isQuietCloudPause, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch } from "./features/classification/classificationAvailability";
+import { applyClassificationAvailabilityToAiStatus, isQuietCloudPause, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveIntelligenceLocked, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch } from "./features/classification/classificationAvailability";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
@@ -146,9 +147,18 @@ import { useGoogleCalendarWeek } from "./features/calendar/useGoogleCalendarWeek
 import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
+import { AppearanceSettingsBlock } from "./features/settings/AppearanceSettingsBlock";
 import { SyncSettingsSection } from "./features/settings/SyncSettingsSection";
-import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
 import { ClassificationRulesManager } from "./features/settings/ClassificationRulesManager";
+import { CategoriesSettingsBlock } from "./features/settings/CategoriesSettingsBlock";
+import { CategoryEditorSheet } from "./features/categories/CategoryEditorSheet";
+import { CLASSIFICATION_RULES_SHEET_HEADING_ID, ClassificationRulesSheet } from "./features/categories/ClassificationRulesSheet";
+import { NEW_PROJECT_KEY, type CategoryEditorTarget } from "./features/categories/categoryEditorModel";
+import type { CloudOffer, IntelligenceProviderChoice } from "./features/categories/CategoryEditorAiNotice";
+import type { ProjectsLockReason } from "./features/projects/projectsLockTypes";
+import { useCategoryCustomizations, useProductivityCustomizations } from "./features/settings/categoryCustomizationStore";
+import { useCategoryCustomizationController } from "./features/settings/useCategoryCustomizationController";
+import { categoryProductivityPreferences, classificationGuidanceFromCustomizations } from "@drifty/domain";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
 import { DeveloperSettingsSection } from "./features/settings/DeveloperSettingsSection";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
@@ -772,6 +782,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(
     devSettingsReviewSubsection ? "dev" : "general",
   );
+  // The category editor sheet: where it opens, or null while closed.
+  const [categoryEditorTarget, setCategoryEditorTarget] = useState<CategoryEditorTarget | null>(null);
+  // The app and site rules sheet.
+  const [rulesSheetOpen, setRulesSheetOpen] = useState(false);
   const [devSettingsSubsection, setDevSettingsSubsection] = useState(() => (
     devSettingsReviewSubsection
       ?? resolveDevSettingsSubsection(window.localStorage.getItem(DEV_SETTINGS_SUBSECTION_STORAGE_KEY))
@@ -1250,7 +1264,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     loadClassificationRules,
     saveClassificationRule,
   } = useClassificationRulesController({
-    managerOpen: activeTab === "settings" && settingsSection === "memory",
+    managerOpen: rulesSheetOpen || (activeTab === "settings" && settingsSection === "memory"),
     t: localization.t,
     onRefreshSelectedDay: () => refresh(selectedDay),
   });
@@ -1267,7 +1281,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const presentedEndOfDayReviewDayRef = useRef<string | null>(null);
   const [driftAlarmEvent, setDriftAlarmEvent] = useState<DriftAlarmEvent | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
-  const [newProjectRequested, setNewProjectRequested] = useState(false);
 
   useEffect(() => {
     appIconsRef.current = appIcons;
@@ -2039,6 +2052,20 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       || classificationAvailability.allowAutomaticClassification
       || classificationAvailability.allowRecoveryProbe
   );
+  // Category productivity preferences apply at read time to every view built
+  // from these options, so a change shows up without reclassifying anything.
+  const liveCategoryCustomizations = useCategoryCustomizations();
+  const liveProductivityCustomizations = useProductivityCustomizations();
+  // Descriptions route YouTube videos to the classifier (see runAiClassification),
+  // so stored built-in answers must leave those videos for it too.
+  const categoryGuidanceActive = useMemo(
+    () => classificationGuidanceFromCustomizations(liveCategoryCustomizations, liveProductivityCustomizations).length > 0,
+    [liveCategoryCustomizations, liveProductivityCustomizations],
+  );
+  const categoryProductivity = useMemo(
+    () => categoryProductivityPreferences(liveCategoryCustomizations),
+    [liveCategoryCustomizations],
+  );
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
       fallbackCandidates: segments,
@@ -2046,8 +2073,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       includeBuiltInHeuristics: allowBuiltInHeuristics,
       builtInHeuristicsUnavailableSince,
       rules: classificationRules,
+      categoryProductivity,
     }),
-    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, segments, showAiClassificationImpact],
+    [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, segments, showAiClassificationImpact],
   );
   useEffect(() => {
     if (!postOnboardingSidebarGuideActive) {
@@ -2147,10 +2175,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       includeBuiltInHeuristics: allowBuiltInHeuristics,
       builtInHeuristicsUnavailableSince,
       rules: classificationRules,
+      categoryProductivity,
     }),
-    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, showAiClassificationImpact],
+    [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, showAiClassificationImpact],
   );
   const materializeBuiltInHeuristicTimeline = useCallback((sourceSegments: ActivitySegment[]) => materializeBuiltInHeuristicClassifications({
+    // Persisted built-in answers stay raw; category productivity preferences
+    // are applied when views read them, so clearing a preference restores them.
     classificationOptions: {
       fallbackCandidates: sourceSegments,
       includeAiClassifications: false,
@@ -2159,7 +2190,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       rules: classificationRules,
     },
     segments: sourceSegments,
-  }), [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules]);
+    leaveYouTubeVideosToClassifier: categoryGuidanceActive,
+  }), [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryGuidanceActive, classificationRules]);
   const allowBuiltInHeuristicsRef = useRef(allowBuiltInHeuristics);
   allowBuiltInHeuristicsRef.current = allowBuiltInHeuristics;
   const scheduleAvailableBuiltInHeuristicPersistence = useCallback((classifications: BuiltInHeuristicClassificationMaterialization["classifications"]) => {
@@ -2646,6 +2678,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       : "disabled";
   const currentAiClassificationProviderKeyRef = useRef(aiClassificationProviderKey);
   currentAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
+  const categoryCustomizationController = useCategoryCustomizationController();
   const classificationActivity = useClassificationActivity();
   const establishedCloudClassificationIssueKind = isEstablishedCloudAiDisconnect(cloudAiConnectionCheck)
     ? cloudAiConnectionCheck?.issueKind ?? null
@@ -3322,6 +3355,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         includeBuiltInHeuristics: allowBuiltInHeuristics,
         builtInHeuristicsUnavailableSince,
         rules: classificationRules,
+        categoryProductivity,
       });
       const nextEvent = {
         id: Date.now(),
@@ -3342,7 +3376,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     })().finally(() => {
       watcherRequestInFlightRef.current = false;
     });
-  }, [allowBuiltInHeuristics, armWatcherRecoveryTimer, builtInHeuristicsUnavailableSince, classificationRules, clearWatcherEvent, showAiClassificationImpact, status?.running]);
+  }, [categoryProductivity, allowBuiltInHeuristics, armWatcherRecoveryTimer, builtInHeuristicsUnavailableSince, classificationRules, clearWatcherEvent, showAiClassificationImpact, status?.running]);
 
   const showEndOfDayReview = useCallback(async (event: EndOfDayReviewEvent): Promise<DayReviewDeliveryResult> => {
     if (!event.isMock) presentedEndOfDayReviewDayRef.current = event.day;
@@ -5672,6 +5706,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             includeBuiltInHeuristics: allowBuiltInHeuristics,
             builtInHeuristicsUnavailableSince,
             rules: classificationRules,
+            categoryProductivity,
           },
         );
         petModeLiveSnapshotRef.current = livePetSnapshot;
@@ -5749,6 +5784,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       includeBuiltInHeuristics: allowBuiltInHeuristics,
       builtInHeuristicsUnavailableSince,
       rules: classificationRules,
+      categoryProductivity,
     } satisfies ClassificationOptions;
     const driftAlarmFocusTargets = buildRecentFocusTargets(
       driftAlarmSegments,
@@ -7012,7 +7048,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, hostPlatform, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running, status?.trackingPaused, trackerPausePending]);
+  }, [categoryProductivity, aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, hostPlatform, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running, status?.trackingPaused, trackerPausePending]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -7072,6 +7108,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             includeBuiltInHeuristics: allowBuiltInHeuristics,
             builtInHeuristicsUnavailableSince,
             rules: classificationRules,
+            categoryProductivity,
           });
         } else {
           showWatcherPeek();
@@ -7086,7 +7123,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, selectedDay, showAiClassificationImpact, showWatcherPeek, status?.running, todayDay, watcherMode, watcherPeekEnabled, watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
+  }, [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, selectedDay, showAiClassificationImpact, showWatcherPeek, status?.running, todayDay, watcherMode, watcherPeekEnabled, watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
 
   const dashboardRange = useMemo(() => getDashboardPeriodRange(selectedDay, dashPeriod, startOfDayMinutes, startOfWeek), [dashPeriod, selectedDay, startOfDayMinutes, startOfWeek]);
   const dashboardWeekRange = useMemo(() => getDashboardPeriodRange(selectedDay, "Week", startOfDayMinutes, startOfWeek), [selectedDay, startOfDayMinutes, startOfWeek]);
@@ -7300,8 +7337,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       ? dashboardWeekRefreshState.status
       : "loading";
   const dashboardClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: effectiveDashboardSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
-    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, effectiveDashboardSegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: effectiveDashboardSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity }),
+    [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, effectiveDashboardSegments, showAiClassificationImpact],
   );
   const effectiveSelectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => buildSelectedDayDashboardClassificationOptions({
@@ -7310,8 +7347,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       includeBuiltInHeuristics: allowBuiltInHeuristics,
       builtInHeuristicsUnavailableSince,
       rules: classificationRules,
+      categoryProductivity,
     }),
-    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, effectiveSelectedDaySegments, showAiClassificationImpact],
+    [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, effectiveSelectedDaySegments, showAiClassificationImpact],
   );
   const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, trendsRange, startOfDayMinutes), [selectedDay, startOfDayMinutes, trendsRange]);
   const insightRecentWeekRange = useMemo(() => getInsightPeriodRange(selectedDay, "Week", startOfDayMinutes), [selectedDay, startOfDayMinutes]);
@@ -7355,18 +7393,18 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     [insightRange.endDay, insightRange.startDay, trendsRange],
   );
   const insightClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: activeInsightSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
-    [activeInsightSegments, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact],
+    () => ({ fallbackCandidates: activeInsightSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity }),
+    [categoryProductivity, activeInsightSegments, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact],
   );
   const historyClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
-    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, historySegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity }),
+    [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, historySegments, showAiClassificationImpact],
   );
   const weekDashboardPrewarmSegments = dashboardWeekCompactHistoryLoad?.materialized.segments ?? historySegments;
   const shouldPrewarmWeekDashboard = dashboardWeekCompactHistoryLoad !== null || historySegments.length > 0;
   const weekDashboardPrewarmClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: weekDashboardPrewarmSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
-    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact, weekDashboardPrewarmSegments],
+    () => ({ fallbackCandidates: weekDashboardPrewarmSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity }),
+    [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact, weekDashboardPrewarmSegments],
   );
   useEffect(() => {
     if (activeTab !== "dashboard" || dashPeriod !== "Week") return undefined;
@@ -7388,6 +7426,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             includeAiClassifications: showAiClassificationImpact,
             includeBuiltInHeuristics: allowBuiltInHeuristics,
             builtInHeuristicsUnavailableSince,
+            categoryProductivity,
           };
           setDashboardPreviousWeekFocusLoad({
             key: dashboardPreviousWeekFocusKey,
@@ -7409,6 +7448,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       cancelIdleWork?.();
     };
   }, [
+    categoryProductivity,
     activeTab,
     allowBuiltInHeuristics,
     builtInHeuristicsUnavailableSince,
@@ -7444,6 +7484,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             includeAiClassifications: showAiClassificationImpact,
             includeBuiltInHeuristics: allowBuiltInHeuristics,
             builtInHeuristicsUnavailableSince,
+            categoryProductivity,
           };
           setDashboardPreviousDayFocusLoad({
             key: dashboardPreviousDayFocusKey,
@@ -7465,6 +7506,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       cancelIdleWork?.();
     };
   }, [
+    categoryProductivity,
     activeTab,
     allowBuiltInHeuristics,
     builtInHeuristicsUnavailableSince,
@@ -7485,7 +7527,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   weekDashboardDayModelCacheSettingsRef.current = syncWeekDashboardDayModelCacheSettings(
     weekDashboardDayModelCache,
     weekDashboardDayModelCacheSettingsRef.current,
-    { includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, startOfDayMinutes },
+    { includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, startOfDayMinutes, categoryProductivityKey: JSON.stringify(categoryProductivity) },
   );
   useEffect(() => {
     if (!shouldPrewarmWeekDashboard) return undefined;
@@ -7636,6 +7678,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       includeBuiltInHeuristics: allowBuiltInHeuristics,
       builtInHeuristicsUnavailableSince,
       rules: classificationRules,
+      categoryProductivity,
     });
     if (!currentSnapshot) return petModeLiveSnapshotRef.current;
     const observedAtMs = snapshotObservedAtMs(currentSnapshot);
@@ -7651,9 +7694,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         includeBuiltInHeuristics: allowBuiltInHeuristics,
         builtInHeuristicsUnavailableSince,
         rules: classificationRules,
+        categoryProductivity,
       },
     );
-  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, liveCaptureGapExpired, segments, selectedDay, showAiClassificationImpact, todayDay, windowsTrackingStopped]);
+  }, [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, liveCaptureGapExpired, segments, selectedDay, showAiClassificationImpact, todayDay, windowsTrackingStopped]);
   const watcherSnapshot = useMemo(() => buildWatcherSnapshot(segments, selectedDayClassificationOptions), [selectedDayClassificationOptions, segments]);
   useEffect(() => { watcherSnapshotRef.current = watcherSnapshot; }, [watcherSnapshot]);
   useEffect(() => { petModeLiveSnapshotRef.current = petModeLiveSnapshot; }, [petModeLiveSnapshot]);
@@ -7915,6 +7959,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       includeBuiltInHeuristics: allowBuiltInHeuristics,
       builtInHeuristicsUnavailableSince,
       rules: classificationRules,
+      categoryProductivity,
     };
     if (windowsTrackingStopped || (!currentSnapshot && liveCaptureGapExpired)) {
       return buildCaptureGapWatcherSnapshot(todaySegments, classificationOptions);
@@ -7923,7 +7968,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     return selectedDay === todayDay
       ? watcherSnapshot
       : buildWatcherSnapshot(todaySegments, classificationOptions);
-  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, liveCaptureGapExpired, segments, selectedDay, showAiClassificationImpact, todayDay, watcherSnapshot, windowsTrackingStopped]);
+  }, [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, liveCaptureGapExpired, segments, selectedDay, showAiClassificationImpact, todayDay, watcherSnapshot, windowsTrackingStopped]);
 
   useEffect(() => {
     const client = trackerClient as Partial<typeof trackerClient>;
@@ -8066,8 +8111,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [classificationSegments, recordedDaySegments]);
   const classificationTotalSeconds = useMemo(() => totalDurationSeconds(classificationSegments), [classificationSegments]);
   const classificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
-    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationSegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity }),
+    [categoryProductivity, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationSegments, showAiClassificationImpact],
   );
   const classificationProductivityTotals = useMemo(
     () => buildProductivityDurations(classificationSegments, classificationOptions),
@@ -8431,6 +8476,70 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     cloudAvailability: cloudClassificationAvailability,
     gateEnabled: classificationAvailabilityGateEnabled,
   });
+  // The category editor locks projects only for on-device (Free) or unset
+  // users; Drifty Cloud and a user's own model both count as Intelligence.
+  const intelligenceLocked = resolveIntelligenceLocked({
+    billingEntitlement,
+    billingEntitlementLoading,
+    billingEntitlementError,
+    ownModelConfigured: analysisModel.analysisConfigured,
+  });
+  // Browser preview only: ?previewIntelligence=cloud|own shows a user who has
+  // Intelligence, =none one who does not, to review both sides of the lock.
+  const previewIntelligence = isPreviewSurface ? new URLSearchParams(window.location.search).get("previewIntelligence") : null;
+  const editorIntelligenceLocked = previewIntelligence === "cloud" || previewIntelligence === "own"
+    ? false
+    : previewIntelligence === "none" ? true : intelligenceLocked;
+  // What Drifty Cloud takes for this person, said up front on the lock screen.
+  const previewCloudOffer = isPreviewSurface ? new URLSearchParams(window.location.search).get("previewCloudOffer") : null;
+  const intelligenceCloudOffer: CloudOffer = previewCloudOffer === "sign-in" || previewCloudOffer === "trial" || previewCloudOffer === "plan"
+    ? previewCloudOffer
+    : !user || !hasRequiredAccountAuth ? "sign-in" : canStartCloudTrial(billingEntitlement) ? "trial" : "plan";
+  // The Drifty Cloud trial from a lock starts in place and switches the
+  // Intelligence model to Cloud, as Settings does; a failure opens AI setup.
+  const startIntelligenceTrial = async () => {
+    try {
+      await activateCloudTrial();
+      analysisModel.setAnalysisSetup({ ...analysisModel.analysisSetup, provider: "cloud" });
+    } catch {
+      setCategoryEditorTarget(null);
+      openAiSetupSettings();
+    }
+  };
+  // A model picked on a lock: a ready key connects in place, others open their card in Settings › Intelligence.
+  const connectIntelligenceProvider = (provider: Exclude<IntelligenceProviderChoice, "cloud">, stayHere: boolean) => {
+    analysisModel.setAnalysisSetup({ ...analysisModel.analysisSetup, provider });
+    if (stayHere) return;
+    setCategoryEditorTarget(null);
+    navigateToTab("settings");
+    setSettingsSection("intelligence");
+  };
+  // Why projects stopped gathering time for someone who has them, said over the
+  // Projects list. Browser preview: ?previewLockReason= picks one.
+  const previewLockReason = isPreviewSurface ? new URLSearchParams(window.location.search).get("previewLockReason") : null;
+  const projectsLockReason: ProjectsLockReason = previewLockReason === "trial-ended" || previewLockReason === "plan-ended" || previewLockReason === "payment"
+    || previewLockReason === "device-limit" || previewLockReason === "signed-out" || previewLockReason === "disconnected"
+    ? previewLockReason
+    : !user || !hasRequiredAccountAuth ? "signed-out"
+      : billingEntitlement?.lockedReason === "trial_expired" ? "trial-ended"
+        : billingEntitlement?.lockedReason === "billing_missing" ? "plan-ended"
+          : billingEntitlement?.lockedReason === "payment_required" ? "payment"
+            : billingEntitlement?.lockedReason === "device_limit_reached" ? "device-limit"
+              : "disconnected";
+  // The day projects stopped gathering time: the trial's or plan's end (the preview says yesterday).
+  const projectsStoppedAt = projectsLockReason === "trial-ended" ? billingEntitlement?.trialEndsAt : projectsLockReason === "plan-ended" ? billingEntitlement?.currentPeriodEnd : null;
+  const projectsStoppedSinceDay = isPreviewSurface
+    ? shiftIsoDate(logicalTodayIsoDate(startOfDayMinutes), -1)
+    : projectsStoppedAt ? isoDateFromTimestamp(projectsStoppedAt) ?? undefined : undefined;
+  // The Projects page's lock, the same ways in as the category editor's.
+  const pickIntelligenceFromProjects = (provider: IntelligenceProviderChoice): void | Promise<void> => {
+    if (provider === "cloud") {
+      if (intelligenceCloudOffer === "trial") return startIntelligenceTrial();
+      if (cloudClassificationAvailability.state !== "ready") handleOpenUpgradePlanModal();
+      return;
+    }
+    connectIntelligenceProvider(provider, provider === "openrouter" && analysisModel.openRouterConnected);
+  };
   // One-shot: "AI setup" on the Projects page lands on the Intelligence tab.
   const projectClassification = useProjectClassification({
     tracker: trackerClient,
@@ -8652,6 +8761,58 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     [projectsTrend.assignments, projectsTrend.segments, projectsTrend.windowAssignments],
   );
   const projectsTrendProjectBySegmentId = projectsTrendProjection.projectBySegmentId;
+  // Each project's time per day over the latest seven days, loaded while the
+  // category editor is open so deleting a project can say how much time it
+  // holds. The editor opens from any tab, so it loads its own window rather
+  // than relying on the Projects page's.
+  const editorProjectsOpen = categoryEditorTarget !== null && projectClassificationFeatureEnabled;
+  const [editorProjectDays, setEditorProjectDays] = useState<ReadonlyArray<{ readonly projectId: string; readonly day: string; readonly seconds: number }> | null>(null);
+  useEffect(() => {
+    if (!editorProjectsOpen) {
+      setEditorProjectDays(null);
+      return;
+    }
+    if (projectClassification.running) return;
+    let cancelled = false;
+    const endDay = logicalTodayIsoDate(startOfDayMinutes);
+    const range = getLogicalDayRange(shiftIsoDate(endDay, -(PROJECT_LIBRARY_WINDOW_DAYS - 1)), endDay, startOfDayMinutes);
+    void (async () => {
+      try {
+        const [segments, assignments, windowAssignments] = await Promise.all([
+          trackerClient.getProjectTrendTimeline?.(range) ?? trackerClient.getTimeline(range),
+          trackerClient.getProjectAssignments?.(range) ?? Promise.resolve<ProjectAssignmentRecord[]>([]),
+          trackerClient.getProjectWindowAssignments(range),
+        ]);
+        if (cancelled) return;
+        const projection = buildPersonalProjectSliceProjection(segments, windowAssignments, assignments ?? []);
+        const byKey = new Map<string, { projectId: string; day: string; seconds: number }>();
+        for (const segment of projection.segments) {
+          const projectId = projection.projectBySegmentId.get(segment.id);
+          const day = isoDateFromTimestamp(segment.startedAt);
+          if (!projectId || !day) continue;
+          const key = projectId + "|" + day;
+          const entry = byKey.get(key) ?? { projectId, day, seconds: 0 };
+          entry.seconds += segment.durationSeconds;
+          byKey.set(key, entry);
+        }
+        setEditorProjectDays([...byKey.values()]);
+      } catch {
+        if (!cancelled) setEditorProjectDays([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editorProjectsOpen, projectClassification.running, startOfDayMinutes]);
+  // Counted as the Projects list counts it: once Intelligence stopped, later days belong to no project.
+  const editorProjectRecentSeconds = useMemo(() => {
+    if (!editorProjectDays) return null;
+    const stopDay = editorIntelligenceLocked ? projectsStoppedSinceDay : undefined;
+    const totals = new Map<string, number>();
+    for (const entry of editorProjectDays) {
+      if (stopDay && entry.day >= stopDay) continue;
+      totals.set(entry.projectId, (totals.get(entry.projectId) ?? 0) + entry.seconds);
+    }
+    return totals;
+  }, [editorProjectDays, editorIntelligenceLocked, projectsStoppedSinceDay]);
   // Per-project split of the selected day, for the dashboard donut's Project mode
   // (the flow chart's Project toggle swaps the productivity donut to this).
   const dashboardProjectRing = useMemo(() => {
@@ -10699,6 +10860,28 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     );
   }
 
+  // The saved app and site rules, managed in their own sheet.
+  const classificationRulesManager = (
+    <ClassificationRulesManager
+      headingId={CLASSIFICATION_RULES_SHEET_HEADING_ID}
+      onSaveRule={saveClassificationRule}
+      appIcons={appIcons}
+      appThemeColorOverrides={appThemeColorOverrides}
+      categoryColorOverrides={categoryColorOverrides}
+      classificationRuleApplyResult={classificationRuleApplyResult}
+      classificationRuleDeletingId={classificationRuleDeletingId}
+      classificationRuleMessage={classificationRuleMessage}
+      classificationRuleSavingKind={classificationRuleSavingKind}
+      classificationRuleSegments={classificationRuleSegments}
+      classificationRules={classificationRules}
+      classificationRulesError={classificationRulesError}
+      classificationRulesLoading={classificationRulesLoading}
+      onDeleteClassificationRule={(rule) => void handleDeleteClassificationRule(rule)}
+      onLoadClassificationRules={() => void loadClassificationRules()}
+      onToggleClassificationRule={(rule, enabled) => void handleToggleClassificationRule(rule, enabled)}
+    />
+  );
+
   return (
     <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
@@ -10710,6 +10893,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       onNavigate={(entry) => {
         setSettingsSection(entry.section);
         if (entry.devSubsection) handleDevSettingsSubsectionChange(entry.devSubsection);
+        if (entry.categoryEditor) setCategoryEditorTarget(entry.categoryEditor);
       }}
     >
       <SettingsSearchNavigatorBridge navigateRef={settingsSearchNavigateRef} />
@@ -11110,6 +11294,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onSaveDashboardActivityValues={handleSaveDashboardActivityValues}
             onDeleteDashboardActivity={handleDeleteDashboardActivity}
             onSelectDay={selectDay}
+            onEditCategories={setCategoryEditorTarget}
           />
         ) : null}
 
@@ -11187,6 +11372,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onStartClassificationDetailCorrection={(rowId) => startClassificationCorrection("detail", rowId)}
             onStartClassificationSurfaceCorrection={() => startClassificationCorrection("surface")}
             onTodayClassificationRange={() => selectDay(getSafeClassificationNavigationDay(selectedDay, classificationRange, 0, todayDay, startOfDayMinutes, startOfWeek))}
+            onEditCategories={setCategoryEditorTarget}
+            onManageRules={() => setRulesSheetOpen(true)}
           />
         ) : null}
 
@@ -11222,8 +11409,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {/* Projects */}
         {activeTab === "projects" && projectClassificationFeatureEnabled ? (
           <LazyProjectsPage
-            createRequested={newProjectRequested}
-            onCreateRequestHandled={() => setNewProjectRequested(false)}
             projects={projectClassification.projects}
             activeTeamProjectCount={projectClassification.activeTeamProjectCount}
             assignments={projectClassification.assignments}
@@ -11237,7 +11422,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             projectsLoading={projectClassification.projectsLoading}
             running={projectClassification.running}
             runError={projectClassification.runError}
-            analysisConnected={projectAnalysisConnected}
+            analysisConnected={previewIntelligence === "cloud" || previewIntelligence === "own" ? true : previewIntelligence === "none" ? false : projectAnalysisConnected}
             analysisSetup={analysisModel.effectiveAnalysisSetup}
             autoAnalysis={projectAutoAnalysis}
             matchCooldown={projectMatchCooldown}
@@ -11247,9 +11432,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               setSettingsSection(projectClassificationFeatureEnabled ? "intelligence" : "aiSetup");
             }}
             onOpenTrends={openProjectTrends}
-            onSaveProject={handleSaveProject}
-            onDeleteProject={handleDeleteProject}
+            onEditProject={(project) => setCategoryEditorTarget({ group: "project", key: project?.id ?? NEW_PROJECT_KEY })}
             onRunAnalysis={() => requestProjectPassRun()}
+            intelligenceLocked={editorIntelligenceLocked}
+            onPickIntelligence={pickIntelligenceFromProjects}
+            lockReason={projectsLockReason}
+            stoppedSinceDay={projectsStoppedSinceDay}
           />
         ) : null}
 
@@ -11431,6 +11619,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 )}
                 {settingsSection === "general" && (
                   <GeneralSettingsSection
+                    appearance={(
+                      <AppearanceSettingsBlock
+                        hostPlatform={hostPlatform}
+                        windowsBlurEnabled={windowsBlurEnabled}
+                        onWindowsBlurEnabledChange={handleWindowsBlurEnabledChange}
+                        appThemeColorOverrides={appThemeColorOverrides}
+                        theme={themePreference}
+                        onAppThemeColorChange={handleAppThemeColorChange}
+                        onAppThemeColorReset={handleAppThemeColorReset}
+                        onThemeChange={setThemePreference}
+                      />
+                    )}
+                    categories={<CategoriesSettingsBlock onOpen={() => setCategoryEditorTarget({ group: "category" })} />}
                     backgroundUpdatesSupported={hostPlatform === "macos" || hostPlatform === "windows"}
                     currentVersion={BUILD_INFO.version === "unknown" ? null : BUILD_INFO.version}
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
@@ -11458,21 +11659,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onDevModeChange={handleDevModeEnabledChange}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
-                  />
-                )}
-                {settingsSection === "appearance" && (
-                  <AppearanceSettingsSection
-                    hostPlatform={hostPlatform}
-                    windowsBlurEnabled={windowsBlurEnabled}
-                    onWindowsBlurEnabledChange={handleWindowsBlurEnabledChange}
-                    appThemeColorOverrides={appThemeColorOverrides}
-                    categoryColorOverrides={categoryColorOverrides}
-                    theme={themePreference}
-                    onAppThemeColorChange={handleAppThemeColorChange}
-                    onAppThemeColorReset={handleAppThemeColorReset}
-                    onCategoryColorChange={handleCategoryColorChange}
-                    onCategoryColorReset={handleCategoryColorReset}
-                    onThemeChange={setThemePreference}
                   />
                 )}
                 {isAiSettingsSection(settingsSection) && (
@@ -11752,14 +11938,54 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             setCmdOpen(false);
           }}
           onNewProject={() => {
-            setNewProjectRequested(true);
             handleCmdNav("projects");
+            setCategoryEditorTarget({ group: "project", key: NEW_PROJECT_KEY });
           }}
           onReclassifyRecent={() => {
             handleCmdNav("classification");
             void handleRunAiClassificationNow();
           }}
         />
+      ) : null}</ModalPresence>
+
+      <ModalPresence>{categoryEditorTarget ? (
+        <CategoryEditorSheet
+          initialTarget={categoryEditorTarget}
+          allowStructureEdits={isPreviewSurface}
+          intelligenceUnavailable={editorIntelligenceLocked}
+          onOpenIntelligence={() => {
+            setCategoryEditorTarget(null);
+            navigateToTab("settings");
+            setSettingsSection("intelligence");
+          }}
+          onStartCloud={cloudClassificationAvailability.state === "ready" ? undefined : () => {
+            setCategoryEditorTarget(null);
+            handleOpenUpgradePlanModal();
+          }}
+          cloudOffer={intelligenceCloudOffer}
+          onStartTrial={startIntelligenceTrial}
+          openRouterReady={analysisModel.openRouterConnected}
+          onConnectProvider={connectIntelligenceProvider}
+          categoryCustomizations={categoryCustomizationController.customizations}
+          productivityCustomizations={categoryCustomizationController.productivityCustomizations}
+          categoryColorOverrides={categoryColorOverrides}
+          appThemeColorOverrides={appThemeColorOverrides}
+          showProjects={projectClassificationFeatureEnabled}
+          projects={projectClassification.projects}
+          projectsBusy={projectClassification.projectsLoading}
+          projectRecentSeconds={editorProjectRecentSeconds}
+          onSaveDefinitions={categoryCustomizationController.saveDefinitions}
+          onCategoryColorChange={handleCategoryColorChange}
+          onCategoryColorReset={handleCategoryColorReset}
+          onProductivityColorChange={handleAppThemeColorChange}
+          onProductivityColorReset={handleAppThemeColorReset}
+          onSaveProject={handleSaveProject}
+          onDeleteProject={handleDeleteProject}
+          onClose={() => setCategoryEditorTarget(null)}
+        />
+      ) : null}</ModalPresence>
+      <ModalPresence>{rulesSheetOpen ? (
+        <ClassificationRulesSheet onClose={() => setRulesSheetOpen(false)}>{classificationRulesManager}</ClassificationRulesSheet>
       ) : null}</ModalPresence>
 
       <ModalPresence>{authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}</ModalPresence>

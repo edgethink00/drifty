@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { TranslationKey } from "./translations";
 import { translateFor, type TranslationParams } from "./translate";
+import { parseCategoryNameOverrideKey, withCategoryNameOverrides } from "./categoryNameOverrides";
+import { useCategoryNameOverrideKey } from "../settings/categoryCustomizationStore";
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
@@ -37,6 +39,7 @@ export function useLocalization(): LocalizationController {
 
 export function useLocalizationController(): LocalizationController {
   const [effectiveLanguage, setDisplayLanguage] = useState<DisplayLanguage>(resolveInitialDisplayLanguage);
+  const categoryNameKey = useCategoryNameOverrideKey();
 
   useEffect(() => {
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, effectiveLanguage);
@@ -51,8 +54,8 @@ export function useLocalizationController(): LocalizationController {
   return useMemo(() => ({
     effectiveLanguage,
     setDisplayLanguage,
-    t: translateFor(effectiveLanguage),
-  }), [effectiveLanguage]);
+    t: withCategoryNameOverrides(translateFor(effectiveLanguage), parseCategoryNameOverrideKey(categoryNameKey)),
+  }), [categoryNameKey, effectiveLanguage]);
 }
 
 export function LocalizationProvider({ children, controller }: { readonly children: ReactNode; readonly controller: LocalizationController }) {

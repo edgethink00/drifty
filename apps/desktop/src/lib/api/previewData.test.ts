@@ -4,9 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   previewAppIcons,
   previewDeleteActivitySegments,
+  previewDeleteProject,
   previewProjectAssignments,
   previewProjects,
   previewSaveClassifications,
+  previewSaveProject,
   previewSaveProjectAssignments,
   previewTimeline,
   previewTimelineSearch,
@@ -114,6 +116,39 @@ describe("previewData", () => {
     expect(previewProjectAssignments(query).find((assignment) => assignment.segmentId === segment.id)).toMatchObject({
       source: "ai",
     });
+  });
+
+  it("starts with no projects when the preview asks for none", () => {
+    window.history.replaceState(null, "", "/?driftyPreview=1&previewProjects=none");
+    resetPreviewMutations();
+    expect(previewProjects()).toEqual([]);
+    window.history.replaceState(null, "", "/");
+    resetPreviewMutations();
+    expect(previewProjects().map((project) => project.name)).toEqual(["Drifty", "Research", "Launch"]);
+  });
+
+  it("keeps preview project edits in memory, the way the tracker saves and deletes them", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-08T20:30:00"));
+    const query = { day: "2026-05-08" } as const;
+
+    expect(() => previewSaveProject({ name: "  ", description: "" })).toThrow("name is required");
+    const created = previewSaveProject({ name: " Q3 launch ", description: "Release prep", color: "#2f8b83" });
+    expect(created).toMatchObject({ name: "Q3 launch", status: "active", color: "#2f8b83", anchors: [] });
+    previewSaveProject({ id: created.id, name: "Q3 launch", description: "Release prep", color: "#2f8b83", status: "archived" });
+    expect(previewProjects().map((project) => [project.name, project.status])).toEqual([
+      ["Drifty", "active"], ["Research", "active"], ["Launch", "active"], ["Q3 launch", "archived"],
+    ]);
+
+    const driftyTime = previewProjectAssignments(query).filter((assignment) => assignment.projectId === "preview-project-drifty");
+    expect(driftyTime.length).toBeGreaterThan(0);
+    expect(previewDeleteProject("preview-project-drifty")).toEqual({ deleted: 1 });
+    expect(previewDeleteProject("preview-project-drifty")).toEqual({ deleted: 0 });
+    const afterDelete = new Map(previewProjectAssignments(query).map((assignment) => [assignment.segmentId, assignment.projectId]));
+    for (const assignment of driftyTime) expect(afterDelete.get(assignment.segmentId)).toBeNull();
+
+    resetPreviewMutations();
+    expect(previewProjects().map((project) => project.name)).toEqual(["Drifty", "Research", "Launch"]);
   });
 
   it("shapes today preview as a human day: long focus streaks, varied blocks, real breaks", () => {

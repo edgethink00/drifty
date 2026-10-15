@@ -20,6 +20,7 @@ import {
 } from "../dashboard/WeekActivityInspector";
 import { FlowChartGrid } from "./FlowChartGrid";
 import { FlowChartHeader } from "./FlowChartHeader";
+import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import { buildFlowActivityInspectorEvent, FlowHoverLayer } from "./FlowHoverLayer";
@@ -55,6 +56,7 @@ export function FlowChartView({
   onClassifyActivity,
   onDeleteActivity,
   classificationOptions,
+  onEditCategories,
 }: {
   readonly classifiedResultIds?: ReadonlySet<string>;
   blocks: FlowBlock[];
@@ -83,6 +85,8 @@ export function FlowChartView({
   ) => Promise<void>;
   onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
   classificationOptions?: ClassificationOptions;
+  /** Opens the category editor from the legend and the activity inspector. */
+  onEditCategories?: (target: CategoryEditorTarget) => void;
 }) {
   const { t } = useLocalization();
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
@@ -267,6 +271,7 @@ export function FlowChartView({
         setHoveredLegend={setHoveredLegend}
         projectModeAvailable={projectModeAvailable}
         projectLegend={projectLegend}
+        onEditCategories={onEditCategories}
       />
 
       <FlowChartGrid
@@ -318,6 +323,7 @@ export function FlowChartView({
           onClassify={onClassifyActivity}
           onDelete={onDeleteActivity}
           classificationOptions={classificationOptions}
+          onEditCategories={onEditCategories}
         />
       ) : null}
     </section>

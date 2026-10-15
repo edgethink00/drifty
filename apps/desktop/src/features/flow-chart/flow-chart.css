@@ -55,6 +55,14 @@
   min-height: 1.35rem;
 }
 
+/* The legend's last entry opens the editor for what the legend shows. It
+   matches the pills' height and stands a little apart from the last dots so
+   it reads as its own control, not a fourth group. */
+.flow-chart-legend .flow-chart-legend__edit {
+  align-self: center;
+  margin-left: 0.2rem;
+}
+
 .flow-chart-legend__parent {
   display: inline-flex;
   align-items: center;

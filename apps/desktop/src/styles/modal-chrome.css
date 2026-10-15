@@ -290,6 +290,19 @@
   padding-right: var(--space-3);
 }
 
+/* Optional quiet actions (reset, archive, delete) lead the footer; a note
+   then sits beside the buttons it describes instead of in the middle. */
+.modal-foot__start {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.modal-foot__start ~ .modal-foot__note {
+  margin-right: 0;
+}
+
 /* The outcome of the last request sits in the same slot as the note, beside
    the actions that retry it. A short message shares the footer's row, so it
    never grows the dialog or moves the button the user is about to press. */

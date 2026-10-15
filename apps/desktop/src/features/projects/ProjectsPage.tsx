@@ -1,18 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
-import type { ActivitySegment, Project, ProjectAssignmentRecord, ProjectInput } from "@drifty/domain";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ActivitySegment, Project, ProjectAssignmentRecord } from "@drifty/domain";
 import { shiftIsoDate } from "@drifty/domain";
 import "./projects.css";
-import { describeLocalizedRelativeDay, isoDateFromTimestamp } from "../../lib/formatting";
-import { DateNavigator } from "../../components/DateNavigator";
-import { ProjectDetailView } from "./ProjectDetailView";
+import { buildIsoDayList, describeLocalizedRelativeDay, formatLocalizedCompactDurationFromSeconds, isoDateFromTimestamp, logicalTodayIsoDate } from "../../lib/formatting";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
+import type { IntelligenceProviderChoice } from "../categories/CategoryEditorAiNotice";
+import { ProjectsReconnect, ProjectsStrip } from "./ProjectsLock";
+import { ProjectsSharePanel, type ShareProject } from "./ProjectsSharePanel";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
+import type { ProjectsLockReason } from "./projectsLockTypes";
+import { PROJECT_LIBRARY_WINDOW_DAYS, formatProjectLastActivity } from "./projectDates";
+import { DateNavigator } from "../../components/DateNavigator";
+import { ProjectDetailView } from "./ProjectDetailView";
 import { ProjectsManager } from "./ProjectsManager";
-import type { ProjectSaveResult } from "./ProjectEditorModal";
-import type { ProjectDeleteResult } from "./ProjectDeleteConfirmation";
 import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { aggregateProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
-import { formatProjectMatchCooldown, NO_PROJECT_MATCH_COOLDOWN, type ProjectMatchCooldown } from "./projectMatchCooldown";
+import { formatProjectMatchCooldown, type ProjectMatchCooldown } from "./projectMatchCooldown";
 import { useLocalization } from "../localization/LocalizationContext";
 import { PROJECT_PASS_NO_RESULTS_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX } from "../classification/useProjectClassification";
 import { classifyBackgroundError, describeBackgroundError, type DescribedActionError } from "../../lib/actionErrors";
@@ -29,8 +33,6 @@ function describeProjectRunError(message: string, t: ReturnType<typeof useLocali
   if (classifyBackgroundError(message)) return describeBackgroundError(message, t);
   return { message, detail: null };
 }
-
-const PROJECT_LIBRARY_WINDOW_DAYS = 7;
 
 type TrendRangeMode = "day" | "week" | "month";
 
@@ -59,8 +61,6 @@ function analysisModelLabel(setup: AnalysisAiSetupState): string {
 }
 
 export interface ProjectsPageProps {
-  readonly createRequested?: boolean;
-  readonly onCreateRequestHandled?: () => void;
   readonly projects: readonly Project[];
   /** Active team projects the pass also matches against; they enable a refresh on their own. */
   readonly activeTeamProjectCount?: number;
@@ -84,41 +84,61 @@ export interface ProjectsPageProps {
   readonly onTrendWindowChange: (range: { readonly startDay: string; readonly endDay: string }) => void;
   readonly onConfigureModel: () => void;
   readonly onOpenTrends: () => void;
-  readonly onSaveProject: (input: ProjectInput) => Promise<ProjectSaveResult> | ProjectSaveResult;
-  readonly onDeleteProject: (id: string) => Promise<ProjectDeleteResult> | ProjectDeleteResult | void;
+  /** Opens the category editor on a project, or on a new one for null. */
+  readonly onEditProject: (project: Project | null) => void;
   readonly onRunAnalysis: () => void;
+  /** No Intelligence at all (on-device Free or unset), the same test as the category editor's lock. */
+  readonly intelligenceLocked?: boolean;
+  /** Drifty Cloud picked from the line over a stopped list (see plans, sign in). */
+  readonly onPickIntelligence?: (provider: IntelligenceProviderChoice) => void | Promise<void>;
+  /** Why projects stopped gathering time, said in one line over the list. */
+  readonly lockReason?: ProjectsLockReason;
+  /** The first logical day nothing was gathered (the trial's or plan's end); later time goes to no project. */
+  readonly stoppedSinceDay?: string;
 }
 
-interface ProjectMatchingCardProps {
+interface ProjectsStatusProps {
+  /** No Intelligence at all (on-device Free or unset), the same test as the category editor's lock. */
+  readonly locked: boolean;
   readonly activeProjectCount: number;
   readonly analysisConnected: boolean;
   readonly analysisSetup: AnalysisAiSetupState;
   readonly autoAnalysis: ProjectAutoAnalysisState;
   readonly matchCooldown: ProjectMatchCooldown;
-  readonly layout: "strip" | "card";
   readonly running: boolean;
   readonly onConfigureModel: () => void;
   readonly onRunAnalysis: () => void;
 }
 
-function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
+/**
+ * Where project matching stands, beside the title, only when there is
+ * something to say: matching, paused, not connected, or no Intelligence. When
+ * all is well only its menu shows (refresh the latest 7 days, Intelligence
+ * settings); a paused run, a queued burst or a missing connection puts the one
+ * action that helps in the line itself.
+ */
+function ProjectsStatus(props: ProjectsStatusProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
-  const modelLabel = analysisModelLabel(props.analysisSetup);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement | null>(null);
   const autoPhase = aggregateProjectAutoAnalysisPhase(props.autoAnalysis);
   // A queued burst is still pending work, so "Match now" stays clickable even
   // though the previous pass finished moments ago.
   const cooldownActive = props.matchCooldown.active && autoPhase !== "queued" && autoPhase !== "error";
-  const readiness = autoPhase === "running"
-    ? t("projects.matching.matching")
-    : autoPhase === "queued"
-      ? t("projects.matching.soon")
-      : autoPhase === "error"
-        ? t("projects.matching.retryNeeded")
-        : !props.analysisConnected
-          ? t("projects.matching.setupRequired")
-          : cooldownActive ? t("projects.matching.upToDate") : t("projects.matching.ready");
-  const actionLabel = autoPhase === "running"
-    ? t("projects.matching.matchingProgress")
+  const busy = props.running || autoPhase === "running";
+  const state = props.locked
+    ? { tone: "ok", label: "" }
+    : busy
+      ? { tone: "busy", label: t("projects.status.matching") }
+      : autoPhase === "queued"
+        ? { tone: "busy", label: t("projects.status.queued") }
+        : autoPhase === "error"
+          ? { tone: "error", label: t("projects.status.paused") }
+          : !props.analysisConnected
+            ? { tone: "attention", label: t("projects.status.setup") }
+            : { tone: "ok", label: "" };
+  const actionLabel = props.running
+    ? autoPhase === "running" ? t("projects.matching.matchingProgress") : t("projects.matching.refreshing")
     : autoPhase === "queued"
       ? t("projects.matching.matchNow")
       : autoPhase === "error"
@@ -126,61 +146,81 @@ function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
         : cooldownActive
           ? t("projects.matching.justMatched", { remaining: effectiveLanguage === "ko" && props.matchCooldown.remainingSeconds < 60 ? `${props.matchCooldown.remainingSeconds}초` : formatProjectMatchCooldown(props.matchCooldown.remainingSeconds) })
           : t("projects.matching.refreshLatest");
+  const actionDisabled = props.locked || (props.running && autoPhase !== "queued") || cooldownActive || !props.analysisConnected || props.activeProjectCount === 0;
+  const actionHint = cooldownActive
+    ? t("projects.matching.cooldownHint")
+    : props.activeProjectCount === 0 ? t("projects.matching.createFirst") : undefined;
+  const inline = props.running || props.locked
+    ? null
+    : !props.analysisConnected && autoPhase !== "error" && autoPhase !== "queued"
+      ? { label: t("projects.status.openSettings"), onClick: props.onConfigureModel }
+      : autoPhase === "error" || autoPhase === "queued"
+        ? { label: actionLabel, onClick: props.onRunAnalysis }
+        : null;
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onMouseDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest(".projects-status__more")) return;
+      setMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      trigger.current?.focus({ preventScroll: true });
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  const choose = (run: () => void) => {
+    trigger.current?.focus({ preventScroll: true });
+    setMenuOpen(false);
+    run();
+  };
+
   return (
-    <div
-      className={`projects-model-status projects-model-status--${props.layout}${props.analysisConnected ? " is-connected" : " is-disconnected"}`}
-      role="group"
-      aria-label={t("projects.matching.modelAria")}
-    >
-      <div className="projects-model-status__info">
-        <span className="projects-model-status__label">{t("projects.matching.label")}</span>
-        <span className="projects-model-status__value">
-          {props.layout === "strip"
-            ? t("projects.matching.usesModel", { model: modelLabel })
-            : autoPhase === "running"
-              ? t("projects.matching.newProject")
-              : autoPhase === "queued"
-                ? t("projects.matching.queuedProjects")
-                : t("projects.matching.refreshAssignments")}
-        </span>
-        {props.layout !== "strip" ? (
-          <dl className="projects-model-status__meta">
-            <div><dt>{t("projects.matching.model")}</dt><dd>{modelLabel}</dd></div>
-            <div><dt>{t("projects.matching.refreshScope")}</dt><dd>{t("projects.matching.latestSeven")}</dd></div>
-          </dl>
-        ) : null}
-      </div>
-      <span className={`projects-model-status__readiness${props.analysisConnected ? " is-connected" : ""}`}>
-        <span className="projects-model-status__readiness-dot" aria-hidden="true" />
-        {props.layout === "card"
-          ? readiness
-          : autoPhase === "running" || autoPhase === "queued"
-            ? t("projects.matching.recentActivity")
-            : props.analysisConnected
-              ? t("projects.matching.modelReady")
-              : t("projects.matching.modelSetupRequired")}
-      </span>
-      <div className="projects-model-status__actions">
-        <button type="button" className="app-btn app-btn--secondary" onClick={props.onConfigureModel}>{t("projects.matching.modelSettings")}</button>
+    <div className={`projects-status projects-status--${state.tone}`} role="group" aria-label={t("projects.matching.modelAria")}>
+      {state.tone === "ok" ? null : (
+        <>
+          {state.tone === "busy"
+            ? <span className="projects-table__analysis-spinner" aria-hidden="true" />
+            : <span className="projects-status__dot" aria-hidden="true" />}
+          <span role={state.tone === "busy" ? "status" : undefined}>{state.label}</span>
+          {inline ? <button type="button" className="projects-status__act" onClick={inline.onClick}>{inline.label}</button> : null}
+        </>
+      )}
+      <span className="projects-status__more">
         <button
+          ref={trigger}
           type="button"
-          className="app-btn app-btn--secondary"
-          onClick={props.onRunAnalysis}
-          disabled={(props.running && autoPhase !== "queued") || cooldownActive || !props.analysisConnected || props.activeProjectCount === 0}
-          title={cooldownActive ? t("projects.matching.cooldownHint") : undefined}
+          className="pt-more"
+          aria-label={t("projects.status.moreAria")}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
         >
-          {props.running ? (autoPhase === "running" ? t("projects.matching.matchingProgress") : t("projects.matching.refreshing")) : actionLabel}
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="18.6" cy="12" r="1.7" /></svg>
         </button>
-      </div>
-      {props.activeProjectCount === 0 ? (
-        <p className="projects-model-status__reason">{t("projects.matching.createFirst")}</p>
-      ) : autoPhase === "waiting_for_model" || !props.analysisConnected ? (
-        <p className="projects-model-status__reason">{t("projects.matching.connectFirst")}</p>
-      ) : autoPhase === "error" ? (
-        <p className="projects-model-status__reason">{t("projects.matching.paused")}</p>
-      ) : cooldownActive ? (
-        <p className="projects-model-status__reason">{t("projects.matching.upToDateDetail")}</p>
-      ) : null}
+        <AnchoredPresence>{menuOpen ? (
+          <div className="pt-menu" role="menu" aria-label={t("projects.status.moreAria")}>
+            {props.locked ? null : (
+              <button type="button" role="menuitem" disabled={actionDisabled} title={actionHint} onClick={() => choose(props.onRunAnalysis)}>
+                {actionLabel}
+              </button>
+            )}
+            <button type="button" role="menuitem" onClick={() => choose(props.onConfigureModel)}>
+              {t("projects.status.settings")}
+              {props.locked ? null : <span className="pt-menu__hint">{analysisModelLabel(props.analysisSetup)}</span>}
+            </button>
+          </div>
+        ) : null}</AnchoredPresence>
+      </span>
     </div>
   );
 }
@@ -191,10 +231,6 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const [rangeMode, setRangeMode] = useState<TrendRangeMode>("week");
   const [windowOffset, setWindowOffset] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (props.createRequested) setSelectedProjectId(null);
-  }, [props.createRequested]);
 
   const activeProjects = props.projects.filter((project) => project.status === "active");
   const matchableProjectCount = activeProjects.length + (props.activeTeamProjectCount ?? 0);
@@ -213,18 +249,25 @@ export function ProjectsPage(props: ProjectsPageProps) {
     ? relativeDayLabel === (effectiveLanguage === "ko" ? "선택한 날짜" : "Selected day") ? shortDate(endDay, effectiveLanguage) : relativeDayLabel
     : `${shortDate(startDay, effectiveLanguage)} – ${shortDate(endDay, effectiveLanguage)}`;
 
-  // Tell the shell which window to load trend segments/assignments for.
+  // Tell the shell which window to load trend segments/assignments for. A
+  // project's detail also loads the window before, to compare against it.
+  const loadStartDay = selectedProject ? shiftIsoDate(startDay, -dataWindowDays) : startDay;
   const { onTrendWindowChange } = props;
   useEffect(() => {
-    onTrendWindowChange({ startDay, endDay });
-  }, [onTrendWindowChange, startDay, endDay]);
+    onTrendWindowChange({ startDay: loadStartDay, endDay });
+  }, [onTrendWindowChange, loadStartDay, endDay]);
 
-  // Per-project totals + latest active day within the loaded trend window,
-  // for the table's "Total time" / "Last activity" columns.
+  // Segments inside the shown window.
+  const windowSegments = useMemo(() => props.trendSegments.filter((segment) => {
+    const day = isoDateFromTimestamp(segment.startedAt);
+    return Boolean(day) && day! >= startDay && day! <= endDay;
+  }), [props.trendSegments, startDay, endDay]);
+
+  // Per-project totals + latest active day within the shown window.
   const { totalSecondsByProject, lastActivityByProject } = useMemo(() => {
     const totals = new Map<string, number>();
     const lastDays = new Map<string, string>();
-    for (const segment of props.trendSegments) {
+    for (const segment of windowSegments) {
       const projectId = props.trendProjectBySegmentId.get(segment.id);
       if (!projectId) continue;
       totals.set(projectId, (totals.get(projectId) ?? 0) + segment.durationSeconds);
@@ -232,23 +275,73 @@ export function ProjectsPage(props: ProjectsPageProps) {
       if (day && day > (lastDays.get(projectId) ?? "")) lastDays.set(projectId, day);
     }
     return { totalSecondsByProject: totals, lastActivityByProject: lastDays };
-  }, [props.trendSegments, props.trendProjectBySegmentId]);
+  }, [windowSegments, props.trendProjectBySegmentId]);
+
+  // The open project's time in the window before, for "+3h vs. the previous 7 days".
+  const previousProjectSeconds = useMemo(() => {
+    if (!selectedProject) return 0;
+    let total = 0;
+    for (const segment of props.trendSegments) {
+      const day = isoDateFromTimestamp(segment.startedAt);
+      if (!day || day < loadStartDay || day >= startDay) continue;
+      if (props.trendProjectBySegmentId.get(segment.id) === selectedProject.id) total += segment.durationSeconds;
+    }
+    return total;
+  }, [selectedProject, props.trendSegments, props.trendProjectBySegmentId, loadStartDay, startDay]);
 
   // Project rows, overview chart, and assignment refresh share one seven-day window.
   const librarySummaryStartDay = shiftIsoDate(endDay, -(PROJECT_LIBRARY_WINDOW_DAYS - 1));
-  const { libraryTotalSecondsByProject, libraryLastActivityByProject } = useMemo(() => {
+  const library = useMemo(() => {
+    const days = buildIsoDayList(librarySummaryStartDay, endDay);
+    const dayIndex = new Map(days.map((day, index) => [day, index]));
     const totals = new Map<string, number>();
     const lastDays = new Map<string, string>();
+    const daily = new Map<string, number[]>();
+    // Once Intelligence stopped, nothing after that day belongs to a project.
+    const stopDay = props.intelligenceLocked === true ? props.stoppedSinceDay : undefined;
     for (const segment of props.trendSegments) {
       const day = isoDateFromTimestamp(segment.startedAt);
-      if (!day || day < librarySummaryStartDay || day > endDay) continue;
-      const projectId = props.trendProjectBySegmentId.get(segment.id);
+      if (!day) continue;
+      const index = dayIndex.get(day);
+      if (index === undefined) continue;
+      const projectId = stopDay && day >= stopDay ? undefined : props.trendProjectBySegmentId.get(segment.id);
       if (!projectId) continue;
       totals.set(projectId, (totals.get(projectId) ?? 0) + segment.durationSeconds);
       if (day > (lastDays.get(projectId) ?? "")) lastDays.set(projectId, day);
+      const perDay = daily.get(projectId) ?? days.map(() => 0);
+      perDay[index]! += segment.durationSeconds;
+      daily.set(projectId, perDay);
     }
-    return { libraryTotalSecondsByProject: totals, libraryLastActivityByProject: lastDays };
-  }, [endDay, librarySummaryStartDay, props.trendSegments, props.trendProjectBySegmentId]);
+    for (const project of props.projects) {
+      if (!daily.has(project.id)) daily.set(project.id, days.map(() => 0));
+    }
+    return { totals, lastDays, daily };
+  }, [endDay, librarySummaryStartDay, props.projects, props.trendSegments, props.trendProjectBySegmentId, props.intelligenceLocked, props.stoppedSinceDay]);
+  const today = logicalTodayIsoDate(props.startOfDayMinutes);
+  const chartAssignments = useMemo(() => {
+    const stopDay = props.intelligenceLocked === true ? props.stoppedSinceDay : undefined;
+    if (!stopDay) return props.trendProjectBySegmentId;
+    const kept = new Map<string, string>();
+    for (const segment of props.trendSegments) {
+      const projectId = props.trendProjectBySegmentId.get(segment.id);
+      const day = isoDateFromTimestamp(segment.startedAt);
+      if (projectId && day && day < stopDay) kept.set(segment.id, projectId);
+    }
+    return kept;
+  }, [props.intelligenceLocked, props.stoppedSinceDay, props.trendSegments, props.trendProjectBySegmentId]);
+  const locked = props.intelligenceLocked === true;
+  const lockedEmpty = locked && props.projects.length === 0;
+  // The split beside the week's chart: active projects with time, biggest first.
+  const shareProjects: ShareProject[] = activeProjects
+    .map((project) => ({ id: project.id, name: project.name, color: project.color || "#6366f1", total: library.totals.get(project.id) ?? 0 }))
+    .filter((item) => item.total > 0)
+    .sort((left, right) => right.total - left.total);
+  const newProjectButton = (
+    <button type="button" className="app-btn app-btn--primary" disabled={props.running || props.projectsLoading} aria-haspopup="dialog" onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); props.onEditProject(null); }}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      {t("projects.new")}
+    </button>
+  );
 
   const totalCaption = isDayMode ? windowLabel : atLatestWindow ? t("projects.lastDays", { count: windowDays }) : windowLabel;
   // If the open project gets deleted elsewhere, fall back to the list.
@@ -263,7 +356,14 @@ export function ProjectsPage(props: ProjectsPageProps) {
   // Only draw the chart once the loaded segments actually cover the selected
   // window — otherwise a window/mode switch would briefly render the previous
   // window's data at the new scale (flicker), then snap when the fetch lands.
-  const trendReady = props.trendLoadedRange?.startDay === startDay && props.trendLoadedRange?.endDay === endDay;
+  const trendReady = props.trendLoadedRange?.startDay === loadStartDay && props.trendLoadedRange?.endDay === endDay;
+  const comparison = (() => {
+    if (!selectedProject || !trendReady) return null;
+    const delta = (totalSecondsByProject.get(selectedProject.id) ?? 0) - previousProjectSeconds;
+    if (Math.abs(delta) < 60) return t("projects.detail.vsSame");
+    const signed = (delta > 0 ? "+" : "−") + formatLocalizedCompactDurationFromSeconds(Math.abs(delta), effectiveLanguage);
+    return t(isDayMode ? "projects.detail.vsDay" : rangeMode === "month" ? "projects.detail.vsMonth" : "projects.detail.vsWeek", { delta: signed });
+  })();
 
   const returnToProjectLibrary = () => {
     setSelectedProjectId(null);
@@ -288,23 +388,32 @@ export function ProjectsPage(props: ProjectsPageProps) {
             <div className="projects-page__project-identity">
               <span className="pt-swatch" style={{ background: selectedProject.color }} aria-hidden="true" />
               <h1>{selectedProject.name}</h1>
-              <span className={`chip${selectedProject.status === "archived" ? " gray" : " green"}`}>
-                {t(selectedProject.status === "archived" ? "common.archived" : "common.active")}
-              </span>
+              {selectedProject.status === "archived" ? <span className="chip gray">{t("common.archived")}</span> : null}
             </div>
           </div>
         ) : (
           <div className="projects-page__heading-copy">
             <div className="projects-page__title">
               <h1>{t("projects.title")}</h1>
-              <span className="projects-help">
-                <button type="button" className="help-trigger projects-help__trigger" aria-label={t("projects.helpAria")} aria-describedby="projects-help-tip">?</button>
-                <span className="projects-help__tip" id="projects-help-tip" role="tooltip">{t("projects.help")}</span>
-              </span>
             </div>
-            <p>{t("projects.description")}</p>
           </div>
         )}
+        {!selectedProject && !lockedEmpty ? (
+          <div className="projects-page__head-actions">
+            <ProjectsStatus
+              locked={locked}
+              activeProjectCount={matchableProjectCount}
+              analysisConnected={props.analysisConnected}
+              analysisSetup={props.analysisSetup}
+              autoAnalysis={props.autoAnalysis}
+              matchCooldown={props.matchCooldown}
+              running={props.running}
+              onConfigureModel={props.onConfigureModel}
+              onRunAnalysis={props.onRunAnalysis}
+            />
+            {props.projects.length > 0 && !locked ? newProjectButton : null}
+          </div>
+        ) : null}
         {selectedProject ? (
           <div className="classification-range-controls trends-range-controls">
             <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("projects.detailRangeAria")}>
@@ -349,8 +458,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
       {selectedProject ? (
         <ProjectDetailView
           project={selectedProject}
-          projects={props.projects}
-          trendSegments={props.trendSegments}
+          trendSegments={windowSegments}
           trendProjectBySegmentId={props.trendProjectBySegmentId}
           trendReady={trendReady}
           windowDays={windowDays}
@@ -361,28 +469,42 @@ export function ProjectsPage(props: ProjectsPageProps) {
           totalCaption={totalCaption}
           windowLabel={windowLabel}
           totalSeconds={totalSecondsByProject.get(selectedProject.id) ?? 0}
+          comparison={comparison}
           windowProjectSeconds={[...totalSecondsByProject.values()].reduce((sum, value) => sum + value, 0)}
-          lastActivityLabel={(() => {
-            const day = lastActivityByProject.get(selectedProject.id);
-            if (!day) return "—";
-            const parsed = new Date(`${day}T00:00:00`);
-            return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric", year: "numeric" }).format(parsed);
-          })()}
+          lastActivityLabel={formatProjectLastActivity(lastActivityByProject.get(selectedProject.id), today, effectiveLanguage, t)}
           busy={props.running || props.projectsLoading}
-          onSave={props.onSaveProject}
+          onEdit={() => props.onEditProject(selectedProject)}
         />
+      ) : props.projects.length === 0 ? (
+        <>
+          {/* Without Intelligence: the same slim line as a stopped list, over the ordinary empty page; New project opens the editor's lock. */}
+          {lockedEmpty ? (
+            <ProjectsStrip text={t("projects.lock.stripLine")} primary={{ label: t("projects.lock.stripAction"), run: props.onConfigureModel }} />
+          ) : null}
+          <section className="projects-empty" aria-labelledby="projects-empty-title">
+            <h2 id="projects-empty-title">{t("projects.empty.title")}</h2>
+            <p>{t("projects.empty.body")}</p>
+            {newProjectButton}
+          </section>
+        </>
       ) : (
         <>
+          {locked ? (
+            <ProjectsReconnect
+              reason={props.lockReason ?? "disconnected"}
+              onPickCloud={() => void props.onPickIntelligence?.("cloud")}
+              onOpenSettings={props.onConfigureModel}
+            />
+          ) : null}
           <ProjectsManager
-            createRequested={props.createRequested}
-            onCreateRequestHandled={props.onCreateRequestHandled}
             projects={props.projects}
-            totalSecondsByProject={libraryTotalSecondsByProject}
-            lastActivityByProject={libraryLastActivityByProject}
-            totalCaption={t("projects.latestDays", { count: 7 })}
+            totalSecondsByProject={library.totals}
+            lastActivityByProject={library.lastDays}
+            totalCaption={t("projects.latestDays", { count: PROJECT_LIBRARY_WINDOW_DAYS })}
+            dailySecondsByProject={library.daily}
+            today={today}
             autoAnalysis={props.autoAnalysis}
-            onSave={props.onSaveProject}
-            onDelete={props.onDeleteProject}
+            onEditProject={locked ? undefined : props.onEditProject}
             onOpenProject={openProject}
             busy={props.running || props.projectsLoading}
           />
@@ -392,17 +514,18 @@ export function ProjectsPage(props: ProjectsPageProps) {
                 {trendReady ? (
                   <ProjectTrendChart
                     segments={props.trendSegments}
-                    projectBySegmentId={props.trendProjectBySegmentId}
+                    projectBySegmentId={chartAssignments}
                     projects={props.projects}
                     days={PROJECT_LIBRARY_WINDOW_DAYS}
                     endDay={endDay}
                     variant="overview"
                     onOpenTrends={props.onOpenTrends}
+                    legend={false}
                   />
                 ) : (
                   <ProjectTrendChartSkeleton
                     windowLabel={t("projects.latestDays", { count: PROJECT_LIBRARY_WINDOW_DAYS })}
-                    legendProjects={activeProjects}
+                    legendProjects={[]}
                     isDayMode={false}
                     startDay={startDay}
                     endDay={endDay}
@@ -412,38 +535,11 @@ export function ProjectsPage(props: ProjectsPageProps) {
                   />
                 )}
               </div>
-              <ProjectMatchingCard
-                activeProjectCount={matchableProjectCount}
-                analysisConnected={props.analysisConnected}
-                analysisSetup={props.analysisSetup}
-                autoAnalysis={props.autoAnalysis}
-                matchCooldown={props.matchCooldown}
-                layout="card"
-                running={props.running}
-                onConfigureModel={props.onConfigureModel}
-                onRunAnalysis={props.onRunAnalysis}
-              />
+              <ProjectsSharePanel projects={shareProjects} days={PROJECT_LIBRARY_WINDOW_DAYS} />
             </div>
           ) : null}
         </>
       )}
-
-      {!selectedProject && activeProjects.length === 0 ? (
-        <div className="projects-page__footer">
-          <ProjectMatchingCard
-            activeProjectCount={matchableProjectCount}
-            analysisConnected={props.analysisConnected}
-            analysisSetup={props.analysisSetup}
-            autoAnalysis={props.autoAnalysis}
-            matchCooldown={props.matchCooldown}
-            layout="strip"
-            running={props.running}
-            onConfigureModel={props.onConfigureModel}
-            onRunAnalysis={props.onRunAnalysis}
-          />
-        </div>
-      ) : null}
-
     </div>
   );
 }

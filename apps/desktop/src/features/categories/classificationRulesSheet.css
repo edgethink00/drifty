@@ -1,0 +1,46 @@
+/* App and site rules in their own sheet, the category editor's size, with the
+   rules manager scrolling under a fixed title and a footer that only closes. */
+
+.rules-sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(44rem, calc(100vw - 3rem));
+  max-width: 44rem;
+  height: min(46rem, calc(100vh - 3rem));
+}
+
+.rules-sheet .modal-head { flex: none; }
+
+.rules-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.375rem 0.375rem 0.75rem 0.125rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  /* Like the editor's card list, the edges fade so a cut row reads as more. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 0.5rem, #000 calc(100% - 1rem), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 0.5rem, #000 calc(100% - 1rem), transparent 100%);
+}
+
+.rules-sheet__body .settings-section { margin: 0; }
+
+/* The sheet is the frame: the saved rules sit straight on it, with no
+   Settings block box around the list. */
+.rules-sheet__body .classification-rule-saved-block {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.rules-sheet__foot {
+  flex: none;
+  margin-top: var(--space-3);
+  padding-top: 0;
+  border-top: 0;
+}
+
+@media (max-width: 760px) {
+  .rules-sheet { height: calc(100vh - 2rem); }
+}

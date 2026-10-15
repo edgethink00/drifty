@@ -422,6 +422,12 @@ export function AiPrivacyDetails() {
             <dt>{t("settings.aiPrivacy.projectDefinitions")}</dt>
             <dd>{t("settings.aiPrivacy.projectDefinitionsReceipt")}</dd>
           </div>
+          {/* Category descriptions are the other user-written text a provider
+              can read: the model needs them to follow the user's boundaries. */}
+          <div className="ai-privacy-review__glossary-item">
+            <dt>{t("settings.aiPrivacy.categoryGuidance")}</dt>
+            <dd>{t("settings.aiPrivacy.categoryGuidanceReceipt")}</dd>
+          </div>
         </dl>
       </section>
 

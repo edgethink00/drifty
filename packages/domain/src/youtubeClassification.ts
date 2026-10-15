@@ -37,7 +37,30 @@ const YOUTUBE_OFFICIAL_CATEGORY_CLASSIFICATIONS: Readonly<Record<string, Activit
   "travel & events": { category: "entertainment", productivity: "drift" },
 };
 
+/**
+ * Why the YouTube rules reached their answer. `video` means a watched video
+ * classified only from YouTube's official category (or the entertainment
+ * fallback), so the topic of the video, not the surface, decides it.
+ */
+export type YouTubeClassificationBasis = "shorts" | "music" | "feed" | "browse" | "video";
+
 export function classifyYouTubeActivity(segment: ActivitySegment): ActivityClassification | null {
+  return classifyYouTubeActivityWithBasis(segment)?.classification ?? null;
+}
+
+/**
+ * True when the built-in YouTube rule would decide this activity from the
+ * video's official category rather than a surface signal (Shorts, music, feed,
+ * or browse page). User category guidance can legitimately change those
+ * answers, so such videos are sent to the classifier when guidance exists.
+ */
+export function isContentDependentYouTubeActivity(segment: ActivitySegment): boolean {
+  return classifyYouTubeActivityWithBasis(segment)?.basis === "video";
+}
+
+export function classifyYouTubeActivityWithBasis(
+  segment: ActivitySegment,
+): { readonly classification: ActivityClassification; readonly basis: YouTubeClassificationBasis } | null {
   const site = normalizeYouTubeSite(segment.siteDomain);
   if (!isYouTubeSite(site)) return null;
 
@@ -45,19 +68,19 @@ export function classifyYouTubeActivity(segment: ActivitySegment): ActivityClass
   const officialCategory = normalizeYouTubeOfficialCategory(segment.youtubeCategory ?? "");
 
   if (segment.youtubeIsShorts) {
-    return { category: "entertainment", productivity: "drift" };
+    return { classification: { category: "entertainment", productivity: "drift" }, basis: "shorts" };
   }
 
   if (site === "music.youtube.com") {
-    return { category: "music", productivity: "neutral" };
+    return { classification: { category: "music", productivity: "neutral" }, basis: "music" };
   }
 
   if (playlistId && isYouTubeMusicPlaylist(playlistId)) {
-    return { category: "music", productivity: "neutral" };
+    return { classification: { category: "music", productivity: "neutral" }, basis: "music" };
   }
 
   if (isSustainedYouTubeFeedPage(segment)) {
-    return { category: "entertainment", productivity: "drift" };
+    return { classification: { category: "entertainment", productivity: "drift" }, basis: "feed" };
   }
 
   if (isYouTubeBrowsePage(segment)) {
@@ -67,19 +90,24 @@ export function classifyYouTubeActivity(segment: ActivitySegment): ActivityClass
     // Only the bare base URL qualifies: search/feed/channel titles also end in " - YouTube",
     // so those pages must stay unknown for inheritance/AI to handle.
     if (youtubePathFromUrl(segment.siteUrl) === "/" && youTubeVideoNameFromWindowTitle(segment.windowTitle)) {
-      return { category: "entertainment", productivity: "drift" };
+      return { classification: { category: "entertainment", productivity: "drift" }, basis: "video" };
     }
-    return { category: "unknown", productivity: "neutral" };
+    return { classification: { category: "unknown", productivity: "neutral" }, basis: "browse" };
   }
 
   if (hasYouTubeMusicMetadata(segment, officialCategory)) {
-    return { category: "music", productivity: "neutral" };
+    return { classification: { category: "music", productivity: "neutral" }, basis: "music" };
   }
 
   const categoryClassification = classifyYouTubeOfficialCategory(officialCategory);
-  if (categoryClassification) return categoryClassification;
+  if (categoryClassification) {
+    return {
+      classification: categoryClassification,
+      basis: categoryClassification.category === "music" ? "music" : "video",
+    };
+  }
 
-  return { category: "entertainment", productivity: "drift" };
+  return { classification: { category: "entertainment", productivity: "drift" }, basis: "video" };
 }
 
 export function classifyYouTubeWindowTitle(segment: ActivitySegment): ActivityClassification | null {

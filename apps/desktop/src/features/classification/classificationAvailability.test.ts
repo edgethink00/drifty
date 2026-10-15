@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BillingEntitlement } from "../billing/billingService";
-import { applyClassificationAvailabilityToAiStatus, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch, type ClassificationAvailabilityInput } from "./classificationAvailability";
+import { applyClassificationAvailabilityToAiStatus, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveIntelligenceLocked, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch, type ClassificationAvailabilityInput } from "./classificationAvailability";
 
 const activeEntitlement = {
   plan: "individual",
@@ -181,6 +181,26 @@ describe("resolveClassificationAvailability", () => {
       billingEntitlement: null,
       billingEntitlementLoading: true,
     })).state).toBe("checking");
+  });
+});
+
+describe("resolveIntelligenceLocked", () => {
+  const base = { billingEntitlement: null, billingEntitlementLoading: false, billingEntitlementError: null, ownModelConfigured: false } as const;
+
+  it("leaves projects open to Drifty Cloud users, trial and Pro alike", () => {
+    expect(resolveIntelligenceLocked({ ...base, billingEntitlement: activeEntitlement })).toBe(false);
+    expect(resolveIntelligenceLocked({ ...base, billingEntitlement: { ...activeEntitlement, status: "trialing" } })).toBe(false);
+  });
+
+  it("locks projects for on-device or unset users until they set up their own model", () => {
+    expect(resolveIntelligenceLocked(base)).toBe(true);
+    expect(resolveIntelligenceLocked({ ...base, billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" } })).toBe(true);
+    expect(resolveIntelligenceLocked({ ...base, ownModelConfigured: true })).toBe(false);
+  });
+
+  it("does not lock while the plan is still loading or failed to load", () => {
+    expect(resolveIntelligenceLocked({ ...base, billingEntitlementLoading: true })).toBe(false);
+    expect(resolveIntelligenceLocked({ ...base, billingEntitlementError: "network" })).toBe(false);
   });
 });
 

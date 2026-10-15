@@ -1,8 +1,6 @@
-import { useMemo, useState } from "react";
-import type { ActivitySegment, Project, ProjectInput } from "@drifty/domain";
+import { useMemo } from "react";
+import type { ActivitySegment, Project } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
-import { ModalPresence } from "../../components/ModalPresence";
-import { ProjectEditorModal, type ProjectSaveResult } from "./ProjectEditorModal";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -17,7 +15,6 @@ interface SourceRow {
 
 export interface ProjectDetailViewProps {
   readonly project: Project;
-  readonly projects: readonly Project[];
   /** Segments + attribution for the currently loaded trend window. */
   readonly trendSegments: readonly ActivitySegment[];
   readonly trendProjectBySegmentId: ReadonlyMap<string, string>;
@@ -31,22 +28,24 @@ export interface ProjectDetailViewProps {
   readonly totalCaption: string;
   readonly windowLabel: string;
   readonly totalSeconds: number;
+  /** "+3h 10m vs. the previous 7 days", once both windows are loaded. */
+  readonly comparison?: string | null;
   /** Tracked seconds attributed to ANY project in the window (for the share stat). */
   readonly windowProjectSeconds: number;
   readonly lastActivityLabel: string;
   readonly busy?: boolean;
-  readonly onSave: (input: ProjectInput) => Promise<ProjectSaveResult> | ProjectSaveResult;
+  /** Opens the category editor on this project (where it is also archived or deleted). */
+  readonly onEdit: () => void;
 }
 
 /**
- * Per-project drill-down: header (identity + description + edit/archive), the
+ * Per-project drill-down: header (identity + description + edit), the
  * project's own time trend over the selected window, and where that time came
  * from (top apps/sites). Uses only the window data the Projects page already
  * loads — no extra fetches.
  */
 export function ProjectDetailView({
   project,
-  projects,
   trendSegments,
   trendProjectBySegmentId,
   trendReady,
@@ -58,14 +57,13 @@ export function ProjectDetailView({
   totalCaption,
   windowLabel,
   totalSeconds,
+  comparison = null,
   windowProjectSeconds,
   lastActivityLabel,
   busy = false,
-  onSave,
+  onEdit,
 }: ProjectDetailViewProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
-  const [editorOpen, setEditorOpen] = useState(false);
-  const isArchived = project.status === "archived";
 
   // Only this project's segments — the chart shows a single band scaled to it.
   const { projectSegments, projectAssignments } = useMemo(() => {
@@ -107,26 +105,13 @@ export function ProjectDetailView({
 
   const sharePct = windowProjectSeconds > 0 ? Math.round((totalSeconds / windowProjectSeconds) * 100) : 0;
 
-  const toggleArchive = () => {
-    onSave({
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      color: project.color,
-      status: isArchived ? "active" : "archived",
-    });
-  };
-
   return (
     <div className="project-detail">
       <section className="editorial-panel editorial-panel--soft insight-chart-panel project-detail__head-panel" aria-label={`${t("common.project")} ${project.name}`}>
         <div className="project-detail__head">
           <span className="label-mono">{t("projects.detail.overview")}</span>
           <div className="project-detail__actions">
-            <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditorOpen(true); }}>{t("common.edit")}</button>
-            <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={toggleArchive}>
-              {t(isArchived ? "projects.unarchive" : "projects.archive")}
-            </button>
+            <button type="button" className="app-btn app-btn--secondary" disabled={busy} aria-haspopup="dialog" onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); onEdit(); }}>{t("common.edit")}</button>
           </div>
         </div>
         {project.description.trim() ? (
@@ -138,6 +123,7 @@ export function ProjectDetailView({
           <div className="project-detail__stat">
             <span className="label-mono">{totalCaption}</span>
             <strong>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "0분" : "0m"}</strong>
+            {comparison ? <span className={"project-detail__delta" + (comparison.includes("+") ? " is-up" : "")}>{comparison}</span> : null}
           </div>
           <div className="project-detail__stat">
             <span className="label-mono">{t("projects.detail.assignedShare")}</span>
@@ -196,18 +182,6 @@ export function ProjectDetailView({
           </div>
         )}
       </section>
-
-      <ModalPresence>
-        {editorOpen ? (
-        <ProjectEditorModal
-          project={project}
-          projects={projects}
-          busy={busy}
-          onSave={onSave}
-          onClose={() => setEditorOpen(false)}
-        />
-        ) : null}
-      </ModalPresence>
     </div>
   );
 }

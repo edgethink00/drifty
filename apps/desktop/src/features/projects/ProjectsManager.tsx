@@ -1,21 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Project, ProjectInput, ProjectStatus } from "@drifty/domain";
+import { useMemo, useState } from "react";
+import type { Project } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
-import { ModalPresence } from "../../components/ModalPresence";
-import { AnchoredPresence } from "../../components/AnchoredPresence";
-import { ProjectEditorModal, type ProjectSaveResult } from "./ProjectEditorModal";
-import { ProjectDeleteConfirmation, type ProjectDeleteResult } from "./ProjectDeleteConfirmation";
-import { SettingsSelect } from "../settings/SettingsSelect";
+import { PencilGlyph } from "../../components/PencilGlyph";
 import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
+import { formatProjectLastActivity } from "./projectDates";
+import { ProjectSparkline } from "./ProjectSparkline";
 import { useLocalization } from "../localization/LocalizationContext";
 
 const DEFAULT_PROJECT_COLOR = "#6366f1";
-
-type StatusFilter = "all" | ProjectStatus;
+/** The search field shows once the list is long enough to need it. */
+export const PROJECT_SEARCH_FROM = 8;
 
 export interface ProjectsManagerProps {
-  readonly createRequested?: boolean;
-  readonly onCreateRequestHandled?: () => void;
   readonly projects: readonly Project[];
   /** Tracked seconds attributed to each project within the current trend window. */
   readonly totalSecondsByProject: ReadonlyMap<string, number>;
@@ -23,9 +19,12 @@ export interface ProjectsManagerProps {
   readonly lastActivityByProject: ReadonlyMap<string, string>;
   /** Caption in the per-project time column, e.g. "Latest 7 days". */
   readonly totalCaption: string;
-  readonly onSave: (input: ProjectInput) => Promise<ProjectSaveResult> | ProjectSaveResult;
-  /** Runs after the user confirms. A failure keeps the confirmation open to retry. */
-  readonly onDelete: (id: string) => Promise<ProjectDeleteResult> | ProjectDeleteResult | void;
+  /** Per-day seconds across the window, oldest first, for each row's trend line. */
+  readonly dailySecondsByProject?: ReadonlyMap<string, readonly number[]>;
+  /** The logical today, for "today", "yesterday" and "3 days ago". */
+  readonly today: string;
+  /** Opens the category editor on a project; absent while Intelligence locks project edits. */
+  readonly onEditProject?: (project: Project) => void;
   /** Row click → project detail. */
   readonly onOpenProject: (projectId: string) => void;
   readonly autoAnalysis: ProjectAutoAnalysisState;
@@ -39,352 +38,172 @@ function truncateDescription(description: string, emptyLabel: string, max = 72):
   return `${trimmed.slice(0, max - 1).trimEnd()}…`;
 }
 
-function formatLastActivity(day: string | undefined, language: "en" | "ko"): string {
-  if (!day) return "—";
-  const parsed = new Date(`${day}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric", year: "numeric" }).format(parsed);
-}
-
-function focusInsideDialog(): boolean {
-  return document.activeElement instanceof HTMLElement && document.activeElement.closest('[role="dialog"]') !== null;
-}
-
 /**
- * Project library as a filterable table: search + status filter + "New project",
- * one row per project with a per-row ⋯ menu (edit / archive / delete). The
- * create/edit form lives in an on-demand modal. Signals are deliberately not
- * exposed here — the description is the project's definition, and the full text
- * is readable in the Edit modal.
+ * The project list: one row per active project with its last activity, a
+ * 7-day trend line and its time in the window, a pencil that opens it in the
+ * category editor (where projects are added, archived and deleted), and
+ * archived projects folded underneath. A search field appears once
+ * the list is long.
  */
 export function ProjectsManager({
-  createRequested = false,
-  onCreateRequestHandled,
   projects,
   totalSecondsByProject,
   lastActivityByProject,
   totalCaption,
-  onSave,
-  onDelete,
+  dailySecondsByProject,
+  today,
+  onEditProject,
   onOpenProject,
   autoAnalysis,
   busy = false,
 }: ProjectsManagerProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const menuTrigger = useRef<HTMLButtonElement | null>(null);
-  const createTrigger = useRef<HTMLButtonElement | null>(null);
-  // null = closed; "new" = create; otherwise the project being edited.
-  const [editing, setEditing] = useState<Project | "new" | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState<{ readonly detail: string } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const zeroLabel = effectiveLanguage === "ko" ? "0분" : "0m";
 
-  useEffect(() => {
-    if (!createRequested || busy) return;
-    createTrigger.current?.focus({ preventScroll: true });
-    setEditing("new");
-    onCreateRequestHandled?.();
-  }, [createRequested, busy, onCreateRequestHandled]);
+  const matches = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    return (project: Project) => !trimmed || project.name.toLowerCase().includes(trimmed);
+  }, [query]);
+  const active = projects.filter((project) => project.status !== "archived" && matches(project));
+  const archived = projects.filter((project) => project.status === "archived" && matches(project));
+  const searching = query.trim() !== "";
 
-  const filtered = useMemo(() => {
-    const trimmedQuery = query.trim().toLowerCase();
-    return projects.filter((project) => {
-      if (statusFilter !== "all" && project.status !== statusFilter) return false;
-      if (trimmedQuery && !project.name.toLowerCase().includes(trimmedQuery)) return false;
-      return true;
-    });
-  }, [projects, query, statusFilter]);
-
-  useEffect(() => {
-    if (menuFor === null) return;
-    const onMouseDown = (event: globalThis.MouseEvent) => {
-      const target = event.target as Element | null;
-      if (target?.closest(".pt-menu") || target?.closest(".pt-more")) return;
-      setMenuFor(null);
-    };
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [menuFor]);
-
-  useEffect(() => {
-    if (menuFor === null) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuFor(null);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [menuFor]);
-
-  const handleStartEdit = (project: Project) => {
-    // The Edit item disappears with its menu; restore to the persistent trigger.
-    menuTrigger.current?.focus({ preventScroll: true });
-    setMenuFor(null);
-    setEditing(project);
+  const row = (project: Project) => {
+    const isArchived = project.status === "archived";
+    const totalSeconds = totalSecondsByProject.get(project.id) ?? 0;
+    const autoPhase = isArchived ? null : projectAutoAnalysisPhase(autoAnalysis, project.id);
+    const timeState = autoPhase === "running"
+      ? { label: t("projects.matching.matchingProgress"), tone: "running" }
+      : autoPhase === "queued"
+        ? { label: t("projects.matchingSoon"), tone: "running" }
+        : autoPhase === "waiting_for_model"
+          ? { label: t("projects.setupNeeded"), tone: "attention" }
+          : autoPhase === "error"
+            ? { label: t("projects.matching.retryNeeded"), tone: "error" }
+            : autoPhase === "complete" && totalSeconds === 0
+              ? { label: t("projects.noRecentMatch"), tone: "muted", refine: true }
+              : null;
+    const daily = dailySecondsByProject?.get(project.id);
+    return (
+      <div className={`projects-table__rowwrap${isArchived ? " projects-table__rowwrap--archived" : ""}`} key={project.id}>
+        <div className="projects-table__row" onClick={() => onOpenProject(project.id)}>
+          <div className="pt-proj">
+            <span className="pt-swatch" style={{ background: project.color || DEFAULT_PROJECT_COLOR }} />
+            <button
+              type="button"
+              className="projects-table__open"
+              aria-label={t("projects.openAria", { name: project.name })}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenProject(project.id);
+              }}
+            >
+              <strong>{project.name}</strong>
+              <small>{truncateDescription(project.description, t("projects.noDescription"))}</small>
+            </button>
+          </div>
+          <span className="pt-last">{formatProjectLastActivity(lastActivityByProject.get(project.id), today, effectiveLanguage, t)}</span>
+          <span className="pt-trend">{daily && !isArchived ? <ProjectSparkline values={daily} color={project.color || DEFAULT_PROJECT_COLOR} label={t("projects.trendAria", { name: project.name })} /> : null}</span>
+          <div className="pt-total">
+            {timeState ? (
+              <span
+                className={`projects-table__analysis-state projects-table__analysis-state--${timeState.tone}`}
+                role={autoPhase === "running" || autoPhase === "queued" ? "status" : undefined}
+                aria-live={autoPhase === "running" || autoPhase === "queued" ? "polite" : undefined}
+              >
+                {autoPhase === "running" || autoPhase === "queued" ? <span className="projects-table__analysis-spinner" aria-hidden="true" /> : null}
+                {timeState.label}
+                {"refine" in timeState && onEditProject ? (
+                  <button
+                    type="button"
+                    className="projects-table__refine"
+                    aria-haspopup="dialog"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEditProject(project);
+                    }}
+                  >
+                    {t("projects.refineDescription")}
+                  </button>
+                ) : null}
+              </span>
+            ) : (
+              <b>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : zeroLabel}</b>
+            )}
+          </div>
+          <span className="pt-edit-slot">
+            {onEditProject ? <button
+              type="button"
+              className="pencil-plate pencil-plate--sm pt-edit"
+              aria-label={t("projects.editAria", { name: project.name })}
+              title={t("projects.editAria", { name: project.name })}
+              aria-haspopup="dialog"
+              disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                onEditProject(project);
+              }}
+            >
+              <PencilGlyph />
+            </button> : null}
+          </span>
+        </div>
+      </div>
+    );
   };
-
-  const handleToggleArchive = (project: Project) => {
-    setMenuFor(null);
-    onSave({
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      color: project.color,
-      status: project.status === "archived" ? "active" : "archived",
-    });
-  };
-
-  const handleStartDelete = (project: Project) => {
-    menuTrigger.current?.focus({ preventScroll: true });
-    setMenuFor(null);
-    setDeleteError(null);
-    setDeleteTarget(project);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteTarget || deleteBusy) return;
-    setDeleteBusy(true);
-    setDeleteError(null);
-    try {
-      const result = await onDelete(deleteTarget.id);
-      if (result === false || (typeof result === "object" && result !== null && !result.deleted)) {
-        setDeleteError({ detail: typeof result === "object" ? result.error : "" });
-        return;
-      }
-      // The row's ⋮ button the dialog would return to leaves with the project.
-      if (focusInsideDialog()) createTrigger.current?.focus({ preventScroll: true });
-      setDeleteTarget(null);
-    } catch (failure) {
-      setDeleteError({ detail: failure instanceof Error ? failure.message : "" });
-    } finally {
-      setDeleteBusy(false);
-    }
-  };
-
-  const deleteMatchedSeconds = deleteTarget ? totalSecondsByProject.get(deleteTarget.id) ?? 0 : 0;
 
   return (
     <div className="projects-manager">
-      {projects.length === 0 ? (
-        <section className="projects-first-run" aria-labelledby="projects-first-run-title">
-          <div className="projects-first-run__mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 8 4.3-8 4.3-8-4.3L12 3Z" /><path d="m4 12.3 8 4.3 8-4.3M4 17.1l8 4.3 8-4.3" /></svg>
-          </div>
-          <div className="projects-first-run__copy">
-            <span className="label-mono">{t("projects.firstRun.eyebrow")}</span>
-            <h2 id="projects-first-run-title">{t("projects.firstRun.title")}</h2>
-            <p>{t("projects.firstRun.detail")}</p>
-            <ol>
-              <li><span>1</span><strong>{t("projects.firstRun.stepName")}</strong></li>
-              <li><span>2</span><strong>{t("projects.firstRun.stepDescribe")}</strong></li>
-              <li><span>3</span><strong>{t("projects.firstRun.stepRefresh")}</strong></li>
-            </ol>
-          </div>
-          <button ref={createTrigger} type="button" className="app-btn app-btn--primary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditing("new"); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-            {t("projects.create")}
-          </button>
-        </section>
-      ) : (
-        <>
-          <div className="projects-toolbar" aria-label={t("projects.filtersAria")}>
-            <span className="projects-search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-              <input
-                className="settings-input"
-                type="text"
-                aria-label={t("projects.searchAria")}
-                placeholder={t("projects.searchPlaceholder")}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </span>
-            <SettingsSelect
-              ariaLabel={t("projects.filterStatus")}
-              className="projects-status-filter"
-              value={statusFilter}
-              options={[
-                { value: "all", label: t("projects.allStatuses") },
-                { value: "active", label: t("common.active") },
-                { value: "archived", label: t("common.archived") },
-              ]}
-              onChange={setStatusFilter}
+      {projects.length >= PROJECT_SEARCH_FROM ? (
+        <div className="projects-toolbar">
+          <span className="projects-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input
+              className="settings-input"
+              type="text"
+              aria-label={t("projects.searchAria")}
+              placeholder={t("projects.searchPlaceholder")}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
             />
-            <span className="projects-toolbar__spacer" />
-            <button ref={createTrigger} type="button" className="app-btn app-btn--primary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditing("new"); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-              {t("projects.new")}
-            </button>
-          </div>
+          </span>
+        </div>
+      ) : null}
 
-          <div className="projects-table" role="region" aria-label={t("projects.title")}>
-            <div className="projects-table__head">
-              <span>{t("common.project")}</span>
-              <span>{t("projects.lastActivity")}</span>
-              <span>{t("projects.status")}</span>
-              <span>{t("projects.timeCaption", { caption: totalCaption })}</span>
-              <span><span className="sr-only">{t("common.actions")}</span></span>
-            </div>
-        {filtered.map((project) => {
-          const isArchived = project.status === "archived";
-          const totalSeconds = totalSecondsByProject.get(project.id) ?? 0;
-          const autoPhase = projectAutoAnalysisPhase(autoAnalysis, project.id);
-          const timeState = autoPhase === "running"
-            ? { label: t("projects.matching.matchingProgress"), tone: "running" }
-            : autoPhase === "queued"
-              ? { label: t("projects.matchingSoon"), tone: "running" }
-              : autoPhase === "waiting_for_model"
-                ? { label: t("projects.setupNeeded"), tone: "attention" }
-                : autoPhase === "error"
-                  ? { label: t("projects.matching.retryNeeded"), tone: "error" }
-                  : autoPhase === "complete" && totalSeconds === 0
-                    ? { label: t("projects.noRecentMatch"), tone: "muted" }
-                    : null;
-          return (
-            <div
-              className={`projects-table__rowwrap${isArchived ? " projects-table__rowwrap--archived" : ""}`}
-              key={project.id}
-            >
-              <div className="projects-table__row" onClick={() => onOpenProject(project.id)}>
-                <div className="pt-proj">
-                  <span className="pt-swatch" style={{ background: project.color || DEFAULT_PROJECT_COLOR }} />
-                  <button
-                    type="button"
-                    className="projects-table__open"
-                    aria-label={t("projects.openAria", { name: project.name })}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onOpenProject(project.id);
-                    }}
-                  >
-                    <strong>{project.name}</strong>
-                    <small>{truncateDescription(project.description, t("projects.noDescription"))}</small>
-                  </button>
-                </div>
-                <span className="pt-mono">{formatLastActivity(lastActivityByProject.get(project.id), effectiveLanguage)}</span>
-                {/* Every live project is Active, so a chip per row would repeat the
-                    loudest treatment on the least distinguishing column. Archived is
-                    the state worth spotting, so only it keeps the chip. */}
-                {isArchived ? (
-                  <span className="chip gray">{t("common.archived")}</span>
-                ) : (
-                  <span className="pt-status">{t("common.active")}</span>
-                )}
-                <div className="pt-total">
-                  {timeState ? (
-                    <span
-                      className={`projects-table__analysis-state projects-table__analysis-state--${timeState.tone}`}
-                      role={autoPhase === "running" || autoPhase === "queued" ? "status" : undefined}
-                      aria-live={autoPhase === "running" || autoPhase === "queued" ? "polite" : undefined}
-                    >
-                      {autoPhase === "running" || autoPhase === "queued" ? <span className="projects-table__analysis-spinner" aria-hidden="true" /> : null}
-                      {timeState.label}
-                    </span>
-                  ) : (
-                    <b>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "0분" : "0m"}</b>
-                  )}
-                </div>
-                <span className="pt-menu-slot">
-                  <button
-                    type="button"
-                    className="pt-more"
-                    aria-label={t("projects.optionsAria", { name: project.name })}
-                    aria-haspopup="menu"
-                    aria-expanded={menuFor === project.id}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      menuTrigger.current = event.currentTarget;
-                      setMenuFor((current) => (current === project.id ? null : project.id));
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5.4" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="18.6" r="1.7" /></svg>
-                  </button>
-                  <AnchoredPresence>{menuFor === project.id ? (
-                    <div className="pt-menu" role="menu" aria-label={t("projects.options")}>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={busy}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleStartEdit(project);
-                        }}
-                      >
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M11.2 2.8a1.4 1.4 0 0 1 2 2L5.5 12.5l-2.7.7.7-2.7 7.7-7.7Z" /></svg>
-                        {t("common.edit")}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={busy}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleToggleArchive(project);
-                        }}
-                      >
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2.2" y="3" width="11.6" height="2.6" rx="0.6" /><path d="M3.2 5.6v6.2a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.6" /><path d="M6.4 8.2h3.2" /></svg>
-                        {t(isArchived ? "projects.unarchive" : "projects.archive")}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="danger"
-                        disabled={busy}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleStartDelete(project);
-                        }}
-                      >
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4.4h10M6.4 4.4V3.2a0.8 0.8 0 0 1 .8-.8h1.6a0.8 0.8 0 0 1 .8.8v1.2" /><path d="M4.3 4.4l.5 8a1 1 0 0 0 1 .9h4.4a1 1 0 0 0 1-.9l.5-8" /><path d="M6.6 7v3.6M9.4 7v3.6" /></svg>
-                        {t("common.delete")}
-                      </button>
-                    </div>
-                  ) : null}</AnchoredPresence>
-                </span>
-              </div>
-            </div>
-          );
-        })}
-            {filtered.length === 0 ? (
-              <div className="projects-table__empty">
-                <span>{t("projects.noFilterMatch")}</span>
-                <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={() => { setQuery(""); setStatusFilter("all"); }}>{t("projects.clearFilters")}</button>
-              </div>
-            ) : null}
-          </div>
-        </>
-      )}
+      <div className="projects-table" role="region" aria-label={t("projects.title")}>
+        <div className="projects-table__head">
+          <span>{t("common.project")}</span>
+          <span>{t("projects.lastActivity")}</span>
+          <span aria-hidden="true" />
+          <span>{t("projects.timeCaption", { caption: totalCaption })}</span>
+          <span><span className="sr-only">{t("common.actions")}</span></span>
+        </div>
+        {active.map(row)}
+        {searching && active.length === 0 && archived.length === 0 ? (
+          <p className="projects-table__empty">{t("projects.noFilterMatch")}</p>
+        ) : null}
+      </div>
 
-      <ModalPresence>
-        {editing !== null ? (
-        <ProjectEditorModal
-          project={editing === "new" ? null : editing}
-          projects={projects}
-          busy={busy}
-          onSave={onSave}
-          onClose={() => setEditing(null)}
-        />
-        ) : null}
-      </ModalPresence>
-      <ModalPresence>
-        {deleteTarget ? (
-          <ProjectDeleteConfirmation
-            project={deleteTarget}
-            matchedTime={deleteMatchedSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(deleteMatchedSeconds, effectiveLanguage) : null}
-            matchedWindow={totalCaption}
-            deleting={deleteBusy}
-            error={deleteError}
-            onCancel={() => setDeleteTarget(null)}
-            onArchive={deleteTarget.status === "archived" ? undefined : () => {
-              handleToggleArchive(deleteTarget);
-              setDeleteTarget(null);
-            }}
-            onConfirm={() => void confirmDelete()}
-          />
-        ) : null}
-      </ModalPresence>
+      {archived.length > 0 ? (
+        <div className="projects-archived">
+          <button
+            type="button"
+            className="projects-archived__toggle"
+            aria-expanded={showArchived || searching}
+            onClick={() => setShowArchived((open) => !open)}
+          >
+            {t("projects.archivedCount", { count: archived.length })}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+          </button>
+          {showArchived || searching ? (
+            <div className="projects-table projects-table--archived" role="region" aria-label={t("common.archived")}>
+              {archived.map(row)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

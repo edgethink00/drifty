@@ -44,6 +44,7 @@ import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProduc
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 import { WeekDashboardLoadingBreakdown, WeekDashboardLoadingLegend } from "./WeekDashboardLoadingState";
+import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 
 /* Width of .week-v2-calendar__time-rail: the calendar body's first grid column. */
 const WEEK_CALENDAR_TIME_RAIL_REM = 2.5;
@@ -62,7 +63,8 @@ export type WeekDashboardColorMode = "category" | "productivity" | "project";
 const EMPTY_PROJECT_ASSIGNMENTS: readonly ProjectAssignmentRecord[] = [];
 const EMPTY_PROJECT_WINDOW_ASSIGNMENTS: readonly ProjectWindowAssignmentRecord[] = [];
 
-const WEEK_COLOR_MODE_OPTIONS = ["category", "productivity"] as const satisfies readonly WeekDashboardColorMode[];
+// Productivity, categories, projects: the category editor's tab order.
+const WEEK_COLOR_MODE_OPTIONS = ["productivity", "category"] as const satisfies readonly WeekDashboardColorMode[];
 
 type WeekIdentityStripStyle = CSSProperties & {
   "--week-identity-tile": string;
@@ -247,6 +249,8 @@ type WeekDashboardProps = {
     productivity: ProductivityLabel,
   ) => Promise<void>;
   readonly onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
+  /** Opens the category editor from the legend, the breakdown, and the activity inspector. */
+  readonly onEditCategories?: (target: CategoryEditorTarget) => void;
 };
 
 type WeekActivityInspectorState = {
@@ -307,6 +311,7 @@ export function WeekDashboard({
   onAssignProject,
   onClassifyActivity,
   onDeleteActivity,
+  onEditCategories,
 }: WeekDashboardProps) {
   const { effectiveLanguage, t } = useLocalization();
   // Controlled by DashboardPage in the app (shared Day/Week preference);
@@ -707,6 +712,7 @@ export function WeekDashboard({
                   hasUnclassified={hasUnclassified}
                   hoveredLegendCardRef={legendHoverCardRef}
                   setHoveredLegend={setLegendHover}
+                  onEdit={onEditCategories ? () => onEditCategories({ group: colorMode }) : undefined}
                 />
                 {googleCalendarStatusLabel ? (
                   <span className={`week-v2-calendar__calendar-key week-v2-calendar__calendar-key--${googleCalendarStatus}`} aria-live="polite">
@@ -927,6 +933,7 @@ export function WeekDashboard({
             onClassify={onClassifyActivity}
             onDelete={onDeleteActivity}
             classificationOptions={classificationOptions}
+            onEditCategories={onEditCategories}
           />
         ) : null}
         {!initialDataLoading && legendHover && !activityInspector ? <FlowLegendHoverCard hover={legendHover} appIcons={appIcons} cardRef={legendHoverCardRef} /> : null}

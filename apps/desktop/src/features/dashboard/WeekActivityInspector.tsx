@@ -10,6 +10,7 @@ import {
   type ExclusionSource,
   type ProductivityLabel,
 } from "@drifty/domain";
+import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import {
   useCallback,
   useEffect,
@@ -117,6 +118,8 @@ type WeekActivityInspectorProps = {
     segments: readonly ActivitySegment[],
     projectId: string | null,
   ) => Promise<void>;
+  /** Opens the category editor on the picked attribute; the inspector closes first. */
+  readonly onEditCategories?: (target: CategoryEditorTarget) => void;
   readonly onClassify?: (
     segments: readonly ActivitySegment[],
     category: ActivityCategory,
@@ -643,6 +646,7 @@ function DirectAttributePicker({
   pickerRef,
   onClose,
   onSelect,
+  onManage,
 }: {
   readonly field: ActivityInspectorAttribute;
   readonly fieldLabel: string;
@@ -654,6 +658,8 @@ function DirectAttributePicker({
   readonly pickerRef: MutableRefObject<HTMLDivElement | null>;
   readonly onClose: () => void;
   readonly onSelect: (key: string) => void;
+  /** Manage the definitions this picker lists, in the category editor. */
+  readonly onManage?: () => void;
 }) {
   const { t } = useLocalization();
   const layout = useDirectPickerLayout(
@@ -731,6 +737,14 @@ function DirectAttributePicker({
           </button>
         ))}
       </div>
+      {onManage ? (
+        <div className="week-activity-inspector__picker-foot">
+          <button type="button" className="week-activity-inspector__picker-manage" aria-haspopup="dialog" disabled={busy} onClick={onManage}>
+            <span>{t("categoryEditor.manageGroup", { group: fieldLabel })}</span>
+            <ChevronIcon direction="right" />
+          </button>
+        </div>
+      ) : null}
     </div>,
     document.body,
   );
@@ -1174,6 +1188,7 @@ export function WeekActivityInspector({
   onAssignProject,
   onClassify,
   onDelete,
+  onEditCategories,
 }: WeekActivityInspectorProps) {
   const { t } = useLocalization();
   const targetSegmentsRef = useRef(segments);
@@ -1593,6 +1608,16 @@ export function WeekActivityInspector({
           pickerRef={pickerRef}
           onClose={closePicker}
           onSelect={selectOption}
+          onManage={onEditCategories ? () => {
+            const target: CategoryEditorTarget = expandedAttribute === "project"
+              ? { group: "project", key: values.projectId ?? undefined }
+              : expandedAttribute === "category"
+                ? { group: "category", key: values.category }
+                : { group: "productivity", key: values.productivity };
+            // The editor is a dialog; the inspector card does not wait under it.
+            onClose(false);
+            onEditCategories(target);
+          } : undefined}
         />
       ) : null}
 

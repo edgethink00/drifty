@@ -1,0 +1,72 @@
+/* The plate pencil: a soft round plate carrying a white pencil, the edit
+   affordance Dayflow puts beside its legends and summaries. No outline, no
+   shadow — just a tinted disc that deepens on hover — and the same size
+   wherever it appears so the eye learns it once. */
+.pencil-plate {
+  --pencil-plate-size: 24px;
+  --pencil-plate-glyph: 12px;
+  --pencil-plate-fill: color-mix(in srgb, var(--text) 13%, var(--surface));
+  --pencil-plate-fill-hover: color-mix(in srgb, var(--text) 24%, var(--surface));
+  --pencil-plate-ink: var(--surface);
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--pencil-plate-size);
+  height: var(--pencil-plate-size);
+  min-width: var(--pencil-plate-size);
+  min-height: var(--pencil-plate-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--pencil-plate-fill);
+  box-shadow: none;
+  color: var(--pencil-plate-ink);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.pencil-plate:hover:not(:disabled) {
+  background: var(--pencil-plate-fill-hover);
+}
+
+.pencil-plate:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.pencil-plate:focus-visible {
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 45%, transparent));
+  outline-offset: 2px;
+}
+
+.pencil-plate:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.pencil-plate .pencil-glyph {
+  width: var(--pencil-plate-glyph);
+  height: var(--pencil-plate-glyph);
+  fill: currentColor;
+}
+
+/* A slightly smaller plate for dense rows and chip rows. */
+.pencil-plate--sm {
+  --pencil-plate-size: 22px;
+  --pencil-plate-glyph: 11px;
+}
+
+:root[data-theme="dark"] .pencil-plate {
+  --pencil-plate-fill: color-mix(in srgb, var(--text) 20%, var(--surface));
+  --pencil-plate-fill-hover: color-mix(in srgb, var(--text) 32%, var(--surface));
+  --pencil-plate-ink: color-mix(in srgb, var(--text) 92%, var(--surface));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pencil-plate { transition: none; }
+  .pencil-plate:active:not(:disabled) { transform: none; }
+}

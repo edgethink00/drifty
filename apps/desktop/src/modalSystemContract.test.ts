@@ -15,6 +15,8 @@ const animatedModalPanelFiles = [
   "./features/auth/AuthModal.tsx",
   "./features/billing/PromoHandoffAccountDialog.tsx",
   "./features/billing/ProDecisionSheet.tsx",
+  "./features/categories/CategoryEditorSheet.tsx",
+  "./features/categories/ClassificationRulesSheet.tsx",
   "./features/cloud-devices/CloudDeviceManagementPanel.tsx",
   "./features/command-bar/CommandBar.tsx",
   "./features/companion/DriftAlarmCopySettings.tsx",
@@ -29,7 +31,6 @@ const animatedModalPanelFiles = [
   "./features/profile/ProfileEmbedsModal.tsx",
   "./features/profile/ProfileModals.tsx",
   "./features/projects/ProjectDeleteConfirmation.tsx",
-  "./features/projects/ProjectEditorModal.tsx",
   "./features/settings/AiPrivacyDetailsModal.tsx",
   "./features/settings/AiSetupModelDialogs.tsx",
   "./features/settings/DebugLogModal.tsx",
@@ -65,7 +66,6 @@ const sharedModalSurfaces = [
   ["Edit profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace"/],
   ["Profile embed", "./features/profile/ProfileEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal profile-embeds-modal"\s+data-modal-variant="workspace"/],
   ["Rank embed", "./features/leaderboard/RankEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal rank-embeds-modal"\s+data-modal-variant="workspace"/],
-  ["New project", "./features/projects/ProjectEditorModal.tsx", /className="auth-modal modal-shell project-editor-modal"\s+data-modal-variant="standard"/],
   ["Delete project", "./features/projects/ProjectDeleteConfirmation.tsx", /className="auth-modal modal-shell project-delete-modal"\s+data-modal-variant="compact"/],
   ["Debug log", "./features/settings/DebugLogModal.tsx", /className="auth-modal modal-shell debug-log-modal"\s+data-modal-variant="workspace"/],
   ["OpenRouter models", "./features/settings/AiSetupModelDialogs.tsx", /className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard"/],
@@ -85,6 +85,8 @@ const sharedModalSurfaces = [
   ["Pro plan choice", "./features/billing/ProDecisionSheet.tsx", /className="pro-sheet__panel modal-shell"\s+data-modal-variant="workspace"/],
   ["Promo account handoff", "./features/billing/PromoHandoffAccountDialog.tsx", /className="auth-modal modal-shell"\s+data-modal-variant="standard"/],
   ["SSH agent sources", "./features/dev-signals/SshAgentSourcesModal.tsx", /className="auth-modal modal-shell agents-ssh-modal"\s+data-modal-variant="standard"/],
+  ["Category editor", "./features/categories/CategoryEditorSheet.tsx", /className="auth-modal modal-shell category-editor"\s+data-modal-variant="workspace"/],
+  ["App & site rules", "./features/categories/ClassificationRulesSheet.tsx", /className="auth-modal modal-shell rules-sheet"\s+data-modal-variant="workspace"/],
   ["Windows update", "./features/updates/AvailableUpdateDialog.tsx", /className="auth-modal modal-shell windows-update-prompt"\s+data-modal-variant="compact"/],
   ["What's new", "./features/whats-new/WhatsNewDialog.tsx", /className="auth-modal modal-shell whats-new"\s+data-modal-variant="standard"/],
 ] as const;
@@ -179,7 +181,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(31);
+    expect(sharedModalSurfaces).toHaveLength(32);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -298,7 +300,7 @@ describe("dialog key hints", () => {
    * placement, so a dialog that gains or loses a hint has to change it here. */
   type Shortcut = "escape" | "enter" | "modEnter";
   const agreedHints: readonly (readonly [string, readonly Shortcut[]])[] = [
-    ["./features/projects/ProjectEditorModal.tsx", ["escape", "modEnter"]],
+    ["./features/categories/CategoryEditorSheet.tsx", ["escape", "modEnter"]],
     ["./features/team/TeamProjectsView.tsx", ["escape", "modEnter"]],
     ["./features/profile/ProfileModals.tsx", ["escape", "modEnter"]],
     ["./features/feedback/FeedbackModal.tsx", ["escape", "modEnter"]],

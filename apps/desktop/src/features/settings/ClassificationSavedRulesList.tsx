@@ -25,6 +25,9 @@ import type { LocalizationController } from "../localization/LocalizationContext
 import { ActionLabel } from "../../components/ActionLabel";
 
 type ClassificationSavedRulesListProps = {
+  /** The id of a heading outside the list that names it (the rules sheet's
+   *  title); without one the list carries its own heading. */
+  readonly headingId?: string;
   readonly feedback?: ReactNode;
   readonly hasError: boolean;
   readonly onSaveRule: (input: ClassificationRuleInput) => Promise<boolean>;
@@ -47,6 +50,7 @@ type ClassificationSavedRulesListProps = {
 };
 
 export function ClassificationSavedRulesList({
+  headingId,
   feedback,
   hasError,
   onSaveRule,
@@ -77,11 +81,11 @@ export function ClassificationSavedRulesList({
     <div className="settings-block classification-rule-saved-block">
       {/* Heading left, count right, like Memory's other sections. The h3 stays a
           direct child: settings blocks style their rows as cards through it. */}
-      <h3 id="classification-saved-rules-heading">{t("classification.rules.title")}</h3>
+      {headingId ? null : <h3 id="classification-saved-rules-heading">{t("classification.rules.title")}</h3>}
       {/* The empty state already says there are none; "0 classifications" beside it only repeats that. */}
       <span className="classification-rule-list-count classification-rule-saved-count" role="status">{countLabel}</span>
       {feedback}
-      <section className="settings-row settings-row--group-start settings-row--group-end classification-rule-list-section" aria-labelledby="classification-saved-rules-heading">
+      <section className="settings-row settings-row--group-start settings-row--group-end classification-rule-list-section" aria-labelledby={headingId ?? "classification-saved-rules-heading"}>
         {/* The one line on how these apply sits inside the card it describes. */}
         <div className="classification-rule-list-intro">
           <p className="classification-rules-manager__intro">

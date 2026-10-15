@@ -1,0 +1,198 @@
+import { describe, expect, it } from "vitest";
+import type { ActivitySegment } from "./activity";
+import { classifyActivityDetailed } from "./aggregation";
+import {
+  categoryGuidanceChanged,
+  categoryGuidanceFromCustomizations,
+  categoryNameOverrides,
+  categoryProductivityPreferences,
+  classificationGuidanceChanged,
+  classificationGuidanceFromCustomizations,
+  normalizeCategoryCustomizations,
+  normalizeProductivityCustomizations,
+  productivityNameOverrides,
+} from "./categoryCustomization";
+import { normalizeLiveCategoryGuidance } from "./liveClassificationPolicy";
+import { buildLiveClassificationPrompt, LIVE_CATEGORY_DEFINITIONS, LIVE_INTENT_FIRST_RUBRIC } from "./liveClassificationPrompt";
+import { isContentDependentYouTubeActivity } from "./youtubeClassification";
+
+function segment(overrides: Partial<ActivitySegment> = {}): ActivitySegment {
+  return {
+    id: "segment-1",
+    startedAt: "2026-10-10T09:00:00.000Z",
+    endedAt: "2026-10-10T09:10:00.000Z",
+    durationSeconds: 600,
+    appName: "Arc",
+    browserName: "Arc",
+    platform: "macos",
+    source: "nsworkspace",
+    ...overrides,
+  };
+}
+
+describe("category customizations", () => {
+  it("keeps only usable settings for the nine customizable categories", () => {
+    expect(normalizeCategoryCustomizations({
+      learning: { name: "  Dev   study ", description: "  Coding talks  ", productivity: "focus" },
+      entertainment: { productivity: "sometimes" },
+      unknown: { name: "Mystery", description: "Anything" },
+      shopping: { name: "", description: "   " },
+      social_media: { description: "x".repeat(400) },
+    })).toEqual({
+      learning: { name: "Dev study", description: "Coding talks", productivity: "focus" },
+      social_media: { description: "x".repeat(300) },
+    });
+  });
+
+  it("sends only described categories to the model, with their custom name", () => {
+    const guidance = categoryGuidanceFromCustomizations({
+      entertainment: { name: "Shorts", productivity: "drift" },
+      learning: { name: "Dev study", description: "Count <b>WWDC</b> talks here" },
+      workspace: { description: "Design work in Figma" },
+    });
+
+    expect(guidance).toEqual([
+      { category: "workspace", description: "Design work in Figma" },
+      { category: "learning", name: "Dev study", description: "Count b WWDC /b talks here" },
+    ]);
+  });
+
+  it("reclassifies only when what the model reads changes", () => {
+    const base = { learning: { description: "Coding talks" } } as const;
+    expect(categoryGuidanceChanged(base, { learning: { description: "Coding talks", productivity: "focus" } })).toBe(false);
+    expect(categoryGuidanceChanged({}, { entertainment: { name: "Shorts" } })).toBe(false);
+    expect(categoryGuidanceChanged(base, { learning: { description: "Coding talks and papers" } })).toBe(true);
+    expect(categoryGuidanceChanged(base, { learning: { name: "Study", description: "Coding talks" } })).toBe(true);
+  });
+
+  it("derives display names and productivity preferences per category", () => {
+    const customizations = { learning: { name: "Study", productivity: "focus" }, game: { description: "Puzzle apps" } } as const;
+    expect(categoryNameOverrides(customizations)).toEqual({ learning: "Study" });
+    expect(categoryProductivityPreferences(customizations)).toEqual({ learning: "focus" });
+  });
+});
+
+describe("category productivity preference", () => {
+  const preferences = { categoryProductivity: { entertainment: "neutral" as const } };
+
+  it("pins automatic answers in the category", () => {
+    const classified = classifyActivityDetailed(segment({
+      siteDomain: "example.tv",
+      classification: { category: "entertainment", productivity: "drift", source: "llm", confidence: 0.8 },
+    }), preferences);
+
+    expect(classified).toMatchObject({ category: "entertainment", productivity: "neutral", productivityPreference: true });
+  });
+
+  it("never overrides a manual correction or a saved user rule", () => {
+    const manual = classifyActivityDetailed(segment({
+      classification: { category: "entertainment", productivity: "drift", source: "manual", confidence: 1 },
+    }), preferences);
+    const ruled = classifyActivityDetailed(segment({ siteDomain: "example.tv" }), {
+      ...preferences,
+      rules: [{ targetKind: "site", targetValue: "example.tv", category: "entertainment", productivity: "drift" }],
+    });
+
+    expect(manual.productivity).toBe("drift");
+    expect(ruled).toMatchObject({ source: "rule", productivity: "drift" });
+  });
+});
+
+describe("user category guidance in the live prompt", () => {
+  const items = [{ id: "a", appName: "Arc", domain: "youtube.com", urlHost: "youtube.com", title: "WWDC recaps", durationSeconds: 600 }];
+
+  it("adds nothing when the user wrote no descriptions", () => {
+    expect(buildLiveClassificationPrompt(items, null, { intentFirst: true, categoryGuidance: [] }))
+      .toBe(buildLiveClassificationPrompt(items, null, { intentFirst: true }));
+  });
+
+  it("places the user's definitions right after the default definitions", () => {
+    const prompt = buildLiveClassificationPrompt(items, null, {
+      intentFirst: true,
+      categoryGuidance: [{ category: "learning", name: "Dev study", description: "Conference talks and WWDC sessions" }],
+    });
+    const definitions = prompt.indexOf(LIVE_CATEGORY_DEFINITIONS);
+    const guidance = prompt.indexOf("<user_category_guidance>");
+    const rubric = prompt.indexOf(LIVE_INTENT_FIRST_RUBRIC);
+
+    expect(definitions).toBeGreaterThan(-1);
+    expect(guidance).toBeGreaterThan(definitions);
+    expect(rubric).toBeGreaterThan(guidance);
+    expect(prompt).toContain('{"category":"learning","name":"Dev study","description":"Conference talks and WWDC sessions"}');
+  });
+});
+
+describe("productivity definitions", () => {
+  const items = [{ id: "a", appName: "Arc", domain: "youtube.com", urlHost: "youtube.com", title: "WWDC recaps", durationSeconds: 600 }];
+
+  it("keeps a name and description for the three labels only", () => {
+    expect(normalizeProductivityCustomizations({
+      focus: { name: "  Deep  work ", description: "  Coding talks  " },
+      drift: { name: "" },
+      other: { description: "ignored" },
+    })).toEqual({ focus: { name: "Deep work", description: "Coding talks" } });
+    expect(productivityNameOverrides({ focus: { name: "Deep work" }, drift: { description: "Shorts" } })).toEqual({ focus: "Deep work" });
+  });
+
+  it("sends described labels after described categories, and never a rename alone", () => {
+    const guidance = classificationGuidanceFromCustomizations(
+      { learning: { description: "WWDC sessions" }, game: { name: "Play" } },
+      { drift: { name: "Slack off", description: "YouTube Shorts" }, focus: { name: "Deep work" } },
+    );
+
+    expect(guidance).toEqual([
+      { category: "learning", description: "WWDC sessions" },
+      { productivity: "drift", name: "Slack off", description: "YouTube Shorts" },
+    ]);
+  });
+
+  it("treats a productivity description change as a model-facing change", () => {
+    const base = { categories: {}, productivity: { focus: { description: "Coding talks" } } };
+    expect(classificationGuidanceChanged(base, { categories: {}, productivity: { focus: { description: "Coding talks and papers" } } })).toBe(true);
+    expect(classificationGuidanceChanged(base, { categories: {}, productivity: { focus: { name: "Deep work", description: "Coding talks" } } })).toBe(true);
+    expect(classificationGuidanceChanged({ categories: {}, productivity: {} }, { categories: {}, productivity: { neutral: { name: "Calm" } } })).toBe(false);
+  });
+
+  it("drops unknown labels and duplicates instead of rejecting the request", () => {
+    expect(normalizeLiveCategoryGuidance([
+      { productivity: "drift", description: "Shorts" },
+      { productivity: "drift", description: "Second" },
+      { productivity: "sleep", description: "never accepted" },
+      { productivity: "focus", description: "Docs" },
+    ])).toEqual([
+      { productivity: "focus", description: "Docs" },
+      { productivity: "drift", description: "Shorts" },
+    ]);
+  });
+
+  it("adds a productivity block to the intent prompt and keeps it in the productivity-only pass", () => {
+    const categoryGuidance = [
+      { category: "learning" as const, description: "Conference talks" },
+      { productivity: "drift" as const, description: "Reaction videos" },
+    ];
+    const intent = buildLiveClassificationPrompt(items, null, { intentFirst: true, categoryGuidance });
+    const productivityOnly = buildLiveClassificationPrompt(items, null, { productivityOnly: true, categoryGuidance });
+
+    expect(intent.indexOf("<user_productivity_guidance>")).toBeGreaterThan(intent.indexOf("<user_category_guidance>"));
+    expect(intent.indexOf(LIVE_INTENT_FIRST_RUBRIC)).toBeGreaterThan(intent.indexOf("<user_productivity_guidance>"));
+    expect(intent).toContain('<user_productivity_guidance>[{"productivity":"drift","description":"Reaction videos"}]</user_productivity_guidance>');
+    expect(productivityOnly).toContain("<user_productivity_guidance>");
+    expect(productivityOnly).not.toContain("<user_category_guidance>");
+  });
+});
+
+describe("content-dependent YouTube activity", () => {
+  const video = segment({ siteDomain: "youtube.com", siteUrl: "https://www.youtube.com/watch?v=abc", youtubeVideoId: "abc", youtubeCategory: "Entertainment" });
+
+  it("covers videos decided by their official category", () => {
+    expect(isContentDependentYouTubeActivity(video)).toBe(true);
+    expect(isContentDependentYouTubeActivity({ ...video, youtubeCategory: "Education" })).toBe(true);
+  });
+
+  it("leaves surface signals with the built-in rule", () => {
+    expect(isContentDependentYouTubeActivity({ ...video, youtubeIsShorts: true })).toBe(false);
+    expect(isContentDependentYouTubeActivity({ ...video, siteDomain: "music.youtube.com" })).toBe(false);
+    expect(isContentDependentYouTubeActivity({ ...video, youtubeCategory: "Music" })).toBe(false);
+    expect(isContentDependentYouTubeActivity({ ...video, siteDomain: "example.com" })).toBe(false);
+  });
+});

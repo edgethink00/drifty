@@ -1,6 +1,7 @@
 export * from "./activity";
 export * from "./adaptiveContentContext";
 export * from "./aggregation";
+export * from "./categoryCustomization";
 export * from "./deviceElapsedTime";
 export * from "./classificationRuleUrl";
 export * from "./liveClassificationPrompt";

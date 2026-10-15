@@ -6,6 +6,7 @@ import type { LocalizationController } from "../localization/LocalizationContext
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { ClassificationCorrectionDraft, ClassificationCorrectionNotice } from "./classificationCorrection";
 import { ActionLabel } from "../../components/ActionLabel";
+import { ChevronRightIcon } from "../categories/definitionIcons";
 
 export const CLASSIFICATION_CORRECTION_POPOVER_WIDTH = 296;
 export const CLASSIFICATION_CORRECTION_POPOVER_GAP = 8;
@@ -110,6 +111,8 @@ export type ClassificationCorrectionPopoverProps = {
   readonly onProductivityChange: (productivity: ProductivityLabel) => void;
   readonly onSave: () => void;
   readonly onCancel: () => void;
+  /** Opens the category editor, for a category that is missing or needs a better description. */
+  readonly onEditCategories?: () => void;
 };
 
 export function ClassificationCorrectionPopover({
@@ -129,6 +132,7 @@ export function ClassificationCorrectionPopover({
   onProductivityChange,
   onSave,
   onCancel,
+  onEditCategories,
 }: ClassificationCorrectionPopoverProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [placement, setPlacement] = useState<ClassificationCorrectionPopoverPlacement | null>(null);
@@ -240,7 +244,15 @@ export function ClassificationCorrectionPopover({
       </header>
 
       <div className="classification-correction__section">
-        <span className="classification-correction__section-label">{t("common.category")}</span>
+        <div className="classification-correction__section-head">
+          <span className="classification-correction__section-label">{t("common.category")}</span>
+          {onEditCategories ? (
+            <button type="button" className="classification-correction__edit" aria-label={t("categoryEditor.edit")} aria-haspopup="dialog" onClick={onEditCategories} disabled={saving}>
+              {t("categoryEditor.manage")}
+              <ChevronRightIcon />
+            </button>
+          ) : null}
+        </div>
         <div
           className="classification-correction__palette"
           role="radiogroup"

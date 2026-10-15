@@ -9,10 +9,12 @@ const { invoke } = vi.hoisted(() => ({
 const previewDataMocks = vi.hoisted(() => ({
   previewAppIcons: vi.fn(),
   previewDeleteActivitySegments: vi.fn(),
+  previewDeleteProject: vi.fn(),
   previewHourlySummary: vi.fn(),
   previewProjectAssignments: vi.fn(),
   previewProjects: vi.fn(),
   previewSaveClassifications: vi.fn(),
+  previewSaveProject: vi.fn(),
   previewSaveProjectAssignments: vi.fn(),
   previewStatus: vi.fn(),
   previewTimeline: vi.fn(),
@@ -296,16 +298,24 @@ describe("trackerClient", () => {
     previewDataMocks.previewSaveProjectAssignments.mockReturnValue({ saved: 1, skippedManual: 0 });
     previewDataMocks.previewSaveClassifications.mockReturnValue({ saved: 1 });
     previewDataMocks.previewDeleteActivitySegments.mockReturnValue({ deleted: 1 });
+    const projectInput = { name: "Q3 launch", description: "", color: "#2f8b83" };
+    const savedProject = { id: "preview-project-new-1", ...projectInput, status: "active", anchors: [], createdAt: "", updatedAt: "" };
+    previewDataMocks.previewSaveProject.mockReturnValue(savedProject);
+    previewDataMocks.previewDeleteProject.mockReturnValue({ deleted: 1 });
 
     await expect(trackerClient.getProjects()).resolves.toEqual([{ id: "preview-project-drifty" }]);
     await expect(trackerClient.getProjectAssignments({ day: "2026-09-02" })).resolves.toEqual(assignments);
     await expect(trackerClient.saveProjectAssignments(assignments)).resolves.toEqual({ saved: 1, skippedManual: 0 });
     await expect(trackerClient.saveClassifications(classifications)).resolves.toEqual({ saved: 1 });
     await expect(trackerClient.deleteActivitySegments(["preview-t1"])).resolves.toEqual({ deleted: 1 });
+    await expect(trackerClient.saveProject(projectInput)).resolves.toEqual(savedProject);
+    await expect(trackerClient.deleteProject("preview-project-new-1")).resolves.toEqual({ deleted: 1 });
 
     expect(previewDataMocks.previewSaveProjectAssignments).toHaveBeenCalledWith(assignments);
     expect(previewDataMocks.previewSaveClassifications).toHaveBeenCalledWith(classifications);
     expect(previewDataMocks.previewDeleteActivitySegments).toHaveBeenCalledWith(["preview-t1"]);
+    expect(previewDataMocks.previewSaveProject).toHaveBeenCalledWith(projectInput);
+    expect(previewDataMocks.previewDeleteProject).toHaveBeenCalledWith("preview-project-new-1");
     expect(invoke).not.toHaveBeenCalled();
   });
 

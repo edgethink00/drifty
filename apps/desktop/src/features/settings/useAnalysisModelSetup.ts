@@ -26,6 +26,8 @@ export interface UseAnalysisModelSetupResult {
   readonly resolveOpenRouterKey: () => Promise<string | null>;
   readonly openRouterConnected: boolean;
   readonly analysisConnected: boolean;
+  /** The user picked a model other than Drifty Cloud and set it up (whether or not it answers right now). */
+  readonly analysisConfigured: boolean;
   readonly refreshOpenRouterKey: () => Promise<void>;
 }
 
@@ -214,5 +216,6 @@ export function useAnalysisModelSetup(
   }, [loadDirectKey, openRouterCredentialState, refreshOpenRouterKey, sharedCustomEndpoint]);
 
   return { analysisSetup, effectiveAnalysisSetup: route.setup, usingCloudRecovery: route.fallback, requestScopeKey, markUnavailable, canFallbackNow, onProviderVisible,
-    setAnalysisSetup, resolveOpenRouterKey, openRouterConnected: openRouterKeyPresent, analysisConnected: route.ready, refreshOpenRouterKey };
+    setAnalysisSetup, resolveOpenRouterKey, openRouterConnected: openRouterKeyPresent, analysisConnected: route.ready,
+    analysisConfigured: analysisSetup.provider !== "cloud" && route.reason !== "configuration", refreshOpenRouterKey };
 }

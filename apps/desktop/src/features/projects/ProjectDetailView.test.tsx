@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, Project } from "@drifty/domain";
 
@@ -36,7 +36,6 @@ const ATTRIBUTION = new Map<string, string>([
 function baseProps(overrides: Partial<ProjectDetailViewProps> = {}): ProjectDetailViewProps {
   return {
     project: PROJECT,
-    projects: [PROJECT],
     trendSegments: SEGMENTS,
     trendProjectBySegmentId: ATTRIBUTION,
     trendReady: true,
@@ -50,22 +49,18 @@ function baseProps(overrides: Partial<ProjectDetailViewProps> = {}): ProjectDeta
     totalSeconds: 5400,
     windowProjectSeconds: 6000,
     lastActivityLabel: "Jul 10, 2026",
-    onSave: vi.fn(),
+    onEdit: vi.fn(),
     ...overrides,
   };
 }
 
 describe("ProjectDetailView", () => {
-  it("restores the detail Edit button after cancelling the editor", async () => {
-    render(<ProjectDetailView {...baseProps()} />);
-    const trigger = screen.getByRole("button", { name: "Edit" });
-    fireEvent.click(trigger);
-    const dialog = screen.getByRole("dialog");
-    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
-    expect(document.activeElement).toBe(within(dialog).getByLabelText("Name"));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(document.activeElement).toBe(trigger);
+  it("opens the category editor from Edit", () => {
+    const props = baseProps();
+    render(<ProjectDetailView {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(props.onEdit).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("shows the project header, window stats, and share", () => {
@@ -88,11 +83,14 @@ describe("ProjectDetailView", () => {
     expect(within(sources).queryByText("Figma")).toBeNull();
   });
 
-  it("toggles archive through onSave", () => {
-    const props = baseProps();
-    render(<ProjectDetailView {...props} />);
+  it("shows how the window compares with the one before", () => {
+    render(<ProjectDetailView {...baseProps({ comparison: "+1h vs. the previous 7 days" })} />);
+    expect(screen.getByText("+1h vs. the previous 7 days").className).toContain("is-up");
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
-    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", status: "archived" }));
+  it("leaves archiving and deleting to the category editor", () => {
+    render(<ProjectDetailView {...baseProps()} />);
+    expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Unarchive" })).toBeNull();
   });
 });

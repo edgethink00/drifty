@@ -18,10 +18,11 @@ import {
   isRemoteDeviceSegment,
   logicalDayStartMs,
 } from "@drifty/domain";
-import type { ActivitySegment, ProductivityLabel } from "@drifty/domain";
+import type { ActivitySegment, ClassificationOptions, ProductivityLabel } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
 import { getLeaderboardWindowStartDay } from "../leaderboard/leaderboardWindow";
+import { readCategoryProductivityPreferences } from "../settings/categoryCustomizationStore";
 import {
   buildCategoryBreakdown7d,
   buildHourlyFocusPattern,
@@ -81,6 +82,8 @@ export interface AccountStatsInput {
   readonly includeAiClassifications: boolean;
   readonly includeBuiltInHeuristics?: boolean;
   readonly builtInHeuristicsUnavailableSince?: string | null;
+  /** Category productivity preferences; read from Settings by the tracker entry point. */
+  readonly categoryProductivity?: ClassificationOptions["categoryProductivity"];
 }
 
 function bucketSeconds(durations: ReturnType<typeof buildProductivityDurations>, label: ProductivityLabel): number {
@@ -111,6 +114,7 @@ export function buildAccountStatsPayload(monthSegments: ActivitySegment[], input
     includeAiClassifications: input.includeAiClassifications,
     includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
+    categoryProductivity: input.categoryProductivity,
   };
 
   const focus7d = Math.round(buildRollingFocusSeconds(monthSegments, weekStartDay, input.windowEndDay, options, sod));
@@ -163,5 +167,8 @@ export async function buildAccountStatsPayloadFromTracker(input: AccountStatsInp
       && !isExcludedSegment(segment)
       && !isFailedForegroundCaptureSegment(segment),
   );
-  return buildAccountStatsPayload(monthSegments, input);
+  return buildAccountStatsPayload(monthSegments, {
+    ...input,
+    categoryProductivity: input.categoryProductivity ?? readCategoryProductivityPreferences(),
+  });
 }
