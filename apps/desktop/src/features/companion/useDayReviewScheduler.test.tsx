@@ -98,6 +98,21 @@ describe("useDayReviewScheduler", () => {
     vi.useRealTimers();
   });
 
+  it("waits on excluded activity and delivers only after valid activity meets the existing bar", async () => {
+    vi.setSystemTime(new Date(2026, 9, 3, 20, 0, 0));
+    const excluded = { ...segment("excluded", 10800), exclusionSource: "user" as const };
+    const { options, present, loadDaySegments } = harness();
+    loadDaySegments.mockResolvedValue([excluded, segment("valid", 1800)]);
+    render(<Host options={options} />);
+    await flush();
+    expect(present).not.toHaveBeenCalled();
+    expect(lastDecision()).toMatchObject({ action: "wait", reason: "thin_day", trackedSeconds: 1800 });
+    loadDaySegments.mockResolvedValue([excluded, segment("valid", 10800)]);
+    await tick();
+    expect(present).toHaveBeenCalledOnce();
+    expect(readDayReviewRecord(DAY)).toMatchObject({ status: "presented", presentations: 1 });
+  });
+
   it("presents at the review time without any dashboard involvement, then waits for the display report", async () => {
     vi.setSystemTime(new Date(2026, 9, 3, 19, 59, 30));
     const { options, present, loadDaySegments } = harness();

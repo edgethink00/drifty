@@ -1,5 +1,5 @@
 import type { EndOfDayReviewEvent, EndOfDayReviewPendingAssessment } from "./endOfDayReviewModel";
-import { aggregateDeviceElapsedTime, clipDeviceElapsedTimeSegment, isBrowserHistoryImportSegment, isFailedForegroundCaptureSegment, logicalDayEndExclusiveMs, logicalDayStartMs } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, clipDeviceElapsedTimeSegment, isBrowserHistoryImportSegment, isExcludedSegment, isFailedForegroundCaptureSegment, logicalDayEndExclusiveMs, logicalDayStartMs } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ProductivityLabel } from "@drifty/domain";
 import {
   DAILY_LEADERBOARD_CHECKPOINT_MINUTE,
@@ -42,7 +42,7 @@ export const END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS = 3 * 60 * 60;
  * budget after device allocation, preserving timestamps and captured evidence. */
 export function selectEndOfDayReviewDaySegments(segments: readonly ActivitySegment[], day: string, startOfDayMinutes = 0): ActivitySegment[] {
   const window = { start: logicalDayStartMs(day, startOfDayMinutes), end: logicalDayEndExclusiveMs(day, startOfDayMinutes) };
-  return aggregateDeviceElapsedTime(segments.filter((segment) => !isFailedForegroundCaptureSegment(segment)))
+  return aggregateDeviceElapsedTime(segments.filter((segment) => !isExcludedSegment(segment) && !isFailedForegroundCaptureSegment(segment)))
     .map((segment) => clipDeviceElapsedTimeSegment(segment, window))
     .filter((segment) => segment.durationSeconds > 0);
 }

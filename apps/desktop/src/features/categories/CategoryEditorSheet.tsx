@@ -287,6 +287,7 @@ export function CategoryEditorSheet({
   const [projectDrafts, setProjectDrafts] = useState<Record<string, ProjectValue>>(opening.drafts);
   const [newProjectKeys, setNewProjectKeys] = useState<readonly string[]>(opening.newKeys);
   const [projectErrors, setProjectErrors] = useState<Record<string, DescribedActionError>>({});
+  const [definitionError, setDefinitionError] = useState<DescribedActionError | null>(null);
   const [saving, setSaving] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
@@ -468,58 +469,63 @@ export function CategoryEditorSheet({
       return false;
     }
     setSaving(true);
+    setDefinitionError(null);
 
     const categories: Partial<Record<ActivityCategory, CategoryCustomization | null>> = {};
     const productivity: Partial<Record<ProductivityLabel, ProductivityCustomization | null>> = {};
     let definitionsChanged = false;
-    const now = Date.now();
-    for (const [key, draft] of Object.entries(definitionDrafts)) {
-      const target = parseDefinitionKey(key);
-      const saved = savedDefinition(target);
-      // An added category keeps its name, words, color, and fixed
-      // productivity together; new ones are stamped in the order they were added.
-      if (target.group === "category" && isAddedCategory(target.key)) {
-        if (deletedKeys.includes(key)) continue;
-        const newIndex = addedCategories.findIndex((entry) => entry.id === target.key);
-        if (newIndex >= 0 ? !keptNew.includes(target.key) : sameDefinition(draft, saved)) continue;
-        categories[target.key] = addedCategoryCustomizationFrom(
-          draft,
-          (categories[target.key] ?? categoryCustomizations[target.key]) as CategoryCustomization | undefined,
-          new Date(now + Math.max(0, newIndex)).toISOString(),
-        );
+    try {
+      const now = Date.now();
+      for (const [key, draft] of Object.entries(definitionDrafts)) {
+        const target = parseDefinitionKey(key);
+        const saved = savedDefinition(target);
+        // An added category keeps its name, words, color, and fixed
+        // productivity together; new ones are stamped in the order they were added.
+        if (target.group === "category" && isAddedCategory(target.key)) {
+          if (deletedKeys.includes(key)) continue;
+          const newIndex = addedCategories.findIndex((entry) => entry.id === target.key);
+          if (newIndex >= 0 ? !keptNew.includes(target.key) : sameDefinition(draft, saved)) continue;
+          categories[target.key] = addedCategoryCustomizationFrom(
+            draft,
+            (categories[target.key] ?? categoryCustomizations[target.key]) as CategoryCustomization | undefined,
+            new Date(now + Math.max(0, newIndex)).toISOString(),
+          );
+          definitionsChanged = true;
+          continue;
+        }
+        if (normalizeHex(draft.color) !== normalizeHex(saved.color)) applyColor(target, draft.color);
+        if (!textChanged(draft, saved) || deletedKeys.includes(key)) continue;
         definitionsChanged = true;
-        continue;
+        if (target.group === "category") categories[target.key] = categoryCustomizationFrom(draft, builtInName(target), builtInDefinition(target));
+        else productivity[target.key] = productivityCustomizationFrom(draft, builtInName(target), builtInDefinition(target));
       }
-      if (normalizeHex(draft.color) !== normalizeHex(saved.color)) applyColor(target, draft.color);
-      if (!textChanged(draft, saved) || deletedKeys.includes(key)) continue;
-      definitionsChanged = true;
-      if (target.group === "category") categories[target.key] = categoryCustomizationFrom(draft, builtInName(target), builtInDefinition(target));
-      else productivity[target.key] = productivityCustomizationFrom(draft, builtInName(target), builtInDefinition(target));
-    }
-    // A deletion keeps the category's saved name, color, and words for past
-    // records and stamps when it stopped being used; a restore removes the stamp.
-    const deletedAt = new Date().toISOString();
-    for (const key of deletedKeys) {
-      const target = parseDefinitionKey(key);
-      if (target.group !== "category") continue;
-      categories[target.key] = { ...(categoryCustomizations[target.key] ?? {}), deletedAt };
-      definitionsChanged = true;
-    }
-    for (const key of restoredKeys) {
-      const target = parseDefinitionKey(key);
-      if (target.group !== "category" || deletedKeys.includes(key)) continue;
-      const { deletedAt: _restored, ...rest } = (categories[target.key] ?? categoryCustomizations[target.key] ?? {}) as CategoryCustomization;
-      categories[target.key] = Object.keys(rest).length > 0 ? rest : null;
-      definitionsChanged = true;
+      // A deletion keeps the category's saved name, color, and words for past
+      // records and stamps when it stopped being used; a restore removes the stamp.
+      const deletedAt = new Date().toISOString();
+      for (const key of deletedKeys) {
+        const target = parseDefinitionKey(key);
+        if (target.group !== "category") continue;
+        categories[target.key] = { ...(categoryCustomizations[target.key] ?? {}), deletedAt };
+        definitionsChanged = true;
+      }
+      for (const key of restoredKeys) {
+        const target = parseDefinitionKey(key);
+        if (target.group !== "category" || deletedKeys.includes(key)) continue;
+        const { deletedAt: _restored, ...rest } = (categories[target.key] ?? categoryCustomizations[target.key] ?? {}) as CategoryCustomization;
+        categories[target.key] = Object.keys(rest).length > 0 ? rest : null;
+        definitionsChanged = true;
+      }
+      if (definitionsChanged) await onSaveDefinitions({ categories, productivity });
+    } catch (error) {
+      setDefinitionError(describeActionError(error, t("projects.editor.saveError")));
+      setSaving(false);
+      return false;
     }
     setDeletedKeys([]);
     setRestoredKeys([]);
     setDefinitionDrafts({});
     setAddedCategories([]);
     setCategoryErrors({});
-    // Saving writes the definitions at once. A changed description applies to
-    // activity classified from then on; nothing past is reclassified.
-    if (definitionsChanged) void onSaveDefinitions({ categories, productivity });
 
     const failures: Record<string, DescribedActionError> = {};
     const savedKeys: string[] = [];
@@ -1331,6 +1337,7 @@ export function CategoryEditorSheet({
           {/* One footer row under the cards: the group's "+ New …" leads it,
               and a note about saving sits beside the buttons it describes
               (the shared modal footer's layout). */}
+          {definitionError ? <p className="category-editor__error" role="alert" title={definitionError.detail ?? undefined}>{definitionError.message}</p> : null}
           <div className="modal-foot category-editor__foot">
             <div className="modal-foot__start">{addButton}</div>
             {structurePreviewPending ? (

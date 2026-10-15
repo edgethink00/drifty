@@ -88,10 +88,35 @@ function localSegment(day: string, startHour: number, minutes: number, productiv
   };
 }
 
+it("keeps excluded activity out of review totals and the unclassified remainder", () => {
+  const valid = localSegment("2026-04-06", 9, 30, "focus");
+  const excluded = { ...localSegment("2026-04-06", 10, 180, "drift"), exclusionSource: "user" as const };
+  const input = [valid, excluded];
+  const raw = JSON.stringify(input);
+  const summary = buildEndOfDayReviewSummary({ day: "2026-04-06", generatedAt: new Date("2026-04-06T20:00:00").toISOString(), segments: input });
+  expect(summary).toMatchObject({ totalSeconds: 1800, focusSeconds: 1800, driftSeconds: 0, unclassifiedSeconds: 0 });
+  expect(summary.categorySummaries).toEqual([expect.objectContaining({ durationSeconds: 1800, percent: 100 })]);
+  expect(JSON.stringify(input)).toBe(raw);
+});
+
 describe("buildEndOfDayReviewComparison", () => {
   const today = "2026-04-07";
   const yesterday = "2026-04-06";
   const at8pm = new Date(today + "T20:00:00").toISOString();
+
+  it("does not make yesterday comparable with excluded observation time", () => {
+    const normal = localSegment(yesterday, 9, 30, "focus");
+    const excluded = { ...localSegment(yesterday, 10, 180, "drift"), exclusionSource: "user" as const };
+    expect(buildEndOfDayReviewComparison({ day: today, generatedAt: at8pm, previousDaySegments: [normal, excluded],
+      current: { focusSeconds: 1800, driftSeconds: 0, neutralSeconds: 0 } })).toBeUndefined();
+  });
+
+  it("leaves excluded time out of the comparison after valid time meets the bar", () => {
+    const normal = localSegment(yesterday, 9, 180, "focus");
+    const excluded = { ...localSegment(yesterday, 13, 180, "drift"), exclusionSource: "user" as const, deviceId: "pc" };
+    expect(buildEndOfDayReviewComparison({ day: today, generatedAt: at8pm, previousDaySegments: [normal, excluded],
+      current: { focusSeconds: 10800, driftSeconds: 0, neutralSeconds: 0 } })).toMatchObject({ focusDeltaSeconds: 0, driftDeltaSeconds: 0, otherDeltaSeconds: 0 });
+  });
 
   it("compares with yesterday only up to the same time of day", () => {
     const comparison = buildEndOfDayReviewComparison({

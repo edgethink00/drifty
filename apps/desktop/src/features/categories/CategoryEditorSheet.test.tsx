@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "@drifty/domain";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { CategoryEditorSheet, type CategoryEditorSheetProps } from "./CategoryEditorSheet";
+import { useCategoryCustomizationController } from "../settings/useCategoryCustomizationController";
+import { CATEGORY_CUSTOMIZATION_STORAGE_KEY, PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY, readCategoryCustomizations, readProductivityCustomizations } from "../settings/settingsStorage";
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
@@ -200,6 +202,66 @@ describe("CategoryEditorSheet", () => {
 
     expect(props.onProductivityColorChange).toHaveBeenCalledWith("productivityFocus", expect.stringMatching(/^#[0-9a-f]{6}$/));
     expect(props.onSaveDefinitions).not.toHaveBeenCalled();
+  });
+
+  it("waits for definition persistence before closing or saving projects", async () => {
+    let finish!: () => void;
+    const props = renderSheet({ onSaveDefinitions: vi.fn(() => new Promise<void>(resolve => { finish = resolve; })) });
+    fireEvent.change(within(pane()).getByLabelText("설명"), { target: { value: "WWDC 세션" } });
+    openCard("Drifty 출시");
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "새 출시" } });
+    await save();
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(props.onSaveProject).not.toHaveBeenCalled();
+    expect((screen.getByRole("button", { name: /저장/ }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { finish(); });
+    expect(props.onSaveProject).toHaveBeenCalledOnce();
+    expect(props.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps both drafts after a real store failure and retries a partially saved definition batch", async () => {
+    window.localStorage.clear();
+    const controller = renderHook(() => useCategoryCustomizationController());
+    const props = renderSheet({ onSaveDefinitions: changes => controller.result.current.saveDefinitions(changes) });
+    fireEvent.change(within(pane()).getByLabelText("설명"), { target: { value: "WWDC 세션" } });
+    openCard("집중");
+    fireEvent.change(within(pane()).getByLabelText("설명"), { target: { value: "개발 작업" } });
+    const original = Storage.prototype.setItem;
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY) throw new DOMException("Synthetic storage full", "QuotaExceededError");
+      original.call(this, key, value);
+    });
+    try {
+      await save();
+      expect(props.onClose).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toContain("입력은 그대로예요");
+      expect(readCategoryCustomizations().learning?.description).toBe("WWDC 세션");
+      expect(window.localStorage.getItem(PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY)).toBeNull();
+      expect((within(pane()).getByLabelText("설명") as HTMLTextAreaElement).value).toBe("개발 작업");
+      openCard("학습");
+      expect((within(pane()).getByLabelText("설명") as HTMLTextAreaElement).value).toBe("WWDC 세션");
+      write.mockRestore();
+      await save();
+      expect(readProductivityCustomizations().focus?.description).toBe("개발 작업");
+      expect(props.onClose).toHaveBeenCalledOnce();
+    } finally { write.mockRestore(); window.localStorage.clear(); }
+  });
+
+  it("keeps a rejected description and recovers from a synchronous color failure", async () => {
+    const color = vi.fn().mockImplementationOnce(() => { throw new Error("Synthetic color storage failure"); });
+    const props = renderSheet({ initialTarget: { group: "productivity", key: "focus" }, onProductivityColorChange: color });
+    fireEvent.change(within(pane()).getByLabelText("설명"), { target: { value: "개발 작업" } });
+    fireEvent.click(within(pane()).getByRole("button", { name: /^색상 · / }));
+    fireEvent.click(within(pane()).getAllByRole("radio").find(radio => radio.getAttribute("aria-checked") === "false")!);
+    await save();
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(props.onSaveDefinitions).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect((within(pane()).getByLabelText("설명") as HTMLTextAreaElement).value).toBe("개발 작업");
+    await save();
+    expect(color).toHaveBeenCalledTimes(2);
+    expect(props.onSaveDefinitions).toHaveBeenCalledOnce();
+    expect(props.onClose).toHaveBeenCalledOnce();
   });
 
   it("restores a definition to Drifty's own name, words, color and productivity in one step", async () => {
@@ -561,6 +623,36 @@ describe("CategoryEditorSheet", () => {
     expect(entry).toEqual({ name: "사이드 프로젝트", description: "주말에 만드는 앱", color: expect.stringMatching(/^#[0-9a-f]{6}$/), createdAt: expect.any(String) });
   });
 
+  it("keeps a new category and its id after a real storage failure and retries it", async () => {
+    window.localStorage.clear();
+    const controller = renderHook(() => useCategoryCustomizationController());
+    const persist = vi.fn((changes: Parameters<CategoryEditorSheetProps["onSaveDefinitions"]>[0]) => controller.result.current.saveDefinitions(changes));
+    const props = renderSheet({ initialTarget: { group: "category" }, onSaveDefinitions: persist });
+    fireEvent.click(screen.getByRole("button", { name: "새 카테고리" }));
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "사이드 프로젝트" } });
+    fireEvent.change(within(pane()).getByLabelText("설명"), { target: { value: "주말에 만드는 앱" } });
+    const original = Storage.prototype.setItem;
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === CATEGORY_CUSTOMIZATION_STORAGE_KEY) throw new DOMException("Synthetic storage full", "QuotaExceededError");
+      original.call(this, key, value);
+    });
+    try {
+      await save();
+      const id = Object.keys(persist.mock.calls[0][0].categories ?? {})[0];
+      expect(id).toMatch(/^custom-[a-z0-9]{8}$/);
+      expect(readCategoryCustomizations()).toEqual({});
+      expect(props.onClose).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toContain("입력은 그대로예요");
+      expect(screen.getByRole("region", { name: "사이드 프로젝트" }).closest("li")?.classList.contains("is-new")).toBe(true);
+      expect((within(pane()).getByLabelText("설명") as HTMLTextAreaElement).value).toBe("주말에 만드는 앱");
+      write.mockRestore();
+      await save();
+      expect(Object.keys(persist.mock.calls[1][0].categories ?? {})).toEqual([id]);
+      expect(readCategoryCustomizations()).toEqual({ [id]: { name: "사이드 프로젝트", description: "주말에 만드는 앱", color: expect.stringMatching(/^#[0-9a-f]{6}$/), createdAt: expect.any(String) } });
+      expect(props.onClose).toHaveBeenCalledOnce();
+    } finally { write.mockRestore(); window.localStorage.clear(); }
+  });
+
   it("asks for a new category's name, and drops one left untouched", async () => {
     const props = renderSheet({ initialTarget: { group: "category" } });
 
@@ -620,6 +712,26 @@ describe("CategoryEditorSheet", () => {
     await save();
 
     expect(props.onSaveDefinitions).toHaveBeenCalledWith({ categories: { shopping: { name: "장보기" } }, productivity: {} });
+  });
+
+  it.each(["delete", "restore"] as const)("keeps a pending category %s after save failure and retries it", async (action) => {
+    const persist = vi.fn().mockRejectedValueOnce(new Error("Synthetic storage failure")).mockResolvedValue(undefined);
+    const props = renderSheet({ initialTarget: { group: "category" }, onSaveDefinitions: persist,
+      ...(action === "restore" ? { categoryCustomizations: { shopping: { name: "장보기", deletedAt: "2026-10-15T12:00:00.000Z" } } } : {}) });
+    if (action === "delete") {
+      openCard("쇼핑");
+      fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+    } else {
+      fireEvent.click(within(screen.getByRole("list", { name: "삭제함" })).getByRole("button", { name: "복원" }));
+    }
+    await save();
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "저장" })).toBeTruthy();
+    await save();
+    expect(props.onClose).toHaveBeenCalledOnce();
+    expect(persist).toHaveBeenCalledTimes(2);
+    expect(persist.mock.calls[1][0].categories.shopping).toEqual(action === "delete" ? { deletedAt: expect.any(String) } : { name: "장보기" });
   });
 
   it("puts a category under a productivity label from that label's card", async () => {

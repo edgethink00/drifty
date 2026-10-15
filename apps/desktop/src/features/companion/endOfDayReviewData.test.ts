@@ -38,6 +38,16 @@ describe("end-of-day review readiness", () => {
       segment({ id: "infinite", durationSeconds: Number.POSITIVE_INFINITY, source: "accessibility" }),
     ], "2026-08-23")).toBe(60);
   });
+
+  it.each([false, true])("excludes redacted activity before device allocation (remote=%s)", (remote) => {
+    const observed = segment({ id: "observed", source: "nsworkspace", durationSeconds: 60 });
+    const excluded = segment({ id: "excluded", source: "nsworkspace", durationSeconds: 10800, exclusionSource: "user", ...(remote ? { deviceId: "pc" } : {}) });
+    const input = [observed, excluded];
+    const original = JSON.stringify(input);
+    expect(selectEndOfDayReviewDaySegments(input, "2026-08-23")).toEqual([observed]);
+    expect(sumEndOfDayReviewTrackedSeconds(input, "2026-08-23")).toBe(60);
+    expect(JSON.stringify(input)).toBe(original);
+  });
 });
 
 function segment(overrides: Partial<ActivitySegment> & Pick<ActivitySegment, "id" | "durationSeconds" | "source">): ActivitySegment {
