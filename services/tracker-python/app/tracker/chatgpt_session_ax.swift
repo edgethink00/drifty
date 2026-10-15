@@ -132,7 +132,13 @@ func cometClosedSidecarProof<Node>(area: Node, sidecar: Node, windowBounds: CGRe
           let contentChildren = children(contents), contentChildren.count == 1, same(contentChildren[0], container),
           let chromeChildren = children(chrome), chromeChildren.contains(where: { same($0, contents) }),
           chromeChildren.contains(where: { same($0, sideScroll) }),
-          let main = bounds(area), let side = bounds(sidecar), bounds(contents) == main,
+          let main = bounds(area), let side = bounds(sidecar), let contentsBounds = bounds(contents),
+          // Closed Comet 154 chrome can retain exactly one point above the page.
+          // Admit only that top inset; every other edge and proof stays exact.
+          (contentsBounds == main || (main.origin.x == contentsBounds.origin.x
+              && main.origin.y == contentsBounds.origin.y + 1
+              && main.width == contentsBounds.width
+              && main.height == contentsBounds.height - 1)),
           [main, side].allSatisfy({ !$0.isNull && !$0.isEmpty && $0.minX.isFinite && $0.minY.isFinite && $0.width.isFinite && $0.height.isFinite }),
           main.contains(side), windowBounds.contains(main), windowBounds.contains(side) else { return nil }
     for child in chromeChildren {

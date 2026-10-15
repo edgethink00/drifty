@@ -65,6 +65,16 @@ print(proof != nil ? "true" : "false")
                                 text=True, check=True, timeout=10).stdout
         return json.loads(output)
 
+    def observed_top_inset_fixture(self):
+        # Comet 154 after closing its assistant: native chrome keeps one point
+        # above the page, while the retained assistant remains fully covered.
+        f = self.fixture()
+        f['window'] = [22, 52, 1200, 664]
+        f['nodes']['contents']['bounds'] = [27, 136, 1190, 575]
+        f['nodes']['page']['bounds'] = [27, 137, 1190, 574]
+        f['nodes']['sidecar']['bounds'] = [767, 137, 450, 574]
+        return f
+
     def test_only_observed_builtin_sidecar_urls_are_recognized(self):
         addresses = ['https://www.perplexity.ai/sidecar?copilot=true',
                      'https://www.perplexity.ai/sidecar/?copilot=true',
@@ -81,6 +91,41 @@ print(proof != nil ? "true" : "false")
 
     def test_closed_retained_area_is_covered_by_current_native_page(self):
         self.assertTrue(self.admitted(self.fixture()))
+
+    def test_observed_one_point_top_inset_admits_covered_closed_sidecar(self):
+        self.assertTrue(self.admitted(self.observed_top_inset_fixture()))
+
+    def test_nearby_insets_do_not_admit_other_chrome_geometry(self):
+        for bounds in ([27, 136.5, 1190, 574.5], [27, 135, 1190, 576],
+                       [26, 136, 1191, 575], [28, 136, 1189, 575],
+                       [27, 136, 1191, 575], [27, 136, 1190, 576],
+                       [27, 137, 1190, 575]):
+            with self.subTest(contents=bounds):
+                f = self.observed_top_inset_fixture()
+                f['nodes']['contents']['bounds'] = bounds
+                self.assertFalse(self.admitted(f))
+
+    def test_one_point_inset_keeps_open_panel_structure_and_hit_guards(self):
+        f = self.observed_top_inset_fixture()
+        f['nodes']['panel'] = {'role': 'AXGroup', 'classes': ['PerplexitySidecarViewImpl'],
+                               'parent': 'chrome'}
+        f['nodes']['chrome']['children'].append('panel')
+        self.assertFalse(self.admitted(f))
+
+        f = self.observed_top_inset_fixture()
+        f['nodes']['contents']['children'].append('another')
+        self.assertFalse(self.admitted(f))
+
+        f = self.observed_top_inset_fixture()
+        f['nodes']['unknown'] = {'role': 'AXGroup'}
+        f['nodes']['chrome']['children'].append('unknown')
+        self.assertFalse(self.admitted(f))
+
+        for index in range(9):
+            with self.subTest(hit=index):
+                f = self.observed_top_inset_fixture()
+                f['hits'][index] = 'sidecar'
+                self.assertFalse(self.admitted(f))
 
     def test_open_panel_container_rejects_even_if_hits_or_geometry_are_stale(self):
         f = self.fixture()
