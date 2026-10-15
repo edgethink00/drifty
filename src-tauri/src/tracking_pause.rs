@@ -1136,6 +1136,43 @@ mod tests {
     }
 
     #[test]
+    fn healthy_status_holding_operation_does_not_cancel_a_queued_manual_start() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        let startup_state = TrackerStartupState::default();
+        let mut queued_start = None;
+
+        let observed = {
+            let _operation = state.lock_operation();
+            read_status_with_startup_state(
+                &state,
+                &startup_state,
+                || {
+                    // Manual intent is prepared before its worker waits for
+                    // this operation lock, just as in tracker_start.
+                    queued_start = prepare_manual_start_at_path(
+                        &state,
+                        &startup_state,
+                        &path,
+                        true,
+                        || Ok(()),
+                    )
+                    .expect("persist queued manual Start");
+                    Ok(tracker_status(true))
+                },
+                |running| assert_eq!(running, Some(true)),
+            )
+            .expect("healthy status read")
+        };
+        assert!(observed.running);
+        let start = queued_start.expect("manual Start was prepared");
+        let _operation = state.lock_operation();
+        assert!(start_intent_is_current_at_path(&state, &path, start.generation));
+        assert!(startup_state.complete_start_success(start.startup_generation));
+    }
+
+    #[test]
     fn pause_is_durable_before_a_slow_start_releases_the_operation_lock() {
         use std::sync::{mpsc, Arc};
 

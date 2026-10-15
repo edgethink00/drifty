@@ -190,6 +190,47 @@ fn tracker_startup_state_retains_failure_until_tracker_recovers() {
     assert_eq!(recovered.tracker_mode.as_deref(), Some("tracking"));
     assert_eq!(recovered.message.as_deref(), Some("Tracker is running."));
     assert_eq!(startup_state.failure_message(), None);
+    assert!(!startup_state.record_start_failure(
+        retry_start,
+        &TrackerError::CommandFailed("delayed failure after recovery".into()),
+    ));
+}
+
+#[test]
+fn healthy_status_during_start_preserves_completion_and_clears_old_failure() {
+    let startup_state = TrackerStartupState::default();
+    let failed = startup_state.begin_start_attempt();
+    assert!(startup_state.record_start_failure(
+        failed,
+        &TrackerError::CommandFailed("previous start failed".into()),
+    ));
+    let current = startup_state.begin_start_attempt();
+
+    let observed = apply_tracker_startup_state(&startup_state, tracker_status(true));
+    assert!(observed.running);
+    assert_eq!(startup_state.failure_message(), None);
+    assert!(!startup_state.complete_start_success(failed));
+    assert!(startup_state.complete_start_success(current));
+    assert!(!startup_state.complete_start_success(current));
+}
+
+#[test]
+fn healthy_status_does_not_resurrect_a_start_superseded_by_stop() {
+    let startup_state = TrackerStartupState::default();
+    let start = startup_state.begin_start_attempt();
+    let stop = startup_state.begin_stop_attempt();
+
+    assert!(apply_tracker_startup_state(&startup_state, tracker_status(true)).running);
+    assert!(!startup_state.complete_start_success(start));
+    assert!(!startup_state.record_start_failure(
+        start,
+        &TrackerError::CommandFailed("late start response".into()),
+    ));
+    // The healthy read may retire the Stop's status decoration; it must not
+    // restore an older Start or accept that Stop after a newer Start arrives.
+    let newer = startup_state.begin_start_attempt();
+    assert!(!startup_state.complete_stop_success(stop));
+    assert!(startup_state.complete_start_success(newer));
 }
 
 #[test]

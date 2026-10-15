@@ -49,6 +49,7 @@ const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 struct TrackerStartupLifecycle {
     generation: u64,
     failure_message: Option<String>,
+    start_in_flight: bool,
 }
 
 #[derive(Debug, Default)]
@@ -125,6 +126,7 @@ impl TrackerStartupState {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         advance_tracker_startup_generation(&mut lifecycle);
+        lifecycle.start_in_flight = true;
         lifecycle.generation
     }
 
@@ -137,6 +139,7 @@ impl TrackerStartupState {
             return false;
         }
 
+        lifecycle.start_in_flight = false;
         lifecycle.failure_message = Some(bounded_tracker_startup_failure_message(error));
         true
     }
@@ -160,6 +163,7 @@ impl TrackerStartupState {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         advance_tracker_startup_generation(&mut lifecycle);
+        lifecycle.start_in_flight = false;
         lifecycle.generation
     }
 
@@ -181,7 +185,14 @@ impl TrackerStartupState {
             .lifecycle
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        retire_tracker_startup_state(&mut lifecycle);
+        // A status read can hold the operation lock while a manual Start
+        // prepares its intent. Observing an already-running daemon must clear
+        // an old error without invalidating that queued Start's completion.
+        if lifecycle.start_in_flight {
+            lifecycle.failure_message = None;
+        } else {
+            retire_tracker_startup_state(&mut lifecycle);
+        }
     }
 
     pub(crate) fn failure_message(&self) -> Option<String> {
@@ -199,6 +210,7 @@ fn advance_tracker_startup_generation(lifecycle: &mut TrackerStartupLifecycle) {
 
 fn retire_tracker_startup_state(lifecycle: &mut TrackerStartupLifecycle) {
     advance_tracker_startup_generation(lifecycle);
+    lifecycle.start_in_flight = false;
     lifecycle.failure_message = None;
 }
 
