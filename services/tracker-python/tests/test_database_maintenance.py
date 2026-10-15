@@ -53,6 +53,18 @@ class DatabaseMaintenanceTests(unittest.TestCase):
                 self.assertFalse(quick_check_database(self.db_path, immutable=immutable))
         self.assertEqual(self.db_path.read_bytes(), b"")
 
+    def test_directory_at_database_path_is_preserved_without_bootstrapping(self) -> None:
+        self.db_path.mkdir()
+        marker = self.db_path / "preserved.txt"
+        marker.write_bytes(b"synthetic directory contents")
+
+        with self.assertRaisesRegex(sqlite3.OperationalError, "not a regular file"):
+            TrackerDatabase(self.db_path)
+
+        self.assertTrue(self.db_path.is_dir())
+        self.assertEqual(marker.read_bytes(), b"synthetic directory contents")
+        self.assertFalse(database_quarantine_dir(self.db_path).exists())
+
     def test_startup_preserves_a_checkpointed_wal_database_without_sidecars(self) -> None:
         with closing(sqlite3.connect(self.db_path)) as connection:
             connection.execute("PRAGMA journal_mode=WAL").fetchall()

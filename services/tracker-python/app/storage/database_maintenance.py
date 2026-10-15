@@ -570,6 +570,10 @@ def prepare_database(db_path: Path, *, now: datetime | None = None) -> DatabaseP
             pending_recovery.quarantined_path if pending_recovery is not None else None
         )
         source_exists = db_path.exists()
+        if source_exists and not _is_regular_file(db_path):
+            # A directory/device is a path error, not confirmed DB corruption.
+            # Keep it in place instead of quarantining it and creating a DB.
+            raise sqlite3.OperationalError("database path is not a regular file")
         if not source_exists and pending_quarantine is None:
             return DatabasePreparationResult(existed=False)
         if source_exists and quick_check_database(db_path):
