@@ -57,6 +57,24 @@ const baseMetrics: ClassificationMetrics = {
 };
 
 describe("describeAiClassificationFailure", () => {
+  it("preserves structured diagnostics for concurrent and repeated reads of one error", async () => {
+    const error = { context: Response.json({ error: "Invalid JSON", errorType: "parse" }, { status: 502 }) };
+    const expected = { message: "AI classification failed: Invalid JSON", failureKind: "transport", serverErrorType: "parse" };
+    expect(await Promise.all([describeAiClassificationFailure(error), describeAiClassificationFailure(error)]))
+      .toEqual([expected, expected]);
+    expect(await describeAiClassificationFailure(error)).toEqual(expected);
+  });
+
+  it("bounds oversized error bodies while retaining the HTTP quota status", async () => {
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array(64 * 1024 + 1)); }, cancel,
+    }), { status: 429 });
+    const failure = await describeAiClassificationFailure({ context: response });
+    expect(failure).toMatchObject({ message: "AI classification failed: 429", failureKind: "quota", quotaWindow: "unknown" });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("prefers structured quota metadata even when the human-readable copy changes", async () => {
     const failure = await describeAiClassificationFailure({
       context: Response.json({
@@ -649,6 +667,7 @@ describe("runAiClassification cloud contract", () => {
           items: [expect.objectContaining({ id: "segment-1", appName: "MysteryApp" })],
         }),
         timeout: 60_000,
+        signal: expect.any(AbortSignal),
       });
       expect(saveClassifications).toHaveBeenCalledTimes(1);
       expect(onCloudRequestTiming).toHaveBeenNthCalledWith(1, "started", 0);
@@ -751,6 +770,7 @@ describe("runAiClassification cloud contract", () => {
           items: expect.arrayContaining([expect.objectContaining({ id: "segment-0" })]),
         }),
         timeout: 60_000,
+        signal: expect.any(AbortSignal),
       });
       const body = invoke.mock.calls[0]?.[1]?.body as { items: unknown[] };
       expect(body.items).toHaveLength(20);
@@ -3026,9 +3046,115 @@ describe("runAiClassification cloud contract", () => {
           })],
         }),
         timeout: 60_000,
+        signal: expect.any(AbortSignal),
       });
       expect(saveClassifications).not.toHaveBeenCalled();
     } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("does not issue a late Cloud request after device preparation times out", async () => {
+    let finishPreparation: ((body: Record<string, unknown>) => void) | undefined;
+    const prepare = vi.fn(() => new Promise<Record<string, unknown>>((resolve) => { finishPreparation = resolve; }));
+    vi.doMock("../cloud-devices/cloudDeviceIdentity", () => ({ withCloudDevicePayload: prepare }));
+    try {
+      const segment = createUnknownSegment(1, { id: "42" });
+      const service = await importServiceWithSegments([segment]);
+      vi.useFakeTimers();
+      const pending = service.classifyLiveActivityWithAi(segment, { persistLiveResult: true });
+      await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1), { interval: 1 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(await pending).toMatchObject({ kind: "unavailable" });
+      finishPreparation?.({});
+      await vi.advanceTimersByTimeAsync(0);
+      expect(service.invoke).not.toHaveBeenCalled();
+      expect(service.saveClassifications).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      finishPreparation?.({});
+      vi.useRealTimers();
+      vi.doUnmock("../cloud-devices/cloudDeviceIdentity");
+      cleanupServiceMocks();
+    }
+  });
+
+  it.each([
+    ["live", 503], ["batch", 503], ["live", 429], ["batch", 429],
+    ["live", 200], ["batch", 200],
+  ] as const)("bounds a stalled %s Cloud HTTP %s body and recovers", async (route, status) => {
+    const segment = createUnknownSegment(1, { id: "42" });
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let pending: Promise<unknown> | undefined;
+    try {
+      const service = await importServiceWithSegments([segment]);
+      const { createClient } = await import("@supabase/supabase-js");
+      const { cloudAiRequestBackoffs } = await import("./cloudAiRequestBackoff");
+      vi.useFakeTimers();
+      let recover = false;
+      let requestSignal: AbortSignal | null | undefined;
+      const cancel = vi.fn();
+      const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
+        if (recover) return Response.json({
+          results: [{ id: segment.id, category: "workspace", productivity: "focus", confidence: 0.8, reason: "Recovered" }],
+        });
+        requestSignal = init?.signal;
+        // Deliberately ignore abort: the service must settle independently of
+        // the transport, even for a successful response awaiting JSON.
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) { streamController = controller; }, cancel,
+        }), { status, headers: { "Content-Type": "application/json", "Retry-After": "300" } });
+      });
+      const sdk = createClient("https://qa.invalid", "synthetic-qa-placeholder", {
+        accessToken: async () => "synthetic-qa-placeholder", global: { fetch },
+      });
+      service.invoke.mockImplementation(sdk.functions.invoke.bind(sdk.functions));
+      const timing = vi.fn();
+      const classify = () => route === "live"
+        ? service.classifyLiveActivityWithAi(segment, { persistLiveResult: true })
+        : service.runAiClassification({ day: "2026-05-22" }, undefined, { onCloudRequestTiming: timing });
+      let settled = false;
+      pending = classify();
+      void pending.then(() => { settled = true; }, () => { settled = true; });
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1), { interval: 1 });
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(settled).toBe(false);
+      if (route === "batch") expect(timing).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(settled).toBe(true);
+      await pending.catch(() => undefined);
+      expect(requestSignal?.aborted).toBe(true);
+      expect(service.saveClassifications).not.toHaveBeenCalled();
+      if (status !== 200) expect(cancel).toHaveBeenCalledTimes(1);
+      if (route === "batch") expect(timing).toHaveBeenLastCalledWith("settled", 60_000);
+      expect(vi.getTimerCount()).toBe(0);
+
+      if (status === 429) {
+        const backoff = cloudAiRequestBackoffs.current("user-1");
+        expect(backoff).toMatchObject({ status: 429 });
+        expect((backoff?.retryAtMs ?? 0) - Date.now()).toBeGreaterThan(299_000);
+        await classify().catch(() => undefined);
+        expect(service.invoke).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(300_000);
+      }
+      // Completing the old success body must never persist its late result.
+      if (status === 200) {
+        streamController?.enqueue(new TextEncoder().encode(JSON.stringify({ results: [{
+          id: segment.id, category: "learning", productivity: "focus", confidence: 1, reason: "Late",
+        }] })));
+        streamController?.close();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(service.saveClassifications).not.toHaveBeenCalled();
+      }
+      recover = true;
+      await classify();
+      expect(service.saveClassifications).toHaveBeenCalledTimes(1);
+      expect(service.invoke).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      try { streamController?.close(); } catch { /* cancelled or already closed */ }
+      await pending?.catch(() => undefined);
+      vi.useRealTimers();
       cleanupServiceMocks();
     }
   });

@@ -68,6 +68,7 @@ const CLOUD_CLASSIFICATION_BODY_TARGET_BYTES = 28_000;
 // A stalled Edge request must release the first-day single-flight slot so its
 // background pass can retry without requiring an app restart.
 const CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS = 60_000;
+const CLOUD_ERROR_BODY_MAX_BYTES = 64 * 1024;
 export const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
@@ -1479,26 +1480,13 @@ async function classifyLivePayloadWithCloudAi(
   try {
     assertCloudAiRequestAllowed({ requestKey: cloudAccess.requestKey, bypassBackoff });
     const requestRevision = cloudAiRequestBackoffs.revision(cloudAccess.requestKey);
-    const { data, error } = await cloudClient.functions.invoke("classify-activity", {
-      body: await withCloudDevicePayload(cloudClassificationRequestBody([payload], workProfile, memoryContext)),
-      timeout: CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS,
-    });
+    const { data, error, retryAfter } = await invokeCloudClassification(
+      cloudClient, cloudClassificationRequestBody([payload], workProfile, memoryContext),
+    );
 
     if (error) {
       const failure = await describeAiClassificationFailure(error);
-      if (failure.failureKind === "quota") {
-        const context = isRecord(error) ? error.context : null;
-        const status = context instanceof Response ? context.status : null;
-        if (status === 402 || status === 429) {
-          cloudAiRequestBackoffs.record({
-            key: cloudAccess.requestKey,
-            status: status as CloudAiBackoffStatus,
-            message: failure.message,
-            quotaWindow: failure.quotaWindow && failure.quotaWindow !== "unknown" ? failure.quotaWindow : null,
-            retryAfter: context instanceof Response ? context.headers.get("Retry-After") : null,
-          });
-        }
-      }
+      recordCloudClassificationBackoff(cloudAccess.requestKey, error, retryAfter);
       return unavailableLiveClassification(failure.message);
     }
     cloudAiRequestBackoffs.clear(cloudAccess.requestKey, requestRevision);
@@ -1519,37 +1507,91 @@ async function classifyCloudPayloadBatches(
   for (const batch of partitionCloudPayloads(payloads, workProfile, memoryContext)) {
     assertCloudAiRequestAllowed(requestContext);
     const requestRevision = cloudAiRequestBackoffs.revision(requestContext.requestKey);
-    const body = await withCloudDevicePayload(cloudClassificationRequestBody(batch, workProfile, memoryContext));
+    const body = cloudClassificationRequestBody(batch, workProfile, memoryContext);
     const requestStartedAt = Date.now();
     try { requestContext.onRequestTiming?.("started", 0); } catch { /* Diagnostics cannot block classification. */ }
-    let invocation: Awaited<ReturnType<typeof cloudClient.functions.invoke>>;
+    let invocation: Awaited<ReturnType<typeof invokeCloudClassification>>;
     try {
-      invocation = await cloudClient.functions.invoke("classify-activity", {
-        body,
-        timeout: CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS,
-      });
+      invocation = await invokeCloudClassification(cloudClient, body);
     } finally {
       try { requestContext.onRequestTiming?.("settled", Date.now() - requestStartedAt); } catch { /* Best effort. */ }
     }
-    const { data, error } = invocation;
+    const { data, error, retryAfter } = invocation;
     if (error) {
-      const edgeError = await edgeFunctionInvocationError(error);
-      if (edgeError.status === 402 || edgeError.status === 429) {
-        const context = isRecord(error) ? error.context : null;
-        cloudAiRequestBackoffs.record({
-          key: requestContext.requestKey,
-          status: edgeError.status as CloudAiBackoffStatus,
-          message: edgeError.message,
-          quotaWindow: edgeError.quotaWindow,
-          retryAfter: context instanceof Response ? context.headers.get("Retry-After") : null,
-        });
-      }
-      throw edgeError;
+      recordCloudClassificationBackoff(requestContext.requestKey, error, retryAfter);
+      throw error;
     }
     cloudAiRequestBackoffs.clear(requestContext.requestKey, requestRevision);
    records.push(...toClassificationRecords(data, [...batch], memoryContext, "cloud"));
   }
   return records;
+}
+
+// The SDK clears its timer as soon as an HTTP error's headers arrive. Own
+// the deadline through device preparation, invocation and error-body reading,
+// so both live and batch callers settle even when a transport ignores abort.
+async function invokeCloudClassification(
+  cloudClient: NonNullable<typeof supabase>,
+  body: ReturnType<typeof cloudClassificationRequestBody>,
+): Promise<{ data: unknown; error: AiClassificationEdgeError | null; retryAfter: string | null }> {
+  const controller = new AbortController();
+  let response: Response | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error("Cloud AI classification timed out. Try again."));
+      controller.abort();
+    }, CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const preparedBody = await withCloudDevicePayload(body);
+        // A late device lookup must not start a request after its caller left.
+        if (controller.signal.aborted) throw new Error("Cloud AI classification timed out. Try again.");
+        const { data, error } = await cloudClient.functions.invoke("classify-activity", {
+          body: preparedBody,
+          signal: controller.signal,
+          timeout: CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS,
+        });
+        const context = isRecord(error) ? error.context : null;
+        response = context instanceof Response ? context : null;
+        return {
+          data,
+          error: error ? new AiClassificationEdgeError(await edgeFunctionFailureDetail(error, controller.signal)) : null,
+          retryAfter: response?.headers.get("Retry-After") ?? null,
+        };
+      })(),
+      timeout,
+    ]);
+  } catch (error) {
+    // Keep received status/Retry-After even if the error body never completes:
+    // an unreadable quota response must not trigger another paid request.
+    const receivedResponse = response as Response | null;
+    return {
+      data: null,
+      error: new AiClassificationEdgeError({
+        message: messageFromUnknownError(error, "AI classification failed."),
+        status: receivedResponse?.status ?? null,
+        errorType: null,
+        quotaWindow: null,
+      }),
+      retryAfter: receivedResponse?.headers.get("Retry-After") ?? null,
+    };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function recordCloudClassificationBackoff(requestKey: string, error: AiClassificationEdgeError, retryAfter: string | null) {
+  if (error.status !== 402 && error.status !== 429) return;
+  cloudAiRequestBackoffs.record({
+    key: requestKey,
+    status: error.status as CloudAiBackoffStatus,
+    message: error.message,
+    quotaWindow: error.quotaWindow,
+    retryAfter,
+  });
 }
 
 function partitionCloudPayloads(
@@ -2328,10 +2370,6 @@ class AiClassificationEdgeError extends Error {
   }
 }
 
-async function edgeFunctionInvocationError(error: unknown): Promise<AiClassificationEdgeError> {
-  return new AiClassificationEdgeError(await edgeFunctionFailureDetail(error));
-}
-
 export async function describeAiClassificationFailure(error: unknown): Promise<{
   readonly message: string;
   readonly failureKind: AiClassificationFailureKind;
@@ -2362,11 +2400,11 @@ function isAiClassificationCloudErrorType(value: string | null): value is AiClas
   return value === "quota" || value === "config" || value === "request" || value === "parse" || value === "schema";
 }
 
-async function edgeFunctionFailureDetail(error: unknown): Promise<EdgeFunctionFailureDetail> {
+async function edgeFunctionFailureDetail(error: unknown, signal?: AbortSignal): Promise<EdgeFunctionFailureDetail> {
   const fallback = error instanceof Error && error.message ? error.message : "AI classification failed.";
   const context = isRecord(error) ? error.context : null;
   if (context instanceof Response) {
-    const detail = await readEdgeErrorBody(context);
+    const detail = await readEdgeErrorBody(context, signal);
     if (detail) {
       return {
         message: `AI classification failed: ${detail.message}`,
@@ -2379,14 +2417,30 @@ async function edgeFunctionFailureDetail(error: unknown): Promise<EdgeFunctionFa
   return { message: fallback, status: null, errorType: null, quotaWindow: null };
 }
 
-async function readEdgeErrorBody(response: Response): Promise<{
+type EdgeErrorBody = {
   readonly message: string;
   readonly errorType: string | null;
   readonly quotaWindow: Exclude<AiClassificationQuotaWindow, "unknown"> | null;
-} | null> {
+} | null;
+
+// Error diagnostics can inspect the same response more than once (or at the
+// same time). Share the bounded read without cloning an unconsumed stream;
+// WeakMap ownership ends when the response/error is no longer reachable.
+const edgeErrorBodies = new WeakMap<Response, Promise<EdgeErrorBody>>();
+
+function readEdgeErrorBody(response: Response, signal?: AbortSignal): Promise<EdgeErrorBody> {
+  let pending = edgeErrorBodies.get(response);
+  if (!pending) {
+    pending = consumeEdgeErrorBody(response, signal);
+    edgeErrorBodies.set(response, pending);
+  }
+  return pending;
+}
+
+async function consumeEdgeErrorBody(response: Response, signal?: AbortSignal): Promise<EdgeErrorBody> {
   let text = "";
   try {
-    text = await response.clone().text();
+    text = await readBoundedCloudErrorText(response, signal);
   } catch {
     const message = response.status ? `${response.status} ${response.statusText}`.trim() : null;
     return message ? { message, errorType: null, quotaWindow: null } : null;
@@ -2427,6 +2481,45 @@ async function readEdgeErrorBody(response: Response): Promise<{
   }
 
   return { message: text.slice(0, 240), errorType: null, quotaWindow: null };
+}
+
+async function readBoundedCloudErrorText(response: Response, signal?: AbortSignal): Promise<string> {
+  // This error response is consumed once and normalized before leaving the
+  // service. Avoid clone/tee: cancelling one branch leaves the other buffered.
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abort: (() => void) | undefined;
+  const cancelled = new Promise<never>((_, reject) => {
+    abort = () => reject(new Error("Cloud error response did not complete."));
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
+    // describeAiClassificationFailure can also be called outside an invocation.
+    if (!signal) timer = setTimeout(abort, CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const decoder = new TextDecoder();
+        let bytes = 0;
+        let text = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) return text + decoder.decode();
+          bytes += value.byteLength;
+          if (bytes > CLOUD_ERROR_BODY_MAX_BYTES) throw new Error("Cloud error response is too large.");
+          text += decoder.decode(value, { stream: true });
+        }
+      })(),
+      cancelled,
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    if (abort) signal?.removeEventListener("abort", abort);
+    // Some transports never acknowledge cancellation. It must not extend the
+    // deadline; rejecting reads are already observed by Promise.race above.
+    void reader.cancel().catch(() => undefined);
+  }
 }
 
 function isQuotaWindow(value: unknown): value is Exclude<AiClassificationQuotaWindow, "unknown"> {
