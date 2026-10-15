@@ -129,7 +129,7 @@ func cometClosedSidecarProof<Node>(area: Node, sidecar: Node, windowBounds: CGRe
           let chrome = parent(contents), nativeClass(chrome, "PerplexityBrowserView"),
           let sideScroll = parent(sidecar), role(sideScroll) == "AXScrollArea",
           let sideChrome = parent(sideScroll), same(sideChrome, chrome),
-          let contentChildren = children(contents), contentChildren.count == 1, same(contentChildren[0], container),
+          let contentChildren = children(contents),
           let chromeChildren = children(chrome), chromeChildren.contains(where: { same($0, contents) }),
           chromeChildren.contains(where: { same($0, sideScroll) }),
           let main = bounds(area), let side = bounds(sidecar), let contentsBounds = bounds(contents),
@@ -141,6 +141,21 @@ func cometClosedSidecarProof<Node>(area: Node, sidecar: Node, windowBounds: CGRe
               && main.height == contentsBounds.height - 1)),
           [main, side].allSatisfy({ !$0.isNull && !$0.isEmpty && $0.minX.isFinite && $0.minY.isFinite && $0.width.isFinite && $0.height.isFinite }),
           main.contains(side), windowBounds.contains(main), windowBounds.contains(side) else { return nil }
+    if contentChildren.count == 1 {
+        guard same(contentChildren[0], container) else { return nil }
+    } else {
+        // The observed one-point inset can retain its native top-strip separator.
+        // No other extra content child or separator geometry is admitted.
+        guard contentChildren.count == 2, contentChildren.contains(where: { same($0, container) }),
+              let separator = contentChildren.first(where: { !same($0, container) }),
+              nativeClass(separator, "ContentsSeparator"),
+              let separatorParent = parent(separator), same(separatorParent, contents),
+              main.origin.x == contentsBounds.origin.x,
+              main.origin.y == contentsBounds.origin.y + 1,
+              main.width == contentsBounds.width, main.height == contentsBounds.height - 1,
+              bounds(separator) == CGRect(x: contentsBounds.origin.x, y: contentsBounds.origin.y,
+                                          width: contentsBounds.width, height: 1) else { return nil }
+    }
     for child in chromeChildren {
         let r = role(child)
         guard !r.isEmpty else { return nil }

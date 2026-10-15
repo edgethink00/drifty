@@ -592,7 +592,7 @@ describe("App AI classification controls", () => {
   });
 
   it("keeps long classification activity detail titles recoverable", async () => {
-    const selectedDay = todayIsoDate();
+    const selectedDay = currentAutoClassificationDay();
     const longWindowTitle = "Quarterly classification QA reproduction title - ".repeat(10) + "final window title segment";
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
       timelineQueryIncludesDay(query, selectedDay)
@@ -616,7 +616,7 @@ describe("App AI classification controls", () => {
   });
 
   it("places classification panel header labels above their values", async () => {
-    const selectedDay = todayIsoDate();
+    const selectedDay = currentAutoClassificationDay();
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
       timelineQueryIncludesDay(query, selectedDay) ? [createSegmentForDay(selectedDay)] : [],
     ));
@@ -641,7 +641,7 @@ describe("App AI classification controls", () => {
   });
 
   it("keeps browser source rows site-wise when only a page title is captured", async () => {
-    const selectedDay = todayIsoDate();
+    const selectedDay = currentAutoClassificationDay();
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
       timelineQueryIncludesDay(query, selectedDay)
         ? [
@@ -696,7 +696,7 @@ describe("App AI classification controls", () => {
   });
 
   it("shows source productivity mix dots and short AI source labels in classification details", async () => {
-    const selectedDay = todayIsoDate();
+    const selectedDay = currentAutoClassificationDay();
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
       timelineQueryIncludesDay(query, selectedDay)
         ? [
@@ -765,7 +765,7 @@ describe("App AI classification controls", () => {
   });
 
   it("uses the selected category tone for classification selections and activity detail bars", async () => {
-    const selectedDay = todayIsoDate();
+    const selectedDay = currentAutoClassificationDay();
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
       timelineQueryIncludesDay(query, selectedDay)
         ? [

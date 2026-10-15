@@ -75,6 +75,27 @@ print(proof != nil ? "true" : "false")
         f['nodes']['sidecar']['bounds'] = [767, 137, 450, 574]
         return f
 
+    def observed_separator_fixture(self):
+        # Public native metadata after Comet 154's assistant closes, including
+        # the one-point strip and the remaining native chrome siblings.
+        f = self.observed_top_inset_fixture()
+        f['nodes']['separator'] = {'role': 'AXGroup', 'classes': ['ContentsSeparator'],
+                                   'parent': 'contents', 'bounds': [27, 136, 1190, 1]}
+        f['nodes']['contents']['children'].append('separator')
+        chrome = [('top', 'TopContainerView', [27, 96, 1190, 40]),
+                  ('tabs', 'HorizontalTabStripRegionViewOld', [96, 52, 1126, 43]),
+                  ('view', 'View', [22, 52, 0, 0]),
+                  ('bottomLeft', 'PerplexityRoundedCorner', [26, 695, 17, 17]),
+                  ('bottomRight', 'PerplexityRoundedCorner', [1201, 695, 17, 17]),
+                  ('topLeft', 'PerplexityRoundedCorner', [26, 95, 17, 17]),
+                  ('topRight', 'PerplexityRoundedCorner', [1201, 95, 17, 17])]
+        for name, native_class, bounds in chrome:
+            f['nodes'][name] = {'role': 'AXGroup', 'classes': [native_class],
+                                 'parent': 'chrome', 'bounds': bounds}
+        f['nodes']['chrome']['children'] = ['top', 'contents', 'tabs', 'view', 'retained',
+                                           'bottomLeft', 'bottomRight', 'topLeft', 'topRight']
+        return f
+
     def test_only_observed_builtin_sidecar_urls_are_recognized(self):
         addresses = ['https://www.perplexity.ai/sidecar?copilot=true',
                      'https://www.perplexity.ai/sidecar/?copilot=true',
@@ -94,6 +115,43 @@ print(proof != nil ? "true" : "false")
 
     def test_observed_one_point_top_inset_admits_covered_closed_sidecar(self):
         self.assertTrue(self.admitted(self.observed_top_inset_fixture()))
+
+    def test_observed_closed_separator_matches_complete_native_metadata(self):
+        self.assertTrue(self.admitted(self.observed_separator_fixture()))
+
+    def test_only_exact_one_point_top_separator_is_admitted(self):
+        for field, value in [('role', 'AXScrollArea'), ('classes', ['View']),
+                             ('classes', ['ContentsSeparator', 'View']),
+                             ('parent', 'anotherContents'),
+                             ('bounds', [27, 136.5, 1190, 0.5]),
+                             ('bounds', [27, 135, 1190, 2]),
+                             ('bounds', [28, 136, 1189, 1]),
+                             ('bounds', [27, 136, 1191, 1]),
+                             ('bounds', [27, 137, 1190, 1])]:
+            with self.subTest(field=field, value=value):
+                f = self.observed_separator_fixture()
+                f['nodes']['separator'][field] = value
+                self.assertFalse(self.admitted(f))
+        f = self.observed_separator_fixture()
+        f['nodes']['contents']['bounds'] = f['nodes']['page']['bounds']
+        self.assertFalse(self.admitted(f))
+        f = self.observed_separator_fixture()
+        f['nodes']['extra'] = dict(f['nodes']['separator'])
+        f['nodes']['contents']['children'].append('extra')
+        self.assertFalse(self.admitted(f))
+
+    def test_separator_keeps_open_panel_and_all_hit_guards(self):
+        f = self.observed_separator_fixture()
+        f['nodes']['panel'] = {'role': 'AXGroup', 'classes': ['PerplexitySidecarViewImpl'],
+                               'parent': 'chrome'}
+        f['nodes']['chrome']['children'].append('panel')
+        self.assertFalse(self.admitted(f))
+        for index in range(9):
+            for hit in ('sidecar', 'otherPage', ''):
+                with self.subTest(index=index, hit=hit):
+                    f = self.observed_separator_fixture()
+                    f['hits'][index] = hit
+                    self.assertFalse(self.admitted(f))
 
     def test_nearby_insets_do_not_admit_other_chrome_geometry(self):
         for bounds in ([27, 136.5, 1190, 574.5], [27, 135, 1190, 576],
