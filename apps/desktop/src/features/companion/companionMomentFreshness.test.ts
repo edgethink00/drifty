@@ -54,8 +54,8 @@ describe("end-of-day review minimum tracked time", () => {
       segment(7_200),
       segment(-30),
     ];
-    expect(sumEndOfDayReviewTrackedSeconds(segments)).toBe(10_800);
-    expect(sumEndOfDayReviewTrackedSeconds([])).toBe(0);
+    expect(sumEndOfDayReviewTrackedSeconds(segments, "2026-08-18")).toBe(10_800);
+    expect(sumEndOfDayReviewTrackedSeconds([], "2026-08-18")).toBe(0);
   });
 
   it("keeps the afternoon mock activity raw after the 14:20 AI cutoff", () => {
@@ -66,7 +66,7 @@ describe("end-of-day review minimum tracked time", () => {
 
     expect(beforeCutoff.every((item) => item.classification)).toBe(true);
     expect(afterCutoff.every((item) => !item.classification)).toBe(true);
-    expect(sumEndOfDayReviewTrackedSeconds(segments)).toBeGreaterThan(END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS);
+    expect(sumEndOfDayReviewTrackedSeconds(segments, "2026-09-04")).toBeGreaterThan(END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS);
   });
 });
 

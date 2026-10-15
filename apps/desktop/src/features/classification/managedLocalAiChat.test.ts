@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ensureManagedLocalAiReady,
+  invokeOpenAiChatWithManagedLocalRetry,
   MANAGED_LOCAL_AI_READY_TIMEOUT_MS,
 } from "./managedLocalAiChat";
 
@@ -70,5 +71,35 @@ describe("managed local AI cold-start wait", () => {
     await vi.advanceTimersByTimeAsync(MANAGED_LOCAL_AI_READY_TIMEOUT_MS);
 
     await ready;
+  });
+});
+
+
+describe("managed local send guard", () => {
+  const provider = { provider: "managed_local" as const, modelId: MODEL_ID, baseUrl: RUNNING_STATUS.baseUrl, model: RUNNING_STATUS.model };
+  beforeEach(() => { invokeMock.mockReset(); });
+
+  it("does not send if consent changes during runtime discovery", async () => {
+    let allowed = true;
+    let finish!: (value: unknown) => void;
+    invokeMock.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const response = invokeOpenAiChatWithManagedLocalRetry({ messages: [] }, provider, () => allowed);
+    const rejected = expect(response).rejects.toThrow("cancelled");
+    allowed = false;
+    finish(RUNNING_STATUS);
+    await rejected;
+    expect(invokeMock.mock.calls.map(([command]) => command)).toEqual(["managed_ai_status"]);
+  });
+
+  it("does not resend after a connection recovery if consent was withdrawn", async () => {
+    let allowed = true;
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "managed_ai_status") return RUNNING_STATUS;
+      if (command === "ai_classification_openai_chat") throw new Error("connection refused");
+      if (command === "managed_ai_start") { allowed = false; return RUNNING_STATUS; }
+      throw new Error(command);
+    });
+    await expect(invokeOpenAiChatWithManagedLocalRetry({ messages: [] }, provider, () => allowed)).rejects.toThrow("cancelled");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "ai_classification_openai_chat")).toHaveLength(1);
   });
 });

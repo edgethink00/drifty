@@ -1,5 +1,5 @@
 import type { EndOfDayReviewEvent, EndOfDayReviewPendingAssessment } from "./endOfDayReviewModel";
-import { aggregateDeviceElapsedTime, isBrowserHistoryImportSegment, isFailedForegroundCaptureSegment } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, clipDeviceElapsedTimeSegment, isBrowserHistoryImportSegment, isFailedForegroundCaptureSegment, logicalDayEndExclusiveMs, logicalDayStartMs } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ProductivityLabel } from "@drifty/domain";
 import {
   DAILY_LEADERBOARD_CHECKPOINT_MINUTE,
@@ -38,11 +38,20 @@ export const END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY =
  */
 export const END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS = 3 * 60 * 60;
 
-export function sumEndOfDayReviewTrackedSeconds(segments: readonly ActivitySegment[]): number {
+/** Timeline queries return whole overlapping records; derive one logical day's
+ * budget after device allocation, preserving timestamps and captured evidence. */
+export function selectEndOfDayReviewDaySegments(segments: readonly ActivitySegment[], day: string, startOfDayMinutes = 0): ActivitySegment[] {
+  const window = { start: logicalDayStartMs(day, startOfDayMinutes), end: logicalDayEndExclusiveMs(day, startOfDayMinutes) };
+  return aggregateDeviceElapsedTime(segments.filter((segment) => !isFailedForegroundCaptureSegment(segment)))
+    .map((segment) => clipDeviceElapsedTimeSegment(segment, window))
+    .filter((segment) => segment.durationSeconds > 0);
+}
+
+export function sumEndOfDayReviewTrackedSeconds(segments: readonly ActivitySegment[], day: string, startOfDayMinutes = 0): number {
   // Imported history reconstructs the dashboard, but it was not observed by
   // Drifty after installation and cannot make a thin install day review-ready.
   const observed = segments.filter((segment) => !isBrowserHistoryImportSegment(segment) && !isFailedForegroundCaptureSegment(segment));
-  return aggregateDeviceElapsedTime(observed).reduce(
+  return selectEndOfDayReviewDaySegments(observed, day, startOfDayMinutes).reduce(
     (total, segment) => total + (
       !Number.isFinite(segment.durationSeconds)
         ? 0

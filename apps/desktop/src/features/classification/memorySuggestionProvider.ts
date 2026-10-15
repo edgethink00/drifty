@@ -9,14 +9,17 @@ import type { SuggestionCompletionRequest } from "./memorySuggestions";
  */
 export function createLocalSuggestionCompleter(
   provider: LocalAiProviderConfig,
+  canSend: () => boolean = () => true,
 ): (request: SuggestionCompletionRequest) => Promise<string | null> {
   return async ({ prompt }) => {
+    if (!canSend()) return null;
     const request = toLocalSoulRefinementRequest(provider, prompt);
     if (!request) return null;
     try {
       const response = await invokeOpenAiChatWithManagedLocalRetry(
         request.request,
         provider.provider === "managed_local" ? provider : null,
+        canSend,
       );
       const status = typeof response.status === "number" ? response.status : 0;
       if (status < 200 || status >= 300 || typeof response.body !== "string") return null;

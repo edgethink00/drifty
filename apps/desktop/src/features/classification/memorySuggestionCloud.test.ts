@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createCloudSuggestionCompleter } from "./memorySuggestionCloud";
 import type { SuggestionCluster } from "./memorySuggestions";
 
-const invoke = vi.hoisted(() => vi.fn());
+const { invoke, withDevice } = vi.hoisted(() => ({ invoke: vi.fn(), withDevice: vi.fn() }));
 vi.mock("../../lib/supabase/client", () => ({ supabase: { functions: { invoke } } }));
-vi.mock("../cloud-devices/cloudDeviceIdentity", () => ({ withCloudDevicePayload: async (body: Record<string, unknown>) => ({ ...body, device: "test" }) }));
+vi.mock("../cloud-devices/cloudDeviceIdentity", () => ({ withCloudDevicePayload: withDevice }));
 
 const cluster = {
   key: "Aside|overleaf.com", app: "Aside", domain: "overleaf.com", kind: "work", minutes: 61.6, days: 3, blocks: 9, modelFiledShare: 1,
@@ -14,7 +14,7 @@ const cluster = {
 } as SuggestionCluster;
 
 describe("createCloudSuggestionCompleter", () => {
-  beforeEach(() => { invoke.mockReset(); });
+  beforeEach(() => { invoke.mockReset(); withDevice.mockReset().mockImplementation(async (body: Record<string, unknown>) => ({ ...body, device: "test" })); });
 
   it("sends structured evidence with titles only when allowed and returns the sentence as JSON", async () => {
     invoke.mockResolvedValue({ data: { summary: "문장입니다 문장입니다." }, error: null });
@@ -63,4 +63,17 @@ describe("createCloudSuggestionCompleter", () => {
     invoke.mockImplementation(() => Promise.reject(new Error("offline")));
     await expect(createCloudSuggestionCompleter()({ prompt: "p", cluster, language: "ko", showTitles: true })).resolves.toBeNull();
   });
+});
+
+
+it("rechecks consent after native device identity preparation", async () => {
+  invoke.mockReset();
+  let allowed = true;
+  let finish!: (body: unknown) => void;
+  withDevice.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const result = createCloudSuggestionCompleter(() => allowed)({ prompt: "p", cluster, language: "en", showTitles: true });
+  allowed = false;
+  finish({ cloudDevice: "synthetic" });
+  await expect(result).resolves.toBeNull();
+  expect(invoke).not.toHaveBeenCalled();
 });

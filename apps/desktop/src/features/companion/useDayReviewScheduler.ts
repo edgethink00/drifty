@@ -170,7 +170,7 @@ async function evaluateDayReview(
     if (decision.action === "wait" && decision.reason === "tracked_unknown") {
       try {
         segments = await options.loadDaySegments(day);
-        trackedSeconds = sumEndOfDayReviewTrackedSeconds(segments);
+        trackedSeconds = sumEndOfDayReviewTrackedSeconds(segments, day, options.startOfDayMinutes);
       } catch {
         segments = null;
         trackedSeconds = null;
@@ -215,7 +215,7 @@ async function applyDayReviewDecision(
       return;
     }
   }
-  const preparedTrackedSeconds = trackedSeconds ?? sumEndOfDayReviewTrackedSeconds(segments);
+  const preparedTrackedSeconds = trackedSeconds ?? sumEndOfDayReviewTrackedSeconds(segments, day, options.startOfDayMinutes);
   const expiresAt = resolveDayReviewWindow(day, options.reviewMinute, options.startOfDayMinutes).endMs;
   let committed = false;
   let previousRecord: DayReviewRecord | null = null;

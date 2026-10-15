@@ -1,5 +1,5 @@
 import { useSettingsSearch } from "./SettingsSearchContext";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -58,6 +58,12 @@ export function AiSetupSupportSections({
   rulesSection = null,
 }: AiSetupSupportSectionsProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const ownerScopeRef = useRef({ ownerId: workProfileUserId });
+  if (ownerScopeRef.current.ownerId !== workProfileUserId) ownerScopeRef.current = { ownerId: workProfileUserId };
+  const ownerScope = ownerScopeRef.current;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const isCurrentOwner = useCallback(() => mounted.current && ownerScopeRef.current === ownerScope, [ownerScope]);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [editorFocusRequest, setEditorFocusRequest] = useState(0);
   const [profileSavedNotice, setProfileSavedNotice] = useState(false);
@@ -104,10 +110,17 @@ export function AiSetupSupportSections({
   };
   const saveEditor = async () => {
     if (!(await onSaveWorkProfile())) return;
+    if (!isCurrentOwner()) return;
     setProfileSavedNotice(true);
     closeEditor();
   };
-  const [memory, setMemory] = useState<MemoryLoadState>({ status: "loading", document: null });
+  const [memoryState, setMemoryState] = useState<MemoryLoadState & { readonly scope: typeof ownerScope }>(
+    { scope: ownerScope, status: "loading", document: null },
+  );
+  const memory: MemoryLoadState = memoryState.scope === ownerScope ? memoryState : { status: "loading", document: null };
+  const setMemory = useCallback((next: MemoryLoadState) => {
+    if (isCurrentOwner()) setMemoryState({ ...next, scope: ownerScope });
+  }, [isCurrentOwner, ownerScope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,7 +141,7 @@ export function AiSetupSupportSections({
     return () => {
       cancelled = true;
     };
-  }, [memorySnapshotVersion, workProfileUserId]);
+  }, [memorySnapshotVersion, setMemory, workProfileUserId]);
 
   // Another writer changed Memory after this view loaded: refresh in place so the
   // list keeps its notice and focus instead of dropping back to a loading state.
@@ -155,10 +168,21 @@ export function AiSetupSupportSections({
   });
   const [suggestionBusy, setSuggestionBusy] = useState(false);
   const [suggestionNotice, setSuggestionNotice] = useState<string | null>(null);
+  const previousOwnerScope = useRef(ownerScope);
+  useEffect(() => {
+    if (previousOwnerScope.current === ownerScope) return;
+    previousOwnerScope.current = ownerScope;
+    setSuggestionBusy(false);
+    setSuggestionNotice(null);
+    setEditorExpanded(false);
+    setProfileSavedNotice(false);
+    restoreEditFocusRef.current = false;
+  }, [ownerScope]);
   async function handleAcceptSuggestion(id: string) {
     setSuggestionBusy(true);
     setSuggestionNotice(null);
     const result = await suggestionsState.accept(id);
+    if (!isCurrentOwner()) return;
     if (result.ok) setMemory({ status: "ready", document: result.document });
     else {
       if (result.code === "memory_changed") reloadMemory();

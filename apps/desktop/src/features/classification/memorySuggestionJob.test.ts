@@ -6,6 +6,7 @@ import { adoptLivingSoulSuggestion, readLivingSoulForUser, reviewLivingSoulPatte
 import {
   MEMORY_SUGGESTIONS_CHANGED_EVENT, blockedSuggestionPlaces, isMemorySuggestionJobRunning, runMemorySuggestionJobIfDue,
 } from "./memorySuggestionJob";
+import { readAiPrivacyRequestSettings, saveAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { readSuggestionStore, writeSuggestionStore } from "./memorySuggestionStore";
 
 const { completeMock } = vi.hoisted(() => ({ completeMock: vi.fn() }));
@@ -149,5 +150,64 @@ describe("runMemorySuggestionJobIfDue", () => {
     await expect(runMemorySuggestionJobIfDue({ ownerId: "local", provider, language: "en", now: new Date(NOW.getTime() + 61 * 60_000), loadSegments: async () => mixedSegments() }))
       .resolves.toBe("failed");
     expect(completeMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+describe("suggestion privacy and retry boundaries", () => {
+  it.each(["windowTitle", "contentContext"] as const)("cancels later requests and storage after %s is withdrawn during drafting", async (key) => {
+    await synchronizeLivingSoulDeclaredContextForUser("local");
+    let finish!: (value: string) => void;
+    completeMock.mockImplementationOnce(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const job = runMemorySuggestionJobIfDue({ ownerId: "local", provider, language: "en", now: NOW, loadSegments: async () => mixedSegments() });
+    await vi.waitFor(() => expect(completeMock).toHaveBeenCalledTimes(1));
+    const settings = readAiPrivacyRequestSettings();
+    saveAiPrivacyRequestSettings({ ...settings, optional: { ...settings.optional, [key]: false } });
+    finish(JSON.stringify({ summary: RULE }));
+    expect(await job).toBe("cancelled");
+    expect(completeMock).toHaveBeenCalledTimes(1);
+    expect(readSuggestionStore("local")).toMatchObject({ lastRunAt: null, retryAfter: null, suggestions: [] });
+    expect(dailyEventMock).not.toHaveBeenCalled();
+  });
+
+  it("discards a completed verification when privacy changed while it was in flight", async () => {
+    await synchronizeLivingSoulDeclaredContextForUser("local");
+    let finish!: (value: string) => void;
+    completeMock.mockResolvedValueOnce(JSON.stringify({ summary: RULE }))
+      .mockImplementationOnce(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const job = runMemorySuggestionJobIfDue({ ownerId: "local", provider, language: "en", now: NOW, loadSegments: async () => mixedSegments() });
+    await vi.waitFor(() => expect(completeMock).toHaveBeenCalledTimes(2));
+    const settings = readAiPrivacyRequestSettings();
+    saveAiPrivacyRequestSettings({ ...settings, optional: { ...settings.optional, contentContext: false } });
+    finish(JSON.stringify({ labels: completeMock.mock.calls[1][0].cluster.evidence.map((row: { title: string }) => row.title.startsWith("Draft") ? "work" : "distraction") }));
+    expect(await job).toBe("cancelled");
+    expect(readSuggestionStore("local")).toMatchObject({ suggestions: [], lastRunAt: null });
+  });
+
+  it("retries an unreachable verification after one hour without requiring new tracked activity", async () => {
+    await synchronizeLivingSoulDeclaredContextForUser("local");
+    completeMock.mockImplementation(async (request: { verify?: unknown }) => request.verify ? null : JSON.stringify({ summary: RULE }));
+    const input = { ownerId: "local", provider, language: "en" as const, now: NOW, loadSegments: async () => mixedSegments() };
+    expect(await runMemorySuggestionJobIfDue(input)).toBe("failed");
+    expect(readSuggestionStore("local")).toMatchObject({ suggestions: [], lastRunAt: null, retryAfter: new Date(NOW.getTime() + 3600000).toISOString() });
+    expect(await runMemorySuggestionJobIfDue({ ...input, now: new Date(NOW.getTime() + 59 * 60000) })).toBe("not_due");
+    answerRule();
+    expect(await runMemorySuggestionJobIfDue({ ...input, now: new Date(NOW.getTime() + 61 * 60000) })).toBe("ran");
+    expect(readSuggestionStore("local").suggestions).toHaveLength(1);
+  });
+
+  it("keeps a verified suggestion from a partial failure and retries only the unanswered place", async () => {
+    await synchronizeLivingSoulDeclaredContextForUser("local");
+    completeMock.mockImplementation(async (request: { verify?: unknown; cluster: { domain: string; evidence: readonly { title: string }[] } }) => request.verify
+      ? request.cluster.domain === "down.com" ? null : JSON.stringify({ labels: request.cluster.evidence.map(row => row.title.startsWith("Draft") ? "work" : "distraction") })
+      : JSON.stringify({ summary: RULE }));
+    const input = { ownerId: "local", provider, language: "en" as const, now: NOW, loadSegments: async () => [...mixedSegments("good.com"), ...mixedSegments("down.com")] };
+    expect(await runMemorySuggestionJobIfDue(input)).toBe("failed");
+    expect(readSuggestionStore("local").suggestions.map(row => row.domain)).toEqual(["good.com"]);
+    expect(readSuggestionStore("local").lastRunAt).toBeNull();
+    completeMock.mockClear();
+    answerRule();
+    expect(await runMemorySuggestionJobIfDue({ ...input, now: new Date(NOW.getTime() + 61 * 60000) })).toBe("ran");
+    expect(completeMock.mock.calls.map(([request]) => request.cluster.domain)).toEqual(["down.com", "down.com"]);
   });
 });

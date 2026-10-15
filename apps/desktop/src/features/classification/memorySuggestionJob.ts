@@ -35,7 +35,7 @@ export type MemorySuggestionProvider =
 export const MEMORY_SUGGESTIONS_CHANGED_EVENT = "drifty:memory-suggestions-changed";
 export const MEMORY_SUGGESTION_WINDOW_DAYS = 7;
 
-export type MemorySuggestionJobOutcome = "ran" | "failed" | "not_due" | "busy" | "no_memory";
+export type MemorySuggestionJobOutcome = "ran" | "failed" | "cancelled" | "not_due" | "busy" | "no_memory";
 
 const running = new Map<string, Promise<MemorySuggestionJobOutcome>>();
 
@@ -138,22 +138,39 @@ async function runJob(input: RunMemorySuggestionJobInput, now: Date): Promise<Me
     ];
     const settings = readAiPrivacyRequestSettings();
     const privacy = { windowTitle: settings.optional.windowTitle, contentContext: settings.optional.contentContext };
+    let cancelled = false;
+    const canSend = () => {
+      const current = readAiPrivacyRequestSettings().optional;
+      cancelled ||= current.windowTitle !== privacy.windowTitle || current.contentContext !== privacy.contentContext;
+      return !cancelled;
+    };
+    const complete = input.provider.kind === "cloud"
+      ? createCloudSuggestionCompleter(canSend)
+      : createLocalSuggestionCompleter(input.provider.provider, canSend);
     const result = clusters.length === 0
       ? { suggestions: [], rejected: [] }
       : await generateMemorySuggestions({
         clusters, language: input.language, existingSummaries: existing, privacy,
-        complete: input.provider.kind === "cloud" ? createCloudSuggestionCompleter() : createLocalSuggestionCompleter(input.provider.provider),
+        complete: async (request) => {
+          if (!canSend()) return null;
+          const response = await complete(request);
+          return canSend() ? response : null;
+        },
       });
+    // Revoked settings invalidate the whole prepared result, including local
+    // examples. Do not spend its activity watermark or failure retry allowance.
+    if (!canSend()) return "cancelled";
     const store = readSuggestionStore(input.ownerId);
-    // Every call failing means the provider was unreachable, not that nothing recurs.
-    const allFailed = result.suggestions.length === 0 && result.rejected.length > 0
-      && result.rejected.every((entry) => entry.reason === "no_response");
-    writeSuggestionStore(input.ownerId, allFailed
-      ? recordFailedSuggestionRun(store, now)
-      : recordSuggestionRun(store, result.suggestions.map((suggestion) => toStoredSuggestion(suggestion, { since, until }, until,
-        { includeTitles: suggestionShowsTitles(privacy) })), existing, now));
-    reportSuggestionRun(input.provider, allFailed ? "error" : clusters.length === 0 ? "skipped" : "success", clusters.length, result.suggestions.length);
-    return allFailed ? "failed" : "ran";
+    const retryableFailure = result.rejected.some((entry) => entry.reason === "no_response");
+    const next = recordSuggestionRun(store, result.suggestions.map((suggestion) => toStoredSuggestion(suggestion, { since, until }, until,
+      { includeTitles: suggestionShowsTitles(privacy) })), existing, now);
+    // Keep verified suggestions from a partial run, but leave unanswered
+    // activity eligible for the hourly retry instead of requiring 20 new hours.
+    writeSuggestionStore(input.ownerId, retryableFailure
+      ? recordFailedSuggestionRun({ ...next, lastRunAt: store.lastRunAt }, now)
+      : next);
+    reportSuggestionRun(input.provider, retryableFailure ? "error" : clusters.length === 0 ? "skipped" : "success", clusters.length, result.suggestions.length);
+    return retryableFailure ? "failed" : "ran";
   } catch {
     // Not recorded, so the next check tries again.
     return "failed";

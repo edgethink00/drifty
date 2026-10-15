@@ -8,7 +8,6 @@ import {
   classifyActivityDetailed,
   clipDeviceElapsedTimeSegment,
   isBrowserHistoryImportSegment,
-  isFailedForegroundCaptureSegment,
   logicalDayEndExclusiveMs,
   logicalDayStartMs,
   shiftIsoDate,
@@ -19,7 +18,8 @@ import {
 } from "@drifty/domain";
 import type { CompanionDayReviewLayout } from "./companionPillLayout";
 import type { LeaderboardCelebration } from "./companionLeaderboardMilestones";
-import { joinProductivityRuns, longestProductivityRun, toProductivityRunPart } from "../../lib/productivityRuns";
+import { joinProductivityRuns, longestProductivityRun } from "../../lib/productivityRuns";
+import { selectEndOfDayReviewDaySegments } from "./endOfDayReviewData";
 import type {
   ClassificationAvailabilityReason,
   ClassificationProviderRoute,
@@ -141,10 +141,12 @@ export function buildEndOfDayReviewComparison({
   classificationOptions?: ClassificationOptions;
   startOfDayMinutes?: number;
 }): EndOfDayReviewComparison | undefined {
-  const observed = aggregateDeviceElapsedTime(previousDaySegments.filter((segment) => !isBrowserHistoryImportSegment(segment) && !isFailedForegroundCaptureSegment(segment)));
+  const previousDay = shiftIsoDate(day, -1);
+  const observed = selectEndOfDayReviewDaySegments(
+    previousDaySegments.filter((segment) => !isBrowserHistoryImportSegment(segment)), previousDay, startOfDayMinutes,
+  );
   const observedSeconds = observed.reduce((total, segment) => total + Math.max(0, segment.durationSeconds), 0);
   if (observedSeconds < END_OF_DAY_REVIEW_COMPARISON_MIN_OBSERVED_SECONDS) return undefined;
-  const previousDay = shiftIsoDate(day, -1);
   const elapsedMs = Date.parse(generatedAt) - logicalDayStartMs(day, startOfDayMinutes);
   if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return undefined;
   const previousDayEndMs = logicalDayEndExclusiveMs(previousDay, startOfDayMinutes);
@@ -188,7 +190,7 @@ export function buildEndOfDayReviewSummary({
   assessment?: EndOfDayReviewPendingAssessment;
   isMock?: boolean;
 }): EndOfDayReviewEvent {
-  segments = aggregateDeviceElapsedTime(segments);
+  segments = selectEndOfDayReviewDaySegments(segments, day, startOfDayMinutes);
   const totalSeconds = segments.reduce((total, segment) => total + segment.durationSeconds, 0);
   const productivityDurations = buildProductivityDurations(segments, classificationOptions);
   const focusSeconds = productivityDurations.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
@@ -295,7 +297,9 @@ export function buildEndOfDayReviewDailySignals(
     .sort((left, right) => left.startedAt.getTime() - right.startedAt.getTime());
 
   /* Breakdown's Longest streak uses this same run rule. */
-  const focusRuns = joinProductivityRuns(focusSourceSegments.map(toProductivityRunPart));
+  const focusRuns = joinProductivityRuns(focusSegments.map((segment) => ({
+    startMs: segment.startedAt.getTime(), endMs: segment.endedAt.getTime(), seconds: segment.durationSeconds,
+  })));
   const deepRuns = focusRuns.filter((run) => run.seconds >= DEEP_SESSION_MIN_SECONDS);
   /* Ties go to the earlier run, so the caption points at the first time the
      day reached its best stretch. */

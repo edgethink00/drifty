@@ -10,40 +10,41 @@ import type { SuggestionCompletionRequest } from "./memorySuggestions";
  * general completion endpoint. Returns the provider answer as JSON text in the
  * same shape a local model produces, or null on any failure.
  */
-export function createCloudSuggestionCompleter(): (request: SuggestionCompletionRequest) => Promise<string | null> {
+export function createCloudSuggestionCompleter(canSend: () => boolean = () => true): (request: SuggestionCompletionRequest) => Promise<string | null> {
   return async ({ cluster, language, showTitles, verify }) => {
-    if (!supabase || cluster.signal === "settled") return null;
+    if (!supabase || cluster.signal === "settled" || !canSend()) return null;
     try {
-      const { data, error } = await supabase.functions.invoke("classify-activity", {
-        body: await withCloudDevicePayload({
-          ...cloudApiClientMetadata,
-          mode: "suggest_memory",
-          stage: verify ? "verify" : "draft",
-          ...(verify ? { summary: verify.summary } : {}),
-          language,
-          showTitles,
-          cluster: {
-            app: cluster.app,
-            domain: cluster.domain,
-            kind: cluster.kind,
-            signal: cluster.signal === "uncertain" ? "uncertain" : "mixed",
-            minutes: Math.round(cluster.minutes),
-            days: Math.max(1, Math.round(cluster.days)),
-            productivityMinutes: {
-              focus: Math.round(cluster.productivityMinutes.focus),
-              neutral: Math.round(cluster.productivityMinutes.neutral),
-              drift: Math.round(cluster.productivityMinutes.drift),
-            },
-            meanModelConfidence: cluster.meanModelConfidence ?? null,
-            evidence: cluster.evidence.slice(0, 6).map((row) => ({
-              title: showTitles ? row.title : "",
-              minutes: Math.round(row.minutes),
-              filedAs: row.filedAs,
-              reason: showTitles ? row.reason : "",
-            })),
+      const payload = await withCloudDevicePayload({
+        ...cloudApiClientMetadata,
+        mode: "suggest_memory",
+        stage: verify ? "verify" : "draft",
+        ...(verify ? { summary: verify.summary } : {}),
+        language,
+        showTitles,
+        cluster: {
+          app: cluster.app,
+          domain: cluster.domain,
+          kind: cluster.kind,
+          signal: cluster.signal === "uncertain" ? "uncertain" : "mixed",
+          minutes: Math.round(cluster.minutes),
+          days: Math.max(1, Math.round(cluster.days)),
+          productivityMinutes: {
+            focus: Math.round(cluster.productivityMinutes.focus),
+            neutral: Math.round(cluster.productivityMinutes.neutral),
+            drift: Math.round(cluster.productivityMinutes.drift),
           },
-        }),
+          meanModelConfidence: cluster.meanModelConfidence ?? null,
+          evidence: cluster.evidence.slice(0, 6).map((row) => ({
+            title: showTitles ? row.title : "",
+            minutes: Math.round(row.minutes),
+            filedAs: row.filedAs,
+            reason: showTitles ? row.reason : "",
+          })),
+        },
       });
+      // Native device identity can suspend preparation; check again at egress.
+      if (!canSend()) return null;
+      const { data, error } = await supabase.functions.invoke("classify-activity", { body: payload });
       if (error || typeof data !== "object" || data === null) return null;
       const body = data as { summary?: unknown; skip?: unknown; labels?: unknown };
       if (verify) return Array.isArray(body.labels) ? JSON.stringify({ labels: body.labels }) : null;

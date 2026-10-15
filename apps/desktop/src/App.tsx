@@ -402,7 +402,7 @@ import { toLeaderboardCelebration, type LeaderboardCelebration } from "./feature
 import { buildBreakRecoveryAttempt, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import { buildAlarmFollowThrough } from "./features/insights/alarmFollowThrough";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
-import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons } from "./features/companion/endOfDayReviewData";
+import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, selectEndOfDayReviewDaySegments } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import {
   END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY,
@@ -3365,7 +3365,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     const { assessment: requestedAssessment, ...rawReviewInput } = input;
     const reviewInput = {
       ...rawReviewInput,
-      segments: aggregateDeviceElapsedTime(rawReviewInput.segments.filter((segment) => !isFailedForegroundCaptureSegment(segment))),
+      segments: selectEndOfDayReviewDaySegments(rawReviewInput.segments, input.day, input.startOfDayMinutes),
     };
     const resolveCurrentInput = () => {
       const currentAvailability = classificationAvailabilityRef.current;
@@ -3441,10 +3441,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       day: selectedDay,
       generatedAt: new Date().toISOString(),
       segments: previewSegments,
+      startOfDayMinutes: segments.length > 0 ? startOfDayMinutes : 0,
       assessment: null,
       isMock: true,
     }).then(showEndOfDayReview);
-  }, [buildEndOfDayReviewEvent, isDevModeActive, segments, selectedDay, showEndOfDayReview]);
+  }, [buildEndOfDayReviewEvent, isDevModeActive, segments, selectedDay, showEndOfDayReview, startOfDayMinutes]);
 
   const handleEndOfDayReviewNotificationPreview = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
@@ -3454,10 +3455,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       day: selectedDay,
       generatedAt: new Date().toISOString(),
       segments: previewSegments,
+      startOfDayMinutes: segments.length > 0 ? startOfDayMinutes : 0,
       assessment: null,
       isMock: true,
     }).then((event) => sendDayReviewNotification(event, companionLanguage));
-  }, [buildEndOfDayReviewEvent, companionLanguage, isDevModeActive, segments, selectedDay]);
+  }, [buildEndOfDayReviewEvent, companionLanguage, isDevModeActive, segments, selectedDay, startOfDayMinutes]);
 
   const recordDriftInteraction = useCallback((interaction: DriftAlarmInteraction) => {
     setDriftAlarmInteractions(recordDriftAlarmInteraction(interaction));

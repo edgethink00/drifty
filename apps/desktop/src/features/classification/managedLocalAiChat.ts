@@ -38,15 +38,22 @@ const CONNECTION_ERROR_MARKERS = [
 export async function invokeOpenAiChatWithManagedLocalRetry(
   request: Record<string, unknown>,
   managedLocalProvider: ManagedLocalProviderConfig | null,
+  canSend: () => boolean = () => true,
 ): Promise<NativeOpenAiChatResponse> {
+  const checkCanSend = () => {
+    if (!canSend()) throw new ManagedLocalAiChatError("AI request cancelled before sending.");
+  };
+  checkCanSend();
   const readyRequest = managedLocalProvider
     ? await requestForReadyManagedLocalRuntime(request, managedLocalProvider)
     : request;
   try {
+    checkCanSend();
     return await invokePreviewAwareAiCommand<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: readyRequest });
   } catch (error) {
     if (!managedLocalProvider || !isLikelyManagedLocalConnectionError(error)) throw error;
     const readyStatus = await ensureManagedLocalAiReady(managedLocalProvider.modelId);
+    checkCanSend();
     return await invokePreviewAwareAiCommand<NativeOpenAiChatResponse>("ai_classification_openai_chat", {
       request: requestWithManagedLocalRuntime(request, managedLocalProvider, readyStatus),
     });

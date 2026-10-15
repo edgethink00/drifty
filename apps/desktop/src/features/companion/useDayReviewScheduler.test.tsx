@@ -117,6 +117,17 @@ describe("useDayReviewScheduler", () => {
     expect(lastDecision()).toMatchObject({ action: "wait", reason: "awaiting_acknowledgement" });
   });
 
+  it("does not count the previous logical day's part of a crossing record toward readiness", async () => {
+    vi.setSystemTime(new Date(2026, 9, 3, 20, 5));
+    const crossing = { ...segment("crossing", 14400), startedAt: new Date(2026, 9, 3, 1).toISOString(), endedAt: new Date(2026, 9, 3, 5).toISOString() };
+    const { options, present } = harness({ loadDaySegments: async () => [crossing] });
+    render(<Host options={options} />);
+    await flush();
+    expect(present).not.toHaveBeenCalled();
+    expect(lastDecision()).toMatchObject({ action: "wait", reason: "thin_day", trackedSeconds: 3600 });
+    expect(readDayReviewRecord(DAY)).toBeNull();
+  });
+
   it("acknowledges a browser display immediately", async () => {
     vi.setSystemTime(new Date(2026, 9, 3, 20, 5));
     const { options } = harness({}, "displayed");

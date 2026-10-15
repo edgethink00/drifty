@@ -621,6 +621,10 @@ export async function generateMemorySuggestions(input: GenerateSuggestionsInput)
       } catch {
         check = null;
       }
+      if (check === null) {
+        rejected.push({ key: cluster.key, reason: "no_response" });
+        continue;
+      }
       const agreement = scoreSuggestionVerification(cluster, check);
       if (agreement === null || agreement < MIN_VERIFIED_AGREEMENT) {
         rejected.push({ key: cluster.key, reason: "unverified" });

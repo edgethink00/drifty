@@ -288,3 +288,22 @@ describe("Day Review device allocations", () => {
     expect(compare(thin)).toBeUndefined();
   });
 });
+
+
+describe("Day Review logical day boundaries", () => {
+  it("clips totals, source rows and the longest run to the reviewed day", () => {
+    const record = localSegment("2026-10-15", 1, 240, "focus");
+    const event = buildEndOfDayReviewSummary({ day: "2026-10-15", generatedAt: new Date("2026-10-15T20:00:00").toISOString(), startOfDayMinutes: 240,
+      segments: [record, { ...record, id: "remote", deviceId: "pc" }] });
+    expect(event).toMatchObject({ totalSeconds: 3600, focusSeconds: 3600, unclassifiedSeconds: 0,
+      dailySignals: { longestFocusRunSeconds: 3600, longestFocusRunStartedAt: new Date("2026-10-15T04:00:00").toISOString(), peakHourLabel: "04:00", peakHourFocusSeconds: 3600 } });
+    expect(event.sourceSummaries?.[0]).toMatchObject({ durationSeconds: 3600, percent: 100 });
+    expect(event.categorySummaries?.[0]).toMatchObject({ durationSeconds: 3600, percent: 100 });
+  });
+
+  it("does not let another day's time satisfy yesterday's observed-time bar", () => {
+    expect(buildEndOfDayReviewComparison({ day: "2026-10-16", generatedAt: new Date("2026-10-16T20:00:00").toISOString(), startOfDayMinutes: 240,
+      previousDaySegments: [localSegment("2026-10-15", 1, 240, "focus"), localSegment("2026-10-14", 9, 240, "focus")],
+      current: { focusSeconds: 3600, driftSeconds: 0, neutralSeconds: 0 } })).toBeUndefined();
+  });
+});
