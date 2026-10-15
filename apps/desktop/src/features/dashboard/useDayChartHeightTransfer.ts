@@ -1,6 +1,6 @@
 import { useLayoutEffect, type RefObject } from "react";
 
-/** Move only the space saved by Day's compact trend chrome into its flow plot.
+/** Move the space saved by Day's compact trend chrome and gap into its flow plot.
  * Measure the existing layout before applying the compact chrome: summing a
  * per-row CSS increment loses fractional pixels when the browser rounds rows.
  * Both measurements happen together before paint; no duplicate chart is needed.
@@ -18,16 +18,20 @@ export function useDayChartHeightTransfer(
     const update = () => {
       if (stopped) return;
       plot = main.querySelector<HTMLElement>(".flow-chart-grid");
+      const flow = main.querySelector<HTMLElement>(".flow-breakdown-layout");
       const trend = main.querySelector<HTMLElement>(".dashboard-insight-stack > .insight-chart-panel");
-      if (!plot || !trend) return;
+      if (!plot || !flow || !trend) return;
 
       main.removeAttribute("data-day-chart-density");
       plot.style.removeProperty("height");
       const originalPlotHeight = plot.getBoundingClientRect().height;
       const originalTrendHeight = trend.getBoundingClientRect().height;
+      const originalGap = Number.parseFloat(getComputedStyle(flow).marginBottom) || 0;
 
       main.dataset.dayChartDensity = "compact";
-      const savedHeight = originalTrendHeight - trend.getBoundingClientRect().height;
+      const compactGap = Number.parseFloat(getComputedStyle(flow).marginBottom) || 0;
+      const savedHeight = originalTrendHeight - trend.getBoundingClientRect().height
+        + originalGap - compactGap;
       plot.style.height = `${originalPlotHeight + savedHeight}px`;
     };
 

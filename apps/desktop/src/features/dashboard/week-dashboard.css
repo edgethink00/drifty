@@ -3706,6 +3706,10 @@
   transform: translate(5px, calc(-50% + 1px));
 }
 
+.day-split__main[data-day-chart-density="compact"] .flow-breakdown-layout {
+  margin-bottom: calc(var(--block-gap) - 7px);
+}
+
 .day-split__main[data-day-chart-density="compact"] .flow-chart-grid {
   grid-template-rows: repeat(var(--flow-row-count), minmax(0, 1fr));
 }
