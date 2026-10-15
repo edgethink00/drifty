@@ -3009,10 +3009,10 @@ class TrackerDatabase:
                     )
         return candidates[:limit]
 
-    def apply_classification_rules(self, start: str | None = None, end: str | None = None) -> dict[str, int]:
-        with self.connect() as conn:
-            rules = conn.execute(
-                """
+    @staticmethod
+    def _enabled_classification_rules(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+        return conn.execute(
+            """
                 SELECT
                     id,
                     target_kind,
@@ -3024,15 +3024,31 @@ class TrackerDatabase:
                     normalized_detail_value,
                     category,
                     productivity,
-                    confidence
+                    confidence,
+                    updated_at,
+                    created_at
                 FROM classification_rules
                 WHERE enabled = 1
                 ORDER BY
                     CASE WHEN match_scope = 'detail' THEN 0 ELSE 1 END,
                     updated_at DESC,
                     created_at DESC
-                """
-            ).fetchall()
+            """
+        ).fetchall()
+
+    def apply_classification_rules(self, start: str | None = None, end: str | None = None) -> dict[str, int]:
+        # Editing or adding a rule while we match can change precedence. Retry
+        # preparation once outside the writer; never keep it locked to rematch
+        # all history, and never spin indefinitely under concurrent edits.
+        for _ in range(2):
+            result = self._apply_classification_rule_snapshot(start, end)
+            if result is not None:
+                return result
+        raise RuntimeError("Classification rules changed during application. Try again.")
+
+    def _apply_classification_rule_snapshot(self, start: str | None, end: str | None) -> dict[str, int] | None:
+        with self.connect() as conn:
+            rules = self._enabled_classification_rules(conn)
             if not rules:
                 return {"matchedCount": 0, "appliedCount": 0, "skippedCount": 0}
 
@@ -3049,9 +3065,7 @@ class TrackerDatabase:
             query = self._append_overlap_filters(query, params, start, end)
             rows = conn.execute(query, tuple(params)).fetchall()
 
-            matched_count = 0
-            applied_count = 0
-            skipped_count = 0
+            prepared: list[tuple[Any, ...]] = []
             timestamp = datetime.now(timezone.utc).isoformat()
             surface_rules: dict[tuple[str | None, str | None, str | None], list[sqlite3.Row]] = {}
             for segment in rows:
@@ -3073,13 +3087,40 @@ class TrackerDatabase:
                 rule = self._matching_rule(segment, surface_rules.get(surface_key, rules))
                 if not rule:
                     continue
-                matched_count += 1
                 segment_id = int(segment["id"])
-                # The snapshot predates this write transaction. A concurrent
-                # trim/history deletion or rule removal/disable can commit
-                # before the first INSERT; skip that stale result atomically.
-                cursor = conn.execute(
-                    """
+                prepared.append((
+                    segment_id,
+                    f"rule:{rule['id']}:{segment_id}",
+                    rule["category"],
+                    rule["productivity"],
+                    float(rule["confidence"] if rule["confidence"] is not None else DEFAULT_RULE_CONFIDENCE),
+                    self._rule_reason(rule),
+                    timestamp,
+                    timestamp,
+                    rule["id"],
+                    segment_id,
+                    rule["id"],
+                    segment["segment_uid"], segment["app_name"], segment["bundle_id"],
+                    segment["site_domain"], segment["site_url"], segment["site_title"],
+                    segment["window_title"], segment["youtube_video_id"], segment["youtube_title"],
+                    segment["started_at"], segment["ended_at"],
+                ))
+
+            if not prepared:
+                return {"matchedCount": 0, "appliedCount": 0, "skippedCount": 0}
+
+            # All matching, normalization and parameter construction finish
+            # before SQLite admits this writer. Keep the writes atomic, while
+            # allowing capture/settings writers to run during expensive work.
+            snapshot_rules = {tuple(rule) for rule in rules}
+            conn.execute("BEGIN IMMEDIATE")
+            if any(tuple(rule) not in snapshot_rules for rule in self._enabled_classification_rules(conn)):
+                return None
+            # Deleted/disabled rules and changed/deleted captures are skipped
+            # by the same write that protects manual classifications. A newly
+            # enabled/edited rule above requires a fresh ordered match instead.
+            cursor = conn.executemany(
+                """
                     INSERT INTO activity_classifications (
                         segment_id,
                         input_fingerprint,
@@ -3100,8 +3141,14 @@ class TrackerDatabase:
                         classification_rule_id
                     )
                     SELECT ?, ?, ?, ?, 'rule', ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?, 0, 0, ?
-                    WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
+                    FROM activity_segments AS segment
+                    LEFT JOIN youtube_video_metadata AS video ON video.video_id = segment.youtube_video_id
+                    WHERE segment.id = ?
                       AND EXISTS (SELECT 1 FROM classification_rules WHERE id = ? AND enabled = 1)
+                      AND segment.segment_uid IS ? AND segment.app_name IS ? AND segment.bundle_id IS ?
+                      AND segment.site_domain IS ? AND segment.site_url IS ? AND segment.site_title IS ?
+                      AND segment.window_title IS ? AND segment.youtube_video_id IS ? AND video.title IS ?
+                      AND segment.started_at IS ? AND segment.ended_at IS ?
                     ON CONFLICT(segment_id) DO UPDATE SET
                         input_fingerprint = excluded.input_fingerprint,
                         category = excluded.category,
@@ -3120,26 +3167,12 @@ class TrackerDatabase:
                         stale = excluded.stale,
                         classification_rule_id = excluded.classification_rule_id
                     WHERE activity_classifications.source != 'manual'
-                    """,
-                    (
-                        segment_id,
-                        f"rule:{rule['id']}:{segment_id}",
-                        rule["category"],
-                        rule["productivity"],
-                        float(rule["confidence"] if rule["confidence"] is not None else DEFAULT_RULE_CONFIDENCE),
-                        self._rule_reason(rule),
-                        timestamp,
-                        timestamp,
-                        rule["id"],
-                        segment_id,
-                        rule["id"],
-                    ),
-                )
-                if cursor.rowcount > 0:
-                    applied_count += 1
-                else:
-                    skipped_count += 1
-        return {"matchedCount": matched_count, "appliedCount": applied_count, "skippedCount": skipped_count}
+                """,
+                prepared,
+            )
+            applied_count = cursor.rowcount
+        return {"matchedCount": len(prepared), "appliedCount": applied_count,
+                "skippedCount": len(prepared) - applied_count}
 
     # ---- Dev signals -----------------------------------------------------
     #
@@ -5074,9 +5107,8 @@ class TrackerDatabase:
         return "." in text and " " not in text
 
     def _matching_rule(self, segment: sqlite3.Row, rules: list[sqlite3.Row]) -> sqlite3.Row | None:
-        # Rule application keeps one atomic writer transaction. Normalize each
-        # captured field once per segment instead of repeating URL parsing for
-        # every rule while other tracker/settings writers are waiting.
+        # Normalize each captured field once per segment instead of repeating
+        # URL parsing for every rule. Batch preparation runs before the writer.
         surfaces: dict[str, str] = {}
         details: dict[str, set[str]] = {}
         for rule in rules:
