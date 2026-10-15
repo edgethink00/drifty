@@ -3053,8 +3053,24 @@ class TrackerDatabase:
             applied_count = 0
             skipped_count = 0
             timestamp = datetime.now(timezone.utc).isoformat()
+            surface_rules: dict[tuple[str | None, str | None, str | None], list[sqlite3.Row]] = {}
             for segment in rows:
-                rule = self._matching_rule(segment, rules)
+                # Surface matching depends only on these captured values. Reuse
+                # its ordered candidates within this immutable rule snapshot;
+                # URL/title detail matching remains independent per segment.
+                surface_key = (
+                    segment["site_domain"] or segment["site_url"],
+                    segment["bundle_id"], segment["app_name"],
+                )
+                if surface_key not in surface_rules and len(surface_rules) < 256:
+                    normalized: dict[str, str] = {}
+                    surface_rules[surface_key] = [
+                        candidate for candidate in rules
+                        if self._rule_surface_matches(segment, candidate, normalized)
+                    ]
+                # Bound candidate memory for batches with many unique surfaces.
+                # Uncached surfaces keep the original full matching path.
+                rule = self._matching_rule(segment, surface_rules.get(surface_key, rules))
                 if not rule:
                     continue
                 matched_count += 1

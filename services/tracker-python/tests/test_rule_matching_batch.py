@@ -5,6 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
@@ -82,3 +83,59 @@ class RuleMatchingBatchTests(unittest.TestCase):
         self.assertEqual([tuple(row) for row in self.db.connect().execute(
             "SELECT * FROM activity_classifications")], before)
         self.assertFalse(self.db.connect().in_transaction)
+
+    def test_repeated_surfaces_avoid_full_rule_scans_without_reusing_details(self) -> None:
+        surface = self.rule()
+        detail = self.rule(matchScope="detail", detailKind="windowTitle", detailValue="Plan")
+        for index in range(80):
+            self.rule(targetValue=f"unrelated-{index}.invalid", matchScope="detail",
+                      detailKind="windowTitle", detailValue="Plan")
+        expected = {}
+        for index in range(40):
+            segment_id = self.segment(site_domain="example.org",
+                                      site_url=f"https://example.org/page-{index}",
+                                      window_title="Plan" if index % 2 else "Other")
+            expected[segment_id] = detail["id"] if index % 2 else surface["id"]
+        for index in range(20):
+            self.segment(site_domain="no-rule.invalid", window_title=str(index))
+
+        with patch.object(self.db, "_rule_surface_matches",
+                          wraps=self.db._rule_surface_matches) as compare:
+            self.assertEqual(self.db.apply_classification_rules(),
+                             {"matchedCount": 40, "appliedCount": 40, "skippedCount": 0})
+        saved = dict(self.db.connect().execute(
+            "SELECT segment_id, classification_rule_id FROM activity_classifications"))
+        self.assertEqual(saved, expected)
+        # The same site/app should not rescan every unrelated rule for every
+        # segment, including repeated surfaces with no applicable rule.
+        self.assertLess(compare.call_count, 500)
+
+        # Candidate reuse ends with this invocation; disabling a rule must be
+        # observed when the same database instance applies the next batch.
+        self.db.save_classification_rule({**detail, "enabled": False})
+        self.db.apply_classification_rules()
+        self.assertEqual(set(row[0] for row in self.db.connect().execute(
+            "SELECT classification_rule_id FROM activity_classifications")), {surface["id"]})
+
+    def test_many_unique_surfaces_keep_the_original_ordered_matching_result(self) -> None:
+        surface = self.rule()
+        detail = self.rule(matchScope="detail", detailKind="siteUrl",
+                           detailValue="https://example.org/work")
+        app = self.rule(targetKind="app", targetValue="qa.exact.bundle")
+        expected = {}
+        for index in range(300):
+            # Exceed the bounded candidate cache and exercise domain/URL
+            # fallback, exact bundle matching, misses, and per-row URL detail.
+            kind = index % 4
+            segment_id = self.segment(
+                app_name=f"Synthetic App {index}",
+                bundle_id="qa.exact.bundle" if kind == 2 else None,
+                site_domain="docs.example.org" if kind == 0 else None,
+                site_url="https://example.org/work" if kind == 1 else "https://miss.invalid/",
+            )
+            selected = [surface["id"], detail["id"], app["id"], None][kind]
+            if selected is not None:
+                expected[segment_id] = selected
+        self.db.apply_classification_rules()
+        self.assertEqual(dict(self.db.connect().execute(
+            "SELECT segment_id, classification_rule_id FROM activity_classifications")), expected)
