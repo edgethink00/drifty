@@ -66,6 +66,8 @@ import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
+import type { HistoryRow as HistoryRowModel } from "./features/history/historyGroups";
+import type { HistoryRecordSurface } from "./features/history/HistoryRowMenu";
 import { AiConnectionStatusBar, resolveAiConnectionStatus, type AiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { resolveRecordingHealth, type RecordingRecoveryAction } from "./features/ai-connection/recordingHealth";
 import { useRecordingObservation } from "./features/ai-connection/useRecordingObservation";
@@ -656,6 +658,15 @@ export default function App() {
 /** How long the intro waits for the prepared day to load before opening on the sample cards. */
 const INTRO_STORY_WAIT_MS = 6_000;
 
+type HistoryReturnPoint = {
+  readonly query: string;
+  readonly segmentId: string;
+  readonly day: string;
+  /** The day was today, which may have rolled over by the time History is back. */
+  readonly wasToday: boolean;
+  readonly userSelectedDay: boolean;
+};
+
 function AppBody({ localization }: { readonly localization: LocalizationController }) {
   /* Companion cards and macOS notifications are built here as strings before
      they cross to another window, so their wording follows the display
@@ -751,6 +762,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [historySearchHasMoreSegments, setHistorySearchHasMoreSegments] = useState(false);
   const [historySearchLoading, setHistorySearchLoading] = useState(false);
   const [historySearchError, setHistorySearchError] = useState<DescribedActionError | null>(null);
+  // The record to mark when History opens again after showing it in a calendar.
+  const [historyLocateSegmentId, setHistoryLocateSegmentId] = useState<string | null>(null);
+  // A record sent from History to Your Day or Your Week, whose block card opens there.
+  const [historyRecordReveal, setHistoryRecordReveal] = useState<string | null>(null);
+  // Where History and the selected day were when a record was opened elsewhere, restored on the way back.
+  const [historyReturn, setHistoryReturn] = useState<HistoryReturnPoint | null>(null);
   const normalizedHistorySearchQuery = historySearchQuery.trim();
   const isHistorySearchActive = normalizedHistorySearchQuery.length > 0;
   const [dashboardPreviousWeekFocusLoad, setDashboardPreviousWeekFocusLoad] = useState<DashboardPreviousWeekFocusLoad | null>(null);
@@ -3037,6 +3054,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   const resetHistorySearch = useCallback(() => {
     setHistorySearchQuery("");
+    setHistoryLocateSegmentId(null);
     historySearchRequestRef.current += 1;
     setHistorySearchSegments([]);
     setHistorySearchNextCursor(null);
@@ -3044,6 +3062,43 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setHistorySearchLoading(false);
     setHistorySearchError(null);
   }, []);
+
+  // Typing a new search drops the located record with it.
+  const handleHistorySearchQueryChange = useCallback((nextQuery: string) => {
+    setHistoryLocateSegmentId(null);
+    setHistorySearchQuery(nextQuery);
+  }, []);
+  const clearHistoryLocate = useCallback(() => setHistoryLocateSegmentId(null), []);
+  const clearHistoryRecordReveal = useCallback(() => setHistoryRecordReveal(null), []);
+
+  // Assigned next to the navigation helpers below; a stable wrapper keeps the
+  // History rows from re-rendering on every app tick.
+  const openHistoryRecordInContextRef = useRef<(row: HistoryRowModel, surface: HistoryRecordSurface) => void>(() => {});
+  const openHistoryRecordInContext = useCallback(
+    (row: HistoryRowModel, surface: HistoryRecordSurface) => openHistoryRecordInContextRef.current(row, surface),
+    [],
+  );
+
+  // Coming back to History after opening a record elsewhere restores the search,
+  // marks the record and puts the selected day back, so Your Day does not stay
+  // on the record's day; going anywhere else forgets the way back.
+  useEffect(() => {
+    if (!historyReturn) return;
+    if (activeTab === "history") {
+      setHistorySearchQuery(historyReturn.query);
+      setHistoryLocateSegmentId(historyReturn.segmentId);
+      selectDay(historyReturn.wasToday ? logicalTodayIsoDate(startOfDayMinutes) : historyReturn.day, { userSelected: historyReturn.userSelectedDay });
+      setHistoryReturn(null);
+    } else if (activeTab !== "dashboard") {
+      setHistoryReturn(null);
+    }
+    // selectDay is redeclared each render; the effect runs only when History is reached.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, historyReturn, startOfDayMinutes]);
+
+  useEffect(() => {
+    if (activeTab !== "dashboard") setHistoryRecordReveal(null);
+  }, [activeTab]);
 
   useEffect(() => {
     const query = normalizedHistorySearchQuery;
@@ -3116,6 +3171,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (activeTab === "history") return;
     if (
       historySearchQuery === ""
+      && historyLocateSegmentId === null
       && historySearchSegments.length === 0
       && historySearchNextCursor === null
       && !historySearchHasMoreSegments
@@ -3125,6 +3181,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     resetHistorySearch();
   }, [
     activeTab,
+    historyLocateSegmentId,
     historySearchError,
     historySearchHasMoreSegments,
     historySearchLoading,
@@ -10241,6 +10298,23 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setCmdOpen(false);
   }
 
+  // A History row opens its day in Your Day or its week in Your Week, with the
+  // block's card open. History's search and the record are kept for the way back.
+  openHistoryRecordInContextRef.current = (row, surface) => {
+    const segmentId = row.segmentIds[row.segmentIds.length - 1];
+    if (segmentId === undefined) return;
+    setHistoryReturn({
+      query: historySearchQuery,
+      segmentId,
+      day: selectedDay,
+      wasToday: selectedDay === logicalTodayIsoDate(startOfDayMinutes),
+      userSelectedDay: userSelectedDayRef.current,
+    });
+    setHistoryRecordReveal(segmentId);
+    selectDay(logicalDayIsoDateForDate(new Date(row.startedAt), startOfDayMinutes));
+    navigateToTab("dashboard", surface === "week" ? "Week" : "Today");
+  };
+
   const startOfDayValue = minutesToHourlyStartOfDayValue(startOfDayMinutes);
   const handleStartOfDayChange = useCallback((value: string) => {
     setStartOfDayMinutes(hourlyStartOfDayValueToMinutes(value));
@@ -11354,6 +11428,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onDeleteDashboardActivity={handleDeleteDashboardActivity}
             onSelectDay={selectDay}
             onEditCategories={setCategoryEditorTarget}
+            revealSegmentId={historyRecordReveal}
+            onRevealSettled={clearHistoryRecordReveal}
           />
         ) : null}
 
@@ -11457,7 +11533,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 onRefreshAfterDelete={refreshAfterHistoryDeletion}
                 onOpenDeleteHistory={() => { setHistoryDeletionResult(null); setDeleteHistoryModalOpen(true); }}
                 onLoadMore={displayedHistoryLoadMore}
-                onSearchQueryChange={setHistorySearchQuery}
+                onSearchQueryChange={handleHistorySearchQueryChange}
+                locateSegmentId={historyLocateSegmentId}
+                onLocateSettled={clearHistoryLocate}
+                onOpenRecord={openHistoryRecordInContext}
               />
             ) : (
               <DeferredTabBodyFallback label="history records" variant="history" />

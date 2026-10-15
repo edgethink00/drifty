@@ -732,6 +732,48 @@ describe("FlowChartView activity inspector", () => {
     expect(within(inspector).getByRole("button", { name: /Current value: Focus · dominant/ })).toBeTruthy();
   });
 
+  it("opens the card of a record sent from History on its block", () => {
+    const onRevealSettled = vi.fn();
+    const block = makeFlowBlock({ sourceSegmentIds: ["seg-docs"] });
+    render(
+      <FlowChartView
+        blocks={[block]}
+        appIcons={{}}
+        intervalMinutes={3}
+        activityActionsEnabled
+        revealSegmentId="seg-docs"
+        onRevealSettled={onRevealSettled}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "docs.example.com" })).toBeTruthy();
+    expect(onRevealSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not open a card when the day holds no such record", () => {
+    vi.useFakeTimers();
+    try {
+      const onRevealSettled = vi.fn();
+      render(
+        <FlowChartView
+          blocks={[makeFlowBlock({ sourceSegmentIds: ["seg-docs"] })]}
+          appIcons={{}}
+          intervalMinutes={3}
+          revealSegmentId="seg-elsewhere"
+          onRevealSettled={onRevealSettled}
+        />,
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(onRevealSettled).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("opens the activity inspector from a flow cell", () => {
     const block = makeFlowBlock({ sourceSegmentIds: ["seg-docs"] });
     render(

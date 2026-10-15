@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   logicalMinuteOfDay,
@@ -34,6 +34,8 @@ const FLOW_CELL_BASE_MIN_HEIGHT_REM = 0.5;
 const FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM = 0.76;
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_ACTIVITY_SEGMENTS: readonly ActivitySegment[] = [];
+/** How long a record sent from History may take to appear before it is dropped. */
+const FLOW_REVEAL_GIVE_UP_MS = 5000;
 
 export function FlowChartView({
   classifiedResultIds,
@@ -57,6 +59,8 @@ export function FlowChartView({
   onDeleteActivity,
   classificationOptions,
   onEditCategories,
+  revealSegmentId = null,
+  onRevealSettled,
 }: {
   readonly classifiedResultIds?: ReadonlySet<string>;
   blocks: FlowBlock[];
@@ -87,6 +91,10 @@ export function FlowChartView({
   classificationOptions?: ClassificationOptions;
   /** Opens the category editor from the legend and the activity inspector. */
   onEditCategories?: (target: CategoryEditorTarget) => void;
+  /** A record opened from History: scroll to its block and open its card once the day has loaded. */
+  revealSegmentId?: string | null;
+  /** Called once the card opens, or when the day holds no such record. */
+  onRevealSettled?: () => void;
 }) {
   const { t } = useLocalization();
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
@@ -238,6 +246,28 @@ export function FlowChartView({
       };
     });
   }, [flowGridElement, hoverGroupsByCell]);
+
+  // Open the card of a record sent from History once its block has rendered.
+  const onRevealSettledRef = useRef(onRevealSettled);
+  onRevealSettledRef.current = onRevealSettled;
+  // The day may still be loading. Give up quietly if the record never shows;
+  // the timer is keyed to the record alone, so live refreshes cannot restart it.
+  useEffect(() => {
+    if (!revealSegmentId) return;
+    const timeoutId = window.setTimeout(() => onRevealSettledRef.current?.(), FLOW_REVEAL_GIVE_UP_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [revealSegmentId]);
+  useEffect(() => {
+    if (!revealSegmentId) return;
+    const group = [...new Set(hoverGroupsByCell.values())].find((candidate) => candidate.segmentIds.includes(revealSegmentId));
+    const anchor = group
+      ? flowGridElement?.querySelector<HTMLButtonElement>(`button[data-flow-minute="${group.startMinuteOfDay}"]`) ?? null
+      : null;
+    if (!group || !anchor) return;
+    anchor.scrollIntoView?.({ block: "center", inline: "center" });
+    openActivityInspector(group, anchor);
+    onRevealSettledRef.current?.();
+  }, [flowGridElement, hoverGroupsByCell, openActivityInspector, revealSegmentId]);
   const activityActionsDisabledReason = useMemo(() => {
     if (!activityInspector) return null;
     return resolveActivityActionsDisabledReason(

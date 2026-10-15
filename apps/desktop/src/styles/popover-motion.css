@@ -45,12 +45,14 @@
 [data-anchored-presence] > .pt-menu,
 [data-anchored-presence] > .classification-rule-card__menu,
 [data-anchored-presence] > .cloud-device-row__menu,
-[data-anchored-presence] > .developer-skill-picker__menu {
+[data-anchored-presence] > .developer-skill-picker__menu,
+[data-anchored-presence] > .history-row-menu {
   transform-origin: top right;
 }
 
 /* The agent picker opens upward when the page leaves no room below it. */
-[data-anchored-presence] > .developer-skill-picker__menu--above {
+[data-anchored-presence] > .developer-skill-picker__menu--above,
+[data-anchored-presence] > .history-row-menu[data-placement="above"] {
   transform-origin: bottom right;
 }
 

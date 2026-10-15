@@ -4,6 +4,7 @@ import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
+import type { HistoryRecordSurface, HistoryRowMenuActions } from "./HistoryRowMenu";
 import { historyToolbarActionReserve } from "./historyToolbar";
 import { ActionLabel } from "../../components/ActionLabel";
 import { ModalPresence } from "../../components/ModalPresence";
@@ -33,10 +34,18 @@ type HistoryViewProps = {
   readonly searchUsesBackend?: boolean;
   readonly segments: readonly ActivitySegment[];
   readonly startOfDayMinutes?: number;
+  /** Scrolls to and briefly marks the row holding this segment, once it renders. */
+  readonly locateSegmentId?: string | null;
+  /** Called when the mark has faded, or the search answered without the record. */
+  readonly onLocateSettled?: () => void;
+  /** Opens a record in Your Week or Your Day from its row menu. */
+  readonly onOpenRecord?: (row: HistoryRowModel, surface: HistoryRecordSurface) => void;
 };
 
 const HISTORY_RENDER_STEP = 200;
 const EMPTY_HISTORY_ROWS: readonly HistoryRowModel[] = [];
+/** Matches the highlight in history.css, plus a short hold. */
+const HISTORY_LOCATE_MARK_MS = 1800;
 
 type HistoryDeleteConfirmationProps = {
   readonly deleting: boolean;
@@ -111,6 +120,9 @@ export function HistoryView({
   searchUsesBackend = false,
   segments,
   startOfDayMinutes = 0,
+  locateSegmentId = null,
+  onLocateSettled,
+  onOpenRecord,
 }: HistoryViewProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [uncontrolledQuery, setUncontrolledQuery] = useState("");
@@ -119,6 +131,10 @@ export function HistoryView({
   const [deleteError, setDeleteError] = useState<DescribedActionError | null>(null);
   const [confirmDeleting, setConfirmDeleting] = useState(false);
   const [pendingRecordCount, setPendingRecordCount] = useState(0);
+  // A row menu's delete confirms that row alone; the toolbar confirms the selection.
+  const [rowDeleteIds, setRowDeleteIds] = useState<readonly string[] | null>(null);
+  // After a row is deleted from its menu, focus continues from its neighbour.
+  const [focusRowIdAfterDelete, setFocusRowIdAfterDelete] = useState<string | null>(null);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [retryingRefresh, setRetryingRefresh] = useState(false);
   const requestInFlight = useRef(false);
@@ -193,11 +209,63 @@ export function HistoryView({
   }, [hasMoreRows, loadMoreError, loadingMore, loadMore, renderedRows.length]);
 
   const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes, effectiveLanguage), [effectiveLanguage, renderedRows, startOfDayMinutes]);
+
+  const locatedRowId = useMemo(() => {
+    if (!locateSegmentId) return null;
+    return renderedRows.find((row) => row.segmentIds.includes(locateSegmentId))?.id ?? null;
+  }, [locateSegmentId, renderedRows]);
+  // The app re-renders on live ticks; a ref keeps that from restarting the mark's timer.
+  const onLocateSettledRef = useRef(onLocateSettled);
+  onLocateSettledRef.current = onLocateSettled;
+
+  useEffect(() => {
+    if (!locateSegmentId) return;
+    if (locatedRowId === null) {
+      // The search answered without that record: it was deleted, or no longer matches.
+      if (!initialLoading && !loadingMore) onLocateSettledRef.current?.();
+      return;
+    }
+    const locatedRow = scrollRootRef.current?.querySelector<HTMLElement>('[data-located="true"]');
+    locatedRow?.scrollIntoView?.({ block: "center" });
+    // Coming back from a calendar leaves focus on the page; continue from the
+    // record instead, unless the user has already moved focus somewhere.
+    if (!document.activeElement || document.activeElement === document.body) {
+      locatedRow?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.focus({ preventScroll: true });
+    }
+    const timeoutId = window.setTimeout(() => onLocateSettledRef.current?.(), HISTORY_LOCATE_MARK_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [initialLoading, loadingMore, locateSegmentId, locatedRowId]);
+
   const selectedCount = selectedIds.size;
   const hasAnySegments = segments.length > 0;
   const showToolbar = hasAnySegments || isSearching;
   const deleteLabel = t("history.deleteSelectedCount", { count: selectedCount });
   const actionReserve = historyToolbarActionReserve(t);
+
+  const openRowDelete = useCallback((row: HistoryRowModel) => {
+    setDeleteError(null);
+    setRowDeleteIds(row.segmentIds);
+    setConfirmOpen(true);
+  }, []);
+  const rowMenu = useMemo<HistoryRowMenuActions>(() => ({
+    onOpen: onOpenRecord,
+    onDelete: openRowDelete,
+    deleteDisabled: isDeleting || retryingRefresh,
+  }), [isDeleting, onOpenRecord, openRowDelete, retryingRefresh]);
+
+  useEffect(() => {
+    if (!focusRowIdAfterDelete || confirmOpen) return;
+    const shell = Array.from(scrollRootRef.current?.querySelectorAll<HTMLElement>("[data-row-id]") ?? [])
+      .find((element) => element.dataset.rowId === focusRowIdAfterDelete);
+    // The closing confirmation still holds focus while it fades, and its own
+    // return target was the deleted row's button. Leave focus alone only if
+    // the user already moved it somewhere else.
+    const active = document.activeElement;
+    if (!active || active === document.body || active.closest(".history-confirm")) {
+      shell?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.focus({ preventScroll: true });
+    }
+    setFocusRowIdAfterDelete(null);
+  }, [confirmOpen, focusRowIdAfterDelete]);
 
   const toggleRow = useCallback((segmentIds: readonly string[], selected: boolean) => {
     setSelectedIds((current) => {
@@ -211,16 +279,23 @@ export function HistoryView({
   }, []);
 
   async function confirmDelete() {
-    if (requestInFlight.current || selectedIds.size === 0) return;
+    const ids = rowDeleteIds ? [...rowDeleteIds] : Array.from(selectedIds);
+    if (requestInFlight.current || ids.length === 0) return;
     requestInFlight.current = true;
     setConfirmDeleting(true);
     setDeleteError(null);
-    const ids = Array.from(selectedIds);
     setPendingRecordCount(ids.length);
+    const deletedRowIndex = rowDeleteIds ? renderedRows.findIndex((row) => row.segmentIds.includes(ids[0]!)) : -1;
+    const neighbourRow = deletedRowIndex < 0 ? undefined : renderedRows[deletedRowIndex + 1] ?? renderedRows[deletedRowIndex - 1];
     try {
       const result = await onDeleteSelected(ids);
-      setSelectedIds(new Set());
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
       setConfirmOpen(false);
+      setFocusRowIdAfterDelete(neighbourRow?.id ?? null);
       setRefreshFailed(result?.refreshFailed ?? false);
     } catch (failure) {
       setDeleteError(describeActionError(failure, t("history.deleteError")));
@@ -267,6 +342,10 @@ export function HistoryView({
             <input
               type="search"
               aria-label={t("history.search")}
+              autoCapitalize="off"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={query}
               onChange={(event) => {
                 updateQuery(event.target.value);
@@ -284,7 +363,7 @@ export function HistoryView({
               type="button"
               className="app-btn app-btn--danger history-toolbar-action"
               disabled={isDeleting || retryingRefresh}
-              onClick={() => { setDeleteError(null); setConfirmOpen(true); }}
+              onClick={() => { setDeleteError(null); setRowDeleteIds(null); setConfirmOpen(true); }}
             >
               <ActionLabel busy={false} reserve={actionReserve}>{deleteLabel}</ActionLabel>
             </button>
@@ -334,8 +413,10 @@ export function HistoryView({
               <div className="history-list">
                 {group.rows.map((row) => (
                   <HistoryRow
-                    appIcons={appIcons}
                     key={row.id}
+                    appIcons={appIcons}
+                    located={row.id === locatedRowId}
+                    menu={rowMenu}
                     onSelectedChange={toggleRow}
                     row={row}
                     selected={row.segmentIds.every((segmentId) => selectedIds.has(segmentId))}
@@ -373,7 +454,7 @@ export function HistoryView({
         {confirmOpen ? (
           <HistoryDeleteConfirmation
             deleting={isDeleting}
-            recordCount={confirmDeleting ? pendingRecordCount : selectedCount}
+            recordCount={confirmDeleting ? pendingRecordCount : rowDeleteIds?.length ?? selectedCount}
             error={deleteError}
             onCancel={() => setConfirmOpen(false)}
             onConfirm={() => void confirmDelete()}

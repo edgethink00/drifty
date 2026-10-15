@@ -160,6 +160,8 @@ type WeekDashboardRenderOverrides = {
   ) => Promise<void>;
   readonly onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
   readonly onEditCategories?: (target: { readonly group: string; readonly key?: string }) => void;
+  readonly revealSegmentId?: string | null;
+  readonly onRevealSettled?: () => void;
 };
 
 function weekDashboardElement(overrides: WeekDashboardRenderOverrides = {}) {
@@ -506,6 +508,60 @@ describe("WeekDashboard activity inspector", () => {
     ],
   });
   const groupedEvents = new Map<string, WeekCalendarEvent[]>([["2024-01-03", [groupedEvent]]]);
+
+  it("opens the card of a record sent from History once its block renders", () => {
+    const onRevealSettled = vi.fn();
+    renderWeekDashboard({
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      revealSegmentId: "week-drift-browser",
+      onRevealSettled,
+    });
+
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+    expect(document.querySelector(".week-v2-calendar__event.is-inspected")?.getAttribute("data-event-id")).toBe("event-grouped");
+    expect(onRevealSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a record go quietly when the week never shows it", () => {
+    vi.useFakeTimers();
+    try {
+      const onRevealSettled = vi.fn();
+      renderWeekDashboard({ calendarEvents: groupedEvents, revealSegmentId: "elsewhere", onRevealSettled });
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(onRevealSettled).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up on time even while live refreshes keep re-rendering the week", () => {
+    vi.useFakeTimers();
+    try {
+      const onRevealSettled = vi.fn();
+      const { rerender } = renderWeekDashboard({ calendarEvents: groupedEvents, revealSegmentId: "elsewhere", onRevealSettled });
+
+      // A refresh hands the week new event arrays every few seconds.
+      for (let tick = 0; tick < 4; tick += 1) {
+        act(() => {
+          vi.advanceTimersByTime(1200);
+        });
+        rerender(weekDashboardElement({ calendarEvents: new Map(groupedEvents), revealSegmentId: "elsewhere", onRevealSettled }));
+      }
+      expect(onRevealSettled).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(onRevealSettled).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("opens the inspector from the block body without a redundant scope banner", () => {
     renderWeekDashboard({ calendarEvents: groupedEvents, activityActionsEnabled: true });

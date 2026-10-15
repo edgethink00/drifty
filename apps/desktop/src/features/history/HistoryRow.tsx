@@ -7,9 +7,14 @@ import { historyRowTitle } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { excludedActivityLabel, localizedCategoryLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
+import { HistoryRowMenu, type HistoryRowMenuActions } from "./HistoryRowMenu";
 
 type HistoryRowProps = {
   readonly appIcons: AppIconMap;
+  /** The record History came back to; marked briefly. */
+  readonly located?: boolean;
+  /** The row's options menu; absent hides it. */
+  readonly menu?: HistoryRowMenuActions;
   readonly onSelectedChange: (segmentIds: readonly string[], selected: boolean) => void;
   readonly row: HistoryRowModel;
   readonly selected: boolean;
@@ -17,9 +22,11 @@ type HistoryRowProps = {
 
 export const HistoryRow = memo(function HistoryRow({
   appIcons,
+  located = false,
   onSelectedChange,
   row,
   selected,
+  menu,
 }: HistoryRowProps) {
   const { effectiveLanguage, t } = useLocalization();
   const title = isExcludedSegment(row) ? excludedActivityLabel(row.exclusionSource, t) : historyRowTitle(row);
@@ -29,7 +36,14 @@ export const HistoryRow = memo(function HistoryRow({
   const isExcluded = isExcludedSegment(row);
 
   return (
-    <label className="history-row" data-selected={selected ? "true" : "false"}>
+    // The menu button sits over the row's end, outside the label: a label may
+    // hold only its own control, and the rest of the row still selects it.
+    <div className="history-row-shell" data-row-id={row.id} data-has-menu={menu ? "true" : undefined}>
+    <label
+      className="history-row"
+      data-selected={selected ? "true" : "false"}
+      data-located={located ? "true" : undefined}
+    >
       <span className="history-row__check">
         <input
           type="checkbox"
@@ -60,5 +74,7 @@ export const HistoryRow = memo(function HistoryRow({
         <span className={`category-dot category-dot--${classification.category}`} aria-hidden="true" />
       </div>
     </label>
+    {menu ? <HistoryRowMenu actions={menu} canOpen={!isExcluded} row={row} title={title} /> : null}
+    </div>
   );
 });

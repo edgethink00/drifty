@@ -508,3 +508,172 @@ describe("HistoryView", () => {
     await waitFor(() => expect(deleteSelected).toHaveBeenCalledWith(["cmux-1", "cmux-2"]));
   });
 });
+
+describe("HistoryView located record", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function renderLocated(props: Partial<React.ComponentProps<typeof HistoryView>>) {
+    return render(
+      <HistoryView
+        appIcons={{}}
+        segments={historySegments}
+        deleting={false}
+        onDeleteSelected={vi.fn()}
+        searchQuery="a"
+        searchUsesBackend
+        {...props}
+      />,
+    );
+  }
+
+  it("scrolls to the row History comes back to, marks it, then lets the mark go", () => {
+    vi.useFakeTimers();
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const onLocateSettled = vi.fn();
+    try {
+      renderLocated({ locateSegmentId: "1", onLocateSettled });
+
+      const located = document.querySelector('[data-located="true"]');
+      expect(located?.textContent).toContain("API reference");
+      expect(document.querySelectorAll('[data-located="true"]')).toHaveLength(1);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+      expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: /select api reference/i }));
+      expect(onLocateSettled).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(1800);
+      });
+      expect(onLocateSettled).toHaveBeenCalledTimes(1);
+    } finally {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+    }
+  });
+
+  it("lets go at once when the answered search no longer holds the record", () => {
+    const onLocateSettled = vi.fn();
+    renderLocated({ locateSegmentId: "deleted-record", onLocateSettled });
+
+    expect(document.querySelector('[data-located="true"]')).toBeNull();
+    expect(onLocateSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps waiting while the search is still loading", () => {
+    const onLocateSettled = vi.fn();
+    renderLocated({ locateSegmentId: "1", onLocateSettled, segments: [], initialLoading: true });
+
+    expect(onLocateSettled).not.toHaveBeenCalled();
+  });
+
+  it("fades the mark, and holds it still for reduced motion", () => {
+    expect(cssRule('.history-row[data-located="true"]')).toContain("animation: history-row-located");
+    expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.history-row\[data-located="true"\]\s*\{\s*animation: none;/);
+  });
+});
+
+describe("HistoryView row menu", () => {
+  afterEach(() => cleanup());
+
+  function renderWithMenu(props: Partial<React.ComponentProps<typeof HistoryView>> = {}) {
+    const onOpenRecord = vi.fn();
+    const onDeleteSelected = vi.fn().mockResolvedValue(undefined);
+    render(
+      <HistoryView
+        appIcons={{}}
+        segments={historySegments}
+        deleting={false}
+        onDeleteSelected={onDeleteSelected}
+        onOpenRecord={onOpenRecord}
+        {...props}
+      />,
+    );
+    return { onOpenRecord, onDeleteSelected };
+  }
+
+  it("opens a record in its week or its day without selecting the row", () => {
+    const { onOpenRecord } = renderWithMenu();
+    const trigger = screen.getByRole("button", { name: "Options for API reference" });
+
+    fireEvent.click(trigger);
+    const menu = screen.getByRole("menu", { name: "Record options" });
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Show in week calendar", "Show this day", "Delete…"]);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Show in week calendar" }));
+    expect(onOpenRecord).toHaveBeenCalledWith(expect.objectContaining({ segmentIds: ["1"] }), "week");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show this day" }));
+    expect(onOpenRecord).toHaveBeenLastCalledWith(expect.objectContaining({ segmentIds: ["1"] }), "day");
+    expect((screen.getByRole("checkbox", { name: /select api reference/i }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("moves through the menu with the keyboard and returns to its button on Escape", async () => {
+    renderWithMenu();
+    const trigger = screen.getByRole("button", { name: "Options for API reference" });
+    trigger.focus();
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const items = within(screen.getByRole("menu")).getAllByRole("menuitem");
+    await waitFor(() => expect(document.activeElement).toBe(items[0]));
+    fireEvent.keyDown(items[0]!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(items[1]!, { key: "End" });
+    expect(document.activeElement).toBe(items[2]);
+    fireEvent.keyDown(items[2]!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[0]);
+
+    fireEvent.keyDown(items[0]!, { key: "Escape" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("deletes only that record after confirmation, keeps the rest of the selection and moves on to the next record", async () => {
+    const { onDeleteSelected } = renderWithMenu();
+    fireEvent.click(screen.getByRole("checkbox", { name: /select issue triage/i }));
+    const trigger = screen.getByRole("button", { name: "Options for API reference" });
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    const dialog = screen.getByRole("dialog", { name: /delete history records/i });
+    expect(within(dialog).getByText(/this removes 1 local activity record/i)).toBeTruthy();
+    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^cancel$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
+    expect(onDeleteSelected).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    fireEvent.click(screen.getByRole("button", { name: /^delete records$/i }));
+    await waitFor(() => expect(onDeleteSelected).toHaveBeenCalledWith(["1"]));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
+    expect(screen.getByRole("button", { name: /delete 1 selected/i })).toBeTruthy();
+    // Focus continues from the next record instead of falling to the page.
+    expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: /select issue triage/i }));
+  });
+
+  it("follows its row when a new record pushes the list down while the menu is open", async () => {
+    renderWithMenu();
+    const trigger = screen.getByRole("button", { name: "Options for API reference" });
+    let top = 100;
+    trigger.getBoundingClientRect = () => ({ top, bottom: top + 28, left: 900, right: 928, width: 28, height: 28, x: 900, y: top, toJSON: () => ({}) }) as DOMRect;
+
+    fireEvent.click(trigger);
+    const menu = screen.getByRole("menu", { name: "Record options" });
+    await waitFor(() => expect(menu.style.top).toBe("132px"));
+
+    top = 144;
+    await waitFor(() => expect(menu.style.top).toBe("176px"));
+  });
+
+  it("offers only delete for excluded activity, which no calendar shows", () => {
+    renderWithMenu({ segments: [{ ...historySegments[1]!, id: "excluded", exclusionSource: "user" }] });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Options for / }));
+
+    expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Delete…"]);
+  });
+});

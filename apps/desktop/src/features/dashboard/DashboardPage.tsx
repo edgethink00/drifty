@@ -127,6 +127,9 @@ type DashboardPageProps = {
   readonly onDeleteDashboardActivity?: (segmentIds: readonly string[]) => Promise<void>;
   /** Opens the category editor from the legend, the breakdown, and the activity inspector. */
   readonly onEditCategories?: (target: CategoryEditorTarget) => void;
+  /** A record opened from History; the Day or Week view opens its block's card. */
+  readonly revealSegmentId?: string | null;
+  readonly onRevealSettled?: () => void;
 };
 
 export function DashboardPage({
@@ -198,6 +201,8 @@ export function DashboardPage({
   onClassifyDashboardActivity,
   onDeleteDashboardActivity,
   onEditCategories,
+  revealSegmentId = null,
+  onRevealSettled,
 }: DashboardPageProps) {
   const { effectiveLanguage, t } = useLocalization();
   const dayMainRef = useRef<HTMLDivElement>(null);
@@ -409,6 +414,8 @@ export function DashboardPage({
           onClassifyActivity={onClassifyDashboardActivity}
           onDeleteActivity={onDeleteDashboardActivity}
           onEditCategories={onEditCategories}
+          revealSegmentId={revealSegmentId}
+          onRevealSettled={onRevealSettled}
         />
       ) : initialDataLoading ? (
         <DashboardLoadingSkeleton
@@ -459,6 +466,8 @@ export function DashboardPage({
                   onDeleteActivity={onDeleteDashboardActivity}
                   onEditCategories={onEditCategories}
                   classificationOptions={dashboardClassificationOptions}
+                  revealSegmentId={revealSegmentId}
+                  onRevealSettled={onRevealSettled}
                 />
               </div>
             </div>

@@ -37,7 +37,7 @@ import { FlowChartLegend } from "../flow-chart/FlowChartLegend";
 import type { FlowLegendBreakdownRequest } from "../flow-chart/FlowChartLegend";
 import { FlowLegendHoverCard } from "../flow-chart/FlowChartHoverCards";
 import type { FlowLegendHoverState } from "../flow-chart/FlowChartHoverCards";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProductivityLabel } from "../localization/activityTranslations";
@@ -50,6 +50,8 @@ import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 const WEEK_CALENDAR_TIME_RAIL_REM = 2.5;
 /* Longer than one animation frame, well under the 340ms panel transition. */
 const WEEK_CALENDAR_RESIZE_SETTLE_MS = 120;
+/** How long a record sent from History may take to appear before it is dropped. */
+const REVEAL_GIVE_UP_MS = 5000;
 
 function readRootFontSizePx(): number {
   if (typeof window === "undefined") return WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX;
@@ -251,6 +253,13 @@ type WeekDashboardProps = {
   readonly onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
   /** Opens the category editor from the legend, the breakdown, and the activity inspector. */
   readonly onEditCategories?: (target: CategoryEditorTarget) => void;
+  /**
+   * A record opened from History: scroll to the block that holds it and open
+   * that block's card once the week has loaded.
+   */
+  readonly revealSegmentId?: string | null;
+  /** Called once the card opens, or when the week holds no such record. */
+  readonly onRevealSettled?: () => void;
 };
 
 type WeekActivityInspectorState = {
@@ -312,6 +321,8 @@ export function WeekDashboard({
   onClassifyActivity,
   onDeleteActivity,
   onEditCategories,
+  revealSegmentId = null,
+  onRevealSettled,
 }: WeekDashboardProps) {
   const { effectiveLanguage, t } = useLocalization();
   // Controlled by DashboardPage in the app (shared Day/Week preference);
@@ -434,7 +445,18 @@ export function WeekDashboard({
         "--week-calendar-now-offset": formatWeekDashboardAxisPixelValue(currentCalendarOffset),
         "--week-calendar-now-line-end": currentCalendarLineEnd,
       };
+  // The block holding a record opened from History, once this week shows it.
+  const revealTarget = useMemo(() => {
+    if (!revealSegmentId) return null;
+    for (const row of calendarRows) {
+      const event = renderedCalendarEvents.get(row.day)?.find((candidate) => candidate.segmentIds.includes(revealSegmentId));
+      if (event) return { day: row.day, eventId: event.id, topMinutes: event.topMinutes };
+    }
+    return null;
+  }, [calendarRows, renderedCalendarEvents, revealSegmentId]);
+
   const autoScrollTargetMinute = useMemo(() => {
+    if (revealTarget) return Math.min(maxCalendarMinute, minCalendarMinute + revealTarget.topMinutes);
     if (currentCalendarDay === undefined && realCurrentCalendarMinute !== null) return realCurrentCalendarMinute;
 
     const earliestEventOffset = calendarRows.reduce<number | null>((earliest, row) => {
@@ -446,7 +468,7 @@ export function WeekDashboard({
     return earliestEventOffset === null
       ? minCalendarMinute
       : Math.min(maxCalendarMinute, Math.max(minCalendarMinute, minCalendarMinute + earliestEventOffset));
-  }, [renderedCalendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute]);
+  }, [renderedCalendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute, revealTarget]);
 
   const displayCalendarEvents = useMemo(() => {
     if (effectiveLanguage === "en") return renderedCalendarEvents;
@@ -638,6 +660,27 @@ export function WeekDashboard({
       };
     });
   }, [displayCalendarEvents, endDay, projectBySegmentId, projectsById, refreshStatus, segmentsById, startDay]);
+
+  // Open the card of a record sent from History once its block has rendered;
+  // the scroll above has already brought the block into view.
+  const onRevealSettledRef = useRef(onRevealSettled);
+  onRevealSettledRef.current = onRevealSettled;
+  // The week may still be loading. Give up quietly if the record never shows;
+  // the timer is keyed to the record alone, so live refreshes cannot restart it.
+  useEffect(() => {
+    if (!revealSegmentId) return;
+    const timeoutId = window.setTimeout(() => onRevealSettledRef.current?.(), REVEAL_GIVE_UP_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [revealSegmentId]);
+  useEffect(() => {
+    if (!revealSegmentId || !revealTarget) return;
+    const event = displayCalendarEvents.get(revealTarget.day)?.find((candidate) => candidate.id === revealTarget.eventId);
+    const element = Array.from(calendarBodyElement?.querySelectorAll<HTMLElement>(".week-v2-calendar__event[data-event-id]") ?? [])
+      .find((candidate) => candidate.dataset.eventId === revealTarget.eventId);
+    if (!event || !element) return;
+    openActivityInspector(event, element.querySelector<HTMLElement>(".week-v2-calendar__event-open") ?? element);
+    onRevealSettledRef.current?.();
+  }, [calendarBodyElement, displayCalendarEvents, openActivityInspector, revealSegmentId, revealTarget]);
   const activityActionsDisabledReason = useMemo(() => {
     if (!activityInspector) return null;
     return resolveActivityActionsDisabledReason(
