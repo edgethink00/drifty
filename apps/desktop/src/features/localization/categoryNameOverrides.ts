@@ -38,6 +38,10 @@ export function withCategoryNameOverrides(translate: Translate, overrides: Label
   return (key, params) => {
     const category = CATEGORY_KEY_BY_TRANSLATION_KEY[key];
     if (category && categories[category]) return categories[category] as string;
+    if (key === "activity.category.custom" && typeof params?.id === "string") {
+      const custom = categories[params.id as ActivityCategory];
+      if (custom) return custom;
+    }
     const label = PRODUCTIVITY_KEY_BY_TRANSLATION_KEY[key];
     if (label && productivity[label]) return productivity[label] as string;
     return translate(key, params);

@@ -2,6 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type R
 import {
   CATEGORY_CUSTOM_NAME_MAX_LENGTH,
   CATEGORY_DESCRIPTION_MAX_LENGTH,
+  MAX_CATEGORY_COUNT,
+  customCategoryIds,
+  isCustomActivityCategory,
+  newCustomCategoryId,
   type ActivityCategory,
   type CategoryCustomization,
   type CategoryCustomizations,
@@ -40,6 +44,7 @@ import {
   LISTED_PRODUCTIVITY,
   NEW_PROJECT_KEY,
   PRODUCTIVITY_COLOR_KEY,
+  addedCategoryCustomizationFrom,
   categoryCustomizationFrom,
   defaultCategoryColor,
   defaultDefinitionValue,
@@ -48,6 +53,7 @@ import {
   initialSelection,
   orderedProjects,
   productivityCustomizationFrom,
+  savedAddedCategoryValue,
   sameDefinition,
   sameProject,
   sameSelection,
@@ -133,8 +139,8 @@ function parseDefinitionKey(key: string): DefinitionSelection {
 }
 
 /**
- * A productivity level or category drafted in the browser preview. Adding and
- * deleting them is a preview until saving them ships, so nothing of it is saved.
+ * A productivity level drafted in the browser preview. Adding levels is a
+ * preview until saving them ships, so nothing of it is saved.
  */
 type NewDefinitionDraft = {
   readonly key: string;
@@ -143,7 +149,13 @@ type NewDefinitionDraft = {
   readonly color: string;
 };
 
-const NEW_DEFINITION_LIMIT: Readonly<Record<"productivity" | "category", number>> = { productivity: 6, category: 20 };
+const NEW_PRODUCTIVITY_LIMIT = 6;
+
+/** A category added in this sitting: its id is final, and it is a draft until Save. */
+type AddedCategoryDraft = {
+  readonly id: ActivityCategory;
+  readonly color: string;
+};
 
 /** The projects tab's selection when it has no project to point at. */
 const NO_PROJECT = "";
@@ -238,7 +250,7 @@ export function CategoryEditorSheet({
   const deckPressOnEmpty = useRef(false);
 
   const [opening] = useState(() => {
-    const resolved = initialSelection(initialTarget, projects, showProjects);
+    const resolved = initialSelection(initialTarget, projects, showProjects, categoryCustomizations);
     if (resolved.group !== "project" || resolved.key !== NEW_PROJECT_KEY) return { selection: resolved, newKeys: [] as string[], drafts: {} as Record<string, ProjectValue> };
     // "New project" while Intelligence locks projects opens on the lock instead of a draft.
     if (intelligenceUnavailable && onOpenIntelligence !== undefined) {
@@ -257,12 +269,13 @@ export function CategoryEditorSheet({
   // A door that names one item opens with that card in edit; a door that
   // names only a group opens on its list.
   // (Unclassified is not listed, so a door naming it opens the category list.)
-  const [editing, setEditing] = useState(() => targetsListedCard(initialTarget));
+  const [editing, setEditing] = useState(() => targetsListedCard(initialTarget, categoryCustomizations));
   const [editingNew, setEditingNew] = useState<string | null>(null);
   // The productivity level (built-in label or drafted key) whose "add a
   // category" list is open.
   const [assignOpen, setAssignOpen] = useState<string | null>(null);
-  const [newCategories, setNewCategories] = useState<readonly NewDefinitionDraft[]>([]);
+  const [addedCategories, setAddedCategories] = useState<readonly AddedCategoryDraft[]>([]);
+  const [categoryErrors, setCategoryErrors] = useState<Readonly<Partial<Record<ActivityCategory, string>>>>({});
   const [newProductivity, setNewProductivity] = useState<readonly NewDefinitionDraft[]>([]);
   // Browser preview: built-in items marked for deletion, by definition key,
   // and categories fixed to a drafted productivity level.
@@ -283,21 +296,41 @@ export function CategoryEditorSheet({
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
   const { active: activeProjects, archived: archivedProjects } = orderedProjects(projects);
 
+  // Every category the sheet lists: Drifty's own, the ones the user added
+  // (in the order they were made), then the ones added in this sitting.
+  const savedAddedCategories = useMemo(() => customCategoryIds(categoryCustomizations), [categoryCustomizations]);
+  const editorCategories: readonly ActivityCategory[] = [...LISTED_CATEGORIES, ...savedAddedCategories, ...addedCategories.map((entry) => entry.id)];
+  const isAddedCategory = (category: ActivityCategory) => isCustomActivityCategory(category);
+  const isNewCategory = (category: ActivityCategory) => addedCategories.some((entry) => entry.id === category);
+
   // Drifty's own description of an item: what the description field starts
   // with, and what an emptied field goes back to.
-  const builtInDefinition = (target: DefinitionSelection) => t(target.group === "category" ? CATEGORY_CRITERIA_KEY[target.key] : PRODUCTIVITY_CRITERIA_KEY[target.key]);
+  // An added category has no description of Drifty's own.
+  const builtInDefinition = (target: DefinitionSelection) => (target.group === "category" && isAddedCategory(target.key)
+    ? ""
+    : t(target.group === "category" ? CATEGORY_CRITERIA_KEY[target.key] : PRODUCTIVITY_CRITERIA_KEY[target.key]));
   const savedDefinition = (target: DefinitionSelection): DefinitionValue => (target.group === "category"
-    ? savedCategoryValue(target.key, categoryCustomizations, categoryColorOverrides, builtInDefinition(target))
+    ? isAddedCategory(target.key)
+      ? savedAddedCategoryValue(target.key, categoryCustomizations, addedCategories.find((entry) => entry.id === target.key)?.color)
+      : savedCategoryValue(target.key, categoryCustomizations, categoryColorOverrides, builtInDefinition(target))
     : savedProductivityValue(target.key, productivityCustomizations, appThemeColorOverrides, builtInDefinition(target)));
   const currentDefinition = (target: DefinitionSelection): DefinitionValue => definitionDrafts[definitionKey(target)] ?? savedDefinition(target);
   const builtInName = (target: DefinitionSelection) => (target.group === "category"
-    ? localizedCategoryLabel(target.key, builtInT)
+    ? isAddedCategory(target.key) ? categoryCustomizations[target.key]?.name ?? "" : localizedCategoryLabel(target.key, builtInT)
     : localizedProductivityLabel(target.key, builtInT));
-  const definitionName = (target: DefinitionSelection) => currentDefinition(target).name.trim() || builtInName(target);
+  // A new category without a name yet shows a stand-in name.
+  const definitionName = (target: DefinitionSelection) => currentDefinition(target).name.trim() || builtInName(target) || t("categoryEditor.newCategory");
 
   const updateDefinition = (target: DefinitionSelection, patch: Partial<DefinitionValue>) => {
     const key = definitionKey(target);
     const saved = savedDefinition(target);
+    if (target.group === "category" && patch.name !== undefined && categoryErrors[target.key]) {
+      setCategoryErrors((previous) => {
+        const copy = { ...previous };
+        delete copy[target.key];
+        return copy;
+      });
+    }
     setDefinitionDrafts((previous) => {
       const next = { ...(previous[key] ?? saved), ...patch };
       const copy = { ...previous };
@@ -386,7 +419,7 @@ export function CategoryEditorSheet({
 
   const draftedDefinitionKeys = Object.keys(definitionDrafts);
   const draftedProjectKeys = Object.keys(projectDrafts);
-  const dirty = draftedDefinitionKeys.length > 0 || draftedProjectKeys.length > 0 || deletedKeys.length > 0 || restoredKeys.length > 0;
+  const dirty = draftedDefinitionKeys.length > 0 || draftedProjectKeys.length > 0 || deletedKeys.length > 0 || restoredKeys.length > 0 || addedCategories.length > 0;
   const locked = saving || statusChanging;
 
   const applyColor = (target: DefinitionSelection, color: string) => {
@@ -417,14 +450,46 @@ export function CategoryEditorSheet({
       setProjectErrors((previous) => ({ ...previous, [unnamed]: { message: t("categoryEditor.projectNameRequired"), detail: null } }));
       return false;
     }
+    // An added category needs a name. One added here and left untouched is
+    // dropped; one with words but no name stops the save, as a project does.
+    const draftOf = (category: ActivityCategory) => definitionDrafts[definitionKey({ group: "category", key: category })];
+    const keptNew = addedCategories
+      .map((entry) => entry.id)
+      .filter((category) => Boolean(draftOf(category)?.name.trim() || draftOf(category)?.description.trim()));
+    const unnamedCategory = [...savedAddedCategories, ...keptNew].find((category) => {
+      const draft = draftOf(category);
+      return draft !== undefined && !draft.name.trim() && !deletedKeys.includes(definitionKey({ group: "category", key: category }));
+    });
+    if (unnamedCategory) {
+      setSelection({ group: "category", key: unnamedCategory });
+      setEditingNew(null);
+      setEditing(true);
+      setCategoryErrors((previous) => ({ ...previous, [unnamedCategory]: t("categoryEditor.categoryNameRequired") }));
+      return false;
+    }
     setSaving(true);
 
     const categories: Partial<Record<ActivityCategory, CategoryCustomization | null>> = {};
     const productivity: Partial<Record<ProductivityLabel, ProductivityCustomization | null>> = {};
     let definitionsChanged = false;
+    const now = Date.now();
     for (const [key, draft] of Object.entries(definitionDrafts)) {
       const target = parseDefinitionKey(key);
       const saved = savedDefinition(target);
+      // An added category keeps its name, words, color, and fixed
+      // productivity together; new ones are stamped in the order they were added.
+      if (target.group === "category" && isAddedCategory(target.key)) {
+        if (deletedKeys.includes(key)) continue;
+        const newIndex = addedCategories.findIndex((entry) => entry.id === target.key);
+        if (newIndex >= 0 ? !keptNew.includes(target.key) : sameDefinition(draft, saved)) continue;
+        categories[target.key] = addedCategoryCustomizationFrom(
+          draft,
+          (categories[target.key] ?? categoryCustomizations[target.key]) as CategoryCustomization | undefined,
+          new Date(now + Math.max(0, newIndex)).toISOString(),
+        );
+        definitionsChanged = true;
+        continue;
+      }
       if (normalizeHex(draft.color) !== normalizeHex(saved.color)) applyColor(target, draft.color);
       if (!textChanged(draft, saved) || deletedKeys.includes(key)) continue;
       definitionsChanged = true;
@@ -450,6 +515,8 @@ export function CategoryEditorSheet({
     setDeletedKeys([]);
     setRestoredKeys([]);
     setDefinitionDrafts({});
+    setAddedCategories([]);
+    setCategoryErrors({});
     // Saving writes the definitions at once. A changed description applies to
     // activity classified from then on; nothing past is reclassified.
     if (definitionsChanged) void onSaveDefinitions({ categories, productivity });
@@ -557,7 +624,7 @@ export function CategoryEditorSheet({
     && !restoredKeys.includes(definitionKey({ group: "category", key: category }));
   const isDeleted = (target: DefinitionSelection) => deletedKeys.includes(definitionKey(target))
     || (target.group === "category" && savedDeleted(target.key));
-  const liveCategories = LISTED_CATEGORIES.filter((category) => !isDeleted({ group: "category", key: category }));
+  const liveCategories = editorCategories.filter((category) => !isDeleted({ group: "category", key: category }));
   const isBuiltInLane = (lane: string): lane is ProductivityLabel => (LISTED_PRODUCTIVITY as readonly string[]).includes(lane);
   const draftedLane = (lane: string) => newProductivity.find((draft) => draft.key === lane);
   const laneName = (lane: string) => (isBuiltInLane(lane)
@@ -797,7 +864,9 @@ export function CategoryEditorSheet({
     const id = selectionId(target);
     const value = currentDefinition(target);
     if (deletedKeys.includes(definitionKey(target))) return deletedCard(target);
-    if (editing && editingNew === null && sameSelection(target, selection)) return editingCard(id, value.color, definitionName(target), renderDefinitionPane(target));
+    if (editing && editingNew === null && sameSelection(target, selection)) {
+      return editingCard(id, value.color, definitionName(target), renderDefinitionPane(target), { isNew: target.group === "category" && isNewCategory(target.key) });
+    }
     // A category's row is its name and description; where it counts lives on
     // the productivity tab's cards.
     const members = target.group === "productivity" ? liveCategories.filter((category) => laneOf(category) === target.key) : [];
@@ -805,8 +874,9 @@ export function CategoryEditorSheet({
       id,
       color: value.color,
       name: definitionName(target),
+      nameIsPlaceholder: !value.name.trim() && !builtInName(target),
       detail: value.description.trim() && value.description.trim() !== builtInDefinition(target).trim() ? value.description.trim() : undefined,
-      drafted: definitionKey(target) in definitionDrafts || restoredKeys.includes(definitionKey(target)),
+      drafted: definitionKey(target) in definitionDrafts || restoredKeys.includes(definitionKey(target)) || (target.group === "category" && isNewCategory(target.key)),
       extra: members.length > 0 ? (
         <span className="category-editor__tags">
           {members.map((category) => categoryTag(category, { auto: pinnedLane(category) !== target.key }))}
@@ -838,33 +908,60 @@ export function CategoryEditorSheet({
     });
   };
 
-  // New productivity levels and categories are a browser-preview mock until
-  // adding them ships: they can be drafted here to judge the layout, and are
-  // not saved.
-  const setDraftsOf = (group: "productivity" | "category") => (group === "productivity" ? setNewProductivity : setNewCategories);
-  const addDefinitionDraft = (group: "productivity" | "category") => {
+  // A new category opens as its card in edit, with an id it keeps; it is
+  // saved with the sheet's Save, once it has a name.
+  const addCategory = () => {
+    const id = newCustomCategoryId();
+    const taken = liveCategories.map((category) => currentDefinition({ group: "category", key: category }).color);
+    setAddedCategories((previous) => [...previous, { id, color: firstUnusedProjectColor(taken) }]);
+    setSelection({ group: "category", key: id });
+    setAssignOpen(null);
+    setEditingNew(null);
+    setEditing(true);
+  };
+  const discardNewCategory = (category: ActivityCategory) => {
+    const key = definitionKey({ group: "category", key: category });
+    setAddedCategories((previous) => previous.filter((entry) => entry.id !== category));
+    setDefinitionDrafts((previous) => {
+      const copy = { ...previous };
+      delete copy[key];
+      return copy;
+    });
+    setDraftPins((previous) => {
+      const copy = { ...previous };
+      delete copy[category];
+      return copy;
+    });
+    setCategoryErrors((previous) => {
+      const copy = { ...previous };
+      delete copy[category];
+      return copy;
+    });
+    stopEditing();
+    setSelection({ group: "category", key: LISTED_CATEGORIES[0] });
+  };
+
+  // New productivity levels are a browser-preview mock until adding them
+  // ships: they can be drafted here to judge the layout, and are not saved.
+  const addDefinitionDraft = (group: "productivity") => {
     draftCounter.current += 1;
     const key = group + "-" + draftCounter.current;
-    const taken = group === "productivity"
-      ? [...LISTED_PRODUCTIVITY.map((label) => currentDefinition({ group: "productivity", key: label }).color), ...newProductivity.map((draft) => draft.color)]
-      : [...LISTED_CATEGORIES.map((category) => currentDefinition({ group: "category", key: category }).color), ...newCategories.map((draft) => draft.color)];
-    setDraftsOf(group)((previous) => [...previous, { key, name: "", description: "", color: firstUnusedProjectColor(taken) }]);
-    setSelection(group === "productivity" ? { group: "productivity", key: LISTED_PRODUCTIVITY[0] } : { group: "category", key: LISTED_CATEGORIES[0] });
+    const taken = [...LISTED_PRODUCTIVITY.map((label) => currentDefinition({ group: "productivity", key: label }).color), ...newProductivity.map((draft) => draft.color)];
+    setNewProductivity((previous) => [...previous, { key, name: "", description: "", color: firstUnusedProjectColor(taken) }]);
+    setSelection({ group: "productivity", key: LISTED_PRODUCTIVITY[0] });
     setAssignOpen(null);
     setEditingNew(key);
     setEditing(true);
   };
-  const updateDefinitionDraft = (group: "productivity" | "category", key: string, patch: Partial<NewDefinitionDraft>) => {
-    setDraftsOf(group)((previous) => previous.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));
+  const updateDefinitionDraft = (_group: "productivity", key: string, patch: Partial<NewDefinitionDraft>) => {
+    setNewProductivity((previous) => previous.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));
   };
-  const discardDefinitionDraft = (group: "productivity" | "category", key: string) => {
-    setDraftsOf(group)((previous) => previous.filter((draft) => draft.key !== key));
-    if (group === "productivity") {
-      setDraftPins((previous) => Object.fromEntries(Object.entries(previous).filter(([, lane]) => lane !== key)));
-    }
+  const discardDefinitionDraft = (_group: "productivity", key: string) => {
+    setNewProductivity((previous) => previous.filter((draft) => draft.key !== key));
+    setDraftPins((previous) => Object.fromEntries(Object.entries(previous).filter(([, lane]) => lane !== key)));
     stopEditing();
   };
-  const newDefinitionCard = (group: "productivity" | "category", draft: NewDefinitionDraft) => {
+  const newDefinitionCard = (group: "productivity", draft: NewDefinitionDraft) => {
     const id = newCardId(draft.key);
     const title = draft.name.trim() || t(group === "productivity" ? "categoryEditor.newProductivity" : "categoryEditor.newCategory");
     if (editing && editingNew === draft.key) {
@@ -926,11 +1023,14 @@ export function CategoryEditorSheet({
     // category, its fixed productivity), so it sits on the item's title row.
     // That row is always there, so the card keeps its height when it appears.
     const builtInValue = defaultDefinitionValue(target, builtInDefinition(target));
-    const restorable = !sameDefinition(value, builtInValue);
+    // An added category has no built-in form to go back to.
+    const added = target.group === "category" && isAddedCategory(target.key);
+    const restorable = !added && !sameDefinition(value, builtInValue);
     const nameId = "category-editor-" + target.group + "-" + target.key + "-name";
     const siblings = new Map<string, string>();
+    const error = target.group === "category" ? categoryErrors[target.key] : undefined;
     if (target.group === "category") {
-      for (const other of LISTED_CATEGORIES) {
+      for (const other of liveCategories) {
         if (other !== target.key) siblings.set(normalizeHex(currentDefinition({ group: "category", key: other }).color), definitionName({ group: "category", key: other }));
       }
     } else {
@@ -944,7 +1044,7 @@ export function CategoryEditorSheet({
           <DefinitionIdentityField
             nameId={nameId}
             name={value.name}
-            placeholder={defaultName}
+            placeholder={added ? defaultName || t("categoryEditor.newCategoryNamePlaceholder") : defaultName}
             maxLength={CATEGORY_CUSTOM_NAME_MAX_LENGTH}
             color={value.color}
             swatches={balancedIdentitySwatches(t, siblings)}
@@ -959,14 +1059,22 @@ export function CategoryEditorSheet({
           <DefinitionDescriptionField
             label={t("settings.categories.descriptionLabel")}
             value={value.description}
-            placeholder={target.group === "category" ? t("settings.categories.descriptionPlaceholder") : t(PRODUCTIVITY_PLACEHOLDER_KEY[target.key])}
+            placeholder={target.group === "category"
+              ? t(added ? "categoryEditor.newCategoryDescriptionPlaceholder" : "settings.categories.descriptionPlaceholder")
+              : t(PRODUCTIVITY_PLACEHOLDER_KEY[target.key])}
             maxLength={CATEGORY_DESCRIPTION_MAX_LENGTH}
             t={t}
             onChange={(next) => updateDefinition(target, { description: next })}
           />
           {target.group === "productivity" ? laneField(target.key) : null}
-          {/* The last category stays: activity always lands in one. */}
-          {target.group === "category" && liveCategories.length + newCategories.length > 1 ? (
+          {error ? <p className="category-editor__error" role="alert">{error}</p> : null}
+          {/* A category added in this sitting is simply dropped; a saved one
+              is deleted. The last category stays: activity always lands in one. */}
+          {target.group === "category" && isNewCategory(target.key) ? (
+            <div className="category-editor__pane-foot">
+              <QuietButton icon={<TrashIcon />} label={t("categoryEditor.discardNewProject")} disabled={locked} onClick={() => discardNewCategory(target.key)} />
+            </div>
+          ) : target.group === "category" && liveCategories.length > 1 ? (
             <div className="category-editor__pane-foot">
               <QuietButton icon={<TrashIcon />} label={t("categoryEditor.delete")} danger disabled={locked} onClick={() => deleteDefinition(target)} />
             </div>
@@ -1029,8 +1137,8 @@ export function CategoryEditorSheet({
   };
 
   // The footer stays quiet about saving; only the browser preview warns that
-  // its adding and deleting are not saved.
-  const structurePreviewPending = allowStructureEdits && newCategories.length + newProductivity.length > 0;
+  // its added productivity levels are not saved.
+  const structurePreviewPending = allowStructureEdits && newProductivity.length > 0;
 
   const initialFocus = opening.newKeys.length > 0
     ? "#category-editor-project-" + opening.newKeys[0] + "-name"
@@ -1101,7 +1209,7 @@ export function CategoryEditorSheet({
   const cards = activeGroup === "productivity"
     ? [...LISTED_PRODUCTIVITY.map((key) => definitionCard({ group: "productivity", key })), ...newProductivity.map((draft) => newDefinitionCard("productivity", draft))]
     : activeGroup === "category"
-      ? [...LISTED_CATEGORIES.filter((key) => !savedDeleted(key)).map((key) => definitionCard({ group: "category", key })), ...newCategories.map((draft) => newDefinitionCard("category", draft))]
+      ? editorCategories.filter((key) => !savedDeleted(key)).map((key) => definitionCard({ group: "category", key }))
       : [...activeProjects.map((project) => projectCard(project.id)), ...newProjectKeys.map((key) => projectCard(key))];
   const noProjectsYet = activeGroup === "project" && cards.length === 0 && archivedProjects.length === 0;
   // On a locked, empty tab the lock screen holds the way forward.
@@ -1113,18 +1221,30 @@ export function CategoryEditorSheet({
         {t("projects.new")}
       </button>
     )
-    : allowStructureEdits
+    : activeGroup === "category"
       ? (() => {
-        const group = activeGroup;
-        const count = group === "productivity" ? LISTED_PRODUCTIVITY.length + newProductivity.length : liveCategories.length + newCategories.length;
+        const full = liveCategories.length >= MAX_CATEGORY_COUNT;
         return (
-          <button type="button" className="modal-btn modal-btn--secondary category-editor__add" disabled={locked || count >= NEW_DEFINITION_LIMIT[group]} onClick={() => addDefinitionDraft(group)}>
+          <button
+            type="button"
+            className="modal-btn modal-btn--secondary category-editor__add"
+            disabled={locked || full}
+            title={full ? t("categoryEditor.categoryLimit", { count: MAX_CATEGORY_COUNT }) : undefined}
+            onClick={addCategory}
+          >
             <PlusIcon />
-            {t(group === "productivity" ? "categoryEditor.newProductivity" : "categoryEditor.newCategory")}
+            {t("categoryEditor.newCategory")}
           </button>
         );
       })()
-      : null;
+      : allowStructureEdits
+        ? (
+          <button type="button" className="modal-btn modal-btn--secondary category-editor__add" disabled={locked || LISTED_PRODUCTIVITY.length + newProductivity.length >= NEW_PRODUCTIVITY_LIMIT} onClick={() => addDefinitionDraft("productivity")}>
+            <PlusIcon />
+            {t("categoryEditor.newProductivity")}
+          </button>
+        )
+        : null;
 
   const deck = (
     <div className="category-editor__deck">
@@ -1155,11 +1275,11 @@ export function CategoryEditorSheet({
             </div>
           )
         ) : null}
-        {activeGroup === "category" && LISTED_CATEGORIES.some(savedDeleted) ? (
+        {activeGroup === "category" && [...LISTED_CATEGORIES, ...savedAddedCategories].some(savedDeleted) ? (
           <>
             <span className="category-editor__section-label">{t("categoryEditor.deletedCategories")}</span>
             <ul className="category-editor__cards" aria-label={t("categoryEditor.deletedCategories")}>
-              {LISTED_CATEGORIES.filter(savedDeleted).map((category) => {
+              {[...LISTED_CATEGORIES, ...savedAddedCategories].filter(savedDeleted).map((category) => {
                 const target: DefinitionSelection = { group: "category", key: category };
                 return (
                   <li key={selectionId(target)} className="category-editor__card is-deleted" style={toneStyle(currentDefinition(target).color)} data-card={selectionId(target)}>

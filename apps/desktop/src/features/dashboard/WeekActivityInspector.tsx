@@ -1,5 +1,4 @@
 import {
-  CATEGORY_ORDER,
   PRODUCTIVITY_ORDER,
   classifyActivityDetailed,
   isRemoteDeviceSegment,
@@ -10,7 +9,7 @@ import {
   type ExclusionSource,
   type ProductivityLabel,
 } from "@drifty/domain";
-import { useDeletedCategories } from "../settings/categoryCustomizationStore";
+import { useCategoryChoices, useDeletedCategories } from "../settings/categoryCustomizationStore";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import {
   useCallback,
@@ -1242,6 +1241,7 @@ export function WeekActivityInspector({
   };
 
   const deletedCategories = useDeletedCategories();
+  const categoryChoices = useCategoryChoices();
   const pickerOptions = useMemo<readonly PickerOption[]>(() => {
     if (expandedAttribute === "project") {
       const options = projectOptions.some((project) => project.id === null)
@@ -1254,7 +1254,7 @@ export function WeekActivityInspector({
       }));
     }
     if (expandedAttribute === "category") {
-      return CATEGORY_ORDER
+      return categoryChoices
         .filter((category) => category !== "unknown" && (!deletedCategories.has(category) || category === values.category))
         .map((category) => ({
           key: category,
@@ -1270,7 +1270,7 @@ export function WeekActivityInspector({
       }));
     }
     return [];
-  }, [deletedCategories, expandedAttribute, projectOptions, t, values.category]);
+  }, [categoryChoices, deletedCategories, expandedAttribute, projectOptions, t, values.category]);
 
   const selectedPickerKey = expandedAttribute === "project"
     ? values.projectId ?? "__no_project__"

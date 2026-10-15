@@ -1,3 +1,4 @@
+import { builtInCategoryOrUnknown } from "@drifty/domain";
 import {
   MATCHED_CONTEXTUAL_DRIFT_GUARD_MAX_SECONDS,
   MATCHED_CONTEXTUAL_DRIFT_GUARD_MIN_EVIDENCE,
@@ -83,7 +84,7 @@ export function buildContextualGuardAuditEvent(
     : 0;
   const guarded = applyMatchedContextualDriftSafetyGuard(
     input.rawProductivity,
-    input.category,
+    builtInCategoryOrUnknown(input.category),
     input.item,
     input.memoryContext,
   );

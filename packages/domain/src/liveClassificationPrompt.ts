@@ -15,6 +15,7 @@ import { BROWSER_CONTENT_GUIDANCE, normalizeBrowserContentClues } from "./browse
 import {
   LIVE_ACTIVITY_CATEGORIES,
   LIVE_PRODUCTIVITY_LABELS,
+  liveAllowedCategoriesLine,
   liveCategoryGuidancePromptLines,
   type LiveActivityCategory,
   type LiveCategoryGuidance,
@@ -244,7 +245,7 @@ export function buildLiveClassificationPrompt(
     ...(productivityOnly
       ? []
       : [
-          "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
+          liveAllowedCategoriesLine(options.categoryGuidance),
         ]),
     ...(productivityOnly
       ? [

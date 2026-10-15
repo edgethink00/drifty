@@ -1,5 +1,6 @@
 import type { BrowserContentContext } from "./browserContentContext";
 import type { AdaptiveContentContext } from "./adaptiveContentContext";
+import { isLiveCustomActivityCategory, type LiveCustomActivityCategory } from "./liveClassificationPolicy";
 
 export type TrackerSource = "nsworkspace" | "accessibility" | "win32-foreground" | "win32-foreground-untitled" | "manual" | "browser-history-import" | "unknown";
 export type SiteSource = "applescript" | "applescript-front-window" | "accessibility-address-bar" | "browser-history-title" | "browser-history-import" | "windows-uia-document" | "browser-extension" | "window-title" | "unknown" | null;
@@ -15,7 +16,8 @@ export const FLOW_INTERVAL_OPTIONS = [3, 4, 5, 6] as const;
 export type FlowIntervalMinutes = typeof FLOW_INTERVAL_OPTIONS[number];
 export type ProductivityLabel = "focus" | "neutral" | "drift";
 export type ProductivityBasis = "direct" | "contextual";
-export type ActivityCategory =
+/** Drifty's own categories; their keys never change. */
+export type BuiltInActivityCategory =
   | "workspace"
   | "learning"
   | "communication"
@@ -26,6 +28,24 @@ export type ActivityCategory =
   | "shopping"
   | "utility"
   | "unknown";
+
+/** A category the user added in the category editor; its id never changes once created. */
+export type CustomActivityCategory = LiveCustomActivityCategory;
+
+export type ActivityCategory = BuiltInActivityCategory | CustomActivityCategory;
+
+export function isCustomActivityCategory(value: unknown): value is CustomActivityCategory {
+  return isLiveCustomActivityCategory(value);
+}
+
+/**
+ * The category as the shared classification policy knows it. A user-added
+ * category has no built-in meaning there (no shopping or drift heuristics), so
+ * policy guards, learning feedback, and evidence see it as unknown.
+ */
+export function builtInCategoryOrUnknown(category: ActivityCategory): BuiltInActivityCategory {
+  return isCustomActivityCategory(category) ? "unknown" : category;
+}
 
 export interface ActivityClassification {
   category: ActivityCategory;

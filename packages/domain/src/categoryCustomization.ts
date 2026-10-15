@@ -1,4 +1,4 @@
-import type { ActivityCategory, ProductivityLabel } from "./activity";
+import { isCustomActivityCategory, type ActivityCategory, type CustomActivityCategory, type ProductivityLabel } from "./activity";
 import {
   LIVE_CATEGORY_GUIDANCE_DESCRIPTION_MAX_LENGTH,
   LIVE_CATEGORY_GUIDANCE_NAME_MAX_LENGTH,
@@ -36,7 +36,14 @@ export interface CategoryCustomization {
    * removes the time.
    */
   readonly deletedAt?: string;
+  /** A user-added category's color (built-in colors live with the other color overrides). */
+  readonly color?: string;
+  /** When a user-added category was created; it orders the added categories. */
+  readonly createdAt?: string;
 }
+
+/** Built-in and user-added categories together; the editor allows up to this many. */
+export const MAX_CATEGORY_COUNT = 20;
 
 export type CategoryCustomizations = Readonly<Partial<Record<ActivityCategory, CategoryCustomization>>>;
 export type CategoryProductivityPreferences = Readonly<Partial<Record<ActivityCategory, ProductivityLabel>>>;
@@ -79,6 +86,20 @@ export function normalizeCategoryCustomization(value: unknown): CategoryCustomiz
   };
 }
 
+function isoTime(value: unknown): string | null {
+  return typeof value === "string" && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
+}
+
+/** A user-added category needs a name; its color and creation time come along. */
+export function normalizeCustomCategoryCustomization(value: unknown): CategoryCustomization | null {
+  const entry = normalizeCategoryCustomization(value);
+  if (!entry?.name) return null;
+  const record = value as Record<string, unknown>;
+  const color = typeof record.color === "string" && /^#[0-9a-f]{6}$/i.test(record.color) ? record.color.toLowerCase() : null;
+  const createdAt = isoTime(record.createdAt);
+  return { ...entry, ...(color ? { color } : {}), ...(createdAt ? { createdAt } : {}) };
+}
+
 export function normalizeCategoryCustomizations(value: unknown): CategoryCustomizations {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;
@@ -87,7 +108,29 @@ export function normalizeCategoryCustomizations(value: unknown): CategoryCustomi
     const entry = normalizeCategoryCustomization(record[category]);
     if (entry) result[category] = entry;
   }
+  for (const key of Object.keys(record)) {
+    if (!isCustomActivityCategory(key)) continue;
+    const entry = normalizeCustomCategoryCustomization(record[key]);
+    if (entry) result[key] = entry;
+  }
   return result;
+}
+
+/** User-added categories in the order they were created (deleted ones included). */
+export function customCategoryIds(customizations: CategoryCustomizations): CustomActivityCategory[] {
+  return (Object.keys(customizations).filter(isCustomActivityCategory) as CustomActivityCategory[])
+    .sort((left, right) => (customizations[left]?.createdAt ?? "").localeCompare(customizations[right]?.createdAt ?? "") || left.localeCompare(right));
+}
+
+/** Every category the user can define: the built-in ones, then the added ones. */
+export function definedCategories(customizations: CategoryCustomizations): ActivityCategory[] {
+  return [...CUSTOMIZABLE_CATEGORIES, ...customCategoryIds(customizations)];
+}
+
+/** A new id for a user-added category. */
+export function newCustomCategoryId(random: () => number = Math.random): CustomActivityCategory {
+  const suffix = Array.from({ length: 8 }, () => Math.floor(random() * 36).toString(36)).join("");
+  return `custom-${suffix}`;
 }
 
 /**
@@ -95,18 +138,24 @@ export function normalizeCategoryCustomizations(value: unknown): CategoryCustomi
  * custom name. A deleted category is no longer offered, so its words are not sent.
  */
 export function categoryGuidanceFromCustomizations(customizations: CategoryCustomizations): LiveCategoryGuidance[] {
-  return normalizeLiveCategoryGuidance(
-    CUSTOMIZABLE_CATEGORIES.flatMap((category) => {
+  return normalizeLiveCategoryGuidance([
+    ...CUSTOMIZABLE_CATEGORIES.flatMap((category) => {
       const entry = customizations[category];
       if (!entry?.description || entry.deletedAt) return [];
       return [{ category, ...(entry.name ? { name: entry.name } : {}), description: entry.description }];
     }),
-  );
+    // A user-added category is offered to the classifier by its id, name, and words.
+    ...customCategoryIds(customizations).flatMap((category) => {
+      const entry = customizations[category];
+      if (!entry?.name || entry.deletedAt) return [];
+      return [{ category, name: entry.name, ...(entry.description ? { description: entry.description } : {}), added: true as const }];
+    }),
+  ]);
 }
 
 export function categoryProductivityPreferences(customizations: CategoryCustomizations): CategoryProductivityPreferences {
   const result: Partial<Record<ActivityCategory, ProductivityLabel>> = {};
-  for (const category of CUSTOMIZABLE_CATEGORIES) {
+  for (const category of definedCategories(customizations)) {
     const productivity = customizations[category]?.productivity;
     if (productivity) result[category] = productivity;
   }
@@ -116,7 +165,7 @@ export function categoryProductivityPreferences(customizations: CategoryCustomiz
 /** Each deleted category with the time it was deleted, for classification options. */
 export function deletedCategoryCutoffs(customizations: CategoryCustomizations): Readonly<Partial<Record<ActivityCategory, string>>> {
   const result: Partial<Record<ActivityCategory, string>> = {};
-  for (const category of CUSTOMIZABLE_CATEGORIES) {
+  for (const category of definedCategories(customizations)) {
     const deletedAt = customizations[category]?.deletedAt;
     if (deletedAt) result[category] = deletedAt;
   }
@@ -125,12 +174,12 @@ export function deletedCategoryCutoffs(customizations: CategoryCustomizations): 
 
 /** Deleted categories, which the classifier is no longer offered. */
 export function deletedCategories(customizations: CategoryCustomizations): ActivityCategory[] {
-  return CUSTOMIZABLE_CATEGORIES.filter((category) => Boolean(customizations[category]?.deletedAt));
+  return definedCategories(customizations).filter((category) => Boolean(customizations[category]?.deletedAt));
 }
 
 export function categoryNameOverrides(customizations: CategoryCustomizations): Readonly<Partial<Record<ActivityCategory, string>>> {
   const result: Partial<Record<ActivityCategory, string>> = {};
-  for (const category of CUSTOMIZABLE_CATEGORIES) {
+  for (const category of definedCategories(customizations)) {
     const name = customizations[category]?.name;
     if (name) result[category] = name;
   }

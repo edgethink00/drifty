@@ -1,6 +1,6 @@
 import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
 import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel } from "@drifty/domain";
-import { normalizeCategoryCustomizations, normalizeProductivityCustomizations, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
+import { isCustomActivityCategory, normalizeCategoryCustomizations, normalizeProductivityCustomizations, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 
 export type ThemeMode = "light" | "dark";
@@ -245,7 +245,11 @@ export const CATEGORY_COLOR_OPTIONS = [
 ] satisfies ReadonlyArray<ColorOption<ActivityCategory>>;
 
 export function categoryControlColor(category: ActivityCategory, overrides: CategoryColorOverrides): string {
-  return overrides[category] ?? CATEGORY_COLOR_OPTIONS.find((option) => option.key === category)?.defaultColor ?? "#66707a";
+  return overrides[category]
+    ?? CATEGORY_COLOR_OPTIONS.find((option) => option.key === category)?.defaultColor
+    // A user-added category keeps its color with its definition.
+    ?? (isCustomActivityCategory(category) ? readCategoryCustomizations()[category]?.color : undefined)
+    ?? "#66707a";
 }
 
 export function productivityControlColor(productivity: ProductivityLabel, overrides: AppThemeColorOverrides): string {

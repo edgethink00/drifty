@@ -1,6 +1,7 @@
 import {
   CUSTOMIZABLE_CATEGORIES,
   CUSTOMIZABLE_PRODUCTIVITY_LABELS,
+  isCustomActivityCategory,
   type ActivityCategory,
   type CategoryCustomization,
   type CategoryCustomizations,
@@ -47,10 +48,17 @@ export type EditorSelection =
 export const LISTED_CATEGORIES: readonly ActivityCategory[] = CUSTOMIZABLE_CATEGORIES;
 export const LISTED_PRODUCTIVITY: readonly ProductivityLabel[] = CUSTOMIZABLE_PRODUCTIVITY_LABELS;
 
+/** Whether a category has a card: a built-in one, or an added one that is not deleted. */
+function listsCategory(category: ActivityCategory, customizations: CategoryCustomizations): boolean {
+  if (LISTED_CATEGORIES.includes(category)) return true;
+  const added = customizations[category];
+  return isCustomActivityCategory(category) && Boolean(added?.name) && !added?.deletedAt;
+}
+
 /** Whether an opening target names a card the editor shows (and so opens it for editing). */
-export function targetsListedCard(target: CategoryEditorTarget): boolean {
+export function targetsListedCard(target: CategoryEditorTarget, customizations: CategoryCustomizations = {}): boolean {
   if (target.key === undefined) return false;
-  return target.group !== "category" || LISTED_CATEGORIES.includes(target.key);
+  return target.group !== "category" || listsCategory(target.key, customizations);
 }
 
 export type ProductivityChoice = "default" | ProductivityLabel;
@@ -116,6 +124,33 @@ export function savedCategoryValue(category: ActivityCategory, customizations: C
     description: customization?.description?.trim() || defaultDescription,
     color: normalizeHex(categoryControlColor(category, colors)),
     productivity: customization?.productivity ?? "default",
+  };
+}
+
+/** A user-added category as saved: its own name, words, color, and fixed productivity. */
+export function savedAddedCategoryValue(category: ActivityCategory, customizations: CategoryCustomizations, fallbackColor = "#66707a"): DefinitionValue {
+  const customization = customizations[category];
+  return {
+    name: customization?.name ?? "",
+    description: customization?.description?.trim() ?? "",
+    color: normalizeHex(customization?.color ?? fallbackColor),
+    productivity: customization?.productivity ?? "default",
+  };
+}
+
+/**
+ * The stored form of a drafted added category. It keeps when it was created
+ * (or takes createdAt when new) and, if deleted, when that happened.
+ */
+export function addedCategoryCustomizationFrom(draft: DefinitionValue, saved: CategoryCustomization | undefined, createdAt: string): CategoryCustomization {
+  const description = draft.description.trim();
+  return {
+    name: draft.name.trim(),
+    ...(description ? { description } : {}),
+    ...(draft.productivity !== "default" ? { productivity: draft.productivity } : {}),
+    color: normalizeHex(draft.color),
+    createdAt: saved?.createdAt ?? createdAt,
+    ...(saved?.deletedAt ? { deletedAt: saved.deletedAt } : {}),
   };
 }
 
@@ -197,12 +232,12 @@ export function orderedProjects(projects: readonly Project[]): { readonly active
 }
 
 /** Resolves an opening target against what exists; a missing key falls back to the group's first item. */
-export function initialSelection(target: CategoryEditorTarget, projects: readonly Project[], showProjects: boolean): EditorSelection {
+export function initialSelection(target: CategoryEditorTarget, projects: readonly Project[], showProjects: boolean, customizations: CategoryCustomizations = {}): EditorSelection {
   switch (target.group) {
     case "productivity":
       return { group: "productivity", key: target.key ?? LISTED_PRODUCTIVITY[0] };
     case "category":
-      return { group: "category", key: target.key && LISTED_CATEGORIES.includes(target.key) ? target.key : LISTED_CATEGORIES[0] };
+      return { group: "category", key: target.key && listsCategory(target.key, customizations) ? target.key : LISTED_CATEGORIES[0] };
     case "project": {
       if (!showProjects) return { group: "category", key: LISTED_CATEGORIES[0] };
       if (target.key && (target.key === NEW_PROJECT_KEY || projects.some((project) => project.id === target.key))) {

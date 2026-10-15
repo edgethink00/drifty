@@ -1,4 +1,4 @@
-import { browserContentCluesForSegment, normalizeBrowserContentClues } from "@drifty/domain";
+import { browserContentCluesForSegment, normalizeBrowserContentClues, builtInCategoryOrUnknown, isCustomActivityCategory } from "@drifty/domain";
 import { readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD, enhancedRetryImproves, retryEvidenceForRecord } from "./enhancedContextRetryPolicy";
 import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
@@ -2360,8 +2360,9 @@ export function clearCloudAiRequestBackoff(): void {
   cloudAiRequestBackoffs.clear();
 }
 
+/** A built-in category, or a user-added one's id (a deleted one is handled when activity is read). */
 function isActivityCategory(value: unknown): value is ActivityCategory {
-  return typeof value === "string" && ACTIVITY_CATEGORIES.has(value as ActivityCategory);
+  return typeof value === "string" && (ACTIVITY_CATEGORIES.has(value as ActivityCategory) || isCustomActivityCategory(value));
 }
 
 function isLiveActivityIntent(value: unknown): value is LiveActivityIntent {
@@ -2394,14 +2395,14 @@ function resolveProviderProductivity(
 ): ProductivityLabel | null {
   const item = toLiveClassificationPromptItem(payload);
   if (isLiveActivityIntent(classification.intent)) {
-    return resolveLiveActivityClassificationProductivity(classification.intent, category, item, memoryContext);
+    return resolveLiveActivityClassificationProductivity(classification.intent, builtInCategoryOrUnknown(category), item, memoryContext);
   }
   if (!isProductivityLabel(classification.productivity)) return null;
   // Cloud responses and older local providers already contain productivity;
   // applying the narrow shopping gate again is deterministic and idempotent.
   return applyMatchedContextualDriftSafetyGuard(
-    applyLiveShoppingEvidenceGuard(classification.productivity, category, item),
-    category,
+    applyLiveShoppingEvidenceGuard(classification.productivity, builtInCategoryOrUnknown(category), item),
+    builtInCategoryOrUnknown(category),
     item,
     memoryContext,
   );

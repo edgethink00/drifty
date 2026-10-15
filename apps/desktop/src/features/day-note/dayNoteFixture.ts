@@ -1,3 +1,4 @@
+import type { CustomActivityCategory } from "@drifty/domain";
 import type { DisplayLanguage } from "../localization/languagePreference";
 
 /**
@@ -23,7 +24,7 @@ export type DayNoteSource = { readonly app: string; readonly site?: string };
 
 export type DayKind = "focus" | "drift" | "neutral";
 /** The app's activity categories, as Your Day colours them. */
-export type DayCategory = "workspace" | "learning" | "communication" | "socialMedia" | "entertainment" | "utility" | "music" | "game" | "shopping" | "unknown";
+export type DayCategory = "workspace" | "learning" | "communication" | "socialMedia" | "entertainment" | "utility" | "music" | "game" | "shopping" | "unknown" | CustomActivityCategory;
 /** What a span belongs to in the note: an item's index, the leak, or nothing the note names. */
 export type DayRef = number | "leak";
 /** Minutes after midnight. */

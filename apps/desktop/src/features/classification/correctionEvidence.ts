@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { builtInCategoryOrUnknown } from "@drifty/domain";
 import {
   classifyActivityDetailed,
   type ActivitySegment,
@@ -116,7 +117,7 @@ export async function buildCorrectionEvidenceRecord(input: {
       memoryContext: promptMemoryContext,
     },
     predictionBeforeFeedback: {
-      category: prediction.category,
+      category: builtInCategoryOrUnknown(prediction.category),
       productivity: prediction.productivity,
       confidence: boundedConfidence(prediction.confidence),
       source: prediction.source,
@@ -134,7 +135,7 @@ export async function buildCorrectionEvidenceRecord(input: {
       : {
           kind: "manual_correction",
           scope: input.correctionScope === "detail" ? "detail" : "surface",
-          category: input.feedback.correctedCategory,
+          category: builtInCategoryOrUnknown(input.feedback.correctedCategory),
           productivity: input.feedback.correctedProductivity,
         },
   };

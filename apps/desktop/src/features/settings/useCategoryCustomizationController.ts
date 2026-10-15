@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import {
+  isCustomActivityCategory,
   normalizeCategoryCustomization,
+  normalizeCustomCategoryCustomization,
   normalizeProductivityCustomization,
   type ActivityCategory,
   type CategoryCustomization,
@@ -40,7 +42,10 @@ export function useCategoryCustomizationController(): CategoryCustomizationContr
     if (categoryEntries.length > 0) {
       const merged: Partial<Record<ActivityCategory, CategoryCustomization>> = { ...customizations };
       for (const [category, next] of categoryEntries) {
-        const normalized = next ? normalizeCategoryCustomization(next) : null;
+        // An added category keeps its color and creation time with its words.
+        const normalized = next
+          ? isCustomActivityCategory(category) ? normalizeCustomCategoryCustomization(next) : normalizeCategoryCustomization(next)
+          : null;
         if (normalized) merged[category] = normalized;
         else delete merged[category];
       }

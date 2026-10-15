@@ -155,18 +155,7 @@ function orderedSegmentsForDay(
   return present.map(({ key, heightPct, color, seconds }) => ({ key, heightPct, color, seconds }));
 }
 
+/** A category's seconds that day, user-added categories included. */
 function categorySecondsFor(day: WeeklyBreakdownDay, key: WeeklyChartSeriesItem["key"]): number {
-  switch (key) {
-    case "workspace": return day.categorySeconds.workspace ?? 0;
-    case "learning": return day.categorySeconds.learning ?? 0;
-    case "communication": return day.categorySeconds.communication ?? 0;
-    case "music": return day.categorySeconds.music ?? 0;
-    case "game": return day.categorySeconds.game ?? 0;
-    case "social_media": return day.categorySeconds.social_media ?? 0;
-    case "entertainment": return day.categorySeconds.entertainment ?? 0;
-    case "shopping": return day.categorySeconds.shopping ?? 0;
-    case "utility": return day.categorySeconds.utility ?? 0;
-    case "unknown": return day.categorySeconds.unknown ?? 0;
-    default: return 0;
-  }
+  return day.categorySeconds[key as ActivityCategory] ?? 0;
 }

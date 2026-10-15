@@ -1,6 +1,6 @@
 import type { ActivityCategory, CategoryDuration, ProductivityLabel } from "@drifty/domain";
 
-export const CATEGORY_COLORS: Record<ActivityCategory, string> = {
+const BUILT_IN_CATEGORY_COLORS: Record<string, string> = {
   workspace: "var(--category-workspace)",
   learning: "var(--category-learning)",
   communication: "var(--category-communication)",
@@ -13,6 +13,19 @@ export const CATEGORY_COLORS: Record<ActivityCategory, string> = {
   unknown: "var(--category-unknown)",
 };
 
+/**
+ * Category colors as CSS variables. A user-added category answers with its own
+ * variable (set from the color it was given), falling back to Unclassified's.
+ */
+export const CATEGORY_COLORS: Readonly<Record<ActivityCategory, string>> = new Proxy(BUILT_IN_CATEGORY_COLORS, {
+  get(target, key) {
+    if (typeof key === "string" && !(key in target) && key.startsWith("custom-")) {
+      return `var(--category-${key}, var(--category-unknown))`;
+    }
+    return Reflect.get(target, key);
+  },
+}) as Readonly<Record<ActivityCategory, string>>;
+
 export const PRODUCTIVITY_COLORS: Record<ProductivityLabel, string> = {
   focus: "var(--flow-tone-focus)",
   neutral: "var(--flow-tone-neutral)",
@@ -21,7 +34,7 @@ export const PRODUCTIVITY_COLORS: Record<ProductivityLabel, string> = {
 
 export const FLOW_BREAKDOWN_PRODUCTIVITY_ORDER: ProductivityLabel[] = ["focus", "drift", "neutral"];
 
-export function categoryLabel(category: CategoryDuration["category"]) {
+export function categoryLabel(category: CategoryDuration["category"]): string {
   switch (category) {
     case "workspace": return "Workspace";
     case "learning": return "Learning";
@@ -33,6 +46,8 @@ export function categoryLabel(category: CategoryDuration["category"]) {
     case "shopping": return "Shopping";
     case "utility": return "Utility";
     case "unknown": return "Unclassified";
+    // A user-added category: in-app views use its name through the localized label.
+    default: return "Other";
   }
 }
 

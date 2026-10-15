@@ -5,11 +5,35 @@ import {
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
 } from "../settings/localAiSetup";
-import { liveCategoryGuidancePromptLines } from "@drifty/domain";
+import { liveAllowedCategories, liveAllowedCategoriesLine, liveCategoryGuidancePromptLines } from "@drifty/domain";
 import type { LiveCategoryGuidance, LiveClassificationMemoryContext } from "@drifty/domain";
 import type { EnhancedContextProviderPayload } from "./contentContextEgressPolicy";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+/** The strict schema; its category enum also holds the request's added categories. */
+function openRouterLiveIntentResponseFormat(categoryGuidance: readonly LiveCategoryGuidance[]) {
+  return {
+    ...OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT,
+    json_schema: {
+      ...OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT.json_schema,
+      schema: {
+        ...OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT.json_schema.schema,
+        properties: {
+          results: {
+            ...OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT.json_schema.schema.properties.results,
+            items: {
+              ...OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT.json_schema.schema.properties.results.items,
+              properties: {
+                ...OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT.json_schema.schema.properties.results.items.properties,
+                category: { type: "string", enum: [...liveAllowedCategories(categoryGuidance)] },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
 const OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT = {
   type: "json_schema",
   json_schema: {
@@ -200,7 +224,7 @@ function buildLocalProviderRequest(input: {
           ...modelRequestShape,
           ...openAiCompatibleParameterFlags(models, { viaOpenRouter: true }),
           provider: OPENROUTER_PRIVACY_PROVIDER,
-          responseFormat: OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT,
+          responseFormat: openRouterLiveIntentResponseFormat(payloadCategoryGuidance(input.payload)),
           headers: {
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
@@ -381,7 +405,7 @@ export function buildClassificationPrompt(
     ...(payload.some(item => normalizeBrowserContentClues(item.browserContext)) ? [BROWSER_CONTENT_GUIDANCE] : []),
     ...enhancedRetryGuidance(enhancedRetryContext),
     ...redditPromptGuidance(payload),
-    "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
+    liveAllowedCategoriesLine(categoryGuidance),
     "Use only these intents: work_execution, work_support, informational, in_between, personal_admin, leisure, unknown.",
     CATEGORY_DEFINITIONS,
     ...liveCategoryGuidancePromptLines(categoryGuidance),

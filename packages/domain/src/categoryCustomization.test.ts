@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "./activity";
-import { classifyActivityDetailed } from "./aggregation";
+import { buildCategoryDurations, classifyActivityDetailed } from "./aggregation";
 import {
   categoryGuidanceChanged,
   categoryGuidanceFromCustomizations,
@@ -8,13 +8,21 @@ import {
   categoryProductivityPreferences,
   classificationGuidanceChanged,
   classificationGuidanceFromCustomizations,
+  customCategoryIds,
   deletedCategories,
   deletedCategoryCutoffs,
   normalizeCategoryCustomizations,
   normalizeProductivityCustomizations,
   productivityNameOverrides,
 } from "./categoryCustomization";
-import { hasLiveCategoryDescriptions, liveCategoryGuidancePromptLines, normalizeLiveCategoryGuidance } from "./liveClassificationPolicy";
+import {
+  hasLiveCategoryDescriptions,
+  liveAddedCategoryIds,
+  liveAllowedCategoriesLine,
+  liveCategoryGuidancePromptLines,
+  normalizeLiveCategoryGuidance,
+  normalizeLiveReturnedCategory,
+} from "./liveClassificationPolicy";
 import { buildLiveClassificationPrompt, LIVE_CATEGORY_DEFINITIONS, LIVE_INTENT_FIRST_RUBRIC } from "./liveClassificationPrompt";
 import { isContentDependentYouTubeActivity } from "./youtubeClassification";
 
@@ -243,3 +251,63 @@ describe("content-dependent YouTube activity", () => {
     expect(isContentDependentYouTubeActivity({ ...video, siteDomain: "example.com" })).toBe(false);
   });
 });
+
+describe("user-added categories", () => {
+  const added = {
+    "custom-side0001": { name: "사이드 프로젝트", description: "주말에 만드는 앱", color: "#3F7CAC", createdAt: "2026-10-16T01:00:00.000Z" },
+    "custom-read0002": { name: "독서", createdAt: "2026-10-16T00:00:00.000Z" },
+    "custom-gone0003": { name: "옛 카테고리", createdAt: "2026-10-15T00:00:00.000Z", deletedAt: "2026-10-16T02:00:00.000Z" },
+  };
+
+  it("keeps added categories that have a name, in the order they were made", () => {
+    const normalized = normalizeCategoryCustomizations({ ...added, "custom-noname01": { description: "이름 없음" }, "custom-BAD": { name: "x" } });
+    expect(Object.keys(normalized).sort()).toEqual(["custom-gone0003", "custom-read0002", "custom-side0001"]);
+    expect(normalized["custom-side0001"]).toEqual({ name: "사이드 프로젝트", description: "주말에 만드는 앱", color: "#3f7cac", createdAt: "2026-10-16T01:00:00.000Z" });
+    expect(customCategoryIds(normalized)).toEqual(["custom-gone0003", "custom-read0002", "custom-side0001"]);
+  });
+
+  it("offers live added categories to the model by id, name, and words, and lets it return their ids", () => {
+    const guidance = categoryGuidanceFromCustomizations(normalizeCategoryCustomizations(added));
+    expect(guidance).toEqual([
+      { category: "custom-read0002", name: "독서", added: true },
+      { category: "custom-side0001", name: "사이드 프로젝트", description: "주말에 만드는 앱", added: true },
+    ]);
+    expect(hasLiveCategoryDescriptions(guidance)).toBe(true);
+    expect(liveAllowedCategoriesLine(guidance)).toBe("Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, custom-read0002, custom-side0001, unknown.");
+    expect(liveAllowedCategoriesLine([])).toBe("Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.");
+    const prompt = liveCategoryGuidancePromptLines(guidance).join("\n");
+    expect(prompt).toContain('<user_added_categories>[{"category":"custom-read0002","name":"독서"},{"category":"custom-side0001","name":"사이드 프로젝트","description":"주말에 만드는 앱"}]</user_added_categories>');
+    expect(prompt).not.toContain("<user_category_guidance>");
+    expect(liveCategoryGuidancePromptLines(guidance, { includeCategories: false })).toEqual([]);
+    const allowed = new Set(liveAddedCategoryIds(guidance));
+    expect(normalizeLiveReturnedCategory("custom-side0001", allowed)).toBe("custom-side0001");
+    expect(normalizeLiveReturnedCategory("custom-gone0003", allowed)).toBe("unknown");
+    expect(normalizeLiveReturnedCategory("learning", allowed)).toBe("learning");
+  });
+
+  it("counts an added category's time, its fixed productivity, and its deletion like a built-in one", () => {
+    const sideProject = (startedAt: string) => segment({
+      id: startedAt,
+      startedAt,
+      endedAt: new Date(Date.parse(startedAt) + 600_000).toISOString(),
+      classification: { category: "custom-side0001", productivity: "neutral", source: "llm", confidence: 0.8 },
+    });
+    const options = { categoryProductivity: { "custom-side0001": "focus" as const }, deletedCategories: { "custom-side0001": "2026-10-10T12:00:00.000Z" } };
+
+    expect(classifyActivityDetailed(sideProject("2026-10-10T09:00:00.000Z"), options)).toMatchObject({ category: "custom-side0001", productivity: "focus" });
+    expect(classifyActivityDetailed(sideProject("2026-10-10T13:00:00.000Z"), options).category).not.toBe("custom-side0001");
+    const durations = buildCategoryDurations([sideProject("2026-10-10T09:00:00.000Z")], options);
+    expect(durations.map((entry) => entry.category).slice(-2)).toEqual(["custom-side0001", "unknown"]);
+    expect(durations.find((entry) => entry.category === "custom-side0001")?.totalSeconds).toBe(600);
+  });
+
+  it("drops added entries without a valid id or name, so an older reader never offers them", () => {
+    expect(normalizeLiveCategoryGuidance([
+      { category: "custom-ok000001", name: "  <독서>  ", added: true },
+      { category: "learning", name: "학습", added: true },
+      { category: "custom-noname01", added: true },
+      { category: "custom-ok000001", name: "중복", added: true },
+    ])).toEqual([{ category: "custom-ok000001", name: "독서", added: true }]);
+  });
+});
+

@@ -13,6 +13,9 @@ export function localizedCategoryLabel(category: ActivityCategory, t: Localizati
     case "shopping": return t("activity.category.shopping");
     case "utility": return t("activity.category.utility");
     case "unknown": return t("activity.category.unknown");
+    // A user-added category reads by the name the user gave it (the name
+    // overrides fill it in); one this device does not know reads as Other.
+    default: return t("activity.category.custom", { id: category });
   }
 }
 

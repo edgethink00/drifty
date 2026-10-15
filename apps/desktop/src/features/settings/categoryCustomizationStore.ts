@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  CATEGORY_ORDER,
   categoryNameOverrides,
   categoryProductivityPreferences,
+  customCategoryIds,
   deletedCategories,
   deletedCategoryCutoffs,
   productivityNameOverrides,
@@ -17,6 +19,7 @@ import {
   readCategoryCustomizations,
   readProductivityCustomizations,
 } from "./settingsStorage";
+import { customCategoryStyleSheet } from "../../lib/customCategoryStyles";
 
 /**
  * Live view of one stored definition map. The saving window hears the change
@@ -68,6 +71,35 @@ export function useCategoryNameOverrideKey(): string {
   return JSON.stringify({ categories, productivity });
 }
 
+
+/**
+ * The categories a picker can offer, in display order: the built-in ones,
+ * then the ones the user added, then Unclassified. Deleted ones are still in
+ * it; pickers leave them out except as an item's current value.
+ */
+export function useCategoryChoices(): readonly ActivityCategory[] {
+  const customizations = useCategoryCustomizations();
+  return useMemo(() => {
+    const builtIn = CATEGORY_ORDER.filter((category) => category !== "unknown");
+    return [...builtIn, ...customCategoryIds(customizations), "unknown"];
+  }, [customizations]);
+}
+
+/**
+ * Each added category's color: a CSS variable (--category-<id>), which
+ * CATEGORY_COLORS points at, and the class rules the charts color by, so
+ * every chart and dot in this window shows it.
+ */
+export function useCustomCategoryColorVariables(): void {
+  const customizations = useCategoryCustomizations();
+  useEffect(() => {
+    const element = document.createElement("style");
+    element.dataset.driftyCustomCategories = "";
+    element.textContent = customCategoryStyleSheet(customizations);
+    document.head.appendChild(element);
+    return () => element.remove();
+  }, [customizations]);
+}
 
 /** Categories the user deleted. Pickers leave them out, except an item's current value. */
 export function useDeletedCategories(): ReadonlySet<ActivityCategory> {

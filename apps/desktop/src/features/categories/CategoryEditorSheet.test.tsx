@@ -465,7 +465,7 @@ describe("CategoryEditorSheet", () => {
     expect(card("집중")?.textContent).toContain("학습");
   });
 
-  it("adds and deletes productivity levels and categories in the browser preview without saving them", () => {
+  it("adds productivity levels in the browser preview without saving them, beside an undoable category deletion", () => {
     const props = renderSheet({ initialTarget: { group: "category" }, allowStructureEdits: true });
     const tagsOf = (name: string) => Array.from(card(name)?.querySelectorAll(".category-editor__tag") ?? [], (tag) => tag.textContent);
 
@@ -490,7 +490,7 @@ describe("CategoryEditorSheet", () => {
     fireEvent.click(tab("카테고리"));
     fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
     expect(card("쇼핑")).toBeTruthy();
-    expect(screen.getByText("추가와 삭제는 미리보기라 아직 저장되지 않아요.")).toBeTruthy();
+    expect(screen.getByText("생산성 추가는 미리보기라 아직 저장되지 않아요.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "저장" })).toBeNull();
     expect(props.onSaveDefinitions).not.toHaveBeenCalled();
   });
@@ -521,11 +521,11 @@ describe("CategoryEditorSheet", () => {
     expect(within(pane()).getByRole("button", { name: "추가 취소" })).toBeTruthy();
   });
 
-  it("deletes categories but adds nothing outside the preview, and never deletes a built-in level", () => {
+  it("deletes and adds categories, adds no level outside the preview, and never deletes a built-in level", () => {
     renderSheet();
 
     expect(within(pane()).getByRole("button", { name: "삭제" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "새 카테고리" })).toBeNull();
+    expect(screen.getByRole("button", { name: "새 카테고리" })).toBeTruthy();
     fireEvent.click(tab("생산성"));
     expect(screen.queryByRole("button", { name: "새 단계" })).toBeNull();
     openCard("집중");
@@ -541,6 +541,69 @@ describe("CategoryEditorSheet", () => {
     await save();
 
     expect(props.onSaveDefinitions).toHaveBeenCalledWith({ categories: { shopping: { deletedAt: expect.any(String) } }, productivity: {} });
+  });
+
+  it("adds a category that saves with its own id, name, words, color, and creation time", async () => {
+    const props = renderSheet({ initialTarget: { group: "category" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "새 카테고리" }));
+    // The new card opens in edit with examples (kept gray) in place of Drifty's own words.
+    expect(screen.getByRole("region", { name: "새 카테고리" }).closest("li")?.classList.contains("is-new")).toBe(true);
+    expect((within(pane()).getByLabelText("이름") as HTMLInputElement).placeholder).toBe("예: 독서");
+    expect((within(pane()).getByLabelText("설명") as HTMLTextAreaElement).value).toBe("");
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "사이드 프로젝트" } });
+    fireEvent.change(within(pane()).getByLabelText("설명"), { target: { value: "주말에 만드는 앱" } });
+    await save();
+
+    const saved = vi.mocked(props.onSaveDefinitions).mock.calls[0]?.[0].categories ?? {};
+    const [id, entry] = Object.entries(saved)[0] ?? [];
+    expect(id).toMatch(/^custom-[a-z0-9]{8}$/);
+    expect(entry).toEqual({ name: "사이드 프로젝트", description: "주말에 만드는 앱", color: expect.stringMatching(/^#[0-9a-f]{6}$/), createdAt: expect.any(String) });
+  });
+
+  it("asks for a new category's name, and drops one left untouched", async () => {
+    const props = renderSheet({ initialTarget: { group: "category" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "새 카테고리" }));
+    fireEvent.change(within(pane()).getByLabelText("설명"), { target: { value: "주말에 만드는 앱" } });
+    await save();
+    expect(props.onSaveDefinitions).not.toHaveBeenCalled();
+    expect(within(pane()).getByRole("alert").textContent).toBe("저장하려면 카테고리 이름을 적어 주세요.");
+
+    fireEvent.click(within(pane()).getByRole("button", { name: "추가 취소" }));
+    fireEvent.click(screen.getByRole("button", { name: "새 카테고리" }));
+    await save();
+    expect(props.onSaveDefinitions).not.toHaveBeenCalled();
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+  it("lists added categories after Drifty's own, edits them in place, and fixes their productivity from a label", async () => {
+    const props = renderSheet({
+      initialTarget: { group: "productivity", key: "focus" },
+      categoryCustomizations: { "custom-side0001": { name: "사이드 프로젝트", color: "#3f7cac", createdAt: "2026-10-16T00:00:00.000Z" } },
+    });
+
+    fireEvent.click(within(pane()).getByRole("button", { name: "카테고리 추가" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^사이드 프로젝트/ }));
+    await save();
+
+    expect(props.onSaveDefinitions).toHaveBeenCalledWith({
+      categories: { "custom-side0001": { name: "사이드 프로젝트", productivity: "focus", color: "#3f7cac", createdAt: "2026-10-16T00:00:00.000Z" } },
+      productivity: {},
+    });
+  });
+
+  it("stops adding at twenty live categories", () => {
+    const added = Object.fromEntries(Array.from({ length: 11 }, (_, index) => [
+      "custom-full" + String(index).padStart(4, "0"),
+      { name: "추가 " + index, color: "#3f7cac", createdAt: new Date(Date.UTC(2026, 9, 16, 0, index)).toISOString() },
+    ]));
+    renderSheet({ initialTarget: { group: "category" }, categoryCustomizations: added });
+
+    expect(card("추가 10")).toBeTruthy();
+    const add = screen.getByRole("button", { name: "새 카테고리" }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    expect(add.title).toBe("카테고리는 20개까지 둘 수 있어요.");
   });
 
   it("keeps deleted categories apart and restores one on save", async () => {

@@ -1,5 +1,5 @@
-import { CATEGORY_ORDER, PRODUCTIVITY_ORDER, type ActivityCategory, type ProductivityLabel } from "@drifty/domain";
-import { useDeletedCategories } from "../settings/categoryCustomizationStore";
+import { PRODUCTIVITY_ORDER, type ActivityCategory, type ProductivityLabel } from "@drifty/domain";
+import { useCategoryChoices, useDeletedCategories } from "../settings/categoryCustomizationStore";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
@@ -139,7 +139,8 @@ export function ClassificationCorrectionPopover({
   const [placement, setPlacement] = useState<ClassificationCorrectionPopoverPlacement | null>(null);
   const isPositioned = placement !== null;
   const deletedCategories = useDeletedCategories();
-  const categoryValues = CATEGORY_ORDER.filter((category) => category !== "unknown" && (!deletedCategories.has(category) || category === originalCategory));
+  const categoryChoices = useCategoryChoices();
+  const categoryValues = categoryChoices.filter((category) => category !== "unknown" && (!deletedCategories.has(category) || category === originalCategory));
   const changed = draft.category !== originalCategory || draft.productivity !== originalProductivity;
 
   const updatePlacement = useCallback(() => {

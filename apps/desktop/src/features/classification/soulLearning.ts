@@ -4,7 +4,7 @@ import type {
   ProductivityLabel,
   RecentEpisodePromptContext,
 } from "@drifty/domain";
-import { buildLivingSoulRefinementPrompt } from "@drifty/domain";
+import { buildLivingSoulRefinementPrompt, builtInCategoryOrUnknown } from "@drifty/domain";
 
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
@@ -155,7 +155,7 @@ function providerSafeFeedback(
   return {
     kind: feedback.kind,
     occurredAt: feedback.occurredAt,
-    correctedCategory: feedback.correctedCategory,
+    correctedCategory: builtInCategoryOrUnknown(feedback.correctedCategory),
     correctedProductivity: feedback.correctedProductivity,
     activity: {
       appName: cleanText(segment.appName, 120) ?? "Unknown",

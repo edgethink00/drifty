@@ -1,5 +1,5 @@
 import type { CSSProperties, Dispatch, MouseEvent, RefObject, SetStateAction } from "react";
-import type { ActivityCategory, FlowBlock, ProductivityLabel } from "@drifty/domain";
+import { customCategoryIds, type ActivityCategory, type FlowBlock, type ProductivityLabel } from "@drifty/domain";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { buildLegendActivityBreakdown, moveFlowHoverCardToPointer, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
@@ -7,6 +7,7 @@ import type { ProjectLegendEntry } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import { CategoryEditorPencil } from "../categories/CategoryEditorPencil";
+import { useCategoryCustomizations } from "../settings/categoryCustomizationStore";
 
 type FlowCategoryGroup = {
   readonly productivity: ProductivityLabel;
@@ -73,6 +74,15 @@ export function FlowChartLegend({
   onEdit,
 }: FlowChartLegendProps) {
   const { t } = useLocalization();
+  // Added categories: one fixed to a productivity sits with that group's
+  // dots; one Drifty judges per activity gets its own named chip.
+  const customizations = useCategoryCustomizations();
+  const addedCategories = customCategoryIds(customizations).filter((category) => !customizations[category]?.deletedAt);
+  const categoryGroups: readonly FlowCategoryGroup[] = FLOW_CATEGORY_GROUPS.map((group) => ({
+    productivity: group.productivity,
+    categories: [...group.categories, ...addedCategories.filter((category) => customizations[category]?.productivity === group.productivity)],
+  }));
+  const unpinnedAddedCategories = addedCategories.filter((category) => !customizations[category]?.productivity);
   const editPencil = onEdit ? <CategoryEditorPencil className="pencil-plate--sm flow-chart-legend__edit" label={t("categoryEditor.edit")} onClick={onEdit} /> : null;
   const categoryGroupLabel = (categories: readonly ActivityCategory[]) => categories.map((category) => localizedCategoryLabel(category, t)).join(", ");
   const categoryText = (category: ActivityCategory) => localizedCategoryLabel(category, t);
@@ -134,7 +144,7 @@ export function FlowChartLegend({
   return (
     <div className="flow-chart-legend" aria-label={resolvedAriaLabel}>
       {colorMode === "category" ? (
-        FLOW_CATEGORY_GROUPS.map((group) => (
+        categoryGroups.map((group) => (
           <span className="flow-chart-legend__group" key={group.productivity}>
             <span
               className="flow-chart-legend__parent"
@@ -179,6 +189,23 @@ export function FlowChartLegend({
           );
         })
       )}
+      {colorMode === "category" ? unpinnedAddedCategories.map((category) => {
+        const toneStyle: FlowLegendToneStyle = { "--flow-legend-tone": CATEGORY_COLORS[category] };
+        return (
+          <span className="flow-chart-legend__group flow-chart-legend__group--added" key={category}>
+            <span
+              className="flow-chart-legend__parent flow-chart-legend__parent--tone"
+              onMouseEnter={(event) => showLegendHover(event, categoryText(category), t("dashboard.today.flowCategoryColor"), { kind: "category", category })}
+              onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
+              onMouseLeave={() => setHoveredLegend(null)}
+              title={categoryText(category)}
+            >
+              <span className="flow-chart-legend__tone-dot" style={toneStyle} />
+              <span className="flow-chart-legend__label">{categoryText(category)}</span>
+            </span>
+          </span>
+        );
+      }) : null}
       {unclassifiedLegend}
       {editPencil}
     </div>

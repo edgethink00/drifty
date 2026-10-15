@@ -24,7 +24,7 @@ import "./dailyFigures.css";
  * divider on the hour. Name and total sit at the left, hours below. Each cell
  * opens the app hover card Your Day and Insights use.
  */
-const CATEGORY_KEYS: Record<DayCategory, TranslationKey> = {
+const CATEGORY_KEYS: Partial<Record<DayCategory, TranslationKey>> = {
   workspace: "activity.category.workspace", learning: "activity.category.learning", communication: "activity.category.communication",
   music: "activity.category.music", game: "activity.category.game", socialMedia: "activity.category.socialMedia", entertainment: "activity.category.entertainment",
   shopping: "activity.category.shopping", utility: "activity.category.utility", unknown: "activity.category.unknown",
@@ -73,7 +73,10 @@ export function DailyFigures({ spans, lang, appIcons = {} }: { spans: readonly D
   const hours = Array.from({ length: 24 }, (_, i) => (firstHour + i) % 24);
   const rowsOf = (kind: DailyRowKind) => figures.rowsBy(kind).map((row, index) => ({
     ...row,
-    name: kind === "category" ? t(CATEGORY_KEYS[row.key as DayCategory]) : kind === "productivity" ? t(`activity.productivity.${row.key}` as TranslationKey) : row.key,
+    // A user-added category reads by its own name (through the name overrides).
+    name: kind === "category"
+      ? t(CATEGORY_KEYS[row.key as DayCategory] ?? "activity.category.custom", { id: row.key })
+      : kind === "productivity" ? t(`activity.productivity.${row.key}` as TranslationKey) : row.key,
     tone: kind === "category" ? color(row.key as DayCategory) : kind === "productivity" ? KIND_COLORS[row.key]! : PROJECT_TONES[index % PROJECT_TONES.length]!,
   }));
 

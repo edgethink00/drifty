@@ -158,7 +158,7 @@ import type { CloudOffer, IntelligenceProviderChoice } from "./features/categori
 import type { ProjectsLockReason } from "./features/projects/projectsLockTypes";
 import { useCategoryCustomizations, useProductivityCustomizations } from "./features/settings/categoryCustomizationStore";
 import { useCategoryCustomizationController, type DefinitionChanges } from "./features/settings/useCategoryCustomizationController";
-import { categoryProductivityPreferences, classificationGuidanceFromCustomizations, deletedCategoryCutoffs, hasLiveCategoryDescriptions } from "@drifty/domain";
+import { builtInCategoryOrUnknown, categoryProductivityPreferences, classificationGuidanceFromCustomizations, deletedCategoryCutoffs, hasLiveCategoryDescriptions } from "@drifty/domain";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
 import { DeveloperSettingsSection } from "./features/settings/DeveloperSettingsSection";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
@@ -3833,7 +3833,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       correctionScope: "alarm",
       contextSegments: segmentsRef.current,
       classificationOptions: selectedDayClassificationOptions,
-      predictionBeforeFeedback: event?.decisionClassification,
+      predictionBeforeFeedback: event?.decisionClassification
+        ? { ...event.decisionClassification, category: builtInCategoryOrUnknown(event.decisionClassification.category) }
+        : null,
     }).catch((error) => console.warn("Unable to capture Not a drift evidence.", error));
     void learnLivingSoulFromFeedback({
       feedback,

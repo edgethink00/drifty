@@ -92,6 +92,21 @@ describe("buildShareCardData", () => {
     expect(data.slices.reduce((sum, slice) => sum + slice.ratio, 0)).toBeCloseTo(1);
   });
 
+  it("shows the user's added categories only as Other, so their names stay on the device", () => {
+    const data = buildShareCardData({
+      ...BASE_INPUT,
+      language: "ko",
+      categoryTotals: [category("workspace", 2000), category("custom-side0001", 700), category("custom-read0002", 300), category("unknown", 200)],
+      totalSeconds: 3200,
+    });
+
+    expect(data.slices.map((slice) => [slice.key, slice.label, slice.seconds])).toEqual([
+      ["workspace", "작업", 2000],
+      ["other", "기타", 1000],
+      ["unknown", "미분류", 200],
+    ]);
+  });
+
   it("omits other when all named categories fit", () => {
     const data = buildShareCardData(BASE_INPUT);
     expect(data.slices.map((slice) => slice.key)).toEqual(["workspace", "communication", "unknown"]);

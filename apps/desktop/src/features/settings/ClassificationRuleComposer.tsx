@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { useDeletedCategories } from "./categoryCustomizationStore";
+import { useCategoryChoices, useDeletedCategories } from "./categoryCustomizationStore";
 import {
-  CATEGORY_ORDER,
   PRODUCTIVITY_ORDER,
   canonicalizeClassificationRuleSiteUrl,
   secondsToLabel,
@@ -73,6 +72,7 @@ export function ClassificationRuleComposer({
   onSaved,
 }: ClassificationRuleComposerProps) {
   const deletedCategories = useDeletedCategories();
+  const categoryChoices = useCategoryChoices();
   const { t } = useLocalization();
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<ComposerTarget | null>(null);
@@ -148,7 +148,7 @@ export function ClassificationRuleComposer({
                 </div>
               </div>
             ) : null}
-            <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.category")} value={category} options={CATEGORY_ORDER.filter((value) => !deletedCategories.has(value) || value === category)} getLabel={(value) => localizedCategoryLabel(value, t)} getColor={(value) => categoryControlColor(value, categoryColorOverrides)} onChange={setCategory} />
+            <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.category")} value={category} options={categoryChoices.filter((value) => !deletedCategories.has(value) || value === category)} getLabel={(value) => localizedCategoryLabel(value, t)} getColor={(value) => categoryControlColor(value, categoryColorOverrides)} onChange={setCategory} />
             <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.productivity")} value={productivity} options={PRODUCTIVITY_ORDER} getLabel={(value) => localizedProductivityLabel(value, t)} getColor={(value) => productivityControlColor(value, appThemeColorOverrides)} onChange={setProductivity} variant="productivity" />
             <div className="classification-rule-composer__actions">
               <button type="button" className="settings-btn" disabled={saving} onClick={onCancel}>{t("common.cancel")}</button>

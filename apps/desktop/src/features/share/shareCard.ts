@@ -6,7 +6,7 @@
 // (shareCardSvg.ts) draws exactly what this module produces, so the privacy
 // boundary is enforced here.
 
-import type { ActivityCategory, CategoryDuration, FlowBlock, ProductivityDuration } from "@drifty/domain";
+import { isCustomActivityCategory, type ActivityCategory, type CategoryDuration, type FlowBlock, type ProductivityDuration } from "@drifty/domain";
 import { categoryLabel } from "../../lib/activityLabels";
 import { formatDateRangeLabel, formatLocalizedDateRangeLabel, UI_LOCALE } from "../../lib/formatting";
 import type { WeekCalendarEvent, WeekDayRow } from "../dashboard/weekCalendar";
@@ -139,17 +139,21 @@ function buildSlices(
   language: "en" | "ko" = "en",
 ): ShareCardCategorySlice[] {
   const active = categoryTotals.filter((entry) => entry.totalSeconds > 0);
+  // A user-added category's name stays on this device: the card counts it as Other.
+  const addedSeconds = active
+    .filter((entry) => isCustomActivityCategory(entry.category))
+    .reduce((sum, entry) => sum + entry.totalSeconds, 0);
   const named = active
-    .filter((entry) => entry.category !== "unknown")
+    .filter((entry) => entry.category !== "unknown" && !isCustomActivityCategory(entry.category))
     .sort((a, b) => b.totalSeconds - a.totalSeconds);
   const unknownSeconds = active
     .filter((entry) => entry.category === "unknown")
     .reduce((sum, entry) => sum + entry.totalSeconds, 0);
   const namedSlots = MAX_CATEGORY_SLICES - (unknownSeconds > 0 ? 1 : 0);
-  const needsOther = named.length > namedSlots;
-  const visibleNamedCount = needsOther ? Math.max(0, namedSlots - 1) : named.length;
+  const needsOther = addedSeconds > 0 || named.length > namedSlots;
+  const visibleNamedCount = needsOther ? Math.min(named.length, Math.max(0, namedSlots - 1)) : named.length;
   const top = named.slice(0, visibleNamedCount);
-  const otherSeconds = named.slice(visibleNamedCount).reduce((sum, entry) => sum + entry.totalSeconds, 0);
+  const otherSeconds = addedSeconds + named.slice(visibleNamedCount).reduce((sum, entry) => sum + entry.totalSeconds, 0);
 
   const ratioOf = (seconds: number) => (trackedSeconds > 0 ? seconds / trackedSeconds : 0);
   const slices: ShareCardCategorySlice[] = top.map((entry) => ({

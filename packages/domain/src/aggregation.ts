@@ -13,7 +13,7 @@ import type {
   ProductivityLabel,
   SiteDuration,
 } from "./activity";
-import { isExcludedSegment, isFailedForegroundCaptureSegment } from "./activity";
+import { isCustomActivityCategory, isExcludedSegment, isFailedForegroundCaptureSegment } from "./activity";
 import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, activityTimeBounds } from "./deviceElapsedTime";
 import { canonicalizeClassificationRuleSiteUrl } from "./classificationRuleUrl";
 import {
@@ -1258,7 +1258,13 @@ export function buildCategoryDurations(segments: ActivitySegment[], options?: Cl
   for (const segment of segments) {
     if (isExcludedSegment(segment)) continue;
     const { category } = classifyActivity(segment, options);
-    const target = totals.find((entry) => entry.category === category);
+    let target = totals.find((entry) => entry.category === category);
+    // A user-added category joins the list the first time it has time,
+    // ahead of unclassified, which stays last.
+    if (!target && isCustomActivityCategory(category)) {
+      target = { category, totalSeconds: 0, segments: 0, ratio: 0 };
+      totals.splice(totals.length - 1, 0, target);
+    }
     if (!target) continue;
     target.totalSeconds += segment.durationSeconds;
     target.segments += 1;

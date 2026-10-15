@@ -1,9 +1,8 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type SyntheticEvent } from "react";
-import { useDeletedCategories } from "./categoryCustomizationStore";
+import { useCategoryChoices, useDeletedCategories } from "./categoryCustomizationStore";
 import { ClassificationPicker } from "./SettingsColorControls";
 import { categoryControlColor, productivityControlColor, type AppThemeColorOverrides, type CategoryColorOverrides } from "./settingsStorage";
 import {
-  CATEGORY_ORDER,
   PRODUCTIVITY_ORDER,
   canonicalizeClassificationRuleSiteUrl,
   siteTargetFromCanonicalUrl,
@@ -171,6 +170,7 @@ function ClassificationSavedRuleCard({
   onToggleClassificationRule,
 }: ClassificationSavedRuleCardProps) {
   const deletedCategories = useDeletedCategories();
+  const categoryChoices = useCategoryChoices();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -289,7 +289,7 @@ function ClassificationSavedRuleCard({
           if (saved) setEditing(false);
         }}>
           <fieldset disabled={busy}>
-            <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.category")} value={category} options={CATEGORY_ORDER.filter((value) => !deletedCategories.has(value) || value === category)} getLabel={(value) => localizedCategoryLabel(value, t)} getColor={(value) => categoryControlColor(value, categoryColorOverrides)} onChange={setCategory} />
+            <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.category")} value={category} options={categoryChoices.filter((value) => !deletedCategories.has(value) || value === category)} getLabel={(value) => localizedCategoryLabel(value, t)} getColor={(value) => categoryControlColor(value, categoryColorOverrides)} onChange={setCategory} />
             <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.productivity")} value={productivity} options={PRODUCTIVITY_ORDER} getLabel={(value) => localizedProductivityLabel(value, t)} getColor={(value) => productivityControlColor(value, appThemeColorOverrides)} onChange={setProductivity} variant="productivity" />
           </fieldset>
           <div className="classification-rule-card__form-actions">
