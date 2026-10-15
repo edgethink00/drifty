@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AccountSettingsSection, ORGANIZATION_SEAT_MANAGEMENT_URL, type AccountSettingsSectionProps } from "./AccountSettingsSection";
+import { AccountSettingsSection, ORGANIZATION_SEAT_MANAGEMENT_URL, ORGANIZATION_SEAT_MANAGEMENT_URL_KO, type AccountSettingsSectionProps } from "./AccountSettingsSection";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS } from "../localization/translations";
 import type { BillingEntitlement, BillingEntitlementOrganizationRole } from "../billing/billingService";
@@ -524,32 +524,43 @@ describe("AccountSettingsSection organization seat", () => {
     expect(screen.getByText("Drifty Pro")).toBeTruthy();
     expect(screen.getByText("Manage your Cloud AI subscription and billing.")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Manage billing$/i })).toBeTruthy();
-    expect(screen.queryByText("Organization seat")).toBeNull();
-    expect(screen.queryByText(/organization seat at/i)).toBeNull();
-    expect(screen.queryByText(/^Role:/)).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Manage seats$/i })).toBeNull();
+    expect(screen.queryByText("Team plan")).toBeNull();
+    expect(screen.queryByText(/team plan, so there is nothing/i)).toBeNull();
+    expect(screen.queryByText(/Your role:/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Manage team$/i })).toBeNull();
   });
 
   it("shows the organization name and role for a member seat without a management entry point", () => {
     render(<AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("member") })} />);
 
-    expect(screen.getByText("Organization seat")).toBeTruthy();
-    expect(screen.getByText(/organization seat at Acme, not a personal subscription/i)).toBeTruthy();
-    expect(screen.getByText(/Role: Member/)).toBeTruthy();
+    expect(screen.getByText("Team plan")).toBeTruthy();
+    expect(screen.getByText(/Your Pro comes from the Acme team plan, so there is nothing for you to pay\./)).toBeTruthy();
+    expect(screen.getByText(/Your role: Member\./)).toBeTruthy();
     expect(screen.queryByText("Drifty Pro")).toBeNull();
     expect(screen.queryByText("Manage your Cloud AI subscription and billing.")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Manage billing$/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Manage seats$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Manage team$/i })).toBeNull();
   });
 
   it.each(["owner", "admin"] as const)("shows seat management for an %s and opens the organization page", async (role) => {
     render(<AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement(role) })} />);
 
-    const manageSeats = screen.getByRole("button", { name: /^Manage seats$/i });
+    const manageSeats = screen.getByRole("button", { name: /^Manage team$/i });
     expect(manageSeats).toBeTruthy();
     fireEvent.click(manageSeats);
     await waitFor(() => expect(openUrlMock).toHaveBeenCalledWith(ORGANIZATION_SEAT_MANAGEMENT_URL));
     expect(openUrlMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the Korean team page from the Korean app", async () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("admin") })} />
+      </LocalizationTestProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^팀 관리$/ }));
+    await waitFor(() => expect(openUrlMock).toHaveBeenCalledWith(ORGANIZATION_SEAT_MANAGEMENT_URL_KO));
   });
 
   it("resolves the new organization-seat strings in each supported locale instead of falling back to keys", () => {
@@ -573,10 +584,10 @@ describe("AccountSettingsSection organization seat", () => {
         <AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("owner") })} />
       </LocalizationTestProvider>,
     );
-    expect(screen.getByText("Organization seat")).toBeTruthy();
-    expect(screen.getByText(/organization seat at Acme/i)).toBeTruthy();
-    expect(screen.getByText(/Role: Owner/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Manage seats$/i })).toBeTruthy();
+    expect(screen.getByText("Team plan")).toBeTruthy();
+    expect(screen.getByText(/the Acme team plan/i)).toBeTruthy();
+    expect(screen.getByText(/Your role: Owner\./)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Manage team$/i })).toBeTruthy();
     expect(screen.queryByText("settings.account.manageSeats")).toBeNull();
     unmount();
 
@@ -585,10 +596,10 @@ describe("AccountSettingsSection organization seat", () => {
         <AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("owner") })} />
       </LocalizationTestProvider>,
     );
-    expect(screen.getByText("조직 좌석")).toBeTruthy();
-    expect(screen.getByText(/Acme 조직 좌석으로 앱을 사용하고 있어요/)).toBeTruthy();
-    expect(screen.getByText(/역할: 소유자/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^좌석 관리$/ })).toBeTruthy();
+    expect(screen.getByText("팀 플랜")).toBeTruthy();
+    expect(screen.getByText(/Acme 팀 플랜에서 Pro를 받고 있어서 따로 결제할 필요가 없어요/)).toBeTruthy();
+    expect(screen.getByText(/내 역할: 소유자\./)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^팀 관리$/ })).toBeTruthy();
     expect(screen.queryByText("settings.account.manageSeats")).toBeNull();
     expect(screen.queryByText("settings.account.organizationRole")).toBeNull();
   });
@@ -601,7 +612,7 @@ describe("AccountSettingsSection organization seat release", () => {
         billingEntitlement: organizationEntitlement(role),
         onReleaseOrganizationSeat: vi.fn(),
       })} />);
-      expect(screen.getByText("Leave this organization")).toBeTruthy();
+      expect(screen.getByText("Leave this team")).toBeTruthy();
       expect(screen.getByRole("button", { name: /^Leave$/ })).toBeTruthy();
       unmount();
     }
@@ -610,7 +621,7 @@ describe("AccountSettingsSection organization seat release", () => {
       billingEntitlement: organizationEntitlement("owner"),
       onReleaseOrganizationSeat: vi.fn(),
     })} />);
-    expect(screen.queryByText("Leave this organization")).toBeNull();
+    expect(screen.queryByText("Leave this team")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Leave$/ })).toBeNull();
   });
 
@@ -620,7 +631,7 @@ describe("AccountSettingsSection organization seat release", () => {
       onReleaseOrganizationSeat: vi.fn(),
     })} />);
 
-    expect(screen.queryByText("Leave this organization")).toBeNull();
+    expect(screen.queryByText("Leave this team")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Leave$/ })).toBeNull();
   });
 
@@ -633,11 +644,11 @@ describe("AccountSettingsSection organization seat release", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Leave$/ }));
     expect(onReleaseOrganizationSeat).not.toHaveBeenCalled();
-    expect(screen.getByText(/Leaving ends your access right away/)).toBeTruthy();
+    expect(screen.getByText(/Leaving ends your Pro from this team right away/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^Cancel$/ }));
     expect(onReleaseOrganizationSeat).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Leaving ends your access right away/)).toBeNull();
+    expect(screen.queryByText(/Leaving ends your Pro from this team right away/)).toBeNull();
     expect(screen.getByRole("button", { name: /^Leave$/ })).toBeTruthy();
   });
 
@@ -702,7 +713,7 @@ describe("AccountSettingsSection organization seat release", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^Yes, leave$/ }));
     });
-    expect(screen.getByRole("alert").textContent).toContain("Unable to leave the organization");
+    expect(screen.getByRole("alert").textContent).toContain("Unable to leave the team");
   });
 
   it("localizes every new seat-release string instead of falling back to keys", () => {
@@ -733,7 +744,7 @@ describe("AccountSettingsSection organization seat release", () => {
         })} />
       </LocalizationTestProvider>,
     );
-    expect(screen.getByText("이 조직에서 나가기")).toBeTruthy();
+    expect(screen.getByText("이 팀에서 나가기")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^나가기$/ }));
     expect(screen.getByRole("button", { name: /^네, 나갈게요$/ })).toBeTruthy();
     expect(screen.queryByText("settings.account.releaseSeatConfirm")).toBeNull();
@@ -747,7 +758,7 @@ describe("AccountSettingsSection organization dissolution", () => {
         billingEntitlement: organizationEntitlement(role),
         onDissolveOrganization: vi.fn(),
       })} />);
-      expect(screen.queryByText("Close this organization")).toBeNull();
+      expect(screen.queryByText("Cancel the team plan")).toBeNull();
       unmount();
     }
 
@@ -755,8 +766,22 @@ describe("AccountSettingsSection organization dissolution", () => {
       billingEntitlement: organizationEntitlement("owner"),
       onDissolveOrganization: vi.fn(),
     })} />);
-    expect(screen.getByText("Close this organization")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Close organization$/ })).toBeTruthy();
+    expect(screen.getByText("Cancel the team plan")).toBeTruthy();
+    const cancelPlan = screen.getByRole("button", { name: /^Cancel team plan$/ });
+    // Ending the plan for every member is a danger action, not a seat setting.
+    expect(cancelPlan.closest(".settings-block--danger-zone")).toBeTruthy();
+    expect(cancelPlan.closest(".settings-block--plans")).toBeNull();
+    expect(cancelPlan.className).toContain("danger");
+  });
+
+  it("keeps the danger zone for an owner even when account deletion is not offered", () => {
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("owner"),
+      onDissolveOrganization: vi.fn(),
+      onDeleteAccount: undefined,
+    })} />);
+    expect(screen.getByRole("button", { name: /^Cancel team plan$/ }).closest(".settings-block--danger-zone")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Delete account$/i })).toBeNull();
   });
 
   it("does not offer the close control on an individual entitlement", () => {
@@ -765,7 +790,7 @@ describe("AccountSettingsSection organization dissolution", () => {
       onDissolveOrganization: vi.fn(),
     })} />);
 
-    expect(screen.queryByText("Close this organization")).toBeNull();
+    expect(screen.queryByText("Cancel the team plan")).toBeNull();
   });
 
   it("keeps the confirmation disabled until the organization name is typed exactly", () => {
@@ -775,21 +800,21 @@ describe("AccountSettingsSection organization dissolution", () => {
       onDissolveOrganization,
     })} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
-    const confirm = screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement;
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel team plan$/ }));
+    const confirm = screen.getByRole("button", { name: /^Yes, cancel the plan$/ }) as HTMLButtonElement;
     // This is the only thing standing between one stray click and an
     // immediately cancelled subscription for everyone in the organization.
     expect(confirm.disabled).toBe(true);
 
-    const field = screen.getByLabelText("Organization name");
+    const field = screen.getByLabelText("Team name");
     fireEvent.change(field, { target: { value: "Acm" } });
-    expect((screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /^Yes, cancel the plan$/ }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.change(field, { target: { value: "acme" } });
-    expect((screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /^Yes, cancel the plan$/ }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.change(field, { target: { value: "Acme" } });
-    expect((screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: /^Yes, cancel the plan$/ }) as HTMLButtonElement).disabled).toBe(false);
     expect(onDissolveOrganization).not.toHaveBeenCalled();
   });
 
@@ -802,10 +827,10 @@ describe("AccountSettingsSection organization dissolution", () => {
       onRefreshCloudStatus,
     })} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
-    fireEvent.change(screen.getByLabelText("Organization name"), { target: { value: "Acme" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel team plan$/ }));
+    fireEvent.change(screen.getByLabelText("Team name"), { target: { value: "Acme" } });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Yes, close it$/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, cancel the plan$/ }));
     });
 
     expect(onDissolveOrganization).toHaveBeenCalledTimes(1);
@@ -820,14 +845,14 @@ describe("AccountSettingsSection organization dissolution", () => {
       onDissolveOrganization,
     })} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
-    fireEvent.change(screen.getByLabelText("Organization name"), { target: { value: "Acme" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Keep the organization$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel team plan$/ }));
+    fireEvent.change(screen.getByLabelText("Team name"), { target: { value: "Acme" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Keep the team plan$/ }));
     expect(onDissolveOrganization).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
-    expect((screen.getByLabelText("Organization name") as HTMLInputElement).value).toBe("");
-    expect((screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel team plan$/ }));
+    expect((screen.getByLabelText("Team name") as HTMLInputElement).value).toBe("");
+    expect((screen.getByRole("button", { name: /^Yes, cancel the plan$/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("warns that the subscription may already be cancelled when the reply does not settle", async () => {
@@ -837,10 +862,10 @@ describe("AccountSettingsSection organization dissolution", () => {
       onDissolveOrganization,
     })} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
-    fireEvent.change(screen.getByLabelText("Organization name"), { target: { value: "Acme" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel team plan$/ }));
+    fireEvent.change(screen.getByLabelText("Team name"), { target: { value: "Acme" } });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Yes, close it$/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, cancel the plan$/ }));
     });
 
     expect(screen.getByRole("alert").textContent).toMatch(/may already be cancelled/);

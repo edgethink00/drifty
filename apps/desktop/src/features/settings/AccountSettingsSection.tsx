@@ -25,6 +25,12 @@ import "./AccountSettingsSection.css";
 import { ActionLabel } from "../../components/ActionLabel";
 
 export const ORGANIZATION_SEAT_MANAGEMENT_URL = "https://drifty.so/account/organization";
+export const ORGANIZATION_SEAT_MANAGEMENT_URL_KO = "https://drifty.so/ko/account/organization/";
+
+/** The team page has an English and a Korean copy; open the one matching the app. */
+export function organizationSeatManagementUrl(language: string): string {
+  return language === "ko" ? ORGANIZATION_SEAT_MANAGEMENT_URL_KO : ORGANIZATION_SEAT_MANAGEMENT_URL;
+}
 
 export type AccountSettingsSectionProps = {
   readonly billingCheckoutAwaitingConfirmation?: boolean;
@@ -123,7 +129,7 @@ export function AccountSettingsSection({
     setOrganizationOpenError(false);
     try {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(ORGANIZATION_SEAT_MANAGEMENT_URL);
+      await openUrl(organizationSeatManagementUrl(effectiveLanguage));
     } catch {
       setOrganizationOpenError(true);
     } finally {
@@ -213,6 +219,7 @@ export function AccountSettingsSection({
     ? t("settings.account.checkoutPending")
     : planActionBusy ? t("settings.account.billingOpening") : null;
   const canDeleteAccount = hasAuthenticatedSession ?? isSignedIn;
+  const canDissolveOrganization = organizationSeat?.role === "owner";
   const accountEmail = trimmedUserEmail || (isSignedIn
     ? t("settings.account.signedInWithoutEmail")
     : t("settings.account.notSignedIn"));
@@ -346,61 +353,6 @@ export function AccountSettingsSection({
                 : "settings.account.releaseSeatFailed")}
           </p>
         ) : null}
-        {organizationSeat && organizationSeat.role === "owner" ? (
-          <div className="settings-row account-organization-dissolve">
-            <div>
-              <div className="lbl">{t("settings.account.dissolveTitle")}</div>
-              <div className="desc">
-                {t(dissolveConfirming
-                  ? "settings.account.dissolveConfirmDescription"
-                  : "settings.account.dissolveDescription")}
-              </div>
-              {dissolveConfirming ? (
-                <input
-                  className="settings-input"
-                  type="text"
-                  value={dissolveNameInput}
-                  disabled={dissolveWorking}
-                  onChange={(event) => setDissolveNameInput(event.target.value)}
-                  placeholder={t("settings.account.dissolveNamePlaceholder")}
-                  aria-label={t("settings.account.dissolveNamePlaceholder")}
-                />
-              ) : null}
-            </div>
-            <div className="ctrl account-plan-summary__actions">
-              {dissolveConfirming ? (
-                <>
-                  <button type="button" className="settings-btn danger"
-                    disabled={dissolveWorking || dissolveNameInput.trim() !== organizationSeat.organizationName.trim()}
-                    aria-busy={dissolveWorking}
-                    onClick={() => void dissolveOrganization()}>
-                    {dissolveWorking
-                      ? t("settings.account.dissolveWorking")
-                      : t("settings.account.dissolveConfirm")}
-                  </button>
-                  <button type="button" className="settings-btn" disabled={dissolveWorking}
-                    onClick={() => { setDissolveConfirming(false); setDissolveNameInput(""); setDissolveNotice(null); }}>
-                    {t("settings.account.dissolveCancel")}
-                  </button>
-                </>
-              ) : (
-                <button type="button" className="settings-btn"
-                  onClick={() => { setDissolveConfirming(true); setDissolveNotice(null); }}>
-                  {t("settings.account.dissolve")}
-                </button>
-              )}
-            </div>
-          </div>
-        ) : null}
-        {dissolveNotice ? (
-          <p className="account-plan-notice__error" role="alert">
-            {t(dissolveNotice === "pending"
-              ? "settings.account.dissolvePending"
-              : dissolveNotice === "refused"
-                ? "settings.account.dissolveRefused"
-                : "settings.account.dissolveFailed")}
-          </p>
-        ) : null}
       </div>
 
       {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
@@ -434,20 +386,79 @@ export function AccountSettingsSection({
       ) : null}
 
 
-      {canDeleteAccount && onDeleteAccount ? (
+      {(canDeleteAccount && onDeleteAccount) || canDissolveOrganization ? (
         <div className="settings-block settings-block--danger-zone">
           <h3>{t("settings.account.dangerZone")}</h3>
-          <div data-setting-id="settings.account.deleteTitle" className="settings-row settings-row--stacked-action">
-            <div>
-              <div className="lbl">{t("settings.account.deleteTitle")}</div>
-              <div className="desc">{t("settings.account.deleteSettingsDescription")}</div>
+          {/* Cancelling a team plan ends Pro for every member at once, so it
+              sits with account deletion instead of next to seat management. */}
+          {canDissolveOrganization && organizationSeat ? (
+            <div className="settings-row settings-row--stacked-action account-organization-dissolve">
+              <div>
+                <div className="lbl">{t("settings.account.dissolveTitle")}</div>
+                <div className="desc">
+                  {t(dissolveConfirming
+                    ? "settings.account.dissolveConfirmDescription"
+                    : "settings.account.dissolveDescription")}
+                </div>
+              </div>
+              {dissolveConfirming ? (
+                <input
+                  className="settings-input account-organization-dissolve__name"
+                  type="text"
+                  value={dissolveNameInput}
+                  disabled={dissolveWorking}
+                  onChange={(event) => setDissolveNameInput(event.target.value)}
+                  placeholder={t("settings.account.dissolveNamePlaceholder")}
+                  aria-label={t("settings.account.dissolveNamePlaceholder")}
+                />
+              ) : null}
+              <div className="ctrl account-plan-summary__actions">
+                {dissolveConfirming ? (
+                  <>
+                    <button type="button" className="settings-btn danger"
+                      disabled={dissolveWorking || dissolveNameInput.trim() !== organizationSeat.organizationName.trim()}
+                      aria-busy={dissolveWorking}
+                      onClick={() => void dissolveOrganization()}>
+                      {dissolveWorking
+                        ? t("settings.account.dissolveWorking")
+                        : t("settings.account.dissolveConfirm")}
+                    </button>
+                    <button type="button" className="settings-btn" disabled={dissolveWorking}
+                      onClick={() => { setDissolveConfirming(false); setDissolveNameInput(""); setDissolveNotice(null); }}>
+                      {t("settings.account.dissolveCancel")}
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="settings-btn danger"
+                    onClick={() => { setDissolveConfirming(true); setDissolveNotice(null); }}>
+                    {t("settings.account.dissolve")}
+                  </button>
+                )}
+              </div>
+              {dissolveNotice ? (
+                <p className="account-plan-notice__error" role="alert">
+                  {t(dissolveNotice === "pending"
+                    ? "settings.account.dissolvePending"
+                    : dissolveNotice === "refused"
+                      ? "settings.account.dissolveRefused"
+                      : "settings.account.dissolveFailed")}
+                </p>
+              ) : null}
             </div>
-            <div className="ctrl">
-              <button type="button" className="settings-btn danger" onClick={onDeleteAccount}>
-                {t("settings.account.deleteAction")}
-              </button>
+          ) : null}
+          {canDeleteAccount && onDeleteAccount ? (
+            <div data-setting-id="settings.account.deleteTitle" className="settings-row settings-row--stacked-action">
+              <div>
+                <div className="lbl">{t("settings.account.deleteTitle")}</div>
+                <div className="desc">{t("settings.account.deleteSettingsDescription")}</div>
+              </div>
+              <div className="ctrl">
+                <button type="button" className="settings-btn danger" onClick={onDeleteAccount}>
+                  {t("settings.account.deleteAction")}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       ) : null}
     </div>

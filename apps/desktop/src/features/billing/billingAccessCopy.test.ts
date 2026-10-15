@@ -14,22 +14,22 @@ describe("formatBillingAccessEndDate", () => {
 });
 
 describe("formatOrganizationSeatAccessCopy", () => {
-  it("names the organization and says access comes from its seat, not a personal subscription", () => {
+  it("names the Team plan and the team the Pro comes from", () => {
     expect(formatOrganizationSeatAccessCopy("Acme", "en")).toEqual({
-      title: "Organization seat",
-      summary: "Your app access comes from an organization seat at Acme, not a personal subscription.",
+      title: "Team plan",
+      summary: "Your Pro comes from the Acme team plan, so there is nothing for you to pay.",
     });
     expect(formatOrganizationSeatAccessCopy("Acme", "ko")).toEqual({
-      title: "조직 좌석",
-      summary: "개인 구독이 아니라 Acme 조직 좌석으로 앱을 사용하고 있어요.",
+      title: "팀 플랜",
+      summary: "Acme 팀 플랜에서 Pro를 받고 있어서 따로 결제할 필요가 없어요.",
     });
   });
 
-  it("does not call the access Pro or invent a plan name", () => {
+  it("uses the public Team plan name instead of the internal Enterprise one", () => {
     const english = formatOrganizationSeatAccessCopy("Acme", "en");
     const korean = formatOrganizationSeatAccessCopy("Acme", "ko");
     const combined = `${english?.title} ${english?.summary} ${korean?.title} ${korean?.summary}`;
-    expect(combined).not.toMatch(/Pro|Enterprise|엔터프라이즈/i);
+    expect(combined).not.toMatch(/Enterprise|엔터프라이즈|organization seat|조직 좌석/i);
   });
 
   it("does not invent copy for a missing organization name", () => {

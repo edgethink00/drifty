@@ -85,3 +85,10 @@
 .account-plan-notice__error {
   overflow-wrap: anywhere;
 }
+
+/* Cancelling a team plan lives in the danger zone; its typed-name check sits
+   between the explanation and the buttons at a readable width. */
+.content--settings .account-organization-dissolve__name {
+  max-width: 22rem;
+  width: 100%;
+}
