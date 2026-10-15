@@ -1,12 +1,12 @@
 #[cfg(target_os = "macos")]
 use core_foundation::base::Boolean;
 use std::ffi::OsString;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::sync::{Mutex, OnceLock, TryLockError};
+use std::sync::{Arc, Mutex, OnceLock, TryLockError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -1139,6 +1139,7 @@ struct ServeProcess {
     child: Child,
     stdin: ChildStdin,
     responses: mpsc::Receiver<std::io::Result<String>>,
+    response_overflow: Arc<AtomicBool>,
     runtime_identity: String,
     db_path: PathBuf,
 }
@@ -1391,37 +1392,61 @@ fn spawn_serve_process(runtime: &TrackerRuntime, db: &Path) -> Result<ServeProce
     }
     SERVE_CHILD_PID.store(child.id(), Ordering::SeqCst);
 
-    let (response_sender, responses) = mpsc::channel();
+    // The protocol has one request in flight. Reject unsolicited response
+    // floods without blocking the reader: backpressure here could deadlock
+    // a sidecar writing stdout while the caller writes its next stdin request.
+    let (response_sender, responses) = mpsc::sync_channel(1);
+    let response_overflow = Arc::new(AtomicBool::new(false));
+    let reader_overflow = Arc::clone(&response_overflow);
     thread::spawn(move || {
-        let mut reader = BufReader::new(stdout);
-        loop {
-            let mut line = String::new();
-            match reader.read_line(&mut line) {
-                // An empty line marks EOF; the thread exits with the process.
-                Ok(0) => {
-                    let _ = response_sender.send(Ok(String::new()));
-                    break;
-                }
-                Ok(_) => {
-                    if response_sender.send(Ok(line)).is_err() {
-                        break;
-                    }
-                }
-                Err(err) => {
-                    let _ = response_sender.send(Err(err));
-                    break;
-                }
-            }
-        }
+        collect_serve_responses(BufReader::new(stdout), response_sender, reader_overflow);
     });
 
     Ok(ServeProcess {
         child,
         stdin,
         responses,
+        response_overflow,
         runtime_identity: runtime.identity(),
         db_path: db.to_path_buf(),
     })
+}
+
+fn collect_serve_responses(
+    mut reader: impl BufRead,
+    sender: mpsc::SyncSender<std::io::Result<String>>,
+    overflow: Arc<AtomicBool>,
+) {
+    loop {
+        let response = read_serve_response(&mut reader, crate::bounded_process::MAX_STDOUT_BYTES);
+        let eof = matches!(&response, Ok(line) if line.is_empty());
+        let finished = eof || response.is_err();
+        match sender.try_send(response) {
+            Ok(()) => {}
+            Err(mpsc::TrySendError::Full(_)) => {
+                // EOF is a terminal signal, not another response. The queued
+                // final reply remains valid when a one-response sidecar exits.
+                if !eof { overflow.store(true, Ordering::SeqCst); }
+                break;
+            }
+            Err(mpsc::TrySendError::Disconnected(_)) => break,
+        }
+        if finished { break; }
+    }
+}
+
+fn read_serve_response(reader: &mut impl BufRead, limit: usize) -> std::io::Result<String> {
+    let mut line = String::new();
+    // Read at most one byte past the limit, including the newline. Checking
+    // after an unrestricted read_line would already have allocated the output.
+    reader.take(limit as u64 + 1).read_line(&mut line)?;
+    if line.len() > limit {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("tracker response exceeded {limit} byte limit"),
+        ));
+    }
+    Ok(line)
 }
 
 fn kill_serve_process(mut proc: ServeProcess) {
@@ -1482,6 +1507,7 @@ fn serve_round_trip(
     line: &str,
     budget: ServeInvocationBudget,
 ) -> Result<String, TrackerError> {
+    reject_response_overflow(proc)?;
     proc.stdin
         .write_all(line.as_bytes())
         .map_err(serve_io_err)?;
@@ -1489,7 +1515,9 @@ fn serve_round_trip(
     proc.stdin.flush().map_err(serve_io_err)?;
 
     let remaining = budget.remaining()?;
-    match proc.responses.recv_timeout(remaining) {
+    let response = proc.responses.recv_timeout(remaining);
+    reject_response_overflow(proc)?;
+    match response {
         Ok(Ok(response)) if response.is_empty() => Err(TrackerError::CommandFailed(
             "serve process closed its output".into(),
         )),
@@ -1504,6 +1532,14 @@ fn serve_round_trip(
         Err(RecvTimeoutError::Disconnected) => Err(TrackerError::CommandFailed(
             "serve reader thread terminated".into(),
         )),
+    }
+}
+
+fn reject_response_overflow(proc: &ServeProcess) -> Result<(), TrackerError> {
+    if proc.response_overflow.load(Ordering::SeqCst) {
+        Err(TrackerError::CommandFailed("serve response queue exceeded limit".into()))
+    } else {
+        Ok(())
     }
 }
 
@@ -3470,6 +3506,101 @@ done
 
     fn temp_dir_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("drifty-tracker-test-{name}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn serve_queue_keeps_a_final_reply_at_eof_and_rejects_extra_replies() {
+        for (input, expect_overflow) in [("{}\n", false), ("{}\n{}\n", true)] {
+            let (sender, receiver) = mpsc::sync_channel(1);
+            let overflow = Arc::new(AtomicBool::new(false));
+            collect_serve_responses(std::io::Cursor::new(input), sender, Arc::clone(&overflow));
+            assert_eq!(overflow.load(Ordering::SeqCst), expect_overflow);
+            assert_eq!(receiver.recv().unwrap().unwrap(), "{}\n");
+            assert!(receiver.recv().is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unsolicited_serve_responses_fail_before_writing_another_request() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("unsolicited.py");
+        std::fs::write(&script,
+            "import sys,time\nsys.stdout.write('{}\\n'*3)\nsys.stdout.flush()\ntime.sleep(5)\n"
+        ).unwrap();
+        let runtime = TrackerRuntime::source_python(PathBuf::from("/usr/bin/python3"), script);
+        let mut proc = spawn_serve_process(&runtime, &dir.path().join("unused.sqlite3")).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !proc.response_overflow.load(Ordering::SeqCst) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        let overflow = proc.response_overflow.load(Ordering::SeqCst);
+        // Larger than the pipe capacity: a write to this non-reading peer
+        // would hang if overflow were only checked after submitting a request.
+        let result = serve_round_trip(&mut proc, &"x".repeat(1024 * 1024), ServeInvocationBudget::new());
+        kill_serve_process(proc);
+        assert!(overflow, "unsolicited output must stop at the queue bound");
+        assert!(matches!(result,
+            Err(TrackerError::CommandFailed(ref message)) if message.contains("queue")));
+    }
+
+    #[test]
+    fn serve_response_limit_preserves_framing_and_counts_bytes() {
+        let mut reader = std::io::Cursor::new("éé\nnext\n");
+        assert_eq!(read_serve_response(&mut reader, 5).unwrap(), "éé\n");
+        assert_eq!(read_serve_response(&mut reader, 5).unwrap(), "next\n");
+        assert_eq!(read_serve_response(&mut reader, 5).unwrap(), "");
+        let mut oversized = std::io::Cursor::new("abcdef\nnext\n");
+        let error = read_serve_response(&mut oversized, 5).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(oversized.position(), 6, "stop reading at the byte budget");
+        let mut unterminated = std::io::Cursor::new("abcdef");
+        assert!(read_serve_response(&mut unterminated, 5).is_err());
+        let mut exact_eof = std::io::Cursor::new("abcde");
+        assert_eq!(read_serve_response(&mut exact_eof, 5).unwrap(), "abcde");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn oversized_serve_response_is_rejected_and_next_request_respawns() {
+        let _serve_guard = SERVE_TEST_LOCK.lock().expect("serialize serve tests");
+        shutdown_serve_process();
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("oversized-serve.py");
+        let marker = dir.path().join("sent-oversized");
+        std::fs::write(
+            &script,
+            format!(
+                r#"import pathlib, sys
+marker = pathlib.Path({marker})
+for line in sys.stdin:
+    if not marker.exists():
+        marker.touch()
+        sys.stdout.write('x' * ({limit} + 1) + '\n')
+    else:
+        sys.stdout.write('{{"ok":true,"data":{{"pong":true,"payload":"' + 'x' * (128 * 1024 * 1024) + '"}}}}\n')
+    sys.stdout.flush()
+"#,
+                marker = serde_json::to_string(&marker).unwrap(),
+                limit = crate::bounded_process::MAX_STDOUT_BYTES,
+            ),
+        ).unwrap();
+        let runtime = TrackerRuntime::source_python(PathBuf::from("/usr/bin/python3"), script);
+        let db = dir.path().join("unused.sqlite3");
+        let request = json!({"command": "ping", "payload": {}});
+        let rejected = serve_request(&runtime, &db, &request, SidecarCommandRetrySafety::Mutation);
+        let discarded = serve_slot().lock().unwrap().is_none();
+        let recovered = serve_request(&runtime, &db, &request, SidecarCommandRetrySafety::SafeRead);
+        shutdown_serve_process();
+        assert!(rejected.is_err(), "oversized response was accepted");
+        assert!(matches!(rejected,
+            Err(TrackerError::CommandFailed(ref message)) if message.contains("limit")));
+
+        assert!(discarded, "oversized-response sidecar must be discarded");
+        let recovered: Value = serde_json::from_str(&recovered.expect("next request recovers")).unwrap();
+        assert_eq!(recovered["data"]["pong"], true);
+        assert_eq!(recovered["data"]["payload"].as_str().unwrap().len(), 128 * 1024 * 1024);
     }
 
     #[cfg(unix)]
