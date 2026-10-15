@@ -112,6 +112,28 @@ export function WeeklyCategoryRow({
     };
   }, [categorySeries, effectiveLanguage, productivityTotals, t]);
 
+  // Use the same projected slices and residual bucket as the project chart.
+  // Weekday columns may be averages over several weeks; the rail shows the
+  // selected period's actual totals, just like the category rail.
+  const railProjectEntries = useMemo(() => {
+    const secondsByKey = new Map<string, number>();
+    for (const segment of projectSegments) {
+      const key = projectBySegmentId?.get(segment.id)
+        ?? (classifyActivity(segment, classificationOptions).category !== "unknown" ? NO_PROJECT_KEY : null);
+      if (key === null) continue;
+      secondsByKey.set(key, (secondsByKey.get(key) ?? 0) + segment.durationSeconds);
+    }
+    const entries = (projectSeries ?? []).map((item) => ({
+      ...item,
+      totalSeconds: secondsByKey.get(item.key) ?? 0,
+    })).filter((entry) => entry.totalSeconds > 0);
+    const totalSeconds = entries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
+    return entries.map((entry) => ({ ...entry, ratio: entry.totalSeconds / totalSeconds }));
+  }, [classificationOptions, projectBySegmentId, projectSegments, projectSeries]);
+  const railProjectTotalSeconds = railProjectEntries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
+  const projectLabel = (key: string) => projectMeta?.get(key)?.label
+    ?? t(key === NO_PROJECT_KEY ? "projects.chart.noProject" : "common.project");
+
   const hoverPayloads = useMemo(() => {
     const entries = new Map<string, CompactClassificationHoverPayload>();
 
@@ -146,26 +168,14 @@ export function WeeklyCategoryRow({
       const matchesProject = (segment: ActivitySegment, key: string): boolean => key === NO_PROJECT_KEY
         ? !projectBySegmentId?.get(segment.id) && classifyActivity(segment, classificationOptions).category !== "unknown"
         : projectBySegmentId?.get(segment.id) === key;
-      const projectSecondsByKey = new Map<string, number>();
-      for (const segment of hoverSegments) {
-        const projectId = projectBySegmentId?.get(segment.id);
-        if (projectId) {
-          projectSecondsByKey.set(projectId, (projectSecondsByKey.get(projectId) ?? 0) + segment.durationSeconds);
-        } else if (classifyActivity(segment, classificationOptions).category !== "unknown") {
-          projectSecondsByKey.set(NO_PROJECT_KEY, (projectSecondsByKey.get(NO_PROJECT_KEY) ?? 0) + segment.durationSeconds);
-        }
-      }
-      const totalSeconds = [...projectSecondsByKey.values()].reduce((sum, value) => sum + value, 0);
-      for (const item of projectSeries ?? []) {
-        const seconds = projectSecondsByKey.get(item.key) ?? 0;
-        if (seconds <= 0) continue;
+      for (const item of railProjectEntries) {
         const meta = projectMeta?.get(item.key);
         entries.set(item.key, {
-          label: meta?.label ?? t("common.project"),
-          durationLabel: formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage),
-          shareLabel: `${Math.round((seconds / Math.max(totalSeconds, 1)) * 100)}%`,
+          label: meta?.label ?? t(item.key === NO_PROJECT_KEY ? "projects.chart.noProject" : "common.project"),
+          durationLabel: formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage),
+          shareLabel: `${Math.round(item.ratio * 100)}%`,
           dotClassName: "",
-          color: meta?.color ?? item.color,
+          color: item.color,
           appBreakdown: buildBreakdown((segment) => matchesProject(segment, item.key)),
         });
       }
@@ -185,7 +195,7 @@ export function WeeklyCategoryRow({
     }
 
     return entries;
-  }, [classificationOptions, effectiveLanguage, effectiveMode, hoverSegments, productivityTotals, projectSeries, projectMeta, projectBySegmentId, railCategoryEntries, t]);
+  }, [classificationOptions, effectiveLanguage, effectiveMode, hoverSegments, productivityTotals, railProjectEntries, projectMeta, projectBySegmentId, railCategoryEntries, t]);
 
   function showAggregateHover(key: string, x: number, y: number) {
     const payload = hoverPayloads.get(key);
@@ -243,10 +253,10 @@ export function WeeklyCategoryRow({
         {/* Same components the Day breakdown rail uses, so a category reads as
             one composition bar with durations here too, instead of five
             separately scaled percentage bars. */}
-        {railTotalSeconds > 0 || railCategoryEntries.length > 0 ? (
+        {railTotalSeconds > 0 || railCategoryEntries.length > 0 || railProjectEntries.length > 0 ? (
           <div className={`weekly-summary-rail__stack weekly-breakdown-analytical__stack${composition === "category" ? " weekly-summary-rail__stack--category-only" : ""}`}>
             {composition === "both" && <CompactRingChart
-              title={t("dashboard.today.productivity")}
+              title={t("trends.overallProductivity")}
               ariaLabel={t("trends.productivityBreakdownAria")}
               entries={railProductivityEntries}
               totalSeconds={railTotalSeconds}
@@ -255,7 +265,22 @@ export function WeeklyCategoryRow({
               appIcons={appIcons}
               language={effectiveLanguage}
             />}
-            <CompactClassificationBar<CategoryDuration>
+            {effectiveMode === "project" ? <CompactClassificationBar
+              key="project"
+              title={t("dashboard.today.projects")}
+              ariaLabel={t("trends.projectBreakdownAria")}
+              entries={railProjectEntries}
+              totalSeconds={railProjectTotalSeconds}
+              getKey={(entry) => entry.key}
+              getLabel={(entry) => projectLabel(entry.key)}
+              getColor={(entry) => entry.color}
+              getDotClassName={() => ""}
+              getAppBreakdown={(entry) => hoverPayloads.get(entry.key)?.appBreakdown ?? []}
+              appIcons={appIcons}
+              visibleLimit={5}
+              language={effectiveLanguage}
+            /> : <CompactClassificationBar<CategoryDuration>
+              key="category"
               title={t("dashboard.today.categories")}
               ariaLabel={t("trends.categoryBreakdownAria")}
               entries={railCategoryEntries}
@@ -268,7 +293,7 @@ export function WeeklyCategoryRow({
               appIcons={appIcons}
               visibleLimit={5}
               language={effectiveLanguage}
-            />
+            />}
           </div>
         ) : <EmptyState title={t("trends.noWeeklySplit")} detail={t("trends.noWeeklySplitDetail")} />}
       </section>}
