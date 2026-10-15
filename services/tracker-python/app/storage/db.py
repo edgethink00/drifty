@@ -755,6 +755,41 @@ class TrackerDatabase:
                 conn.execute(f"ALTER TABLE agent_session_events ADD COLUMN {column} {column_type}")
 
     def _ensure_sync_schema(self, conn: sqlite3.Connection) -> None:
+        # Local-only ownership and meaning for the classification currently
+        # materialized on a received segment. These facts are deliberately
+        # orthogonal: reverting a local review can restore a synced rule
+        # snapshot while ownership remains the receiver user's local choice.
+        # input_fingerprint is classifier input identity, not either fact (a
+        # receiver-local AI review can legitimately retain ``sync:<segment_uid>``).
+        provenance_table_existed = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'sync_classification_provenance'"
+        ).fetchone() is not None
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sync_classification_provenance (
+              segment_id INTEGER PRIMARY KEY
+                REFERENCES activity_classifications(segment_id) ON DELETE CASCADE,
+              provenance TEXT NOT NULL
+                CHECK (provenance IN ('sync', 'local-protected', 'legacy')),
+              rule_snapshot_kind TEXT
+                CHECK (rule_snapshot_kind IS NULL OR rule_snapshot_kind = 'synced-rule'),
+              CHECK (provenance != 'legacy' OR rule_snapshot_kind IS NULL)
+            )
+            """
+        )
+        if not provenance_table_existed:
+            # The only published legacy schema has no side-state table. Its
+            # manual/rule/AI rows are ambiguous, so retain them conservatively as
+            # legacy and never invent received-rule meaning from historical labels.
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO sync_classification_provenance(
+                    segment_id, provenance, rule_snapshot_kind
+                )
+                SELECT segment_id, 'legacy', NULL FROM activity_classifications
+                """
+            )
         conn.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_sync_deletions_account_pending
@@ -880,6 +915,61 @@ class TrackerDatabase:
               UPDATE activity_segments
                  SET sync_seq = (SELECT seq FROM sync_counter WHERE id = 1)
                WHERE id = NEW.segment_id;
+            END
+            """
+        )
+        conn.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_activity_classifications_sync_delete
+            AFTER DELETE ON activity_classifications
+            BEGIN
+              UPDATE sync_counter
+                 SET seq = seq + 1
+               WHERE id = 1
+                 AND EXISTS (
+                   SELECT 1 FROM activity_segments WHERE id = OLD.segment_id
+                 );
+              UPDATE activity_segments
+                 SET sync_seq = (SELECT seq FROM sync_counter WHERE id = 1)
+               WHERE id = OLD.segment_id;
+            END
+            """
+        )
+
+        # Protected local choices are explicit. Automatic writers deliberately
+        # leave no side-state row, so an origin correction can replace them. Every
+        # ordinary writer also clears remote rule meaning. Sync ingest and Revert
+        # restore their deliberate state in the same SQLite transaction.
+        for operation in ("INSERT", "UPDATE"):
+            trigger_name = f"trg_activity_classifications_sync_origin_{operation.lower()}"
+            conn.execute(f"DROP TRIGGER IF EXISTS {trigger_name}")
+            conn.execute(
+                f"""
+                CREATE TRIGGER {trigger_name}
+                AFTER {operation} ON activity_classifications
+                BEGIN
+                  DELETE FROM sync_classification_provenance
+                   WHERE segment_id = NEW.segment_id;
+                  INSERT INTO sync_classification_provenance(
+                      segment_id, provenance, rule_snapshot_kind
+                  )
+                  SELECT NEW.segment_id, 'local-protected', NULL
+                   WHERE NEW.source IN ('manual', 'ai_review')
+                      OR (NEW.source = 'rule' AND NEW.classification_rule_id IS NOT NULL)
+                  ON CONFLICT(segment_id) DO UPDATE SET
+                      provenance = 'local-protected',
+                      rule_snapshot_kind = NULL;
+                END
+                """
+            )
+        conn.execute("DROP TRIGGER IF EXISTS trg_activity_classifications_sync_origin_delete")
+        conn.execute(
+            """
+            CREATE TRIGGER trg_activity_classifications_sync_origin_delete
+            AFTER DELETE ON activity_classifications
+            BEGIN
+              DELETE FROM sync_classification_provenance
+               WHERE segment_id = OLD.segment_id;
             END
             """
         )
@@ -2709,16 +2799,33 @@ class TrackerDatabase:
                     segment_id = int(cursor.lastrowid)
                     inserted += 1
 
+                classification_present = "classification" in item
                 classification = item.get("classification")
                 if isinstance(classification, dict) and classification.get("category"):
                     # A user-authored local override (rule/manual) or an approved
                     # AI-review correction on a remote segment must survive the
-                    # originating device re-pushing its own classification.
+                    # originating device re-pushing its own classification. The
+                    # dedicated marker distinguishes those choices from the same
+                    # source labels received through sync; fingerprints cannot.
                     existing_classification = conn.execute(
-                        "SELECT source FROM activity_classifications WHERE segment_id = ?",
+                        """
+                        SELECT
+                          c.source,
+                          p.provenance
+                        FROM activity_classifications c
+                        LEFT JOIN sync_classification_provenance p
+                          ON p.segment_id = c.segment_id
+                        WHERE c.segment_id = ?
+                        """,
                         (segment_id,),
                     ).fetchone()
-                    if existing_classification is not None and existing_classification["source"] in ("rule", "manual", "ai_review"):
+                    if existing_classification is not None and (
+                        existing_classification["provenance"] == "local-protected"
+                        or (
+                            existing_classification["provenance"] == "legacy"
+                            and existing_classification["source"] in ("rule", "manual", "ai_review")
+                        )
+                    ):
                         continue
                     source = str(classification.get("source") or "llm")
                     conn.execute(
@@ -2751,6 +2858,41 @@ class TrackerDatabase:
                             timestamp,
                             1 if source == "llm" else 0,
                         ),
+                    )
+                    # The INSERT/UPDATE trigger above first invalidates any old
+                    # marker. Restoring it here makes provenance and the received
+                    # classification one SQLite transaction while keeping all
+                    # non-sync writers automatically local.
+                    conn.execute(
+                        """
+                        INSERT INTO sync_classification_provenance(
+                            segment_id, provenance, rule_snapshot_kind
+                        )
+                        VALUES (
+                            ?, 'sync',
+                            CASE WHEN ? = 'rule' THEN 'synced-rule' ELSE NULL END
+                        )
+                        ON CONFLICT(segment_id) DO UPDATE SET
+                            provenance = 'sync',
+                            rule_snapshot_kind = excluded.rule_snapshot_kind
+                        """,
+                        (segment_id, source),
+                    )
+                elif classification_present and classification is None:
+                    # A missing key is a legacy partial payload and changes
+                    # nothing. Explicit null removes only a classification whose
+                    # current writer is proven to be sync ingest; local choices
+                    # and legacy ambiguous rows remain conservative.
+                    conn.execute(
+                        """
+                        DELETE FROM activity_classifications
+                        WHERE segment_id = ?
+                          AND EXISTS (
+                            SELECT 1 FROM sync_classification_provenance
+                            WHERE segment_id = ? AND provenance = 'sync'
+                          )
+                        """,
+                        (segment_id, segment_id),
                     )
         return {"inserted": inserted, "updated": updated, "skipped": skipped}
 
@@ -4153,6 +4295,7 @@ class TrackerDatabase:
         "stale",
         "classification_rule_id",
     )
+    _AI_REVIEW_RULE_SNAPSHOT_KIND_KEY = "rule_snapshot_kind"
 
     @staticmethod
     def _serialize_ai_review_event(row: sqlite3.Row) -> dict[str, Any]:
@@ -4272,9 +4415,16 @@ class TrackerDatabase:
             if event is None or event["reverted_at"] is not None:
                 return {"reverted": False, "restored": False}
 
-            snapshot_columns = ", ".join(self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)
+            snapshot_columns = ", ".join(
+                f"c.{column}" for column in self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS
+            )
             current = conn.execute(
-                f"SELECT {snapshot_columns} FROM activity_classifications WHERE segment_id = ?",
+                f"""
+                SELECT {snapshot_columns}, p.rule_snapshot_kind
+                FROM activity_classifications c
+                LEFT JOIN sync_classification_provenance p ON p.segment_id = c.segment_id
+                WHERE c.segment_id = ?
+                """,
                 (event["segment_id"],),
             ).fetchone()
             newer_event = conn.execute(
@@ -4282,6 +4432,7 @@ class TrackerDatabase:
                 (event["segment_id"], event["id"]),
             ).fetchone()
             restored = False
+            restored_rule_snapshot_kind = None
             previous_snapshot_json = event["prev_classification_json"]
             applied_snapshot_json = event["applied_classification_json"]
             if current is not None and newer_event is None:
@@ -4293,13 +4444,43 @@ class TrackerDatabase:
                         previous_snapshot = None
                         applied_snapshot = None
                     expected_columns = set(self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)
-                    if (
+                    expected_with_meaning = expected_columns | {
+                        self._AI_REVIEW_RULE_SNAPSHOT_KIND_KEY
+                    }
+                    snapshots_have_meaning = (
+                        isinstance(previous_snapshot, dict)
+                        and isinstance(applied_snapshot, dict)
+                        and set(previous_snapshot) == expected_with_meaning
+                        and set(applied_snapshot) == expected_with_meaning
+                    )
+                    legacy_full_snapshots = (
                         isinstance(previous_snapshot, dict)
                         and isinstance(applied_snapshot, dict)
                         and set(previous_snapshot) == expected_columns
                         and set(applied_snapshot) == expected_columns
+                    )
+                    current_snapshot = dict(current)
+                    current_classification = {
+                        column: current[column]
+                        for column in self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS
+                    }
+                    applied_matches = (
+                        snapshots_have_meaning and current_snapshot == applied_snapshot
+                    ) or (
+                        legacy_full_snapshots
+                        and current_classification == applied_snapshot
+                        and current[self._AI_REVIEW_RULE_SNAPSHOT_KIND_KEY] is None
+                    )
+                    previous_meaning = (
+                        previous_snapshot.get(self._AI_REVIEW_RULE_SNAPSHOT_KIND_KEY)
+                        if snapshots_have_meaning
+                        else None
+                    )
+                    if (
+                        (snapshots_have_meaning or legacy_full_snapshots)
                         and applied_snapshot["source"] == "ai_review"
-                        and dict(current) == applied_snapshot
+                        and applied_matches
+                        and previous_meaning in (None, "synced-rule")
                     ):
                         assignments = ", ".join(
                             f"{column} = ?" for column in self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS
@@ -4310,6 +4491,7 @@ class TrackerDatabase:
                                   for column in self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)
                             + (event["segment_id"],),
                         )
+                        restored_rule_snapshot_kind = previous_meaning
                         restored = True
                 elif (
                     # Legacy events have no complete snapshot. Preserve their
@@ -4336,6 +4518,20 @@ class TrackerDatabase:
                         ),
                     )
                     restored = True
+                if restored:
+                    # Revert itself is a deliberate local user choice. Restore the
+                    # prior rule meaning, but never restore prior sync ownership.
+                    conn.execute(
+                        """
+                        INSERT INTO sync_classification_provenance(
+                            segment_id, provenance, rule_snapshot_kind
+                        ) VALUES (?, 'local-protected', ?)
+                        ON CONFLICT(segment_id) DO UPDATE SET
+                            provenance = 'local-protected',
+                            rule_snapshot_kind = excluded.rule_snapshot_kind
+                        """,
+                        (event["segment_id"], restored_rule_snapshot_kind),
+                    )
             conn.execute(
                 "UPDATE ai_review_events SET reverted_at = ? WHERE id = ?",
                 (timestamp, event_id),
@@ -4399,9 +4595,18 @@ class TrackerDatabase:
                         (segment_id,),
                     ).fetchone() is not None:
                         continue
+                    review_snapshot_columns = ", ".join(
+                        f"c.{column}"
+                        for column in self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS
+                    )
                     review_previous = conn.execute(
-                        f"SELECT {', '.join(self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)} "
-                        "FROM activity_classifications WHERE segment_id = ?",
+                        f"""
+                        SELECT {review_snapshot_columns}, p.rule_snapshot_kind
+                        FROM activity_classifications c
+                        LEFT JOIN sync_classification_provenance p
+                          ON p.segment_id = c.segment_id
+                        WHERE c.segment_id = ?
+                        """,
                         (segment_id,),
                     ).fetchone()
                     if review_previous is None:
@@ -4497,8 +4702,13 @@ class TrackerDatabase:
                     saved += cursor.rowcount
                     if source == "ai_review" and review_pass_id is not None:
                         review_applied = conn.execute(
-                            f"SELECT {', '.join(self._AI_REVIEW_CLASSIFICATION_SNAPSHOT_COLUMNS)} "
-                            "FROM activity_classifications WHERE segment_id = ?",
+                            f"""
+                            SELECT {review_snapshot_columns}, p.rule_snapshot_kind
+                            FROM activity_classifications c
+                            LEFT JOIN sync_classification_provenance p
+                              ON p.segment_id = c.segment_id
+                            WHERE c.segment_id = ?
+                            """,
                             (segment_id,),
                         ).fetchone()
                         event_saved = self._save_ai_review_events(conn, [{
@@ -4629,8 +4839,18 @@ class TrackerDatabase:
             "staleClassifications": stale,
         }
 
+    def _classification_provenance_source(self) -> str:
+        # Read-only CLI queries may inspect a DB before a new app has migrated
+        # it. Preserve that read-only contract and never invent legacy meaning.
+        if self.read_only and self.connect().execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'sync_classification_provenance'"
+        ).fetchone() is None:
+            return "(SELECT NULL AS segment_id, NULL AS rule_snapshot_kind)"
+        return "sync_classification_provenance"
+
     def timeline(self, start: str | None = None, end: str | None = None, limit: int | None = None):
-        query = """
+        query = f"""
             SELECT
                 activity_segments.*,
                 youtube_video_metadata.category AS youtube_category,
@@ -4659,12 +4879,15 @@ class TrackerDatabase:
                 activity_classifications.stale AS classification_stale,
                 activity_classifications.request_id AS classification_request_id,
                 activity_classifications.latency_ms AS classification_latency_ms,
-                activity_classifications.classification_rule_id AS classification_rule_id
+                activity_classifications.classification_rule_id AS classification_rule_id,
+                sync_classification_provenance.rule_snapshot_kind AS classification_rule_snapshot_kind
             FROM activity_segments
             LEFT JOIN youtube_video_metadata
               ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
             LEFT JOIN activity_classifications
               ON activity_classifications.segment_id = activity_segments.id
+            LEFT JOIN {self._classification_provenance_source()} AS sync_classification_provenance
+              ON sync_classification_provenance.segment_id = activity_classifications.segment_id
             WHERE 1=1
         """
         params: list[Any] = []
@@ -4686,7 +4909,7 @@ class TrackerDatabase:
         limit: int | str | None = None,
     ) -> dict[str, Any]:
         page_limit = self._clamp_timeline_page_limit(limit)
-        query = """
+        query = f"""
             SELECT
                 activity_segments.*,
                 youtube_video_metadata.category AS youtube_category,
@@ -4715,12 +4938,15 @@ class TrackerDatabase:
                 activity_classifications.stale AS classification_stale,
                 activity_classifications.request_id AS classification_request_id,
                 activity_classifications.latency_ms AS classification_latency_ms,
-                activity_classifications.classification_rule_id AS classification_rule_id
+                activity_classifications.classification_rule_id AS classification_rule_id,
+                sync_classification_provenance.rule_snapshot_kind AS classification_rule_snapshot_kind
             FROM activity_segments
             LEFT JOIN youtube_video_metadata
               ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
             LEFT JOIN activity_classifications
               ON activity_classifications.segment_id = activity_segments.id
+            LEFT JOIN {self._classification_provenance_source()} AS sync_classification_provenance
+              ON sync_classification_provenance.segment_id = activity_classifications.segment_id
             WHERE 1=1
         """
         params: list[Any] = []
@@ -4771,7 +4997,7 @@ class TrackerDatabase:
             return {"items": [], "hasMore": False, "nextCursor": None}
 
         page_limit = self._clamp_timeline_page_limit(limit)
-        sql = """
+        sql = f"""
             SELECT
                 activity_segments.*,
                 youtube_video_metadata.category AS youtube_category,
@@ -4800,12 +5026,15 @@ class TrackerDatabase:
                 activity_classifications.stale AS classification_stale,
                 activity_classifications.request_id AS classification_request_id,
                 activity_classifications.latency_ms AS classification_latency_ms,
-                activity_classifications.classification_rule_id AS classification_rule_id
+                activity_classifications.classification_rule_id AS classification_rule_id,
+                sync_classification_provenance.rule_snapshot_kind AS classification_rule_snapshot_kind
             FROM activity_segments
             LEFT JOIN youtube_video_metadata
               ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
             LEFT JOIN activity_classifications
               ON activity_classifications.segment_id = activity_segments.id
+            LEFT JOIN {self._classification_provenance_source()} AS sync_classification_provenance
+              ON sync_classification_provenance.segment_id = activity_classifications.segment_id
             LEFT JOIN activity_project_assignments
               ON activity_project_assignments.segment_id = activity_segments.id
             LEFT JOIN projects
@@ -4855,7 +5084,7 @@ class TrackerDatabase:
         }
 
     def dashboard_week_timeline(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
-        query = """
+        query = f"""
             SELECT
                 activity_segments.id,
                 activity_segments.started_at,
@@ -4887,12 +5116,15 @@ class TrackerDatabase:
                 activity_classifications.confidence AS classification_confidence,
                 activity_classifications.ai_result AS classification_ai_result,
                 activity_classifications.stale AS classification_stale,
-                activity_classifications.classification_rule_id AS classification_rule_id
+                activity_classifications.classification_rule_id AS classification_rule_id,
+                sync_classification_provenance.rule_snapshot_kind AS classification_rule_snapshot_kind
             FROM activity_segments
             LEFT JOIN youtube_video_metadata
               ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
             LEFT JOIN activity_classifications
               ON activity_classifications.segment_id = activity_segments.id
+            LEFT JOIN {self._classification_provenance_source()} AS sync_classification_provenance
+              ON sync_classification_provenance.segment_id = activity_classifications.segment_id
             WHERE 1=1
         """
         params: list[Any] = []

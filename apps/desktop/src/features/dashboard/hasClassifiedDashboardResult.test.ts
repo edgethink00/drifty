@@ -25,5 +25,6 @@ describe("classified dashboard result eligibility", () => {
       { ...base.classification, source: "rule" as const },
     ]) expect(hasClassifiedDashboardResult([{ ...base, classification }], {})).toBe(false);
     expect(hasClassifiedDashboardResult([{ ...base, classification: { ...base.classification, source: "rule", aiResult: false, classificationRuleId: "rule-local" } }], {})).toBe(true);
+    expect(hasClassifiedDashboardResult([{ ...base, classification: { ...base.classification, source: "rule", aiResult: false, ruleSnapshotKind: "synced-rule" } }], {})).toBe(true);
   });
 });

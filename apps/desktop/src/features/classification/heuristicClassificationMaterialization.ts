@@ -159,7 +159,10 @@ function shouldMaterializeSegment(segment: ActivitySegment): boolean {
 
 function isAuthoritativeStoredClassification(classification: StoredActivityClassification): boolean {
   if (classification.source === "manual" || classification.source === "llm") return true;
-  return classification.source === "rule" && Boolean(classification.classificationRuleId);
+  return classification.source === "rule" && (
+    Boolean(classification.classificationRuleId)
+    || classification.ruleSnapshotKind === "synced-rule"
+  );
 }
 
 function isFreshBuiltInHeuristicClassification(classification: StoredActivityClassification): boolean {

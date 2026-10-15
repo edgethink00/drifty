@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 import sys
 import unittest
+from contextlib import closing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -65,7 +66,7 @@ class SyncedDeletionAtomicityTestCase(unittest.TestCase):
         copies = list(database_backup_dir(self.path).glob("*.sqlite3"))
         self.assertTrue(copies)
         for path in copies:
-            with sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True) as conn:
+            with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)) as conn:
                 self.assertEqual([row[0] for row in conn.execute(
                     "SELECT app_name FROM activity_segments ORDER BY id"
                 )], expected_names)

@@ -47,6 +47,8 @@ export interface StoredActivityClassification extends ActivityClassification {
   stale?: boolean | null;
   reusedAiResult?: boolean | null;
   classificationRuleId?: string | null;
+  /** Local DTO meaning for a rule snapshot received from another device; not proof of user authorship. */
+  ruleSnapshotKind?: "synced-rule" | null;
 }
 
 export interface ClassificationRuleOption {

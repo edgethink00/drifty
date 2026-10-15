@@ -1017,11 +1017,13 @@ function resolveActivityClassificationDetail(segment: ActivitySegment, options?:
     );
   }
 
-  // Stored "rule" rows without a rule id are snapshots of the built-in heuristics
-  // stamped by the AI batch; recompute those below so the original source
-  // (predefined registry vs keyword hints) and any registry updates win over the
-  // snapshot. Rows with a rule id come from user rules and stay authoritative.
-  const stampedHeuristic = storedUsable?.source === "rule" && !storedUsable.classificationRuleId;
+  // Historical built-in heuristic snapshots used source=rule without a rule id.
+  // A synced rule snapshot also lacks a local FK. Keep the origin result
+  // authoritative without inferring whether it came from a user rule or an
+  // automatic rule; the wire payload does not distinguish those cases.
+  const stampedHeuristic = storedUsable?.source === "rule"
+    && !storedUsable.classificationRuleId
+    && storedUsable.ruleSnapshotKind !== "synced-rule";
   if (storedUsable && stampedHeuristic && !shouldIncludeBuiltInHeuristics(segment, options)) {
     return detail(
       { category: storedUsable.category, productivity: storedUsable.productivity },

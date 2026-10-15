@@ -121,6 +121,7 @@ describe("materializeBuiltInHeuristicClassifications", () => {
       segment({ id: "manual", appName: "Xcode", classification: storedClassification("manual") }),
       segment({ id: "ai", appName: "Xcode", classification: storedClassification("llm") }),
       segment({ id: "custom-rule", appName: "Xcode", classification: storedClassification("rule", { classificationRuleId: "rule-1" }) }),
+      segment({ id: "synced-rule", appName: "Xcode", classification: storedClassification("rule", { ruleSnapshotKind: "synced-rule" }) }),
       segment({ id: "stamped-rule", appName: "Xcode", classification: storedClassification("rule", { classificationRuleId: null }) }),
     ];
 
@@ -136,6 +137,7 @@ describe("materializeBuiltInHeuristicClassifications", () => {
     expect(result.segments.find((item) => item.id === "manual")?.classification?.source).toBe("manual");
     expect(result.segments.find((item) => item.id === "ai")?.classification?.source).toBe("llm");
     expect(result.segments.find((item) => item.id === "custom-rule")?.classification?.source).toBe("rule");
+    expect(result.segments.find((item) => item.id === "synced-rule")?.classification?.source).toBe("rule");
   });
 
   it("reuses stored built-in sources without falling back to generic stored classification", () => {

@@ -201,7 +201,7 @@ def classification_payload(row: Mapping[str, RowValue]) -> dict[str, SerializedV
     if not row.get("classification_category"):
         return None
 
-    return {
+    classification: dict[str, SerializedValue] = {
         "category": row.get("classification_category"),
         "productivity": row.get("classification_productivity"),
         "source": row.get("classification_source") or "unknown",
@@ -220,6 +220,12 @@ def classification_payload(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         and row.get("classification_request_id") is None
         and row.get("classification_latency_ms") is None,
     }
+    if (
+        row.get("classification_source") == "rule"
+        and row.get("classification_rule_snapshot_kind") == "synced-rule"
+    ):
+        classification["ruleSnapshotKind"] = "synced-rule"
+    return classification
 
 
 def dashboard_week_classification_payload(row: Mapping[str, RowValue]) -> dict[str, SerializedValue] | None:
@@ -236,6 +242,11 @@ def dashboard_week_classification_payload(row: Mapping[str, RowValue]) -> dict[s
     }
     if row.get("classification_rule_id"):
         classification["classificationRuleId"] = row.get("classification_rule_id")
+    if (
+        row.get("classification_source") == "rule"
+        and row.get("classification_rule_snapshot_kind") == "synced-rule"
+    ):
+        classification["ruleSnapshotKind"] = "synced-rule"
     return classification
 
 

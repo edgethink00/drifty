@@ -1005,6 +1005,11 @@ describe('domain helpers', () => {
 
     expect(classifyActivityDetailed({
       ...vsCode,
+      classification: { ...stored, ruleSnapshotKind: 'synced-rule' },
+    })).toMatchObject({ category: 'entertainment', productivity: 'neutral', source: 'rule' });
+
+    expect(classifyActivityDetailed({
+      ...vsCode,
       classification: stored,
     })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
 

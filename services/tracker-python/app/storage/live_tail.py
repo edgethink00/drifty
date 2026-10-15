@@ -17,7 +17,7 @@ def fetch_live_tail(
     limit: int | str | None = DEFAULT_LIVE_TAIL_LIMIT,
 ) -> list[dict[str, Any]]:
     resolved_limit = normalize_limit(limit)
-    query = """
+    query = f"""
         SELECT
             activity_segments.*,
             youtube_video_metadata.category AS youtube_category,
@@ -46,12 +46,15 @@ def fetch_live_tail(
             activity_classifications.stale AS classification_stale,
             activity_classifications.request_id AS classification_request_id,
             activity_classifications.latency_ms AS classification_latency_ms,
-            activity_classifications.classification_rule_id AS classification_rule_id
+            activity_classifications.classification_rule_id AS classification_rule_id,
+            sync_classification_provenance.rule_snapshot_kind AS classification_rule_snapshot_kind
         FROM activity_segments
         LEFT JOIN youtube_video_metadata
           ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
         LEFT JOIN activity_classifications
           ON activity_classifications.segment_id = activity_segments.id
+        LEFT JOIN {database._classification_provenance_source()} AS sync_classification_provenance
+          ON sync_classification_provenance.segment_id = activity_classifications.segment_id
         WHERE 1=1
     """
     params: list[Any] = []

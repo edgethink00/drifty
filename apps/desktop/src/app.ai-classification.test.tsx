@@ -591,7 +591,10 @@ describe("App AI classification controls", () => {
     expect(aiClassificationMocks.getAiClassificationUsageSummary).not.toHaveBeenCalled();
   });
 
-  it("keeps long classification activity detail titles recoverable", async () => {
+  it.each(["2026-06-16T00:30:00", "2026-06-16T10:00:00"])("keeps long classification activity detail titles recoverable at %s", async (now) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(now));
+    // The panel opens on the logical day, including before the 04:00 boundary.
     const selectedDay = currentAutoClassificationDay();
     const longWindowTitle = "Quarterly classification QA reproduction title - ".repeat(10) + "final window title segment";
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
