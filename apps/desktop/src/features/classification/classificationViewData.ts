@@ -561,15 +561,16 @@ export function normalizeDomainRuleInput(value: string): string {
   if (!trimmed) return "";
   const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   try {
-    const hostname = new URL(candidate).hostname.toLowerCase().replace(/^www\./, "");
-    return hostname.replace(/\.$/, "");
+    // Match tracker storage: repeated www prefixes and surrounding dots can leave no host.
+    const hostname = new URL(candidate).hostname.toLowerCase().replace(/^(?:www\.)+/, "");
+    return hostname.replace(/^\.+|\.+$/g, "");
   } catch {
     return trimmed
       .toLowerCase()
       .replace(/^https?:\/\//i, "")
-      .replace(/^www\./, "")
+      .replace(/^(?:www\.)+/, "")
       .split(/[/?#]/)[0]
-      .replace(/\.$/, "");
+      .replace(/^\.+|\.+$/g, "");
   }
 }
 

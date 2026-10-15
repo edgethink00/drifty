@@ -30,6 +30,20 @@ function renderComposer(rules: ClassificationRule[], onSaveRule = vi.fn().mockRe
 }
 
 describe("ClassificationRuleComposer", () => {
+  it("does not offer a typed site whose host becomes empty in tracker storage", () => {
+    renderComposer([]);
+    fireEvent.change(screen.getByRole("searchbox", { name: /Search for an app or site to classify/i }), { target: { value: "www.www.." } });
+    expect(screen.queryByRole("button", { name: /^Use / })).toBeNull();
+  });
+
+  it("saves a repeated-www address using the same site identity as tracker storage", async () => {
+    const { onSaveRule } = renderComposer([]);
+    fireEvent.change(screen.getByRole("searchbox", { name: /Search for an app or site to classify/i }), { target: { value: "www.www.example.com.." } });
+    fireEvent.click(await screen.findByRole("button", { name: /^Use example\.com$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Save classification for example\.com$/ }));
+    await waitFor(() => expect(onSaveRule).toHaveBeenCalledWith({ targetKind: "site", targetValue: "example.com", category: "workspace", productivity: "focus", enabled: true }));
+  });
+
   it("chooses the first addable match on Enter, skipping one already in the list", async () => {
     const youtubeRule: ClassificationRule = { id: "site:youtube.com", targetKind: "site", targetValue: "youtube.com", matchScope: "surface",
       detailKind: null, detailValue: null, category: "entertainment", productivity: "drift", enabled: true, confidence: null };

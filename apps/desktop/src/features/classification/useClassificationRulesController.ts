@@ -8,6 +8,7 @@ import type {
 import type { LocalizationController } from "../localization/LocalizationContext";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { toErrorMessage } from "../../lib/formatting";
+import { normalizeClassificationRuleTarget } from "./classificationViewData";
 
 type UseClassificationRulesControllerInput = {
   readonly managerOpen: boolean;
@@ -60,6 +61,9 @@ export function useClassificationRulesController({
     setClassificationRuleMessage(null);
     setClassificationRuleApplyResult(null);
     try {
+      if (!normalizeClassificationRuleTarget(input.targetKind, input.targetValue)) {
+        throw new Error(t("classification.rules.addRowDescription"));
+      }
       const saved = await trackerClient.saveClassificationRule(input);
       if (!saved) throw new Error("The classification could not be saved. Try again.");
       const applyResult = await trackerClient.applyClassificationRules();
