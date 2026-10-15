@@ -61,6 +61,22 @@ class CaptureTimeline:
         # They are process-local and separate from the bounded observations.
         self.pending_input_trims: dict[str, CaptureTrim] = {}
         self.cleanup_retry_logged = False
+        self._sample_second_remainder = 0.0
+
+    def credit_sample_seconds(self, previous_tick: float | None, current_tick: float,
+                              default_seconds: int) -> int:
+        if previous_tick is None:
+            # A failed/suppressed capture or fresh daemon cannot carry timing
+            # credit from its preceding observation window.
+            self._sample_second_remainder = 0.0
+            return default_seconds
+        elapsed = max(default_seconds, current_tick - previous_tick)
+        precise_seconds = elapsed + self._sample_second_remainder
+        credited_seconds = max(default_seconds, int(round(precise_seconds)))
+        # Storage stays in integer seconds. Preserve the fraction across
+        # continuous foreground changes and passive samples, not across gaps.
+        self._sample_second_remainder = precise_seconds - credited_seconds
+        return credited_seconds
 
     def clear_observations(self) -> None:
         self.points.clear()

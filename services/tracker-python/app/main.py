@@ -2366,7 +2366,11 @@ def _daemon_tick(
         # A long interruption is unobserved time, not activity in the first
         # foreground app seen after resume. Start a fresh sample and segment.
         last_capture_tick = None
-    sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
+    sample_seconds = (
+        timeline.credit_sample_seconds(last_capture_tick, capture_tick, SAMPLE_SECONDS)
+        if timeline is not None
+        else sample_seconds_since_previous(last_capture_tick, capture_tick)
+    )
     capture_options = ({"unmergeable_segment_uids": frozenset(timeline.pending_input_trims)}
                        if pending_cleanup_failed and timeline is not None else {})
     if engagement.is_passive:

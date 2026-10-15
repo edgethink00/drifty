@@ -2384,6 +2384,67 @@ class TrackerMainTests(unittest.TestCase):
     def test_sample_seconds_since_previous_keeps_minimum_interval(self) -> None:
         self.assertEqual(tracker_main.sample_seconds_since_previous(10.0, 12.0, default_seconds=5), 5)
 
+    def test_daemon_fractional_capture_intervals_do_not_drift_in_stored_duration(self) -> None:
+        for platform in ("darwin", "win32"):
+            for passive in (False, True):
+                for interval in (16 / 3, 17 / 3):
+                    with self.subTest(platform=platform, passive=passive, interval=interval):
+                        offsets = [i * interval for i in range(301)]
+                        rows = self._stored_fractional_capture_sequence(platform, passive, offsets)
+                        self.assertEqual(len(rows), 2, "the foreground changes halfway through")
+                        self.assertEqual(
+                            sum(row["duration_seconds"] for row in rows),
+                            5 + round(offsets[-1]),
+                            "continuous elapsed time must not be rounded away at every tick",
+                        )
+                        self.assertTrue(all(isinstance(row["duration_seconds"], int) for row in rows))
+
+    def test_daemon_fractional_credit_resets_after_unavailable_foreground(self) -> None:
+        for platform in ("darwin", "win32"):
+            with self.subTest(platform=platform):
+                rows = self._stored_fractional_capture_sequence(
+                    platform, False, [0.0, 5.4, 10.8, 100.0, 105.4], unavailable_at=2,
+                )
+                self.assertEqual(sum(row["duration_seconds"] for row in rows), 20)
+
+    def test_daemon_fractional_credit_resets_after_windows_sampling_gap(self) -> None:
+        rows = self._stored_fractional_capture_sequence("win32", False, [0.0, 5.4, 15.5, 20.9])
+        self.assertEqual(sum(row["duration_seconds"] for row in rows), 20)
+
+    def _stored_fractional_capture_sequence(
+        self, platform: str, passive: bool, offsets: list[float], *, unavailable_at=None,
+    ):
+        started = datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc)
+        with temp_dir_closing_databases() as tmp:
+            database = TrackerDatabase(Path(tmp) / "tracker.sqlite3", perform_maintenance=False)
+            with patch.object(tracker_main.sys, "platform", platform), patch.object(
+                tracker_main, "current_power_state", return_value=PowerStateSample(started, True, "owned fixture"),
+            ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+                tracker_main, "engagement_decision_for_tick",
+                return_value=SimpleNamespace(should_capture=True, is_passive=passive),
+            ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+                tracker_main, "current_snapshot",
+            ) as foreground, patch.object(tracker_main.time, "monotonic") as clock, patch.object(
+                tracker_main, "enqueue_youtube_metadata_fetch",
+            ), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
+                tracker_main, "SAMPLE_SECONDS", 5,
+            ):
+                previous = None
+                for i, offset in enumerate(offsets):
+                    clock.return_value = 100.0 + offset
+                    missing = i == unavailable_at
+                    foreground.return_value = Snapshot(
+                        observed_at=(started + timedelta(seconds=offset)).isoformat(),
+                        app_name="Unavailable" if missing else "Synthetic timing app",
+                        bundle_id=None if missing else "synthetic.timing.app",
+                        window_title=None if missing else ("Before" if i < 150 else "After"),
+                        source="unknown", frontmost_capture_source="unavailable" if missing else "win32-foreground",
+                    )
+                    previous = tracker_main._daemon_tick(database, previous)
+                return database.connect().execute(
+                    "SELECT duration_seconds FROM activity_segments ORDER BY id"
+                ).fetchall()
+
     def test_audio_grace_is_bounded_and_rejects_future_or_invalid_timestamps(self) -> None:
         now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
         offset_timestamp = (now - timedelta(seconds=10)).astimezone(

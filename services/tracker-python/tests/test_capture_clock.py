@@ -200,6 +200,36 @@ class CaptureClockTests(unittest.TestCase):
         self.assertEqual(row["duration_seconds"], 15)
         self.assertEqual(row["ended_at"], (self.anchor + timedelta(seconds=14.8)).isoformat())
 
+    def test_long_fractional_capture_still_trims_to_the_last_real_input(self):
+        for i in range(301):
+            self.capture(i * (16 / 3), idle=0)
+        for elapsed in range(1605, 1780, 5):
+            self.capture(elapsed, idle=elapsed - 1600)
+        self.capture(1780, idle=180)
+        row = self.rows()[0]
+        self.assertEqual(row["duration_seconds"], 1600)
+        self.assertEqual(row["ended_at"], (self.anchor + timedelta(seconds=1600)).isoformat())
+
+    def test_fractional_credit_does_not_cross_a_power_suppressed_capture(self):
+        self.capture(0, idle=0)
+        self.capture(5.4, idle=0)
+        self.power = False
+        self.assertIsNone(self.capture(10.8, idle=0))
+        self.power = True
+        self.capture(100, idle=0)
+        self.capture(105.4, idle=0)
+        self.assertEqual(sum(row["duration_seconds"] for row in self.rows()), 20)
+
+    def test_fractional_credit_does_not_cross_an_idle_stop(self):
+        self.capture(0, idle=0)
+        self.capture(5.4, idle=0)
+        self.assertIsNone(self.capture(185.4, idle=180))
+        self.context = "Owned resumed context"
+        self.capture(200, idle=0)
+        self.capture(205.4, idle=0)
+        rows = self.rows()
+        self.assertEqual(rows[-1]["duration_seconds"], 10)
+
     def test_daemon_start_resets_the_cached_database_generation(self):
         self.active_prefix()
         old_timeline = self.db.capture_timeline
