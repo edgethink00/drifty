@@ -84,6 +84,64 @@ class RuleMatchingBatchTests(unittest.TestCase):
             "SELECT * FROM activity_classifications")], before)
         self.assertFalse(self.db.connect().in_transaction)
 
+    def test_snapshot_deletion_keeps_survivors_and_concurrent_manual_corrections(self) -> None:
+        self.rule()
+        deleted, manual, survivor = [self.segment(site_domain="example.org") for _ in range(3)]
+        other = TrackerDatabase(self.db.db_path, perform_maintenance=False)
+        self.addCleanup(other.close)
+        original = self.db._matching_rule
+
+        def interleave(segment, rules):
+            if int(segment["id"]) == deleted:
+                other.delete_activity_segments([str(deleted)], refresh_recovery_backup=False)
+                other.save_classifications([{
+                    "segmentId": manual, "category": "entertainment",
+                    "productivity": "drift", "source": "manual",
+                }])
+            return original(segment, rules)
+
+        with patch.object(self.db, "_matching_rule", side_effect=interleave):
+            self.assertEqual(self.db.apply_classification_rules(),
+                             {"matchedCount": 3, "appliedCount": 1, "skippedCount": 2})
+        saved = {row["segment_id"]: (row["category"], row["source"])
+                 for row in self.db.connect().execute("SELECT * FROM activity_classifications")}
+        self.assertEqual(saved, {manual: ("entertainment", "manual"), survivor: ("workspace", "rule")})
+        self.assertIsNone(self.db.connect().execute(
+            "SELECT 1 FROM activity_segments WHERE id = ?", (deleted,)).fetchone())
+        self.assertFalse(self.db.connect().in_transaction)
+
+    def assert_invalidated_snapshot_rule_is_skipped(self, *, delete: bool) -> None:
+        stale_rule = self.rule()
+        live_rule = self.rule(targetValue="survivor.invalid")
+        stale = self.segment(site_domain="example.org")
+        survivor = self.segment(site_domain="survivor.invalid")
+        other = TrackerDatabase(self.db.db_path, perform_maintenance=False)
+        self.addCleanup(other.close)
+        original = self.db._matching_rule
+
+        def interleave(segment, rules):
+            if int(segment["id"]) == stale:
+                if delete:
+                    other.delete_classification_rule(stale_rule["id"])
+                else:
+                    other.save_classification_rule({**stale_rule, "enabled": False})
+            return original(segment, rules)
+
+        with patch.object(self.db, "_matching_rule", side_effect=interleave):
+            self.assertEqual(self.db.apply_classification_rules(),
+                             {"matchedCount": 2, "appliedCount": 1, "skippedCount": 1})
+        self.assertEqual(dict(self.db.connect().execute(
+            "SELECT segment_id, classification_rule_id FROM activity_classifications")),
+            {survivor: live_rule["id"]})
+        self.assertEqual(self.db.connect().execute("SELECT count(*) FROM activity_segments").fetchone()[0], 2)
+        self.assertFalse(self.db.connect().in_transaction)
+
+    def test_deleted_snapshot_rule_does_not_abort_other_classifications(self) -> None:
+        self.assert_invalidated_snapshot_rule_is_skipped(delete=True)
+
+    def test_disabled_snapshot_rule_cannot_be_reapplied(self) -> None:
+        self.assert_invalidated_snapshot_rule_is_skipped(delete=False)
+
     def test_repeated_surfaces_avoid_full_rule_scans_without_reusing_details(self) -> None:
         surface = self.rule()
         detail = self.rule(matchScope="detail", detailKind="windowTitle", detailValue="Plan")

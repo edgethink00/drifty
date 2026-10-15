@@ -3075,6 +3075,9 @@ class TrackerDatabase:
                     continue
                 matched_count += 1
                 segment_id = int(segment["id"])
+                # The snapshot predates this write transaction. A concurrent
+                # trim/history deletion or rule removal/disable can commit
+                # before the first INSERT; skip that stale result atomically.
                 cursor = conn.execute(
                     """
                     INSERT INTO activity_classifications (
@@ -3095,7 +3098,10 @@ class TrackerDatabase:
                         ai_result,
                         stale,
                         classification_rule_id
-                    ) VALUES (?, ?, ?, ?, 'rule', ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?, 0, 0, ?)
+                    )
+                    SELECT ?, ?, ?, ?, 'rule', ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?, 0, 0, ?
+                    WHERE EXISTS (SELECT 1 FROM activity_segments WHERE id = ?)
+                      AND EXISTS (SELECT 1 FROM classification_rules WHERE id = ? AND enabled = 1)
                     ON CONFLICT(segment_id) DO UPDATE SET
                         input_fingerprint = excluded.input_fingerprint,
                         category = excluded.category,
@@ -3124,6 +3130,8 @@ class TrackerDatabase:
                         self._rule_reason(rule),
                         timestamp,
                         timestamp,
+                        rule["id"],
+                        segment_id,
                         rule["id"],
                     ),
                 )
