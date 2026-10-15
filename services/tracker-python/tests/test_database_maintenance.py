@@ -65,6 +65,72 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         self.assertEqual(marker.read_bytes(), b"synthetic directory contents")
         self.assertFalse(database_quarantine_dir(self.db_path).exists())
 
+    def _seed_corrupt_database_with_rollback_journal(self) -> bytes:
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute("CREATE TABLE preserved (value TEXT)")
+            connection.execute("INSERT INTO preserved VALUES ('rollback-original')")
+            connection.commit()
+            self.assertIsNotNone(create_rotating_backup(connection, self.db_path, interval_seconds=0))
+        # An interrupted, uncommitted transaction leaves real rollback pages.
+        # The source is then independently corrupted; recovery must preserve
+        # the journal together with that source before opening its replacement.
+        script = textwrap.dedent("""
+            import os, sqlite3, sys
+            connection = sqlite3.connect(sys.argv[1])
+            connection.execute('BEGIN IMMEDIATE')
+            connection.execute("UPDATE preserved SET value = 'uncommitted'")
+            os._exit(0)
+        """)
+        child = subprocess.run(
+            [sys.executable, "-c", script, str(self.db_path)],
+            capture_output=True, text=True, timeout=15,
+        )
+        self.assertEqual(child.returncode, 0, child.stderr)
+        original = Path(f"{self.db_path}-journal").read_bytes()
+        self.assertIn(b"rollback-original", original)
+        self.db_path.write_bytes(b"synthetic confirmed corruption")
+        return original
+
+    def _assert_rollback_journal_recovery(self, original: bytes) -> None:
+        recovered = TrackerDatabase(self.db_path)
+        self.addCleanup(recovered.close)
+        quarantine = recovered.maintenance_result.quarantined_path
+        self.assertIsNotNone(quarantine)
+        self.assertEqual(quarantine.read_bytes(), b"synthetic confirmed corruption")
+        quarantined_journal = Path(f"{quarantine}-journal")
+        self.assertTrue(quarantined_journal.is_file())
+        self.assertEqual(quarantined_journal.read_bytes(), original)
+        self.assertIsNotNone(recovered.maintenance_result.restored_backup_path)
+        with recovered.connect() as connection:
+            self.assertEqual(connection.execute("SELECT value FROM preserved").fetchone()[0], "rollback-original")
+
+    def test_recovery_preserves_real_rollback_journal_before_replacement_opens(self) -> None:
+        original = self._seed_corrupt_database_with_rollback_journal()
+        self._assert_rollback_journal_recovery(original)
+
+    def test_interrupted_rollback_journal_move_blocks_replacement_until_retry(self) -> None:
+        original = self._seed_corrupt_database_with_rollback_journal()
+        journal = Path(f"{self.db_path}-journal")
+        replace = os.replace
+
+        def fail_journal_move(source, destination):
+            if Path(source) == journal:
+                raise PermissionError("journal sharing denial")
+            return replace(source, destination)
+
+        with patch(
+            "app.storage.database_maintenance.os.replace", side_effect=fail_journal_move
+        ), self.assertRaisesRegex(PermissionError, "journal sharing denial"):
+            unexpected = TrackerDatabase(self.db_path)
+            unexpected.close()
+
+        self.assertFalse(self.db_path.exists())
+        self.assertEqual(journal.read_bytes(), original)
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "recovery is pending"):
+            TrackerDatabase(self.db_path, perform_maintenance=False)
+        self.assertFalse(self.db_path.exists())
+        self._assert_rollback_journal_recovery(original)
+
     def test_startup_preserves_a_checkpointed_wal_database_without_sidecars(self) -> None:
         with closing(sqlite3.connect(self.db_path)) as connection:
             connection.execute("PRAGMA journal_mode=WAL").fetchall()

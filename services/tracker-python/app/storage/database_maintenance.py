@@ -537,8 +537,9 @@ def _quarantine_database_files(db_path: Path, quarantined_db: Path) -> None:
     if db_path.exists():
         os.replace(db_path, quarantined_db)
     # A previous process may have moved the source, then failed on a sidecar.
-    # Finish these moves before a restored database can open at the live path.
-    for suffix in ("-wal", "-shm"):
+    # Finish these moves before a replacement can open and consume/delete an
+    # original rollback journal or reuse the original WAL/SHM files.
+    for suffix in ("-wal", "-shm", "-journal"):
         source = Path(f"{db_path}{suffix}")
         if source.exists():
             os.replace(source, Path(f"{quarantined_db}{suffix}"))
