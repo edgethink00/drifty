@@ -1963,6 +1963,19 @@ fn packaged_sidecar_candidates(resource_dir: &Path) -> Vec<PathBuf> {
         }
     }
 
+    // Current Windows installs use this canonical onedir bundle. A legacy
+    // flat executable (or target-suffixed build artifact) can remain beside
+    // it after an update; never let that compatibility fallback shadow the
+    // tracker shipped with the current app. macOS's Contents/MacOS sidecar
+    // above keeps priority over all resource and executable-adjacent paths.
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+    let onedir_exe = format!("drifty-tracker{}", std::env::consts::EXE_SUFFIX);
+    for root in std::iter::once(resource_dir).chain(exe_dir.as_deref()) {
+        candidates.push(root.join("drifty-tracker").join(&onedir_exe));
+    }
+
     // Windows executables carry an extension, and Tauri names the bundled
     // sidecar `drifty-tracker.exe`. Without the suffixed candidates the
     // lookup misses a sidecar sitting right next to the app.
@@ -1981,16 +1994,14 @@ fn packaged_sidecar_candidates(resource_dir: &Path) -> Vec<PathBuf> {
 
     // A Windows install keeps the sidecar beside the executable rather than
     // under a resource directory.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            for name in sidecar_file_names() {
-                candidates.push(exe_dir.join(&name));
-                candidates.push(exe_dir.join("binaries").join(&name));
-            }
-            for rel in sidecar_bundle_paths() {
-                candidates.push(exe_dir.join(&rel));
-                candidates.push(exe_dir.join("binaries").join(&rel));
-            }
+    if let Some(exe_dir) = exe_dir {
+        for name in sidecar_file_names() {
+            candidates.push(exe_dir.join(&name));
+            candidates.push(exe_dir.join("binaries").join(&name));
+        }
+        for rel in sidecar_bundle_paths() {
+            candidates.push(exe_dir.join(&rel));
+            candidates.push(exe_dir.join("binaries").join(&rel));
         }
     }
 
@@ -2793,6 +2804,40 @@ mod tests {
         let _ = std::fs::remove_dir_all(resource_dir);
     }
 
+    #[test]
+    fn packaged_sidecar_prefers_current_onedir_over_legacy_flat_executables() {
+        let resource_dir = temp_dir_path("packaged-current-onedir-priority");
+        let sidecar = resource_dir
+            .join("drifty-tracker")
+            .join(format!("drifty-tracker{}", std::env::consts::EXE_SUFFIX));
+        std::fs::create_dir_all(sidecar.parent().expect("onedir parent"))
+            .expect("create current onedir");
+        std::fs::write(&sidecar, b"current bundled tracker").expect("write current tracker");
+        let legacy_dir = resource_dir.join("binaries");
+        std::fs::create_dir_all(&legacy_dir).expect("create legacy directory");
+        for name in sidecar_file_names() {
+            std::fs::write(legacy_dir.join(&name), b"legacy tracker")
+                .expect("write legacy tracker");
+            // Windows' flat .exe and the current directory can coexist at
+            // the install root. Unix's extensionless name is the directory.
+            if !std::env::consts::EXE_SUFFIX.is_empty() {
+                std::fs::write(resource_dir.join(name), b"legacy root tracker")
+                    .expect("write legacy root tracker");
+            }
+        }
+
+        let runtime = resolve_tracker_runtime_from_paths_with_python_resolver(
+            Some(&resource_dir),
+            resource_dir.as_path(),
+            || panic!("packaged runtime must not resolve Python"),
+        )
+        .expect("current packaged runtime");
+
+        assert_eq!(runtime.executable_path, sidecar);
+        assert_eq!(runtime.kind, TrackerRuntimeKind::PackagedSidecar);
+        let _ = std::fs::remove_dir_all(resource_dir);
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn packaged_app_resources_selects_macos_sidecar() {
@@ -2806,6 +2851,10 @@ mod tests {
             .expect("create macos dir");
         std::fs::create_dir_all(&resource_dir).expect("create resource dir");
         std::fs::write(&sidecar, b"fake sidecar").expect("write sidecar");
+        let alternate = resource_dir.join("drifty-tracker").join("drifty-tracker");
+        std::fs::create_dir_all(alternate.parent().expect("alternate parent"))
+            .expect("create alternate onedir");
+        std::fs::write(alternate, b"alternate tracker").expect("write alternate tracker");
 
         let runtime = resolve_tracker_runtime_from_paths_with_python_resolver(
             Some(&resource_dir),
