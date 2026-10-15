@@ -145,9 +145,42 @@ def quick_check_database(path: Path, *, immutable: bool = False) -> bool:
     ever lead the caller to quarantine a user's source-of-truth database.
     """
 
+    try:
+        return _quick_check_database(path, immutable=immutable, mode="ro")
+    except sqlite3.OperationalError as error:
+        if (
+            not immutable
+            and str(error) == "unable to open database file"
+            and _wal_sidecars_can_be_initialized(path)
+        ):
+            # Some system SQLite builds need writable startup to recreate a
+            # closed WAL's disposable files. Never use immutable on a live DB:
+            # it would ignore committed WAL pages. `rw` cannot create a DB.
+            return _quick_check_database(path, immutable=False, mode="rw")
+        raise
+
+
+def _wal_sidecars_can_be_initialized(path: Path) -> bool:
+    # Preserve existing WAL/SHM bytes, including corrupt recovery evidence.
+    # Access/I/O errors must propagate instead of looking like missing files.
+    for suffix in ("-wal", "-shm"):
+        try:
+            Path(f"{path}{suffix}").stat()
+        except FileNotFoundError:
+            continue
+        return False
+    try:
+        with path.open("rb") as source:
+            header = source.read(20)
+    except FileNotFoundError:
+        return False
+    return header[:16] == b"SQLite format 3\x00" and header[18:20] == b"\x02\x02"
+
+
+def _quick_check_database(path: Path, *, immutable: bool, mode: str) -> bool:
     if not _is_regular_file(path):
         return False
-    uri = f"{path.resolve().as_uri()}?mode=ro"
+    uri = f"{path.resolve().as_uri()}?mode={mode}"
     if immutable:
         # SQLite backup snapshots are closed, self-contained files. A snapshot
         # can retain WAL journal mode in its header while having no WAL/SHM

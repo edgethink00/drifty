@@ -53,6 +53,59 @@ class DatabaseMaintenanceTests(unittest.TestCase):
                 self.assertFalse(quick_check_database(self.db_path, immutable=immutable))
         self.assertEqual(self.db_path.read_bytes(), b"")
 
+    def test_startup_preserves_a_checkpointed_wal_database_without_sidecars(self) -> None:
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute("PRAGMA journal_mode=WAL").fetchall()
+            connection.execute("CREATE TABLE preserved (value TEXT)")
+            connection.execute("INSERT INTO preserved VALUES ('keep-me')")
+            connection.commit()
+            self.assertEqual(connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone(), (0, 0, 0))
+        # Apple's SQLite can leave an empty WAL/index after closing. Model a
+        # closed, fully checkpointed source whose disposable sidecars are gone.
+        wal = Path(f"{self.db_path}-wal")
+        if wal.exists():
+            self.assertEqual(wal.stat().st_size, 0)
+        wal.unlink(missing_ok=True)
+        Path(f"{self.db_path}-shm").unlink(missing_ok=True)
+        original = self.db_path.read_bytes()
+
+        result = prepare_database(self.db_path)
+
+        self.assertTrue(result.existed)
+        self.assertIsNone(result.quarantined_path)
+        self.assertIsNone(result.restored_backup_path)
+        self.assertEqual(self.db_path.read_bytes(), original)
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertEqual(connection.execute("SELECT value FROM preserved").fetchall(), [("keep-me",)])
+        self.assertFalse(database_quarantine_dir(self.db_path).exists())
+
+    def test_startup_checks_include_committed_pages_still_in_live_wal(self) -> None:
+        with closing(sqlite3.connect(self.db_path)) as writer:
+            writer.execute("PRAGMA journal_mode=WAL").fetchall()
+            writer.execute("PRAGMA wal_autocheckpoint=0")
+            writer.execute("CREATE TABLE preserved (value TEXT)")
+            writer.execute("INSERT INTO preserved VALUES ('in-the-wal')")
+            writer.commit()
+            self.assertGreater(Path(f"{self.db_path}-wal").stat().st_size, 0)
+            result = prepare_database(self.db_path)
+            self.assertTrue(result.existed)
+            self.assertIsNone(result.quarantined_path)
+            with closing(sqlite3.connect(self.db_path)) as reader:
+                self.assertEqual(reader.execute("SELECT value FROM preserved").fetchall(), [("in-the-wal",)])
+
+    def test_check_does_not_recreate_a_source_removed_after_file_inspection(self) -> None:
+        self.db_path.write_bytes(b"fixture checked before replacement")
+        connect = sqlite3.connect
+
+        def remove_before_open(*args, **kwargs):
+            self.db_path.unlink()
+            return connect(*args, **kwargs)
+
+        with patch("app.storage.database_maintenance.sqlite3.connect", side_effect=remove_before_open):
+            with self.assertRaises(sqlite3.OperationalError):
+                quick_check_database(self.db_path)
+        self.assertFalse(self.db_path.exists())
+
     def test_permanent_delete_removes_backup_interrupted_by_worker_shutdown(self) -> None:
         database = TrackerDatabase(self.db_path, perform_maintenance=False)
         self.addCleanup(database.close)
