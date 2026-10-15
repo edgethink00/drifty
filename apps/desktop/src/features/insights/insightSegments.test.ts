@@ -25,6 +25,18 @@ function segmentBetween(id: string, startedAt: string, endedAt: string): Activit
 }
 
 describe("selectInsightSegments", () => {
+  it("keeps the final second of the display window separate from the query's inclusive end", () => {
+    const crossing = segmentBetween("crossing", "2026-07-03T03:59:00", "2026-07-03T04:01:00");
+    const original = JSON.stringify(crossing);
+    const selected = selectInsightSegments({
+      historySegments: [crossing], selectedDaySegments: [],
+      range: { start: "2026-06-26T04:00:00", end: "2026-07-03T03:59:59" },
+      endExclusiveMs: Date.parse("2026-07-03T04:00:00"),
+    });
+    expect(selected[0].durationSeconds).toBe(60);
+    expect(JSON.stringify(crossing)).toBe(original);
+  });
+
   it("includes selected-day segments when the history window is missing the selected day", () => {
     const historySegments = [
       segmentBetween("history-monday", "2026-06-29T10:00:00.000", "2026-06-29T11:00:00.000"),

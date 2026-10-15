@@ -109,11 +109,28 @@ export function activitySecondsWithinInterval(segment: ActivitySegment, start: n
   return Number.isFinite(overlap) ? Math.max(0, Math.round(overlap / 1000)) : 0;
 }
 
-/** Clip a derived summary to a logical window, or to a virtual project slice.
- * Raw single-device records retain their existing duration semantics. */
+/** Clip display time to a logical window, or to a virtual project slice.
+ * Keep whole-window single-device sampling totals and the captured evidence.
+ * A record crossing a window boundary contributes only its recorded share. */
 export function clipDeviceElapsedTimeSegment(segment: ActivitySegment, window?: { start: number; end: number }): ActivitySegment {
   const projection = (segment as ProjectedSegment)[elapsedProjection];
-  if (!projection) return segment;
+  if (!projection) {
+    if (!window) return segment;
+    const bounds = sampledActivityTimeBounds(segment);
+    // Invalid/nonpositive records retain their existing filtering semantics.
+    if (!Number.isFinite(bounds.start) || !(bounds.end > bounds.start)
+      || !Number.isFinite(window.start) || !Number.isFinite(window.end)) return segment;
+    if (window.start <= bounds.start && window.end >= bounds.end) return segment;
+    const start = Math.max(window.start, bounds.start);
+    const end = Math.max(start, Math.min(window.end, bounds.end));
+    const capturedDensity = segment.durationSeconds * 1000 / (bounds.end - bounds.start);
+    const intervals = end > start ? [{ start, end, rate: capturedDensity }] : [];
+    return preserveCapturedActivityDuration(segment, {
+      ...segment,
+      durationSeconds: (end - start) / 1000 * capturedDensity,
+      [elapsedProjection]: { start, end, intervals, capturedDensity },
+    } as ProjectedSegment);
+  }
   const start = window?.start ?? Date.parse(segment.startedAt);
   const end = window?.end ?? (segment.startedAt === segment.endedAt ? projection.end : Date.parse(segment.endedAt));
   const intervals = projection.intervals.flatMap(interval => {

@@ -7187,8 +7187,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const effectiveDashboardSegments = useMemo(
     () => aggregateDeviceElapsedTime(filterSegmentsByDevice(unfilteredEffectiveDashboardSegments, deviceTimelineFilter)
       .filter((segment) => !isFailedForegroundCaptureSegment(segment)))
-      .map(segment => clipDeviceElapsedTimeSegment(segment, { start: Date.parse(effectiveDashboardRange.start), end: Date.parse(effectiveDashboardRange.end) })),
-    [deviceTimelineFilter, effectiveDashboardRange.end, effectiveDashboardRange.start, unfilteredEffectiveDashboardSegments],
+      .map(segment => clipDeviceElapsedTimeSegment(segment, { start: Date.parse(effectiveDashboardRange.start), end: logicalDayEndExclusiveMs(effectiveDashboardRange.endDay, startOfDayMinutes) })),
+    [deviceTimelineFilter, effectiveDashboardRange.endDay, effectiveDashboardRange.start, startOfDayMinutes, unfilteredEffectiveDashboardSegments],
   );
   const handleStartDashboardDemoReplay = useCallback((replayKind: DemoDashboardReplayKind) => {
     switch (replayKind) {
@@ -7338,9 +7338,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         supplementalSegments,
         selectedDaySegments: segments,
         range: { start: insightRange.start, end: insightRange.end },
+        endExclusiveMs: logicalDayEndExclusiveMs(insightRange.endDay, startOfDayMinutes),
       });
     },
-    [cachedInsightWeekHistory, historySegments, insightRange, isTrendsDataReady, segments, shouldBuildInsightModels, trendsRange],
+    [cachedInsightWeekHistory, historySegments, insightRange, isTrendsDataReady, segments, shouldBuildInsightModels, startOfDayMinutes, trendsRange],
   );
   const isTrendsBodyReady = activeTab === "trends" && isDeferredTabBodyReady && isTrendsDataReady;
   const activeInsightSegments = isTrendsBodyReady ? insightSegments : EMPTY_ACTIVITY_SEGMENTS;
@@ -8053,9 +8054,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       : shouldBuildClassificationModels ? segments : EMPTY_ACTIVITY_SEGMENTS
   ).filter((segment) => !isFailedForegroundCaptureSegment(segment)))
     .map(segment => clipDeviceElapsedTimeSegment(segment, classificationRange === "Week"
-      ? { start: Date.parse(classificationWeekRange.start), end: Date.parse(classificationWeekRange.end) }
+      ? { start: Date.parse(classificationWeekRange.start), end: logicalDayEndExclusiveMs(classificationWeekRange.endDay, startOfDayMinutes) }
       : { start: logicalDayStartMs(selectedDay, startOfDayMinutes), end: logicalDayEndExclusiveMs(selectedDay, startOfDayMinutes) })),
-  [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments, selectedDay, startOfDayMinutes, shouldBuildClassificationModels]);
+  [classificationRange, classificationWeekRange.end, classificationWeekRange.endDay, classificationWeekRange.start, historySegments, segments, selectedDay, startOfDayMinutes, shouldBuildClassificationModels]);
   const classificationRuleSegments = useMemo(() => {
     if (classificationSegments.length === 0) return recordedDaySegments;
     if (recordedDaySegments.length === 0) return classificationSegments;

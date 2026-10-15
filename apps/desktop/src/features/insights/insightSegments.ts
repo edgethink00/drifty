@@ -12,6 +12,8 @@ type InsightSegmentSelectionInput = {
   readonly supplementalSegments?: ActivitySegment[];
   readonly selectedDaySegments: ActivitySegment[];
   readonly range: InsightSegmentRange;
+  // Query ranges end at HH:mm:59; display intervals include that final second.
+  readonly endExclusiveMs?: number;
 };
 
 export function selectInsightSegments(input: InsightSegmentSelectionInput): ActivitySegment[] {
@@ -22,5 +24,5 @@ export function selectInsightSegments(input: InsightSegmentSelectionInput): Acti
   // failed Windows foreground captures have to be dropped here as well.
   return aggregateDeviceElapsedTime(mergeActivitySegments(mergeActivitySegments(historySegments, supplementalSegments), selectedDaySegments)
     .filter((segment) => !isFailedForegroundCaptureSegment(segment)))
-    .map(segment => clipDeviceElapsedTimeSegment(segment, { start: Date.parse(input.range.start), end: Date.parse(input.range.end) }));
+    .map(segment => clipDeviceElapsedTimeSegment(segment, { start: Date.parse(input.range.start), end: input.endExclusiveMs ?? Date.parse(input.range.end) }));
 }

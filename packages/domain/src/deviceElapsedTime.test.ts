@@ -4,6 +4,7 @@ import { filterSegmentsByDevice } from "./activity";
 import { aggregateDeviceElapsedTime, activitySecondsWithinInterval, clipDeviceElapsedTimeSegment } from "./deviceElapsedTime";
 import { buildAppUsageSummaries, buildCategoryDurations, buildDailyTotals, buildFlowBlocks, buildFlowBlocksForIntervals, buildProductivityDurations, buildRollingFocusSeconds, logicalDayStartMs, totalDurationSeconds } from "./aggregation";
 import { buildPersonalProjectSliceProjection } from "./projectWindowAssignments";
+import { capturedActivityDurationSeconds } from "./capturedActivityDuration";
 
 function segment(id: string, startMinute: number, durationMinutes: number, deviceId?: string, productivity: "focus" | "drift" = "focus"): ActivitySegment {
   const start = new Date("2026-10-04T09:00:00").getTime() + startMinute * 60_000;
@@ -12,6 +13,51 @@ function segment(id: string, startMinute: number, durationMinutes: number, devic
     classification: { category: productivity === "focus" ? "workspace" : "entertainment", productivity, source: "manual", confidence: 1 } };
 }
 const sum = (values: readonly { durationSeconds: number }[]) => values.reduce((total, value) => total + value.durationSeconds, 0);
+
+describe("single-device logical-window display totals", () => {
+  const boundary = Date.parse("2026-10-14T04:00:00Z");
+  const day = 86_400_000;
+
+  it.each(["macos", "windows"] as const)("splits the captured %s crossing without changing stored evidence", platform => {
+    const record = { ...segment("crossing", 0, 1), platform,
+      startedAt: "2026-10-14T03:55:28.189788Z", endedAt: "2026-10-14T04:04:03.314428Z", durationSeconds: 515 };
+    const original = JSON.stringify(record);
+    const previous = clipDeviceElapsedTimeSegment(record, { start: boundary - day, end: boundary });
+    const current = clipDeviceElapsedTimeSegment(record, { start: boundary, end: boundary + day });
+    // JavaScript Date parses these captured timestamps at millisecond precision.
+    expect(current.durationSeconds).toBeCloseTo(515 * 243.314 / 515.125, 6);
+    expect(previous.durationSeconds + current.durationSeconds).toBeCloseTo(515, 10);
+    expect(totalDurationSeconds([current])).toBeCloseTo(current.durationSeconds, 10);
+    expect(buildAppUsageSummaries([current])[0].totalSeconds).toBeCloseTo(current.durationSeconds, 10);
+    expect(buildCategoryDurations([current])[0].totalSeconds).toBeCloseTo(current.durationSeconds, 10);
+    expect(capturedActivityDurationSeconds(current)).toBe(515);
+    expect(current).toMatchObject({ id: record.id, startedAt: record.startedAt, endedAt: record.endedAt, classification: record.classification });
+    expect(JSON.stringify(record)).toBe(original);
+    expect(clipDeviceElapsedTimeSegment(current, { start: boundary, end: boundary + day }).durationSeconds).toBeCloseTo(current.durationSeconds, 10);
+  });
+
+  it("allocates sparse samples without filling their observed gaps", () => {
+    const record = { ...segment("sparse", 0, 1), startedAt: "2026-10-14T03:50:00Z", endedAt: "2026-10-14T04:10:00Z", durationSeconds: 60 };
+    const previous = clipDeviceElapsedTimeSegment(record, { start: boundary - day, end: boundary });
+    const current = clipDeviceElapsedTimeSegment(record, { start: boundary, end: boundary + day });
+    expect([previous.durationSeconds, current.durationSeconds]).toEqual([30, 30]);
+    expect(activitySecondsWithinInterval(current, boundary, boundary + 600_000)).toBe(30);
+  });
+
+  it("preserves and splits a positive first point sample across the boundary", () => {
+    const record = { ...segment("point", 0, 1), startedAt: "2026-10-14T03:59:58Z", endedAt: "2026-10-14T03:59:58Z", durationSeconds: 5 };
+    expect(clipDeviceElapsedTimeSegment(record, { start: boundary - day, end: boundary }).durationSeconds).toBe(2);
+    expect(clipDeviceElapsedTimeSegment(record, { start: boundary, end: boundary + day }).durationSeconds).toBe(3);
+    expect(record.durationSeconds).toBe(5);
+  });
+
+  it("keeps whole-window and unbounded original records intact, and clips outside records to zero", () => {
+    const record = { ...segment("whole", 0, 1), startedAt: "2026-10-14T04:01:00Z", endedAt: "2026-10-14T04:02:00Z", durationSeconds: 55 };
+    expect(clipDeviceElapsedTimeSegment(record)).toBe(record);
+    expect(clipDeviceElapsedTimeSegment(record, { start: boundary, end: boundary + day })).toBe(record);
+    expect(clipDeviceElapsedTimeSegment(record, { start: boundary - day, end: boundary }).durationSeconds).toBe(0);
+  });
+});
 
 describe("cross-device elapsed time", () => {
   it.each([[0, 30], [15, 45], [30, 60]])("counts two 30 minute sessions with offset %i as %i elapsed minutes", (offset, expected) => {
