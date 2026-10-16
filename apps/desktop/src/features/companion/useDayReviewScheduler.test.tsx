@@ -61,6 +61,7 @@ function harness(overrides: Partial<UseDayReviewSchedulerOptions> = {}, delivery
       startOfDayMinutes: 4 * 60,
       quietHours: DEFAULT_QUIET_HOURS,
       onboardingCompletedAt: null,
+      readTimelineRevision: () => 0,
       loadDaySegments,
       readUserActive,
       present,
@@ -303,9 +304,10 @@ describe("useDayReviewScheduler", () => {
     await tick();
     expect(inactive.present).not.toHaveBeenCalled();
   });
-  it.each(["review time", "quiet hours", "disabled", "expiry", "unmounted"] as const)("cancels preparation after %s changes without spending a delivery", async (change) => {
+  it.each(["review time", "quiet hours", "disabled", "expiry", "unmounted", "history"] as const)("cancels preparation after %s changes without spending a delivery", async (change) => {
     vi.setSystemTime(new Date(2026, 9, 3, 20, 5));
-    const { options, present } = harness();
+    let timelineRevision = 0;
+    const { options, present } = harness({ readTimelineRevision: () => timelineRevision });
     let commit: (() => boolean) | undefined;
     let complete: ((result: DayReviewDeliveryResult) => void) | undefined;
     present.mockImplementation((request: DayReviewPresentationRequest) => {
@@ -321,6 +323,7 @@ describe("useDayReviewScheduler", () => {
     if (change === "disabled") rerender(<Host options={{ ...options, dayReviewEnabled: false }} />);
     if (change === "expiry") vi.setSystemTime(new Date(2026, 9, 4, 3));
     if (change === "unmounted") unmount();
+    if (change === "history") timelineRevision += 1;
     await act(async () => { expect(commit?.()).toBe(false); complete?.("cancelled"); });
     expect(readDayReviewRecord(DAY)?.presentations ?? 0).toBe(0);
     if (change === "unmounted") return;
@@ -335,6 +338,30 @@ describe("useDayReviewScheduler", () => {
     act(() => recordDayReviewUnseen(DAY));
     await tick();
     expect(readDayReviewRecord(DAY)).toMatchObject({ status: "closed", closedReason: "presentation_limit" });
+  });
+
+  it("discards a stale timeline read and reevaluates the remaining history on the next tick", async () => {
+    vi.setSystemTime(new Date(2026, 9, 3, 20, 5));
+    let timelineRevision = 0;
+    const { options, present, loadDaySegments } = harness({ readTimelineRevision: () => timelineRevision });
+    let finishRead: ((segments: ActivitySegment[]) => void) | undefined;
+    loadDaySegments.mockReturnValueOnce(new Promise<ActivitySegment[]>((resolve) => { finishRead = resolve; }));
+    render(<Host options={options} />);
+    await flush();
+    expect(finishRead).toBeDefined();
+    timelineRevision += 1;
+    loadDaySegments.mockResolvedValue([segment("remaining", 30 * 60)]);
+    await act(async () => { finishRead?.([segment("deleted", 4 * 3600)]); });
+    expect(present).not.toHaveBeenCalled();
+    expect(readDayReviewRecord(DAY)?.presentations ?? 0).toBe(0);
+    await tick();
+    expect(present).not.toHaveBeenCalled();
+    expect(lastDecision()).toMatchObject({ reason: "thin_day", trackedSeconds: 30 * 60 });
+    timelineRevision += 1;
+    loadDaySegments.mockResolvedValue([segment("new", 4 * 3600)]);
+    await tick();
+    expect(present).toHaveBeenCalledOnce();
+    expect(readDayReviewRecord(DAY)).toMatchObject({ presentations: 1 });
   });
 
   it("reserves one attempt for native plus plugin checks and refunds an unsent cancellation", async () => {

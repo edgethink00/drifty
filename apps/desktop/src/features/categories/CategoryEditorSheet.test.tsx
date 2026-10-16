@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Project } from "@drifty/domain";
+import { CUSTOMIZABLE_CATEGORIES, MAX_CATEGORY_COUNT, type Project } from "@drifty/domain";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { CategoryEditorSheet, type CategoryEditorSheetProps } from "./CategoryEditorSheet";
 import { useCategoryCustomizationController } from "../settings/useCategoryCustomizationController";
@@ -712,6 +712,61 @@ describe("CategoryEditorSheet", () => {
     await save();
     expect(props.onSaveDefinitions).not.toHaveBeenCalled();
     expect(props.onClose).toHaveBeenCalled();
+  });
+
+  it("lists a newly persisted category once when the following productivity write fails", async () => {
+    window.localStorage.clear();
+    const close = vi.fn();
+    function ControlledSheet() {
+      const controller = useCategoryCustomizationController();
+      return <CategoryEditorSheet initialTarget={{ group: "category" }} categoryCustomizations={controller.customizations}
+        productivityCustomizations={controller.productivityCustomizations} categoryColorOverrides={{}} appThemeColorOverrides={{}}
+        showProjects={false} projects={[]} onSaveDefinitions={controller.saveDefinitions}
+        onCategoryColorChange={vi.fn()} onCategoryColorReset={vi.fn()} onProductivityColorChange={vi.fn()} onProductivityColorReset={vi.fn()}
+        onSaveProject={async () => true} onDeleteProject={async () => true} onClose={close} />;
+    }
+    render(<LocalizationTestProvider language="ko"><ControlledSheet /></LocalizationTestProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "새 카테고리" }));
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "사이드 프로젝트" } });
+    openCard("집중");
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "집중 업무" } });
+    const original = Storage.prototype.setItem;
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY) throw new DOMException("Synthetic storage full", "QuotaExceededError");
+      original.call(this, key, value);
+    });
+    try {
+      await save();
+      const ids = Object.keys(readCategoryCustomizations()).filter(key => key.startsWith("custom-"));
+      expect(ids).toHaveLength(1);
+      expect(close).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toBeTruthy();
+      fireEvent.click(tab("카테고리"));
+      expect(screen.getAllByRole("button", { name: /^사이드 프로젝트/ }).filter(button => button.classList.contains("category-editor__card-button"))).toHaveLength(1);
+      write.mockRestore();
+      await save();
+      expect(Object.keys(readCategoryCustomizations()).filter(key => key.startsWith("custom-"))).toEqual(ids);
+      expect(readProductivityCustomizations().focus?.name).toBe("집중 업무");
+      expect(close).toHaveBeenCalledOnce();
+    } finally { write.mockRestore(); window.localStorage.clear(); }
+  });
+
+  it("keeps restoration within the twenty-category limit and allows it after making room", () => {
+    const added = Object.fromEntries(Array.from({ length: MAX_CATEGORY_COUNT - CUSTOMIZABLE_CATEGORIES.length + 1 }, (_, index) => [
+      "custom-full" + String(index).padStart(4, "0"),
+      { name: "추가 " + index, color: "#3f7cac", createdAt: new Date(Date.UTC(2026, 9, 16, 0, index)).toISOString() },
+    ]));
+    renderSheet({ initialTarget: { group: "category" }, categoryCustomizations: {
+      ...added, shopping: { deletedAt: "2026-10-15T12:00:00.000Z" },
+    } });
+    const restore = within(screen.getByRole("list", { name: "삭제함" })).getByRole("button", { name: "복원" });
+    expect(restore).toHaveProperty("disabled", true);
+    openCard("학습");
+    fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+    expect(restore).toHaveProperty("disabled", false);
+    fireEvent.click(restore);
+    expect(card("쇼핑")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "새 카테고리" })).toHaveProperty("disabled", true);
   });
 
   it("lists added categories after Drifty's own, edits them in place, and fixes their productivity from a label", async () => {

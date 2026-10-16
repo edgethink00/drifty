@@ -58,6 +58,8 @@ export type UseDayReviewSchedulerOptions = {
   readonly startOfDayMinutes: number;
   readonly quietHours: QuietHoursSettings;
   readonly onboardingCompletedAt: string | null;
+  /** Changes to the underlying history invalidate a review still being prepared. */
+  readonly readTimelineRevision: () => number;
   readonly loadDaySegments: (day: string) => Promise<ActivitySegment[]>;
   readonly readUserActive: () => Promise<boolean>;
   readonly present: (request: DayReviewPresentationRequest) => Promise<DayReviewDeliveryResult>;
@@ -144,6 +146,7 @@ async function evaluateDayReview(
   latestOptions: () => UseDayReviewSchedulerOptions,
 ): Promise<void> {
   const now = (options.now ?? defaultNow)();
+  const timelineRevision = options.readTimelineRevision();
   const day = dayReviewLogicalDay(now, options.startOfDayMinutes);
   const baseInput: Omit<DayReviewDecisionInput, "trackedSeconds" | "userActive"> = {
     nowMs: now.getTime(),
@@ -179,7 +182,7 @@ async function evaluateDayReview(
     }
   }
 
-  await applyDayReviewDecision(decision, { day, now, options, latestOptions, trackedSeconds, segments });
+  await applyDayReviewDecision(decision, { day, now, options, latestOptions, timelineRevision, trackedSeconds, segments });
 }
 
 async function applyDayReviewDecision(
@@ -189,6 +192,7 @@ async function applyDayReviewDecision(
     readonly now: Date;
     readonly options: UseDayReviewSchedulerOptions;
     readonly latestOptions: () => UseDayReviewSchedulerOptions;
+    readonly timelineRevision: number;
     readonly trackedSeconds: number | null;
     readonly segments: ActivitySegment[] | null;
   },
@@ -227,6 +231,7 @@ async function applyDayReviewDecision(
     const latest = context.latestOptions();
     const commitNow = (latest.now ?? defaultNow)();
     if (!latest.active
+      || latest.readTimelineRevision() !== context.timelineRevision
       || latest.startOfDayMinutes !== options.startOfDayMinutes
       || dayReviewLogicalDay(commitNow, latest.startOfDayMinutes) !== day
       || commitNow.getTime() >= expiresAt) return false;

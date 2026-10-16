@@ -294,7 +294,10 @@ export function CategoryEditorSheet({
   // Every category the sheet lists: Drifty's own, the ones the user added
   // (in the order they were made), then the ones added in this sitting.
   const savedAddedCategories = useMemo(() => customCategoryIds(categoryCustomizations), [categoryCustomizations]);
-  const editorCategories: readonly ActivityCategory[] = [...LISTED_CATEGORIES, ...savedAddedCategories, ...addedCategories.map((entry) => entry.id)];
+  // A failed later write can leave a new category both saved and drafted.
+  // Keep its draft for retry while listing that same stable id only once.
+  const editorCategories: readonly ActivityCategory[] = [...LISTED_CATEGORIES, ...savedAddedCategories,
+    ...addedCategories.map((entry) => entry.id).filter((category) => !savedAddedCategories.some((saved) => saved === category))];
   const isAddedCategory = (category: ActivityCategory) => isCustomActivityCategory(category);
   const isNewCategory = (category: ActivityCategory) => addedCategories.some((entry) => entry.id === category);
 
@@ -1372,7 +1375,7 @@ export function CategoryEditorSheet({
                     <div className="category-editor__deleted">
                       <span className="category-editor__swatch" aria-hidden="true" />
                       <span className="category-editor__deleted-name">{definitionName(target)}</span>
-                      <QuietButton icon={<ResetIcon />} label={t("categoryEditor.restoreDeleted")} disabled={locked} onClick={() => setRestoredKeys((previous) => [...previous, definitionKey(target)])} />
+                      <QuietButton icon={<ResetIcon />} label={t("categoryEditor.restoreDeleted")} disabled={locked || liveCategories.length >= MAX_CATEGORY_COUNT} onClick={() => setRestoredKeys((previous) => [...previous, definitionKey(target)])} />
                     </div>
                   </li>
                 );

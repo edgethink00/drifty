@@ -8549,6 +8549,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     startOfDayMinutes,
     quietHours,
     onboardingCompletedAt,
+    readTimelineRevision: () => compactHistoryCacheGenerationRef.current,
     loadDaySegments: loadDayReviewSegments,
     readUserActive: readDayReviewUserActive,
     present: presentScheduledDayReview,
