@@ -6,6 +6,7 @@ import { prepareDeviceSyncAccountScope } from "./deviceSyncAccountScope";
 import { runSyncCycle, SYNC_DEVICE_ID_KEY, SYNC_GENERATION_KEY } from "./deviceSyncEngine";
 import { syncExcludedAppsForAccount } from "../settings/excludedAppsAccountSync";
 import { syncCategoryDefinitionsForAccount } from "../settings/categoryDefinitionsAccountSync";
+import { syncProjectsAndRulesForAccount } from "./projectRuleAccountSync";
 import { buildSyncStateAfterCloudPurge } from "./deviceSyncPurgeState";
 import {
   findDeviceSyncCycleRecord,
@@ -151,6 +152,7 @@ export function useDeviceSyncController({
             isSyncAccountCurrent: isScopeCurrent,
             syncExcludedApps: (scopeAccountId) => syncExcludedAppsForAccount(scopeAccountId, isScopeCurrent),
             syncCategoryDefinitions: (scopeAccountId) => syncCategoryDefinitionsForAccount(scopeAccountId, isScopeCurrent),
+            syncProjectRuleDefinitions: (scopeAccountId) => syncProjectsAndRulesForAccount(scopeAccountId, isScopeCurrent),
           },
           reason,
         );

@@ -444,6 +444,8 @@ export interface ClassificationRule {
   confidence?: number | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  /** The rule's unique app or site key as a hash; device sync keys the account's copy by it. */
+  syncKey?: string | null;
 }
 
 export interface ClassificationRuleInput {
@@ -648,6 +650,8 @@ export interface ProjectInput {
   description: string;
   color?: string;
   status?: ProjectStatus;
+  /** A project another device made keeps its creation time (device sync); ignored for an existing one. */
+  createdAt?: string;
 }
 
 export type ProjectAssignmentSource = "ai" | "manual";

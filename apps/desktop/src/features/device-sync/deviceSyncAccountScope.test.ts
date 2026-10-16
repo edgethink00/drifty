@@ -23,6 +23,7 @@ describe("prepareDeviceSyncAccountScope", () => {
       sync_generation: null,
       sync_last_pushed_at: null,
       sync_last_pulled_at: null,
+      sync_definition_ledger: null,
     });
   });
 

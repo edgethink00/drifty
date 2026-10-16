@@ -8,6 +8,7 @@ import {
   SYNC_LAST_PUSHED_AT_KEY,
   SYNC_PULL_CURSOR_KEY,
 } from "./deviceSyncEngine";
+import { SYNC_DEFINITION_LEDGER_KEY } from "./projectRuleSyncEvent";
 
 type DeviceSyncAccountScopeTracker = Pick<
   TrackerApi,
@@ -50,6 +51,8 @@ export async function prepareDeviceSyncAccountScope(
       [SYNC_GENERATION_KEY]: null,
       [SYNC_LAST_PUSHED_AT_KEY]: null,
       [SYNC_LAST_PULLED_AT_KEY]: null,
+      // Another account starts from this device's projects and rules as they stand.
+      [SYNC_DEFINITION_LEDGER_KEY]: null,
     });
     return true;
   });

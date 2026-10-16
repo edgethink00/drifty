@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeProjectColor } from "../../lib/colorPalette";
 import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
+import { PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, type ProjectRuleDefinitionsSyncedDetail } from "../device-sync/projectRuleSyncEvent";
 import {
   type AiReviewEvent,
   type Project,
@@ -352,6 +353,18 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   useEffect(() => subscribeTeamProjectMirrorChanged(() => {
     void loadTeamProjectCount();
   }), [loadTeamProjectCount]);
+
+  // Device sync can bring projects from another device, or delete one here.
+  useEffect(() => {
+    const reload = (event: Event) => {
+      if (!(event as CustomEvent<ProjectRuleDefinitionsSyncedDetail>).detail?.projects) return;
+      void loadProjects();
+      void loadAssignments();
+      void loadInsightAssignments();
+    };
+    window.addEventListener(PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, reload);
+    return () => window.removeEventListener(PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, reload);
+  }, [loadProjects, loadAssignments, loadInsightAssignments]);
 
   useEffect(() => {
     void loadAssignments();

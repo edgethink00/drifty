@@ -52,6 +52,21 @@ describe("runSyncCycle exclusion account boundary", () => {
     warn.mockRestore();
   });
 
+  it("syncs projects and rules after the category definitions and keeps activity sync when that pass fails", async () => {
+    const { tracker } = makeTracker({
+      snapshot: emptySnapshot({ [SYNC_ACCOUNT_ID_KEY]: "user-1" }),
+      outboxPages: [{ items: [], batchMaxSeq: 0, counterSeq: 0, pendingCount: 0 }],
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const order: string[] = [];
+    const syncCategoryDefinitions = vi.fn(async () => { order.push("categories"); });
+    const syncProjectRuleDefinitions = vi.fn(async () => { order.push("projects and rules"); throw new Error("relation does not exist"); });
+    await expect(runSyncCycle({ tracker, pushBatch: vi.fn(), syncAccountId: "user-1", syncCategoryDefinitions, syncProjectRuleDefinitions }, "manual")).resolves.toBeTruthy();
+    expect(order).toEqual(["categories", "projects and rules"]);
+    expect(syncProjectRuleDefinitions).toHaveBeenCalledWith("user-1");
+    warn.mockRestore();
+  });
+
   it("does not push history after the account changes during the category definitions pass", async () => {
     const { tracker } = makeTracker({
       snapshot: emptySnapshot({ [SYNC_ACCOUNT_ID_KEY]: "user-1" }),

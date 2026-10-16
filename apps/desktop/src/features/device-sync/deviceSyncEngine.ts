@@ -64,6 +64,8 @@ export type DeviceSyncEngineDeps = {
    * definitions; activity sync goes on and the next cycle tries again.
    */
   readonly syncCategoryDefinitions?: (accountId: string) => Promise<void>;
+  /** Projects and app & site rules for the account, best effort like the category definitions. */
+  readonly syncProjectRuleDefinitions?: (accountId: string) => Promise<void>;
 };
 
 function defaultSleep(ms: number): Promise<void> {
@@ -278,6 +280,16 @@ export async function runSyncCycle(deps: DeviceSyncEngineDeps, reason: DeviceSyn
       console.warn("category definitions sync skipped", error);
     }
     // An account change on the way still stops the whole cycle.
+    assertSyncAccount(await deps.tracker.getSyncState(), deps);
+  }
+  // After the category definitions, so a rule's added category is already known here.
+  if (deps.syncAccountId && deps.syncProjectRuleDefinitions) {
+    assertSyncAccount(await deps.tracker.getSyncState(), deps);
+    try {
+      await deps.syncProjectRuleDefinitions(deps.syncAccountId);
+    } catch (error) {
+      console.warn("project and rule sync skipped", error);
+    }
     assertSyncAccount(await deps.tracker.getSyncState(), deps);
   }
   const pushStatus = await runSyncPushCycle(deps, reason);

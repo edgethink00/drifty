@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.tracker.browser_content import normalize_context as normalize_browser_context
 
+import hashlib
 import json
 import math
 import re
@@ -2109,9 +2110,11 @@ class TrackerDatabase:
                     id,
                     target_kind,
                     target_value,
+                    normalized_target_value,
                     match_scope,
                     detail_kind,
                     detail_value,
+                    normalized_detail_value,
                     category,
                     productivity,
                     enabled,
@@ -2123,6 +2126,16 @@ class TrackerDatabase:
                 """
             ).fetchall()
         return [self._serialize_rule(row) for row in rows]
+
+    @classmethod
+    def _classification_rule_sync_key(cls, rule: Any) -> str:
+        """The rule's unique key as a stable hash, so devices that sync agree on one rule.
+
+        Two devices that each save a rule for the same app or site (and the
+        same title or address) store one rule under the table's unique key;
+        device sync keys the account's row by this hash of it.
+        """
+        return hashlib.sha256("".join(cls._classification_rule_key(rule)).encode("utf-8")).hexdigest()
 
     def _classification_rule_identity(self, target_kind: str, rule_input: dict[str, Any]) -> dict[str, Any]:
         """The normalized fields that identify a rule, shared by save and preview."""
@@ -2361,9 +2374,11 @@ class TrackerDatabase:
                     id,
                     target_kind,
                     target_value,
+                    normalized_target_value,
                     match_scope,
                     detail_kind,
                     detail_value,
+                    normalized_detail_value,
                     category,
                     productivity,
                     enabled,
@@ -3839,7 +3854,11 @@ class TrackerDatabase:
             existing = conn.execute(
                 "SELECT created_at FROM projects WHERE id = ?", (project_id,)
             ).fetchone()
-            created_at = existing["created_at"] if existing else timestamp
+            # A project another device made (device sync) keeps its own
+            # creation time, so the project list has one order everywhere.
+            created_at = existing["created_at"] if existing else (
+                self._valid_iso_timestamp(project_input.get("createdAt")) or timestamp
+            )
             conn.execute(
                 """
                 INSERT INTO projects (id, name, description, color, status, created_at, updated_at)
@@ -3856,6 +3875,18 @@ class TrackerDatabase:
         project = self._get_project(project_id)
         assert project is not None
         return project
+
+    @staticmethod
+    def _valid_iso_timestamp(value: Any) -> str | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return None
+        return parsed.astimezone(timezone.utc).isoformat()
 
     def delete_project(self, project_id: str) -> int:
         with self.connect() as conn:
@@ -5527,6 +5558,11 @@ class TrackerDatabase:
     def _serialize_rule(row: sqlite3.Row) -> dict[str, Any]:
         match_scope = row["match_scope"] or "surface"
         detail_kind = row["detail_kind"] or None
+        sync_key = (
+            {"syncKey": TrackerDatabase._classification_rule_sync_key(row)}
+            if "normalized_target_value" in row.keys()
+            else {}
+        )
         return {
             "id": row["id"],
             "targetKind": row["target_kind"],
@@ -5540,6 +5576,7 @@ class TrackerDatabase:
             "confidence": row["confidence"],
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
+            **sync_key,
         }
 
     @staticmethod

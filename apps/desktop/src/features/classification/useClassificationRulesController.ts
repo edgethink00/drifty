@@ -9,6 +9,7 @@ import type { LocalizationController } from "../localization/LocalizationContext
 import { trackerClient } from "../../lib/api/trackerClient";
 import { toErrorMessage } from "../../lib/formatting";
 import { normalizeClassificationRuleTarget } from "./classificationViewData";
+import { PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, type ProjectRuleDefinitionsSyncedDetail } from "../device-sync/projectRuleSyncEvent";
 
 type UseClassificationRulesControllerInput = {
   readonly managerOpen: boolean;
@@ -115,6 +116,17 @@ export function useClassificationRulesController({
   useEffect(() => {
     void loadClassificationRules();
   }, [loadClassificationRules]);
+
+  // Device sync can bring rules from another device; they are already applied.
+  useEffect(() => {
+    const reload = (event: Event) => {
+      if (!(event as CustomEvent<ProjectRuleDefinitionsSyncedDetail>).detail?.rules) return;
+      void loadClassificationRules();
+      void onRefreshSelectedDay();
+    };
+    window.addEventListener(PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, reload);
+    return () => window.removeEventListener(PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, reload);
+  }, [loadClassificationRules, onRefreshSelectedDay]);
 
   useEffect(() => {
     if (!managerOpen) return;
