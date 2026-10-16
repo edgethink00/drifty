@@ -330,9 +330,9 @@ describe("WeekDashboard calendar board", () => {
   });
 
   it("sizes day columns beside the time rail's rem width, which grows with the root font size", () => {
-    // Four full-size identity icons need a 113px day column (81px strip + 32px
-    // chrome). An 831px calendar body leaves 113px per day beside the 40px rail
-    // of a 16px root, but under 112px beside the 47.5px rail of a 19px root.
+    // Four full-size identity icons need a 112px day column (81px strip + 31px
+    // chrome). An 814px calendar body leaves 112px per day beside the 32px rail
+    // of a 16px root, but under 112px beside the 38px rail of a 19px root.
     const identities = ["a", "b", "c", "d"].map((id, index) => ({
       id,
       label: id,
@@ -348,7 +348,7 @@ describe("WeekDashboard calendar board", () => {
     const measureElement = HTMLElement.prototype.getBoundingClientRect;
     const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       if (!this.classList.contains("week-v2-calendar__body")) return measureElement.call(this);
-      return { x: 0, y: 0, left: 0, top: 0, right: 831, bottom: 0, width: 831, height: 0, toJSON: () => ({}) } as DOMRect;
+      return { x: 0, y: 0, left: 0, top: 0, right: 814, bottom: 0, width: 814, height: 0, toJSON: () => ({}) } as DOMRect;
     });
     const visibleIcons = (container: HTMLElement) => container.querySelectorAll(".week-v2-calendar__identity").length;
     try {
@@ -1678,12 +1678,16 @@ describe("WeekDashboard activity inspector", () => {
 });
 
 describe("WeekDashboard time rail", () => {
-  it("centres compact time-rail labels on their hour line inside the 2.5rem rail", () => {
-    expect(styles).toMatch(/\.week-v2-calendar__time-rail span\s*\{[^}]*right:\s*7px[^}]*transform:\s*translateY\(-50%\)/);
+  it("centres compact time-rail labels with a configurable inset", () => {
+    expect(styles).toMatch(/\.week-v2-calendar__time-rail span\s*\{[^}]*right:\s*var\(--week-calendar-time-label-inset, 7px\)[^}]*transform:\s*translateY\(-50%\)/);
   });
 
-  it("keeps the original 2.5rem grid-column width for the time rail", () => {
-    expect(styles).toMatch(/grid-template-columns:\s*2\.5rem repeat\(7/);
+  it("narrows activity Week to 2rem while shared calendars retain their default rail", () => {
+    const { container } = renderWeekDashboard();
+    const week = container.querySelector<HTMLElement>(".week-v2")!;
+    expect(week.style.getPropertyValue("--week-calendar-time-rail-width")).toBe("2rem");
+    expect(week.style.getPropertyValue("--week-calendar-time-label-inset")).toBe("5px");
+    expect(styles).toMatch(/grid-template-columns:\s*var\(--week-calendar-time-rail-width, 2\.5rem\) repeat\(7/);
   });
 });
 

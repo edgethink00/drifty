@@ -83,10 +83,11 @@ export type WeekIdentityStripPlan = {
 export const WEEK_IDENTITY_STRIP_MAX_ICONS = 4;
 
 // Identity strip geometry (see week-dashboard.css). The chrome around the
-// strip inside a day column is 1px+6px column insets (WeekDashboard.tsx),
+// strip inside a day column is 1px+5px column insets (WeekDashboard.tsx),
 // 6px+6px event padding, 1px+1px borders and the ~11px category-dot grid
 // column. The "+N" chip is roughly 22px for one digit and 27px for two.
-const IDENTITY_STRIP_HORIZONTAL_CHROME_PX = 32;
+export const WEEK_CALENDAR_EVENT_RIGHT_INSET_PX = 5;
+const IDENTITY_STRIP_HORIZONTAL_CHROME_PX = 26 + WEEK_CALENDAR_EVENT_RIGHT_INSET_PX;
 const IDENTITY_TILE_BASE_PX = 18;
 const IDENTITY_TILE_MIN_PX = 13;
 const IDENTITY_GAP_BASE_PX = 3;

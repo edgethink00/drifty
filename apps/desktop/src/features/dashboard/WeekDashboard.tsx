@@ -20,6 +20,7 @@ import {
   buildWeekCalendarEventLayout,
   planWeekIdentityStrip,
   WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX,
+  WEEK_CALENDAR_EVENT_RIGHT_INSET_PX,
 } from "./weekCalendarEventLayout";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { WeekCalendarBoard } from "./weekCalendarBoard";
@@ -49,7 +50,7 @@ import { WeekDashboardLoadingBreakdown, WeekDashboardLoadingLegend } from "./Wee
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 
 /* Width of .week-v2-calendar__time-rail: the calendar body's first grid column. */
-const WEEK_CALENDAR_TIME_RAIL_REM = 2.5;
+const WEEK_CALENDAR_TIME_RAIL_REM = 2;
 /* Longer than one animation frame, well under the 340ms panel transition. */
 const WEEK_CALENDAR_RESIZE_SETTLE_MS = 120;
 /** How long a record sent from History may take to appear before it is dropped. */
@@ -733,6 +734,11 @@ export function WeekDashboard({
       aria-live={initialDataLoading ? "polite" : undefined}
       role={initialDataLoading ? "status" : undefined}
       data-week-axis-scale-percent={effectiveAxisScalePercent}
+      style={{
+        "--week-calendar-time-rail-width": `${WEEK_CALENDAR_TIME_RAIL_REM}rem`,
+        "--week-calendar-time-label-inset": "5px",
+        "--week-calendar-event-right-inset": `${WEEK_CALENDAR_EVENT_RIGHT_INSET_PX}px`,
+      } as CSSProperties}
     >
       <div className={`week-v2-grid week-v2-grid--calendar${sideOpen ? " week-v2-grid--side-open" : ""}`}>
         <section ref={funnelResultRef} className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label={t("dashboard.week.calendarAria")}>
@@ -875,13 +881,14 @@ export function WeekDashboard({
                         // Lane-stacked events render 24px narrower than the full column.
                         dayColumnWidth === null ? null : dayColumnWidth - (event.laneCount > 1 ? 24 : 0),
                       );
+                      const horizontalInset = 1 + WEEK_CALENDAR_EVENT_RIGHT_INSET_PX;
                       const eventStyle: WeekCalendarEventStyle = {
                         top: formatWeekDashboardAxisPixelValue((event.topMinutes / 60) * calendarHourHeight),
                         height: formatWeekDashboardAxisPixelValue(eventLayout.eventHeight),
                         // Blocks hug the left of their day (1px) and leave the free space on
-                        // the right (6px), the direction concurrent lanes already cascade in.
+                        // the right (5px), the direction concurrent lanes already cascade in.
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 1px)` : "1px",
-                        width: event.laneCount > 1 ? "calc(100% - 31px)" : "calc(100% - 7px)",
+                        width: `calc(100% - ${horizontalInset + (event.laneCount > 1 ? 24 : 0)}px)`,
                         zIndex: event.laneCount > 1 ? 10 + event.lane : 3,
                         "--event-tone": colorMode === "project" ? event.projectColor : colorMode === "productivity" ? levelFor(event.category, event.productivity, productivityLevels)?.color ?? PRODUCTIVITY_COLORS[event.productivity] : CATEGORY_COLORS[event.category],
                       };

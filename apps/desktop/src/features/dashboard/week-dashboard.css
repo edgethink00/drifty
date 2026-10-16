@@ -941,7 +941,7 @@
 
 .week-v2-calendar__day-head {
   display: grid;
-  grid-template-columns: 2.5rem repeat(7, minmax(6.25rem, 1fr));
+  grid-template-columns: var(--week-calendar-time-rail-width, 2.5rem) repeat(7, minmax(6.25rem, 1fr));
   min-width: min(100%, 52.5rem);
   width: max(100%, 52.5rem);
   flex: 0 0 auto;
@@ -1041,7 +1041,7 @@
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: 2.5rem repeat(7, minmax(6.25rem, 1fr));
+  grid-template-columns: var(--week-calendar-time-rail-width, 2.5rem) repeat(7, minmax(6.25rem, 1fr));
   min-width: 0;
   width: 100%;
   min-height: 100%;
@@ -1060,7 +1060,7 @@
    sits just above the bottom edge for the same reason. */
 .week-v2-calendar__time-rail span {
   position: absolute;
-  right: 7px;
+  right: var(--week-calendar-time-label-inset, 7px);
   transform: translateY(-50%);
   color: var(--calendar-axis-text);
   font-family: var(--font-mono);
@@ -1084,7 +1084,7 @@
   right: 0;
   left: 0;
   display: grid;
-  grid-template-columns: 2.5rem repeat(7, minmax(6.25rem, 1fr));
+  grid-template-columns: var(--week-calendar-time-rail-width, 2.5rem) repeat(7, minmax(6.25rem, 1fr));
   height: 0;
   align-items: center;
   pointer-events: none;
@@ -2071,7 +2071,7 @@
 .week-v2-grid--side-open .week-v2-calendar__day-head,
 .week-v2-grid--side-open .week-v2-calendar__body,
 .week-v2-grid--side-open .week-v2-calendar__now-marker {
-  grid-template-columns: 2.5rem repeat(7, minmax(0, 1fr));
+  grid-template-columns: var(--week-calendar-time-rail-width, 2.5rem) repeat(7, minmax(0, 1fr));
 }
 
 .week-v2-grid--side-open .week-v2-calendar__day-head,
@@ -2764,14 +2764,14 @@
 
 /* Google Calendar is a planned-time backdrop. It stays visually and
    semantically separate from the solid captured-activity blocks above it,
-   and shares their 1px left / 6px right gutter (WeekDashboard.tsx) so it
+   and shares their 1px left / 5px right gutter (WeekDashboard.tsx) so it
    never peeks out beside them. */
 .week-v2-calendar__scheduled-event {
   position: absolute;
   z-index: 2;
   box-sizing: border-box;
   left: 1px;
-  right: 6px;
+  right: var(--week-calendar-event-right-inset, 6px);
   min-height: 12px;
   overflow: hidden;
   padding: 2px 5px;

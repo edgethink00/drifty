@@ -239,7 +239,7 @@
 .week-v2-calendar__day-head {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 2.5rem repeat(7, minmax(6.25rem, 1fr));
+  grid-template-columns: var(--week-calendar-time-rail-width, 2.5rem) repeat(7, minmax(6.25rem, 1fr));
   min-width: min(100%, 840px);
   width: max(100%, 840px);
   max-width: none;
@@ -315,7 +315,7 @@
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: 2.5rem repeat(7, minmax(6.25rem, 1fr));
+  grid-template-columns: var(--week-calendar-time-rail-width, 2.5rem) repeat(7, minmax(6.25rem, 1fr));
   min-width: min(100%, 840px);
   width: max(100%, 840px);
   max-width: none;
@@ -359,7 +359,7 @@
 
 .week-v2-calendar__time-rail span {
   position: absolute;
-  right: 7px;
+  right: var(--week-calendar-time-label-inset, 7px);
   transform: translateY(-50%);
   color: var(--calendar-axis-text);
   font-family: var(--font-mono);
@@ -383,7 +383,7 @@
   right: 0;
   left: 0;
   display: grid;
-  grid-template-columns: 2.5rem repeat(7, minmax(6.25rem, 1fr));
+  grid-template-columns: var(--week-calendar-time-rail-width, 2.5rem) repeat(7, minmax(6.25rem, 1fr));
   height: 0;
   align-items: center;
   pointer-events: none;
