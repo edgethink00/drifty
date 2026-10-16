@@ -5,7 +5,7 @@ import { CUSTOMIZABLE_CATEGORIES, MAX_CATEGORY_COUNT, type Project } from "@drif
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { CategoryEditorSheet, type CategoryEditorSheetProps } from "./CategoryEditorSheet";
 import { useCategoryCustomizationController } from "../settings/useCategoryCustomizationController";
-import { CATEGORY_CUSTOMIZATION_STORAGE_KEY, PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY, readCategoryCustomizations, readProductivityCustomizations } from "../settings/settingsStorage";
+import { CATEGORY_CUSTOMIZATION_STORAGE_KEY, CATEGORY_ORDER_STORAGE_KEY, PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY, readCategoryCustomizations, readCategoryOrder, readProductivityCustomizations } from "../settings/settingsStorage";
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
@@ -751,6 +751,46 @@ describe("CategoryEditorSheet", () => {
     } finally { write.mockRestore(); window.localStorage.clear(); }
   });
 
+  it("lists a new level once when the order write after it fails, and deletes it like a saved level", async () => {
+    window.localStorage.clear();
+    const close = vi.fn();
+    function ControlledSheet() {
+      const controller = useCategoryCustomizationController();
+      return <CategoryEditorSheet initialTarget={{ group: "productivity" }} categoryCustomizations={controller.customizations}
+        productivityCustomizations={controller.productivityCustomizations} categoryOrder={controller.categoryOrder}
+        categoryColorOverrides={{}} appThemeColorOverrides={{}}
+        showProjects={false} projects={[]} onSaveDefinitions={controller.saveDefinitions}
+        onCategoryColorChange={vi.fn()} onCategoryColorReset={vi.fn()} onProductivityColorChange={vi.fn()} onProductivityColorReset={vi.fn()}
+        onSaveProject={async () => true} onDeleteProject={async () => true} onClose={close} />;
+    }
+    render(<LocalizationTestProvider language="ko"><ControlledSheet /></LocalizationTestProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "새 단계" }));
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "휴식" } });
+    fireEvent.click(tab("카테고리"));
+    fireEvent.keyDown(card("학습")!, { key: "ArrowUp", altKey: true });
+    const original = Storage.prototype.setItem;
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === CATEGORY_ORDER_STORAGE_KEY) throw new DOMException("Synthetic storage full", "QuotaExceededError");
+      original.call(this, key, value);
+    });
+    try {
+      await save();
+      const levels = Object.keys(readProductivityCustomizations()).filter((key) => key.startsWith("level-"));
+      expect(levels).toHaveLength(1);
+      expect(close).not.toHaveBeenCalled();
+      fireEvent.click(tab("생산성"));
+      expect(document.querySelectorAll("[data-card^='level:']")).toHaveLength(1);
+      // Already written, so it is deleted rather than discarded.
+      fireEvent.click(card("휴식")!);
+      fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+      write.mockRestore();
+      await save();
+      expect(Object.keys(readProductivityCustomizations()).filter((key) => key.startsWith("level-"))).toEqual([]);
+      expect(readCategoryOrder().slice(0, 2)).toEqual(["learning", "workspace"]);
+      expect(close).toHaveBeenCalledOnce();
+    } finally { write.mockRestore(); window.localStorage.clear(); }
+  });
+
   it.each(["delete", "restore after partial deletion"] as const)("can %s a category already persisted by a partially failed save", async (action) => {
     window.localStorage.clear();
     const close = vi.fn();
@@ -886,6 +926,22 @@ describe("CategoryEditorSheet", () => {
     fireEvent.click(within(pane()).getByRole("button", { name: "접기" }));
     expect(screen.queryByRole("region")).toBeNull();
     expect(screen.getByRole("button", { name: "저장" })).toBeTruthy();
+  });
+
+  it("saves the place of a category added in this sitting when it is moved before Save", async () => {
+    const props = renderSheet({ initialTarget: { group: "category" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "새 카테고리" }));
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "운동" } });
+    fireEvent.click(within(pane()).getByRole("button", { name: "접기" }));
+    // Only the new row moves: Drifty's own keep their order among themselves.
+    fireEvent.keyDown(card("운동")!, { key: "ArrowUp", altKey: true });
+    await save();
+
+    const changes = vi.mocked(props.onSaveDefinitions).mock.calls[0]?.[0];
+    const id = Object.keys(changes?.categories ?? {})[0];
+    expect(id).toMatch(/^custom-[a-z0-9]{8}$/);
+    expect(changes?.categoryOrder?.slice(-2)).toEqual([id, "utility"]);
   });
 
   it("drags a row by its body without opening it; a press without moving still opens it", async () => {

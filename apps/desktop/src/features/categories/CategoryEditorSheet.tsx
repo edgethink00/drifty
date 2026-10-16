@@ -309,9 +309,11 @@ export function CategoryEditorSheet({
   // Keep its draft for retry while listing that same stable id only once.
   const savedCategoryList = orderCategories([...LISTED_CATEGORIES, ...savedAddedCategories], categoryOrder);
   const draftedCategories = addedCategories.map((entry) => entry.id).filter((category) => !savedAddedCategories.some((saved) => saved === category));
-  const editorCategories: readonly ActivityCategory[] = orderCategories([...savedCategoryList, ...draftedCategories], orderDraft ?? savedCategoryList);
-  const orderChanged = orderDraft !== null
-    && editorCategories.filter((category) => savedCategoryList.includes(category)).join(",") !== savedCategoryList.join(",");
+  const unmovedCategoryList = [...savedCategoryList, ...draftedCategories];
+  const editorCategories: readonly ActivityCategory[] = orderCategories(unmovedCategoryList, orderDraft ?? savedCategoryList);
+  // Moving only a category added now (its place differs from "last") is a
+  // change too, so the order is saved with it.
+  const orderChanged = orderDraft !== null && editorCategories.join(",") !== unmovedCategoryList.join(",");
   const isAddedCategory = (category: ActivityCategory) => isCustomActivityCategory(category);
   const isNewCategory = (category: ActivityCategory) => addedCategories.some((entry) => entry.id === category)
     && !savedAddedCategories.some((saved) => saved === category);
@@ -320,7 +322,11 @@ export function CategoryEditorSheet({
   // then the ones added in this sitting. A level deleted now stays listed as
   // a strip until Save.
   const savedLevels = useMemo(() => productivityLevelIds(productivityCustomizations), [productivityCustomizations]);
-  const liveLevels: readonly CustomProductivityLevel[] = [...savedLevels.filter((id) => !deletedLevels.includes(id)), ...newLevels];
+  // As with categories, a save that fails after the levels were written
+  // leaves a new level both saved and drafted: list it once.
+  const draftedLevels = newLevels.filter((id) => !savedLevels.includes(id));
+  const isNewLevel = (id: CustomProductivityLevel) => draftedLevels.includes(id);
+  const liveLevels: readonly CustomProductivityLevel[] = [...savedLevels.filter((id) => !deletedLevels.includes(id)), ...draftedLevels];
   const savedLevelValue = (id: CustomProductivityLevel): LevelValue => ({
     name: productivityCustomizations[id]?.name ?? "",
     color: normalizeHex(productivityCustomizations[id]?.color ?? defaultProductivityColor("neutral")),
@@ -517,7 +523,7 @@ export function CategoryEditorSheet({
       // one is removed.
       keptNewLevels.forEach((id, index) => {
         const value = levelValue(id);
-        productivity[id] = { name: value.name.trim(), color: normalizeHex(value.color), createdAt: new Date(now + index).toISOString() };
+        productivity[id] = { name: value.name.trim(), color: normalizeHex(value.color), createdAt: productivityCustomizations[id]?.createdAt ?? new Date(now + index).toISOString() };
       });
       for (const id of savedLevels) {
         if (deletedLevels.includes(id)) productivity[id] = null;
@@ -1088,7 +1094,7 @@ export function CategoryEditorSheet({
   // the app's charts. It has no description: the classifier picks only
   // focus, neutral, or drift.
   const updateLevel = (id: CustomProductivityLevel, patch: Partial<LevelValue>) => {
-    const isNew = newLevels.includes(id);
+    const isNew = isNewLevel(id);
     setLevelDrafts((previous) => {
       const next = { ...(previous[id] ?? savedLevelValue(id)), ...patch };
       const copy = { ...previous };
@@ -1121,9 +1127,10 @@ export function CategoryEditorSheet({
     setEditing(true);
   };
   // Deleting a level lets its categories go back to Drifty's judgment; a
-  // level added in this sitting is simply dropped.
+  // level added in this sitting is simply dropped. One a failed save already
+  // wrote is deleted like any saved level.
   const deleteLevel = (id: CustomProductivityLevel) => {
-    if (newLevels.includes(id)) {
+    if (isNewLevel(id)) {
       setNewLevels((previous) => previous.filter((level) => level !== id));
       setLevelDrafts((previous) => {
         const copy = { ...previous };
@@ -1131,6 +1138,7 @@ export function CategoryEditorSheet({
         return copy;
       });
     } else {
+      setNewLevels((previous) => previous.filter((level) => level !== id));
       setDeletedLevels((previous) => [...previous, id]);
     }
     setLevelErrors((previous) => {
@@ -1153,7 +1161,7 @@ export function CategoryEditorSheet({
   const levelCard = (id: CustomProductivityLevel) => {
     const cardId = levelCardId(id);
     const value = levelValue(id);
-    const isNew = newLevels.includes(id);
+    const isNew = isNewLevel(id);
     if (deletedLevels.includes(id)) {
       return (
         <li key={cardId} className="category-editor__card is-deleted" style={toneStyle(value.color)} data-card={cardId}>
@@ -1401,7 +1409,7 @@ export function CategoryEditorSheet({
     // Added levels follow neutral, where they count in every score.
     ? LISTED_PRODUCTIVITY.flatMap((key) => [
       definitionCard({ group: "productivity", key }),
-      ...(key === "neutral" ? [...savedLevels, ...newLevels].map(levelCard) : []),
+      ...(key === "neutral" ? [...savedLevels, ...draftedLevels].map(levelCard) : []),
     ])
     : activeGroup === "category"
       ? editorCategories.filter((key) => !savedDeleted(key)).map((key) => definitionCard({ group: "category", key }))
