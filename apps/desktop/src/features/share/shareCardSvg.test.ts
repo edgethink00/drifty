@@ -116,8 +116,25 @@ describe("renderShareCardSvg", () => {
     expect(percentile).toContain("Estimación basada en 100 participantes");
     expect(productivity).toContain("Productividad");
     expect(productivity).toContain("Concentración");
-    expect(locked).toContain("Únete a la clasificación");
+    expect(locked).toContain("Únete al ranking");
     expect(locked).not.toContain("Join the leaderboard");
+  });
+
+  it("uses Spanish number punctuation in exported aggregate metrics", () => {
+    const productivity = renderShareCardSvg({ data: DAY, language: "es", format: "landscape", theme: "light", story: "X5" });
+    const weeklyRank = renderShareWeekCardSvg({
+      data: WEEK, language: "es", format: "landscape", theme: "light", story: "WR4",
+      liveRanks: { daily: null, weekly: {
+        rank: 123, participantCount: 12500, topPercent: 0.98,
+        windowStartDay: WEEK.startDay, windowEndDay: WEEK.endDay,
+      } },
+    });
+    expect(productivity).toContain(">5,7 h<");
+    expect(productivity).toContain("Neutro");
+    expect(weeklyRank).toContain("/ 12.500");
+    expect(weeklyRank).toContain("0,98%");
+    expect(weeklyRank).toContain("en el ranking de esta semana.");
+    expect(weeklyRank).not.toContain("in this week’s focus ranking");
   });
 
   it("keeps the unified lineup as the primary story set", () => {

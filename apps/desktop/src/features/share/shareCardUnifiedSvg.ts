@@ -123,7 +123,7 @@ function minutesFromSeconds(seconds: number | null | undefined): number {
 }
 
 function localizedProductivityLabel(key: "focus" | "neutral" | "drift"): string {
-  if (selectedLanguage === "es") return { focus: "Concentración", neutral: "Neutral", drift: "Distracción" }[key];
+  if (selectedLanguage === "es") return { focus: "Concentración", neutral: "Neutro", drift: "Distracción" }[key];
   if (selectedLanguage !== "ko") return { focus: "Focus", neutral: "Neutral", drift: "Drift" }[key];
   return { focus: "집중", neutral: "중립", drift: "딴짓" }[key];
 }
@@ -437,22 +437,22 @@ const SPANISH_CARD_COPY: Readonly<Record<string, string>> = {
   "YOU": "TÚ",
   "Today's focus percentile": "Percentil de hoy",
   "Estimated focus percentile": "Percentil estimado",
-  "from today’s live leaderboard.": "Según la clasificación de hoy.",
-  "from today’s live leaderboard": "Según la clasificación de hoy",
+  "from today’s live leaderboard.": "Según el ranking de hoy.",
+  "from today’s live leaderboard": "Según el ranking de hoy",
   "Focus time": "Tiempo de concentración",
   "of focused work this week.": "de concentración esta semana.",
   "of focused work today.": "de concentración hoy.",
-  "in today’s focus ranking.": "en la clasificación de hoy.",
+  "in today’s focus ranking.": "en el ranking de hoy.",
   "This week": "Esta semana",
   "TRACKED-DAY AVG": "MEDIA POR DÍA REGISTRADO",
   "focused per tracked day this week.": "de concentración por día registrado esta semana.",
   "focused per tracked day that week.": "de concentración por día registrado esa semana.",
   "This week’s focus percentile": "Percentil de esta semana",
   "Estimated weekly percentile": "Percentil semanal estimado",
-  "from the live weekly leaderboard.": "Según la clasificación semanal.",
+  "from the live weekly leaderboard.": "Según el ranking semanal.",
   "TODAY": "HOY",
   "Focus": "Concentración",
-  "Neutral": "Neutral",
+  "Neutral": "Neutro",
   "Drift": "Distracción",
   "No categorized activity yet.": "Aún no hay actividad clasificada.",
   "Categories": "Categorías",
@@ -461,7 +461,7 @@ const SPANISH_CARD_COPY: Readonly<Record<string, string>> = {
   "This week's focus rank": "Puesto de esta semana",
   "today": "hoy",
   "this week": "esta semana",
-  "Join the leaderboard": "Únete a la clasificación",
+  "Join the leaderboard": "Únete al ranking",
   "Locked focus rank": "Puesto bloqueado",
   "Curve Card": "Tarjeta de percentil",
   "Weekly Curve Card": "Percentil semanal",
@@ -469,6 +469,9 @@ const SPANISH_CARD_COPY: Readonly<Record<string, string>> = {
   "Wide Statement": "Tiempo de concentración",
   "Rank Statement": "Percentil de concentración",
   "Head Count": "Puesto de concentración",
+  "Weekly Head Count": "Puesto semanal",
+  "in this week’s focus ranking.": "en el ranking de esta semana.",
+  "Rank updating": "Actualizando el puesto",
   "Week Average": "Media semanal",
   "Focus + Rank": "Concentración y percentil",
 };
@@ -476,6 +479,7 @@ const spanishCardCopy = (english: string): string => {
   const exact = SPANISH_CARD_COPY[english];
   if (exact) return exact;
   if (english.startsWith("Top ")) return english.replace("Top ", "TOP ");
+  if (english.startsWith("Your rank for ")) return english.replace(/^Your rank for (.+) shows after the next refresh\.$/u, "Tu puesto de $1 aparecerá tras la próxima actualización.");
   if (english.startsWith("From ")) return english.replace(/^From ([\d,.]+) leaderboard participants$/u, "Estimación basada en $1 participantes");
   if (english.startsWith("of focused work in ")) return english.replace("of focused work in ", "de concentración en ");
   if (english.startsWith("of focused work on ")) return english.replace("of focused work on ", "de concentración el ");
@@ -535,11 +539,14 @@ let AVG_DAILY_FOCUS_MINUTES = 0;
 const dailyAverageMinutes = () => Math.max(0, Math.round(AVG_DAILY_FOCUS_MINUTES));
 const peakDayLabel = () => localized('Tue', '화');
 const metric = () => formatDuration(FOCUS_MINUTES);
-const pctLabel = (v) => String(parseFloat(v.toPrecision(2)));
+const shareNumberLocale = () => selectedLanguage === 'es' ? 'es-ES' : selectedLanguage === 'ko' ? 'ko-KR' : 'en-US';
+const pctLabel = (v) => selectedLanguage === 'es'
+  ? parseFloat(v.toPrecision(2)).toLocaleString('es-ES', { useGrouping: false, maximumSignificantDigits: 2 })
+  : String(parseFloat(v.toPrecision(2)));
 let TOTAL_USERS = 2858;
 const rankPlace = () => Math.max(1, RANK_PLACE);
-const placeLabel = () => `#${rankPlace().toLocaleString('en-US')}`;
-const totalUsersLabel = () => TOTAL_USERS.toLocaleString('en-US');
+const placeLabel = () => `#${rankPlace().toLocaleString(shareNumberLocale())}`;
+const totalUsersLabel = () => TOTAL_USERS.toLocaleString(shareNumberLocale());
 const normsInv = (prob) => {
   const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];
   const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
@@ -582,6 +589,7 @@ function curveCard(p, id) { if (RANK === null) return wideStatement(p, id); cons
 
 
 function communityEstimateLabel(sampleSize) {
+  if (selectedLanguage === 'es') return `Estimación basada en ${sampleSize.toLocaleString('es-ES')} participantes`;
   return localized(`From ${sampleSize.toLocaleString('en-US')} leaderboard participants`, `리더보드 참여자 ${sampleSize.toLocaleString('ko-KR')}명 기준 추정`);
 }
 
@@ -770,7 +778,7 @@ const categoryPalette = (p) => (p === dark ? CATEGORY_COLORS_DARK : CATEGORY_COL
 const productivityPalette = (p) => (p === dark ? PRODUCTIVITY_COLORS_DARK : PRODUCTIVITY_COLORS_LIGHT);
 const formatHoursDecimal = (minutes) => {
   const hours = Math.max(0, Math.round((minutes / 60) * 10) / 10);
-  return selectedLanguage === 'ko' ? `${hours.toFixed(1)}시간` : selectedLanguage === 'es' ? `${hours.toFixed(1)} h` : `${hours.toFixed(1)}h`;
+  return selectedLanguage === 'ko' ? `${hours.toFixed(1)}시간` : selectedLanguage === 'es' ? `${hours.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h` : `${hours.toFixed(1)}h`;
 };
 const pointOnCircle = (cx, cy, r, ratio) => {
   const radians = ratio * 360 * (Math.PI / 180);
@@ -834,14 +842,14 @@ const compactStackedBar = (p, id, x, y, w, h, entries, colors, getPct) => {
 const PANEL_TOP = 188;
 const PANEL_H = 510;
 const PANEL_MID_Y = PANEL_TOP + PANEL_H / 2;
-const compactLegendRows = (p, x, y, entries, colors, getPct, formatValue, rowGap = 72, valueX = 540, labelSize = 36, valueSize = 30, swatchR = 10) => entries.map((entry, i) => {
+const compactLegendRows = (p, x, y, entries, colors, getPct, formatValue, rowGap = 72, valueX = 540, labelSize = 36, valueSize = 30, swatchR = 10, stackValues = false) => entries.map((entry, i) => {
   const ly = y + i * rowGap;
   const pct = getPct(entry);
   const value = formatValue(pct, entry);
   return `
   <circle cx="${x}" cy="${ly}" r="${swatchR}" fill="${colors[entry.key]}"/>
   ${tx(x + 32 + (swatchR - 10), ly + 10, entry.label, { font: F.sans, size: labelSize, floor: labelSize, fill: p.ink, spacing: -.2 })}
-  ${tx(valueX, ly + 10, value, { font: F.mono, size: valueSize, floor: valueSize, fill: p.soft, anchor: 'end' })}`;
+  ${tx(stackValues ? x + 32 + (swatchR - 10) : valueX, ly + (stackValues ? 62 : 10), value, { font: F.mono, size: valueSize, floor: valueSize, fill: p.soft, anchor: stackValues ? 'start' : 'end' })}`;
 }).join('');
 const compactDonut = (p, entries, colors, cx, cy, size = 300) => {
   const active = entries.filter((entry) => entry.pct > 0);
@@ -903,20 +911,22 @@ function dashProductivity(p, id) {
   const dialSize = 336;
   const legendGap = 72;
   const legendColW = 360;
-  const rowGap = 100;
+  // Longer Spanish names need their own line above the duration.
+  const stackedLegend = selectedLanguage === 'es';
+  const rowGap = stackedLegend ? 128 : 100;
   const blockW = dialSize + legendGap + legendColW;
   const blockLeft = panelX + Math.round((panelW - blockW) / 2);
   const dialCx = blockLeft + dialSize / 2;
   const dialCy = PANEL_MID_Y;
   const legendX = blockLeft + dialSize + legendGap;
   const valueX = legendX + legendColW;
-  const legendY = dialCy - rowGap;
+  const legendY = dialCy - rowGap - (stackedLegend ? 16 : 0);
   return wrap(p, id, `${wash(id)}
   ${chromeTitle(p, localized('Productivity', '생산성'))}
   ${panel(p, id, 70, PANEL_TOP, 1060, PANEL_H, 36)}
   ${compactDonut(p, entries, colors, dialCx, dialCy, dialSize)}
   ${tx(dialCx, dialCy + 18, `${PROD_FOCUS}%`, { font: F.mono, size: 58, floor: 58, fill: p.ink, weight: 760, anchor: 'middle' })}
-  ${compactLegendRows(p, legendX, legendY, entries, colors, (entry) => entry.pct, (_pct, entry) => formatHoursDecimal(entry.minutes), rowGap, valueX, 48, 44, 14)}
+  ${compactLegendRows(p, legendX, legendY, entries, colors, (entry) => entry.pct, (_pct, entry) => formatHoursDecimal(entry.minutes), rowGap, valueX, stackedLegend ? 44 : 48, stackedLegend ? 36 : 44, 14, stackedLegend)}
   ${footer(p)}`, localized('Productivity', '생산성'));
 }
 
