@@ -2,6 +2,7 @@ import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
 import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel } from "@drifty/domain";
 import { isCustomActivityCategory, normalizeCategoryCustomizations, normalizeCategoryOrder, normalizeProductivityCustomizations, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
+import { changedDefinitionKeys, stableJson, stampDefinitions } from "./categoryDefinitionLedger";
 
 export type ThemeMode = "light" | "dark";
 export type ThemePreference = ThemeMode | "system";
@@ -62,9 +63,11 @@ export const START_OF_WEEK_STORAGE_KEY = "drifty.general.startOfWeek";
 export const CATEGORY_COLOR_STORAGE_KEY = "drifty.theme.categoryColors.v1";
 
 /**
- * Category names, descriptions, and productivity preferences (Settings →
- * Categories). Device-local: names never leave this device, and descriptions are
- * sent only to the user's classification provider.
+ * Category names, descriptions, and productivity preferences (the category
+ * editor). Kept on this device; with device sync on, they also sync to the
+ * account's other devices through owner-only account storage (see
+ * categoryDefinitionsAccountSync). Descriptions are sent only to the user's
+ * classification provider, and names never reach shared surfaces.
  */
 export const CATEGORY_CUSTOMIZATION_STORAGE_KEY = "drifty.categoryCustomizations.v1";
 /** Same-window change signal; other windows observe the storage event. */
@@ -75,7 +78,7 @@ export const CATEGORY_CUSTOMIZATION_CHANGED_EVENT = "drifty:category-customizati
  * change signal so every reader refreshes both together.
  */
 export const PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY = "drifty.productivityCustomizations.v1";
-/** The user's category order (ids). Local to this device like the definitions. */
+/** The user's category order (ids). Kept and synced like the definitions. */
 export const CATEGORY_ORDER_STORAGE_KEY = "drifty.categoryOrder.v1";
 
 export const APP_THEME_COLOR_STORAGE_KEY = "drifty.theme.appColors.v1";
@@ -460,11 +463,13 @@ export function readCategoryCustomizations(): CategoryCustomizations {
 export function writeCategoryCustomizations(customizations: CategoryCustomizations): CategoryCustomizations {
   const normalized = normalizeCategoryCustomizations(customizations);
   if (typeof window === "undefined") return normalized;
+  const changed = changedDefinitionKeys(readCategoryCustomizations(), normalized, "category:");
   if (Object.keys(normalized).length === 0) {
     window.localStorage.removeItem(CATEGORY_CUSTOMIZATION_STORAGE_KEY);
   } else {
     window.localStorage.setItem(CATEGORY_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(normalized));
   }
+  stampDefinitions(changed);
   window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
   return normalized;
 }
@@ -481,8 +486,10 @@ export function readCategoryOrder(): ActivityCategory[] {
 export function writeCategoryOrder(order: readonly ActivityCategory[]): ActivityCategory[] {
   const normalized = normalizeCategoryOrder(order);
   if (typeof window === "undefined") return normalized;
+  const changed = stableJson(readCategoryOrder()) !== stableJson(normalized);
   if (normalized.length === 0) window.localStorage.removeItem(CATEGORY_ORDER_STORAGE_KEY);
   else window.localStorage.setItem(CATEGORY_ORDER_STORAGE_KEY, JSON.stringify(normalized));
+  if (changed) stampDefinitions(["order"]);
   window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
   return normalized;
 }
@@ -501,13 +508,42 @@ export function readProductivityCustomizations(): ProductivityCustomizations {
 export function writeProductivityCustomizations(customizations: ProductivityCustomizations): ProductivityCustomizations {
   const normalized = normalizeProductivityCustomizations(customizations);
   if (typeof window === "undefined") return normalized;
+  const changed = changedDefinitionKeys(readProductivityCustomizations(), normalized, "productivity:");
   if (Object.keys(normalized).length === 0) {
     window.localStorage.removeItem(PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY);
   } else {
     window.localStorage.setItem(PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(normalized));
   }
+  stampDefinitions(changed);
   window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
   return normalized;
+}
+
+/** The productivity colors' keys in the app theme map, by productivity label. */
+export const PRODUCTIVITY_THEME_COLOR_KEYS = {
+  focus: "productivityFocus",
+  neutral: "productivityNeutral",
+  drift: "productivityDrift",
+} as const satisfies Record<ProductivityLabel, AppThemeColorKey>;
+
+const PRODUCTIVITY_BY_THEME_COLOR_KEY: Readonly<Record<string, ProductivityLabel>> = Object.fromEntries(
+  Object.entries(PRODUCTIVITY_THEME_COLOR_KEYS).map(([label, key]) => [key, label as ProductivityLabel]),
+);
+
+/** Saves the built-in category colors; a changed color counts as an edit of that category. */
+export function persistCategoryColorOverrides(overrides: CategoryColorOverrides): void {
+  if (typeof window === "undefined") return;
+  const previous = resolveInitialCategoryColorOverrides();
+  window.localStorage.setItem(CATEGORY_COLOR_STORAGE_KEY, JSON.stringify(overrides));
+  stampDefinitions(changedDefinitionKeys(previous, overrides, "category:"));
+}
+
+/** Saves the app theme colors; a changed focus, neutral, or drift color counts as an edit of that label. */
+export function persistAppThemeColorOverrides(overrides: AppThemeColorOverrides): void {
+  if (typeof window === "undefined") return;
+  const previous = resolveInitialAppThemeColorOverrides();
+  window.localStorage.setItem(APP_THEME_COLOR_STORAGE_KEY, JSON.stringify(overrides));
+  stampDefinitions(changedDefinitionKeys(previous, overrides, "productivity:", (key) => PRODUCTIVITY_BY_THEME_COLOR_KEY[key] ?? null));
 }
 
 export function resolveInitialAppThemeColorOverrides(): AppThemeColorOverrides {

@@ -5,6 +5,7 @@ import { DeviceSyncHttpError, fetchSyncDevices, fetchSyncedDeletionsPage, fetchS
 import { prepareDeviceSyncAccountScope } from "./deviceSyncAccountScope";
 import { runSyncCycle, SYNC_DEVICE_ID_KEY, SYNC_GENERATION_KEY } from "./deviceSyncEngine";
 import { syncExcludedAppsForAccount } from "../settings/excludedAppsAccountSync";
+import { syncCategoryDefinitionsForAccount } from "../settings/categoryDefinitionsAccountSync";
 import { buildSyncStateAfterCloudPurge } from "./deviceSyncPurgeState";
 import {
   findDeviceSyncCycleRecord,
@@ -149,6 +150,7 @@ export function useDeviceSyncController({
             syncAccountId: accountId,
             isSyncAccountCurrent: isScopeCurrent,
             syncExcludedApps: (scopeAccountId) => syncExcludedAppsForAccount(scopeAccountId, isScopeCurrent),
+            syncCategoryDefinitions: (scopeAccountId) => syncCategoryDefinitionsForAccount(scopeAccountId, isScopeCurrent),
           },
           reason,
         );

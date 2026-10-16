@@ -38,6 +38,32 @@ describe("runSyncCycle exclusion account boundary", () => {
     }, "manual")).rejects.toThrow("account scope changed");
     expect(pushBatch).not.toHaveBeenCalled();
   });
+
+  it("keeps syncing activity when the category definitions pass fails", async () => {
+    const { tracker } = makeTracker({
+      snapshot: emptySnapshot({ [SYNC_ACCOUNT_ID_KEY]: "user-1" }),
+      outboxPages: [{ items: [], batchMaxSeq: 0, counterSeq: 0, pendingCount: 0 }],
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const syncCategoryDefinitions = vi.fn().mockRejectedValue(new Error("relation does not exist"));
+    await expect(runSyncCycle({ tracker, pushBatch: vi.fn(), syncAccountId: "user-1", syncCategoryDefinitions }, "manual")).resolves.toBeTruthy();
+    expect(syncCategoryDefinitions).toHaveBeenCalledWith("user-1");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("does not push history after the account changes during the category definitions pass", async () => {
+    const { tracker } = makeTracker({
+      snapshot: emptySnapshot({ [SYNC_ACCOUNT_ID_KEY]: "user-1" }),
+      outboxPages: [],
+    });
+    const pushBatch = vi.fn();
+    await expect(runSyncCycle({
+      tracker, pushBatch, syncAccountId: "user-1",
+      syncCategoryDefinitions: async () => { await tracker.setSyncState({ [SYNC_ACCOUNT_ID_KEY]: "user-2" }); throw new Error("Device sync account scope changed."); },
+    }, "manual")).rejects.toThrow("account scope changed");
+    expect(pushBatch).not.toHaveBeenCalled();
+  });
 });
 
 function outboxSegment(syncSeq: number): SyncOutboxSegment {

@@ -58,6 +58,12 @@ export type DeviceSyncEngineDeps = {
   /** Re-checks the live auth owner after each awaited cloud request. */
   readonly isSyncAccountCurrent?: () => boolean;
   readonly syncExcludedApps?: (accountId: string) => Promise<void>;
+  /**
+   * Category-editor definitions for the account. Best effort: a failure (an
+   * account whose storage is not ready yet, a network error) skips only the
+   * definitions; activity sync goes on and the next cycle tries again.
+   */
+  readonly syncCategoryDefinitions?: (accountId: string) => Promise<void>;
 };
 
 function defaultSleep(ms: number): Promise<void> {
@@ -262,6 +268,16 @@ export async function runSyncCycle(deps: DeviceSyncEngineDeps, reason: DeviceSyn
   if (deps.syncAccountId && deps.syncExcludedApps) {
     assertSyncAccount(await deps.tracker.getSyncState(), deps);
     await deps.syncExcludedApps(deps.syncAccountId);
+    assertSyncAccount(await deps.tracker.getSyncState(), deps);
+  }
+  if (deps.syncAccountId && deps.syncCategoryDefinitions) {
+    assertSyncAccount(await deps.tracker.getSyncState(), deps);
+    try {
+      await deps.syncCategoryDefinitions(deps.syncAccountId);
+    } catch (error) {
+      console.warn("category definitions sync skipped", error);
+    }
+    // An account change on the way still stops the whole cycle.
     assertSyncAccount(await deps.tracker.getSyncState(), deps);
   }
   const pushStatus = await runSyncPushCycle(deps, reason);
