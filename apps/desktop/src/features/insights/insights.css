@@ -1451,7 +1451,7 @@
   max-width: 100%;
   display: flex;
   flex-direction: column-reverse;
-  border-radius: 0;
+  border-radius: var(--stacked-column-bar-radius);
   overflow: hidden;
 }
 

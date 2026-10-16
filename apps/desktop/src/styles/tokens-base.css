@@ -225,6 +225,8 @@ html {
      Projects allocation both consume these tokens so their plot frame and grid
      cannot quietly drift into separate chart styles. */
   --stacked-column-plot-radius: 12px;
+  /* Soften the outer bar silhouette while keeping stacked segments flush. */
+  --stacked-column-bar-radius: 1px;
   --stacked-column-plot-border: var(--line);
   --stacked-column-plot-background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 58%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),

@@ -126,7 +126,7 @@
   max-width: 100%;
   min-height: 2px;
   overflow: hidden;
-  border-radius: 0;
+  border-radius: var(--stacked-column-bar-radius);
   cursor: default;
   transition: filter var(--transition-fast, 0.16s ease), opacity var(--transition-fast, 0.16s ease);
 }
@@ -166,7 +166,7 @@
   display: block;
   width: clamp(0.55rem, 68%, 2.6rem);
   max-width: 100%;
-  border-radius: 0;
+  border-radius: var(--stacked-column-bar-radius);
   background: color-mix(in srgb, var(--surface-strong) 70%, var(--line));
   animation: projects-chart-skeleton-pulse 1.3s ease-in-out infinite;
 }
