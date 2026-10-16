@@ -119,10 +119,13 @@ class OwnedHelperTests(unittest.TestCase):
         for mode in ("normal", "timeout", "setting"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 pid_file = Path(directory)/"owned-child.pid"
-                code = ("import subprocess,sys,time; from pathlib import Path; "
+                # Existence is the cancellation signal, so publish only a complete PID.
+                code = ("import os,subprocess,sys,time; from pathlib import Path; "
                         "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],"
                         "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
-                        "Path(sys.argv[1]).write_text(str(p.pid)); "
+                        "pending_pid_file=Path(sys.argv[1]+'.pending'); "
+                        "pending_pid_file.write_text(str(p.pid)); "
+                        "os.replace(pending_pid_file,sys.argv[1]); "
                         + ("print('complete',flush=True)" if mode == "normal" else "time.sleep(60)"))
                 scope = CommandScope(time.monotonic()+.5)
                 try:
