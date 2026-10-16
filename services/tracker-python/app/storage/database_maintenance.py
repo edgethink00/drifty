@@ -11,6 +11,7 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 
 from app.fs_safety import ensure_directory
 from app.platform_locks import lock_exclusive, unlock
@@ -18,6 +19,7 @@ from app.platform_locks import lock_exclusive, unlock
 
 DEFAULT_BACKUP_INTERVAL_SECONDS = 24 * 60 * 60
 DEFAULT_BACKUP_RETENTION = 3
+BACKUP_COPY_TIMEOUT_SECONDS = 30.0
 BACKUP_DIRECTORY_NAME = "database-backups"
 QUARANTINE_DIRECTORY_NAME = "database-quarantine"
 _QUARANTINE_ONLY_RECORD_PREFIX = "quarantine-only:"
@@ -702,7 +704,17 @@ def _create_rotating_backup_locked(
     destination: sqlite3.Connection | None = None
     try:
         destination = sqlite3.connect(temp_path)
-        source.backup(destination, pages=256, sleep=0.01)
+        deadline = monotonic() + BACKUP_COPY_TIMEOUT_SECONDS
+
+        def check_copy_deadline(status: int, _remaining: int, _total: int) -> None:
+            # backup() retries SQLITE_BUSY/LOCKED independently of busy_timeout.
+            # Concurrent writes can also keep restarting an otherwise moving
+            # copy. Bound both without committing or rolling back the source.
+            # A completed final step can proceed to the existing verification.
+            if status != sqlite3.SQLITE_DONE and monotonic() >= deadline:
+                raise sqlite3.OperationalError("database backup copy timed out; retry later")
+
+        source.backup(destination, pages=256, sleep=0.01, progress=check_copy_deadline)
         destination.close()
         destination = None
         if not quick_check_database(temp_path, immutable=True):

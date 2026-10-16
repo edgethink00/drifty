@@ -666,6 +666,163 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         self.assertEqual(list(backup_dir.glob("*")), [])
         database.close()
 
+    def test_locked_backup_times_out_without_replacing_recovery_or_holding_maintenance_lock(self) -> None:
+        # Connection busy_timeout does not bound sqlite3.Connection.backup's
+        # own retry loop. Keep the writer in this process so a stuck child can
+        # be killed without leaking a lock or hanging the test suite.
+        script = textwrap.dedent("""
+            import sqlite3, sys
+            from pathlib import Path
+            from unittest.mock import patch
+            sys.path.insert(0, sys.argv[1])
+            from app.storage.database_maintenance import create_rotating_backup, database_initialization_guard
+            path = Path(sys.argv[2])
+            source = sqlite3.connect(path, timeout=0.02)
+            try:
+                with patch('app.storage.database_maintenance.BACKUP_COPY_TIMEOUT_SECONDS', 0.1):
+                    try:
+                        create_rotating_backup(source, path, interval_seconds=0)
+                    except sqlite3.OperationalError as error:
+                        assert 'backup copy timed out' in str(error), error
+                    else:
+                        raise AssertionError('locked backup unexpectedly completed')
+                # This opens a new file-lock handle: the failed copy must
+                # release the maintenance lock before another operation starts.
+                with database_initialization_guard(path):
+                    print('timeout and lock released', flush=True)
+            finally:
+                source.close()
+        """)
+        for journal in ("delete", "wal"):
+            with self.subTest(journal=journal):
+                path = Path(self.tempdir.name) / f"busy-{journal}.sqlite3"
+                with closing(sqlite3.connect(path)) as writer:
+                    writer.execute(f"PRAGMA journal_mode={journal}")
+                    writer.execute("CREATE TABLE fixture (value TEXT)")
+                    writer.execute("INSERT INTO fixture VALUES ('original')")
+                    writer.commit()
+                    previous = create_rotating_backup(writer, path, interval_seconds=0)
+                    previous_bytes = previous.read_bytes()
+                    order = path.parent / f".{path.name}.backup-order"
+                    order_bytes = order.read_bytes()
+                    writer.execute("PRAGMA locking_mode=EXCLUSIVE")
+                    writer.execute("BEGIN EXCLUSIVE")
+                    writer.execute("UPDATE fixture SET value='uncommitted'")
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, "-c", script, str(SERVICE_ROOT), str(path)],
+                            capture_output=True, text=True, timeout=5,
+                        )
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertIn("timeout and lock released", result.stdout)
+                        self.assertEqual(previous.read_bytes(), previous_bytes)
+                        self.assertEqual(order.read_bytes(), order_bytes)
+                        self.assertEqual(list(database_backup_dir(path).glob(f".{path.name}-*.tmp*")), [])
+                    finally:
+                        writer.rollback()
+                    self.assertEqual(writer.execute("SELECT value FROM fixture").fetchone()[0], "original")
+                    # Releasing contention lets the very next attempt succeed.
+                    writer.execute("UPDATE fixture SET value='later committed'")
+                    writer.commit()
+                    retry = create_rotating_backup(writer, path, interval_seconds=0)
+                    self.assertTrue(quick_check_database(retry, immutable=True))
+                    with closing(sqlite3.connect(retry)) as snapshot:
+                        self.assertEqual(snapshot.execute("SELECT value FROM fixture").fetchone()[0], "later committed")
+
+    def test_backup_copy_deadline_also_bounds_progress_and_preserves_the_previous_snapshot(self) -> None:
+        with closing(sqlite3.connect(self.db_path)) as source:
+            source.execute("CREATE TABLE fixture (value BLOB)")
+            source.execute("INSERT INTO fixture VALUES (zeroblob(4 * 1024 * 1024))")
+            source.commit()
+            previous = create_rotating_backup(source, self.db_path, interval_seconds=0)
+            previous_bytes = previous.read_bytes()
+            order = self.db_path.parent / f".{self.db_path.name}.backup-order"
+            order_bytes = order.read_bytes()
+            # Real incremental SQLite copy, with only elapsed time controlled.
+            # Busy-only bounds miss repeated restarts during concurrent writes.
+            with patch("app.storage.database_maintenance.monotonic", side_effect=[0.0, 31.0]):
+                with self.assertRaisesRegex(sqlite3.OperationalError, "backup copy timed out"):
+                    create_rotating_backup(source, self.db_path, interval_seconds=0)
+            self.assertEqual(previous.read_bytes(), previous_bytes)
+            self.assertEqual(order.read_bytes(), order_bytes)
+            self.assertEqual(list(database_backup_dir(self.db_path).glob(".*.tmp*")), [])
+            retry = create_rotating_backup(source, self.db_path, interval_seconds=0)
+            self.assertTrue(quick_check_database(retry, immutable=True))
+            with closing(sqlite3.connect(retry)) as snapshot:
+                self.assertEqual(snapshot.execute("SELECT length(value) FROM fixture").fetchone()[0], 4 * 1024 * 1024)
+
+    def test_backup_recovers_from_transient_contention_before_the_copy_deadline(self) -> None:
+        with closing(sqlite3.connect(self.db_path)) as writer:
+            writer.execute("CREATE TABLE fixture (value TEXT)")
+            writer.execute("INSERT INTO fixture VALUES ('committed')")
+            writer.commit()
+            writer.execute("BEGIN EXCLUSIVE")
+            writer.execute("UPDATE fixture SET value='must roll back'")
+            busy_steps = []
+
+            class UnlockingSource(sqlite3.Connection):
+                def backup(self, target, **kwargs):
+                    deadline_check = kwargs.pop("progress", None)
+
+                    def progress(status, remaining, total):
+                        # Python 3.9 exposes backup status codes but does not
+                        # export names for every SQLite result constant.
+                        if status in (5, 6):  # SQLITE_BUSY, SQLITE_LOCKED
+                            busy_steps.append(status)
+                            writer.rollback()
+                        if deadline_check is not None:
+                            deadline_check(status, remaining, total)
+
+                    return super().backup(target, progress=progress, **kwargs)
+
+            with closing(sqlite3.connect(self.db_path, timeout=0.02, factory=UnlockingSource)) as source:
+                backup = create_rotating_backup(source, self.db_path, interval_seconds=0)
+            self.assertTrue(busy_steps, "The fixture must encounter a real SQLite lock")
+            self.assertTrue(quick_check_database(backup, immutable=True))
+            with closing(sqlite3.connect(backup)) as snapshot:
+                self.assertEqual(snapshot.execute("SELECT value FROM fixture").fetchone()[0], "committed")
+
+    def test_periodic_backup_timeout_preserves_the_callers_uncommitted_transaction(self) -> None:
+        # A backup from its own write transaction also retries indefinitely
+        # without the guard; keep a future regression inside a bounded child.
+        script = textwrap.dedent("""
+            import sqlite3, sys
+            from contextlib import closing
+            from datetime import datetime, timedelta, timezone
+            from pathlib import Path
+            from unittest.mock import patch
+            sys.path.insert(0, sys.argv[1])
+            from app.storage.db import TrackerDatabase
+            from app.storage.database_maintenance import create_rotating_backup
+            database = TrackerDatabase(Path(sys.argv[2]))
+            source = database.connect()
+            try:
+                with source:
+                    source.execute("INSERT INTO tracker_meta(key,value) VALUES ('maintenance-test','committed')")
+                previous = create_rotating_backup(source, database.db_path,
+                    now=datetime.now(timezone.utc) - timedelta(days=2), interval_seconds=0)
+                previous_bytes = previous.read_bytes()
+                source.execute("UPDATE tracker_meta SET value='pending' WHERE key='maintenance-test'")
+                with patch('app.storage.database_maintenance.BACKUP_COPY_TIMEOUT_SECONDS', 0.05):
+                    assert database.create_periodic_backup() is None
+                assert 'backup copy timed out' in database.maintenance_error
+                assert source.in_transaction
+                assert source.execute("SELECT value FROM tracker_meta WHERE key='maintenance-test'").fetchone()[0] == 'pending'
+                with closing(sqlite3.connect(database.db_path)) as observer:
+                    assert observer.execute("SELECT value FROM tracker_meta WHERE key='maintenance-test'").fetchone()[0] == 'committed'
+                assert previous.read_bytes() == previous_bytes
+                print('caller transaction preserved')
+            finally:
+                source.rollback()
+                database.close()
+        """)
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(SERVICE_ROOT), str(self.db_path)],
+            capture_output=True, text=True, timeout=5,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("caller transaction preserved", result.stdout)
+
     def test_unreadable_backup_preserves_source_until_latest_copy_can_be_retried(self) -> None:
         for with_older in (False, True):
             for fault in (PermissionError("backup access denied"),
