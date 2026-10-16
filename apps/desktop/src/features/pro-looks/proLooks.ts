@@ -9,11 +9,12 @@ import {
 } from "../pet-mode/petModeData";
 
 /**
- * Pro looks: the cat Dock icons and four of the six pet coats are Pro. The
- * hourglass icons and the Ivory and Grey coats stay free for everyone. A 7-day
+ * Pro looks: every Dock icon except Classic and Midnight (so Plum, Flow, Retro
+ * and the cats) and four of the six pet coats are Pro. Classic, Midnight and
+ * the Ivory and Grey coats stay free for everyone. A 7-day
  * trial, an individual plan and an organization seat all open every look.
  */
-export const FREE_APP_ICONS: ReadonlySet<AppIconVariantId> = new Set(["classic", "midnight", "plum", "flow", "retro"]);
+export const FREE_APP_ICONS: ReadonlySet<AppIconVariantId> = new Set(["classic", "midnight"]);
 export const FREE_PET_COATS: ReadonlySet<PetModeCoat> = new Set(["ivory", "grey"]);
 /** What a look falls back to once Pro ends. */
 export const FREE_FALLBACK_APP_ICON: AppIconVariantId = "classic";

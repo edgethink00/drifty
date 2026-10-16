@@ -139,17 +139,21 @@ describe("App icon setting", () => {
 });
 
 describe("App icon setting without Pro", () => {
-  it("locks each cat icon with an always-visible corner lock and leaves the hourglass icons free", async () => {
+  it("locks every icon after the first two with an always-visible corner lock and leaves Classic and Midnight free", async () => {
     const { view } = renderRow({ state: "upgrade" });
     await waitFor(() => expect(checked("Classic")).toBe("true"));
     expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual([
-      "Classic", "Midnight", "Plum", "Flow", "Retro",
+      "Classic", "Midnight", "Plum · Pro", "Flow · Pro", "Retro · Pro",
       "Peek · Pro", "Cat face · Pro", "Window walk · Pro", "Ivory cat · Pro", "Charcoal cat · Pro", "Plum cat · Pro",
     ]);
-    expect(view.container.querySelectorAll(".pro-look-lock")).toHaveLength(6);
+    expect(view.container.querySelectorAll(".pro-look-lock")).toHaveLength(9);
 
-    fireEvent.click(screen.getByRole("radio", { name: "Retro" }));
-    expect(nativeIcon.set).toHaveBeenCalledWith("retro");
+    fireEvent.click(screen.getByRole("radio", { name: "Midnight" }));
+    expect(nativeIcon.set).toHaveBeenCalledWith("midnight");
+    nativeIcon.set.mockClear();
+    fireEvent.click(screen.getByRole("radio", { name: "Retro · Pro" }));
+    expect(nativeIcon.set).not.toHaveBeenCalled();
+    expect(nativeIcon.preview).toHaveBeenCalledWith("retro");
   });
 
   it("tries a locked icon on in the Dock while its bubble is open and puts the saved icon back on Go back", async () => {
@@ -158,7 +162,7 @@ describe("App icon setting without Pro", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: "Peek · Pro" }));
     const bubble = screen.getByRole("dialog", { name: "Previewing ‘Peek’ in the Dock" });
-    expect(within(bubble).getByText("Pro includes all six cat icons.")).toBeTruthy();
+    expect(within(bubble).getByText("Pro includes every app icon.")).toBeTruthy();
     expect(within(bubble).getByText("Close this to go back to your icon.")).toBeTruthy();
     await waitFor(() => expect(nativeIcon.preview).toHaveBeenLastCalledWith("peek"));
     expect(nativeIcon.set).not.toHaveBeenCalled();
@@ -185,7 +189,7 @@ describe("App icon setting without Pro", () => {
     await waitFor(() => expect(checked("Classic")).toBe("true"));
     fireEvent.click(screen.getByRole("radio", { name: "Peek · Pro" }));
     const bubble = screen.getByRole("dialog");
-    expect(within(bubble).getByText("Sign in to try every cat icon free for 7 days.")).toBeTruthy();
+    expect(within(bubble).getByText("Sign in to try every Pro icon free for 7 days.")).toBeTruthy();
     fireEvent.click(within(bubble).getByRole("button", { name: "Sign in and try free for 7 days" }));
     expect(flow.requestSignIn).toHaveBeenCalledTimes(1);
 

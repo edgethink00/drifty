@@ -59,7 +59,8 @@ describe("Pro looks access", () => {
     const input = { access, currentIcon: "peek" as const, currentCoat: "ivory" as const, keptCoat: "apricot" as const };
     expect(isLookLocked({ kind: "icon", id: "peek" }, input)).toBe(false);
     expect(isLookLocked({ kind: "icon", id: "omega" }, input)).toBe(true);
-    expect(isLookLocked({ kind: "icon", id: "retro" }, input)).toBe(false);
+    expect(isLookLocked({ kind: "icon", id: "midnight" }, input)).toBe(false);
+    expect(isLookLocked({ kind: "icon", id: "retro" }, input)).toBe(true);
     expect(isLookLocked({ kind: "coat", id: "grey" }, input)).toBe(false);
     expect(isLookLocked({ kind: "coat", id: "apricot" }, input)).toBe(false);
     expect(isLookLocked({ kind: "coat", id: "charcoal" }, input)).toBe(true);

@@ -168,7 +168,7 @@ describe("ProDecisionSheet opened from a locked Pro look", () => {
   });
   afterEach(() => cleanup());
 
-  it("names the look beside its picture, keeps the plans, and lists the cat icons on macOS", () => {
+  it("names the look beside its picture, keeps the plans, and lists every app icon on macOS", () => {
     render(<ProDecisionSheet
       open context="trial-ended" funnelEnabled trialEndsAt="2026-10-08T06:30:00.000Z" unclassifiedSeconds={7800}
       billingCheckoutLoadingInterval={null} onSelectBillingPlan={vi.fn()} onDismiss={vi.fn()}
@@ -181,7 +181,7 @@ describe("ProDecisionSheet opened from a locked Pro look", () => {
     expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
     const value = within(dialog).getByRole("list", { name: "Included with Pro" });
     const lines = within(value).getAllByRole("listitem");
-    expect(lines[lines.length - 1].textContent).toBe("4 pet coats and the cat app icons");
+    expect(lines[lines.length - 1].textContent).toBe("4 pet coats and every app icon");
   });
 
   it("shows a coat on the desktop cat it would dress", () => {

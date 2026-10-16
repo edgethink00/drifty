@@ -9,7 +9,7 @@ import { useProLooks } from "../pro-looks/useProLooksController";
 /**
  * macOS only. The choice lives on this Mac (it never syncs) and changes the
  * Dock and app switcher while Drifty runs; Finder keeps the bundle icon. The
- * hourglass icons are free; the cat icons are Pro looks (features/pro-looks):
+ * Classic and Midnight are free; every other icon is a Pro look (features/pro-looks):
  * a locked one is tried on in the Dock while its bubble is open.
  */
 export function AppIconSettingsRow() {

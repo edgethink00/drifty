@@ -1854,7 +1854,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     setProStartedNoticeVisible(true);
   }, [acknowledgeProPurchase, classificationOnCloudRoute, proPurchaseConfirmed, setLocalAiSetup]);
-  // Pro looks: cat Dock icons and four pet coats need a trial, Pro or a seat.
+  // Pro looks: every Dock icon except Classic and Midnight, and four pet coats need a trial, Pro or a seat.
   // Locks follow the real account (not Dev previews), so a preview can never
   // put someone's look away.
   const [upgradeSheetLook, setUpgradeSheetLook] = useState<ProLook | null>(null);

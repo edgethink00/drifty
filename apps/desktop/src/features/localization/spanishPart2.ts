@@ -112,7 +112,7 @@ export const SPANISH_PART_2 = {
   "billing.proSheet.lead": "Todo lo del plan Gratis, y además",
   "billing.proSheet.plus.sync": "Sincronización de actividad en hasta 3 equipos",
   "billing.proSheet.plus.setup": "Sin descargas ni claves de API",
-  "billing.proSheet.plus.looks": "4 estilos de pelaje y los iconos de gato",
+  "billing.proSheet.plus.looks": "4 estilos de pelaje y todos los iconos de la app",
   "billing.proSheet.plus.coats": "4 estilos de pelaje",
   "billing.proSheet.lookIconFact": "Activa Pro y aparecerá directamente en tu Dock. Incluye clasificación con Cloud AI.",
   "billing.proSheet.lookCoatFact": "Activa Pro y tu gato de escritorio lo llevará de inmediato. Incluye clasificación con Cloud AI.",

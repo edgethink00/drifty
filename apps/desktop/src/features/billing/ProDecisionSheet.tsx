@@ -56,7 +56,7 @@ type ProDecisionSheetProps = {
    * header then names that look beside its picture; plans and benefits stay.
    */
   readonly look?: ProLook | null;
-  /** macOS: the benefit line includes the cat Dock icons as well as the coats. */
+  /** macOS: the benefit line includes the Dock icons as well as the coats. */
   readonly looksIncludeAppIcons?: boolean;
 };
 
