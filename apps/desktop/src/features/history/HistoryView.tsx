@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KeyHint } from "../../components/KeyHint";
-import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty/domain";
+import type { ActivitySegment, AppIconMap, ClassificationOptions, ExcludedAppRule } from "@drifty/domain";
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
@@ -14,6 +14,22 @@ import "./history.css";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { HistoryDeletionResult } from "./historyDeletion";
 import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
+import { trackerClient } from "../../lib/api/trackerClient";
+import { AppGlyph } from "../../components/AppGlyph";
+import { FloatingNoticePortal } from "../../components/FloatingNoticePortal";
+import { useFloatingNotice } from "../../components/useFloatingNotice";
+import "../settings/HistoryDeletionNotice.css";
+import { ExcludedAppHistoryConfirmation } from "../settings/ExcludedAppHistoryConfirmation";
+import { HistoryExcludeConfirmation } from "./HistoryExcludeConfirmation";
+import {
+  coveringExclusionRule,
+  exclusionHistoryQuery,
+  exclusionRuleFor,
+  historyExclusionTarget,
+  type HistoryExclusionOutcome,
+  type HistoryExclusionRequest,
+  type HistoryExclusionTarget,
+} from "./historyExclusion";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -40,7 +56,47 @@ type HistoryViewProps = {
   readonly onLocateSettled?: () => void;
   /** Opens a record in Your Week or Your Day from its row menu. */
   readonly onOpenRecord?: (row: HistoryRowModel, surface: HistoryRecordSurface) => void;
+  /**
+   * Keeps a row's site or app out of history (the Settings exclusion list) and
+   * optionally deletes its past records. Absent hides "Don't record" from the
+   * row menu.
+   */
+  readonly onExcludeActivity?: (request: HistoryExclusionRequest) => Promise<HistoryExclusionOutcome>;
 };
+
+type ExcludeDialogState =
+  | { readonly mode: "add"; readonly row: HistoryRowModel; readonly target: HistoryExclusionTarget }
+  | { readonly mode: "past"; readonly row: HistoryRowModel; readonly rule: ExcludedAppRule; readonly count: number };
+
+type ExclusionNoticeState = {
+  readonly key: number;
+  readonly title: string;
+  readonly detail: string;
+};
+
+/** The short confirmation after a row's site or app was kept out, in the History deletion notice's frame. */
+function HistoryExclusionNotice({ notice, onDismiss }: { readonly notice: ExclusionNoticeState; readonly onDismiss: () => void }) {
+  const { t } = useLocalization();
+  const floating = useFloatingNotice(onDismiss);
+  const className = ["history-deletion-notice", floating.isLeaving ? "is-leaving" : floating.hasEntered ? "is-settled" : "is-entering", floating.isTimerPaused ? "is-paused" : ""].filter(Boolean).join(" ");
+  if (typeof document === "undefined") return null;
+  return <FloatingNoticePortal>
+    <section ref={floating.rootRef} className={className} role="status" aria-atomic="true" aria-label={notice.title} {...floating.handlers}>
+      <span className="history-deletion-notice__copy">
+        <strong>{notice.title}</strong>
+        <span>{notice.detail}</span>
+      </span>
+      <button className="history-deletion-notice__dismiss" type="button" aria-label={t("settings.deleteHistory.dismissNotice")} onClick={floating.requestLeave}>
+        <svg className="history-deletion-notice__ring" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
+          <circle className="history-deletion-notice__ring-track" cx="14" cy="14" r="11" />
+          <circle className="history-deletion-notice__ring-progress" cx="14" cy="14" r="11" />
+        </svg>
+        <span className="history-deletion-notice__dismiss-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" /></svg></span>
+      </button>
+      <span className="sr-only" role="timer" aria-label={t("settings.deleteHistory.noticeTimer")} />
+    </section>
+  </FloatingNoticePortal>;
+}
 
 const HISTORY_RENDER_STEP = 200;
 const EMPTY_HISTORY_ROWS: readonly HistoryRowModel[] = [];
@@ -123,6 +179,7 @@ export function HistoryView({
   locateSegmentId = null,
   onLocateSettled,
   onOpenRecord,
+  onExcludeActivity,
 }: HistoryViewProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [uncontrolledQuery, setUncontrolledQuery] = useState("");
@@ -138,6 +195,15 @@ export function HistoryView({
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [retryingRefresh, setRetryingRefresh] = useState(false);
   const requestInFlight = useRef(false);
+  // The saved exclusion list, so a row whose site is already kept out offers
+  // to delete its past records instead of adding the rule again.
+  const [exclusionRules, setExclusionRules] = useState<readonly ExcludedAppRule[]>([]);
+  const [excludeDialog, setExcludeDialog] = useState<ExcludeDialogState | null>(null);
+  const [excludePastCount, setExcludePastCount] = useState<number | null | "error">(null);
+  const [excludeSaving, setExcludeSaving] = useState(false);
+  const [excludeError, setExcludeError] = useState<DescribedActionError | null>(null);
+  const [exclusionNotice, setExclusionNotice] = useState<ExclusionNoticeState | null>(null);
+  const excludeRequestRef = useRef(0);
   const isDeleting = deleting || confirmDeleting;
   const [renderLimit, setRenderLimit] = useState(HISTORY_RENDER_STEP);
   const query = searchQuery ?? uncontrolledQuery;
@@ -247,11 +313,98 @@ export function HistoryView({
     setRowDeleteIds(row.segmentIds);
     setConfirmOpen(true);
   }, []);
+  useEffect(() => {
+    if (!onExcludeActivity) return undefined;
+    let cancelled = false;
+    void trackerClient.getExcludedApps().then((rules) => {
+      if (!cancelled) setExclusionRules(rules);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [onExcludeActivity]);
+
+  const excludeLabel = useCallback((row: HistoryRowModel) => {
+    const target = historyExclusionTarget(row);
+    if (!target) return null;
+    const covering = coveringExclusionRule(exclusionRules, target);
+    return covering
+      ? t("history.rowMenu.deleteExcludedPast", { name: covering.name })
+      : t("history.rowMenu.exclude", { name: target.name });
+  }, [exclusionRules, t]);
+
+  const openRowExclude = useCallback((row: HistoryRowModel) => {
+    const target = historyExclusionTarget(row);
+    if (!target) return;
+    const request = ++excludeRequestRef.current;
+    setExcludeError(null);
+    const covering = coveringExclusionRule(exclusionRules, target);
+    if (covering) {
+      // Already kept out: the row can only offer to delete the past records
+      // the rule did not stop. The confirmation names their count, so it opens
+      // once the count arrives.
+      void trackerClient.getExcludedAppHistoryCount(exclusionHistoryQuery(covering)).then(({ count }) => {
+        if (excludeRequestRef.current === request) setExcludeDialog({ mode: "past", row, rule: covering, count });
+      }).catch(() => {
+        if (excludeRequestRef.current === request) {
+          setExclusionNotice({ key: request, title: t("history.exclude.countErrorTitle"), detail: t("history.exclude.countError", { name: covering.name }) });
+        }
+      });
+      return;
+    }
+    setExcludePastCount(null);
+    setExcludeDialog({ mode: "add", row, target });
+    void trackerClient.getExcludedAppHistoryCount(exclusionHistoryQuery(exclusionRuleFor(target))).then(({ count }) => {
+      if (excludeRequestRef.current === request) setExcludePastCount(count);
+    }).catch(() => {
+      if (excludeRequestRef.current === request) setExcludePastCount("error");
+    });
+  }, [exclusionRules, t]);
+
   const rowMenu = useMemo<HistoryRowMenuActions>(() => ({
     onOpen: onOpenRecord,
     onDelete: openRowDelete,
     deleteDisabled: isDeleting || retryingRefresh,
-  }), [isDeleting, onOpenRecord, openRowDelete, retryingRefresh]);
+    ...(onExcludeActivity ? { excludeLabel, onExclude: openRowExclude } : {}),
+  }), [excludeLabel, isDeleting, onExcludeActivity, onOpenRecord, openRowDelete, openRowExclude, retryingRefresh]);
+
+  function closeExcludeDialog() {
+    if (excludeSaving) return;
+    excludeRequestRef.current += 1;
+    setExcludeDialog(null);
+    setExcludeError(null);
+  }
+
+  async function confirmExclude(deletePast: boolean) {
+    if (!excludeDialog || !onExcludeActivity || requestInFlight.current) return;
+    const rule = excludeDialog.mode === "add" ? exclusionRuleFor(excludeDialog.target) : excludeDialog.rule;
+    const save = excludeDialog.mode === "add";
+    const deleting = excludeDialog.mode === "past" || deletePast;
+    // Deleting the past records takes this row with them; focus continues from its neighbour.
+    const rowIndex = renderedRows.findIndex((candidate) => candidate.id === excludeDialog.row.id);
+    const neighbourRow = rowIndex < 0 ? undefined : renderedRows[rowIndex + 1] ?? renderedRows[rowIndex - 1];
+    requestInFlight.current = true;
+    setExcludeSaving(true);
+    setExcludeError(null);
+    try {
+      const outcome = await onExcludeActivity({ rule, save, deletePast: deleting });
+      if (save) setExclusionRules((current) => [rule, ...current.filter((existing) => existing.id !== rule.id)]);
+      setExcludeDialog(null);
+      if (deleting) setFocusRowIdAfterDelete(neighbourRow?.id ?? null);
+      if (outcome.refreshFailed) setRefreshFailed(true);
+      const deletedDetail = t(outcome.deleted === 1 ? "history.exclude.noticeDeletedOne" : "history.exclude.noticeDeleted", { count: outcome.deleted });
+      setExclusionNotice({
+        key: Date.now(),
+        title: t(save ? "history.exclude.noticeTitle" : "history.exclude.noticePastTitle", { name: rule.name }),
+        detail: deleting ? deletedDetail : t("history.exclude.noticeKept"),
+      });
+    } catch (failure) {
+      setExcludeError(describeActionError(failure, t(deleting && !save ? "settings.privacy.excludedAppsError.delete" : "history.exclude.error")));
+    } finally {
+      setExcludeSaving(false);
+      requestInFlight.current = false;
+    }
+  }
 
   useEffect(() => {
     if (!focusRowIdAfterDelete || confirmOpen) return;
@@ -461,6 +614,37 @@ export function HistoryView({
           />
         ) : null}
       </ModalPresence>
+
+      {/* Both confirmations own their dismissal, as they do in Settings. */}
+      <ModalPresence>
+        {excludeDialog?.mode === "add" ? (
+          <HistoryExcludeConfirmation
+            key={excludeDialog.row.id}
+            target={excludeDialog.target}
+            icon={excludeDialog.target.kind === "site"
+              // The lettered mark the Settings list shows for this rule.
+              ? <span className="site-favicon site-favicon--fallback" style={{ width: 24, height: 24 }}>{excludeDialog.target.name[0]?.toUpperCase() ?? "•"}</span>
+              : <AppGlyph appName={excludeDialog.row.appName} iconSrc={appIcons[excludeDialog.row.bundleId ?? excludeDialog.row.appName] ?? null} size="sm" />}
+            pastCount={excludePastCount}
+            saving={excludeSaving}
+            error={excludeError}
+            onCancel={closeExcludeDialog}
+            onConfirm={(deletePast) => void confirmExclude(deletePast)}
+          />
+        ) : excludeDialog?.mode === "past" ? (
+          <ExcludedAppHistoryConfirmation
+            appName={excludeDialog.rule.name}
+            count={excludeDialog.count}
+            deleting={excludeSaving}
+            error={excludeError}
+            onCancel={closeExcludeDialog}
+            onConfirm={() => void confirmExclude(true)}
+          />
+        ) : null}
+      </ModalPresence>
+      {exclusionNotice ? (
+        <HistoryExclusionNotice key={exclusionNotice.key} notice={exclusionNotice} onDismiss={() => setExclusionNotice(null)} />
+      ) : null}
     </section>
   );
 }

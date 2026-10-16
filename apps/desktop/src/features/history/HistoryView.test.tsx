@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import type { ActivitySegment } from "@drifty/domain";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryView } from "./HistoryView";
+import { trackerClient } from "../../lib/api/trackerClient";
 import { readAppStyles, readCssWithImports } from "../../test/readStyles";
 import { fireIntersection, installMockIntersectionObserver } from "../../test/intersectionObserverMock";
 
@@ -677,3 +678,148 @@ describe("HistoryView row menu", () => {
     expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Delete…"]);
   });
 });
+
+describe("HistoryView row menu: don't record", () => {
+  const bankRow: ActivitySegment = {
+    id: "bank",
+    appName: "Google Chrome",
+    bundleId: "com.google.Chrome",
+    browserName: "Google Chrome",
+    durationSeconds: 300,
+    endedAt: "2026-06-10T10:05:00+00:00",
+    platform: "macos",
+    siteDomain: "obank.kbstar.com",
+    siteTitle: "계좌 조회",
+    siteUrl: "https://obank.kbstar.com/quics",
+    source: "accessibility",
+    startedAt: "2026-06-10T10:00:00+00:00",
+    windowTitle: "계좌 조회 - Chrome",
+  };
+  const newTabRow: ActivitySegment = {
+    id: "newtab",
+    appName: "Google Chrome",
+    bundleId: "com.google.Chrome",
+    browserName: "Google Chrome",
+    durationSeconds: 60,
+    endedAt: "2026-06-10T08:01:00+00:00",
+    platform: "macos",
+    source: "accessibility",
+    startedAt: "2026-06-10T08:00:00+00:00",
+    windowTitle: "New Tab",
+  };
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  function renderExclude(segments: ActivitySegment[], rules: Awaited<ReturnType<typeof trackerClient.getExcludedApps>> = [], count = 4) {
+    vi.spyOn(trackerClient, "getExcludedApps").mockResolvedValue(rules);
+    const countSpy = vi.spyOn(trackerClient, "getExcludedAppHistoryCount").mockResolvedValue({ count });
+    const onExcludeActivity = vi.fn(async ({ deletePast }: { deletePast: boolean }) => ({ deleted: deletePast ? count : 0 }));
+    render(
+      <HistoryView
+        appIcons={{}}
+        segments={segments}
+        deleting={false}
+        onDeleteSelected={vi.fn(async () => {})}
+        onOpenRecord={vi.fn()}
+        onExcludeActivity={onExcludeActivity}
+      />,
+    );
+    return { onExcludeActivity, countSpy };
+  }
+
+  function menuItems(title: RegExp) {
+    fireEvent.click(screen.getByRole("button", { name: title }));
+    return within(screen.getByRole("menu")).getAllByRole("menuitem").map((item) => item.textContent);
+  }
+
+  it("offers the whole site for a site row, the app for an app row, and nothing for a browser row without a site", async () => {
+    renderExclude([bankRow, historySegments[1]!, newTabRow]);
+    await waitFor(() => expect(trackerClient.getExcludedApps).toHaveBeenCalled());
+
+    expect(menuItems(/^Options for 계좌 조회/)).toEqual(["Show in week calendar", "Show this day", "Don't record kbstar.com…", "Delete…"]);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(menuItems(/^Options for Issue triage/)).toEqual(["Show in week calendar", "Show this day", "Don't record Acme Tracker…", "Delete…"]);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    // Offering the browser would hide all browsing.
+    expect(menuItems(/^Options for New Tab/)).toEqual(["Show in week calendar", "Show this day", "Delete…"]);
+  });
+
+  it("asks first, saves the site rule and keeps past records unless their deletion is ticked", async () => {
+    const { onExcludeActivity, countSpy } = renderExclude([bankRow]);
+    await waitFor(() => expect(trackerClient.getExcludedApps).toHaveBeenCalled());
+    menuItems(/^Options for 계좌 조회/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Don't record kbstar.com…" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Stop recording this site?" });
+    expect(within(dialog).getByText("kbstar.com")).toBeTruthy();
+    expect(within(dialog).getByText("Includes obank.kbstar.com")).toBeTruthy();
+    expect(countSpy).toHaveBeenCalledWith({ name: "kbstar.com", bundleId: null, siteDomain: "kbstar.com" });
+    const deletePast = await within(dialog).findByRole("checkbox", { name: /Also delete 4 past records/ });
+    expect((deletePast as HTMLInputElement).checked).toBe(false);
+    expect(onExcludeActivity).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Don't record" }));
+    await waitFor(() => expect(onExcludeActivity).toHaveBeenCalledWith({
+      rule: { id: "site:kbstar.com", name: "kbstar.com", bundleId: null, source: "user", kind: "site" },
+      save: true,
+      deletePast: false,
+    }));
+    expect(await screen.findByRole("status", { name: "Not recording kbstar.com" })).toBeTruthy();
+    expect(screen.getByText("Past records stay. Unblock it in Settings › Privacy & Data.")).toBeTruthy();
+
+    // Now that the site is kept out, the same row offers to delete what was recorded before.
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Stop recording this site?" })).toBeNull());
+    expect(menuItems(/^Options for 계좌 조회/)).toContain("Delete past kbstar.com records…");
+  });
+
+  it("names the deletion on the button when past records are ticked, and reports how many went", async () => {
+    const { onExcludeActivity } = renderExclude([bankRow, historySegments[1]!]);
+    await waitFor(() => expect(trackerClient.getExcludedApps).toHaveBeenCalled());
+    menuItems(/^Options for 계좌 조회/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Don't record kbstar.com…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Stop recording this site?" });
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: /Also delete 4 past records/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Don't record and delete" }));
+    await waitFor(() => expect(onExcludeActivity).toHaveBeenCalledWith(expect.objectContaining({ save: true, deletePast: true })));
+    expect(await screen.findByText("Deleted 4 past records.")).toBeTruthy();
+  });
+
+  it("keeps a failed save in the dialog for a retry", async () => {
+    const { onExcludeActivity } = renderExclude([historySegments[1]!], [], 0);
+    onExcludeActivity.mockRejectedValueOnce(new Error("storage unavailable"));
+    await waitFor(() => expect(trackerClient.getExcludedApps).toHaveBeenCalled());
+    menuItems(/^Options for Issue triage/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Don't record Acme Tracker…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Stop recording this app?" });
+    expect(await within(dialog).findByText("No past records to delete.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Don't record" }));
+    expect((await within(dialog).findByRole("alert")).textContent).toContain("Couldn't save");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Don't record" }));
+    await waitFor(() => expect(onExcludeActivity).toHaveBeenLastCalledWith({
+      rule: { id: "com.acme.tracker", name: "Acme Tracker", bundleId: "com.acme.tracker", source: "user", kind: "app" },
+      save: true,
+      deletePast: false,
+    }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Stop recording this app?" })).toBeNull());
+  });
+
+  it("only deletes past records for a site that is already kept out, in the Settings confirmation", async () => {
+    const rule = { id: "site:kbstar.com", name: "kbstar.com", bundleId: null, source: "user" as const, kind: "site" as const };
+    const { onExcludeActivity } = renderExclude([bankRow], [rule], 3);
+    await waitFor(() => expect(menuItems(/^Options for 계좌 조회/)).toContain("Delete past kbstar.com records…"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete past kbstar.com records…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete 3 kbstar.com records?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete records" }));
+    await waitFor(() => expect(onExcludeActivity).toHaveBeenCalledWith({ rule, save: false, deletePast: true }));
+    expect(await screen.findByRole("status", { name: "Deleted past kbstar.com records" })).toBeTruthy();
+  });
+
+  it("hides the item when the app gives no way to keep activity out", () => {
+    render(<HistoryView appIcons={{}} segments={[bankRow]} deleting={false} onDeleteSelected={vi.fn(async () => {})} onOpenRecord={vi.fn()} />);
+    expect(menuItems(/^Options for 계좌 조회/)).toEqual(["Show in week calendar", "Show this day", "Delete…"]);
+  });
+});
+

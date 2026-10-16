@@ -12,6 +12,13 @@ export type HistoryRowMenuActions = {
   readonly onOpen?: (row: HistoryRowModel, surface: HistoryRecordSurface) => void;
   readonly onDelete: (row: HistoryRowModel) => void;
   readonly deleteDisabled: boolean;
+  /**
+   * "Don't record" for this row's site or app: its label, or null when the row
+   * offers none (a browser with no site, excluded activity). Absent when the
+   * app cannot keep anything out of history.
+   */
+  readonly excludeLabel?: (row: HistoryRowModel) => string | null;
+  readonly onExclude?: (row: HistoryRowModel) => void;
 };
 
 type HistoryRowMenuProps = {
@@ -41,7 +48,8 @@ const iconProps = {
   "aria-hidden": true,
 };
 
-/** The row's one menu: open the record where it happened, or delete it.
+/** The row's one menu: open the record where it happened, keep its site or
+ * app out of history from now on, or delete it.
  *
  * History's list clips its rounded corners, so the menu is placed on the
  * document instead of inside the row, and opens upward when the window has no
@@ -60,6 +68,7 @@ export function HistoryRowMenu({ actions, canOpen, row, title }: HistoryRowMenuP
   // Keyboard opening lands on an item; a pointer leaves focus where it was.
   const focusOnOpen = useRef<"first" | "last" | null>(null);
   const showOpenItems = canOpen && actions.onOpen !== undefined;
+  const excludeLabel = actions.onExclude ? actions.excludeLabel?.(row) ?? null : null;
 
   useLayoutEffect(() => {
     if (!open) {
@@ -187,6 +196,13 @@ export function HistoryRowMenu({ actions, canOpen, row, title }: HistoryRowMenuP
     actions.onOpen?.(row, surface);
   };
 
+  // Its confirmation also returns focus to the trigger.
+  const excludeRecord = () => {
+    triggerRef.current?.focus({ preventScroll: true });
+    setOpen(false);
+    actions.onExclude?.(row);
+  };
+
   // The confirmation returns focus to whatever held it when it opened.
   const deleteRecord = () => {
     triggerRef.current?.focus({ preventScroll: true });
@@ -246,6 +262,12 @@ export function HistoryRowMenu({ actions, canOpen, row, title }: HistoryRowMenuP
                 </button>
                 <div className="history-row-menu__separator" role="separator" />
               </>
+            ) : null}
+            {excludeLabel ? (
+              <button type="button" role="menuitem" tabIndex={-1} onPointerMove={followPointer} onClick={excludeRecord}>
+                <svg {...iconProps}><path d="M2 8s2.2-4 6-4c1 0 1.9.3 2.7.7M14 8s-2.2 4-6 4c-1 0-1.9-.3-2.7-.7" /><path d="M6.6 9.4a2 2 0 0 1 2.8-2.8M2.5 13.5l11-11" /></svg>
+                {excludeLabel}
+              </button>
             ) : null}
             <button type="button" role="menuitem" tabIndex={-1} className="danger" disabled={actions.deleteDisabled} onPointerMove={followPointer} onClick={deleteRecord}>
               <svg {...iconProps}><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1" /></svg>

@@ -25,6 +25,7 @@ const animatedModalPanelFiles = [
   "./features/device-sync/DeviceSyncPurgeConfirmation.tsx",
   "./features/device-sync/DeviceSyncSetupModal.tsx",
   "./features/feedback/FeedbackModal.tsx",
+  "./features/history/HistoryExcludeConfirmation.tsx",
   "./features/history/HistoryView.tsx",
   "./features/leaderboard/RankEmbedsModal.tsx",
   "./features/onboarding/AutomaticCloseConfirmDialog.tsx",
@@ -77,6 +78,7 @@ const sharedModalSurfaces = [
   ["Remove cloud device", "./features/cloud-devices/CloudDeviceManagementPanel.tsx", /className="cloud-device-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Enable device sync", "./features/device-sync/DeviceSyncSetupModal.tsx", /className="auth-modal modal-shell device-sync-setup-modal" data-modal-variant="compact"/],
   ["Delete synced cloud data", "./features/device-sync/DeviceSyncPurgeConfirmation.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
+  ["Stop recording a site or app", "./features/history/HistoryExcludeConfirmation.tsx", /className="auth-modal modal-shell history-exclude-modal"\s+data-modal-variant="compact"/],
   ["Delete selected records", "./features/history/HistoryView.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Automatic close consent", "./features/onboarding/AutomaticCloseConfirmDialog.tsx", /className="guide-close-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Command palette", "./features/command-bar/CommandBar.tsx", /className="cmd-box modal-shell"\s+data-modal-variant="utility"/],
@@ -181,7 +183,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(32);
+    expect(sharedModalSurfaces).toHaveLength(33);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -315,6 +317,7 @@ describe("dialog key hints", () => {
     ["./features/billing/PromoHandoffAccountDialog.tsx", ["escape"]],
     ["./features/updates/AvailableUpdateDialog.tsx", ["escape"]],
     ["./features/projects/ProjectDeleteConfirmation.tsx", ["escape"]],
+    ["./features/history/HistoryExcludeConfirmation.tsx", ["escape"]],
     ["./features/history/HistoryView.tsx", ["escape"]],
     ["./features/settings/DeleteHistoryModal.tsx", ["escape", "modEnter"]],
     ["./features/settings/ExcludedAppHistoryConfirmation.tsx", ["escape"]],

@@ -246,6 +246,37 @@ export function normalizeExcludedSite(value: string | null | undefined): string 
   return host;
 }
 
+/** Second-level labels that, under a two-letter country code, name a registry rather than a site: co.kr, go.kr, co.uk, com.au. */
+const COUNTRY_SECOND_LEVEL_LABELS = new Set(["ac", "co", "com", "edu", "go", "gov", "ne", "net", "or", "org", "re", "pe", "mil", "ltd", "plc", "nhs", "gen", "biz", "info", "sch", "police"]);
+
+/** Shared hosts where each subdomain is a different owner's site, so the subdomain itself is the site. */
+const SHARED_HOST_SUFFIXES = ["github.io", "gitlab.io", "pages.dev", "vercel.app", "netlify.app", "web.app", "firebaseapp.com", "herokuapp.com", "blogspot.com", "notion.site", "tistory.com", "wordpress.com"];
+
+/**
+ * The site that "don't record this site" saves for a recorded host. A bank
+ * visited at obank.kbstar.com is kbstar.com, so the rule also covers its other
+ * addresses (www.kbstar.com, banking.kbstar.com). Keeps one more label under
+ * a country registry (hometax.go.kr, bbc.co.uk) and on shared hosts where each
+ * subdomain is someone else's site (me.github.io). Null when the host names no
+ * site.
+ */
+export function suggestedExcludedSite(host: string | null | undefined): string | null {
+  const normalized = normalizeExcludedSite(host);
+  if (!normalized) return null;
+  const shared = SHARED_HOST_SUFFIXES.find((suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`));
+  if (shared) {
+    if (normalized === shared) return normalized;
+    const extra = normalized.slice(0, -(shared.length + 1)).split(".");
+    return `${extra[extra.length - 1]}.${shared}`;
+  }
+  const labels = normalized.split(".");
+  if (labels.length <= 2) return normalized;
+  const tld = labels[labels.length - 1]!;
+  const second = labels[labels.length - 2]!;
+  const keep = tld.length === 2 && COUNTRY_SECOND_LEVEL_LABELS.has(second) ? 3 : 2;
+  return labels.slice(-keep).join(".");
+}
+
 export const DEFAULT_EXCLUDED_APPS: readonly ExcludedAppRule[] = [
   { id: "com.1password.1password", name: "1Password", bundleId: "com.1password.1password", source: "default" },
   { id: "com.authy.authy-mac", name: "Authy", bundleId: "com.authy.authy-mac", source: "default" },

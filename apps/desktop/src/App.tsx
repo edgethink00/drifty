@@ -543,6 +543,7 @@ import { scheduleIdleWork } from "./lib/scheduleIdleWork";
 const LazyClassificationPage = lazy(async () => ({
   default: (await import("./features/classification/ClassificationPage")).ClassificationPage,
 }));
+import { exclusionHistoryQuery, type HistoryExclusionOutcome, type HistoryExclusionRequest } from "./features/history/historyExclusion";
 const LazyHistoryView = lazy(async () => ({
   default: (await import("./features/history/HistoryView")).HistoryView,
 }));
@@ -9424,6 +9425,23 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
   }, [clearLocalActivityCaches, historyDeleting, refreshAfterHistoryDeletion]);
 
+  // "Don't record" from a History row saves the same rule Settings saves and,
+  // when asked, deletes that site's or app's past records like Settings does.
+  const handleHistoryExclusion = useCallback(async (request: HistoryExclusionRequest): Promise<HistoryExclusionOutcome> => {
+    setError(null);
+    if (request.save) await trackerClient.saveExcludedApp(request.rule);
+    if (!request.deletePast) return { deleted: 0 };
+    const { deleted } = await trackerClient.deleteExcludedAppHistory(exclusionHistoryQuery(request.rule));
+    clearLocalActivityCaches();
+    setHistorySearchSegments([]);
+    try {
+      await refreshAfterHistoryDeletion();
+      return { deleted };
+    } catch {
+      return { deleted, refreshFailed: true };
+    }
+  }, [clearLocalActivityCaches, refreshAfterHistoryDeletion]);
+
   const [historyDeletionResult, setHistoryDeletionResult] = useState<DeleteHistoryRangeResult | null>(null);
   const [deleteHistoryModalOpen, setDeleteHistoryModalOpen] = useState(false);
 
@@ -11580,6 +11598,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 locateSegmentId={historyLocateSegmentId}
                 onLocateSettled={clearHistoryLocate}
                 onOpenRecord={openHistoryRecordInContext}
+                onExcludeActivity={isPreviewSurface || !shouldBlockLocalTrackerAccess ? handleHistoryExclusion : undefined}
               />
             ) : (
               <DeferredTabBodyFallback variant="history" />

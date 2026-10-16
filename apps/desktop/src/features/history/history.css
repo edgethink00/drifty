@@ -642,3 +642,136 @@
   min-width: 12rem;
   color: var(--text-soft);
 }
+
+/* "Don't record" from a row asks in the app's compact confirmation shell:
+   the site or app it keeps out, what happens from now on, and an opt-in to
+   delete what is already recorded. */
+.history-exclude-modal {
+  max-width: 27rem;
+}
+
+.history-exclude-modal .auth-modal__header {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.history-exclude-modal__target {
+  align-items: center;
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  padding: 9px 12px;
+}
+
+.history-exclude-modal__icon {
+  display: grid;
+  height: 24px;
+  place-items: center;
+  width: 24px;
+}
+
+.history-exclude-modal__icon .site-favicon,
+.history-exclude-modal__icon .app-glyph--sm,
+.history-exclude-modal__icon .app-icon--sm {
+  border-radius: 50%;
+  height: 24px;
+  width: 24px;
+}
+
+.history-exclude-modal__icon .app-glyph--sm,
+.history-exclude-modal__icon .app-icon--sm {
+  border-radius: 7px;
+}
+
+.history-exclude-modal__name {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.history-exclude-modal__name strong {
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-shell .auth-modal__header .history-exclude-modal__name span {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.3;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-exclude-modal__detail {
+  display: grid;
+}
+
+.history-exclude-modal__detail > p {
+  grid-area: 1 / 1;
+  margin: 0;
+}
+
+.history-exclude-modal__detail.has-error > p:first-child {
+  visibility: hidden;
+}
+
+.history-exclude-modal .auth-modal__header .history-exclude-modal__error {
+  color: var(--warn);
+}
+
+/* One line either way, so the actions never move while the count arrives. */
+.history-exclude-modal__past {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  font-size: var(--type-setting-desc-size);
+  margin-bottom: var(--space-4);
+  min-height: 2.6rem;
+  padding-top: var(--space-3);
+}
+
+.history-exclude-modal__past-note {
+  color: var(--text-soft);
+}
+
+.history-exclude-modal__past-choice {
+  align-items: flex-start;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  gap: 9px;
+  line-height: 1.35;
+}
+
+.history-exclude-modal__past-choice input {
+  accent-color: var(--warn);
+  flex: 0 0 auto;
+  height: 15px;
+  margin: 2px 0 0;
+  width: 15px;
+}
+
+.history-exclude-modal__past-hint {
+  color: var(--text-soft);
+  display: block;
+  font-size: var(--type-caption-size);
+  margin-top: 1px;
+}
+
+.history-exclude-modal__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
