@@ -910,13 +910,16 @@ class RangeDeletionReplayTests(DeviceSyncTestCase):
         self._leave_pre_fix_range_deletion("2026-07-06T00:00:00+00:00", None)
         self._restart()
         uid = "99999999-0000-0000-0000-00000000e004"
-        self.database.apply_synced_segments([
-            self._remote_segment(uid, started_at="2026-07-06T10:00:00.65494+00:00",
-                                 ended_at="2026-07-06T10:01:00.6549+00:00"),
-        ])
-
+        # Seed a pre-existing row directly: receive now correctly rejects a
+        # late cloud page covered by the durable local tombstone. This test
+        # still proves the startup repair does not run a second time.
+        with self.database.connect() as conn:
+            conn.execute(
+                "INSERT INTO activity_segments(segment_uid, origin_device_id, started_at, ended_at, "
+                "duration_seconds, app_name, source, platform) VALUES (?, ?, ?, ?, 60, 'fixture', 'test', 'macos')",
+                (uid, REMOTE_DEVICE_ID, "2026-07-06T10:00:00.65494+00:00", "2026-07-06T10:01:00.6549+00:00"),
+            )
         self._restart()
-
         self.assertIn(uid, self._remaining_uids())
         self.assertEqual(self._uid_tombstones(), [])
 

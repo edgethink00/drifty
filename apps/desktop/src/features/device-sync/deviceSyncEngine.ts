@@ -222,8 +222,9 @@ export async function runSyncPullCycle(deps: DeviceSyncEngineDeps): Promise<Sync
     await sleep(SYNC_CHUNK_YIELD_MS);
   }
 
-  // Deletions apply AFTER segments each cycle so a deleted range cannot be
-  // resurrected by segment pages that were read before the tombstone.
+  // Apply newly pulled deletions after segment pages. The tracker's durable
+  // receive barriers also protect local/previously applied deletions while a
+  // segment response is in flight; ordering these two loops alone cannot.
   if (deps.fetchDeletionsPullPage) {
     let deletionCursor: string | null = snapshot.state[SYNC_DELETION_PULL_CURSOR_KEY] ?? null;
     for (let chunk = 0; chunk < SYNC_MAX_CHUNKS_PER_CYCLE; chunk += 1) {

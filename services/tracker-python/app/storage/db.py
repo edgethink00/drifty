@@ -18,6 +18,9 @@ from urllib.parse import urlparse
 
 from app.fs_safety import ensure_directory
 from app.storage.ai_review_schema import ensure_ai_review_schema
+from app.storage.sync_deletion_barrier import (
+    SyncDeletionBarrier, ensure_received_deletion_schema, sync_account_scope,
+)
 from app.text_safety import without_lone_surrogates
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
 from app.capture_platform import CAPTURE_PLATFORM
@@ -775,6 +778,7 @@ class TrackerDatabase:
                 conn.execute(f"ALTER TABLE agent_session_events ADD COLUMN {column} {column_type}")
 
     def _ensure_sync_schema(self, conn: sqlite3.Connection) -> None:
+        ensure_received_deletion_schema(conn)
         # Local-only ownership and meaning for the classification currently
         # materialized on a received segment. These facts are deliberately
         # orthogonal: reverting a local review can restore a synced rule
@@ -2414,6 +2418,10 @@ class TrackerDatabase:
             else [None]
         )
         created_at = datetime.now(timezone.utc).isoformat()
+        if kind == "range" and range_end is None:
+            # "Delete history" is a snapshot through deletion time, not a ban
+            # on future capture. Send the finite bound to older servers too.
+            range_end = created_at
         for uid_chunk in uid_chunks:
             conn.execute(
                 """
@@ -2468,14 +2476,15 @@ class TrackerDatabase:
         *,
         refresh_recovery_backup: bool = True,
         expected_capture_timings: dict[int, CaptureTiming] | None = None,
-        _claim_sync_deletion: Callable[[sqlite3.Connection], bool] | None = None,
+        _claim_sync_deletion: Callable[[sqlite3.Connection], tuple[bool, bool]] | None = None,
+        _sync_segment_uids: list[str] | None = None,
     ) -> int:
         normalized_ids = sorted({
             int(segment_id)
             for segment_id in segment_ids
             if segment_id.strip().isdecimal()
         })
-        if not normalized_ids:
+        if not normalized_ids and _sync_segment_uids is None:
             return 0
 
         with permanent_deletion_guard(
@@ -2491,8 +2500,26 @@ class TrackerDatabase:
                     # would let daemon writers change those references before the
                     # first DELETE acquires SQLite's write lock.
                     conn.execute("BEGIN IMMEDIATE")
-                if _claim_sync_deletion is not None and not _claim_sync_deletion(conn):
-                    return 0
+                remote_only = False
+                if _claim_sync_deletion is not None:
+                    proceed, remote_only = _claim_sync_deletion(conn)
+                    if not proceed:
+                        return 0
+                    # Even an absent UID installs a durable receive barrier.
+                    # Recovery must not fall back to a copy that predates it.
+                    invalidate_recovery_copies()
+                if _sync_segment_uids is not None:
+                    # Resolve UID targets after taking the same write lock as
+                    # the tombstone. A previously empty lookup cannot race a
+                    # late page into a permanently applied-but-ineffective delete.
+                    normalized_ids = []
+                    for start in range(0, len(_sync_segment_uids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+                        batch = _sync_segment_uids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+                        placeholders = ",".join("?" for _ in batch)
+                        query = f"SELECT id FROM activity_segments WHERE segment_uid IN ({placeholders})"
+                        if remote_only:
+                            query += " AND origin_device_id IS NOT NULL"
+                        normalized_ids.extend(row[0] for row in conn.execute(query, tuple(batch)))
                 rows: list[sqlite3.Row] = []
                 columns = "*" if expected_capture_timings is not None else "id, segment_uid, youtube_video_id"
                 for start in range(0, len(normalized_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
@@ -2565,7 +2592,7 @@ class TrackerDatabase:
         record_tombstone: bool = True,
         *,
         refresh_recovery_backup: bool = True,
-        _claim_sync_deletion: Callable[[sqlite3.Connection], bool] | None = None,
+        _claim_sync_deletion: Callable[[sqlite3.Connection], tuple[bool, bool]] | None = None,
     ) -> dict[str, Any]:
         scopes = scopes or {}
         delete_activity = bool(scopes.get("activity"))
@@ -2604,18 +2631,25 @@ class TrackerDatabase:
                     # Counts, recovery invalidation, deletes and the sync tombstone
                     # must describe one snapshot while daemon/provider writers wait.
                     conn.execute("BEGIN IMMEDIATE")
-                if not dry_run and _claim_sync_deletion is not None and not _claim_sync_deletion(conn):
-                    return
+                remote_only = False
+                deletion_subquery = segment_subquery
+                if not dry_run and _claim_sync_deletion is not None:
+                    proceed, remote_only = _claim_sync_deletion(conn)
+                    if not proceed:
+                        return
+                    invalidate_recovery_copies()
+                    if remote_only:
+                        deletion_subquery += " AND origin_device_id IS NOT NULL"
                 if delete_activity:
                     activity_segments = int(
                         conn.execute(
-                            f"SELECT COUNT(*) AS count FROM activity_segments WHERE id IN ({segment_subquery})",
+                            f"SELECT COUNT(*) AS count FROM activity_segments WHERE id IN ({deletion_subquery})",
                             tuple(segment_params),
                         ).fetchone()["count"]
                     )
                     classifications = int(
                         conn.execute(
-                            f"SELECT COUNT(*) AS count FROM activity_classifications WHERE segment_id IN ({segment_subquery})",
+                            f"SELECT COUNT(*) AS count FROM activity_classifications WHERE segment_id IN ({deletion_subquery})",
                             tuple(segment_params),
                         ).fetchone()["count"]
                     )
@@ -2623,7 +2657,7 @@ class TrackerDatabase:
                     classifications = int(
                         conn.execute(
                             "SELECT COUNT(*) AS count FROM activity_classifications "
-                            f"WHERE ai_result = 1 AND segment_id IN ({segment_subquery})",
+                            f"WHERE ai_result = 1 AND segment_id IN ({deletion_subquery})",
                             tuple(segment_params),
                         ).fetchone()["count"]
                     )
@@ -2649,7 +2683,7 @@ class TrackerDatabase:
                     invalidate_recovery_copies()
                 if delete_ai_classifications:
                     conn.execute(
-                        f"DELETE FROM activity_classifications WHERE ai_result = 1 AND segment_id IN ({segment_subquery})",
+                        f"DELETE FROM activity_classifications WHERE ai_result = 1 AND segment_id IN ({deletion_subquery})",
                         tuple(segment_params),
                     )
                 if delete_youtube_metadata:
@@ -2661,7 +2695,11 @@ class TrackerDatabase:
                     else:
                         conn.execute("DELETE FROM youtube_video_metadata")
                 if delete_activity:
-                    if has_range:
+                    if remote_only:
+                        self._delete_project_windows_for_segment_ids(conn, {
+                            str(row["id"]) for row in conn.execute(deletion_subquery, tuple(segment_params))
+                        })
+                    elif has_range:
                         window_query = "DELETE FROM project_window_assignments WHERE 1=1"
                         window_params: list[Any] = []
                         if start_bound:
@@ -2678,13 +2716,13 @@ class TrackerDatabase:
                         # invalidate those references in this same write transaction.
                         deleted_segment_ids = {
                             str(row["id"])
-                            for row in conn.execute(segment_subquery, tuple(segment_params))
+                            for row in conn.execute(deletion_subquery, tuple(segment_params))
                         }
                         self._delete_project_windows_for_segment_ids(conn, deleted_segment_ids)
                     else:
                         conn.execute("DELETE FROM project_window_assignments")
                     conn.execute(
-                        f"DELETE FROM activity_segments WHERE id IN ({segment_subquery})",
+                        f"DELETE FROM activity_segments WHERE id IN ({deletion_subquery})",
                         tuple(segment_params),
                     )
                     if record_tombstone and activity_segments > 0:
@@ -2899,6 +2937,11 @@ class TrackerDatabase:
         timestamp = datetime.now(timezone.utc).isoformat()
         local_device_id = self.get_meta("sync_device_id")
         with self.connect() as conn:
+            if not conn.in_transaction:
+                conn.execute("BEGIN IMMEDIATE")
+            # Snapshot the account's tombstones and apply the page under one
+            # write lock, so a concurrent deletion cannot slip between them.
+            deletion_barrier = SyncDeletionBarrier(conn, segments)
             for item in segments:
                 segment_uid = item.get("segmentUid")
                 origin_device_id = item.get("originDeviceId")
@@ -2908,6 +2951,10 @@ class TrackerDatabase:
                 # Echo protection: never re-apply rows this device originated, even if
                 # the pull filter missed them.
                 if local_device_id and origin_device_id == local_device_id:
+                    skipped += 1
+                    continue
+
+                if deletion_barrier.blocks(conn, item):
                     skipped += 1
                     continue
 
@@ -3111,7 +3158,8 @@ class TrackerDatabase:
                 "deletionUid": row["deletion_uid"],
                 "kind": row["kind"],
                 "rangeStart": row["range_start"],
-                "rangeEnd": row["range_end"],
+                "rangeEnd": (row["range_end"] if row["range_end"] is not None or row["kind"] != "range"
+                             else row["created_at"]),
                 "segmentUids": json.loads(row["segment_uids_json"]) if row["segment_uids_json"] else None,
                 "createdAt": row["created_at"],
             }
@@ -3154,80 +3202,68 @@ class TrackerDatabase:
                     skipped += 1
                     continue
                 with self.connect() as conn:
-                    already = conn.execute(
-                        "SELECT 1 FROM applied_sync_deletions WHERE deletion_uid = ?",
-                        (deletion_uid,),
+                    account = sync_account_scope(conn)
+                    known = conn.execute(
+                        "SELECT 1 FROM received_sync_deletions WHERE account_id = ? AND deletion_uid = ?",
+                        (account, deletion_uid),
                     ).fetchone()
-                if already is not None:
+                if known is not None:
                     skipped += 1
                     continue
 
-                deletion_claimed: bool | None = None
+                segment_uids = [uid for uid in (deletion.get("segmentUids") or []) if isinstance(uid, str) and uid]
+                start = self._expand_history_range_bound(deletion.get("rangeStart"), end_of_day=False) if kind == "range" else None
+                end = self._expand_history_range_bound(deletion.get("rangeEnd"), end_of_day=True) if kind == "range" else None
+                range_start = self._normalize_range_bound(start) if start else None
+                range_end = self._normalize_range_bound(end) if end else None
+                if kind == "range" and range_end is None:
+                    # Old senders emitted open-ended tombstones. Freeze their
+                    # upper edge at the original deletion time (receipt time
+                    # only for legacy payloads without createdAt).
+                    range_end = self._normalize_range_bound(deletion.get("createdAt") or timestamp)
+                deletion_claimed = False
 
-                def claim_deletion(conn: sqlite3.Connection) -> bool:
+                def claim_deletion(conn: sqlite3.Connection) -> tuple[bool, bool]:
                     nonlocal deletion_claimed
-                    # The marker and deletion commit together. A crash cannot
-                    # replay a completed range over newly captured activity,
-                    # and a failed deletion rolls its marker back as well.
-                    cursor = conn.execute(
+                    if sync_account_scope(conn) != account:
+                        raise ValueError("Sync account changed while applying deletion")
+                    # Target, replay marker, and deletion commit together. A
+                    # legacy marker is enriched without repeating the deletion
+                    # over local history captured since its original application.
+                    marker = conn.execute(
                         "INSERT OR IGNORE INTO applied_sync_deletions (deletion_uid, applied_at) VALUES (?, ?)",
                         (deletion_uid, timestamp),
                     )
-                    deletion_claimed = cursor.rowcount > 0
-                    return deletion_claimed
-
-                if kind == "range":
-                    # Replaying a remote deletion must not record a fresh tombstone, or two
-                    # synced devices would ping-pong the same deletion forever.
-                    recovery_backup_due = True
-                    self.delete_history_range(
-                        start=deletion.get("rangeStart"),
-                        end=deletion.get("rangeEnd"),
-                        scopes={"activity": True},
-                        record_tombstone=False,
-                        refresh_recovery_backup=False,
-                        _claim_sync_deletion=claim_deletion,
+                    deletion_claimed = marker.rowcount > 0
+                    barrier = conn.execute(
+                        """
+                        INSERT OR IGNORE INTO received_sync_deletions
+                        (account_id, deletion_uid, kind, range_start, range_end, segment_uids_json)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (account, deletion_uid, kind, range_start, range_end,
+                         json.dumps(segment_uids) if kind == "uids" else None),
                     )
-                else:
-                    segment_uids = [uid for uid in (deletion.get("segmentUids") or []) if isinstance(uid, str) and uid]
-                    if segment_uids:
-                        ids: list[str] = []
-                        with self.connect() as conn:
-                            # Tombstones written before tombstone batching existed
-                            # (or after manual repair) can still exceed the
-                            # bound-variable limit; page the lookup.
-                            for start in range(0, len(segment_uids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
-                                batch = segment_uids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
-                                placeholders = ",".join("?" for _ in batch)
-                                ids.extend(
-                                    str(row["id"])
-                                    for row in conn.execute(
-                                        f"SELECT id FROM activity_segments WHERE segment_uid IN ({placeholders})",
-                                        tuple(batch),
-                                    )
-                                )
-                        if ids:
-                            recovery_backup_due = True
-                            self.delete_activity_segments(
-                                ids,
-                                record_tombstone=False,
-                                refresh_recovery_backup=False,
-                                _claim_sync_deletion=claim_deletion,
-                            )
+                    return deletion_claimed or barrier.rowcount > 0, not deletion_claimed
 
-                if deletion_claimed is None:
-                    # Empty UID tombstones have no activity mutation to join.
-                    with self.connect() as conn:
-                        claim_deletion(conn)
-                if deletion_claimed:
+                recovery_backup_due = True
+                if kind == "range":
+                    deleted = self.delete_history_range(
+                        start=range_start, end=range_end, scopes={"activity": True},
+                        record_tombstone=False, refresh_recovery_backup=False,
+                        _claim_sync_deletion=claim_deletion,
+                    )["activitySegments"]
+                else:
+                    deleted = self.delete_activity_segments(
+                        [], record_tombstone=False, refresh_recovery_backup=False,
+                        _claim_sync_deletion=claim_deletion, _sync_segment_uids=segment_uids,
+                    )
+                if deletion_claimed or deleted:
                     applied += 1
                 else:
                     skipped += 1
         finally:
             if recovery_backup_due:
-                # A sync page may contain up to hundreds of tombstones. One
-                # verified post-batch snapshot preserves the same privacy
-                # boundary without rewriting the full database per tombstone.
                 self._create_post_delete_backup()
         return {"applied": applied, "skipped": skipped}
 
