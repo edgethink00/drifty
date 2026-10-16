@@ -1960,7 +1960,7 @@ describe("WeekDashboard Project mode", () => {
   const assignments: ProjectAssignmentRecord[] = [{ segmentId: "week-focus-code", projectId: "build", source: "manual" }];
 
   it("switches calendar colors, legend, donut and weekly bars together, retaining No project", () => {
-    const { container } = renderWeekDashboard({ projectOptions: projects, projectAssignments: assignments });
+    const { container } = renderWeekDashboard({ projectOptions: projects, projectAssignments: assignments, calendarEvents: buildWeekCalendarEvents(weekSegments, "2024-01-01", "2024-01-07", 0, 24) });
     fireEvent.click(screen.getByRole("button", { name: "Project" }));
     expect(screen.getByRole("button", { name: "Project" }).getAttribute("aria-pressed")).toBe("true");
     const legend = container.querySelector('.flow-chart-legend--project')!;
@@ -1979,6 +1979,23 @@ describe("WeekDashboard Project mode", () => {
     expect(container.querySelector('.flow-chart-legend--project')).toBeNull();
   });
 
+  it("keeps Korean block labels and accessible details unchanged when switching to Project", () => {
+    const { container } = render(<LocalizationTestProvider language="ko">{weekDashboardElement({
+      projectOptions: projects, projectAssignments: assignments,
+      calendarEvents: buildWeekCalendarEvents(weekSegments, "2024-01-01", "2024-01-07", 0, 24),
+    })}</LocalizationTestProvider>);
+    const blocks = [...container.querySelectorAll<HTMLElement>(".week-v2-calendar__event")];
+    const details = blocks.map(block => ({ text: block.textContent,
+      title: block.querySelector("button")!.title, label: block.querySelector("button")!.getAttribute("aria-label") }));
+    fireEvent.click(screen.getByRole("button", { name: "프로젝트" }));
+    blocks.forEach((block, i) => {
+      expect(block.textContent).toBe(details[i].text);
+      expect(block.querySelector("button")!.title).toBe(details[i].title);
+      expect(block.querySelector("button")!.getAttribute("aria-label")).toBe(details[i].label);
+    });
+    expect(blocks[0].style.getPropertyValue("--event-tone")).toBe("#123456");
+  });
+
   it("hides unavailable Project and falls back safely when its assignments disappear", () => {
     const { rerender } = renderWeekDashboard({ projectOptions: projects });
     expect(screen.queryByRole("button", { name: "Project" })).toBeNull();
@@ -1989,21 +2006,31 @@ describe("WeekDashboard Project mode", () => {
     expect(screen.getByRole("button", { name: "Category" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("keeps AI windows distinct while source-record details and edits retain full-record scope", async () => {
+  it("keeps the original block through project mode and round trips while edits retain full-record scope", async () => {
     const raw = { ...weekSegments[0], endedAt: "2024-01-03T09:06:00", durationSeconds: 360 };
     const onAssignProject = vi.fn().mockResolvedValue(undefined);
     const windows: ProjectWindowAssignmentRecord[] = [
       { windowId: "w1", teamProjectId: null, windowStartedAt: "2024-01-03T09:00:00", windowEndedAt: "2024-01-03T09:03:00", durationSeconds: 180, projectId: "build", source: "ai", segmentOverlaps: [{ segmentId: raw.id, durationSeconds: 180 }] },
       { windowId: "w2", teamProjectId: null, windowStartedAt: "2024-01-03T09:03:00", windowEndedAt: "2024-01-03T09:06:00", durationSeconds: 180, projectId: "research", source: "ai", segmentOverlaps: [{ segmentId: raw.id, durationSeconds: 180 }] },
     ];
-    const { container } = renderWeekDashboard({ projectOptions: projects, projectWindowAssignments: windows, projectBySegmentId: new Map([[raw.id, "build"]]), segments: [raw], activityActionsEnabled: true, onAssignProject });
-    fireEvent.click(screen.getByRole("button", { name: "Project" }));
-    const events = container.querySelectorAll<HTMLElement>('.week-v2-calendar__event');
-    expect(events).toHaveLength(2);
-    fireEvent.click(events[1].querySelector('.week-v2-calendar__event-open')!);
+    const { container } = renderWeekDashboard({ calendarEvents: buildWeekCalendarEvents([raw], "2024-01-01", "2024-01-07", 0, 24), projectOptions: projects, projectWindowAssignments: windows, projectBySegmentId: new Map([[raw.id, "build"]]), segments: [raw], activityActionsEnabled: true, onAssignProject });
+    const original = container.querySelector<HTMLElement>('.week-v2-calendar__event')!;
+    const stableState = (event: HTMLElement) => ({ id: event.dataset.eventId, text: event.textContent, className: event.className,
+      top: event.style.top, height: event.style.height, width: event.style.width, left: event.style.left, zIndex: event.style.zIndex });
+    const before = stableState(original);
+    for (const mode of ["Project", "Productivity", "Category", "Project"]) {
+      fireEvent.click(screen.getByRole("button", { name: mode }));
+      const events = container.querySelectorAll<HTMLElement>('.week-v2-calendar__event');
+      expect(events).toHaveLength(1);
+      expect(events[0]).toBe(original);
+      expect(stableState(events[0])).toEqual(before);
+    }
+    expect(original.style.getPropertyValue("--event-tone")).toBe("#123456");
+    fireEvent.click(original.querySelector('.week-v2-calendar__event-open')!);
     const inspector = screen.getByRole("dialog");
     expect(within(inspector).getByRole("button", { name: /Current value: Build · dominant/ })).toBeTruthy();
-    expect(within(inspector).getByText("Edits and deletion apply to the full activity.")).toBeTruthy();
+    expect(within(inspector).queryByText("Edits and deletion apply to the full activity.")).toBeNull();
+    expect(within(inspector).getByRole("list", { name: "1 constituent activities" }).textContent).toContain("6m");
     fireEvent.click(within(inspector).getByRole("button", { name: /Change Project/ }));
     fireEvent.click(screen.getByRole("option", { name: "Research" }));
     await waitFor(() => expect(onAssignProject).toHaveBeenCalledWith([raw], "research"));

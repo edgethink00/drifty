@@ -347,10 +347,9 @@ export function WeekDashboard({
   const colorModeOptions: readonly WeekDashboardColorMode[] = projectModeAvailable ? [...WEEK_COLOR_MODE_OPTIONS, "project"] : WEEK_COLOR_MODE_OPTIONS;
   const projectView = useMemo(() => colorMode === "project" ? buildWeekProjectView({
     segments, assignments: projectAssignments, windowAssignments: projectWindowAssignments, projects: projectOptions,
-    classificationOptions, startDay, endDay, startOfDayMinutes,
-    calendarHourHeightPx: weekDashboardAxisScalePercentToHourHeight(axisScalePercent),
+    calendarEvents, startDay, endDay, startOfDayMinutes,
     noProjectLabel: t("projects.chart.noProject"), unavailableProjectLabel: t("dashboard.week.inspector.unavailableProject"),
-  }) : null, [colorMode, segments, projectAssignments, projectWindowAssignments, projectOptions, classificationOptions, startDay, endDay, startOfDayMinutes, axisScalePercent, t]);
+  }) : null, [colorMode, segments, projectAssignments, projectWindowAssignments, projectOptions, calendarEvents, startDay, endDay, startOfDayMinutes, t]);
   const renderedCalendarEvents = projectView?.calendarEvents ?? calendarEvents;
   const [legendHover, setLegendHover] = useState<FlowLegendHoverState | null>(null);
   const [breakdownHover, setBreakdownHover] = useState<CompactClassificationHoverState | null>(null);
@@ -494,11 +493,11 @@ export function WeekDashboard({
         const endMinute = startMinute + event.durationMinutes;
         const startLabel = formatLocalizedCalendarMinuteLabel(day, startMinute, effectiveLanguage, startOfDayMinutes);
         const endLabel = formatLocalizedCalendarMinuteLabel(day, endMinute, effectiveLanguage, startOfDayMinutes);
-        const categoryName = colorMode === "project" ? event.projectName ?? t("projects.chart.noProject") : localizedCategoryLabel(event.category, t);
+        const categoryName = localizedCategoryLabel(event.category, t);
         const recordLabel = event.sessionCount === 1
           ? t("dashboard.week.inspector.record")
           : t("dashboard.week.inspector.records", { count: event.sessionCount });
-        const detailSummary = colorMode === "project" ? categoryName : event.isGroupedCluster || event.sessionCount > 1 ? recordLabel : categoryName;
+        const detailSummary = event.isGroupedCluster || event.sessionCount > 1 ? recordLabel : categoryName;
         const detailTitle = [
           `${startLabel}–${endLabel} · ${categoryName}`,
           `${formatLocalizedCompactDurationFromSeconds(event.activeDurationMinutes * 60, effectiveLanguage)} · ${recordLabel}`,
@@ -510,7 +509,7 @@ export function WeekDashboard({
         return { ...event, startLabel, endLabel, detailSummary, detailTitle };
       }),
     ]));
-  }, [renderedCalendarEvents, colorMode, effectiveLanguage, minCalendarMinute, startOfDayMinutes, t]);
+  }, [renderedCalendarEvents, effectiveLanguage, minCalendarMinute, startOfDayMinutes, t]);
 
   // The calendar squishes (no horizontal scroll) while the Breakdown panel is
   // open, so the identity strips must adapt to the live day-column width

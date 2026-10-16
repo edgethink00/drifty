@@ -51,7 +51,7 @@ export type WeekCalendarEventIdentity = WeekCalendarIdentity & {
 };
 
 export type WeekCalendarEvent = {
-  /** Present only on project-colored calendar slices; null is No project. */
+  /** Dominant project color metadata on an unchanged calendar block; null is No project. */
   projectId?: string | null;
   projectName?: string;
   projectColor?: string;

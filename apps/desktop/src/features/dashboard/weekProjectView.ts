@@ -1,11 +1,10 @@
-import { buildPersonalProjectSliceProjection, type ActivitySegment, type ClassificationOptions, type ProjectAssignmentRecord, type ProjectWindowAssignmentRecord } from "@drifty/domain";
+import { buildPersonalProjectSliceProjection, sampledActivitySecondsWithinInterval, type ActivitySegment, type ProjectAssignmentRecord, type ProjectWindowAssignmentRecord } from "@drifty/domain";
 import { buildIsoDayList } from "../../lib/formatting";
 import { NO_PROJECT_COLOR, type ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import type { CompactRingEntry } from "./CompactRingChart";
 import type { ActivityInspectorProjectOption } from "./WeekActivityInspector";
-import { assignWeekCalendarEventLanes, buildWeekCalendarEvents, splitSegmentIntoDayOverlaps, type WeekCalendarEvent } from "./weekCalendar";
-import { buildWeekCalendarEventLayout } from "./weekCalendarEventLayout";
-import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
+import { splitSegmentIntoDayOverlaps, type WeekCalendarEvent } from "./weekCalendar";
+import { buildLogicalDayDrawingBuckets } from "./logicalDayDrawingBuckets";
 
 export const WEEK_NO_PROJECT_KEY = "__no_project__";
 
@@ -21,17 +20,16 @@ type WeekProjectViewInput = {
   readonly assignments: readonly ProjectAssignmentRecord[];
   readonly windowAssignments: readonly ProjectWindowAssignmentRecord[];
   readonly projects: readonly ActivityInspectorProjectOption[];
-  readonly classificationOptions: ClassificationOptions;
+  readonly calendarEvents: ReadonlyMap<string, readonly WeekCalendarEvent[]>;
   readonly startDay: string;
   readonly endDay: string;
   readonly startOfDayMinutes: number;
   readonly noProjectLabel: string;
   readonly unavailableProjectLabel: string;
-  readonly calendarHourHeightPx?: number;
 };
 
-/** Calendar, donut, bars and hovers share the persisted-window time allocation.
- * Calendar actions still target full source records, never virtual slice ids. */
+/** Project summaries keep exact persisted-window shares. The calendar only
+ * decorates the existing activity blocks with their dominant project color. */
 export function buildWeekProjectView(input: WeekProjectViewInput) {
   const projection = buildPersonalProjectSliceProjection(input.segments, input.windowAssignments, input.assignments);
   const projectsById = new Map(input.projects.flatMap(project => project.id ? [[project.id, project] as const] : []));
@@ -80,51 +78,43 @@ export function buildWeekProjectView(input: WeekProjectViewInput) {
     return seconds > 0 ? [slice(key, seconds)] : [];
   })]));
 
-  const calendarEvents = new Map<string, WeekCalendarEvent[]>(days.map(day => [day, []]));
-  let run: ActivitySegment[] = [];
-  let runKey = "";
-  let runIndex = 0;
-  const flush = () => {
-    if (run.length === 0) return;
-    const meta = slice(runKey, 0);
-    const runDays = run.flatMap(segment => splitSegmentIntoDayOverlaps(segment, input.startDay, input.endDay, input.startOfDayMinutes, { sampledTime: true }).map(overlap => overlap.day)).sort();
-    if (runDays.length === 0) { run = []; return; }
-    const events = buildWeekCalendarEvents(run, runDays[0], runDays[runDays.length - 1], 0, 24, input.classificationOptions, input.startOfDayMinutes, undefined, { sampledTime: true });
-    for (const [day, entries] of events) {
-      for (const event of entries) {
-        const segmentIds = [...new Set(event.segmentIds.map(sourceId))];
-        calendarEvents.get(day)!.push({
-          ...event,
-          id: `project:${runIndex}:${event.id}`,
-          segmentIds,
-          detailSummary: meta.label,
-          detailTitle: `${event.startLabel}–${event.endLabel} · ${meta.label}\n${segmentIds.length} captured record${segmentIds.length === 1 ? "" : "s"}`,
-          sessionCount: segmentIds.length,
-          hasMixedProject: segmentIds.some(id => (projectsBySource.get(id)?.size ?? 0) > 1),
-          identities: event.identities.map(identity => ({ ...identity, sourceSegmentIds: [...new Set((identity.sourceSegmentIds ?? []).map(sourceId))] })),
-          projectId: runKey === WEEK_NO_PROJECT_KEY ? null : runKey,
-          projectName: meta.label,
-          projectColor: meta.color,
-        });
-      }
-    }
-    run = [];
-    runIndex += 1;
-  };
-  for (const segment of [...projection.segments].sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))) {
-    const key = keyForSlice(segment.id);
-    if (key !== runKey) flush();
-    runKey = key;
-    run.push(segment);
+  const slicesBySource = new Map<string, ActivitySegment[]>();
+  for (const segment of projection.segments) {
+    const id = sourceId(segment.id);
+    const slices = slicesBySource.get(id) ?? [];
+    slices.push(segment);
+    slicesBySource.set(id, slices);
   }
-  flush();
-  for (const events of calendarEvents.values()) {
-    events.sort((a, b) => a.topMinutes - b.topMinutes || b.durationMinutes - a.durationMinutes);
-    // Three-minute decisions use the existing minimum card height. Assign lanes
-    // using the rendered height so adjacent projects remain visible/clickable.
-    const hourHeight = input.calendarHourHeightPx ?? weekDashboardAxisScalePercentToHourHeight(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT);
-    assignWeekCalendarEventLanes(events, event => Math.max(event.durationMinutes,
-      (buildWeekCalendarEventLayout(event, hourHeight).eventHeight + 1) / hourHeight * 60));
+  const calendarEvents = new Map<string, WeekCalendarEvent[]>();
+  for (const [day, events] of input.calendarEvents) {
+    // Use the same fixed clock axis as the calendar, including logical-day
+    // boundaries and both occurrences of a folded DST hour.
+    const minutes = buildLogicalDayDrawingBuckets(day, 1, input.startOfDayMinutes);
+    calendarEvents.set(day, events.map(event => {
+      const intervals = minutes.slice(event.topMinutes, event.topMinutes + event.durationMinutes)
+        .flatMap(minute => minute.intervals);
+      const weights = new Map<string, number>();
+      for (const id of event.segmentIds) {
+        for (const segment of slicesBySource.get(id) ?? []) {
+          const seconds = intervals.reduce((sum, interval) => sum
+            + sampledActivitySecondsWithinInterval(segment, interval.start, interval.end), 0);
+          if (!(seconds > 0)) continue;
+          const key = keyForSlice(segment.id);
+          weights.set(key, (weights.get(key) ?? 0) + seconds);
+        }
+      }
+      // Resolve equal shares by key so assignment load order cannot change a
+      // block's color. No project competes with the same weight as any project.
+      const key = [...weights].sort(([a, aSeconds], [b, bSeconds]) => bSeconds - aSeconds || a.localeCompare(b))[0]?.[0] ?? WEEK_NO_PROJECT_KEY;
+      const meta = slice(key, 0);
+      return {
+        ...event,
+        projectId: key === WEEK_NO_PROJECT_KEY ? null : key,
+        projectName: meta.label,
+        projectColor: meta.color,
+        hasMixedProject: weights.size > 1 || event.segmentIds.some(id => (projectsBySource.get(id)?.size ?? 0) > 1),
+      };
+    }));
   }
   return { ...projection, calendarEvents, slicesByDay, ringEntries, legend, totalSeconds,
     centerPercent: totalSeconds > 0 ? Math.round((ringEntries[0]?.totalSeconds ?? 0) / totalSeconds * 100) : 0 };
