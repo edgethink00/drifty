@@ -534,7 +534,7 @@ describe("AccountSettingsSection organization seat", () => {
     render(<AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("member") })} />);
 
     expect(screen.getByText("Team plan")).toBeTruthy();
-    expect(screen.getByText(/Your Pro comes from the Acme team plan, so there is nothing for you to pay\./)).toBeTruthy();
+    expect(screen.getByText(/Your Pro comes from the Acme team plan\./)).toBeTruthy();
     expect(screen.getByText(/Your role: Member\./)).toBeTruthy();
     expect(screen.queryByText("Drifty Pro")).toBeNull();
     expect(screen.queryByText("Manage your Cloud AI subscription and billing.")).toBeNull();
@@ -597,7 +597,7 @@ describe("AccountSettingsSection organization seat", () => {
       </LocalizationTestProvider>,
     );
     expect(screen.getByText("팀 플랜")).toBeTruthy();
-    expect(screen.getByText(/Acme 팀 플랜에서 Pro를 받고 있어서 따로 결제할 필요가 없어요/)).toBeTruthy();
+    expect(screen.getByText(/Acme 팀 플랜에서 Pro를 받고 있어요/)).toBeTruthy();
     expect(screen.getByText(/내 역할: 소유자\./)).toBeTruthy();
     expect(screen.getByRole("button", { name: /^팀 관리$/ })).toBeTruthy();
     expect(screen.queryByText("settings.account.manageSeats")).toBeNull();

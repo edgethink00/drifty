@@ -12,11 +12,25 @@ describe("Cloud trial client contract", () => {
     const invoke = vi.fn().mockResolvedValue({ data: { entitlement: available }, error: null });
     expect(await fetchBillingEntitlement({ functions: { invoke } })).toEqual({ success: true, data: available });
     expect(invoke).toHaveBeenCalledExactlyOnceWith("get-cloud-trial-entitlement", {
-      body: { trialActivation: "explicit-v1" }, timeout: BILLING_ENTITLEMENT_TIMEOUT_MS, signal: expect.any(AbortSignal),
+      body: { emailLocale: "en", trialActivation: "explicit-v1" }, timeout: BILLING_ENTITLEMENT_TIMEOUT_MS, signal: expect.any(AbortSignal),
     });
     expect(canStartCloudTrial(available)).toBe(true);
     expect(canStartCloudTrial({ ...available, lockedReason: "trial_expired" })).toBe(false);
     expect(canStartCloudTrial({ ...available, lockedReason: "device_limit_reached" })).toBe(false);
+  });
+
+  it("asks for the welcome email in the app's display language", async () => {
+    vi.stubGlobal("window", {
+      localStorage: { getItem: (key: string) => key === "drifty.displayLanguage.v2" ? "ko" : null },
+      navigator: { language: "en-US", languages: ["en-US"] },
+    });
+    try {
+      const invoke = vi.fn().mockResolvedValue({ data: { entitlement: available }, error: null });
+      await fetchBillingEntitlement({ functions: { invoke } });
+      expect(invoke.mock.calls[0][1].body).toEqual({ emailLocale: "ko", trialActivation: "explicit-v1" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("preserves older servers only when the new endpoint does not exist", async () => {

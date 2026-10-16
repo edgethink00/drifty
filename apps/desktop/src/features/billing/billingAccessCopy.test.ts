@@ -18,11 +18,11 @@ describe("formatOrganizationSeatAccessCopy", () => {
   it("names the Team plan and the team the Pro comes from", () => {
     expect(formatOrganizationSeatAccessCopy("Acme", "en")).toEqual({
       title: "Team plan",
-      summary: "Your Pro comes from the Acme team plan, so there is nothing for you to pay.",
+      summary: "Your Pro comes from the Acme team plan.",
     });
     expect(formatOrganizationSeatAccessCopy("Acme", "ko")).toEqual({
       title: "팀 플랜",
-      summary: "Acme 팀 플랜에서 Pro를 받고 있어서 따로 결제할 필요가 없어요.",
+      summary: "Acme 팀 플랜에서 Pro를 받고 있어요.",
     });
     expect(formatOrganizationSeatAccessCopy("Acme", "es")).toEqual({
       title: "Licencia de la organización",

@@ -1507,6 +1507,8 @@ describe("AuthContext", () => {
       password: "long-enough1",
       options: {
         emailRedirectTo: "https://drifty.so/auth/callback/",
+        // Supabase Auth emails choose Korean or English from this.
+        data: { locale: "en" },
       },
     });
     expect(result.error?.message).toMatch(/at least 12 characters/i);
@@ -1536,6 +1538,8 @@ describe("AuthContext", () => {
       password: "long-enough1",
       options: {
         emailRedirectTo: "https://drifty.so/auth/callback/",
+        // Supabase Auth emails choose Korean or English from this.
+        data: { locale: "en" },
       },
     });
     expect(result.error).toBeNull();

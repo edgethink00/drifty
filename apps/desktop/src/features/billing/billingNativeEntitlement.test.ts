@@ -46,7 +46,7 @@ describe("native entitlement reads on legacy servers", () => {
     expect(mocks.invoke).toHaveBeenCalledWith("cloud_sync_http_post", { request: {
       url: "https://qa.supabase.co/functions/v1/get-cloud-trial-entitlement",
       bearerToken: "synthetic-session", apikey: "synthetic-anon",
-      bodyJson: { trialActivation: "explicit-v1" }, timeoutMs: BILLING_ENTITLEMENT_TIMEOUT_MS,
+      bodyJson: { emailLocale: "en", trialActivation: "explicit-v1" }, timeoutMs: BILLING_ENTITLEMENT_TIMEOUT_MS,
     } });
   });
 

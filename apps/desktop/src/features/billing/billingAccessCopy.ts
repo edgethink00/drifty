@@ -33,10 +33,10 @@ export function formatOrganizationSeatAccessCopy(
     : language === "ko"
     ? {
       title: "팀 플랜",
-      summary: `${name} 팀 플랜에서 Pro를 받고 있어서 따로 결제할 필요가 없어요.`,
+      summary: `${name} 팀 플랜에서 Pro를 받고 있어요.`,
     }
     : {
       title: "Team plan",
-      summary: `Your Pro comes from the ${name} team plan, so there is nothing for you to pay.`,
+      summary: `Your Pro comes from the ${name} team plan.`,
     });
 }

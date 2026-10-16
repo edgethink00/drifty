@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { supabase } from "../../lib/supabase/client";
 import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
+import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
 import type { CloudDeviceAccess, CloudDeviceRecord } from "../cloud-devices/cloudDeviceService";
 import {
   INDIVIDUAL_PRICING,
@@ -218,7 +219,8 @@ export async function fetchBillingEntitlement(client: BillingClient = supabase):
   if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
 
   try {
-    const body = await withCloudDevicePayload({});
+    // The server writes the one-time welcome email in this language.
+    const body = await withCloudDevicePayload({ emailLocale: resolveInitialDisplayLanguage() === "ko" ? "ko" : "en" });
     let { data, error } = await invokeEntitlement(client, "get-cloud-trial-entitlement", body);
     // Only an absent endpoint is permission to use the legacy getter, which can
     // grant a trial. A timeout or service failure must never silently start one.

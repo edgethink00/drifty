@@ -35,6 +35,7 @@ import {
   type AuthConnectionStatus,
 } from "./authConnectionStatus";
 import { getOAuthCallbackResultFromUrl } from "./authCallback";
+import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
 import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import {
   clearPendingPasswordRecovery,
@@ -1557,6 +1558,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         emailRedirectTo: DESKTOP_EMAIL_AUTH_BRIDGE_URL,
+        // Supabase Auth emails read this to choose Korean or English.
+        data: { locale: resolveInitialDisplayLanguage() === "ko" ? "ko" : "en" },
       },
     });
     const normalizedError = normalizeAuthPasswordError(error);
