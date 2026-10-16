@@ -3,7 +3,8 @@ import { classifyActivityDetailed, logicalMinuteOfDay, normalizeStartOfDayMinute
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { getInsightSurfaceIdentity } from "../insights/insightData";
 import type { DriftSurfaceAccumulator } from "../insights/insightData";
-import { formatCompactHourLabel, formatQuarterHourLabel } from "../../lib/formatting";
+import { formatLocalizedCompactHourLabel, formatLocalizedQuarterHourLabel } from "../../lib/formatting";
+import type { DisplayLanguage } from "../localization/languagePreference";
 import type { CSSProperties } from "react";
 import { scoreFocusDriftWindowShare } from "./focusDriftScoring";
 import { buildLogicalDayDrawingBuckets } from "./logicalDayDrawingBuckets";
@@ -105,15 +106,16 @@ export type FocusDriftReplayRevealInput = {
   readonly chart: FocusDriftChart;
   readonly revealMinuteOfDay: number | null;
   readonly startOfDayMinutes: number;
+  readonly language?: DisplayLanguage;
 };
 
-export function buildFocusDriftAxisTicks(startOfDayMinutes = 0): FocusDriftAxisTick[] {
+export function buildFocusDriftAxisTicks(startOfDayMinutes = 0, language: DisplayLanguage = "en"): FocusDriftAxisTick[] {
   const chartWidth = FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left;
   return Array.from({ length: 9 }, (_, index) => {
     const logicalMinute = index * 3 * 60;
     return {
       id: `focus-drift-axis-${logicalMinute}`,
-      label: formatCompactHourLabel(Math.floor(clockMinuteForLogicalMinute(logicalMinute, startOfDayMinutes) / 60)),
+      label: formatLocalizedCompactHourLabel(Math.floor(clockMinuteForLogicalMinute(logicalMinute, startOfDayMinutes) / 60), language),
       x: FOCUS_DRIFT_CHART_BOUNDS.left + (logicalMinute / FOCUS_DRIFT_MINUTES_PER_DAY) * chartWidth,
     };
   });
@@ -169,8 +171,8 @@ function buildSeriesAreaPath(runs: readonly (readonly FocusDriftPoint[])[], yKey
   }).filter(Boolean).join(" ");
 }
 
-export function buildFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
-  return buildWindowedFocusDriftChart(segments, day, classificationOptions, currentMinuteOfDay, startOfDayMinutes);
+export function buildFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0, language: DisplayLanguage = "en"): FocusDriftChart {
+  return buildWindowedFocusDriftChart(segments, day, classificationOptions, currentMinuteOfDay, startOfDayMinutes, language);
 }
 
 export function applyFocusDriftReplayReveal(input: FocusDriftReplayRevealInput): FocusDriftChart {
@@ -198,11 +200,11 @@ export function applyFocusDriftReplayReveal(input: FocusDriftReplayRevealInput):
     currentX: null,
     currentTimeLabel: null,
     revealX,
-    revealTimeLabel: formatQuarterHourLabel(clockMinuteForLogicalMinute(logicalRevealMinute, input.startOfDayMinutes)),
+    revealTimeLabel: formatLocalizedQuarterHourLabel(clockMinuteForLogicalMinute(logicalRevealMinute, input.startOfDayMinutes), input.language ?? "en"),
   };
 }
 
-export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
+export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0, language: DisplayLanguage = "en"): FocusDriftChart {
   segments = aggregateDeviceElapsedTime(segments);
   const buckets = buildLogicalDayDrawingBuckets(day, FOCUS_DRIFT_BUCKET_MINUTES, startOfDayMinutes).map((window) => ({
     focusSeconds: 0,
@@ -225,7 +227,7 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     : Math.floor(boundedCurrentMinute / FOCUS_DRIFT_BUCKET_MINUTES) * FOCUS_DRIFT_BUCKET_MINUTES;
   const chartWidth = FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left;
   const currentX = boundedCurrentMinute === null ? null : FOCUS_DRIFT_CHART_BOUNDS.left + (boundedCurrentMinute / FOCUS_DRIFT_MINUTES_PER_DAY) * chartWidth;
-  const currentTimeLabel = boundedCurrentMinute === null ? null : formatQuarterHourLabel(clockMinuteForLogicalMinute(boundedCurrentMinute, startOfDayMinutes));
+  const currentTimeLabel = boundedCurrentMinute === null ? null : formatLocalizedQuarterHourLabel(clockMinuteForLogicalMinute(boundedCurrentMinute, startOfDayMinutes), language);
   const isLive = currentX !== null && currentBucketStartMinute !== null;
 
   for (const segment of segments) {
@@ -327,7 +329,7 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     currentTimeLabel,
     revealX: null,
     revealTimeLabel: null,
-    axisTicks: buildFocusDriftAxisTicks(startOfDayMinutes),
+    axisTicks: buildFocusDriftAxisTicks(startOfDayMinutes, language),
   };
 }
 

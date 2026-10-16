@@ -17,8 +17,13 @@ export function AuxiliaryLocalizationProvider({ children }: { readonly children:
         setLanguage(resolveInitialDisplayLanguage());
       }
     };
+    const followSystemLanguage = () => setLanguage(resolveInitialDisplayLanguage());
     window.addEventListener("storage", updateLanguage);
-    return () => window.removeEventListener("storage", updateLanguage);
+    window.addEventListener("languagechange", followSystemLanguage);
+    return () => {
+      window.removeEventListener("storage", updateLanguage);
+      window.removeEventListener("languagechange", followSystemLanguage);
+    };
   }, []);
   useEffect(() => {
     document.documentElement.lang = language;

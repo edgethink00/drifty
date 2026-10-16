@@ -107,6 +107,19 @@ describe("renderShareCardSvg", () => {
     expect(productivity).toContain("시간");
   });
 
+  it("renders Spanish in exported and locked cards", () => {
+    const percentile = renderShareCardSvg({ communityModels: MODELS, data: DAY, language: "es", format: "landscape", theme: "light", story: "R1c" });
+    const productivity = renderShareCardSvg({ data: DAY, language: "es", format: "landscape", theme: "light", story: "X5" });
+    const locked = renderLockedShareRankSvg({ theme: "light", period: "daily", language: "es" });
+
+    expect(percentile).toContain("Percentil estimado");
+    expect(percentile).toContain("Estimación basada en 100 participantes");
+    expect(productivity).toContain("Productividad");
+    expect(productivity).toContain("Concentración");
+    expect(locked).toContain("Únete a la clasificación");
+    expect(locked).not.toContain("Join the leaderboard");
+  });
+
   it("keeps the unified lineup as the primary story set", () => {
     expect(UNIFIED_STORY_OPTIONS.map((entry) => entry.value)).toEqual([
       "R1c",

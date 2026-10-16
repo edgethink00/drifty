@@ -71,8 +71,8 @@ export const FlowChartGrid = memo(function FlowChartGrid({
     categoryLabel: ({ category }) => localizedCategoryLabel(category, t),
     productivityLabel: ({ category, productivity }) => levelFor(category, productivity, productivityLevels)?.name ?? localizedProductivityLabel(productivity, t),
     durationLabel: (seconds) => formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage),
-    timeBlockPrefix: effectiveLanguage === "ko" ? "시간대" : "Time block",
-    durationPrefix: effectiveLanguage === "ko" ? "소요 시간" : "Duration",
+    timeBlockPrefix: effectiveLanguage === "ko" ? "시간대" : effectiveLanguage === "es" ? "Franja horaria" : "Time block",
+    durationPrefix: effectiveLanguage === "ko" ? "소요 시간" : effectiveLanguage === "es" ? "Duración" : "Duration",
   }), [effectiveLanguage, hoverGroupsByCell, productivityLevels, t]);
   // The grid is one tab stop: only one cell is in the tab order and the arrow
   // keys move between cells, so the controls after the chart are one Tab away
@@ -150,10 +150,13 @@ export const FlowChartGrid = memo(function FlowChartGrid({
         <span />
         {HOURS.map((hour) => {
           const clockHour = clockHourForLogicalHour(hour, boundaryMinutes);
+          const showHourLabel = hour === currentHourIndex || (hour % 3 === 0 && !(
+            effectiveLanguage === "es" && currentHourIndex !== null && Math.abs(hour - currentHourIndex) <= 1
+          ));
           return (
             <span className={hour === currentHourIndex ? "flow-chart-hour--now" : undefined} key={hour}>
-              {hour === currentHourIndex || hour % 3 === 0
-                ? effectiveLanguage === "ko" ? formatLocalizedCompactHourLabel(clockHour, effectiveLanguage) : formatHourLabel(clockHour)
+              {showHourLabel
+                ? effectiveLanguage === "en" ? formatHourLabel(clockHour) : effectiveLanguage === "es" ? String(clockHour) : formatLocalizedCompactHourLabel(clockHour, effectiveLanguage)
                 : ""}
             </span>
           );

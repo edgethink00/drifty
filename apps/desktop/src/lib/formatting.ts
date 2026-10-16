@@ -4,6 +4,19 @@ import type { DisplayLanguage } from "../features/localization/languagePreferenc
 
 export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/** Keep the device region for a manual Spanish choice when no Spanish variant is configured. */
+export function localeForDisplayLanguage(language: DisplayLanguage): string {
+  if (language === "ko") return "ko-KR";
+  if (language === "es") {
+    const preferred = typeof navigator === "undefined" ? "" : navigator.languages?.find((value) => /^es(?:[-_]|$)/iu.test(value)) ?? "";
+    if (preferred) return preferred.replace("_", "-");
+    const systemLocale = typeof navigator === "undefined" ? "" : navigator.language || Intl.DateTimeFormat().resolvedOptions().locale;
+    const region = /(?:-|_)([a-z]{2}|\d{3})(?:-|$)/iu.exec(systemLocale)?.[1];
+    return region ? `es-${region.toUpperCase()}` : "es";
+  }
+  return "en-US";
+}
+
 export function localDateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -63,6 +76,11 @@ export function formatLocalizedDuration(totalSeconds: number, language: DisplayL
   const totalMinutes = Math.max(0, Math.round(totalSeconds / 60));
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
+  if (language === "es") {
+    if (hours === 0) return `${minutes} min`;
+    if (minutes === 0) return `${hours} h`;
+    return `${hours} h ${minutes} min`;
+  }
   if (hours === 0) return `${minutes}분`;
   if (minutes === 0) return `${hours}시간`;
   return `${hours}시간 ${minutes}분`;
@@ -79,6 +97,8 @@ export function formatTimeLabel(value: string | Date): string {
 
 export function formatLocalizedTimeLabel(value: string | Date, language: DisplayLanguage): string {
   if (language === "en") return formatTimeLabel(value);
+  if (language === "es") return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { hour: "numeric", minute: "2-digit" })
+    .format(typeof value === "string" ? new Date(value) : value);
   return new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true })
     .format(typeof value === "string" ? new Date(value) : value);
 }
@@ -125,20 +145,21 @@ export function formatLocalizedShortDurationFromSeconds(totalSeconds: number, la
 export function formatRelativeTime(value: string, locale = "en-US"): string {
   const parsed = new Date(value).getTime();
   const isKorean = locale.toLowerCase().startsWith("ko");
-  if (Number.isNaN(parsed)) return isKorean ? "알 수 없음" : "unknown";
+  const isSpanish = locale.toLowerCase().startsWith("es");
+  if (Number.isNaN(parsed)) return isKorean ? "알 수 없음" : isSpanish ? "desconocido" : "unknown";
 
   const diffSeconds = Math.max(0, Math.round((Date.now() - parsed) / 1000));
-  if (diffSeconds < 10) return isKorean ? "방금" : "just now";
-  if (diffSeconds < 60) return isKorean ? `${diffSeconds}초 전` : `${diffSeconds}s ago`;
+  if (diffSeconds < 10) return isKorean ? "방금" : isSpanish ? "ahora mismo" : "just now";
+  if (diffSeconds < 60) return isKorean ? `${diffSeconds}초 전` : isSpanish ? `hace ${diffSeconds} s` : `${diffSeconds}s ago`;
 
   const diffMinutes = Math.round(diffSeconds / 60);
-  if (diffMinutes < 60) return isKorean ? `${diffMinutes}분 전` : `${diffMinutes}m ago`;
+  if (diffMinutes < 60) return isKorean ? `${diffMinutes}분 전` : isSpanish ? `hace ${diffMinutes} min` : `${diffMinutes}m ago`;
 
   const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return isKorean ? `${diffHours}시간 전` : `${diffHours}h ago`;
+  if (diffHours < 24) return isKorean ? `${diffHours}시간 전` : isSpanish ? `hace ${diffHours} h` : `${diffHours}h ago`;
 
   const diffDays = Math.round(diffHours / 24);
-  return isKorean ? `${diffDays}일 전` : `${diffDays}d ago`;
+  return isKorean ? `${diffDays}일 전` : isSpanish ? `hace ${diffDays} d` : `${diffDays}d ago`;
 }
 
 export function formatQuarterHourLabel(minuteOfDay: number): string {
@@ -169,6 +190,12 @@ export function describeLocalizedRelativeDay(
 ): string {
   const label = describeRelativeDay(day, startOfDayMinutes);
   if (language === "en") return label;
+  if (language === "es") {
+    if (label === "Today") return "Hoy";
+    if (label === "Yesterday") return "Ayer";
+    if (label === "Tomorrow") return "Mañana";
+    return "Día seleccionado";
+  }
   if (label === "Today") return "오늘";
   if (label === "Yesterday") return "어제";
   if (label === "Tomorrow") return "내일";
@@ -219,6 +246,7 @@ export function formatCompactHourLabel(hour: number): string {
 export function formatLocalizedCompactHourLabel(hour: number, language: DisplayLanguage): string {
   if (language === "en") return formatCompactHourLabel(hour);
   const normalizedHour = ((Math.floor(hour) % 24) + 24) % 24;
+  if (language === "es") return `${normalizedHour} h`;
   return `${normalizedHour}시`;
 }
 
@@ -231,6 +259,7 @@ export function formatHourLabel(hour: number): string {
 export function formatLocalizedHourLabel(hour: number, language: DisplayLanguage): string {
   if (language === "en") return formatHourLabel(hour);
   const normalizedHour = ((Math.floor(hour) % 24) + 24) % 24;
+  if (language === "es") return `${String(normalizedHour).padStart(2, "0")}:00`;
   return `${normalizedHour}시`;
 }
 
@@ -273,7 +302,7 @@ export function clockHourForLogicalHour(logicalHour: number, startOfDayMinutes =
 export function formatStartOfDayOptionLabel(minutes: number, locale = UI_LOCALE): string {
   const normalized = ((minutes % (24 * 60)) + (24 * 60)) % (24 * 60);
   const date = new Date(2026, 0, 1, Math.floor(normalized / 60), normalized % 60, 0, 0);
-  return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", hour12: true }).format(date);
+  return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", ...(locale.startsWith("es") ? {} : { hour12: true }) }).format(date);
 }
 
 /** The device's IANA time zone with its current UTC offset, e.g. "Asia/Seoul · GMT+9". */
@@ -348,10 +377,15 @@ export function formatLocalizedDateRangeLabel(
 
   const sameYear = start.getFullYear() === end.getFullYear();
   const sameMonth = sameYear && start.getMonth() === end.getMonth();
-  const startLabel = new Intl.DateTimeFormat("ko-KR", sameYear
+  const locale = localeForDisplayLanguage(language);
+  if (language === "es" && sameMonth) {
+    const month = new Intl.DateTimeFormat(locale, { month: "long" }).format(start);
+    return `${start.getDate()}–${end.getDate()} de ${month}`;
+  }
+  const startLabel = new Intl.DateTimeFormat(locale, sameYear
     ? { month: "long", day: "numeric" }
     : { year: "numeric", month: "long", day: "numeric" }).format(start);
-  const endLabel = new Intl.DateTimeFormat("ko-KR", sameMonth
+  const endLabel = new Intl.DateTimeFormat(locale, sameMonth
     ? { day: "numeric" }
     : sameYear
       ? { month: "long", day: "numeric" }
@@ -375,7 +409,7 @@ export function formatLocalizedDayLabel(day: string, language: DisplayLanguage):
   if (language === "en") return formatDayLabel(day);
   const parsed = parseLocalIsoDay(day);
   if (!parsed) return day;
-  return new Intl.DateTimeFormat("ko-KR", { weekday: "short", month: "long", day: "numeric" }).format(parsed);
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: "short", month: "long", day: "numeric" }).format(parsed);
 }
 
 export function formatHistoryMonthLabel(month: string): string {

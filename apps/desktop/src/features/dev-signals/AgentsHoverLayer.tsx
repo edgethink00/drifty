@@ -61,7 +61,7 @@ function AgentsHoverCard({ hover, cardRef }: { readonly hover: AgentsHoverState;
   const modelLabels = hover.details.modelLabels.slice(0, 2);
   const cellSummary = hover.details.cellSummary;
   const durationLabel = hover.details.activeSeconds > 0 && hover.details.activeSeconds < 60
-    ? effectiveLanguage === "ko" ? "1분 미만" : "<1m"
+    ? effectiveLanguage === "ko" ? "1분 미만" : effectiveLanguage === "es" ? "menos de 1 min" : "<1m"
     : formatLocalizedCompactDurationFromSeconds(hover.details.activeSeconds, effectiveLanguage);
 
   return (

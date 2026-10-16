@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { createPortal } from "react-dom";
 import { shiftIsoDate, type ActivitySegment, type ClassificationOptions } from "@drifty/domain";
 import type { CompactHistoryLoad, CompactHistoryRange } from "../dashboard/compactHistoryCache";
-import { formatLocalizedCompactDurationFromSeconds, getLogicalDayRange } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, getLogicalDayRange, localeForDisplayLanguage } from "../../lib/formatting";
 import { mergeActivitySegments } from "../../lib/activitySegments";
 import { useLocalization } from "../localization/LocalizationContext";
 import { buildFocusCalendar, focusCalendarWindow, type FocusCalendarDay, type FocusCalendarVariant } from "./focusCalendar";
@@ -102,7 +102,7 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
   const columns = Math.ceil((offset + days.length) / 7);
   const lastSelectable = days.findIndex(day => day.day === endDay);
   const activeDay = days.find(day => day.day === selectedDay && day.day <= endDay) ?? days[lastSelectable];
-  const locale = effectiveLanguage === "ko" ? "ko-KR" : "en-US";
+  const locale = localeForDisplayLanguage(effectiveLanguage);
   const dateLabel = (day: string) => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", weekday: "short" }).format(new Date(`${day}T12:00:00`));
   const relativeDescription = (level: number) => {
     if (level === 1) return t("trends.calendar.relativeLighter");
@@ -204,7 +204,7 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
                 })}
               </div>
               <div className="contribution-grid__weekdays" aria-hidden="true">
-                {(effectiveLanguage === "ko" ? ["월", "", "수", "", "금", "", ""] : ["M", "", "W", "", "F", "", ""]).map((label, index) => <span key={index}>{label}</span>)}
+                {(effectiveLanguage === "ko" ? ["월", "", "수", "", "금", "", ""] : effectiveLanguage === "es" ? ["L", "", "X", "", "V", "", ""] : ["M", "", "W", "", "F", "", ""]).map((label, index) => <span key={index}>{label}</span>)}
               </div>
               <div className="contribution-grid" ref={grid} role="group" aria-label={t("trends.calendar.daysAria")} aria-description={t(hasRelativeBasis ? "trends.calendar.scale" : "trends.calendar.scalePending")} onPointerOver={onGridPointerOver} onPointerLeave={onGridPointerLeave} onBlur={onGridBlur}>
                 {Array.from({ length: columns }, (_, column) => <div className="contribution-grid__week" key={column}>

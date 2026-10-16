@@ -1,3 +1,4 @@
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { KeyHint } from "../../components/KeyHint";
 
@@ -361,10 +362,10 @@ function formatCloudDeviceCount(
   return t("settings.cloudDevices.inUseCount", { active: activeCount, max: maxActiveDevices });
 }
 
-export function formatCloudDeviceLastSeen(value: string, language: "en" | "ko", t: LocalizationController["t"]): string {
+export function formatCloudDeviceLastSeen(value: string, language: "en" | "ko" | "es", t: LocalizationController["t"]): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return t("settings.cloudDevices.lastSeenUnknown");
-  const formatted = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : undefined, {
+  const formatted = new Intl.DateTimeFormat(localeForDisplayLanguage(language), {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -372,4 +373,3 @@ export function formatCloudDeviceLastSeen(value: string, language: "en" | "ko", 
   }).format(date);
   return t("settings.cloudDevices.lastSeen", { date: formatted });
 }
-

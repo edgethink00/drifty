@@ -1,3 +1,4 @@
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import type { DisplayLanguage } from "../localization/languagePreference";
 import type { DeviceSyncStatus } from "./deviceSyncTypes";
 
@@ -102,10 +103,10 @@ const DAY_MS = 24 * HOUR_MS;
 export function formatDeviceRelativeTime(value: string, now: number, language: DisplayLanguage): string | null {
   const at = Date.parse(value);
   if (!Number.isFinite(at)) return null;
-  const locale = language === "ko" ? "ko-KR" : "en-US";
+  const locale = localeForDisplayLanguage(language);
   const elapsed = Math.max(0, now - at);
   const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-  if (elapsed < 45_000) return language === "ko" ? "방금" : "just now";
+  if (elapsed < 45_000) return language === "ko" ? "방금" : language === "es" ? "ahora mismo" : "just now";
   if (elapsed < HOUR_MS) return relative.format(-Math.max(1, Math.floor(elapsed / MINUTE_MS)), "minute");
   if (elapsed < DAY_MS) return relative.format(-Math.floor(elapsed / HOUR_MS), "hour");
   if (elapsed < 7 * DAY_MS) return relative.format(-Math.floor(elapsed / DAY_MS), "day");

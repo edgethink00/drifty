@@ -120,7 +120,7 @@ function inlineCorrectionDetailLabel(
   return label.charAt(0).toLocaleLowerCase("en") + label.slice(1);
 }
 
-function localizeClassificationSummaryValue(value: string, language: "en" | "ko"): string {
+function localizeClassificationSummaryValue(value: string, language: "en" | "ko" | "es"): string {
   if (language === "en") return value;
   const labels: Readonly<Record<string, string>> = {
     Mixed: "혼합",
@@ -151,7 +151,7 @@ function localizeClassificationSummaryValue(value: string, language: "en" | "ko"
   return labels[value] ?? value;
 }
 
-function localizeCaptureSurfaceDetail(value: string, language: "en" | "ko"): string {
+function localizeCaptureSurfaceDetail(value: string, language: "en" | "ko" | "es"): string {
   if (language === "en") return value;
   return value
     .replace(/^App:/u, "앱:")
@@ -352,7 +352,7 @@ export function ClassificationPage({
             ariaLabel={t("classification.dateSelector", { range: t(classificationRange === "Day" ? "common.day" : "common.week") })}
             label={classificationDateLabel}
             todayLabel={t("common.now")}
-            todayActionLabel={effectiveLanguage === "ko" ? t(classificationRange === "Week" ? "classification.goCurrent" : "classification.goToday") : undefined}
+            todayActionLabel={effectiveLanguage !== "en" ? t(classificationRange === "Week" ? "classification.goCurrent" : "classification.goToday") : undefined}
             isTodayDisabled={isCurrentClassificationRange}
             isNextDisabled={!canShiftClassificationForward}
             onPrevious={onPreviousClassificationRange}
@@ -377,10 +377,10 @@ export function ClassificationPage({
         <div
           className="clf-stat"
           role="group"
-          aria-label={`${effectiveLanguage === "ko" ? t("classification.focusRate") : CLASSIFICATION_FOCUS_RATE_LABEL}, ${effectiveLanguage === "ko" ? t("classification.focusRateDescription") : CLASSIFICATION_FOCUS_RATE_DESCRIPTION}`}
-          title={effectiveLanguage === "ko" ? t("classification.focusRateDescription") : CLASSIFICATION_FOCUS_RATE_DESCRIPTION}
+          aria-label={`${effectiveLanguage !== "en" ? t("classification.focusRate") : CLASSIFICATION_FOCUS_RATE_LABEL}, ${effectiveLanguage !== "en" ? t("classification.focusRateDescription") : CLASSIFICATION_FOCUS_RATE_DESCRIPTION}`}
+          title={effectiveLanguage !== "en" ? t("classification.focusRateDescription") : CLASSIFICATION_FOCUS_RATE_DESCRIPTION}
         >
-          <span className="eyebrow">{effectiveLanguage === "ko" ? t("classification.focusRate") : CLASSIFICATION_FOCUS_RATE_LABEL}</span>
+          <span className="eyebrow">{effectiveLanguage !== "en" ? t("classification.focusRate") : CLASSIFICATION_FOCUS_RATE_LABEL}</span>
           <strong>{classificationFocusRatePercent}%</strong>
         </div>
       </div>

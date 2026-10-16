@@ -144,7 +144,7 @@ export function TrendsPage({
               onToday={onTodayInsightRange}
               previousLabel={t("trends.previousWindow")}
               nextLabel={t("trends.nextWindow")}
-              todayActionLabel={effectiveLanguage === "ko" ? "가장 최근 분석 기간으로 이동" : undefined}
+              todayActionLabel={effectiveLanguage === "ko" ? "가장 최근 분석 기간으로 이동" : effectiveLanguage === "es" ? "Ir al período de análisis más reciente" : undefined}
             />
           </div>
         ) : (

@@ -136,11 +136,6 @@
       "count": 4
     }
   },
-  "apps/desktop/src/features/localization/LocalizationContext.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "apps/desktop/src/features/onboarding/components/steps/ConnectServerStep.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1

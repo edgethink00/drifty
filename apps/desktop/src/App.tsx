@@ -482,7 +482,7 @@ import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings,
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek } from "./features/settings/settingsStorage";
 import { useLeaderboardSeriesPrewarm } from "./features/leaderboard/useLeaderboardSeriesPrewarm";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
-import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
+import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, localeForDisplayLanguage, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { useUsageMilestones } from "./lib/analytics/useUsageMilestones";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
@@ -8268,7 +8268,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     [classificationProductivityTotals],
   );
   const lastCaptureDistanceLabel = status?.lastEventAt
-    ? formatRelativeTime(status.lastEventAt, localization.effectiveLanguage === "ko" ? "ko-KR" : "en-US")
+    ? formatRelativeTime(status.lastEventAt, localeForDisplayLanguage(localization.effectiveLanguage))
     : localization.t("tracker.noCapturesYet");
   const uniqueAppsCount = useMemo(() => new Set(effectiveDashboardSegments.map((s) => s.bundleId ?? s.appName)).size, [effectiveDashboardSegments]);
   const averageSessionMinutes = effectiveDashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / effectiveDashboardSegments.length) : 0;
@@ -9212,7 +9212,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setClassificationCorrectionNotice(null);
   }, [activeTab, effectiveClassifyCategoryId, effectiveClassifySourceId]);
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
-  const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
+  const classificationTopAppLabel = classificationTopApp?.appName ?? localization.t("common.noActivity");
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
   // Same segments and options as the Breakdown productivity ring, so the Dev
   // preview's Longest streak and pattern tiles agree with its Focus and Drift totals.
@@ -9257,19 +9257,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const weekCalendarEvents = weekDashboardModel.calendarEvents;
   const focusDriftChart = useMemo(() => {
     if (dashboardDemoReplayState.kind !== "active") {
-      return buildFocusDriftChart(effectiveSelectedDaySegments, selectedDay, effectiveSelectedDayClassificationOptions, effectiveCurrentMinuteOfDay, startOfDayMinutes);
+      return buildFocusDriftChart(effectiveSelectedDaySegments, selectedDay, effectiveSelectedDayClassificationOptions, effectiveCurrentMinuteOfDay, startOfDayMinutes, localization.effectiveLanguage);
     }
 
     return applyFocusDriftReplayReveal({
-      chart: buildFocusDriftChart(dashboardDemoReplayState.fixture.segments, selectedDay, effectiveSelectedDayClassificationOptions, null, startOfDayMinutes),
+      chart: buildFocusDriftChart(dashboardDemoReplayState.fixture.segments, selectedDay, effectiveSelectedDayClassificationOptions, null, startOfDayMinutes, localization.effectiveLanguage),
       revealMinuteOfDay: effectiveCurrentMinuteOfDay,
       startOfDayMinutes,
+      language: localization.effectiveLanguage,
     });
   }, [
     dashboardDemoReplayState,
     effectiveCurrentMinuteOfDay,
     effectiveSelectedDayClassificationOptions,
     effectiveSelectedDaySegments,
+    localization.effectiveLanguage,
     selectedDay,
     startOfDayMinutes,
   ]);
@@ -10616,7 +10618,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       ariaLabel={dashPeriod === "Today" ? localization.t("dashboard.today.dateSelector") : localization.t("dashboard.week.dateSelector")}
       label={dashboardDateLabel}
       todayLabel={localization.t("common.now")}
-      todayActionLabel={localization.effectiveLanguage === "ko"
+      todayActionLabel={localization.effectiveLanguage !== "en"
         ? localization.t(dashPeriod === "Today" ? "dashboard.today.goToday" : "dashboard.week.goCurrent")
         : undefined}
       isTodayDisabled={isCurrentDashboardPeriod}
@@ -11568,7 +11570,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 onOpenRecord={openHistoryRecordInContext}
               />
             ) : (
-              <DeferredTabBodyFallback label="history records" variant="history" />
+              <DeferredTabBodyFallback variant="history" />
             )}
           </div>
         ) : null}
@@ -11618,7 +11620,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             activeInsightProductivityTotals={activeInsightProductivityTotals}
             appIcons={appIcons}
             attentionRhythm={attentionRhythm}
-            bodyFallback={<DeferredTabBodyFallback label="trend analysis" variant="trends" />}
+            bodyFallback={<DeferredTabBodyFallback variant="trends" />}
             bodyReady={isTrendsBodyReady}
             alarmFollowThrough={alarmFollowThrough}
             canShiftInsightForward={canShiftInsightForward}

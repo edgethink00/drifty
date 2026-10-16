@@ -53,10 +53,63 @@ const KOREAN_DOMAIN_LABELS: Readonly<Record<string, string>> = {
   "It changes often": "자주 바뀜",
 };
 
+const SPANISH_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
+  Coding: "Programación",
+  "Product & Planning": "Producto y planificación",
+  Designing: "Diseño",
+  Writing: "Redacción",
+  "Writing & Content": "Redacción y contenido",
+  Researching: "Investigación",
+  "Research & Learning": "Investigación y aprendizaje",
+  Studying: "Estudio",
+  "Data Analysis": "Análisis de datos",
+  Marketing: "Marketing",
+  "Marketing & Sales": "Marketing y ventas",
+  Sales: "Ventas",
+  Trading: "Operaciones financieras",
+  "Customer Support": "Atención al cliente",
+  "Content Creation": "Creación de contenido",
+  "Meetings & Communication": "Reuniones y comunicación",
+  "Project Management": "Gestión de proyectos",
+  Operations: "Operaciones",
+  Other: "Otra actividad",
+};
+
+const SPANISH_DOMAIN_LABELS: Readonly<Record<string, string>> = {
+  Tech: "Tecnología",
+  SaaS: "SaaS",
+  AI: "IA",
+  Fashion: "Moda",
+  Beauty: "Belleza",
+  Cosmetics: "Cosmética",
+  Education: "Educación",
+  Research: "Investigación",
+  Media: "Medios",
+  Content: "Contenido",
+  "E-commerce": "Comercio electrónico",
+  Retail: "Comercio minorista",
+  Finance: "Finanzas",
+  Business: "Negocios",
+  Design: "Diseño",
+  Creative: "Industria creativa",
+  Health: "Salud",
+  Wellness: "Bienestar",
+  Gaming: "Videojuegos",
+  Architecture: "Arquitectura",
+  Music: "Música",
+  Film: "Cine",
+  "Food & Beverage": "Alimentación y bebidas",
+  "Real Estate": "Inmobiliaria",
+  "Non-profit": "Organización sin fines de lucro",
+  Government: "Administración pública",
+  Other: "Otro sector",
+  "It changes often": "Cambia con frecuencia",
+};
+
 export function onboardingActivityLabel(value: string, language: DisplayLanguage): string {
-  return language === "ko" ? KOREAN_ACTIVITY_LABELS[value] ?? value : value;
+  return language === "ko" ? KOREAN_ACTIVITY_LABELS[value] ?? value : language === "es" ? SPANISH_ACTIVITY_LABELS[value] ?? value : value;
 }
 
 export function onboardingDomainLabel(value: string, language: DisplayLanguage): string {
-  return language === "ko" ? KOREAN_DOMAIN_LABELS[value] ?? value : value;
+  return language === "ko" ? KOREAN_DOMAIN_LABELS[value] ?? value : language === "es" ? SPANISH_DOMAIN_LABELS[value] ?? value : value;
 }

@@ -1,5 +1,4 @@
 import type { CustomActivityCategory } from "@drifty/domain";
-import type { DisplayLanguage } from "../localization/languagePreference";
 
 /**
  * A made-up week for the design review. The lab notes on the owner's real days
@@ -19,7 +18,8 @@ import type { DisplayLanguage } from "../localization/languagePreference";
  * page can count how long each has run: Checkout v3 five noted days, the API a
  * second day, the refund policy back after two days, the release notes new.
  */
-export type LocalText = Readonly<Record<DisplayLanguage, string>>;
+// This development-only design fixture has English and Korean sample text.
+export type LocalText = Readonly<Record<"en" | "ko", string>>;
 export type DayNoteSource = { readonly app: string; readonly site?: string };
 
 export type DayKind = "focus" | "drift" | "neutral";

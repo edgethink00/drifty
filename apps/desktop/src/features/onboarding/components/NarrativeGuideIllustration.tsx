@@ -8,9 +8,10 @@ import type { PostOnboardingSidebarGuideStep } from "../postOnboardingSidebarGui
 import "../styles/sidebar-guide-real-art.css";
 import { StoryScene, storyCatPlacement, type ArtCatPlacement, type StoryDriftChoice } from "./introArt/StoryScene";
 import type { FirstDayRecap } from "../firstDayStory";
+import type { DisplayLanguage } from "../../localization/languagePreference";
 import { VIEW } from "./introArt/artKit";
 import { ArtPlatform, type RealLabels } from "./introArt/realApp";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../lib/formatting";
+import { localeForDisplayLanguage, formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../lib/formatting";
 
 /** Sample day for the drawn Today screen: 5h 15m of focus on a Wednesday afternoon. */
 const FOCUS_SECONDS = 5 * 3600 + 15 * 60;
@@ -18,17 +19,19 @@ const SAMPLE_DAY = new Date(2026, 8, 30, 12);
 /** The sample "now": the Today timeline stops at 18:08 and the menu bar clock shows the same time. */
 const SAMPLE_NOW = new Date(2026, 8, 30, 18, 8);
 /** macOS menu bar clock with the date hidden and the weekday shown (a stock Control Center setting). */
-function menuBarClock(ko: boolean) {
-  const locale = ko ? "ko-KR" : "en-US";
+function menuBarClock(language: DisplayLanguage) {
+  const ko = language === "ko";
+  const locale = localeForDisplayLanguage(language);
   const weekday = new Intl.DateTimeFormat(locale, { weekday: "short" }).format(SAMPLE_NOW);
   const time = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(SAMPLE_NOW).replace(/\u202f/g, " ");
   return ko ? "(" + weekday + ") " + time : weekday + " " + time;
 }
 /** The Windows taskbar clock: time over the short date in the Windows default format for the language. */
-function taskbarClock(ko: boolean) {
-  const time = new Intl.DateTimeFormat(ko ? "ko-KR" : "en-US", { hour: "numeric", minute: "2-digit" }).format(SAMPLE_NOW).replace(/\u202f/g, " ");
+function taskbarClock(language: DisplayLanguage) {
+  const ko = language === "ko";
+  const time = new Intl.DateTimeFormat(localeForDisplayLanguage(language), { hour: "numeric", minute: "2-digit" }).format(SAMPLE_NOW).replace(/\u202f/g, " ");
   const y = SAMPLE_NOW.getFullYear(), m = SAMPLE_NOW.getMonth() + 1, d = SAMPLE_NOW.getDate();
-  return { time, date: ko ? y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0") : m + "/" + d + "/" + y };
+  return { time, date: language === "es" ? d + "/" + m + "/" + y : ko ? y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0") : m + "/" + d + "/" + y };
 }
 
 const CAT_STYLE = {
@@ -132,16 +135,16 @@ export function NarrativeGuideIllustration({ step, hostPlatform = "macos", theme
     category: t("common.category"), productivity: t("common.productivity"), project: t("common.project"), breakdown: t("dashboard.today.breakdown"),
     total: t("common.total"), sessions: t("common.sessions"), topApp: t("classification.topApp"), focusRate: t("classification.focusRate"), title: t("classification.title"),
     dayShort: t("common.day"), weekShort: t("common.week"), now: t("common.now"),
-    focusValue: formatLocalizedCompactDurationFromSeconds(FOCUS_SECONDS, ko ? "ko" : "en"), focusWord: ko ? "집중했습니다" : "Focused for", focusValueFirst: ko, share: t("dashboard.today.share"),
-    date: new Intl.DateTimeFormat(ko ? "ko-KR" : "en-US", { month: ko ? "long" : "short", day: "numeric", weekday: "short" }).format(SAMPLE_DAY),
-    menuClock: menuBarClock(ko), trayTime: taskbarClock(ko).time, trayDate: taskbarClock(ko).date,
-    hours: [0, 1, 2, 3, 4, 5, 6, 7].map(i => formatLocalizedCompactHourLabel(4 + i * 3, ko ? "ko" : "en")), cancel: t("common.cancel"), apply: t("classification.correction.apply"),
-    settings: t("postOnboarding.sidebarGuide.settingsLabel"), aiSettings: t("account.aiSettings"), language: t("postOnboarding.sidebarGuide.languageLabel"), languageValue: ko ? "한국어" : "English",
+    focusValue: formatLocalizedCompactDurationFromSeconds(FOCUS_SECONDS, effectiveLanguage), focusWord: ko ? "집중했습니다" : effectiveLanguage === "es" ? "Concentración durante" : "Focused for", focusValueFirst: ko, share: t("dashboard.today.share"),
+    date: new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { month: ko ? "long" : "short", day: "numeric", weekday: "short" }).format(SAMPLE_DAY),
+    menuClock: menuBarClock(effectiveLanguage), trayTime: taskbarClock(effectiveLanguage).time, trayDate: taskbarClock(effectiveLanguage).date,
+    hours: [0, 1, 2, 3, 4, 5, 6, 7].map(i => formatLocalizedCompactHourLabel(4 + i * 3, effectiveLanguage)), cancel: t("common.cancel"), apply: t("classification.correction.apply"),
+    settings: t("postOnboarding.sidebarGuide.settingsLabel"), aiSettings: t("account.aiSettings"), language: t("postOnboarding.sidebarGuide.languageLabel"), languageValue: ko ? "한국어" : effectiveLanguage === "es" ? "Español" : "English",
     darkMode: t("account.darkMode"), pet: t("settings.pet.show"), update: t("account.checkForUpdates"), feedback: t("account.sendFeedback"), signIn: t("account.signIn"), recording: t("tracker.trackingNow"),
     workspace: t("activity.category.workspace"), learning: t("activity.category.learning"), communication: t("activity.category.communication"), music: t("activity.category.music"), game: t("activity.category.game"),
     socialMedia: t("activity.category.socialMedia"), entertainment: t("activity.category.entertainment"), shopping: t("activity.category.shopping"), utility: t("activity.category.utility"),
   };
-  const props = { theme, ko, platform: hostPlatform, labels, step };
+  const props = { theme, ko, language: effectiveLanguage, platform: hostPlatform, labels, step };
   // Windows, the menu bar and the taskbar bleed to the real panel edge, so when the panel is wider or
   // taller than the art the rounded panel (overflow: hidden) does the cropping.
   const frame = { x: -VIEW.w, y: -VIEW.h, w: VIEW.w * 3, h: VIEW.h * 3 };

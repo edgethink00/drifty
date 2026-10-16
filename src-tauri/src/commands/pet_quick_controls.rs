@@ -155,7 +155,7 @@ fn is_supported_quick_controls_state(state: &PetQuickControlsState) -> bool {
         })
         .unwrap_or(true);
     override_supported
-        && matches!(state.language.as_str(), "en" | "ko")
+        && matches!(state.language.as_str(), "en" | "ko" | "es")
         && matches!(state.theme.as_str(), "light" | "dark")
 }
 

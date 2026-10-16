@@ -130,6 +130,13 @@ function notificationCopy(
         : `${period} 일시 중지가 끝나 저장된 설정으로 돌아왔습니다.`,
     };
   }
+  if (language === "es") {
+    const period = override.kind === "15" ? "15 minutos" : override.kind === "60" ? "1 hora" : "hasta medianoche";
+    return {
+      title: restoredEnabled ? "El cierre automático vuelve a estar activo" : "El cierre automático vuelve a estar desactivado",
+      body: `Terminó ${override.enabled ? "la activación temporal" : "la pausa"} de ${period}. Drifty restableció tu configuración guardada.`,
+    };
+  }
   const period = override.kind === "15"
     ? "15-minute"
     : override.kind === "60"

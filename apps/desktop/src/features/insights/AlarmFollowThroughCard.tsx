@@ -42,7 +42,7 @@ export function AlarmFollowThroughCard({ followThrough }: AlarmFollowThroughCard
   const median = followThrough.medianMinutesToFocus;
   const medianLabel = median === null
     ? t("trends.followThrough.noMedian")
-    : t("trends.followThrough.median", { duration: isKorean ? `${median}분` : `${median}m` });
+    : t("trends.followThrough.median", { duration: isKorean ? `${median}분` : effectiveLanguage === "es" ? `${median} min` : `${median}m` });
 
   return (
     <section

@@ -106,7 +106,7 @@ type Translate = ReturnType<typeof useLocalization>["t"];
  * of app time, so the totals are the browser's, not the whole day's. The story is always about yesterday
  * (see buildFirstDayRecap). With almost no drift the second card says so plainly instead of naming a source.
  */
-function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | null | undefined, t: Translate, language: "en" | "ko"): GuideText | null {
+function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | null | undefined, t: Translate, language: "en" | "ko" | "es"): GuideText | null {
   if (!recap || (step !== "recap" && step !== "drift")) return null;
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
   const browser = recap.importedOnly;

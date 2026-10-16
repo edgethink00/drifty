@@ -251,6 +251,11 @@ describe("AccountMenu", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: "게스트" })).toBeTruthy());
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
+    fireEvent.click(screen.getByRole("button", { name: "게스트" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "언어 한국어" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "스페인어" }));
+    await waitFor(() => expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("es"));
+    expect(document.documentElement.lang).toBe("es");
     window.localStorage.removeItem(DISPLAY_LANGUAGE_STORAGE_KEY);
   });
 

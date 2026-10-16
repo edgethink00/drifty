@@ -29,7 +29,7 @@ import { useProductivityLevels } from "../settings/categoryCustomizationStore";
  * from 10 onward onto a second line. The card heading already says 시간대별.
  */
 export function formatRhythmHourLabel(hour: number, language: DisplayLanguage = "en"): string {
-  if (language === "ko") return String(hour);
+  if (language !== "en") return String(hour);
   if (hour === 0) return "12a";
   if (hour === 12) return "12p";
   return String(hour > 12 ? hour - 12 : hour);
@@ -342,9 +342,12 @@ export function AttentionRhythmCard({
       .map((cell) => cell.weekdayIndex);
     const fallbackIndexes = orderedWeekdayIndexes.length > 0 ? orderedWeekdayIndexes : [0, 1, 2, 3, 4, 5, 6];
     const koreanWeekdays = ["월", "화", "수", "목", "금", "토", "일"] as const;
+    const spanishWeekdays = ["L", "M", "X", "J", "V", "S", "D"] as const;
     return fallbackIndexes.map((weekdayIndex) => (
       effectiveLanguage === "ko"
         ? koreanWeekdays[weekdayIndex] ?? ""
+        : effectiveLanguage === "es"
+          ? spanishWeekdays[weekdayIndex] ?? ""
         : WEEKLY_BREAKDOWN_WEEKDAYS[weekdayIndex] ?? ""
     ));
   }, [cells, effectiveLanguage]);
@@ -479,7 +482,7 @@ export function InsightSourceGroup({
         </div>
         <div className="drift-time-trend__sources-items" style={toneStyle}>
           {visibleItems.map((item, index) => {
-            const valueLabel = item.valueKind === "count" ? (effectiveLanguage === "ko" ? `${item.count}회` : `${item.count}x`) : formatLocalizedCompactDurationFromSeconds(item.seconds, effectiveLanguage);
+            const valueLabel = item.valueKind === "count" ? (effectiveLanguage === "ko" ? `${item.count}회` : effectiveLanguage === "es" ? `${item.count} veces` : `${item.count}x`) : formatLocalizedCompactDurationFromSeconds(item.seconds, effectiveLanguage);
             const content = (
               <>
                 <span className="drift-time-trend__sources-rank" aria-hidden="true">{start + index + 1}</span>

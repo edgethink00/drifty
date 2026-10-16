@@ -58,7 +58,7 @@ export function AuthModal({
    */
   presentation?: "modal" | "onboarding" | "inline";
 }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const {
     status,
     callbackStatus,
@@ -581,7 +581,7 @@ export function AuthModal({
     <span>
       {t("auth.modal.byContinuing")}
       {" "}<a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("auth.modal.terms")}</a>
-      {" & "}
+      {effectiveLanguage === "es" ? " y " : " & "}
       <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("auth.modal.privacy")}</a>.
     </span>
   );
@@ -677,7 +677,7 @@ export function AuthModal({
                   <p className="dc-onb-account__legal">
                     {t("onboarding.account.legalPrefix")}{" "}
                     <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("onboarding.account.terms")}</a>{" "}
-                    &amp; <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
+                    {effectiveLanguage === "es" ? "y" : "&"} <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
                   </p>
                 </div>
               </div>

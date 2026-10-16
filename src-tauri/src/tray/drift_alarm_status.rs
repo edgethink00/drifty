@@ -89,6 +89,44 @@ pub fn drift_summary_label(status: &TrayDriftAlarmStatus, ko: bool) -> Option<St
     }
 }
 
+pub fn spanish_drift_alerts_status_label(status: &TrayDriftAlarmStatus) -> String {
+    if status.enabled && status.tracker_running == Some(false) {
+        return "Alertas de distracción: en pausa".to_string();
+    }
+    let label = status.status_label.trim();
+    if !label.is_empty() {
+        return label.to_string();
+    }
+    if status.enabled {
+        "Alertas de distracción: activas".to_string()
+    } else {
+        "Alertas de distracción: desactivadas".to_string()
+    }
+}
+
+pub fn spanish_drift_summary_label(status: &TrayDriftAlarmStatus) -> Option<String> {
+    if !status.enabled || !status.developer_details_enabled {
+        return None;
+    }
+    if status.tracker_running == Some(false) {
+        return Some("Última comprobación: sin comprobar".to_string());
+    }
+    let label = status.last_checked_label.trim();
+    let display = if label.is_empty() && status.last_checked_at.is_some() {
+        "Registrado"
+    } else if label.is_empty() {
+        "Nunca"
+    } else {
+        label
+    };
+    let result = status.result_label.trim();
+    if result.is_empty() {
+        Some(format!("Última comprobación: {display}"))
+    } else {
+        Some(format!("Última comprobación: {display} · {result}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

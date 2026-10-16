@@ -122,7 +122,7 @@ export function ProjectDetailView({
         <div className="project-detail__stats" role="group" aria-label={t("projects.detail.statsAria")}>
           <div className="project-detail__stat">
             <span className="label-mono">{totalCaption}</span>
-            <strong>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "0분" : "0m"}</strong>
+            <strong>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "0분" : effectiveLanguage === "es" ? "0 min" : "0m"}</strong>
             {comparison ? <span className={"project-detail__delta" + (comparison.includes("+") ? " is-up" : "")}>{comparison}</span> : null}
           </div>
           <div className="project-detail__stat">

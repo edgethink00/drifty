@@ -1,11 +1,12 @@
 import type { DisplayLanguage } from "../localization/LocalizationContext";
+import { localeForDisplayLanguage } from "../../lib/formatting";
 
 export function formatBillingAccessEndDate(value: string | null, language: DisplayLanguage): string | null {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
 
-  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), {
     year: "numeric",
     month: language === "ko" ? "long" : "short",
     day: "numeric",
@@ -24,7 +25,12 @@ export function formatOrganizationSeatAccessCopy(
   const name = organizationName.trim();
   if (!name) return null;
 
-  return Object.freeze(language === "ko"
+  return Object.freeze(language === "es"
+    ? {
+      title: "Licencia de la organización",
+      summary: `Puedes usar la aplicación con una licencia de ${name}, sin una suscripción personal.`,
+    }
+    : language === "ko"
     ? {
       title: "팀 플랜",
       summary: `${name} 팀 플랜에서 Pro를 받고 있어서 따로 결제할 필요가 없어요.`,

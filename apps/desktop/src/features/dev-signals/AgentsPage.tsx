@@ -42,6 +42,7 @@ import {
   formatLocalizedDateRangeLabel,
   formatLocalizedHourLabel,
   formatLocalizedQuarterHourLabel,
+  localeForDisplayLanguage,
 } from "../../lib/formatting";
 import { BreakdownSidePanel } from "../dashboard/BreakdownSidePanelChrome";
 import { getDashboardPeriodRange, shiftDashboardPeriodDay } from "../dashboard/dashboardPeriods";
@@ -110,18 +111,18 @@ function clockMinuteForLogicalMinute(logicalMinute: number, startOfDayMinutes: n
 
 function formatLogicalClock(logicalMinute: number, startOfDayMinutes: number, language: DisplayLanguage): string {
   const minuteOfDay = clockMinuteForLogicalMinute(logicalMinute, startOfDayMinutes);
-  return language === "ko" ? formatLocalizedQuarterHourLabel(minuteOfDay, language) : formatClock(minuteOfDay);
+  return language !== "en" ? formatLocalizedQuarterHourLabel(minuteOfDay, language) : formatClock(minuteOfDay);
 }
 
 function formatAgentDuration(minutes: number, language: DisplayLanguage): string {
-  if (minutes > 0 && minutes < 1) return language === "ko" ? "1분 미만" : "<1m";
-  return language === "ko"
+  if (minutes > 0 && minutes < 1) return language === "ko" ? "1분 미만" : language === "es" ? "menos de 1 min" : "<1m";
+  return language !== "en"
     ? formatLocalizedCompactDurationFromSeconds(Math.round(minutes * 60), language)
     : formatHours(minutes);
 }
 
 function localizedWeekday(day: string, language: DisplayLanguage): string {
-  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { weekday: "short" })
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: "short" })
     .format(new Date(`${day}T12:00:00`));
 }
 
@@ -1093,7 +1094,7 @@ function agentsDayStatEntries(
     { label: t("agents.stats.sessions"), value: String(numbers.sessions), detail: t("agents.stats.distinct") },
     { label: t("agents.stats.tokens"), value: formatTokens(numbers.tokens), detail: numbers.sessions > 0 ? t("agents.stats.perSession", { value: formatTokens(numbers.tokensPerSession) }) : undefined },
     { label: t("agents.stats.longestRun"), value: formatAgentDuration(numbers.longestStretchMinutes, language), detail: t("agents.stats.fromTime", { time: formatLogicalClock(numbers.longestStretchStart, startOfDayMinutes, language) }) },
-    { label: t("agents.stats.medianRun"), value: language === "ko" ? `${Math.round(numbers.medianStretchMinutes)}분` : `${Math.round(numbers.medianStretchMinutes)}m`, detail: t("agents.stats.perStretch") },
+    { label: t("agents.stats.medianRun"), value: language === "ko" ? `${Math.round(numbers.medianStretchMinutes)}분` : language === "es" ? `${Math.round(numbers.medianStretchMinutes)} min` : `${Math.round(numbers.medianStretchMinutes)}m`, detail: t("agents.stats.perStretch") },
     { label: t("agents.stats.activeSpan"), value: formatAgentDuration(numbers.activeSpanMinutes, language), detail: numbers.firstActivityMinute !== null && numbers.lastActivityMinute !== null ? `${formatLogicalClock(numbers.firstActivityMinute, startOfDayMinutes, language)}–${formatLogicalClock(numbers.lastActivityMinute, startOfDayMinutes, language)}` : undefined },
     { label: t("agents.stats.nightShare"), value: `${Math.round(numbers.nightSharePercent)}%`, detail: t("agents.stats.nightHours") },
   ];

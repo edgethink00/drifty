@@ -1,8 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatCompactDurationFromSeconds, formatDateRangeLabel, formatDeviceTimeZone, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatRelativeTime } from "./formatting";
+import { formatCompactDurationFromSeconds, formatDateRangeLabel, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedHourLabel, localeForDisplayLanguage, formatDeviceTimeZone, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatRelativeTime } from "./formatting";
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+it("keeps the device region when Spanish is selected manually", () => {
+  vi.stubGlobal("navigator", { language: "en-US", languages: ["en-US"] });
+  expect(localeForDisplayLanguage("es")).toBe("es-US");
+  vi.stubGlobal("navigator", { language: "es-MX", languages: ["es-MX", "en-US"] });
+  expect(localeForDisplayLanguage("es")).toBe("es-MX");
 });
 
 describe("device time zone label", () => {
@@ -37,6 +45,16 @@ describe("formatRelativeTime", () => {
 
     expect(formatRelativeTime("2026-08-29T05:55:00.000Z", "ko-KR")).toBe("5분 전");
     expect(formatRelativeTime("not-a-date", "ko-KR")).toBe("알 수 없음");
+  });
+
+  it("formats Spanish durations, recency and dates without English suffixes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-29T06:00:00.000Z"));
+    expect(formatLocalizedDuration(5399, "es")).toBe("1 h 30 min");
+    expect(formatRelativeTime("2026-08-29T05:55:00.000Z", "es")).toBe("hace 5 min");
+    expect(formatLocalizedHourLabel(14, "es")).toBe("14:00");
+    expect(formatLocalizedDayLabel("2026-08-24", "es")).toContain("ago");
+    expect(formatLocalizedDateRangeLabel("2026-08-24", "2026-08-30", "es")).toBe("24–30 de agosto");
   });
 });
 

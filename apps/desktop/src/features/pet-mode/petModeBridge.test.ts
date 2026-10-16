@@ -612,7 +612,7 @@ describe("pet quick-controls bridge", () => {
       automaticCloseEnabled: boolean;
       automaticCloseSavedEnabled: boolean;
       automaticCloseOverride: null | { enabled: boolean; kind: "15" | "60" | "today" | "forever"; endsAtMs: number | null };
-      language: "en" | "ko";
+      language: "en" | "ko" | "es";
       theme: "light" | "dark";
     }> = [];
     tauriListen.listen.mockImplementationOnce(async (
@@ -627,6 +627,7 @@ describe("pet quick-controls bridge", () => {
         language: "ko",
         theme: "dark",
       } });
+      handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "es", theme: "light" } });
       handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ko", theme: "sepia" } });
       handler({ payload: { automaticCloseEnabled: "false", automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ko", theme: "light" } });
       handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ja", theme: "light" } });
@@ -643,6 +644,12 @@ describe("pet quick-controls bridge", () => {
       automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: 1_800_000 },
       language: "ko",
       theme: "dark",
+    }, {
+      automaticCloseEnabled: false,
+      automaticCloseSavedEnabled: true,
+      automaticCloseOverride: null,
+      language: "es",
+      theme: "light",
     }]);
   });
 });

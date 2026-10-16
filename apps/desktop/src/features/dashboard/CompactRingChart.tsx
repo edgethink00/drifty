@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { MouseEvent } from "react";
 import type { AppIconMap, FlowBlock } from "@drifty/domain";
 import { DONUT_CIRCUMFERENCE } from "../insights/insightData";
-import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, localeForDisplayLanguage } from "../../lib/formatting";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import { CompactClassificationHoverCard } from "./HoverCards";
@@ -37,6 +37,7 @@ export interface CompactRingChartProps {
 function formatCompactRingLegendHours(totalSeconds: number, language: DisplayLanguage): string {
   if (language === "ko") return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
   const hours = Math.max(0, Math.floor((totalSeconds / 3600) * 10) / 10);
+  if (language === "es") return `${new Intl.NumberFormat(localeForDisplayLanguage(language), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(hours)} h`;
   return `${hours.toFixed(1)}h`;
 }
 

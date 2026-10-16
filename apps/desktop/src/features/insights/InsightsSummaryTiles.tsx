@@ -42,6 +42,8 @@ export function InsightsSummaryTiles({ productivityTotals, range, segments, week
   const peakIsAverage = range !== "Week";
   const activeDays = countActiveDays(segments);
   const isKorean = effectiveLanguage === "ko";
+  const isSpanish = effectiveLanguage === "es";
+  const spanishWeekdays = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] as const;
   const trackedSeconds = productivityTotals.focus + productivityTotals.neutral + productivityTotals.drift;
   const focusShare = trackedSeconds > 0 ? Math.round((productivityTotals.focus / trackedSeconds) * 100) : 0;
   const driftShare = trackedSeconds > 0 ? Math.round((productivityTotals.drift / trackedSeconds) * 100) : 0;
@@ -51,11 +53,11 @@ export function InsightsSummaryTiles({ productivityTotals, range, segments, week
     null,
   );
   const peakLabel = peakDay
-    ? (isKorean ? KOREAN_WEEKDAYS[peakDay.weekdayIndex] ?? peakDay.weekday : peakDay.weekday)
+    ? (isKorean ? KOREAN_WEEKDAYS[peakDay.weekdayIndex] ?? peakDay.weekday : isSpanish ? spanishWeekdays[peakDay.weekdayIndex] ?? peakDay.weekday : peakDay.weekday)
     : t("trends.summary.empty");
 
   function duration(totalSeconds: number) {
-    return isKorean ? formatLocalizedDuration(totalSeconds, effectiveLanguage) : formatDuration(totalSeconds);
+    return effectiveLanguage !== "en" ? formatLocalizedDuration(totalSeconds, effectiveLanguage) : formatDuration(totalSeconds);
   }
 
   return (
@@ -98,8 +100,8 @@ export function InsightsPeakWeekday({ weekly, range }: Pick<InsightsSummaryTiles
     null,
   );
   if (!peak) return null;
-  const label = effectiveLanguage === "ko" ? KOREAN_WEEKDAYS[peak.weekdayIndex] : peak.weekday;
-  const duration = effectiveLanguage === "ko"
+  const label = effectiveLanguage === "ko" ? KOREAN_WEEKDAYS[peak.weekdayIndex] : effectiveLanguage === "es" ? ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][peak.weekdayIndex] : peak.weekday;
+  const duration = effectiveLanguage !== "en"
     ? formatLocalizedDuration(peak.focusSeconds, effectiveLanguage)
     : formatDuration(peak.focusSeconds);
   return (

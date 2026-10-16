@@ -695,6 +695,7 @@
   left: var(--focus-drift-axis-x);
   top: 0;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   transform: translateX(-50%);
 }
 

@@ -56,7 +56,7 @@ export function DailyFigures({ spans, lang, appIcons = {} }: { spans: readonly D
   const [hover, setHover] = useState<CompactClassificationHoverState | null>(null);
   const start = resolveInitialStartOfDayMinutes();
   const figures = useMemo(() => dailyFigures(spans, start, CELL_MINUTES), [spans, start]);
-  const c = COPY[lang];
+  const c = COPY[lang === "ko" ? "ko" : "en"];
 
   /* The panel's title (settled 2026-10-13): section size in the muted ink, the less/more key at its right. */
   const head = (withKey: boolean) => (

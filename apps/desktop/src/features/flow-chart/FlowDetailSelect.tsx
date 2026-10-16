@@ -30,7 +30,7 @@ export function FlowDetailSelect({
   const { effectiveLanguage, t } = useLocalization();
   const options = FLOW_INTERVAL_OPTIONS.map((optionMinutes) => ({
     value: FLOW_DETAIL_VALUE_BY_INTERVAL[optionMinutes],
-    label: `${optionMinutes}${effectiveLanguage === "ko" ? "분" : "m"}`,
+    label: effectiveLanguage === "ko" ? `${optionMinutes}분` : effectiveLanguage === "es" ? `${optionMinutes} min` : `${optionMinutes}m`,
   }));
   return (
     <SettingsSelect

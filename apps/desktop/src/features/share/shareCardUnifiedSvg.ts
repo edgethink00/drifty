@@ -28,7 +28,7 @@ export type UnifiedShareStoryId =
   | "WR4";
 
 export type ShareCardTheme = "light" | "dark";
-export type ShareCardLanguage = "en" | "ko";
+export type ShareCardLanguage = "en" | "ko" | "es";
 
 /**
  * A privacy-safe, live leaderboard fact. The count is returned with the
@@ -123,6 +123,7 @@ function minutesFromSeconds(seconds: number | null | undefined): number {
 }
 
 function localizedProductivityLabel(key: "focus" | "neutral" | "drift"): string {
+  if (selectedLanguage === "es") return { focus: "Concentración", neutral: "Neutral", drift: "Distracción" }[key];
   if (selectedLanguage !== "ko") return { focus: "Focus", neutral: "Neutral", drift: "Drift" }[key];
   return { focus: "집중", neutral: "중립", drift: "딴짓" }[key];
 }
@@ -155,7 +156,7 @@ function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks, c
   }));
   const productivitySlices = (data.productivitySlices ?? []).map((slice) => ({
     key: slice.key,
-    label: localizedProductivityLabel(slice.key) ?? (selectedLanguage === "ko" ? "기타" : "Other"),
+    label: localizedProductivityLabel(slice.key) ?? (selectedLanguage === "ko" ? "기타" : selectedLanguage === "es" ? "Otros" : "Other"),
     pct: Math.min(100, finiteNonNegative(slice.ratio) * 100),
     minutes: minutesFromSeconds(slice.seconds),
   }));
@@ -432,7 +433,56 @@ const wrap = (p, id, body, label, h = H) => {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
 const wash = (id, h = H) => `<rect width="1200" height="${h}" fill="url(#wash-${id})"/>`;
-const localized = (english, korean) => selectedLanguage === 'ko' ? korean : english;
+const SPANISH_CARD_COPY: Readonly<Record<string, string>> = {
+  "YOU": "TÚ",
+  "Today's focus percentile": "Percentil de hoy",
+  "Estimated focus percentile": "Percentil estimado",
+  "from today’s live leaderboard.": "Según la clasificación de hoy.",
+  "from today’s live leaderboard": "Según la clasificación de hoy",
+  "Focus time": "Tiempo de concentración",
+  "of focused work this week.": "de concentración esta semana.",
+  "of focused work today.": "de concentración hoy.",
+  "in today’s focus ranking.": "en la clasificación de hoy.",
+  "This week": "Esta semana",
+  "TRACKED-DAY AVG": "MEDIA POR DÍA REGISTRADO",
+  "focused per tracked day this week.": "de concentración por día registrado esta semana.",
+  "focused per tracked day that week.": "de concentración por día registrado esa semana.",
+  "This week’s focus percentile": "Percentil de esta semana",
+  "Estimated weekly percentile": "Percentil semanal estimado",
+  "from the live weekly leaderboard.": "Según la clasificación semanal.",
+  "TODAY": "HOY",
+  "Focus": "Concentración",
+  "Neutral": "Neutral",
+  "Drift": "Distracción",
+  "No categorized activity yet.": "Aún no hay actividad clasificada.",
+  "Categories": "Categorías",
+  "Productivity": "Productividad",
+  "Today's focus rank": "Puesto de hoy",
+  "This week's focus rank": "Puesto de esta semana",
+  "today": "hoy",
+  "this week": "esta semana",
+  "Join the leaderboard": "Únete a la clasificación",
+  "Locked focus rank": "Puesto bloqueado",
+  "Curve Card": "Tarjeta de percentil",
+  "Weekly Curve Card": "Percentil semanal",
+  "Weekly focus time": "Concentración semanal",
+  "Wide Statement": "Tiempo de concentración",
+  "Rank Statement": "Percentil de concentración",
+  "Head Count": "Puesto de concentración",
+  "Week Average": "Media semanal",
+  "Focus + Rank": "Concentración y percentil",
+};
+const spanishCardCopy = (english: string): string => {
+  const exact = SPANISH_CARD_COPY[english];
+  if (exact) return exact;
+  if (english.startsWith("Top ")) return english.replace("Top ", "TOP ");
+  if (english.startsWith("From ")) return english.replace(/^From ([\d,.]+) leaderboard participants$/u, "Estimación basada en $1 participantes");
+  if (english.startsWith("of focused work in ")) return english.replace("of focused work in ", "de concentración en ");
+  if (english.startsWith("of focused work on ")) return english.replace("of focused work on ", "de concentración el ");
+  if (english.startsWith("to reveal your live focus rank for ")) return english.replace("to reveal your live focus rank for ", "para ver tu puesto en tiempo real de ");
+  return english;
+};
+const localized = (english: string, korean: string) => selectedLanguage === 'ko' ? korean : selectedLanguage === 'es' ? spanishCardCopy(english) : english;
 const formatDuration = (minutes) => {
   const m = Math.max(0, Math.round(Number(minutes) || 0));
   const h = Math.floor(m / 60);
@@ -441,6 +491,11 @@ const formatDuration = (minutes) => {
     if (h <= 0) return `${mm}분`;
     if (mm === 0) return `${h}시간`;
     return `${h}시간 ${mm}분`;
+  }
+  if (selectedLanguage === 'es') {
+    if (h <= 0) return `${mm} min`;
+    if (mm === 0) return `${h} h`;
+    return `${h} h ${mm} min`;
   }
   if (h <= 0) return `${mm}m`;
   if (mm === 0) return `${h}h`;
@@ -667,6 +722,7 @@ function comboFocus(p, id) {
   // Ink/Paper surface is controlled by the global toggle (not a separate card).
   const chipText = selectedLanguage === 'ko'
     ? `${RANK_IS_LIVE ? '상위' : '예상 상위'} ${pctLabel(RANK)}%`
+    : selectedLanguage === 'es' ? `${RANK_IS_LIVE ? 'TOP' : 'TOP EST.'} ${pctLabel(RANK)}%`
     : `${RANK_IS_LIVE ? 'TOP' : 'EST. TOP'} ${pctLabel(RANK)}%`;
   const chipW = Math.max(236, 56 + chipText.length * 22);
   const chipX = 140;
@@ -714,7 +770,7 @@ const categoryPalette = (p) => (p === dark ? CATEGORY_COLORS_DARK : CATEGORY_COL
 const productivityPalette = (p) => (p === dark ? PRODUCTIVITY_COLORS_DARK : PRODUCTIVITY_COLORS_LIGHT);
 const formatHoursDecimal = (minutes) => {
   const hours = Math.max(0, Math.round((minutes / 60) * 10) / 10);
-  return selectedLanguage === 'ko' ? `${hours.toFixed(1)}시간` : `${hours.toFixed(1)}h`;
+  return selectedLanguage === 'ko' ? `${hours.toFixed(1)}시간` : selectedLanguage === 'es' ? `${hours.toFixed(1)} h` : `${hours.toFixed(1)}h`;
 };
 const pointOnCircle = (cx, cy, r, ratio) => {
   const radians = ratio * 360 * (Math.PI / 180);

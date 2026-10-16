@@ -7,7 +7,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { PillBrandMark, PillDismissIcon } from "../companion/CompanionPillIcons";
 import { useLocalization } from "../localization/LocalizationContext";
-import type { DisplayLanguage } from "../localization/languagePreference";
+type PreviewLanguage = keyof LocalText;
 import { durationLabel } from "../insights/read/readFormat";
 import {
   DAY_NOTE_DAYS,
@@ -144,17 +144,18 @@ const COPY = {
   },
 } as const;
 
-type Copy = (typeof COPY)[DisplayLanguage];
+type Copy = (typeof COPY)[PreviewLanguage];
 
-const PLACE_LABEL: Record<DayNotePlace, Record<DisplayLanguage, string>> = {
+const PLACE_LABEL: Record<DayNotePlace, Record<PreviewLanguage, string>> = {
   page: { ko: "① 사이드바 ‘하루 기록’ 메뉴", en: "① Daily record in the sidebar" },
   insights: { ko: "② 인사이트 탭", en: "② Insights tab" },
   moment: { ko: "③ 아침 메뉴바 카드", en: "③ Morning menu-bar card" },
 };
 
-function useCopy(): { readonly c: Copy; readonly lang: DisplayLanguage } {
+function useCopy(): { readonly c: Copy; readonly lang: PreviewLanguage } {
   const { effectiveLanguage } = useLocalization();
-  return { c: COPY[effectiveLanguage], lang: effectiveLanguage };
+  const lang: PreviewLanguage = effectiveLanguage === "ko" ? "ko" : "en";
+  return { c: COPY[lang], lang };
 }
 
 function shiftDay(day: string, delta: number): string {
@@ -164,7 +165,7 @@ function shiftDay(day: string, delta: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function whenLabel(day: string, lang: DisplayLanguage, short = false): string {
+function whenLabel(day: string, lang: PreviewLanguage, short = false): string {
   const date = new Date(day + "T12:00:00");
   if (short) {
     return lang === "ko"
@@ -337,13 +338,13 @@ function tierOf(run: Run): Tier {
   return run.days >= 6 ? "top" : run.days >= 4 ? "long" : run.days >= 3 ? "mid" : "short";
 }
 
-function runWords(run: Run, lang: DisplayLanguage): string {
+function runWords(run: Run, lang: PreviewLanguage): string {
   if (run.kind === "run") return lang === "ko" ? run.days + "일 연속" : run.days + " days running";
   return lang === "ko" ? "다시 · " + run.gap + "일 쉬고" : "Back after " + run.gap + (run.gap === 1 ? " day" : " days");
 }
 
 /** Back after a break, short, after the return arrow: "2일 쉬고". */
-function breakWords(gap: number, lang: DisplayLanguage): string {
+function breakWords(gap: number, lang: PreviewLanguage): string {
   return lang === "ko" ? gap + "일 쉬고" : gap + (gap === 1 ? " day off" : " days off");
 }
 
@@ -365,7 +366,7 @@ function RunBadge({ run }: { readonly run: Run }) {
 
 /* ------------------------------------------------------ shared parts */
 
-function copyHead(view: DayView, at: number, c: Copy, lang: DisplayLanguage): string {
+function copyHead(view: DayView, at: number, c: Copy, lang: PreviewLanguage): string {
   const date = whenLabel(shiftDay(view.day, view.index - at), lang, true);
   if (view.index !== 0) return date;
   return (at === 0 ? c.todaySoFar : c.yesterdayDone) + " (" + date + ")";
@@ -377,7 +378,7 @@ function copyHead(view: DayView, at: number, c: Copy, lang: DisplayLanguage): st
  * today's page that is "done yesterday" and "today so far"; an earlier page
  * copies its two days under their dates.
  */
-function standupText(view: DayView, c: Copy, lang: DisplayLanguage, linesOf: (at: number) => readonly NoteLine[] | null): string {
+function standupText(view: DayView, c: Copy, lang: PreviewLanguage, linesOf: (at: number) => readonly NoteLine[] | null): string {
   const block = (at: number): string[] => {
     const lines = (linesOf(at) ?? []).map((line) => lineText(line, lang).trim()).filter(Boolean);
     return lines.length ? [copyHead(view, at, c, lang)].concat(lines.map((line) => "- " + line)) : [];
@@ -505,7 +506,7 @@ function modelLines(at: number): NoteLine[] | null {
   return note ? note.items.map((entry, line) => ({ id: "m" + at + "-" + line, base: entry.text, name: entry.label.ko })) : null;
 }
 
-function lineText(line: NoteLine, lang: DisplayLanguage): string {
+function lineText(line: NoteLine, lang: PreviewLanguage): string {
   return line.text ?? line.base?.[lang] ?? "";
 }
 

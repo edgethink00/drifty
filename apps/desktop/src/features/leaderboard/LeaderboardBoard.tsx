@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { formatLocalizedDuration } from "../../lib/formatting";
+import { formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
 import { LEADERBOARD_PUBLIC_RESULT_LIMIT } from "./leaderboardConfig";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
 import { getDailyAverageSeconds, ProfileAvatar, StateBlock } from "./leaderboardViewHelpers";
@@ -240,7 +240,7 @@ function LeaderboardToolbar({
           <span className="label-mono">{t("leaderboard.participants")}</span>
           <strong>{isLoading
             ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value" />
-            : participantCount?.toLocaleString(effectiveLanguage === "ko" ? "ko-KR" : "en-US") ?? "—"}</strong>
+            : participantCount?.toLocaleString(localeForDisplayLanguage(effectiveLanguage)) ?? "—"}</strong>
         </div>
         <div>
           <span className="label-mono">{scopeLabel === t("leaderboard.allRanked")

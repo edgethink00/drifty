@@ -438,9 +438,11 @@ export function AccountMenu({
     options[nextIndex]?.focus();
   };
 
-  const currentLanguageLabel = effectiveLanguage === "ko"
-    ? t("settings.general.languageKorean")
-    : t("settings.general.languageEnglish");
+  const currentLanguageLabel = t(effectiveLanguage === "ko"
+    ? "settings.general.languageKorean"
+    : effectiveLanguage === "es"
+      ? "settings.general.languageSpanish"
+      : "settings.general.languageEnglish");
 
   const avatarMark = (
     <span className={shouldShowUserAvatar ? "account-avatar" : "account-avatar account-avatar--placeholder"}>
@@ -564,6 +566,16 @@ export function AccountMenu({
               onClick={() => selectLanguage("ko")}
             >
               <span>{t("settings.general.languageKorean")}</span>
+              <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
+            </button>
+            <button
+              type="button"
+              className="account-menu-item account-menu-language-option"
+              role="menuitemradio"
+              aria-checked={effectiveLanguage === "es"}
+              onClick={() => selectLanguage("es")}
+            >
+              <span>{t("settings.general.languageSpanish")}</span>
               <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
             </button>
           </div>

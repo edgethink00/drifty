@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
@@ -21,7 +21,10 @@ beforeEach(() => {
   delete document.documentElement.dataset.locale;
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function ControllerHarness() {
   const controller = useLocalizationController();
@@ -66,6 +69,42 @@ function GeneralSettingsHarness() {
 }
 
 describe("display language preference", () => {
+  it("selects Spanish from regional system tags and preserves an explicit choice", () => {
+    expect(resolveSystemDisplayLanguage({ language: "es-MX", languages: ["es-MX", "en-US"] })).toBe("es");
+    expect(resolveSystemDisplayLanguage({ language: "en-US", languages: ["en-US", "es-ES"] })).toBe("en");
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "es");
+    expect(resolveInitialDisplayLanguage({ language: "ko-KR" })).toBe("es");
+    render(<ControllerHarness />);
+    expect(screen.getByText("Configuración")).toBeTruthy();
+    expect(document.documentElement.lang).toBe("es");
+  });
+
+  it("uses preferred language rather than country or a lower-priority Spanish language", () => {
+    expect(resolveSystemDisplayLanguage({ languages: ["en-MX", "es-MX"] })).toBe("en");
+    expect(resolveSystemDisplayLanguage({ languages: ["es-US", "en-US"] })).toBe("es");
+    expect(resolveSystemDisplayLanguage({ languages: ["fr-ES", "es-ES"] })).toBe("en");
+  });
+
+  it("follows a changed system language until the user explicitly chooses one", () => {
+    let preferredLanguages = ["en-US"];
+    vi.spyOn(window.navigator, "languages", "get").mockImplementation(() => preferredLanguages);
+    render(<ControllerHarness />);
+    expect(screen.getByText("Settings")).toBeTruthy();
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
+
+    preferredLanguages = ["es-MX", "en-US"];
+    act(() => window.dispatchEvent(new Event("languagechange")));
+    expect(screen.getByText("Configuración")).toBeTruthy();
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle language" }));
+    expect(screen.getByText("설정")).toBeTruthy();
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
+
+    preferredLanguages = ["en-US"];
+    act(() => window.dispatchEvent(new Event("languagechange")));
+    expect(screen.getByText("설정")).toBeTruthy();
+  });
   it.each(["en-US", "ja-JP", "de-DE"])("repairs the old implicit Korean default on a %s system", (language) => {
     window.localStorage.setItem("drifty.displayLanguage", "ko");
     expect(resolveInitialDisplayLanguage({ language, languages: [language] })).toBe("en");
@@ -177,7 +216,7 @@ describe("display language preference", () => {
     fireEvent.click(screen.getByRole("option", { name: "Korean" }));
 
     expect(screen.getByRole("combobox", { name: "언어" }).textContent).toContain("한국어");
-    expect(screen.getByText("이 기기에서 Drifty에 사용할 언어를 선택합니다.")).toBeTruthy();
+    expect(screen.getByText("처음에는 이 기기의 첫 번째 선호 언어를 사용합니다. 여기서 선택한 언어는 계속 유지됩니다.")).toBeTruthy();
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
     expect(document.documentElement.lang).toBe("ko");
   });

@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ActionLabel } from "../../components/ActionLabel";
-import { formatLocalizedDuration } from "../../lib/formatting";
+import { formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
 import { buildPublicProfileUrl, normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
 import { ShareCardModal } from "../share/ShareCardModal";
@@ -199,7 +199,7 @@ export function LeaderboardView({
   const dailyAverageLabel = localMetricsStatus === "ready"
     ? formatLocalizedDuration(dailyAverageSeconds, effectiveLanguage)
     : "—";
-  const numberLocale = effectiveLanguage === "ko" ? "ko-KR" : "en-US";
+  const numberLocale = localeForDisplayLanguage(effectiveLanguage);
   const participantCountLabel = participantCount === null ? null : participantCount.toLocaleString(numberLocale);
   const periodRankKey = activePeriod === "daily"
     ? "leaderboard.dailyRank"
@@ -534,11 +534,11 @@ function resolveParticipantCount(rows: readonly LeaderboardRow[], ownParticipant
   return resolved < observedMinimum ? null : resolved;
 }
 
-function resolvePublicNamePreview(profileDisplayName?: string | null, email?: string | null, language: "en" | "ko" = "en") {
+function resolvePublicNamePreview(profileDisplayName?: string | null, email?: string | null, language: "en" | "ko" | "es" = "en") {
   const trimmedName = profileDisplayName?.trim();
   if (trimmedName) return trimmedName;
   const emailPrefix = email?.split("@")[0]?.trim();
-  return emailPrefix || (language === "ko" ? "멤버" : "member");
+  return emailPrefix || (language === "ko" ? "멤버" : language === "es" ? "Miembro" : "member");
 }
 
 function PencilIcon() {

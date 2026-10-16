@@ -56,6 +56,31 @@ describe("PetModeQuickControlsWindowApp", () => {
     expect(screen.getByRole("button", { name: "펫 옵션 더 보기" })).toBeTruthy();
   });
 
+  it("follows the first preferred language while no manual choice is stored", () => {
+    let preferredLanguages = ["en-US"];
+    const languagesSpy = vi.spyOn(window.navigator, "languages", "get").mockImplementation(() => preferredLanguages);
+    try {
+      render(<PetModeQuickControlsWindowApp />);
+      expect(screen.getByRole("button", { name: "More pet options" })).toBeTruthy();
+
+      preferredLanguages = ["es-MX", "en-US"];
+      act(() => window.dispatchEvent(new Event("languagechange")));
+      expect(screen.getByRole("button", { name: "Más opciones de la mascota" })).toBeTruthy();
+      expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
+
+      preferredLanguages = ["en-US"];
+      act(() => window.dispatchEvent(new Event("languagechange")));
+      expect(screen.getByRole("button", { name: "More pet options" })).toBeTruthy();
+
+      window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
+      preferredLanguages = ["es-MX"];
+      act(() => window.dispatchEvent(new Event("languagechange")));
+      expect(screen.getByRole("button", { name: "More pet options" })).toBeTruthy();
+    } finally {
+      languagesSpy.mockRestore();
+    }
+  });
+
   it("opens the timed automatic-close menu and the native overflow menu", async () => {
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
     window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, "1");
@@ -432,17 +457,20 @@ describe("PetModeQuickControlsWindowApp", () => {
   });
 
   it("shows the selected resume time after pausing auto-close", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Keep the 1,099/1,100 ms boundary independent of real time spent rendering.
+    vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-05T15:27:00+09:00"));
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
     window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, "1");
     window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, "1");
     render(<PetModeQuickControlsWindowApp />);
-    await waitFor(() => expect(bridge.listenToNativePetQuickControlsState).toHaveBeenCalled());
+    expect(bridge.listenToNativePetQuickControlsState).toHaveBeenCalled();
     const listenerCalls = bridge.listenToNativePetQuickControlsState.mock.calls;
     const onState = listenerCalls[listenerCalls.length - 1]?.[0];
-    fireEvent.click(screen.getByRole("button", { name: "자동 닫기: 켬" }));
-    await waitFor(() => expect(nativeMenu.openNativeAutomaticCloseMenu).toHaveBeenCalled());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "자동 닫기: 켬" }));
+    });
+    expect(nativeMenu.openNativeAutomaticCloseMenu).toHaveBeenCalled();
     const onAction = nativeMenu.openNativeAutomaticCloseMenu.mock.calls[0][0];
     act(() => {
       onAction("automaticClosePause15");

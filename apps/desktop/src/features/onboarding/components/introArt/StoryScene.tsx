@@ -5,6 +5,7 @@ import { AppIcon, Bar, DAY_SHARES, TrayMenu, TrayRing, trayMenuHeight, trayRowTo
 import { APP_W, AppShell, ClassificationPage, CorrectionEditor, Scaled, TodayPage, type NavActive, type RealLabels } from "./realApp";
 import { WIN_APP, WIN_OVERFLOW_TRAY, WIN_TASKBAR, WindowsTaskbar } from "./windowsShell";
 import type { FirstDayRecap, FirstDayRecapBlock, FirstDayVerdict } from "../../firstDayStory";
+import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { FirstDaySource } from "../../firstDayPreparationStory";
 import { useSiteIcon } from "../../../../components/SiteIconContext";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../../lib/formatting";
@@ -17,7 +18,7 @@ import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLa
  */
 
 
-export type SceneProps = { readonly theme: ArtTheme; readonly ko: boolean; readonly platform: HostPlatform; readonly labels: RealLabels };
+export type SceneProps = { readonly theme: ArtTheme; readonly language?: DisplayLanguage; readonly ko: boolean; readonly platform: HostPlatform; readonly labels: RealLabels };
 type Pt = { readonly x: number; readonly y: number };
 /**
  * The hand-drawn arrow, as one even arc: both control points sit the same distance off the
@@ -233,11 +234,10 @@ function FactMark({ source, duration, color, span, chart }: {
  * The first day as the Today canvas draws it: one column per hour, blocks by minute, coloured by
  * productivity. "focus" lights the longest focus stretch, "drift" lights the drift; the rest steps back.
  */
-function RecapDayScene({ recap, lit, ko, labels }: { recap: FirstDayRecap; lit: "focus" | "drift"; ko: boolean; labels: RealLabels }) {
+function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: { recap: FirstDayRecap; lit: "focus" | "drift"; ko: boolean; labels: RealLabels; language?: DisplayLanguage }) {
   const panel = { x: 14, y: 34, w: 372, h: 282 };
   const chart = { x: panel.x + 16, y: panel.y + 66, w: panel.w - 32, h: 168 };
   const cw = chart.w / recap.hourCount;
-  const language = ko ? "ko" : "en";
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
   // With almost no drift there is no source to point at: the drift card lights the day's focus and
   // neutral time instead, a day that stayed mostly on track, and shows no label.
@@ -280,10 +280,10 @@ function RecapDayScene({ recap, lit, ko, labels }: { recap: FirstDayRecap; lit: 
   </g>;
 }
 
-export function StoryScene({ step, theme, ko, platform, labels, driftClosed = false, recap = null, driftChoice = "close" }: SceneProps & {
+export function StoryScene({ step, theme, ko, platform, labels, language, driftClosed = false, recap = null, driftChoice = "close" }: SceneProps & {
   step: PostOnboardingSidebarGuideStep; driftClosed?: boolean; recap?: FirstDayRecap | null; driftChoice?: StoryDriftChoice;
 }) {
-  if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap} lit={step === "recap" ? "focus" : "drift"} ko={ko} labels={labels} />;
+  if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap} lit={step === "recap" ? "focus" : "drift"} ko={ko} labels={labels} language={language} />;
   if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}
     driftTitle={recap?.topDrift?.source.label} />;
   const windows = platform === "windows";

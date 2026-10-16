@@ -63,6 +63,7 @@ export function WeeklyTrendChart({
     nodes.current.get(cells[next])?.focus();
   }
   const koreanWeekdays = ["월", "화", "수", "목", "금", "토", "일"] as const;
+  const spanishWeekdays = ["L", "M", "X", "J", "V", "S", "D"] as const;
   return (
     <section className="editorial-panel editorial-panel--soft insight-section productivity-insight-groups__weekly-trend weekly-productivity-trend-card" aria-label={t("trends.weeklyTrendAria")}>
       <div className="weekly-productivity-trend-card__head">
@@ -123,7 +124,7 @@ export function WeeklyTrendChart({
                     </div>
                   )}
                 </div>
-                <div className="wt-daylabel">{effectiveLanguage === "ko" ? koreanWeekdays[column.weekdayIndex] : column.weekday}</div>
+                <div className="wt-daylabel">{effectiveLanguage === "ko" ? koreanWeekdays[column.weekdayIndex] : effectiveLanguage === "es" ? spanishWeekdays[column.weekdayIndex] : column.weekday}</div>
               </div>
             ))}
           </div>

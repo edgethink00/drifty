@@ -160,7 +160,7 @@ describe("CustomEndpointSetupPanel", () => {
     fireEvent.keyDown(modelPicker, { key: "Enter" });
 
     expect(onModelChange).toHaveBeenCalledWith("qwen2.5:14b");
-    expect(screen.queryByRole("listbox", { name: "Available endpoint models" })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("listbox", { name: "Available endpoint models" })).toBeNull());
   });
 
   it("opens the model menu upward when there is not enough viewport space below", async () => {

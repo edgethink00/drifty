@@ -31,6 +31,7 @@ import "./styles/popover-motion.css";
 import "./styles/modal-chrome.css";
 import {
   hideBootShell,
+  localizeBootShell,
   shouldDeferBootShellForNativeMaterial,
 } from "./features/loading/bootShell";
 import { DEV_SETTINGS_ENABLED } from "./appFeatureSwitches";
@@ -49,6 +50,7 @@ window.__DRIFTY_SET_BOOT_STATUS__ = (message: string) => {
   if (shell) shell.dataset.bootStatus = message;
 };
 window.__DRIFTY_SET_BOOT_STATUS__?.("main.tsx loaded");
+localizeBootShell();
 const initialSurface = resolveLocationSurface(window.location);
 if (initialSurface !== "app") document.documentElement.dataset.surface = initialSurface;
 // Browser-only builds (dev:web QA, static demo) have no native window material,

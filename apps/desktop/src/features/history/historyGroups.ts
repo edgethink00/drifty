@@ -2,6 +2,7 @@ import { classifyActivityDetailed, isExcludedSegment, logicalDayIsoDateForDate }
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, ExclusionSource, ProductivityLabel } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import type { DisplayLanguage } from "../localization/languagePreference";
+import { localeForDisplayLanguage } from "../../lib/formatting";
 
 export type HistoryClassification = {
   readonly category: ActivityCategory;
@@ -142,7 +143,7 @@ export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMin
     groups.set(dayKey, dayRows);
   }
 
-  const historyDayFormatter = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
+  const historyDayFormatter = new Intl.DateTimeFormat(localeForDisplayLanguage(language), {
     day: "numeric",
     month: language === "ko" ? "long" : "short",
     year: "numeric",

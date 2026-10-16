@@ -5,7 +5,7 @@ import { getLeaderboardPeriodFocusLabel } from "../leaderboard/leaderboardWindow
 import { getDailyAverageSeconds, ProfileAvatar } from "../leaderboard/leaderboardViewHelpers";
 import { getLeaderFocusSeconds, getLeaderShareRatio, getRankGap, getRankTier, getTopPercentile } from "../leaderboard/leaderboardStanding";
 import type { PublicProfile } from "./profileService";
-import { formatLocalizedCompactDurationFromSeconds, formatRelativeTime } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatRelativeTime, localeForDisplayLanguage } from "../../lib/formatting";
 import { MetricTile } from "../../components/MetricTile";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -54,8 +54,8 @@ export function ProfileModal({
   const bio = profile?.bio?.trim();
   const focusSeconds = row.focus_seconds;
   const rank = row.rank;
-  const locale = effectiveLanguage === "ko" ? "ko-KR" : "en-US";
-  const periodFocusLabel = effectiveLanguage === "ko"
+  const locale = localeForDisplayLanguage(effectiveLanguage);
+  const periodFocusLabel = effectiveLanguage !== "en"
     ? t(row.period === "daily" ? "leaderboard.embed.focusToday" : row.period === "weekly" ? "leaderboard.embed.focusWeek" : "leaderboard.embed.focusMonth")
     : getLeaderboardPeriodFocusLabel(row.period);
   const rankTier = getRankTier(rank);

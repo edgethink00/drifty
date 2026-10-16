@@ -206,7 +206,7 @@ export function AccountStep({
         <p className="dc-onb-account__legal">
           {t("onboarding.account.legalPrefix")}{" "}
           <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("onboarding.account.terms")}</a>{" "}
-          &amp; <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
+          {effectiveLanguage === "es" ? "y" : "&"} <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
         </p>
       )}
     </div>

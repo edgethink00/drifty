@@ -153,6 +153,21 @@ fn korean_menu_and_language_roundtrip_preserve_actions_and_optional_rows() {
 }
 
 #[test]
+fn spanish_menu_keeps_the_same_actions_with_localized_labels() {
+    let en = sample_tray_menu_plan(TrayLanguage::English, TrackingPauseSnapshot::Indefinite, None);
+    let es = sample_tray_menu_plan(TrayLanguage::Spanish, TrackingPauseSnapshot::Indefinite, None);
+    let english = visible_rows(&en);
+    let spanish = visible_rows(&es);
+    assert_eq!(spanish[0].1, "Reanudar el registro");
+    assert!(spanish.iter().any(|(_, label, _)| label == "Configuración"));
+    assert!(spanish.iter().any(|(_, label, _)| label == "Salir de Drifty"));
+    assert_eq!(
+        english.iter().map(|(id, _, enabled)| (id, enabled)).collect::<Vec<_>>(),
+        spanish.iter().map(|(id, _, enabled)| (id, enabled)).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn every_tracking_and_summary_state_uses_the_same_bounded_item_pool() {
     let baseline = tray_menu_rows(&sample_tray_menu_plan(
         TrayLanguage::English,
@@ -167,7 +182,7 @@ fn every_tracking_and_summary_state_uses_the_same_bounded_item_pool() {
     let expected = schema(baseline);
     let mut unique_ids = std::collections::HashSet::new();
     assert!(expected.iter().all(|(id, _)| unique_ids.insert(*id)));
-    for language in [TrayLanguage::English, TrayLanguage::Korean] {
+    for language in [TrayLanguage::English, TrayLanguage::Korean, TrayLanguage::Spanish] {
         for running in [None, Some(false), Some(true)] {
             for pause in [
                 TrackingPauseSnapshot::Inactive,
@@ -256,6 +271,11 @@ fn focused_time_title_reduces_weight_by_four_percent_and_locates_secondary_copy(
 #[test]
 fn focused_label_start_utf16_works_for_korean_suffix() {
     assert_eq!(focused_label_start_utf16("2:41 집중", "집중"), Some(5));
+}
+
+#[test]
+fn focused_label_start_utf16_works_for_spanish_prefix() {
+    assert_eq!(focused_label_start_utf16("Foco 2:41", "Foco"), Some(0));
 }
 
 #[test]

@@ -7,7 +7,7 @@ import {
   START_OF_DAY_OPTIONS,
 } from "./settingsStorage";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
-import { formatStartOfDayOptionLabel } from "../../lib/formatting";
+import { formatStartOfDayOptionLabel, localeForDisplayLanguage } from "../../lib/formatting";
 import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { ActionLabel } from "../../components/ActionLabel";
@@ -68,6 +68,7 @@ export function GeneralSettingsSection({
   const languageOptions = [
     { value: "en", label: t("settings.general.languageEnglish") },
     { value: "ko", label: t("settings.general.languageKorean") },
+    { value: "es", label: t("settings.general.languageSpanish") },
   ] satisfies ReadonlyArray<{ value: DisplayLanguage; label: string }>;
   const startOfWeekOptions = [
     { value: "monday", label: t("settings.weekday.monday") },
@@ -76,7 +77,7 @@ export function GeneralSettingsSection({
   ] satisfies ReadonlyArray<{ value: StartOfWeek; label: string }>;
   const startOfDayOptions = START_OF_DAY_OPTIONS.map((option) => ({
     ...option,
-    label: formatStartOfDayOptionLabel(option.minutes, effectiveLanguage === "ko" ? "ko-KR" : "en-US"),
+    label: formatStartOfDayOptionLabel(option.minutes, localeForDisplayLanguage(effectiveLanguage)),
   }));
 
   return (

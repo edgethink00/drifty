@@ -240,7 +240,7 @@ export function DashboardPage({
   const isDashboardReplayActive = dashboardReplay !== null;
   const hasMeasuredActivity = totalSeconds > 0 || hasTimelineData || isDashboardReplayActive;
   const logicalToday = logicalTodayIsoDate(startOfDayMinutes);
-  const selectedDayDisplayLabel = effectiveLanguage === "ko" ? formatLocalizedDayLabel(selectedDay, effectiveLanguage) : selectedDayLabel;
+  const selectedDayDisplayLabel = effectiveLanguage !== "en" ? formatLocalizedDayLabel(selectedDay, effectiveLanguage) : selectedDayLabel;
   const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
     ?? (selectedDay !== logicalToday
       ? t("dashboard.today.noActivityForDayDetail", { date: selectedDayDisplayLabel })
@@ -251,7 +251,7 @@ export function DashboardPage({
   const focusDuration = hasMeasuredActivity
     ? focusSeconds > 0
       ? formatLocalizedCompactDurationFromSeconds(focusSeconds, effectiveLanguage)
-      : effectiveLanguage === "ko" ? "0분" : "0m"
+      : effectiveLanguage === "ko" ? "0분" : effectiveLanguage === "es" ? "0 min" : "0m"
     : null;
   const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
   const dayProductivityRingEntries = withLevelRingEntries(

@@ -19,6 +19,7 @@ enum QuitConfirmationLanguage {
     #[default]
     English,
     Korean,
+    Spanish,
 }
 
 impl QuitConfirmationLanguage {
@@ -26,6 +27,7 @@ impl QuitConfirmationLanguage {
         match value {
             "en" => Ok(Self::English),
             "ko" => Ok(Self::Korean),
+            "es" => Ok(Self::Spanish),
             _ => Err(format!("Unsupported quit confirmation language: {value}")),
         }
     }
@@ -51,6 +53,16 @@ impl QuitConfirmationLanguage {
                 pause_failed_title: "활동 기록을 일시 정지하지 못했습니다",
                 pause_failed_body: "일시 정지를 확인하지 못해 활동 기록이 계속되고 있을 수 있습니다. 메뉴에서 다시 일시 정지하거나, 기록을 멈추려면 Drifty를 종료해 주세요.",
                 dismiss: "확인",
+            },
+            Self::Spanish => QuitConfirmationCopy {
+                title: "¿Salir de Drifty y dejar de registrar la actividad?",
+                body: "Drifty deja de registrar la actividad cuando el Mac entra en reposo. Si sales, no se registrará nueva actividad hasta que vuelvas a abrir Drifty.",
+                keep_tracking: "Seguir registrando",
+                pause_instead: "Pausar en su lugar",
+                quit_drifty: "Salir de Drifty",
+                pause_failed_title: "No se pudo pausar el registro",
+                pause_failed_body: "No se pudo confirmar la pausa. Es posible que la actividad siga registrándose. Intenta pausarla de nuevo desde el menú o sal de Drifty para detener el registro.",
+                dismiss: "Aceptar",
             },
         }
     }
@@ -327,6 +339,13 @@ mod tests {
                 .copy()
                 .pause_instead,
             "대신 일시 정지"
+        );
+        assert_eq!(
+            QuitConfirmationLanguage::parse("es")
+                .expect("Spanish should parse")
+                .copy()
+                .pause_instead,
+            "Pausar en su lugar"
         );
         assert_eq!(
             QuitConfirmationLanguage::English.copy().pause_failed_title,

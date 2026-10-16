@@ -6,6 +6,18 @@ import {
 } from "./driftAlarmTrayStatus";
 
 describe("drift alarm tray status", () => {
+  it("publishes Spanish status and result labels for the native tray", () => {
+    const status = buildDriftAlarmTrayStatus({
+      enabled: true,
+      checkedAt: null,
+      result: { kind: "tracker_paused" },
+      trackerRunning: false,
+      locale: "es",
+    });
+    expect(status.statusLabel).toBe("Alertas de distracción: en pausa");
+    expect(status.lastCheckedLabel).toBe("Sin comprobar");
+    expect(status.resultLabel).toBe("Registro en pausa");
+  });
   it("marks disabled alerts without a live check timestamp", () => {
     const status = buildDriftAlarmTrayStatus({
       enabled: false,

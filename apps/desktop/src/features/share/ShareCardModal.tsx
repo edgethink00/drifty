@@ -160,6 +160,9 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   const { models: communityModels, loading: communityModelsLoading } = useShareCardCommunityModels();
   const rankGate = rankGateForStory(card, storyOption.value, liveRankState, t);
   const lockedRankPeriod = rankGate && rankStoryPeriod ? rankStoryPeriod : null;
+  // Korean share exports intentionally remain English; Spanish exports follow
+  // the new display language without changing that existing card contract.
+  const cardLanguage = effectiveLanguage === "es" ? "es" : "en";
   // Only a non-member is asked to join; a member's rank is loading or not yet
   // published for this window.
   const lockedRankReason = rankGate?.action === "join" ? "join" : "pending";
@@ -179,18 +182,18 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
         theme: defaultTheme,
         period: lockedRankPeriod,
         lookIndex: storyIndex,
-        language: "en",
+        language: cardLanguage,
         reason: lockedRankReason,
       });
     }
     return card.kind === "week"
-      ? renderShareWeekCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks, communityModels })
-      : renderShareCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks, communityModels });
-  }, [card, defaultTheme, matchingLiveRanks, communityModels, lockedRankPeriod, lockedRankReason, storyIndex, storyOption.value]);
+      ? renderShareWeekCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, language: cardLanguage, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks, communityModels })
+      : renderShareCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, language: cardLanguage, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks, communityModels });
+  }, [card, cardLanguage, defaultTheme, matchingLiveRanks, communityModels, lockedRankPeriod, lockedRankReason, storyIndex, storyOption.value]);
   const previewAlt = card.kind === "week"
     ? t("share.previewWeekAria", { week: card.data.weekLabel, range: card.data.rangeLabel })
     : t("share.previewDayAria", { day: `${card.data.weekdayLabel} ${card.data.dateLabel}` });
-  const storyLabel = (index: number, fallback: string) => effectiveLanguage === "ko" ? t("share.storyLabel", { index: index + 1 }) : fallback;
+  const storyLabel = (index: number, fallback: string) => effectiveLanguage !== "en" ? t("share.storyLabel", { index: index + 1 }) : fallback;
   const fileName = card.kind === "week"
     ? `drifty-week-${card.data.startDay}`
     : `drifty-${card.data.day}`;

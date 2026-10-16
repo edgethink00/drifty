@@ -23,11 +23,11 @@ export function ClassificationSourceBadge({
   const userOwnedSource = source === "manual" || source === "rule";
   if (!userOwnedSource && !showAutomaticSources) return null;
   const isAi = Boolean(ai || source === "llm");
-  const label = language === "ko" ? koreanClassificationSourceLabel(source, ai, aiCached) : classificationSourceLabel(source, ai, aiCached);
+  const label = language === "ko" ? koreanClassificationSourceLabel(source, ai, aiCached) : language === "es" ? spanishClassificationSourceLabel(source, ai, aiCached) : classificationSourceLabel(source, ai, aiCached);
 
   return (
     <span
-      aria-label={language === "ko" ? `분류 출처: ${label}` : `Classification source: ${label}`}
+      aria-label={language === "ko" ? `분류 출처: ${label}` : language === "es" ? `Origen de clasificación: ${label}` : `Classification source: ${label}`}
       className={`hover-metadata-chip classification-source-badge${isAi ? " classification-source-badge--ai" : ""}`}
     >
       {label}
@@ -44,4 +44,15 @@ function koreanClassificationSourceLabel(source?: ClassificationSource | string 
   if (source === "rule") return "사용자 규칙";
   if (source === "stored") return "저장됨";
   return "미분류";
+}
+
+function spanishClassificationSourceLabel(source?: ClassificationSource | string | null, ai?: boolean | null, aiCached?: boolean | null): string {
+  if (ai || source === "llm") return aiCached ? "IA en caché" : "IA";
+  if (source === "domain-db" || source === "app-db" || source === "youtube") return "Predefinida";
+  if (source === "context") return "Regla de palabras clave";
+  if (source === "fallback") return "Clasificación predeterminada";
+  if (source === "manual") return "Manual";
+  if (source === "rule") return "Regla personalizada";
+  if (source === "stored") return "Guardada";
+  return "Sin clasificar";
 }

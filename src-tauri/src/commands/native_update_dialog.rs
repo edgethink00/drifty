@@ -40,6 +40,23 @@ pub struct NativeUpdateStatusResult {
     dismissed: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NativeUpdateLanguage {
+    English,
+    Korean,
+    Spanish,
+}
+
+impl NativeUpdateLanguage {
+    fn from_tag(tag: Option<&str>) -> Self {
+        match tag {
+            Some("ko") => Self::Korean,
+            Some("es") => Self::Spanish,
+            _ => Self::English,
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 struct UpdatePromptButtonTargetIvars {
     modal_response: NSModalResponse,
@@ -89,7 +106,7 @@ pub async fn update_prompt_show_native(
     background_updates_enabled: bool,
     language: Option<String>,
 ) -> Result<NativeUpdatePromptResult, String> {
-    let korean = language.as_deref() == Some("ko");
+    let language = NativeUpdateLanguage::from_tag(language.as_deref());
     async_runtime::spawn_blocking(move || {
         show_native_update_prompt(
             app,
@@ -97,7 +114,7 @@ pub async fn update_prompt_show_native(
             urgent,
             message,
             background_updates_enabled,
-            korean,
+            language,
         )
     })
     .await
@@ -111,8 +128,8 @@ pub async fn update_status_show_native(
     body: String,
     language: Option<String>,
 ) -> Result<NativeUpdateStatusResult, String> {
-    let korean = language.as_deref() == Some("ko");
-    async_runtime::spawn_blocking(move || show_native_update_status(app, title, body, korean))
+    let language = NativeUpdateLanguage::from_tag(language.as_deref());
+    async_runtime::spawn_blocking(move || show_native_update_status(app, title, body, language))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -123,7 +140,7 @@ fn show_native_update_prompt(
     urgent: bool,
     message: Option<String>,
     background_updates_enabled: bool,
-    korean: bool,
+    language: NativeUpdateLanguage,
 ) -> Result<NativeUpdatePromptResult, String> {
     let (sender, receiver) = mpsc::channel();
     app.run_on_main_thread(move || {
@@ -132,7 +149,7 @@ fn show_native_update_prompt(
             urgent,
             message.as_deref(),
             background_updates_enabled,
-            korean,
+            language,
         ));
     })
     .map_err(|error| error.to_string())?;
@@ -146,12 +163,12 @@ fn show_native_update_status(
     app: AppHandle,
     title: String,
     body: String,
-    korean: bool,
+    language: NativeUpdateLanguage,
 ) -> Result<NativeUpdateStatusResult, String> {
     let (sender, receiver) = mpsc::channel();
     app.run_on_main_thread(move || {
         let _ = sender.send(show_native_update_status_on_main_thread(
-            &title, &body, korean,
+            &title, &body, language,
         ));
     })
     .map_err(|error| error.to_string())?;
@@ -167,7 +184,7 @@ fn show_native_update_prompt_on_main_thread(
     urgent: bool,
     message: Option<&str>,
     background_updates_enabled: bool,
-    korean: bool,
+    language: NativeUpdateLanguage,
 ) -> Result<NativeUpdatePromptResult, String> {
     autoreleasepool(|_| {
         let Some(mtm) = MainThreadMarker::new() else {
@@ -181,7 +198,7 @@ fn show_native_update_prompt_on_main_thread(
             urgent,
             message,
             background_updates_enabled,
-            korean,
+            language,
         );
         present_update_panel(mtm, &prompt.panel);
         let response = app.runModalForWindow(&prompt.panel);
@@ -202,13 +219,15 @@ fn update_prompt_panel(
     urgent: bool,
     message: Option<&str>,
     background_updates_enabled: bool,
-    korean: bool,
+    language: NativeUpdateLanguage,
 ) -> NativeUpdatePrompt {
-    let copy = native_update_copy(korean, urgent);
+    let copy = native_update_copy(language, urgent);
     let text_width = PANEL_WIDTH - SIDE_PADDING * 2.0;
     let title_copy = if urgent {
-        if korean {
+        if language == NativeUpdateLanguage::Korean {
             format!("중요 업데이트 · Drifty {version}")
+        } else if language == NativeUpdateLanguage::Spanish {
+            format!("Actualización importante · Drifty {version}")
         } else {
             format!("Important update · Drifty {version}")
         }
@@ -220,7 +239,7 @@ fn update_prompt_panel(
     title.setTextColor(Some(&NSColor::whiteColor().colorWithAlphaComponent(0.92)));
     let title_height = wrapped_label_height(&title, text_width);
 
-    let body_copy = normalize_update_prompt_message(message, urgent, korean);
+    let body_copy = normalize_update_prompt_message(message, urgent, language);
     let body = NSTextField::wrappingLabelWithString(&NSString::from_str(&body_copy), mtm);
     body.setFont(Some(&NSFont::systemFontOfSize(13.0)));
     body.setTextColor(Some(&NSColor::whiteColor().colorWithAlphaComponent(0.9)));
@@ -278,8 +297,8 @@ struct NativeUpdateCopy {
     ok: &'static str,
 }
 
-fn native_update_copy(korean: bool, urgent: bool) -> NativeUpdateCopy {
-    if korean {
+fn native_update_copy(language: NativeUpdateLanguage, urgent: bool) -> NativeUpdateCopy {
+    if language == NativeUpdateLanguage::Korean {
         NativeUpdateCopy {
             title: if urgent {
                 "Drifty 중요 업데이트"
@@ -295,6 +314,19 @@ fn native_update_copy(korean: bool, urgent: bool) -> NativeUpdateCopy {
             later: "나중에",
             update: "업데이트",
             ok: "확인",
+        }
+    } else if language == NativeUpdateLanguage::Spanish {
+        NativeUpdateCopy {
+            title: if urgent { "Actualización importante de Drifty" } else { "Actualización de Drifty" },
+            fallback: if urgent {
+                "Esta actualización corrige un problema importante de estabilidad o seguridad."
+            } else {
+                "Hay una nueva actualización de Drifty disponible."
+            },
+            automatic: "Actualizar Drifty automáticamente",
+            later: "Más tarde",
+            update: "Actualizar",
+            ok: "Aceptar",
         }
     } else {
         NativeUpdateCopy {
@@ -316,13 +348,13 @@ fn native_update_copy(korean: bool, urgent: bool) -> NativeUpdateCopy {
     }
 }
 
-fn normalize_update_prompt_message(message: Option<&str>, urgent: bool, korean: bool) -> String {
+fn normalize_update_prompt_message(message: Option<&str>, urgent: bool, language: NativeUpdateLanguage) -> String {
     let normalized = message
         .unwrap_or_default()
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    let fallback = native_update_copy(korean, urgent).fallback;
+    let fallback = native_update_copy(language, urgent).fallback;
     let source = if normalized.is_empty() {
         fallback
     } else {
@@ -366,7 +398,7 @@ fn present_update_panel(mtm: MainThreadMarker, panel: &NSPanel) {
 fn show_native_update_status_on_main_thread(
     title: &str,
     body: &str,
-    korean: bool,
+    language: NativeUpdateLanguage,
 ) -> Result<NativeUpdateStatusResult, String> {
     autoreleasepool(|_| {
         let Some(mtm) = MainThreadMarker::new() else {
@@ -374,7 +406,7 @@ fn show_native_update_status_on_main_thread(
         };
 
         let app = NSApplication::sharedApplication(mtm);
-        let prompt = update_status_panel(mtm, title, body, korean);
+        let prompt = update_status_panel(mtm, title, body, language);
         present_update_panel(mtm, &prompt.panel);
         let _response = app.runModalForWindow(&prompt.panel);
         prompt.panel.orderOut(None);
@@ -393,7 +425,7 @@ fn update_status_panel(
     mtm: MainThreadMarker,
     title: &str,
     body: &str,
-    korean: bool,
+    language: NativeUpdateLanguage,
 ) -> NativeUpdateStatus {
     let panel_height = 164.0;
     let (panel, root) = create_update_panel(mtm, title, PANEL_WIDTH, panel_height);
@@ -416,7 +448,7 @@ fn update_status_panel(
     root.addSubview(&body_field);
 
     let ok_target = UpdatePromptButtonTarget::new(mtm, NSModalResponseOK);
-    let ok = update_prompt_primary_button(mtm, native_update_copy(korean, false).ok, &ok_target);
+    let ok = update_prompt_primary_button(mtm, native_update_copy(language, false).ok, &ok_target);
     ok.setFrame(frame((PANEL_WIDTH - 102.0) / 2.0, 16.0, 102.0, 28.0));
     ok.setKeyEquivalent(&NSString::from_str("\r"));
     root.addSubview(&ok);
@@ -549,9 +581,9 @@ fn show_native_update_prompt_on_main_thread(
     _urgent: bool,
     _message: Option<&str>,
     background_updates_enabled: bool,
-    korean: bool,
+    language: NativeUpdateLanguage,
 ) -> Result<NativeUpdatePromptResult, String> {
-    let _ = (background_updates_enabled, korean);
+    let _ = (background_updates_enabled, language);
     Err("Native update prompt is only available on macOS.".to_string())
 }
 
@@ -559,7 +591,7 @@ fn show_native_update_prompt_on_main_thread(
 fn show_native_update_status_on_main_thread(
     _title: &str,
     _body: &str,
-    _korean: bool,
+    _language: NativeUpdateLanguage,
 ) -> Result<NativeUpdateStatusResult, String> {
     Err("Native update status is only available on macOS.".to_string())
 }
@@ -606,16 +638,18 @@ mod tests {
 
     #[test]
     fn native_update_copy_follows_explicit_app_language() {
-        assert_eq!(native_update_copy(false, false).update, "Update");
-        assert_eq!(native_update_copy(false, true).later, "Later");
-        assert_eq!(native_update_copy(true, false).update, "업데이트");
-        assert_eq!(native_update_copy(true, false).ok, "확인");
+        assert_eq!(native_update_copy(NativeUpdateLanguage::English, false).update, "Update");
+        assert_eq!(native_update_copy(NativeUpdateLanguage::English, true).later, "Later");
+        assert_eq!(native_update_copy(NativeUpdateLanguage::Korean, false).update, "업데이트");
+        assert_eq!(native_update_copy(NativeUpdateLanguage::Korean, false).ok, "확인");
+        assert_eq!(native_update_copy(NativeUpdateLanguage::Spanish, false).update, "Actualizar");
+        assert_eq!(native_update_copy(NativeUpdateLanguage::Spanish, false).later, "Más tarde");
         assert_eq!(
-            normalize_update_prompt_message(None, true, true),
+            normalize_update_prompt_message(None, true, NativeUpdateLanguage::Korean),
             "안정성 또는 보안을 위한 중요한 업데이트입니다."
         );
         assert_eq!(
-            normalize_update_prompt_message(Some("Release reason"), true, true),
+            normalize_update_prompt_message(Some("Release reason"), true, NativeUpdateLanguage::Korean),
             "Release reason"
         );
     }
@@ -626,10 +660,10 @@ mod tests {
             normalize_update_prompt_message(
                 Some("  Activity   records may be lost.  "),
                 true,
-                false
+                NativeUpdateLanguage::English
             ),
             "Activity records may be lost."
         );
-        assert!(normalize_update_prompt_message(None, true, false).contains("important"));
+        assert!(normalize_update_prompt_message(None, true, NativeUpdateLanguage::English).contains("important"));
     }
 }

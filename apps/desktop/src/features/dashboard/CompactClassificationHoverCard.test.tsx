@@ -28,4 +28,16 @@ describe("CompactClassificationHoverCard", () => {
     expect(screen.getByText("38분", { selector: ".category-hover-card__app strong" })).toBeTruthy();
     expect(screen.queryByText(/of tracked time/)).toBeNull();
   });
+
+  it("uses Spanish for an unpinned Insights hover card", () => {
+    render(
+      <LocalizationTestProvider language="es">
+        <CompactClassificationHoverCard hover={hover} appIcons={{}} />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByText("38% del tiempo registrado")).toBeTruthy();
+    expect(screen.getByText("38 min", { selector: ".category-hover-card__app strong" })).toBeTruthy();
+    expect(screen.queryByText(/of tracked time/)).toBeNull();
+  });
 });

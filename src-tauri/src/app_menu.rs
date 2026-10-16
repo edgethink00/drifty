@@ -10,6 +10,7 @@ struct LocalizedItem {
     item: MenuItemKind<tauri::Wry>,
     english: &'static str,
     korean: &'static str,
+    spanish: &'static str,
 }
 
 /// The menu bar is installed once. Keeping its tree and changing labels in
@@ -29,11 +30,7 @@ impl AppMenu {
         }
         self.language = None;
         for item in &self.localized {
-            let text = if language.is_korean() {
-                item.korean
-            } else {
-                item.english
-            };
+            let text = language.pick(item.english, item.korean, item.spanish);
             match &item.item {
                 MenuItemKind::MenuItem(item) => item.set_text(text)?,
                 MenuItemKind::Predefined(item) => item.set_text(text)?,
@@ -128,27 +125,26 @@ fn build_app_submenu(
     app: &AppHandle,
     language: TrayLanguage,
 ) -> tauri::Result<(Submenu<tauri::Wry>, Vec<LocalizedItem>)> {
-    let ko = language.is_korean();
     // Use AppKit's bundle-backed About panel.
-    let about = PredefinedMenuItem::about(app, Some(if ko { "Drifty에 관하여" } else { "About Drifty" }), None)?;
+    let about = PredefinedMenuItem::about(app, Some(language.pick("About Drifty", "Drifty에 관하여", "Acerca de Drifty")), None)?;
     let whats_new = MenuItem::with_id(
         app,
         app_menu_id::WHATS_NEW,
-        if ko { "새로운 기능…" } else { "What’s New…" },
+        language.pick("What’s New…", "새로운 기능…", "Novedades…"),
         true,
         None::<&str>,
     )?;
     let check_updates = MenuItem::with_id(
         app,
         app_menu_id::CHECK_FOR_UPDATES,
-        if ko { "업데이트 확인…" } else { "Check for Updates..." },
+        language.pick("Check for Updates...", "업데이트 확인…", "Buscar actualizaciones…"),
         true,
         None::<&str>,
     )?;
     let settings = MenuItem::with_id(
         app,
         app_menu_id::SETTINGS,
-        if ko { "설정…" } else { "Settings..." },
+        language.pick("Settings...", "설정…", "Configuración…"),
         true,
         Some("CmdOrCtrl+,"),
     )?;
@@ -186,14 +182,14 @@ fn build_app_submenu(
     let app_services_separator = PredefinedMenuItem::separator(app)?;
     let app_hide_separator = PredefinedMenuItem::separator(app)?;
     let app_quit_separator = PredefinedMenuItem::separator(app)?;
-    let services = PredefinedMenuItem::services(app, Some(if ko { "서비스" } else { "Services" }))?;
-    let hide = PredefinedMenuItem::hide(app, Some(if ko { "Drifty 가리기" } else { "Hide Drifty" }))?;
-    let hide_others = PredefinedMenuItem::hide_others(app, Some(if ko { "기타 가리기" } else { "Hide Others" }))?;
-    let show_all = PredefinedMenuItem::show_all(app, Some(if ko { "모두 보기" } else { "Show All" }))?;
+    let services = PredefinedMenuItem::services(app, Some(language.pick("Services", "서비스", "Servicios")))?;
+    let hide = PredefinedMenuItem::hide(app, Some(language.pick("Hide Drifty", "Drifty 가리기", "Ocultar Drifty")))?;
+    let hide_others = PredefinedMenuItem::hide_others(app, Some(language.pick("Hide Others", "기타 가리기", "Ocultar las demás")))?;
+    let show_all = PredefinedMenuItem::show_all(app, Some(language.pick("Show All", "모두 보기", "Mostrar todo")))?;
     let quit = MenuItem::with_id(
         app,
         app_menu_id::QUIT,
-        if ko { "Drifty 종료" } else { "Quit Drifty" },
+        language.pick("Quit Drifty", "Drifty 종료", "Salir de Drifty"),
         true,
         Some("CmdOrCtrl+Q"),
     )?;
@@ -225,46 +221,55 @@ fn build_app_submenu(
             item: MenuItemKind::Predefined(about),
             english: "About Drifty",
             korean: "Drifty에 관하여",
+            spanish: "Acerca de Drifty",
         },
         LocalizedItem {
             item: MenuItemKind::MenuItem(whats_new),
             english: "What’s New…",
             korean: "새로운 기능…",
+            spanish: "Novedades…",
         },
         LocalizedItem {
             item: MenuItemKind::MenuItem(check_updates),
             english: "Check for Updates...",
             korean: "업데이트 확인…",
+            spanish: "Buscar actualizaciones…",
         },
         LocalizedItem {
             item: MenuItemKind::MenuItem(settings),
             english: "Settings...",
             korean: "설정…",
+            spanish: "Configuración…",
         },
         LocalizedItem {
             item: MenuItemKind::Predefined(services),
             english: "Services",
             korean: "서비스",
+            spanish: "Servicios",
         },
         LocalizedItem {
             item: MenuItemKind::Predefined(hide),
             english: "Hide Drifty",
             korean: "Drifty 가리기",
+            spanish: "Ocultar Drifty",
         },
         LocalizedItem {
             item: MenuItemKind::Predefined(hide_others),
             english: "Hide Others",
             korean: "기타 가리기",
+            spanish: "Ocultar las demás",
         },
         LocalizedItem {
             item: MenuItemKind::Predefined(show_all),
             english: "Show All",
             korean: "모두 보기",
+            spanish: "Mostrar todo",
         },
         LocalizedItem {
             item: MenuItemKind::MenuItem(quit),
             english: "Quit Drifty",
             korean: "Drifty 종료",
+            spanish: "Salir de Drifty",
         },
     ];
     Ok((submenu, localized))

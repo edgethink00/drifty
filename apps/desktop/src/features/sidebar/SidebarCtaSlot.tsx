@@ -1,5 +1,6 @@
 import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import type { CSSProperties } from "react";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { aiFailureResolvesWithoutUser } from "../ai-connection/aiFailureGuidance";
@@ -695,9 +696,9 @@ export function SidebarCtaSlot({
   );
 }
 
-function formatResourceCapacity(bytes: number, language: "en" | "ko"): string {
+function formatResourceCapacity(bytes: number, language: "en" | "ko" | "es"): string {
   const gibibytes = bytes / (1024 ** 3);
   const rounded = Math.round(gibibytes * 10) / 10;
-  const locale = language === "ko" ? "ko-KR" : "en-US";
+  const locale = localeForDisplayLanguage(language);
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rounded)} GB`;
 }

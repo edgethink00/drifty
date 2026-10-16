@@ -3,7 +3,7 @@ import { historyToolbarActionReserve } from "../history/historyToolbar";
 import { useLocalization } from "../localization/LocalizationContext";
 
 type DeferredTabBodyFallbackProps = {
-  readonly label: string;
+  readonly label?: string;
   readonly variant: "history" | "trends";
 };
 
@@ -11,7 +11,7 @@ export function DeferredTabBodyFallback({ label, variant }: DeferredTabBodyFallb
   const { effectiveLanguage, t } = useLocalization();
   // The English label names what is loading; other languages use the tab name,
   // like the page-level fallback, instead of an English sentence.
-  const localizedLabel = effectiveLanguage === "en" ? label : t(variant === "history" ? "nav.history" : "nav.trends");
+  const localizedLabel = effectiveLanguage === "en" ? (label ?? (variant === "history" ? "history records" : "trend analysis")) : t(variant === "history" ? "nav.history" : "nav.trends");
   const status = { text: t("loading.page", { label: localizedLabel }), aria: t("loading.pageAria", { label: localizedLabel }) };
   if (variant === "history") {
     return <HistoryDeferredFallback status={status} />;

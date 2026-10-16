@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import type {
   CouponRedemption,
   CouponRedemptionFailureCode,
@@ -228,7 +229,7 @@ function isCouponCodeReady(value: string): boolean {
 
 function describeRedemption(
   redemption: CouponRedemption,
-  language: "en" | "ko",
+  language: "en" | "ko" | "es",
   t: LocalizationController["t"],
 ): { readonly error: false; readonly message: string } {
   const date = formatCouponDate(redemption.trialEndsAt, language);
@@ -261,10 +262,10 @@ function describeCouponError(
   }
 }
 
-function formatCouponDate(value: string, language: "en" | "ko"): string {
+function formatCouponDate(value: string, language: "en" | "ko" | "es"): string {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return value;
-  return new Date(timestamp).toLocaleDateString(language === "ko" ? "ko-KR" : "en-US", {
+  return new Date(timestamp).toLocaleDateString(localeForDisplayLanguage(language), {
     year: "numeric",
     month: "short",
     day: "numeric",

@@ -103,14 +103,28 @@ describe("OnboardingEntryStep language policy", () => {
     expect(screen.getByText("drifty에 오신 것을 환영합니다.")).toBeTruthy();
     expect(screen.getByText(/일하는 동안 앱과 웹사이트 사용 시간을 자동으로 기록하고/)).toBeTruthy();
     expect(screen.getByRole("radio", { name: "한국어" }).getAttribute("aria-checked")).toBe("true");
-    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
   });
 
-  it("does not show the language toggle to non-Korean-system users", () => {
+  it("keeps every supported language visible on non-Korean systems", () => {
     render(<EntryHarness />);
 
     expect(screen.getByText("Welcome to drifty.")).toBeTruthy();
-    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "Language" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "English" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("radio", { name: "Español" }));
+    expect(screen.getByText("Te damos la bienvenida a drifty.")).toBeTruthy();
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("es");
+  });
+
+  it("starts Spanish when it is the first preferred language without storing an automatic choice", () => {
+    vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["es-US", "en-US"]);
+    render(<EntryHarness />);
+    expect(screen.getByText("Te damos la bienvenida a drifty.")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Español" }).getAttribute("aria-checked")).toBe("true");
+    expect(document.querySelector(".onb-entry-demo")?.textContent).toContain("8 h");
+    expect(document.querySelector(".onb-entry-demo")?.textContent).not.toMatch(/(?:8|11)am/);
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
   });
 
   it("lets Korean-system users correct a stored English preference", () => {

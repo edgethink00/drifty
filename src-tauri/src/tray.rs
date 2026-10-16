@@ -35,7 +35,8 @@ use objc2_foundation::{
 };
 
 use self::drift_alarm_status::{
-    drift_alerts_status_label, drift_summary_label, TrayDriftAlarmStatus,
+    drift_alerts_status_label, drift_summary_label, spanish_drift_alerts_status_label,
+    spanish_drift_summary_label, TrayDriftAlarmStatus,
 };
 use self::menu::{run_menu_update, MenuRow, TrayMenu};
 use self::productivity_icon::{
@@ -83,6 +84,7 @@ pub(crate) enum TrayLanguage {
     #[default]
     English,
     Korean,
+    Spanish,
 }
 
 impl TrayLanguage {
@@ -90,12 +92,21 @@ impl TrayLanguage {
         match value {
             "en" => Ok(Self::English),
             "ko" => Ok(Self::Korean),
+            "es" => Ok(Self::Spanish),
             _ => Err(format!("Unsupported tray language: {value}")),
         }
     }
 
     pub(crate) fn is_korean(self) -> bool {
         self == Self::Korean
+    }
+
+    pub(crate) fn pick(self, english: &'static str, korean: &'static str, spanish: &'static str) -> &'static str {
+        match self {
+            Self::English => english,
+            Self::Korean => korean,
+            Self::Spanish => spanish,
+        }
     }
 }
 
@@ -441,7 +452,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 /// One snapshot of the values rendered by the tray menu.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct TrayMenuPlan {
-    korean: bool,
+    language: TrayLanguage,
     show_pause_options: bool,
     tracking_action: &'static str,
     pause_status: Option<String>,
@@ -462,12 +473,23 @@ fn tray_menu_plan(app: &AppHandle) -> TrayMenuPlan {
     let lang = latest_tray_language(app);
     let ko = lang.is_korean();
 
+    let drift_alerts_status = if lang == TrayLanguage::Spanish {
+        spanish_drift_alerts_status_label(&drift_status)
+    } else {
+        drift_alerts_status_label(&drift_status, ko)
+    };
+    let drift_summary = if lang == TrayLanguage::Spanish {
+        spanish_drift_summary_label(&drift_status)
+    } else {
+        drift_summary_label(&drift_status, ko)
+    };
+
     let mut plan = tray_menu_plan_from(
         lang,
         drift_status.tracker_running(),
         pause.snapshot,
-        drift_alerts_status_label(&drift_status, ko),
-        drift_summary_label(&drift_status, ko),
+        drift_alerts_status,
+        drift_summary,
         &app.package_info().version.to_string(),
     );
     plan.trial_status = app.try_state::<TrayTrialState>()
@@ -484,7 +506,7 @@ fn tray_menu_plan_from(
     version: &str,
 ) -> TrayMenuPlan {
     TrayMenuPlan {
-        korean: lang.is_korean(),
+        language: lang,
         show_pause_options: pause_options_visible(tracker_running, pause_snapshot),
         tracking_action: tracking_action_label(tracker_running, pause_snapshot, lang),
         pause_status: pause_status_label(pause_snapshot, tracker_running, lang),
@@ -496,44 +518,36 @@ fn tray_menu_plan_from(
 }
 
 fn tray_menu_rows(plan: &TrayMenuPlan) -> Vec<MenuRow> {
-    let ko = plan.korean;
+    let lang = plan.language;
     let pause = plan.show_pause_options;
     vec![
         MenuRow::item(
             tray_menu_id::PAUSE_HEADER,
-            if ko {
-                "활동 기록 일시 정지"
-            } else {
-                "Pause Tracking"
-            },
+            lang.pick("Pause Tracking", "활동 기록 일시 정지", "Pausar el registro"),
             false,
             pause,
         ),
         MenuRow::item(
             tray_menu_id::PAUSE_FOR_15,
-            if ko { "15분 동안" } else { "15 Minutes" },
+            lang.pick("15 Minutes", "15분 동안", "15 minutos"),
             pause,
             pause,
         ),
         MenuRow::item(
             tray_menu_id::PAUSE_FOR_30,
-            if ko { "30분 동안" } else { "30 Minutes" },
+            lang.pick("30 Minutes", "30분 동안", "30 minutos"),
             pause,
             pause,
         ),
         MenuRow::item(
             tray_menu_id::PAUSE_FOR_60,
-            if ko { "1시간 동안" } else { "1 Hour" },
+            lang.pick("1 Hour", "1시간 동안", "1 hora"),
             pause,
             pause,
         ),
         MenuRow::item(
             tray_menu_id::PAUSE_FOREVER,
-            if ko {
-                "직접 다시 시작할 때까지"
-            } else {
-                "Forever"
-            },
+            lang.pick("Forever", "직접 다시 시작할 때까지", "Hasta que lo reanudes"),
             pause,
             pause,
         ),
@@ -565,17 +579,13 @@ fn tray_menu_rows(plan: &TrayMenuPlan) -> Vec<MenuRow> {
         MenuRow::separator("drift-separator"),
         MenuRow::item(
             tray_menu_id::OPEN_DASHBOARD,
-            if ko {
-                "대시보드 열기"
-            } else {
-                "Open Dashboard"
-            },
+            lang.pick("Open Dashboard", "대시보드 열기", "Abrir panel"),
             true,
             true,
         ),
         MenuRow::item(
             tray_menu_id::SETTINGS,
-            if ko { "설정" } else { "Settings" },
+            lang.pick("Settings", "설정", "Configuración"),
             true,
             true,
         ),
@@ -590,18 +600,14 @@ fn tray_menu_rows(plan: &TrayMenuPlan) -> Vec<MenuRow> {
         ),
         MenuRow::item(
             tray_menu_id::UPDATE_STATUS,
-            if ko {
-                "업데이트 확인…"
-            } else {
-                UPDATE_STATUS_LABEL
-            },
+            lang.pick(UPDATE_STATUS_LABEL, "업데이트 확인…", "Buscar actualizaciones…"),
             true,
             true,
         ),
         MenuRow::separator("quit-separator"),
         MenuRow::item(
             tray_menu_id::QUIT,
-            if ko { "Drifty 종료" } else { "Quit" },
+            lang.pick("Quit", "Drifty 종료", "Salir de Drifty"),
             true,
             true,
         ),
@@ -640,13 +646,12 @@ fn tracking_action_label(
     pause_snapshot: TrackingPauseSnapshot,
     lang: TrayLanguage,
 ) -> &'static str {
-    let ko = lang.is_korean();
     if pause_snapshot.is_active() {
-        if ko { "활동 기록 다시 시작" } else { "Resume Tracking" }
+        lang.pick("Resume Tracking", "활동 기록 다시 시작", "Reanudar el registro")
     } else if running.unwrap_or(false) {
-        if ko { "활동 기록 일시 정지" } else { "Pause Tracking" }
+        lang.pick("Pause Tracking", "활동 기록 일시 정지", "Pausar el registro")
     } else {
-        if ko { "활동 기록 시작" } else { "Start Tracking" }
+        lang.pick("Start Tracking", "활동 기록 시작", "Iniciar el registro")
     }
 }
 
@@ -659,52 +664,46 @@ fn pause_status_label(
     tracker_running: Option<bool>,
     lang: TrayLanguage,
 ) -> Option<String> {
-    let ko = lang.is_korean();
     if pause_snapshot.is_active() {
         if tracker_running == Some(true) {
-            return Some(if ko {
-                "일시 정지 요청됨 · 아직 기록 중, 재시도 중"
-            } else {
-                "Pause requested · still tracking, retrying"
-            }
+            return Some(lang.pick("Pause requested · still tracking, retrying", "일시 정지 요청됨 · 아직 기록 중, 재시도 중", "Pausa solicitada · el registro continúa, reintentando")
             .to_string());
         }
         if tracker_running.is_none() {
-            return Some(if ko {
-                "일시 정지 요청됨 · 기록 상태 확인 불가"
-            } else {
-                "Pause requested · tracking status unavailable"
-            }
+            return Some(lang.pick("Pause requested · tracking status unavailable", "일시 정지 요청됨 · 기록 상태 확인 불가", "Pausa solicitada · estado del registro no disponible")
             .to_string());
         }
     }
     match pause_snapshot {
         TrackingPauseSnapshot::Inactive => None,
         TrackingPauseSnapshot::Indefinite => Some(
-            if ko { "일시 정지됨 · 직접 다시 시작 필요" } else { "Paused until you resume" }.to_string()
+            lang.pick("Paused until you resume", "일시 정지됨 · 직접 다시 시작 필요", "Pausado hasta que lo reanudes").to_string()
         ),
         TrackingPauseSnapshot::Timed {
             resumes_at_unix_seconds,
         } => {
-            let time = local_clock_label(resumes_at_unix_seconds);
-            Some(if ko {
-                format!("일시 정지됨 · {time}에 다시 시작")
-            } else {
-                format!("Paused · resumes at {time}")
+            let time = local_clock_label(resumes_at_unix_seconds, lang);
+            Some(match lang {
+                TrayLanguage::English => format!("Paused · resumes at {time}"),
+                TrayLanguage::Korean => format!("일시 정지됨 · {time}에 다시 시작"),
+                TrayLanguage::Spanish => format!("Pausado · se reanuda a las {time}"),
             })
         }
         TrackingPauseSnapshot::ResumeFailed { .. } => {
             Some(
-                if ko { "일시 정지됨 · 자동 재개 실패" } else { "Paused · automatic resume failed" }.to_string()
+                lang.pick("Paused · automatic resume failed", "일시 정지됨 · 자동 재개 실패", "Pausado · falló la reanudación automática").to_string()
             )
         }
     }
 }
 
-fn local_clock_label(unix_seconds: i64) -> String {
+fn local_clock_label(unix_seconds: i64, lang: TrayLanguage) -> String {
     let Some(utc) = DateTime::<Utc>::from_timestamp(unix_seconds, 0) else {
         return "unknown time".to_string();
     };
+    if lang == TrayLanguage::Spanish {
+        return utc.with_timezone(&Local).format("%H:%M").to_string();
+    }
     let label = utc.with_timezone(&Local).format("%I:%M %p").to_string();
     label.strip_prefix('0').unwrap_or(&label).to_string()
 }
@@ -1222,7 +1221,6 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang:
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
-    let ko = lang.is_korean();
     match display.mode {
         TrayDisplayMode::Donut => {
             let _ = tray.set_title(Some(""));
@@ -1230,32 +1228,32 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang:
         }
         TrayDisplayMode::FocusTime => {
             let focused = format_focus_time(display.focus_seconds);
-            let title = if ko {
-                format!("{focused} 집중")
-            } else {
-                format!("{focused} focused")
+            let title = match lang {
+                TrayLanguage::English => format!("{focused} focused"),
+                TrayLanguage::Korean => format!("{focused} 집중"),
+                TrayLanguage::Spanish => format!("Foco {focused}"),
             };
             let _ = tray.set_title(Some(&title));
             apply_tray_title_typography(&tray, title, lang);
-            let _ = tray.set_tooltip(Some(if ko {
-                format!("Drifty · 오늘 {focused} 집중")
-            } else {
-                format!("Drifty · {focused} focused today")
+            let _ = tray.set_tooltip(Some(match lang {
+                TrayLanguage::English => format!("Drifty · {focused} focused today"),
+                TrayLanguage::Korean => format!("Drifty · 오늘 {focused} 집중"),
+                TrayLanguage::Spanish => format!("Drifty · {focused} de concentración hoy"),
             }));
         }
         TrayDisplayMode::DonutFocusTime => {
             let focused = format_focus_time(display.focus_seconds);
-            let title = if ko {
-                format!("{focused} 집중")
-            } else {
-                format!("{focused} focused")
+            let title = match lang {
+                TrayLanguage::English => format!("{focused} focused"),
+                TrayLanguage::Korean => format!("{focused} 집중"),
+                TrayLanguage::Spanish => format!("Foco {focused}"),
             };
             let _ = tray.set_title(Some(&title));
             apply_tray_title_typography(&tray, title, lang);
-            let _ = tray.set_tooltip(Some(if ko {
-                format!("Drifty · 오늘 {focused} 집중 · 생산성 비율")
-            } else {
-                format!("Drifty · {focused} focused today · productivity mix")
+            let _ = tray.set_tooltip(Some(match lang {
+                TrayLanguage::English => format!("Drifty · {focused} focused today · productivity mix"),
+                TrayLanguage::Korean => format!("Drifty · 오늘 {focused} 집중 · 생산성 비율"),
+                TrayLanguage::Spanish => format!("Drifty · {focused} de concentración hoy · distribución de productividad"),
             }));
         }
     }
@@ -1285,7 +1283,7 @@ fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String, lang
         let title = NSString::from_str(&title);
         let attributed = unsafe { NSAttributedString::new_with_attributes(&title, &attributes) };
         let attributed = NSMutableAttributedString::from_attributed_nsstring(&attributed);
-        let suffix = if lang.is_korean() { "집중" } else { "focused" };
+        let suffix = lang.pick("focused", "집중", "Foco");
         if let Some(label_start) = focused_label_start_utf16(&title.to_string(), suffix) {
             let secondary_color = NSColor::colorWithCalibratedWhite_alpha(0.88, 0.92)
                 .into_super()
@@ -1300,7 +1298,7 @@ fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String, lang
                 attributed.addAttribute_value_range(
                     NSKernAttributeName,
                     &extra_spacing,
-                    NSRange::new(label_start.saturating_sub(1), 1),
+                    NSRange::new(if label_start == 0 { suffix.encode_utf16().count() } else { label_start - 1 }, 1),
                 );
             }
         }
@@ -1326,6 +1324,9 @@ fn reduced_tray_title_weight(weight: f64) -> f64 {
 }
 
 fn focused_label_start_utf16(title: &str, suffix: &str) -> Option<usize> {
+    if title.starts_with(suffix) {
+        return Some(0);
+    }
     let prefix = title.strip_suffix(suffix)?;
     Some(prefix.encode_utf16().count())
 }

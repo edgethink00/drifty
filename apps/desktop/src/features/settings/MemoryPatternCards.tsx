@@ -1,3 +1,4 @@
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import { useEffect, useRef, useState } from "react";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import {
@@ -57,7 +58,7 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
     drift: t("settings.ai.memoryPatternKindDrift"),
     ambiguities: t("settings.ai.memoryPatternKindAmbiguity"),
   };
-  const formatDate = (timestamp: string) => new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", {
+  const formatDate = (timestamp: string) => new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), {
     year: "numeric", month: "short", day: "numeric",
   }).format(new Date(timestamp));
 

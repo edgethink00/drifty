@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { formatLocalizedDuration, formatLocalizedTimeLabel } from "../../lib/formatting";
+import { formatLocalizedDuration, formatLocalizedTimeLabel, localeForDisplayLanguage } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export type AppUsagePanelItem = {
@@ -58,7 +58,7 @@ function formatShare(shareOfTotal: number): string {
   return `${Math.round(percent)}%`;
 }
 
-function formatLastUsed(endedAt: string | null, language: "en" | "ko", t: ReturnType<typeof useLocalization>["t"]): string {
+function formatLastUsed(endedAt: string | null, language: "en" | "ko" | "es", t: ReturnType<typeof useLocalization>["t"]): string {
   if (!endedAt) return t("dashboard.today.lastUsedPending");
 
   const endedDate = new Date(endedAt);
@@ -66,7 +66,7 @@ function formatLastUsed(endedAt: string | null, language: "en" | "ko", t: Return
   const isToday = endedDate.toDateString() === today.toDateString();
   const label = isToday
     ? formatLocalizedTimeLabel(endedDate, language)
-    : new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { month: language === "ko" ? "long" : "short", day: "numeric" }).format(endedDate);
+    : new Intl.DateTimeFormat(localeForDisplayLanguage(language), { month: language === "ko" ? "long" : "short", day: "numeric" }).format(endedDate);
   return t("dashboard.today.lastUsed", { time: label });
 }
 
@@ -80,7 +80,7 @@ function displayName(item: AppUsagePanelItem): string {
   return item.usageKind === "site" ? item.siteDomain ?? item.siteTitle ?? item.appName : item.appName;
 }
 
-function formatUsageContext(item: AppUsagePanelItem, language: "en" | "ko", t: ReturnType<typeof useLocalization>["t"]): string {
+function formatUsageContext(item: AppUsagePanelItem, language: "en" | "ko" | "es", t: ReturnType<typeof useLocalization>["t"]): string {
   const lastUsed = formatLastUsed(item.lastEndedAt, language, t);
   if (item.usageKind !== "site") return lastUsed;
 
@@ -116,10 +116,10 @@ export function AppUsagePanel({
   emptyPresentation = "message",
 }: AppUsagePanelProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const formatDuration = (seconds: number) => effectiveLanguage === "ko"
+  const formatDuration = (seconds: number) => effectiveLanguage !== "en"
     ? formatLocalizedDuration(seconds, effectiveLanguage)
     : formatEnglishDuration(seconds);
-  const formatSessionCount = (count: number) => effectiveLanguage === "ko"
+  const formatSessionCount = (count: number) => effectiveLanguage !== "en"
     ? t("dashboard.today.sessionCount", { count })
     : `${count} ${count === 1 ? "session" : "sessions"}`;
   const rankedItems = items.slice().sort((left, right) => left.rank - right.rank || right.totalSeconds - left.totalSeconds);
@@ -128,7 +128,7 @@ export function AppUsagePanel({
   const hasItems = rankedItems.length > 0;
 
   return (
-    <section className="app-usage-panel app-usage-panel--activity app-usage-panel--short-compact editorial-panel editorial-panel--soft" aria-label={effectiveLanguage === "ko" ? t("dashboard.today.appUsageAria") : `App usage for ${periodLabel}`}>
+    <section className="app-usage-panel app-usage-panel--activity app-usage-panel--short-compact editorial-panel editorial-panel--soft" aria-label={effectiveLanguage !== "en" ? t("dashboard.today.appUsageAria") : `App usage for ${periodLabel}`}>
       {hasItems && primaryItem ? (
         <div className="app-usage-content">
           <article
@@ -157,7 +157,7 @@ export function AppUsagePanel({
                 <span>{t("dashboard.today.shareMetric")}</span>
                 <strong>{formatShare(primaryItem.shareOfTotal)}</strong>
               </div>
-              <div className="app-usage-feature__meter" aria-label={effectiveLanguage === "ko" ? t("dashboard.today.usageShareAria", { percent: Math.round(normalizeShare(primaryItem.shareOfTotal)) }) : `${displayName(primaryItem)} accounts for ${formatShare(primaryItem.shareOfTotal)} of tracked time`}>
+              <div className="app-usage-feature__meter" aria-label={effectiveLanguage !== "en" ? t("dashboard.today.usageShareAria", { percent: Math.round(normalizeShare(primaryItem.shareOfTotal)) }) : `${displayName(primaryItem)} accounts for ${formatShare(primaryItem.shareOfTotal)} of tracked time`}>
                 <span />
               </div>
             </div>
@@ -193,7 +193,7 @@ export function AppUsagePanel({
                         <small title={usageContext}>{usageContext}</small>
                       </div>
                     </div>
-                    <div className="app-usage-row__bar" aria-label={effectiveLanguage === "ko" ? t("dashboard.today.usageShareAria", { percent: Math.round(normalizeShare(item.shareOfTotal)) }) : `${name} accounts for ${formatShare(item.shareOfTotal)} of tracked time`}>
+                    <div className="app-usage-row__bar" aria-label={effectiveLanguage !== "en" ? t("dashboard.today.usageShareAria", { percent: Math.round(normalizeShare(item.shareOfTotal)) }) : `${name} accounts for ${formatShare(item.shareOfTotal)} of tracked time`}>
                       <span style={shareStyle} />
                     </div>
                     <div className="app-usage-row__figures">
@@ -207,12 +207,12 @@ export function AppUsagePanel({
           ) : null}
         </div>
       ) : emptyPresentation === "blank" ? (
-        <div className="app-usage-empty app-usage-empty--blank" aria-label={effectiveLanguage === "ko" ? t("dashboard.today.noAppUsage") : `No app usage for ${periodLabel} yet`} />
+        <div className="app-usage-empty app-usage-empty--blank" aria-label={effectiveLanguage !== "en" ? t("dashboard.today.noAppUsage") : `No app usage for ${periodLabel} yet`} />
       ) : (
         <div className="app-usage-empty empty-state">
           <span className="eyebrow">{t("dashboard.today.noUsage")}</span>
           <strong>{t("dashboard.today.usageQuiet")}</strong>
-          <p>{effectiveLanguage === "ko" ? t("dashboard.today.usageEmptyDetail") : emptyDetail}</p>
+          <p>{effectiveLanguage !== "en" ? t("dashboard.today.usageEmptyDetail") : emptyDetail}</p>
         </div>
       )}
     </section>

@@ -1955,6 +1955,13 @@
   margin-top: 7px;
 }
 
+@media (max-width: 1100px) {
+  html[lang="es"] .week-v2-side__content .flow-compact-productivity-circle {
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+}
+
 .week-v2-side__content .flow-compact-productivity-circle .flow-compact-split-chart__legend-item {
   font-size: 0.75rem;
 }

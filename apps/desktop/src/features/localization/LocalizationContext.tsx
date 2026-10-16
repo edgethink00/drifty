@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { TranslationKey } from "./translations";
 import { translateFor, type TranslationParams } from "./translate";
 import { parseCategoryNameOverrideKey, withCategoryNameOverrides } from "./categoryNameOverrides";
@@ -6,6 +6,8 @@ import { useCategoryNameOverrideKey, useCustomCategoryColorVariables, useProduct
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
+  hasExplicitDisplayLanguagePreference,
+  migrateLegacyDisplayLanguagePreference,
   resolveInitialDisplayLanguage,
   resolveSystemDisplayLanguage,
   type DisplayLanguage,
@@ -38,15 +40,31 @@ export function useLocalization(): LocalizationController {
 }
 
 export function useLocalizationController(): LocalizationController {
-  const [effectiveLanguage, setDisplayLanguage] = useState<DisplayLanguage>(resolveInitialDisplayLanguage);
+  const [effectiveLanguage, setEffectiveLanguage] = useState<DisplayLanguage>(resolveInitialDisplayLanguage);
+
+  const setDisplayLanguage = useCallback((language: DisplayLanguage) => {
+    try {
+      window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, language);
+      window.localStorage.removeItem(LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY);
+    } catch {
+      // Keep the user's live choice even when preference storage is unavailable.
+    }
+    setEffectiveLanguage(language);
+  }, []);
   const categoryNameKey = useCategoryNameOverrideKey();
   useCustomCategoryColorVariables();
   useProductivityLevelStyles();
 
   useEffect(() => {
-    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, effectiveLanguage);
-    window.localStorage.removeItem(LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY);
-  }, [effectiveLanguage]);
+    migrateLegacyDisplayLanguagePreference();
+    const followSystemLanguage = () => {
+      if (!hasExplicitDisplayLanguagePreference()) {
+        setEffectiveLanguage(resolveSystemDisplayLanguage(window.navigator));
+      }
+    };
+    window.addEventListener("languagechange", followSystemLanguage);
+    return () => window.removeEventListener("languagechange", followSystemLanguage);
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = effectiveLanguage;
@@ -57,7 +75,7 @@ export function useLocalizationController(): LocalizationController {
     effectiveLanguage,
     setDisplayLanguage,
     t: withCategoryNameOverrides(translateFor(effectiveLanguage), parseCategoryNameOverrideKey(categoryNameKey)),
-  }), [categoryNameKey, effectiveLanguage]);
+  }), [categoryNameKey, effectiveLanguage, setDisplayLanguage]);
 }
 
 export function LocalizationProvider({ children, controller }: { readonly children: ReactNode; readonly controller: LocalizationController }) {

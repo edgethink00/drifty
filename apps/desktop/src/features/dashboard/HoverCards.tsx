@@ -81,7 +81,7 @@ export function CompactClassificationHoverCard({ hover, appIcons, language: lang
       </div>
       <div className="category-treemap-hover-card__metric">
         <strong>{hover.durationLabel}</strong>
-        <span>{language === "ko" ? `기록 시간의 ${hover.shareLabel}` : `${hover.shareLabel} of tracked time`}</span>
+        <span>{language === "ko" ? `기록 시간의 ${hover.shareLabel}` : language === "es" ? `${hover.shareLabel} del tiempo registrado` : `${hover.shareLabel} of tracked time`}</span>
       </div>
       <div className="category-treemap-hover-card__accent" aria-hidden="true">
         <span style={{ width: hover.shareLabel, background: hover.color }} />
@@ -99,7 +99,7 @@ export function CompactClassificationHoverCard({ hover, appIcons, language: lang
               <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, language)}</strong>
             </div>
           );
-        }) : <span className="category-hover-card__empty">{language === "ko" ? "앱 분석이 아직 없습니다." : "No app breakdown yet."}</span>}
+        }) : <span className="category-hover-card__empty">{language === "ko" ? "앱 분석이 아직 없습니다." : language === "es" ? "Aún no hay desglose por apps." : "No app breakdown yet."}</span>}
       </div>
     </div>
   );

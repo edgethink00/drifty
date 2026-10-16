@@ -1346,11 +1346,14 @@ describe("App leaderboard participation", () => {
     expect(compactRefreshStatus?.closest(".capture-recency--error")).toBeNull();
   });
 
-  it("shows leaderboard status text in Korean when the display language is Korean", async () => {
+  it.each([
+    { language: "ko", navigation: "소셜 메뉴", board: "리더보드", monthly: "월간", refreshing: "리더보드 새로고침 중" },
+    { language: "es", navigation: "Navegación social", board: "Ranking", monthly: "Mensual", refreshing: "Actualizando el ranking" },
+  ] as const)("shows leaderboard and billing-hook language in $language", async ({ language, navigation, board, monthly, refreshing }) => {
     // App's hooks run inside the localization provider App creates first; if
     // they ran above it (as they once did) these messages and the billing
-    // controller's errors stayed English in a Korean app.
-    window.localStorage.setItem("drifty.displayLanguage.v2", "ko");
+    // controller's errors stayed English in a localized app.
+    window.localStorage.setItem("drifty.displayLanguage.v2", language);
     billingControllerLanguages.length = 0;
     const deferredLeaderboard = createDeferred<LeaderboardResult<LeaderboardRow[]>>();
     getTimeline.mockResolvedValue([]);
@@ -1361,17 +1364,17 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: "소셜 메뉴" });
-    fireEvent.click(within(nav).getByRole("button", { name: /^리더보드$/ }));
-    await screen.findByRole("region", { name: /^리더보드$/ });
+    const nav = await screen.findByRole("navigation", { name: navigation });
+    fireEvent.click(within(nav).getByRole("button", { name: board }));
+    await screen.findByRole("region", { name: board });
     expect(await screen.findByText("Alex")).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: /^월간$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: monthly }));
     await waitFor(() => {
       expect(fetchGlobalLeaderboard).toHaveBeenCalledWith("monthly", 100);
     });
 
-    const refreshStatus = screen.queryAllByText("리더보드 새로고침 중")[0] ?? null;
+    const refreshStatus = screen.queryAllByText(refreshing)[0] ?? null;
     const englishStatus = screen.queryAllByText(/refreshing leaderboard/i);
     deferredLeaderboard.resolve({ success: true, error: null, data: [makeLeaderboardRow("monthly")] });
     await screen.findByText("Alex");
@@ -1379,7 +1382,7 @@ describe("App leaderboard participation", () => {
     expect(refreshStatus).toBeTruthy();
     expect(englishStatus).toHaveLength(0);
     expect(billingControllerLanguages.length).toBeGreaterThan(0);
-    expect(new Set(billingControllerLanguages)).toEqual(new Set(["ko"]));
+    expect(new Set(billingControllerLanguages)).toEqual(new Set([language]));
   });
 
   it("ignores a late profile response after the viewer switches to another leaderboard member", async () => {

@@ -324,7 +324,7 @@ function ReviewDelta({
 }
 
 function formatFocusedMinutes(seconds: number, language: LocalizationController["effectiveLanguage"]): string {
-  if (language === "ko") return formatLocalizedCompactDurationFromSeconds(seconds, language);
+  if (language !== "en") return formatLocalizedCompactDurationFromSeconds(seconds, language);
   const minutes = Math.max(0, Math.round(seconds / 60));
   if (minutes < 60) return minutes + "m";
   const hours = Math.floor(minutes / 60);
@@ -345,6 +345,7 @@ function formatClockShort(date: Date, language: LocalizationController["effectiv
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
   if (language === "ko") return (hour < 12 ? "오전 " : "오후 ") + hour12 + ":" + minutes;
+  if (language === "es") return String(hour).padStart(2, "0") + ":" + minutes;
   const suffix = hour < 12 ? "AM" : "PM";
   return hour12 + ":" + minutes + " " + suffix;
 }

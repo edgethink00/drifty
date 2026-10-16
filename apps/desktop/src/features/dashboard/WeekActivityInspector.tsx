@@ -755,7 +755,7 @@ function DirectAttributePicker({
 function formatActivityShareDuration(totalSeconds: number, language: DisplayLanguage): string {
   if (totalSeconds < 60) {
     const seconds = Math.max(0, Math.round(totalSeconds));
-    return language === "ko" ? `${seconds}초` : `${seconds}s`;
+    return language === "ko" ? `${seconds}초` : language === "es" ? `${seconds} s` : `${seconds}s`;
   }
   return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
 }

@@ -35,6 +35,7 @@ export interface ShareCardRenderOptions {
   readonly data: ShareCardData;
   readonly format: ShareCardFormat;
   readonly theme: ShareCardTheme;
+  readonly language?: "en" | "ko" | "es";
   readonly story?: ShareCardStory;
   readonly background?: ShareCardBackground;
   readonly lookIndex?: number;
@@ -46,6 +47,7 @@ export interface ShareWeekCardRenderOptions {
   readonly data: ShareWeekCardData;
   readonly format: ShareCardFormat;
   readonly theme: ShareCardTheme;
+  readonly language?: "en" | "ko" | "es";
   readonly story?: ShareCardStory;
   readonly background?: ShareCardBackground;
   readonly lookIndex?: number;
@@ -456,19 +458,19 @@ function isUnifiedStory(story: ShareCardStory): story is UnifiedShareStoryId {
   return UNIFIED_STORY_OPTIONS.some((entry) => entry.value === story);
 }
 
-export function renderShareCardSvg({ data, format, theme, story = "R1c", background = "quiet_wash", lookIndex, liveRanks, communityModels }: ShareCardRenderOptions): string {
+export function renderShareCardSvg({ data, format, theme, language, story = "R1c", background = "quiet_wash", lookIndex, liveRanks, communityModels }: ShareCardRenderOptions): string {
   if (isUnifiedStory(story) || format === "landscape") {
     const unifiedStory = isUnifiedStory(story) ? story : "R1c";
-    return renderUnifiedShareCardSvg({ data, theme, story: unifiedStory, lookIndex, liveRanks, communityModels });
+    return renderUnifiedShareCardSvg({ data, theme, language, story: unifiedStory, lookIndex, liveRanks, communityModels });
   }
   const legacyStory = story === "focus_share" || story === "deep_work" || story === "focus_time" ? story : "focus_time";
   return renderPoster(dayPosterContent(data, legacyStory), format, theme, background);
 }
 
-export function renderShareWeekCardSvg({ data, format, theme, story = "WR1", background = "quiet_wash", lookIndex, liveRanks, communityModels }: ShareWeekCardRenderOptions): string {
+export function renderShareWeekCardSvg({ data, format, theme, language, story = "WR1", background = "quiet_wash", lookIndex, liveRanks, communityModels }: ShareWeekCardRenderOptions): string {
   if (isUnifiedStory(story) || format === "landscape") {
     const unifiedStory = isUnifiedStory(story) ? story : "WR1";
-    return renderUnifiedShareWeekCardSvg({ data, theme, story: unifiedStory, lookIndex, liveRanks, communityModels });
+    return renderUnifiedShareWeekCardSvg({ data, theme, language, story: unifiedStory, lookIndex, liveRanks, communityModels });
   }
   const legacyStory = story === "focus_share" || story === "deep_work" || story === "focus_time" ? story : "focus_time";
   return renderPoster(weekPosterContent(data, legacyStory), format, theme, background);

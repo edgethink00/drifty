@@ -1,5 +1,6 @@
 import type { DisplayLanguage } from "../localization/languagePreference";
-import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS, type TranslationKey } from "../localization/translations";
+import { type TranslationKey } from "../localization/translations";
+import { translateFor } from "../localization/translate";
 import type { PetQuickControlsAutomaticCloseOverridePayload } from "./petModeBridge";
 
 export type PetQuickControlsCopyParams = Readonly<Record<string, string | number>>;
@@ -9,7 +10,7 @@ export function copyFor(
   key: TranslationKey,
   params?: PetQuickControlsCopyParams,
 ): string {
-  const template = language === "ko" ? KOREAN_TRANSLATIONS[key] : ENGLISH_TRANSLATIONS[key];
+  const template = translateFor(language)(key);
   if (!params) return template;
   return template.replace(/\{\{(\w+)\}\}/gu, (match, name: string) => {
     const value = params[name];
@@ -26,6 +27,7 @@ export function formatAutomaticCloseResumeTime(
   const minute = String(date.getMinutes()).padStart(2, "0");
   const hour12 = hour % 12 || 12;
   if (language === "ko") return `${hour12}:${minute}`;
+  if (language === "es") return `${String(hour).padStart(2, "0")}:${minute}`;
   return `${hour12}:${minute}${hour < 12 ? "am" : "pm"}`;
 }
 

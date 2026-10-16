@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivitySegment, Project, ProjectAssignmentRecord } from "@drifty/domain";
 import { shiftIsoDate } from "@drifty/domain";
 import "./projects.css";
-import { buildIsoDayList, describeLocalizedRelativeDay, formatLocalizedCompactDurationFromSeconds, isoDateFromTimestamp, logicalTodayIsoDate } from "../../lib/formatting";
+import { localeForDisplayLanguage, buildIsoDayList, describeLocalizedRelativeDay, formatLocalizedCompactDurationFromSeconds, isoDateFromTimestamp, logicalTodayIsoDate } from "../../lib/formatting";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import type { IntelligenceProviderChoice } from "../categories/CategoryEditorAiNotice";
 import { ProjectsReconnect, ProjectsStrip } from "./ProjectsLock";
@@ -46,10 +46,10 @@ function windowDaysFor(mode: TrendRangeMode): number {
   return 7;
 }
 
-function shortDate(iso: string, language: "en" | "ko"): string {
+function shortDate(iso: string, language: "en" | "ko" | "es"): string {
   const parsed = new Date(`${iso}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return iso;
-  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric" }).format(parsed);
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { month: "short", day: "numeric" }).format(parsed);
 }
 
 function analysisModelLabel(setup: AnalysisAiSetupState): string {
@@ -144,7 +144,9 @@ function ProjectsStatus(props: ProjectsStatusProps): JSX.Element {
       : autoPhase === "error"
         ? t("projects.matching.retryLatest")
         : cooldownActive
-          ? t("projects.matching.justMatched", { remaining: effectiveLanguage === "ko" && props.matchCooldown.remainingSeconds < 60 ? `${props.matchCooldown.remainingSeconds}초` : formatProjectMatchCooldown(props.matchCooldown.remainingSeconds) })
+          ? t("projects.matching.justMatched", { remaining: props.matchCooldown.remainingSeconds < 60
+            ? effectiveLanguage === "ko" ? `${props.matchCooldown.remainingSeconds}초` : effectiveLanguage === "es" ? `${props.matchCooldown.remainingSeconds} s` : formatProjectMatchCooldown(props.matchCooldown.remainingSeconds)
+            : formatProjectMatchCooldown(props.matchCooldown.remainingSeconds) })
           : t("projects.matching.refreshLatest");
   const actionDisabled = props.locked || (props.running && autoPhase !== "queued") || cooldownActive || !props.analysisConnected || props.activeProjectCount === 0;
   const actionHint = cooldownActive
@@ -246,7 +248,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const atLatestWindow = windowOffset === 0;
   const relativeDayLabel = describeLocalizedRelativeDay(endDay, effectiveLanguage, props.startOfDayMinutes);
   const windowLabel = isDayMode
-    ? relativeDayLabel === (effectiveLanguage === "ko" ? "선택한 날짜" : "Selected day") ? shortDate(endDay, effectiveLanguage) : relativeDayLabel
+    ? relativeDayLabel === (effectiveLanguage === "ko" ? "선택한 날짜" : effectiveLanguage === "es" ? "Día seleccionado" : "Selected day") ? shortDate(endDay, effectiveLanguage) : relativeDayLabel
     : `${shortDate(startDay, effectiveLanguage)} – ${shortDate(endDay, effectiveLanguage)}`;
 
   // Tell the shell which window to load trend segments/assignments for. A

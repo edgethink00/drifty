@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DISPLAY_LANGUAGE_STORAGE_KEY } from "../localization/languagePreference";
 import {
   BOOT_SHELL_PREVIEW_DURATION_MS,
   BOOT_SHELL_PREVIEW_DURATION_SECONDS,
   hideBootShell,
+  localizeBootShell,
   shouldDeferBootShellForNativeMaterial,
   showBootShellPreview,
 } from "./bootShell";
@@ -11,6 +13,7 @@ import {
 describe("boot shell preview", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    window.localStorage.clear();
     document.body.innerHTML = `
       <div id="boot-shell" hidden aria-hidden="true" data-boot-preview="false">
         <span id="boot-status">Loading Drifty later…</span>
@@ -22,7 +25,36 @@ describe("boot shell preview", () => {
   afterEach(() => {
     hideBootShell();
     document.body.replaceChildren();
+    window.localStorage.clear();
     vi.useRealTimers();
+  });
+
+  it.each([
+    { preferred: "en-US", label: "Loading Drifty", status: "Loading Drifty…" },
+    { preferred: "es-US", label: "Cargando Drifty", status: "Cargando Drifty…" },
+    { preferred: "ko-KR", label: "Drifty 불러오는 중", status: "Drifty 불러오는 중…" },
+    { preferred: "fr-ES", label: "Loading Drifty", status: "Loading Drifty…" },
+  ])("uses the first device language on the boot shell for $preferred", ({ preferred, label, status }) => {
+    const languagesSpy = vi.spyOn(window.navigator, "languages", "get").mockReturnValue([preferred]);
+    try {
+      localizeBootShell();
+      expect(document.getElementById("boot-shell")?.getAttribute("aria-label")).toBe(label);
+      expect(document.getElementById("boot-status")?.textContent).toBe(status);
+    } finally {
+      languagesSpy.mockRestore();
+    }
+  });
+
+  it("keeps a manual choice on the boot shell above the device language", () => {
+    const languagesSpy = vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["es-US"]);
+    try {
+      window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
+      localizeBootShell();
+      expect(document.getElementById("boot-status")?.textContent).toBe("Loading Drifty…");
+      expect(document.getElementById("boot-status-visible")?.textContent).toBe("drifty loading…");
+    } finally {
+      languagesSpy.mockRestore();
+    }
   });
 
   it("shows the real boot shell long enough to preview the delayed status and resets its copy", () => {

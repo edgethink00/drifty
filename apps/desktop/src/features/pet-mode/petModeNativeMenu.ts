@@ -17,14 +17,14 @@ export type PetModeNativeMenuActions = {
 };
 
 export type PetModeNativeMenuState = {
-  readonly language?: "en" | "ko";
+  readonly language?: "en" | "ko" | "es";
   readonly presenceMode?: PetPresenceMode;
 };
 
 export type PetModeAutomaticCloseMenuState = {
   readonly savedEnabled: boolean;
   readonly override: PetQuickControlsAutomaticCloseOverridePayload | null;
-  readonly language?: "en" | "ko";
+  readonly language?: "en" | "ko" | "es";
 };
 
 async function popupPetMenu(items: NonNullable<MenuOptions["items"]>): Promise<boolean> {
@@ -63,7 +63,7 @@ async function popupPetMenu(items: NonNullable<MenuOptions["items"]>): Promise<b
   }
 }
 
-function petModeMenuCopy(language: "en" | "ko") {
+function petModeMenuCopy(language: "en" | "ko" | "es") {
   if (language === "ko") {
     return {
       openDashboard: "Drifty 열기",
@@ -76,6 +76,20 @@ function petModeMenuCopy(language: "en" | "ko") {
       turnOffSuggestionHeader: "펫을 완전히 끌까요?",
       turnOffSuggestionDriftOnly: "딴짓할 때만 나타나기",
       turnOffSuggestionConfirm: "완전히 끄기",
+    };
+  }
+  if (language === "es") {
+    return {
+      openDashboard: "Abrir Drifty",
+      openSettings: "Configuración de la mascota…",
+      automaticCloseSettings: "Configurar cierre automático…",
+      hideOneHour: "Ocultar la mascota 1 hora",
+      showOnlyOnDrift: "Mostrar solo al distraerme",
+      stayAlways: "Mantener en pantalla",
+      turnOffPet: "Desactivar la mascota",
+      turnOffSuggestionHeader: "¿Desactivar la mascota por completo?",
+      turnOffSuggestionDriftOnly: "Mostrar solo al distraerme",
+      turnOffSuggestionConfirm: "Desactivar",
     };
   }
   return {
@@ -92,7 +106,7 @@ function petModeMenuCopy(language: "en" | "ko") {
   };
 }
 
-function automaticCloseMenuCopy(language: "en" | "ko") {
+function automaticCloseMenuCopy(language: "en" | "ko" | "es") {
   if (language === "ko") {
     return {
       pause15: "15분 멈추기",
@@ -104,6 +118,19 @@ function automaticCloseMenuCopy(language: "en" | "ko") {
       restoreOn: "지금 다시 켜기",
       restoreOff: "지금 다시 끄기",
       returnsOn: "시간이 끝나면 자동으로 다시 켜집니다.",
+    };
+  }
+  if (language === "es") {
+    return {
+      pause15: "Pausar 15 minutos",
+      pause60: "Pausar 1 hora",
+      pauseToday: "Pausar hasta medianoche",
+      pauseForever: "Pausar hasta reanudar",
+      pauseHeader: "Pausar el cierre automático",
+      turnOn: "Activar cierre automático",
+      restoreOn: "Reactivar ahora",
+      restoreOff: "Desactivar ahora",
+      returnsOn: "El cierre automático se reactivará cuando termine la pausa.",
     };
   }
   return {

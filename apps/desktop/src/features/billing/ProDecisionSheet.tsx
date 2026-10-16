@@ -1,3 +1,4 @@
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { KeyHint } from "../../components/KeyHint";
 import { createPortal } from "react-dom";
@@ -260,7 +261,7 @@ function useSheetHeader(
   }
   const end = trialEndsAt ? new Date(trialEndsAt) : null;
   const endTime = end && Number.isFinite(end.getTime())
-    ? new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", { hour: "numeric", minute: "2-digit" }).format(end)
+    ? new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { hour: "numeric", minute: "2-digit" }).format(end)
     : null;
   const title = t("billing.proSheet.endedTitle");
   if (unclassifiedSeconds === null || unclassifiedSeconds < 60) return { title, fact: t("billing.proSheet.factPlain") };

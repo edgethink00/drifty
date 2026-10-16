@@ -50,7 +50,7 @@ function isOnboardingPurpose(value: unknown): value is OnboardingPurpose {
   return typeof value === "string" && VALID_PURPOSES.has(value);
 }
 
-function resolvePersistedWorkDescriptionLanguage(): "en" | "ko" {
+function resolvePersistedWorkDescriptionLanguage(): "en" | "ko" | "es" {
   return resolveInitialDisplayLanguage();
 }
 
@@ -259,14 +259,14 @@ function summarizeWorkActivities(workProfile: WorkProfileSettings): string | nul
   return activities.length > 0 ? activities.join(", ") : null;
 }
 
-function migrateLegacyDomainIntoDescription(state: UserOnboardingState | null, language: "en" | "ko" = "en"): string {
+function migrateLegacyDomainIntoDescription(state: UserOnboardingState | null, language: "en" | "ko" | "es" = "en"): string {
   const existingDescription = normalizeWorkProfileSetting(state?.workDescription, 240) ?? "";
   if (existingDescription) return existingDescription;
   const domain = normalizeWorkProfileSetting(
     state?.workDomain === "Other" ? state?.workDomainOther : state?.workDomain,
   );
   if (!domain) return "";
-  return language === "ko" ? `${domain} 분야에서 일합니다.` : `Works in ${domain}.`;
+  return language === "ko" ? `${domain} 분야에서 일합니다.` : language === "es" ? `Trabaja en el sector de ${domain}.` : `Works in ${domain}.`;
 }
 
 function readWorkActivitiesFromState(state: UserOnboardingState | null): readonly string[] {

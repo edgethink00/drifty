@@ -169,6 +169,8 @@ export function PetModeQuickControlsWindowApp() {
       ) refresh();
     };
     window.addEventListener("storage", handleStorage);
+    const followSystemLanguage = () => setLanguage(resolveInitialDisplayLanguage());
+    window.addEventListener("languagechange", followSystemLanguage);
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void listenToNativePetQuickControlsState((state) => {
@@ -187,6 +189,7 @@ export function PetModeQuickControlsWindowApp() {
     return () => {
       disposed = true;
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("languagechange", followSystemLanguage);
       unlisten?.();
       if (acknowledgeTimerRef.current !== null) {
         window.clearTimeout(acknowledgeTimerRef.current);

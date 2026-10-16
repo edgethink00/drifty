@@ -1,5 +1,5 @@
 import type { DriftAlarmTrayStatus, SystemTransientActivity } from "@drifty/domain";
-import { formatCompactDurationFromSeconds, formatTimeLabel } from "../../lib/formatting";
+import { formatCompactDurationFromSeconds, formatLocalizedTimeLabel, formatTimeLabel } from "../../lib/formatting";
 
 type DriftAlarmDeferredReason = Exclude<SystemTransientActivity, null>;
 
@@ -21,7 +21,7 @@ export type DriftAlarmTrayStatusInput = {
   readonly checkedAt: Date | null;
   readonly result: DriftAlarmTrayResult;
   readonly trackerRunning?: boolean | null;
-  readonly locale?: "en" | "ko";
+  readonly locale?: "en" | "ko" | "es";
 };
 
 /**
@@ -37,16 +37,17 @@ export type DriftAlarmTrayState = {
 export function buildDriftAlarmTrayStatus(input: DriftAlarmTrayStatusInput): DriftAlarmTrayStatus {
   const checkedAt = input.result.kind === "tracker_paused" ? null : checkedAtOrNull(input.checkedAt);
   const ko = input.locale === "ko";
+  const es = input.locale === "es";
   const baseStatus = {
     enabled: input.enabled,
-    statusLabel: statusLabel(input.enabled, input.result, ko),
+    statusLabel: es ? spanishStatusLabel(input.enabled, input.result) : statusLabel(input.enabled, input.result, ko),
     lastCheckedAt: checkedAt?.toISOString() ?? null,
     lastCheckedLabel: input.result.kind === "tracker_paused"
-      ? (ko ? "확인 안 함" : "Not checking")
+      ? (ko ? "확인 안 함" : es ? "Sin comprobar" : "Not checking")
       : checkedAt
-        ? formatDriftAlarmTrayCheckTime(checkedAt)
-        : input.enabled ? (ko ? "없음" : "Never") : (ko ? "꺼짐" : "Off"),
-    resultLabel: resultLabel(input.result, ko),
+        ? es ? formatLocalizedTimeLabel(checkedAt, "es") : formatDriftAlarmTrayCheckTime(checkedAt)
+        : input.enabled ? (ko ? "없음" : es ? "Nunca" : "Never") : (ko ? "꺼짐" : es ? "Desactivadas" : "Off"),
+    resultLabel: es ? spanishResultLabel(input.result) : resultLabel(input.result, ko),
     detailLabel: resultDetailLabel(input.result),
   };
 
@@ -98,6 +99,64 @@ function statusLabel(enabled: boolean, result: DriftAlarmTrayResult, ko: boolean
       return ko ? "딴짓 알림: 확인 실패" : "Drift alerts: Check failed";
     default:
       return assertNever(result);
+  }
+}
+
+function spanishStatusLabel(enabled: boolean, result: DriftAlarmTrayResult): string {
+  if (!enabled) return "Alertas de distracción: desactivadas";
+  const prefix = "Alertas de distracción: ";
+  switch (result.kind) {
+    case "disabled": return `${prefix}desactivadas`;
+    case "not_today": return `${prefix}en espera`;
+    case "tracker_paused": return `${prefix}en pausa`;
+    case "no_candidate": return `${prefix}activas`;
+    case "snoozed": return `${prefix}pospuestas`;
+    case "checking": return `${prefix}comprobando`;
+    case "delivered": return `${prefix}enviadas`;
+    case "already_delivered": return `${prefix}ya mostradas`;
+    case "suppressed": return `${prefix}${spanishSuppressionReason(result.reason)}`;
+    case "deferred": return `${prefix}en espera`;
+    case "error": return `${prefix}error al comprobar`;
+    default: return assertNever(result);
+  }
+}
+
+function spanishSuppressionReason(reason: string): string {
+  const normalized = reason.trim();
+  if (normalized === "quiet-hours") return "horario de silencio";
+  if (normalized.startsWith("ai-unavailable:")) return "IA no disponible";
+  if (normalized === "ai-timeout" || normalized === "ai-deadline") return "tiempo de IA agotado";
+  if (normalized === "ai-low-confidence") return "baja confianza de IA";
+  if (normalized === "ai-classified-focus") return "IA clasificó concentración";
+  if (normalized === "ai-classified-neutral") return "IA clasificó neutral";
+  return "suprimidas";
+}
+
+function spanishResultLabel(result: DriftAlarmTrayResult): string {
+  switch (result.kind) {
+    case "disabled": return "Alertas desactivadas";
+    case "not_today": return "No se comprueba este día";
+    case "tracker_paused": return "Registro en pausa";
+    case "no_candidate": return "Sin distracciones aptas";
+    case "snoozed": return "Pospuestas";
+    case "checking": return "Comprobando distracción";
+    case "delivered": return "Alerta enviada";
+    case "already_delivered": return "Alerta ya mostrada";
+    case "suppressed": return `Suprimidas: ${spanishSuppressionReason(result.reason)}`;
+    case "deferred": return `Esperando a ${spanishSystemActivity(result.reason)}`;
+    case "error": return "Error al comprobar";
+    default: return assertNever(result);
+  }
+}
+
+function spanishSystemActivity(reason: DriftAlarmDeferredReason): string {
+  switch (reason) {
+    case "mission_control": return "Mission Control";
+    case "app_switcher": return "cambio de app";
+    case "launchpad": return "Launchpad";
+    case "spotlight": return "Spotlight";
+    case "system_overlay": return "ventana del sistema";
+    default: return assertNever(reason);
   }
 }
 

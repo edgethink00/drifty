@@ -23,7 +23,7 @@ describe("boot shell markup", () => {
     }
   });
 
-  it("renders the Drifty symbol with accessible and delayed visible loading copy", () => {
+  it("renders the Drifty symbol with language-neutral copy until localization runs", () => {
     const shellStart = indexSource.indexOf('<div id="boot-shell"');
     const shellEnd = indexSource.indexOf('<div id="boot-error"');
     const bootShell = indexSource.slice(shellStart, shellEnd);
@@ -33,9 +33,10 @@ describe("boot shell markup", () => {
     expect(bootShell).toContain('src="/src/assets/drifty-mark.svg"');
     expect(bootShell).toContain('class="boot-loading__mark"');
     expect(bootShell).toContain('id="boot-status" class="boot-sr-only" role="status" aria-live="polite"');
-    expect(bootShell).toContain("Loading Drifty&hellip;");
+    expect(bootShell).toContain('aria-label="Drifty"');
+    expect(bootShell).toContain('>Drifty</span>');
     expect(bootShell).toContain('id="boot-status-visible" class="boot-loading" aria-hidden="true"');
-    expect(bootShell).toContain("drifty loading&hellip;");
+    expect(bootShell).toContain('>drifty</span>');
     expect(indexSource).not.toContain("drifty still loading");
     expect(bootShell.indexOf("boot-loading__mark")).toBeLessThan(bootShell.indexOf("boot-status"));
     expect(indexSource).toContain('<div id="boot-error" class="boot-error" role="alert" aria-live="assertive"></div>');

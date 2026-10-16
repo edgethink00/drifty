@@ -3,7 +3,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
-import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedDuration, formatLocalizedCompactHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
+import { localeForDisplayLanguage, clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedDuration, formatLocalizedCompactHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel, ProductivityLevel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
@@ -113,7 +113,7 @@ function buildWeekSummaryMetrics(
   rows: readonly WeekDayRow[],
   segments: readonly ActivitySegment[],
   totalSeconds: number,
-  language: "en" | "ko",
+  language: "en" | "ko" | "es",
   t: LocalizationController["t"],
 ): WeekSummaryMetrics {
   const activeRows = rows.filter((row) => row.totalSeconds > 0);
@@ -129,7 +129,7 @@ function buildWeekSummaryMetrics(
     averageDailySeconds: activeRows.length > 0 ? Math.round(totalSeconds / activeRows.length) : 0,
     averageSessionMinutes: segments.length > 0 ? Math.round(totalSeconds / 60 / segments.length) : 0,
     peakDayLabel: peakDay
-      ? new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${peakDay.day}T12:00:00`))
+      ? new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: "short" }).format(new Date(`${peakDay.day}T12:00:00`))
       : "\u2014",
     peakDaySeconds: peakDay?.totalSeconds ?? 0,
     sessionCount: segments.length,
@@ -145,7 +145,7 @@ const WEEK_SIDE_TREND_STEP_CANDIDATES = [0.25, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10
 function buildWeekSideTrendChart(
   rows: WeekDayRow[],
   colorMode: WeekDashboardColorMode,
-  language: "en" | "ko",
+  language: "en" | "ko" | "es",
   t: LocalizationController["t"],
   projectSlicesByDay?: ReadonlyMap<string, readonly WeekProjectSlice[]>,
   levels: readonly ProductivityLevel[] = [],
@@ -192,7 +192,7 @@ function buildWeekSideTrendChart(
         })).sort((left, right) => Number(left.key === "unknown") - Number(right.key === "unknown"));
     return {
       day: row.day,
-      dayLabel: new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${row.day}T12:00:00`)),
+      dayLabel: new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: "short" }).format(new Date(`${row.day}T12:00:00`)),
       totalSeconds: row.totalSeconds,
       off,
       barHeightPercent: Math.min((row.totalSeconds / (axisMaxHours * 3600)) * 100, 100),
@@ -796,12 +796,12 @@ export function WeekDashboard({
                     aria-label={t("dashboard.week.openDay", { date: dayLabel })}
                     onClick={() => onSelectDay(row.day)}
                   >
-                    <strong>{new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${row.day}T12:00:00`))}</strong>
+                    <strong>{new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { weekday: "short" }).format(new Date(`${row.day}T12:00:00`))}</strong>
                     <small>{row.dayNumber}</small>
                   </button>
                 ) : (
                   <span className={`${isWeekend ? "is-weekend" : ""}${row.day === markerCalendarDay ? " is-today" : ""}`.trim()} key={row.day}>
-                    <strong>{new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${row.day}T12:00:00`))}</strong>
+                    <strong>{new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { weekday: "short" }).format(new Date(`${row.day}T12:00:00`))}</strong>
                     <small>{row.dayNumber}</small>
                   </span>
                 );

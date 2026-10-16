@@ -5,7 +5,7 @@ export function localizeSettingsError(
   language: DisplayLanguage,
   t: LocalizationController["t"],
 ): string {
-  return language === "ko" ? t("settings.error.actionFailed", { detail: value }) : value;
+  return language === "en" ? value : t("settings.error.actionFailed", { detail: value });
 }
 
 export function localizeUpdateMessage(

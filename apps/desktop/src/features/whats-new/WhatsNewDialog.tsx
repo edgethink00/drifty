@@ -1,3 +1,4 @@
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import { useId } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -28,7 +29,7 @@ export function WhatsNewDialog({ entries, status, onRetry, onClose }: WhatsNewDi
   const titleId = useId();
   useModalDismiss(onClose);
   const overlayDismiss = useOverlayDismiss(onClose);
-  const locale = effectiveLanguage === "ko" ? "ko-KR" : "en-US";
+  const locale = localeForDisplayLanguage(effectiveLanguage);
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>

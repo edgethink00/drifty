@@ -22,7 +22,7 @@ export function DashboardPageHeader({
   focusDuration,
 }: DashboardPageHeaderProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const localizeDashboard = dashPeriod === "Today" || (dashPeriod === "Week" && effectiveLanguage === "ko");
+  const localizeDashboard = dashPeriod === "Today" || (dashPeriod === "Week" && effectiveLanguage !== "en");
   const titleAriaLabel = initialDataLoading
     ? (localizeDashboard ? t("dashboard.today.loading") : "Loading dashboard data")
     : focusDuration === null
@@ -41,6 +41,8 @@ export function DashboardPageHeader({
                 <span className="dashboard-page-head__focus-word">{localizeDashboard ? t("dashboard.today.noFocus") : "No focus recorded"}</span>
               ) : localizeDashboard && effectiveLanguage === "ko" ? (
                 <><span className="dashboard-page-head__focus-value">{focusDuration}</span><span className="dashboard-page-head__focus-word">집중했습니다</span></>
+              ) : localizeDashboard && effectiveLanguage === "es" ? (
+                <><span className="dashboard-page-head__focus-word">Tiempo de concentración:</span><span className="dashboard-page-head__focus-value">{focusDuration}</span></>
               ) : (
                 <><span className="dashboard-page-head__focus-word">Focused for</span><span className="dashboard-page-head__focus-value">{focusDuration}</span></>
               )}

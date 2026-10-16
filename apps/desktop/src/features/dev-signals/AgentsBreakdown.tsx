@@ -52,8 +52,8 @@ type RepoBarEntry = {
 };
 
 function formatAgentDuration(minutes: number, language: DisplayLanguage): string {
-  if (minutes > 0 && minutes < 1) return language === "ko" ? "1분 미만" : "<1m";
-  return language === "ko"
+  if (minutes > 0 && minutes < 1) return language === "ko" ? "1분 미만" : language === "es" ? "menos de 1 min" : "<1m";
+  return language !== "en"
     ? formatLocalizedCompactDurationFromSeconds(Math.round(minutes * 60), language)
     : formatHours(minutes);
 }

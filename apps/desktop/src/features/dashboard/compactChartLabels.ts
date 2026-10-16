@@ -12,6 +12,6 @@ export function formatCompactBarLabel<TEntry extends CompactChartLabelEntry>(
   getLabel: (entry: TEntry) => string,
   language: DisplayLanguage = "en",
 ) {
-  const parts = entries.map((entry) => `${getLabel(entry)} ${language === "ko" ? formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, language) : formatCompactDurationFromSeconds(entry.totalSeconds)} ${Math.round(entry.ratio * 100)}%`);
-  return `${title} ${language === "ko" ? "분류" : "classification"}: ${parts.join(", ")}`;
+  const parts = entries.map((entry) => `${getLabel(entry)} ${language !== "en" ? formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, language) : formatCompactDurationFromSeconds(entry.totalSeconds)} ${Math.round(entry.ratio * 100)}%`);
+  return `${title} ${language === "ko" ? "분류" : language === "es" ? "clasificación" : "classification"}: ${parts.join(", ")}`;
 }

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { AuxiliaryLocalizationProvider } from "./AuxiliaryLocalizationProvider";
 import { useLocalization } from "./LocalizationContext";
 import { DISPLAY_LANGUAGE_STORAGE_KEY } from "./languagePreference";
 function Probe() { const { t } = useLocalization(); return <span>{t("companion.dayReview.title")}</span>; }
-afterEach(() => { cleanup(); localStorage.clear(); });
+afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 it("follows cross-window changes and storage clearing without rewriting the preference", () => {
   localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
   render(<AuxiliaryLocalizationProvider><Probe /></AuxiliaryLocalizationProvider>);
@@ -22,5 +22,17 @@ it("follows cross-window changes and storage clearing without rewriting the pref
   });
   expect(screen.getByText("Day review")).toBeTruthy();
   act(() => { localStorage.clear(); window.dispatchEvent(new StorageEvent("storage", { key: null })); });
+  expect(localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
+});
+
+it("follows a system language change when no explicit preference is stored", () => {
+  let preferredLanguages = ["en-US"];
+  vi.spyOn(window.navigator, "languages", "get").mockImplementation(() => preferredLanguages);
+  render(<AuxiliaryLocalizationProvider><Probe /></AuxiliaryLocalizationProvider>);
+  expect(document.documentElement.lang).toBe("en");
+
+  preferredLanguages = ["es-MX"];
+  act(() => window.dispatchEvent(new Event("languagechange")));
+  expect(document.documentElement.lang).toBe("es");
   expect(localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
 });

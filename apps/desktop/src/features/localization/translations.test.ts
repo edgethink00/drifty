@@ -4,6 +4,33 @@ import { localizeAiConnectionTestMessage, localizeAiStatusLabel } from "./aiStat
 import { localizeSettingsError, localizeUpdateMessage } from "./settingsMessageTranslations";
 import type { LocalizationController } from "./LocalizationContext";
 import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS, type TranslationKey } from "./translations";
+import { SPANISH_TRANSLATIONS } from "./spanishTranslations";
+
+const spanishT: LocalizationController["t"] = (key, params) => interpolate(SPANISH_TRANSLATIONS[key], params);
+
+describe("Spanish translations", () => {
+  it("covers every English key with matching interpolation variables", () => {
+    expect(Object.keys(SPANISH_TRANSLATIONS).sort()).toEqual(Object.keys(ENGLISH_TRANSLATIONS).sort());
+    for (const key of Object.keys(ENGLISH_TRANSLATIONS) as TranslationKey[]) {
+      expect(placeholders(SPANISH_TRANSLATIONS[key]), key).toEqual(placeholders(ENGLISH_TRANSLATIONS[key]));
+    }
+  });
+
+  it("keeps tracking, trial and privacy language accurate", () => {
+    expect(SPANISH_TRANSLATIONS["tracker.pause"]).toBe("Pausar el registro");
+    expect(SPANISH_TRANSLATIONS["billing.plan.trialBadge"]).toContain("Prueba");
+    expect(SPANISH_TRANSLATIONS["onboarding.entry.headline"]).toContain("drifty");
+    expect(SPANISH_TRANSLATIONS["settings.privacy.rawChip"]).toContain("no público");
+    expect(SPANISH_TRANSLATIONS["settings.aiPrivacy.rawLocal"]).toContain("no se envía al proveedor de IA");
+    expect(SPANISH_TRANSLATIONS["settings.account.syncRetention"]).toMatch(/elimina.*60 días/);
+    expect(SPANISH_TRANSLATIONS["settings.account.deleteCloudDescription"]).toContain("actividad guardada en tus dispositivos");
+  });
+
+  it("keeps raw settings failures actionable in Spanish", () => {
+    expect(localizeSettingsError("network unavailable", "es", spanishT))
+      .toBe("No se pudo completar esta acción. Detalles: network unavailable");
+  });
+});
 
 const koreanT: LocalizationController["t"] = (key, params) => interpolate(KOREAN_TRANSLATIONS[key], params);
 

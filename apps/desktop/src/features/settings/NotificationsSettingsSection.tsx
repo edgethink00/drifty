@@ -20,7 +20,7 @@ import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 import { useNativeNotificationAuthorization } from "./useNativeNotificationAuthorization";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
-import { formatStartOfDayOptionLabel } from "../../lib/formatting";
+import { formatStartOfDayOptionLabel, localeForDisplayLanguage } from "../../lib/formatting";
 
 type NotificationsSettingsSectionProps = {
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
@@ -86,7 +86,7 @@ export function NotificationsSettingsSection({
   useEffect(() => {
     if (request?.entry.reveal === "notifications-drift") setRevealInactiveAlerts(true);
   }, [request]);
-  const locale = effectiveLanguage === "ko" ? "ko-KR" : "en-US";
+  const locale = localeForDisplayLanguage(effectiveLanguage);
   // Only a host that reports a denial reaches this notice. The desktop
   // notification plugin (2.3.x) reports "granted" on macOS and Windows, so a
   // real OS-level block needs a native permission read before it can show.

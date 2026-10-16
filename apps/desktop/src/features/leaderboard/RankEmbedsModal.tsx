@@ -101,7 +101,11 @@ export function RankEmbedsModal({
   const periodLabel = (value: LeaderboardPeriod) => t(value === "daily" ? "leaderboard.daily" : value === "weekly" ? "leaderboard.weekly" : "leaderboard.monthly");
   const focusPeriodLabel = (value: LeaderboardPeriod) => t(value === "daily" ? "leaderboard.embed.focusToday" : value === "weekly" ? "leaderboard.embed.focusWeek" : "leaderboard.embed.focusMonth");
   const designLabel = (value: RankEmbedDesign) => t(value === "minimal" ? "leaderboard.embed.minimal" : value === "compact" ? "leaderboard.embed.compact" : "leaderboard.embed.card");
-  const accentName = (name: string) => effectiveLanguage === "ko" ? ({ Green: "초록", Indigo: "인디고", Blue: "파랑", Pink: "분홍", Amber: "황금", Teal: "청록" }[name] ?? name) : name;
+  const accentName = (name: string) => effectiveLanguage === "ko"
+    ? ({ Green: "초록", Indigo: "인디고", Blue: "파랑", Pink: "분홍", Amber: "황금", Teal: "청록" }[name] ?? name)
+    : effectiveLanguage === "es"
+      ? ({ Green: "Verde", Indigo: "Índigo", Blue: "Azul", Pink: "Rosa", Amber: "Ámbar", Teal: "Turquesa" }[name] ?? name)
+      : name;
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>

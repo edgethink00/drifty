@@ -102,7 +102,7 @@ export function FocusDriftHoverCard({ hover, appIcons, startOfDayMinutes = 0 }: 
         </div>
         <span className="focus-drift-hover-card__tracked">{t("dashboard.today.trackedAmount", { duration: trackedDuration })}</span>
       </div>
-      <span className="sr-only">{effectiveLanguage === "ko" ? `${focusDuration} ${t("activity.productivity.focus")} · ${driftDuration} ${t("activity.productivity.drift")}` : `${focusDuration} focus · ${driftDuration} drift`}</span>
+      <span className="sr-only">{effectiveLanguage !== "en" ? `${focusDuration} ${t("activity.productivity.focus")} · ${driftDuration} ${t("activity.productivity.drift")}` : `${focusDuration} focus · ${driftDuration} drift`}</span>
       <div
         className="focus-drift-hover-card__duo"
         role={hasSources ? "group" : undefined}
@@ -197,9 +197,9 @@ function formatFocusDriftSourceDetail(source: FocusDriftSourceSummary, language:
       ? t("dashboard.today.website")
       : source.detail;
   const surface = source.siteDomain
-    ? language === "ko" ? `${detail} · ${source.appName}` : `${detail} via ${source.appName}`
+    ? language === "ko" ? `${detail} · ${source.appName}` : language === "es" ? `${detail} en ${source.appName}` : `${detail} via ${source.appName}`
     : detail;
-  const captures = language === "ko" ? `캡처 ${source.captures}개` : `${source.captures} ${source.captures === 1 ? "capture" : "captures"}`;
+  const captures = language === "ko" ? `캡처 ${source.captures}개` : language === "es" ? `${source.captures} ${source.captures === 1 ? "captura" : "capturas"}` : `${source.captures} ${source.captures === 1 ? "capture" : "captures"}`;
   return `${surface} · ${formatLocalizedCompactDurationFromSeconds(source.seconds, language)} · ${captures}`;
 }
 
@@ -213,13 +213,13 @@ function formatFocusDriftSourceShare(
 }
 
 export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDriftHoverKind, language: DisplayLanguage = "en", startOfDayMinutes = 0): string {
-  const kindLabel = language === "ko" ? (kind === "focus" ? "집중" : "딴짓") : HOVER_KIND_LABELS[kind];
+  const kindLabel = language === "ko" ? (kind === "focus" ? "집중" : "딴짓") : language === "es" ? (kind === "focus" ? "concentración" : "distracción") : HOVER_KIND_LABELS[kind];
   const pointLabel = formatLocalizedQuarterHourLabel(point.bucketStartMinute + startOfDayMinutes, language);
   const focusPercent = formatSharePercent(point.focusScore);
   const driftPercent = formatSharePercent(point.driftScore);
   const focusDuration = formatLocalizedDuration(point.focusSeconds, language);
   const driftDuration = formatLocalizedDuration(point.driftSeconds, language);
-  const verdict = point.focusScore >= point.driftScore ? (language === "ko" ? "집중 우세" : "focus-heavy") : (language === "ko" ? "딴짓 우세" : "drift-heavy");
+  const verdict = point.focusScore >= point.driftScore ? (language === "ko" ? "집중 우세" : language === "es" ? "predomina la concentración" : "focus-heavy") : (language === "ko" ? "딴짓 우세" : language === "es" ? "predomina la distracción" : "drift-heavy");
   const trackedDuration = formatLocalizedCompactDurationFromSeconds(point.trackedSeconds, language);
   const topFocusSource = point.topFocusSource ? language === "ko" ? ` 주요 집중 활동: ${point.topFocusSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topFocusSource.seconds, language)}, 캡처 ${point.topFocusSource.captures}개.` : ` Top focus source: ${point.topFocusSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topFocusSource.seconds, language)} across ${point.topFocusSource.captures} ${point.topFocusSource.captures === 1 ? "capture" : "captures"}.` : "";
   const topDriftSource = point.topDriftSource ? language === "ko" ? ` 주요 딴짓 활동: ${point.topDriftSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topDriftSource.seconds, language)}, 캡처 ${point.topDriftSource.captures}개.` : ` Top drift source: ${point.topDriftSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topDriftSource.seconds, language)} across ${point.topDriftSource.captures} ${point.topDriftSource.captures === 1 ? "capture" : "captures"}.` : "";
@@ -227,6 +227,10 @@ export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDr
   if (language === "ko") {
     return `${pointLabel} ${kindLabel} 지점. 집중 ${focusPercent}, ${focusDuration}; 딴짓 ${driftPercent}, ${driftDuration}; 기록 시간 ${trackedDuration}. 이 구간은 ${verdict}입니다.${topFocusSource}${topDriftSource}`;
   }
+  if (language === "es") {
+    const focusSource = point.topFocusSource ? ` Principal actividad de concentración: ${point.topFocusSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topFocusSource.seconds, language)} en ${point.topFocusSource.captures} capturas.` : "";
+    const driftSource = point.topDriftSource ? ` Principal actividad de distracción: ${point.topDriftSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topDriftSource.seconds, language)} en ${point.topDriftSource.captures} capturas.` : "";
+    return `${kindLabel} a las ${pointLabel}. Concentración: ${focusPercent}, ${focusDuration}; distracción: ${driftPercent}, ${driftDuration}; tiempo registrado: ${trackedDuration}. ${verdict}.${focusSource}${driftSource}`;
+  }
   return `${kindLabel} point for ${pointLabel}. Focus is ${focusPercent}, ${focusDuration}; drift is ${driftPercent}, ${driftDuration}; tracked time is ${trackedDuration}. This ${point.unit} is ${verdict}.${topFocusSource}${topDriftSource}`;
 }
-

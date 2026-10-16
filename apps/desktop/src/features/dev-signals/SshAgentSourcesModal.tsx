@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { localeForDisplayLanguage } from "../../lib/formatting";
 
 import type {
   SshAgentSourceCollectResult,
@@ -508,7 +509,7 @@ function formatCollectedAt(value: string, language: DisplayLanguage, t: Localiza
   if (Number.isNaN(date.getTime())) return t("agents.ssh.collectedPreviously");
   const elapsedMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60_000));
   if (elapsedMinutes < 1) return t("agents.ssh.syncedJustNow");
-  const relative = new Intl.RelativeTimeFormat(language === "ko" ? "ko-KR" : "en-US", { numeric: "auto" });
+  const relative = new Intl.RelativeTimeFormat(localeForDisplayLanguage(language), { numeric: "auto" });
   const time = elapsedMinutes < 60
     ? relative.format(-elapsedMinutes, "minute")
     : elapsedMinutes < 48 * 60

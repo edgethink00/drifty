@@ -126,8 +126,8 @@ export function EntryDayDemo() {
   const day = useMemo(() => logicalTodayIsoDate(ENTRY_DEMO_START_OF_DAY_MINUTES), []);
   const segments = useMemo(() => buildEntryDemoSegments(day), [day]);
   const fullFocusDriftChart = useMemo(
-    () => buildFocusDriftChart(segments, day, ENTRY_DEMO_CLASSIFICATION_OPTIONS, null, ENTRY_DEMO_START_OF_DAY_MINUTES),
-    [day, segments],
+    () => buildFocusDriftChart(segments, day, ENTRY_DEMO_CLASSIFICATION_OPTIONS, null, ENTRY_DEMO_START_OF_DAY_MINUTES, effectiveLanguage),
+    [day, effectiveLanguage, segments],
   );
   const recorded = useMemo(() => revealEntryDemoSegments(segments, day, clock.minute), [clock.minute, day, segments]);
   const flowBlocks = useMemo(
@@ -143,12 +143,13 @@ export function EntryDayDemo() {
   const recordedSeconds = useMemo(() => recorded.reduce((sum, segment) => sum + segment.durationSeconds, 0), [recorded]);
   const focusDriftChart = useMemo(() => applyFocusDriftReplayReveal({
     chart: fullFocusDriftChart,
+    language: effectiveLanguage,
     revealMinuteOfDay: clock.minute,
     startOfDayMinutes: ENTRY_DEMO_START_OF_DAY_MINUTES,
-  }), [clock.minute, fullFocusDriftChart]);
+  }), [clock.minute, effectiveLanguage, fullFocusDriftChart]);
   const focusDuration = focusSeconds > 0
     ? formatLocalizedCompactDurationFromSeconds(focusSeconds, effectiveLanguage)
-    : effectiveLanguage === "ko" ? "0분" : "0m";
+    : effectiveLanguage === "ko" ? "0분" : effectiveLanguage === "es" ? "0 min" : "0m";
 
   useEffect(() => {
     rootRef.current?.setAttribute("inert", "");

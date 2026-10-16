@@ -25,15 +25,10 @@ impl TrialStatus {
     }
 
     pub(super) fn label(&self, now: DateTime<Utc>, language: TrayLanguage) -> Option<String> {
-        let ko = language.is_korean();
         match self {
             Self::Hidden => None,
             Self::Expired => Some(
-                if ko {
-                    "Pro 체험 종료 · 플랜 보기"
-                } else {
-                    "Pro trial ended · View plans"
-                }
+                language.pick("Pro trial ended · View plans", "Pro 체험 종료 · 플랜 보기", "Prueba de Pro terminada · Ver planes")
                 .into(),
             ),
             Self::Trial(end) => {
@@ -44,13 +39,13 @@ impl TrialStatus {
                     return None;
                 }
                 let days = (remaining + 86_400_000 - 1) / 86_400_000;
-                Some(if ko {
-                    format!("Pro 체험 {days}일 남음")
-                } else {
-                    format!(
+                Some(match language {
+                    TrayLanguage::Korean => format!("Pro 체험 {days}일 남음"),
+                    TrayLanguage::Spanish => format!("Prueba de Pro · {} {days} {}", if days == 1 { "queda" } else { "quedan" }, if days == 1 { "día" } else { "días" }),
+                    TrayLanguage::English => format!(
                         "Pro trial · {days} {} left",
                         if days == 1 { "day" } else { "days" }
-                    )
+                    ),
                 })
             }
         }

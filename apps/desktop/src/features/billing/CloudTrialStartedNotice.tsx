@@ -3,6 +3,7 @@ import { FloatingNoticePortal } from "../../components/FloatingNoticePortal";
 import type { BillingEntitlement } from "./billingService";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { LocalizationController } from "../localization/LocalizationContext";
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import "./CloudTrialStartedNotice.css";
 
 const CLOUD_TRIAL_STARTED_NOTICE_STORAGE_PREFIX = "drifty:billing:trial-started-notice:v1";
@@ -109,7 +110,7 @@ export function CloudTrialStartedNotice({
 export function formatCloudTrialStartedDetail(
   trialEndsAt: string | null,
   accessSource: CloudTrialStartedNoticeModel["accessSource"],
-  language: "en" | "ko",
+  language: "en" | "ko" | "es",
   t: LocalizationController["t"],
 ): string {
   // Each variant owns a whole sentence rather than a subject slot: Korean
@@ -121,7 +122,7 @@ export function formatCloudTrialStartedDetail(
     return t(isPromotion ? "billing.trialNotice.promoWhileActive" : "billing.trialNotice.trialWhileActive");
   }
 
-  const date = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
+  const date = new Intl.DateTimeFormat(localeForDisplayLanguage(language), {
     month: language === "ko" ? "long" : "short",
     day: "numeric",
   }).format(endDate);
