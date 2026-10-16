@@ -12136,6 +12136,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           openRouterReady={analysisModel.openRouterConnected}
           onConnectProvider={connectIntelligenceProvider}
           categoryCustomizations={categoryCustomizationController.customizations}
+          categoryOrder={categoryCustomizationController.categoryOrder}
           productivityCustomizations={categoryCustomizationController.productivityCustomizations}
           categoryColorOverrides={categoryColorOverrides}
           appThemeColorOverrides={appThemeColorOverrides}

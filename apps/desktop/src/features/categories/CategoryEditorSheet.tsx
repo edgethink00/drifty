@@ -9,6 +9,7 @@ import {
   isCustomProductivityLevel,
   newCustomCategoryId,
   newProductivityLevelId,
+  orderCategories,
   productivityLevelIds,
   type ActivityCategory,
   type CustomProductivityLevel,
@@ -75,7 +76,8 @@ import {
   type ProjectValue,
 } from "./categoryEditorModel";
 import { DefinitionDescriptionField, DefinitionIdentityField, balancedIdentitySwatches } from "./definitionFields";
-import { ArchiveIcon, LockIcon, PlusIcon, ResetIcon, TrashIcon, UnarchiveIcon } from "./definitionIcons";
+import { ArchiveIcon, ChevronUpIcon, GripIcon, LockIcon, PlusIcon, ResetIcon, TrashIcon, UnarchiveIcon } from "./definitionIcons";
+import { useCardReorder } from "./useCardReorder";
 import { useCardMotion } from "./useCardMotion";
 import { CategoryEditorLockBand, CategoryEditorLockScreen, type CloudOffer, type IntelligenceProviderChoice } from "./CategoryEditorAiNotice";
 import "./categoryEditor.css";
@@ -162,6 +164,8 @@ const NO_PROJECT = "";
 export type CategoryEditorSheetProps = {
   readonly initialTarget: CategoryEditorTarget;
   readonly categoryCustomizations: CategoryCustomizations;
+  /** The user's category order; the list follows it and can be reordered. */
+  readonly categoryOrder?: readonly ActivityCategory[];
   readonly productivityCustomizations: ProductivityCustomizations;
   readonly categoryColorOverrides: CategoryColorOverrides;
   readonly appThemeColorOverrides: AppThemeColorOverrides;
@@ -207,6 +211,7 @@ export type CategoryEditorSheetProps = {
 export function CategoryEditorSheet({
   initialTarget,
   categoryCustomizations,
+  categoryOrder = [],
   productivityCustomizations,
   categoryColorOverrides,
   appThemeColorOverrides,
@@ -237,6 +242,11 @@ export function CategoryEditorSheet({
   const dialogRef = useRef<HTMLElement | null>(null);
   const draftCounter = useRef(0);
   const deckPressOnEmpty = useRef(false);
+  const deckScrollRef = useRef<HTMLDivElement | null>(null);
+  const cardListRef = useRef<HTMLUListElement | null>(null);
+  // The categories' order as drafted in this sitting; null while it is the saved one.
+  const [orderDraft, setOrderDraft] = useState<readonly ActivityCategory[] | null>(null);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState("");
 
   const [opening] = useState(() => {
     const resolved = initialSelection(initialTarget, projects, showProjects, categoryCustomizations);
@@ -294,10 +304,14 @@ export function CategoryEditorSheet({
   // Every category the sheet lists: Drifty's own, the ones the user added
   // (in the order they were made), then the ones added in this sitting.
   const savedAddedCategories = useMemo(() => customCategoryIds(categoryCustomizations), [categoryCustomizations]);
+  // The list follows the user's order; one added now goes last until moved.
   // A failed later write can leave a new category both saved and drafted.
   // Keep its draft for retry while listing that same stable id only once.
-  const editorCategories: readonly ActivityCategory[] = [...LISTED_CATEGORIES, ...savedAddedCategories,
-    ...addedCategories.map((entry) => entry.id).filter((category) => !savedAddedCategories.some((saved) => saved === category))];
+  const savedCategoryList = orderCategories([...LISTED_CATEGORIES, ...savedAddedCategories], categoryOrder);
+  const draftedCategories = addedCategories.map((entry) => entry.id).filter((category) => !savedAddedCategories.some((saved) => saved === category));
+  const editorCategories: readonly ActivityCategory[] = orderCategories([...savedCategoryList, ...draftedCategories], orderDraft ?? savedCategoryList);
+  const orderChanged = orderDraft !== null
+    && editorCategories.filter((category) => savedCategoryList.includes(category)).join(",") !== savedCategoryList.join(",");
   const isAddedCategory = (category: ActivityCategory) => isCustomActivityCategory(category);
   const isNewCategory = (category: ActivityCategory) => addedCategories.some((entry) => entry.id === category)
     && !savedAddedCategories.some((saved) => saved === category);
@@ -430,7 +444,7 @@ export function CategoryEditorSheet({
 
   const draftedDefinitionKeys = Object.keys(definitionDrafts);
   const draftedProjectKeys = Object.keys(projectDrafts);
-  const dirty = draftedDefinitionKeys.length > 0 || draftedProjectKeys.length > 0 || deletedKeys.length > 0 || restoredKeys.length > 0 || addedCategories.length > 0
+  const dirty = draftedDefinitionKeys.length > 0 || draftedProjectKeys.length > 0 || deletedKeys.length > 0 || restoredKeys.length > 0 || addedCategories.length > 0 || orderChanged
     || Object.keys(levelDrafts).length > 0 || newLevels.length > 0 || deletedLevels.length > 0;
   const locked = saving || statusChanging;
 
@@ -559,7 +573,10 @@ export function CategoryEditorSheet({
         categories[target.key] = Object.keys(rest).length > 0 ? rest : null;
         definitionsChanged = true;
       }
-      if (definitionsChanged) await onSaveDefinitions({ categories, productivity });
+      // The order keeps every saved category and the new ones being kept.
+      const keptCategories = new Set<ActivityCategory>([...savedCategoryList, ...keptNew]);
+      const categoryOrderChange = orderChanged ? { categoryOrder: editorCategories.filter((category) => keptCategories.has(category)) } : {};
+      if (definitionsChanged || orderChanged) await onSaveDefinitions({ categories, productivity, ...categoryOrderChange });
     } catch (error) {
       setDefinitionError(describeActionError(error, t("projects.editor.saveError")));
       setSaving(false);
@@ -574,6 +591,7 @@ export function CategoryEditorSheet({
     setNewLevels([]);
     setDeletedLevels([]);
     setLevelErrors({});
+    setOrderDraft(null);
 
     const failures: Record<string, DescribedActionError> = {};
     const savedKeys: string[] = [];
@@ -679,6 +697,39 @@ export function CategoryEditorSheet({
   const isDeleted = (target: DefinitionSelection) => deletedKeys.includes(definitionKey(target))
     || (target.group === "category" && savedDeleted(target.key));
   const liveCategories = editorCategories.filter((category) => !isDeleted({ group: "category", key: category }));
+
+  // ── Reordering categories ──────────────────────────────────────────────
+  // Every row in the category list moves (a deleted strip too, so it keeps
+  // its slot); a deleted category in the Deleted list keeps its place in the
+  // order for when it is restored. Moves are drafts until Save.
+  const listedCategories = editorCategories.filter((category) => !savedDeleted(category));
+  const listedCardIds = listedCategories.map((category) => selectionId({ group: "category", key: category }));
+  const moveCategory = (cardId: string, to: number) => {
+    const category = listedCategories[listedCardIds.indexOf(cardId)];
+    if (!category) return;
+    const next = listedCategories.filter((item) => item !== category);
+    const target = Math.max(0, Math.min(next.length, to));
+    next.splice(target, 0, category);
+    // Deleted categories keep their slots in the full order.
+    let cursor = 0;
+    setOrderDraft(editorCategories.map((item) => (savedDeleted(item) ? item : next[cursor++]!)));
+    setReorderAnnouncement(t("categoryEditor.reorderMoved", { name: definitionName({ group: "category", key: category }), position: target + 1 }));
+  };
+  const reorder = useCardReorder({
+    listRef: cardListRef,
+    scrollRef: deckScrollRef,
+    ids: listedCardIds,
+    cardSelector: (id) => "[data-card='" + id + "']",
+    onMove: moveCategory,
+  });
+  const moveByKey = (cardId: string, delta: number, focusSelector: string) => {
+    const index = listedCardIds.indexOf(cardId);
+    if (index < 0 || index + delta < 0 || index + delta >= listedCardIds.length) return;
+    moveCategory(cardId, index + delta);
+    window.requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("[data-card='" + cardId + "'] " + focusSelector)?.focus());
+  };
+  // Rows move while another card is open too; the open card itself stays put.
+  const reorderable = selection.group === "category" && !locked;
   const isBuiltInLane = (lane: string): lane is ProductivityLabel => (LISTED_PRODUCTIVITY as readonly string[]).includes(lane);
   const laneName = (lane: string) => (isBuiltInLane(lane)
     ? definitionName({ group: "productivity", key: lane })
@@ -722,6 +773,19 @@ export function CategoryEditorSheet({
       dialogRef.current?.querySelector<HTMLButtonElement>("[data-card='" + id + "'] .category-editor__card-button")?.focus();
     });
   };
+  // The open card's fold control, where the closed card's pencil was.
+  const foldButton = (
+    <button
+      type="button"
+      className="pencil-plate pencil-plate--sm category-editor__fold"
+      aria-label={t("categoryEditor.fold")}
+      title={t("categoryEditor.foldHint")}
+      onClick={() => foldCard({ restoreFocus: true })}
+    >
+      <ChevronUpIcon />
+    </button>
+  );
+
   // Escape folds an open card first; the next press closes the sheet.
   useModalDismiss(editing ? () => foldCard({ restoreFocus: true }) : onClose, { disabled: locked || pendingDelete !== null || assignOpen !== null });
   // The primary button answers ⌘/Ctrl+Enter (and Enter in a name, since
@@ -833,7 +897,7 @@ export function CategoryEditorSheet({
   // shows only in the open card), and a pencil; pressing it turns the card
   // into its form in place. A card with a description line is one the user
   // has given their own criteria.
-  const cardButton = ({ id, color, name, nameIsPlaceholder = false, detail, extra, drafted, muted = false, disabled = false, onOpen }: {
+  const cardButton = ({ id, color, name, nameIsPlaceholder = false, detail, extra, drafted, muted = false, disabled = false, movable = false, onOpen }: {
     readonly id: string;
     readonly color: string;
     readonly name: string;
@@ -845,10 +909,34 @@ export function CategoryEditorSheet({
     readonly muted?: boolean;
     /** A card that cannot be opened (projects while Intelligence locks them). */
     readonly disabled?: boolean;
+    /** A category row, which can be moved within the list. */
+    readonly movable?: boolean;
     readonly onOpen: () => void;
   }) => (
-    <li key={id} className={"category-editor__card" + (muted ? " is-muted" : "")} style={toneStyle(color)} data-card={id}>
-      <button type="button" className="category-editor__card-button" disabled={disabled} onClick={onOpen}>
+    <li
+      key={id}
+      className={"category-editor__card" + (muted ? " is-muted" : "") + (movable && reorderable ? " is-movable" : "") + (reorder.drag?.id === id ? " is-dragging" : "")}
+      style={{ ...toneStyle(color), ...(movable ? reorder.styleFor(id) : undefined) }}
+      data-card={id}
+    >
+      <button
+        type="button"
+        className="category-editor__card-button"
+        disabled={disabled}
+        onClick={() => {
+          if (reorder.consumeClick()) return;
+          onOpen();
+        }}
+        // The whole row drags once the pointer moves a few pixels; a plain
+        // click still opens it. The grip shows that the row can move.
+        onPointerDown={movable && reorderable ? (event) => reorder.beginDrag(event, id, 5) : undefined}
+        onKeyDown={movable && reorderable ? (event) => {
+          // Option/Alt with ↑↓ moves the row from the keyboard.
+          if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+          event.preventDefault();
+          moveByKey(id, event.key === "ArrowUp" ? -1 : 1, ".category-editor__card-button");
+        } : undefined}
+      >
         <span className="category-editor__swatch" aria-hidden="true" />
         <span className="category-editor__card-text">
           <span className={"category-editor__card-name" + (nameIsPlaceholder ? " is-placeholder" : "")}>
@@ -860,6 +948,24 @@ export function CategoryEditorSheet({
         </span>
         <span className="pencil-plate pencil-plate--sm category-editor__card-pencil" aria-hidden="true"><PencilGlyph /></span>
       </button>
+      {/* The color dot turns into this grip, in the same color, under the pointer. */}
+      {movable && reorderable ? (
+        <button
+          type="button"
+          className="category-editor__grip"
+          aria-label={t("categoryEditor.reorderHandle", { name })}
+          title={t("categoryEditor.reorderHint")}
+          onPointerDown={(event) => reorder.beginDrag(event, id)}
+          onClick={(event) => event.preventDefault()}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            moveByKey(id, event.key === "ArrowUp" ? -1 : 1, ".category-editor__grip");
+          }}
+        >
+          <GripIcon />
+        </button>
+      ) : null}
     </li>
   );
 
@@ -868,7 +974,7 @@ export function CategoryEditorSheet({
   // A new item's name field shows an example, so it is marked to keep that
   // example gray.
   const editingCard = (id: string, color: string | undefined, label: string, content: ReactNode, { isNew = false }: { readonly isNew?: boolean } = {}) => (
-    <li key={id} className={"category-editor__card is-editing" + (isNew ? " is-new" : "")} style={color ? toneStyle(color) : undefined} data-card={id}>
+    <li key={id} className={"category-editor__card is-editing" + (isNew ? " is-new" : "")} style={{ ...(color ? toneStyle(color) : undefined), ...reorder.styleFor(id) }} data-card={id}>
       <div className="category-editor__card-body" role="region" aria-label={label}>
         <fieldset className="category-editor__pane-fields" disabled={locked}>{content}</fieldset>
       </div>
@@ -878,7 +984,7 @@ export function CategoryEditorSheet({
   // In the browser preview a deleted item stays in place as a strip until
   // the sheet closes, so the deletion can be undone.
   const deletedCard = (target: DefinitionSelection) => (
-    <li key={selectionId(target)} className="category-editor__card is-deleted" style={toneStyle(currentDefinition(target).color)} data-card={selectionId(target)}>
+    <li key={selectionId(target)} className="category-editor__card is-deleted" style={{ ...toneStyle(currentDefinition(target).color), ...reorder.styleFor(selectionId(target)) }} data-card={selectionId(target)}>
       <div className="category-editor__deleted">
         <span className="category-editor__swatch" aria-hidden="true" />
         <span className="category-editor__deleted-name">{definitionName(target)}</span>
@@ -921,6 +1027,7 @@ export function CategoryEditorSheet({
           {members.map((category) => categoryTag(category, { auto: pinnedLane(category) !== target.key }))}
         </span>
       ) : null,
+      movable: target.group === "category",
       onOpen: () => startEditing(target),
     });
   };
@@ -1072,6 +1179,7 @@ export function CategoryEditorSheet({
             swatches={balancedIdentitySwatches(t, levelSiblings(id))}
             customColorLabel={t("settings.appearance.customColorAria", { label: levelName(id), type: "category" })}
             t={t}
+            trailing={foldButton}
             onNameChange={(next) => updateLevel(id, { name: next })}
             onColorChange={(next) => updateLevel(id, { color: next })}
           />
@@ -1131,9 +1239,12 @@ export function CategoryEditorSheet({
             color={value.color}
             swatches={balancedIdentitySwatches(t, siblings)}
             customColorLabel={t("settings.appearance.customColorAria", { label: name || defaultName, type: "category" })}
-            trailing={restorable ? (
-              <QuietButton icon={<ResetIcon />} label={t("categoryEditor.restoreDefault")} disabled={locked} onClick={() => updateDefinition(target, builtInValue)} />
-            ) : null}
+            trailing={(
+              <>
+                {restorable ? <QuietButton icon={<ResetIcon />} label={t("categoryEditor.restoreDefault")} disabled={locked} onClick={() => updateDefinition(target, builtInValue)} /> : null}
+                {foldButton}
+              </>
+            )}
             t={t}
             onNameChange={(next) => updateDefinition(target, { name: next })}
             onColorChange={(next) => updateDefinition(target, { color: next })}
@@ -1180,6 +1291,7 @@ export function CategoryEditorSheet({
           description={value.description}
           color={value.color}
           usedColors={usedColors}
+          nameTrailing={foldButton}
           onNameChange={(next) => updateProject(key, { name: next })}
           onDescriptionChange={(next) => updateProject(key, { description: next })}
           onColorChange={(next) => updateProject(key, { color: next })}
@@ -1339,6 +1451,7 @@ export function CategoryEditorSheet({
   const deck = (
     <div className="category-editor__deck">
       <div
+        ref={deckScrollRef}
         className="category-editor__deck-scroll"
         onPointerDown={(event) => { deckPressOnEmpty.current = isDeckEmptySpace(event); }}
         onClick={(event) => {
@@ -1350,7 +1463,8 @@ export function CategoryEditorSheet({
         {activeGroup === "project" && !noProjectsYet && projectsLocked()
           ? <CategoryEditorLockBand disabled={locked} onOpen={() => void openIntelligence()} />
           : null}
-        <ul className="category-editor__cards" aria-label={groupLabel(activeGroup)}>{cards}</ul>
+        <ul ref={cardListRef} className={"category-editor__cards" + (reorder.drag ? " is-reordering" : "")} aria-label={groupLabel(activeGroup)}>{cards}</ul>
+        <span className="sr-only" role="status" aria-live="polite">{reorderAnnouncement}</span>
         {noProjectsYet ? (
           projectsLocked() ? (
             <CategoryEditorLockScreen
@@ -1405,6 +1519,7 @@ export function CategoryEditorSheet({
         ref={dialogRef}
         className="auth-modal modal-shell category-editor"
         data-modal-variant="workspace"
+        data-dragging-card={reorder.drag ? "" : undefined}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

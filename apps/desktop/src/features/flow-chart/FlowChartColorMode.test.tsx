@@ -152,6 +152,17 @@ describe("FlowChartView color mode", () => {
     }
   });
 
+  it("orders each legend group's dots by the saved category order", () => {
+    window.localStorage.setItem("drifty.categoryOrder.v1", JSON.stringify(["utility", "music"]));
+    try {
+      render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+      const neutral = screen.getByLabelText("Neutral categories");
+      expect(Array.from(neutral.querySelectorAll(".flow-chart-legend__dot"), (dot) => dot.getAttribute("aria-label"))).toEqual(["Utility", "Music", "Communication"]);
+    } finally {
+      window.localStorage.removeItem("drifty.categoryOrder.v1");
+    }
+  });
+
   it("keeps the empty-day legend on a single row by omitting the Unclassified chip", () => {
     render(<FlowChartView blocks={[]} appIcons={{}} intervalMinutes={3} showEmptyGrid />);
 

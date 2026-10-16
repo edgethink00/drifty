@@ -404,18 +404,24 @@
 .category-editor__card.is-editing::before,
 .category-editor__card.is-editing + .category-editor__card::before { left: 0; }
 
+/* One rhythm in the open card (owner review 2026-10-16): the dot and the
+   title stay where a one-line row had them, so opening does not shift them,
+   and the title, the description, the next field, the actions and the
+   card's bottom edge are each about 13px apart as you see them (the title
+   row and the action buttons are taller than their text, which the margins
+   below account for). The same in every tab. */
 .category-editor__card-body {
   /* The color button's round hit area, centred on the dot. */
   --card-chip: 1.5rem;
   --card-chip-overhang: calc((var(--card-chip) - var(--card-dot)) / 2);
-  padding: 0.375rem 0.9rem 0.9rem var(--card-inset);
+  padding: 0.6rem 0.9rem 0.75rem var(--card-inset);
 }
 
 .category-editor__card-body > .category-editor__pane-fields {
   gap: 0.75rem;
 }
 
-.category-editor__card-body .project-editor-fields { gap: 0.95rem; }
+.category-editor__card-body .project-editor-fields { gap: 0.75rem; }
 .category-editor__card-body .project-editor-field { gap: 0.4rem; }
 
 /* The name needs no label here: the field is the card's title. The label
@@ -565,7 +571,7 @@
 
 /* Actions (archive, delete, discard) sit on the name edge: the first one's
    icon lines up with the fields above it. */
-.category-editor__card-body .category-editor__pane-foot { margin: -0.1rem 0 -0.35rem; }
+.category-editor__card-body .category-editor__pane-foot { margin: -0.45rem 0 -0.35rem; }
 .category-editor__card-body .category-editor__quiet { height: 1.75rem; font-size: 0.78rem; }
 
 /* "+ New category / project" leads the footer row as the shared secondary
@@ -871,4 +877,89 @@
 
 @media (max-width: 760px) {
   .category-editor__layout { max-height: calc(100vh - 2rem - 2 * var(--modal-shell-inset) - 2px); }
+}
+
+/* ── Reordering categories (owner choice 2026-10-16) ─────────────────────
+   Under the pointer a category row's color dot turns into a grip in the
+   same color; dragging it lifts the row above the list while the rows it
+   passes slide out of its way. Rows move while another card is open too. */
+.category-editor__grip {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: calc(var(--card-inset) + var(--card-dot) / 2);
+  display: grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--definition-tone);
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+  translate: -50% -50%;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+
+.category-editor__grip .definition-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.category-editor__grip:hover { background: color-mix(in srgb, var(--definition-tone) 12%, transparent); }
+
+.category-editor__grip:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 45%, transparent));
+  outline-offset: -1px;
+}
+
+.category-editor__card.is-movable:hover .category-editor__grip,
+.category-editor__card.is-dragging .category-editor__grip { opacity: 1; }
+
+.category-editor__card.is-movable:hover .category-editor__swatch,
+.category-editor__card.is-dragging .category-editor__swatch,
+.category-editor__card:has(.category-editor__grip:focus-visible) .category-editor__swatch { opacity: 0; }
+
+.category-editor__cards.is-reordering { overflow: visible; }
+
+/* Above the hover tint, so the lifted row stays solid over the rows it passes. */
+.category-editor__card.is-dragging,
+.category-editor__card.is-dragging:not(.is-editing):not(.is-deleted):hover {
+  border-radius: 12px;
+  background: var(--category-editor-card);
+  box-shadow: 0 12px 28px color-mix(in srgb, #000 16%, transparent), 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.category-editor__card.is-dragging::before,
+.category-editor__card.is-dragging + .category-editor__card::before { opacity: 0; }
+
+.category-editor[data-dragging-card],
+.category-editor[data-dragging-card] * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* The open card's fold control sits where the closed card's pencil was. */
+.category-editor .category-editor__fold {
+  flex: 0 0 auto;
+  /* Lines up with the closed rows' pencils (the open card's form sits 4px further in). */
+  margin-right: -4px;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 45%, transparent);
+  cursor: pointer;
+}
+
+.category-editor .category-editor__fold:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.category-editor .category-editor__fold .definition-icon {
+  width: 1rem;
+  height: 1rem;
 }

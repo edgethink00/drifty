@@ -5,6 +5,7 @@ import {
   categoryProductivityPreferences,
   customCategoryIds,
   deletedCategories,
+  orderCategories,
   productivityLevels,
   type ProductivityLevel,
   deletedCategoryCutoffs,
@@ -17,6 +18,8 @@ import {
 import {
   CATEGORY_CUSTOMIZATION_CHANGED_EVENT,
   CATEGORY_CUSTOMIZATION_STORAGE_KEY,
+  CATEGORY_ORDER_STORAGE_KEY,
+  readCategoryOrder,
   PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY,
   readCategoryCustomizations,
   readProductivityCustomizations,
@@ -47,6 +50,11 @@ function useStoredDefinitions<T>(storageKey: string, read: () => T): T {
 
 export function useCategoryCustomizations(): CategoryCustomizations {
   return useStoredDefinitions(CATEGORY_CUSTOMIZATION_STORAGE_KEY, readCategoryCustomizations);
+}
+
+/** The user's category order; lists, pickers, and legends follow it. */
+export function useCategoryOrder(): readonly ActivityCategory[] {
+  return useStoredDefinitions(CATEGORY_ORDER_STORAGE_KEY, readCategoryOrder);
 }
 
 export function useProductivityCustomizations(): ProductivityCustomizations {
@@ -81,10 +89,11 @@ export function useCategoryNameOverrideKey(): string {
  */
 export function useCategoryChoices(): readonly ActivityCategory[] {
   const customizations = useCategoryCustomizations();
+  const order = useCategoryOrder();
   return useMemo(() => {
     const builtIn = CATEGORY_ORDER.filter((category) => category !== "unknown");
-    return [...builtIn, ...customCategoryIds(customizations), "unknown"];
-  }, [customizations]);
+    return [...orderCategories([...builtIn, ...customCategoryIds(customizations)], order), "unknown"];
+  }, [customizations, order]);
 }
 
 /**

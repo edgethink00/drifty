@@ -12,7 +12,9 @@ import {
   deletedCategories,
   deletedCategoryCutoffs,
   normalizeCategoryCustomizations,
+  normalizeCategoryOrder,
   normalizeProductivityCustomizations,
+  orderCategories,
   productivityLevels,
   productivityNameOverrides,
 } from "./categoryCustomization";
@@ -342,3 +344,16 @@ describe("added productivity levels", () => {
     expect(entertainment).toMatchObject({ totalSeconds: 600, neutralSeconds: 600 });
   });
 });
+
+describe("category order", () => {
+  it("keeps known category ids once, in the saved order", () => {
+    expect(normalizeCategoryOrder(["music", "workspace", "music", "unknown", "nope", "custom-side0001", 3])).toEqual(["music", "workspace", "custom-side0001"]);
+    expect(normalizeCategoryOrder("music")).toEqual([]);
+  });
+
+  it("puts categories in the saved order and leaves the ones it does not name after it, in their own order", () => {
+    expect(orderCategories(["workspace", "learning", "music", "custom-new00001"], ["music", "workspace"])).toEqual(["music", "workspace", "learning", "custom-new00001"]);
+    expect(orderCategories(["workspace", "learning"], [])).toEqual(["workspace", "learning"]);
+  });
+});
+

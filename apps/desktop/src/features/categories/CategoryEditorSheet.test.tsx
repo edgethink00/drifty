@@ -852,6 +852,79 @@ describe("CategoryEditorSheet", () => {
     expect(add.title).toBe("카테고리는 20개까지 둘 수 있어요.");
   });
 
+  it("lists categories in the saved order and moves one with its grip's arrow keys, saved with Save", async () => {
+    const props = renderSheet({ initialTarget: { group: "category" }, categoryOrder: ["music", "workspace"] });
+    const order = () => Array.from(document.querySelectorAll("[data-card^='category:']"), (item) => item.getAttribute("data-card")?.slice(9));
+
+    expect(order().slice(0, 3)).toEqual(["music", "workspace", "learning"]);
+    fireEvent.keyDown(screen.getByRole("button", { name: "학습 옮기기" }), { key: "ArrowUp" });
+    expect(order().slice(0, 3)).toEqual(["music", "learning", "workspace"]);
+    expect(screen.getByRole("status").textContent).toBe("학습 · 2번째로 옮겼어요");
+    // ⌥↑ on the row itself moves it too.
+    fireEvent.keyDown(card("학습")!, { key: "ArrowUp", altKey: true });
+    expect(order().slice(0, 3)).toEqual(["learning", "music", "workspace"]);
+    await save();
+
+    expect(props.onSaveDefinitions).toHaveBeenCalledWith({
+      categories: {},
+      productivity: {},
+      categoryOrder: ["learning", "music", "workspace", "communication", "game", "social_media", "entertainment", "shopping", "utility"],
+    });
+  });
+
+  it("moves other rows while a card is open, keeps it open, and folds it with its fold button", () => {
+    renderSheet({ initialTarget: { group: "category", key: "learning" } });
+    const order = () => Array.from(document.querySelectorAll("[data-card^='category:']"), (item) => item.getAttribute("data-card")?.slice(9));
+
+    expect(screen.getByRole("region", { name: "학습" })).toBeTruthy();
+    // The open card has no grip of its own.
+    expect(screen.queryByRole("button", { name: "학습 옮기기" })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("button", { name: "커뮤니케이션 옮기기" }), { key: "ArrowUp" });
+    expect(order().slice(0, 3)).toEqual(["workspace", "communication", "learning"]);
+    expect(screen.getByRole("region", { name: "학습" })).toBeTruthy();
+
+    fireEvent.click(within(pane()).getByRole("button", { name: "접기" }));
+    expect(screen.queryByRole("region")).toBeNull();
+    expect(screen.getByRole("button", { name: "저장" })).toBeTruthy();
+  });
+
+  it("drags a row by its body without opening it; a press without moving still opens it", async () => {
+    renderSheet({ initialTarget: { group: "category" } });
+    const order = () => Array.from(document.querySelectorAll("[data-card^='category:']"), (item) => item.getAttribute("data-card")?.slice(9));
+    // Rows 44px apart, as the drag measures them.
+    const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const top = Math.max(0, Array.from(document.querySelectorAll("[data-card^='category:']")).indexOf(this)) * 44;
+      return { top, bottom: top + 44, height: 44, left: 0, right: 400, width: 400, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    // jsdom has no PointerEvent, so these are mouse events carrying a pointer id.
+    const pointer = (target: Element | Window, type: string, pointerId: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientY });
+      Object.defineProperty(event, "pointerId", { value: pointerId });
+      fireEvent(target, event);
+    };
+    try {
+      const shopping = card("쇼핑")!;
+      const y = 7 * 44 + 20;
+      pointer(shopping, "pointerdown", 1, y);
+      pointer(window, "pointermove", 1, y - 3 * 44);
+      pointer(window, "pointerup", 1, y - 3 * 44);
+      fireEvent.click(shopping);
+      expect(order().slice(3, 6)).toEqual(["music", "shopping", "game"]);
+      expect(screen.queryByRole("region")).toBeNull();
+
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      const music = card("음악")!;
+      pointer(music, "pointerdown", 2, 3 * 44 + 20);
+      pointer(window, "pointermove", 2, 3 * 44 + 22);
+      pointer(window, "pointerup", 2, 3 * 44 + 22);
+      fireEvent.click(music);
+      expect(screen.getByRole("region", { name: "음악" })).toBeTruthy();
+      expect(order().slice(3, 6)).toEqual(["music", "shopping", "game"]);
+    } finally {
+      rects.mockRestore();
+    }
+  });
+
   it("keeps deleted categories apart and restores one on save", async () => {
     const props = renderSheet({
       initialTarget: { group: "category" },

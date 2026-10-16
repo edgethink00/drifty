@@ -162,6 +162,34 @@ export function newCustomCategoryId(random: () => number = Math.random): CustomA
 }
 
 /**
+ * The user's order for the categories they can define (owner request
+ * 2026-10-16). Display only: lists, pickers, and legends follow it; charts
+ * that rank by time keep ranking by time, and the classifier's prompt keeps
+ * its fixed order so reordering never changes what the model reads.
+ */
+export function normalizeCategoryOrder(value: unknown): ActivityCategory[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: ActivityCategory[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || seen.has(entry)) continue;
+    if (!(CUSTOMIZABLE_CATEGORIES as readonly string[]).includes(entry) && !isCustomActivityCategory(entry)) continue;
+    seen.add(entry);
+    result.push(entry as ActivityCategory);
+  }
+  return result;
+}
+
+/** Categories in the user's order; ones the order does not name keep their own order after it. */
+export function orderCategories<T extends ActivityCategory>(categories: readonly T[], order: readonly ActivityCategory[]): T[] {
+  const position = new Map(order.map((category, index) => [category, index]));
+  return categories
+    .map((category, index) => ({ category, index }))
+    .sort((left, right) => (position.get(left.category) ?? order.length + left.index) - (position.get(right.category) ?? order.length + right.index))
+    .map(({ category }) => category);
+}
+
+/**
  * The model-facing guidance: only categories with a description, plus their
  * custom name. A deleted category is no longer offered, so its words are not sent.
  */

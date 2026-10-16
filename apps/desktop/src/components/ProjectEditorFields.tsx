@@ -22,6 +22,8 @@ export interface ProjectEditorFieldsProps {
   readonly description: string;
   readonly color: string;
   readonly usedColors?: ReadonlySet<string>;
+  /** An action at the end of the name row (the category editor's fold control). */
+  readonly nameTrailing?: ReactNode;
   readonly onNameChange: (value: string) => void;
   readonly onDescriptionChange: (value: string) => void;
   readonly onColorChange: (value: string) => void;
@@ -192,6 +194,7 @@ function ProjectIdentityField({
   name,
   color,
   usedColors,
+  trailing,
   onNameChange,
   onColorChange,
 }: {
@@ -199,6 +202,7 @@ function ProjectIdentityField({
   readonly name: string;
   readonly color: string;
   readonly usedColors?: ReadonlySet<string>;
+  readonly trailing?: ReactNode;
   readonly onNameChange: (value: string) => void;
   readonly onColorChange: (value: string) => void;
 }): JSX.Element {
@@ -221,6 +225,7 @@ function ProjectIdentityField({
       selectedLabel={selectedName ? localizedProjectColorName(selectedName, t) : t("projects.color.custom")}
       chipAriaLabel={t("projects.editor.colorAria")}
       usedCaption={t("projects.color.usedShort")}
+      trailing={trailing}
       onNameChange={onNameChange}
       onColorChange={onColorChange}
     />
@@ -234,6 +239,7 @@ export function ProjectEditorFields({
   description,
   color,
   usedColors,
+  nameTrailing,
   onNameChange,
   onDescriptionChange,
   onColorChange,
@@ -251,6 +257,7 @@ export function ProjectEditorFields({
           name={name}
           color={color}
           usedColors={usedColors}
+          trailing={nameTrailing}
           onNameChange={onNameChange}
           onColorChange={onColorChange}
         />

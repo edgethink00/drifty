@@ -14,19 +14,22 @@ import {
   type ProductivityCustomizations,
   type ProductivityLabel,
 } from "@drifty/domain";
-import { useCategoryCustomizations, useProductivityCustomizations } from "./categoryCustomizationStore";
-import { writeCategoryCustomizations, writeProductivityCustomizations } from "./settingsStorage";
+import { useCategoryCustomizations, useCategoryOrder, useProductivityCustomizations } from "./categoryCustomizationStore";
+import { writeCategoryCustomizations, writeCategoryOrder, writeProductivityCustomizations } from "./settingsStorage";
 
 /** One save from the category editor. Omitted keys stay as they are; null restores the built-in definition. */
 export type DefinitionChanges = {
   readonly categories?: Readonly<Partial<Record<ActivityCategory, CategoryCustomization | null>>>;
   /** Built-in labels and added levels; null removes an added level. */
   readonly productivity?: Readonly<Partial<Record<ProductivityLabel | CustomProductivityLevel, ProductivityCustomization | null>>>;
+  /** The categories' new order, when it changed. */
+  readonly categoryOrder?: readonly ActivityCategory[];
 };
 
 export type CategoryCustomizationController = {
   readonly customizations: CategoryCustomizations;
   readonly productivityCustomizations: ProductivityCustomizations;
+  readonly categoryOrder: readonly ActivityCategory[];
   /** Saves every changed definition at once. */
   readonly saveDefinitions: (changes: DefinitionChanges) => Promise<void>;
 };
@@ -39,6 +42,7 @@ export type CategoryCustomizationController = {
 export function useCategoryCustomizationController(): CategoryCustomizationController {
   const customizations = useCategoryCustomizations();
   const productivityCustomizations = useProductivityCustomizations();
+  const categoryOrder = useCategoryOrder();
 
   const saveDefinitions = useCallback(async (changes: DefinitionChanges) => {
     const categoryEntries = Object.entries(changes.categories ?? {}) as [ActivityCategory, CategoryCustomization | null][];
@@ -67,8 +71,9 @@ export function useCategoryCustomizationController(): CategoryCustomizationContr
       }
       writeProductivityCustomizations(merged);
     }
+    if (changes.categoryOrder) writeCategoryOrder(changes.categoryOrder);
   }, [customizations, productivityCustomizations]);
 
-  return { customizations, productivityCustomizations, saveDefinitions };
+  return { customizations, productivityCustomizations, categoryOrder, saveDefinitions };
 }
 

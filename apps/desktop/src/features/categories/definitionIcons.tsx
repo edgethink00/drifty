@@ -69,3 +69,19 @@ export function UnarchiveIcon() {
 export function TrashIcon() {
   return <LineIcon><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></LineIcon>;
 }
+
+/** Reorder: Lucide's six-dot grip, filled so it reads at a small size. */
+export function GripIcon() {
+  return (
+    <svg className="definition-icon definition-icon--grip" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="9" cy="5" r="1.6" /><circle cx="15" cy="5" r="1.6" />
+      <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+      <circle cx="9" cy="19" r="1.6" /><circle cx="15" cy="19" r="1.6" />
+    </svg>
+  );
+}
+
+/** Fold: an open card folds back to its row. */
+export function ChevronUpIcon() {
+  return <LineIcon><path d="m18 15-6-6-6 6" /></LineIcon>;
+}

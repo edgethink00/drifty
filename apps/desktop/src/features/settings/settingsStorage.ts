@@ -1,6 +1,6 @@
 import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
 import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel } from "@drifty/domain";
-import { isCustomActivityCategory, normalizeCategoryCustomizations, normalizeProductivityCustomizations, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
+import { isCustomActivityCategory, normalizeCategoryCustomizations, normalizeCategoryOrder, normalizeProductivityCustomizations, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 
 export type ThemeMode = "light" | "dark";
@@ -75,6 +75,8 @@ export const CATEGORY_CUSTOMIZATION_CHANGED_EVENT = "drifty:category-customizati
  * change signal so every reader refreshes both together.
  */
 export const PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY = "drifty.productivityCustomizations.v1";
+/** The user's category order (ids). Local to this device like the definitions. */
+export const CATEGORY_ORDER_STORAGE_KEY = "drifty.categoryOrder.v1";
 
 export const APP_THEME_COLOR_STORAGE_KEY = "drifty.theme.appColors.v1";
 
@@ -463,6 +465,24 @@ export function writeCategoryCustomizations(customizations: CategoryCustomizatio
   } else {
     window.localStorage.setItem(CATEGORY_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(normalized));
   }
+  window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
+  return normalized;
+}
+
+export function readCategoryOrder(): ActivityCategory[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return normalizeCategoryOrder(JSON.parse(window.localStorage.getItem(CATEGORY_ORDER_STORAGE_KEY) ?? "[]"));
+  } catch {
+    return [];
+  }
+}
+
+export function writeCategoryOrder(order: readonly ActivityCategory[]): ActivityCategory[] {
+  const normalized = normalizeCategoryOrder(order);
+  if (typeof window === "undefined") return normalized;
+  if (normalized.length === 0) window.localStorage.removeItem(CATEGORY_ORDER_STORAGE_KEY);
+  else window.localStorage.setItem(CATEGORY_ORDER_STORAGE_KEY, JSON.stringify(normalized));
   window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
   return normalized;
 }

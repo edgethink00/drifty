@@ -666,5 +666,10 @@ export const SPANISH_PART_1 = {
   "sidebar.cta.ai.networkTitle": "Problema de conexión con {{provider}}",
   "categoryEditor.levelNameRequired": "Ponle un nombre al nivel antes de guardar.",
   "categoryEditor.levelLimit": "Puedes tener hasta {{count}} niveles de productividad.",
+  "categoryEditor.reorderHandle": "Mover {{name}}",
+  "categoryEditor.reorderHint": "Arrastra para reordenar o usa ↑↓",
+  "categoryEditor.reorderMoved": "{{name}} movida a la posición {{position}}",
+  "categoryEditor.fold": "Contraer",
+  "categoryEditor.foldHint": "Contraer · Esc",
   "categoryEditor.levelDeletePending": "Se elimina al guardar",
 } as const;
