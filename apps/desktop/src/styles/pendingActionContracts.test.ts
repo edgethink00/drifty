@@ -51,7 +51,7 @@ describe("pending and failed actions keep their place", () => {
     expect(ruleBody(actionLabel, ".action-label__size {")).toContain("visibility: hidden;");
     // A busy button is working, not unavailable.
     expect(actionLabel).toContain('.modal-btn[aria-busy="true"]:disabled,');
-    expect(ruleBody(actionLabel, '.excluded-apps-item__history[aria-busy="true"]:disabled {')).toContain("opacity: 1;");
+    expect(ruleBody(actionLabel, '.excluded-apps-chip[aria-busy="true"]:disabled {')).toContain("opacity: 1;");
   });
 
   it("delays the spinner so a fast request does not flash", () => {

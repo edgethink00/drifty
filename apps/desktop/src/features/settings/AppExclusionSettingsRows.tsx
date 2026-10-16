@@ -1,6 +1,13 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { AppIconMap, ExcludedAppRule } from "@drifty/domain";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  EXCLUDED_SITE_RULE_PREFIX,
+  isExcludedSiteRule,
+  normalizeExcludedSite,
+  type AppIconMap,
+  type ExcludedAppRule,
+} from "@drifty/domain";
 import { ActionLabel } from "../../components/ActionLabel";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { AppGlyph } from "../../components/AppGlyph";
 import { ModalPresence } from "../../components/ModalPresence";
 import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
@@ -10,12 +17,25 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { ExcludedAppHistoryConfirmation } from "./ExcludedAppHistoryConfirmation";
 import "./AppExclusionSettingsRows.css";
 
-type RecentAppItem = {
+type ItemKind = "app" | "site";
+
+/** Something the add picker offers: a recently used app or a site already recorded. */
+type Candidate = {
+  readonly kind: ItemKind;
   readonly name: string;
   readonly bundleId: string | null;
-  readonly lastSeenAt: string;
-  readonly totalSeconds: number;
 };
+
+const PICKER_GROUP_LIMIT = 10;
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5 14 14" />
+    </svg>
+  );
+}
 
 function PlusIcon() {
   return (
@@ -30,12 +50,22 @@ function iconSrcFor(app: { name: string; bundleId?: string | null }, icons: AppI
   return icons[key] ?? icons[app.name] ?? null;
 }
 
-function sameApp(
-  a: { name: string; bundleId?: string | null },
-  b: { name: string; bundleId?: string | null },
-): boolean {
-  if (a.bundleId && b.bundleId) return a.bundleId === b.bundleId;
-  return a.name.localeCompare(b.name, undefined, { sensitivity: "accent" }) === 0;
+function kindOf(rule: ExcludedAppRule): ItemKind {
+  return isExcludedSiteRule(rule) ? "site" : "app";
+}
+
+/** A site rule's past records are found by its domain; an app's by its name and bundle ID. */
+function historyQuery(rule: ExcludedAppRule): { name: string; bundleId?: string | null; siteDomain?: string | null } {
+  if (isExcludedSiteRule(rule)) return { name: rule.name, bundleId: null, siteDomain: rule.name };
+  return { name: rule.name, bundleId: rule.bundleId };
+}
+
+/** Whether an excluded rule already covers a candidate of the same kind. */
+function covers(rule: ExcludedAppRule, item: Candidate): boolean {
+  if (kindOf(rule) !== item.kind) return false;
+  if (item.kind === "site") return rule.name === item.name;
+  if (rule.bundleId && item.bundleId) return rule.bundleId === item.bundleId;
+  return rule.name.localeCompare(item.name, undefined, { sensitivity: "accent" }) === 0;
 }
 
 function compareName(a: string, b: string): number {
@@ -43,37 +73,47 @@ function compareName(a: string, b: string): number {
 }
 
 /**
- * The rows of the "apps not to record" setting. They are direct children of a
- * `.settings-block`, so the list, the picker and the add button read as ordinary
- * settings rows instead of a card of their own.
+ * The "apps and sites not to record" setting: one label row whose items are
+ * chips, and a search field beside the title that finds both. Apps and sites
+ * are kept out of history the same way (time stays counted; names, titles and
+ * addresses are not kept), so they share a list. Like Dayflow's, the search is
+ * there from the start instead of behind an Add button; its candidates open
+ * in a panel under it and leave the list in place. Text that names a site
+ * (example.com or a pasted address) is added as that site; any other text as
+ * an app name.
  */
-export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readonly deviceSyncEnabled?: boolean } = {}) {
+export function ExclusionSettingsRows({ deviceSyncEnabled = false }: { readonly deviceSyncEnabled?: boolean } = {}) {
   const { t } = useLocalization();
   const pickerId = useId();
-  const addButtonRef = useRef<HTMLButtonElement>(null);
-  // Each row's Unblock button, so focus has somewhere to go when the control
-  // that held it leaves the list (an unblocked row, a spent "Delete N records").
-  const removeButtonsRef = useRef(new Map<string, HTMLButtonElement>());
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+  // Each item's chip, so focus has somewhere to go when the chip that held it
+  // leaves the list, or when its menu and confirmation close.
+  const chipRefs = useRef(new Map<string, HTMLButtonElement>());
   const searchRef = useRef<HTMLInputElement>(null);
-  const [excludedApps, setExcludedApps] = useState<ExcludedAppRule[]>([]);
+  const [rules, setRules] = useState<ExcludedAppRule[]>([]);
   const [historyCounts, setHistoryCounts] = useState<Record<string, number>>({});
   const [appIcons, setAppIcons] = useState<AppIconMap>({});
-  const [addPanelOpen, setAddPanelOpen] = useState(false);
-  const [recentApps, setRecentApps] = useState<RecentAppItem[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerOpenRef = useRef(false);
+  const [candidatesLoaded, setCandidatesLoaded] = useState(false);
+  const [recentApps, setRecentApps] = useState<Candidate[]>([]);
+  const [recentSiteItems, setRecentSiteItems] = useState<Candidate[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   // The picker entry whose add request is in flight, and the one whose last
   // request failed. Both are keyed like the entries so the state shows on the
-  // row the user pressed.
+  // chip the user pressed.
   const [addingKey, setAddingKey] = useState<string | null>(null);
   const [addErrorKey, setAddErrorKey] = useState<string | null>(null);
   const [rowPending, setRowPending] = useState<Record<string, "remove" | "delete" | "count">>({});
   const [rowErrors, setRowErrors] = useState<Record<string, "remove" | "delete" | "count">>({});
   const pendingRef = useRef(new Set<string>());
   const addingRef = useRef(false);
+  // Set by a successful add; the search takes focus back once it is enabled again.
+  const refocusSearchRef = useRef(false);
   const countVersionsRef = useRef(new Map<string, number>());
   const adding = addingKey !== null;
-  // Deleting an app's past records asks first; the dialog owns its failure.
+  // Deleting an item's past records asks first; the dialog owns its failure.
   const [historyConfirm, setHistoryConfirm] = useState<{ readonly app: ExcludedAppRule; readonly count: number } | null>(null);
   const [historyConfirmError, setHistoryConfirmError] = useState<DescribedActionError | null>(null);
 
@@ -103,23 +143,25 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
     });
   }
 
-  async function refreshHistoryCount(app: ExcludedAppRule) {
-    if (!beginRowAction(app.id, "count")) return;
+  async function refreshHistoryCount(rule: ExcludedAppRule) {
+    if (!beginRowAction(rule.id, "count")) return;
     try {
-      const { count } = await trackerClient.getExcludedAppHistoryCount({ name: app.name, bundleId: app.bundleId });
-      setHistoryCounts((current) => ({ ...current, [app.id]: count }));
+      const { count } = await trackerClient.getExcludedAppHistoryCount(historyQuery(rule));
+      setHistoryCounts((current) => ({ ...current, [rule.id]: count }));
     } catch {
-      setRowErrors((current) => ({ ...current, [app.id]: "count" }));
+      setRowErrors((current) => ({ ...current, [rule.id]: "count" }));
     } finally {
-      finishRowAction(app.id);
+      finishRowAction(rule.id);
     }
   }
 
-  async function loadApps() {
+  async function loadRules() {
     try {
-      const apps = await trackerClient.getExcludedApps();
-      setExcludedApps(apps);
-      const identities = apps.map((app) => ({ appName: app.name, bundleId: app.bundleId }));
+      const loaded = await trackerClient.getExcludedApps();
+      setRules(loaded);
+      // Only apps have icons to look up. A site's favicon is never fetched: an
+      // uncached lookup would send the very address the user is hiding.
+      const identities = loaded.filter((rule) => kindOf(rule) === "app").map((rule) => ({ appName: rule.name, bundleId: rule.bundleId }));
       if (identities.length > 0) {
         try {
           const icons = await trackerClient.getAppIcons(identities);
@@ -128,15 +170,15 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
           // Ignore icon fetch error
         }
       }
-      for (const app of apps) {
-        const version = countVersionsRef.current.get(app.id) ?? 0;
-        trackerClient.getExcludedAppHistoryCount({ name: app.name, bundleId: app.bundleId }).then(({ count }) => {
-          if ((countVersionsRef.current.get(app.id) ?? 0) === version) {
-            setHistoryCounts((prev) => ({ ...prev, [app.id]: count }));
+      for (const rule of loaded) {
+        const version = countVersionsRef.current.get(rule.id) ?? 0;
+        trackerClient.getExcludedAppHistoryCount(historyQuery(rule)).then(({ count }) => {
+          if ((countVersionsRef.current.get(rule.id) ?? 0) === version) {
+            setHistoryCounts((prev) => ({ ...prev, [rule.id]: count }));
           }
         }).catch(() => {
-          if ((countVersionsRef.current.get(app.id) ?? 0) === version) {
-            setRowErrors((current) => ({ ...current, [app.id]: "count" }));
+          if ((countVersionsRef.current.get(rule.id) ?? 0) === version) {
+            setRowErrors((current) => ({ ...current, [rule.id]: "count" }));
           }
         });
       }
@@ -148,15 +190,16 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   }
 
   useEffect(() => {
-    void loadApps();
+    // The list loads once when it opens.
+    void loadRules();
   }, []);
 
   useEffect(() => {
     const identities = [
-      ...excludedApps.map((app) => ({ appName: app.name, bundleId: app.bundleId })),
+      ...rules.filter((rule) => kindOf(rule) === "app").map((rule) => ({ appName: rule.name, bundleId: rule.bundleId })),
       ...recentApps.map((app) => ({ appName: app.name, bundleId: app.bundleId })),
     ];
-    if (identities.length === 0) return;
+    if (identities.length === 0) return undefined;
     let cancelled = false;
     void trackerClient.getAppIcons(identities).then((icons) => {
       if (!cancelled) setAppIcons((current) => mergeAppIconResults(current, identities, icons));
@@ -164,78 +207,98 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
     return () => {
       cancelled = true;
     };
-  }, [excludedApps, recentApps]);
+  }, [rules, recentApps]);
 
-  async function handleOpenAddPanel() {
+  async function openPicker() {
+    if (pickerOpenRef.current) return;
+    pickerOpenRef.current = true;
     setAddErrorKey(null);
-    setSearch("");
-    setAddPanelOpen(true);
-    try {
-      const recents = await trackerClient.getRecentApps({ limit: 50 });
-      setRecentApps(recents);
-    } catch {
-      setRecentApps([]);
-    }
+    setPickerOpen(true);
+    const [apps, sites] = await Promise.allSettled([trackerClient.getRecentApps({ limit: 50 }), recentSites()]);
+    setRecentApps(apps.status === "fulfilled" ? apps.value.map((app) => ({ kind: "app" as const, name: app.name, bundleId: app.bundleId ?? null })) : []);
+    setRecentSiteItems(sites.status === "fulfilled" ? sites.value : []);
+    setCandidatesLoaded(true);
   }
 
-  function handleCloseAddPanel() {
-    setAddPanelOpen(false);
+  function closePicker() {
+    pickerOpenRef.current = false;
+    setPickerOpen(false);
     setSearch("");
-    window.requestAnimationFrame(() => addButtonRef.current?.focus());
+    setAddErrorKey(null);
   }
 
+  // The search keeps focus for the next one after an add. It is disabled while
+  // the add runs, so focus waits for the render that enables it; WebKit can
+  // paint a frame before that render. Focusing it does not reopen the panel.
   useEffect(() => {
-    if (addPanelOpen) searchRef.current?.focus();
-  }, [addPanelOpen]);
+    if (adding || !refocusSearchRef.current) return;
+    refocusSearchRef.current = false;
+    searchRef.current?.focus();
+  }, [adding]);
 
-  async function handleAddApp(name: string, bundleId?: string | null, entryKey?: string) {
-    const trimmed = name.trim();
-    if (!trimmed || addingRef.current) return;
-    addingRef.current = true;
-    const key = entryKey ?? pickerKey({ name: trimmed, bundleId });
-    setAddingKey(key);
-    setAddErrorKey(null);
-    const id = bundleId || trimmed;
-    const newRule: ExcludedAppRule = {
-      id,
-      name: trimmed,
-      bundleId: bundleId ?? null,
-      source: "user",
+  // The panel closes when the pointer or keyboard focus leaves the search and
+  // its panel. Focus alone cannot tell: WebKit does not focus a clicked button.
+  useEffect(() => {
+    if (!pickerOpen) return undefined;
+    const inside = (target: EventTarget | null) => target instanceof Node && Boolean(searchWrapRef.current?.contains(target));
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!inside(event.target) && !addingRef.current) closePicker();
     };
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!inside(event.target) && !addingRef.current) closePicker();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("focusin", handleFocusIn);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("focusin", handleFocusIn);
+    };
+  }, [pickerOpen]);
+
+  async function handleAdd(item: Candidate, entryKey: string) {
+    const isSite = item.kind === "site";
+    const name = isSite ? normalizeExcludedSite(item.name) ?? "" : item.name.trim();
+    if (!name || addingRef.current) return;
+    addingRef.current = true;
+    setAddingKey(entryKey);
+    setAddErrorKey(null);
+    const id = isSite ? EXCLUDED_SITE_RULE_PREFIX + name : item.bundleId || name;
+    const rule: ExcludedAppRule = { id, name, bundleId: isSite ? null : item.bundleId, source: "user", kind: item.kind };
     try {
-      await trackerClient.saveExcludedApp(newRule);
-      setExcludedApps((prev) => [newRule, ...prev.filter((app) => app.id !== id && !sameApp(app, newRule))]);
-      handleCloseAddPanel();
+      await trackerClient.saveExcludedApp(rule);
+      setRules((prev) => [rule, ...prev.filter((existing) => existing.id !== id && !covers(existing, { kind: item.kind, name, bundleId: rule.bundleId ?? null }))]);
+      closePicker();
+      refocusSearchRef.current = true;
       // The rule is already saved. A count-query failure retries only the query.
-      void refreshHistoryCount(newRule);
+      void refreshHistoryCount(rule);
     } catch {
-      setAddErrorKey(key);
+      setAddErrorKey(entryKey);
     } finally {
       addingRef.current = false;
       setAddingKey(null);
     }
   }
 
-  async function handleRemoveApp(id: string) {
-    const order = visibleApps.map((app) => app.id);
+  async function handleRemove(id: string) {
+    const order = items.map((rule) => rule.id);
     const neighborId = order[order.indexOf(id) + 1] ?? order[order.indexOf(id) - 1] ?? null;
-    const hadFocus = document.activeElement === removeButtonsRef.current.get(id);
+    const hadFocus = document.activeElement === chipRefs.current.get(id);
     if (!beginRowAction(id, "remove")) return;
     try {
       await trackerClient.deleteExcludedApp(id);
       countVersionsRef.current.set(id, (countVersionsRef.current.get(id) ?? 0) + 1);
-      setExcludedApps((prev) => prev.filter((app) => app.id !== id));
+      setRules((prev) => prev.filter((rule) => rule.id !== id));
       setHistoryCounts((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
       });
-      // The row goes with its button; keep keyboard focus in the list.
+      // The chip goes with the item; keep keyboard focus in the list.
       if (hadFocus || document.activeElement === document.body) {
         window.requestAnimationFrame(() => {
-          const neighbor = neighborId ? removeButtonsRef.current.get(neighborId) : undefined;
+          const neighbor = neighborId ? chipRefs.current.get(neighborId) : undefined;
           if (neighbor) neighbor.focus();
-          else addButtonRef.current?.focus();
+          else searchRef.current?.focus();
         });
       }
     } catch {
@@ -245,216 +308,226 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
     }
   }
 
-  async function handleDeleteHistory(app: ExcludedAppRule) {
-    if (!beginRowAction(app.id, "delete")) return;
+  async function handleDeleteHistory(rule: ExcludedAppRule) {
+    if (!beginRowAction(rule.id, "delete")) return;
     setHistoryConfirmError(null);
     try {
-      await trackerClient.deleteExcludedAppHistory({ name: app.name, bundleId: app.bundleId });
-      countVersionsRef.current.set(app.id, (countVersionsRef.current.get(app.id) ?? 0) + 1);
-      setHistoryCounts((prev) => ({ ...prev, [app.id]: 0 }));
+      await trackerClient.deleteExcludedAppHistory(historyQuery(rule));
+      countVersionsRef.current.set(rule.id, (countVersionsRef.current.get(rule.id) ?? 0) + 1);
+      setHistoryCounts((prev) => ({ ...prev, [rule.id]: 0 }));
       setHistoryConfirm(null);
-      // The button that opened the confirmation is gone with the records, so
-      // focus moves to the same row's Unblock instead of falling to the page.
+      // The confirmation closes with the records, so focus returns to the
+      // item's chip instead of falling to the page.
       window.requestAnimationFrame(() => {
         const active = document.activeElement;
-        if (!active || active === document.body || active.closest('[role="dialog"]')) removeButtonsRef.current.get(app.id)?.focus();
+        if (!active || active === document.body || active.closest('[role="dialog"]')) chipRefs.current.get(rule.id)?.focus();
       });
     } catch (failure) {
       setHistoryConfirmError(describeActionError(failure, t("settings.privacy.excludedAppsError.delete")));
     } finally {
-      finishRowAction(app.id);
+      finishRowAction(rule.id);
     }
   }
+
+  // Added items first, newest first; then the default apps that are installed here.
+  const items = useMemo(() => {
+    const userItems = rules.filter((rule) => rule.source === "user");
+    const defaults = rules
+      .filter((rule) => rule.source !== "user" && kindOf(rule) === "app")
+      .filter((rule) => Boolean(appIcons[rule.bundleId?.trim() || rule.name] ?? appIcons[rule.name]))
+      .slice()
+      .sort((a, b) => compareName(a.name, b.name));
+    return [...userItems, ...defaults];
+  }, [rules, appIcons]);
 
   const query = search.trim();
   const queryLower = query.toLocaleLowerCase();
+  // Text that names a site is a site; anything else is an app name.
+  const typedDomain = normalizeExcludedSite(query);
+  const typedItem: Candidate | null = query ? (typedDomain ? { kind: "site", name: typedDomain, bundleId: null } : { kind: "app", name: query, bundleId: null }) : null;
+  const notExcluded = (item: Candidate) => !rules.some((rule) => covers(rule, item));
+  const matches = (item: Candidate) => !queryLower || item.name.toLocaleLowerCase().includes(typedDomain ?? queryLower);
+  const appMatches = recentApps.filter(notExcluded).filter(matches).slice(0, PICKER_GROUP_LIMIT);
+  const siteMatches = recentSiteItems.filter(notExcluded).filter(matches).slice(0, PICKER_GROUP_LIMIT);
+  const exactMatch = typedItem
+    ? [...appMatches, ...siteMatches].find((item) => item.kind === typedItem.kind && item.name.toLocaleLowerCase() === typedItem.name.toLocaleLowerCase()) ?? null
+    : null;
+  const canAddTyped = pickerOpen && typedItem !== null && exactMatch === null && notExcluded(typedItem);
+  const typedKey = typedItem ? `typed:${typedItem.kind}:${typedItem.name.toLocaleLowerCase()}` : "typed:";
+  const hasCandidates = appMatches.length > 0 || siteMatches.length > 0 || canAddTyped;
 
-  const sortedApps = useMemo(() => {
-    const installed = excludedApps.filter((app) => {
-      if (app.source === "user") return true;
-      const key = app.bundleId?.trim() || app.name;
-      return Boolean(appIcons[key] ?? appIcons[app.name]);
-    });
-    const userApps = installed.filter((app) => app.source === "user");
-    const defaultApps = installed
-      .filter((app) => app.source !== "user")
-      .slice()
-      .sort((a, b) => compareName(a.name, b.name));
-    return [...userApps, ...defaultApps];
-  }, [excludedApps, appIcons]);
-
-  const visibleApps = sortedApps.filter((app) => !queryLower || app.name.toLocaleLowerCase().includes(queryLower));
-  const availableRecent = recentApps.filter((item) => !excludedApps.some((app) => sameApp(app, item)));
-  const filteredRecent = availableRecent.filter((item) => !queryLower || item.name.toLocaleLowerCase().includes(queryLower));
-  const exactMatch = filteredRecent.some((item) => item.name.toLocaleLowerCase() === queryLower)
-    || excludedApps.some((app) => app.name.toLocaleLowerCase() === queryLower);
-  const canAddTyped = addPanelOpen && query.length > 0 && !exactMatch;
-  const showSearch = addPanelOpen || sortedApps.length > 8 || query.length > 0;
-  const typedKey = `typed:${queryLower}`;
-
+  // Enter takes the entry the text plainly means: an exact match, else the only
+  // match, else the text itself when nothing matches. With several matches it
+  // waits for a pick, because "kakao" should not become an app of that name
+  // while KakaoTalk is right there.
   function submitSearch() {
-    if (!addPanelOpen) return;
-    if (filteredRecent.length === 1 && !canAddTyped) {
-      const only = filteredRecent[0];
-      if (only) void handleAddApp(only.name, only.bundleId, pickerKey(only));
+    if (!pickerOpen) {
+      void openPicker();
       return;
     }
-    const exactRecent = filteredRecent.find((item) => item.name.toLocaleLowerCase() === queryLower);
-    if (exactRecent) {
-      void handleAddApp(exactRecent.name, exactRecent.bundleId, pickerKey(exactRecent));
+    const offered = [...appMatches, ...siteMatches];
+    const pick = exactMatch ?? (offered.length === 1 ? offered[0] : null);
+    if (pick) {
+      void handleAdd(pick, pickerKey(pick));
       return;
     }
-    if (canAddTyped) void handleAddApp(query, null, typedKey);
+    if (offered.length === 0 && canAddTyped && typedItem) void handleAdd(typedItem, typedKey);
   }
 
+  // Escape first clears the text, then closes the panel; either way focus stays in the search.
   function handleEscape(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape" && addPanelOpen) {
-      event.stopPropagation();
-      if (!adding) handleCloseAddPanel();
+    if (event.key !== "Escape" || !pickerOpen || adding) return;
+    event.stopPropagation();
+    if (search && event.target === searchRef.current) {
+      setSearch("");
+      setAddErrorKey(null);
+      return;
     }
+    closePicker();
+    searchRef.current?.focus();
+  }
+
+  function glyphFor(item: { kind: ItemKind; name: string; bundleId: string | null }) {
+    return item.kind === "site"
+      ? <ExcludedSiteGlyph domain={item.name} />
+      : <AppGlyph appName={item.name} iconSrc={iconSrcFor(item, appIcons)} size="sm" />;
+  }
+
+  function pickerGroup(label: string, group: readonly Candidate[]) {
+    if (group.length === 0) return null;
+    return (
+      <div className="excluded-apps-picker__group">
+        <p className="excluded-apps-picker__label">{label}</p>
+        <ul className="excluded-apps-chips" aria-label={label}>
+          {group.map((item) => {
+            const key = pickerKey(item);
+            return (
+              <li key={key}>
+                <PickerChip busy={addingKey === key} disabled={adding} failed={addErrorKey === key} onPick={() => void handleAdd(item, key)}>
+                  {glyphFor(item)}
+                  <span className="excluded-apps-chip__name">{item.name}</span>
+                </PickerChip>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
   }
 
   return (
     <>
-      <div className="settings-row" data-setting-id="settings.privacy.excludedApps" onKeyDown={handleEscape}>
+      <div className="settings-row excluded-apps-head" data-setting-id="settings.privacy.excludedApps" onKeyDown={handleEscape}>
         <div>
-          <div className="lbl">{t("settings.privacy.excludedAppsTitle")}</div>
-          <div className="desc">
-            {t("settings.privacy.excludedAppsSubtitle")} {t("settings.privacy.excludedAppsDesc")}
-          </div>
+          <div className="lbl">{t("settings.privacy.excludedItemsTitle")}</div>
+          <div className="desc">{t("settings.privacy.excludedItemsDesc")}</div>
           {deviceSyncEnabled ? <div className="desc">{t("settings.privacy.excludedAppsSyncOn")}</div> : null}
         </div>
         {!loading ? (
-          <div className="ctrl">
-            {addPanelOpen ? (
-              <button type="button" className="settings-btn" disabled={adding} onClick={handleCloseAddPanel}>
-                {t("settings.privacy.excludedAppsCancel")}
-              </button>
-            ) : (
-              <button
-                ref={addButtonRef}
-                type="button"
-                className="settings-btn excluded-apps-add"
-                aria-expanded={false}
-                aria-controls={pickerId}
-                onClick={() => void handleOpenAddPanel()}
-              >
-                <PlusIcon />
-                {t("settings.privacy.excludedAppsAdd")}
-              </button>
-            )}
-          </div>
-        ) : null}
-      </div>
-
-      {!loading && showSearch ? (
-        <div className="settings-row excluded-apps-find" onKeyDown={handleEscape}>
-          <div className="excluded-apps-find__bar">
+          <div ref={searchWrapRef} className="ctrl excluded-apps-search" onKeyDown={handleEscape}>
+            <span className="excluded-apps-search__icon" aria-hidden="true">
+              <SearchIcon />
+            </span>
             <input
               ref={searchRef}
               type="search"
-              className="settings-input excluded-apps-find__search"
+              className="settings-input excluded-apps-search__input"
               value={search}
               disabled={adding}
               autoComplete="off"
               spellCheck={false}
-              placeholder={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
-              aria-label={t(addPanelOpen ? "settings.privacy.excludedAppsSearchAdd" : "settings.privacy.excludedAppsSearch")}
+              placeholder={t("settings.privacy.excludedItemsSearch")}
+              aria-label={t("settings.privacy.excludedItemsSearch")}
+              aria-expanded={pickerOpen}
               aria-controls={pickerId}
-              onChange={(event) => { setSearch(event.currentTarget.value); setAddErrorKey(null); }}
+              onClick={() => void openPicker()}
+              onChange={(event) => {
+                setSearch(event.currentTarget.value);
+                setAddErrorKey(null);
+                void openPicker();
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
                   submitSearch();
+                } else if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  void openPicker();
+                  window.requestAnimationFrame(() => searchWrapRef.current?.querySelector<HTMLButtonElement>(".excluded-apps-search__panel button:not(:disabled)")?.focus());
                 }
               }}
             />
-            {canAddTyped ? (
-              <button type="button" disabled={adding} aria-busy={addingKey === typedKey} className="settings-btn settings-btn--primary excluded-apps-btn" onClick={submitSearch}>
-                <ActionLabel busy={addingKey === typedKey}>{t("settings.privacy.excludedAppsCustomSubmit")}</ActionLabel>
-              </button>
-            ) : null}
-          </div>
-          {addPanelOpen ? (
-            <div id={pickerId} role="region" aria-label={t("settings.privacy.excludedAppsPickerAria")}>
-              {filteredRecent.length > 0 || canAddTyped ? (
-                <ul className="excluded-apps-list">
-                  {filteredRecent.slice(0, 15).map((item) => {
-                    const key = pickerKey(item);
-                    return (
-                      <li key={key} className="excluded-apps-item">
-                        <PickerEntry
-                          busy={addingKey === key}
-                          disabled={adding}
-                          error={addErrorKey === key ? t("settings.privacy.excludedAppsAddError") : null}
-                          onPick={() => void handleAddApp(item.name, item.bundleId, key)}
-                        >
-                          <AppGlyph appName={item.name} iconSrc={iconSrcFor(item, appIcons)} size="sm" />
-                          <span className="excluded-apps-item__name">{item.name}</span>
-                        </PickerEntry>
-                      </li>
-                    );
-                  })}
-                  {canAddTyped ? (
-                    <li className="excluded-apps-item">
-                      <PickerEntry
-                        busy={addingKey === typedKey}
-                        disabled={adding}
-                        error={addErrorKey === typedKey ? t("settings.privacy.excludedAppsAddError") : null}
-                        onPick={() => void handleAddApp(query, null, typedKey)}
-                      >
-                        <span className="excluded-apps-item__add-glyph" aria-hidden="true">
+            <AnchoredPresence>{pickerOpen ? (
+              <div id={pickerId} className="excluded-apps-picker excluded-apps-search__panel" role="region" aria-label={t("settings.privacy.excludedItemsPickerAria")}>
+                {pickerGroup(t("settings.privacy.excludedItemsGroupApps"), appMatches)}
+                {pickerGroup(t("settings.privacy.excludedItemsGroupSites"), siteMatches)}
+                {canAddTyped && typedItem ? (
+                  <ul className="excluded-apps-chips">
+                    <li>
+                      <PickerChip busy={addingKey === typedKey} disabled={adding} failed={addErrorKey === typedKey} onPick={() => void handleAdd(typedItem, typedKey)}>
+                        <span className="excluded-apps-chip__add-glyph" aria-hidden="true">
                           <PlusIcon />
                         </span>
-                        <span className="excluded-apps-item__name">{t("settings.privacy.excludedAppsAddNamed", { name: query })}</span>
-                      </PickerEntry>
+                        <span className="excluded-apps-chip__name">
+                          {t(typedItem.kind === "site" ? "settings.privacy.excludedItemsAddSite" : "settings.privacy.excludedItemsAddApp", { name: typedItem.name })}
+                        </span>
+                      </PickerChip>
                     </li>
-                  ) : null}
-                </ul>
-              ) : (
-                <p className="excluded-apps-empty">
-                  {query ? t("settings.privacy.excludedAppsNoMatches") : t("settings.privacy.excludedAppsNoRecent")}
-                </p>
-              )}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {!loading && !addPanelOpen
-        ? visibleApps.map((app) => (
-            <ExcludedAppRow
-              key={app.id}
-              app={app}
-              count={historyCounts[app.id] ?? 0}
-              iconSrc={iconSrcFor(app, appIcons)}
-              removeLabel={t("settings.privacy.excludedAppsRemove")}
-              removeNamed={t("settings.privacy.excludedAppsRemoveNamed", { name: app.name })}
-              deletePastCount={t("settings.privacy.excludedAppsDeletePastCount", { count: historyCounts[app.id] ?? 0 })}
-              pending={rowPending[app.id]}
-              error={rowErrors[app.id] ? t(`settings.privacy.excludedAppsError.${rowErrors[app.id]}`) : null}
-              retryCountLabel={rowErrors[app.id] === "count" ? t("common.retry") : null}
-              onRetryCount={() => void refreshHistoryCount(app)}
-              removeButtonRef={(button) => {
-                if (button) removeButtonsRef.current.set(app.id, button);
-                else removeButtonsRef.current.delete(app.id);
-              }}
-              onRemove={() => void handleRemoveApp(app.id)}
-              onDeleteHistory={() => {
-                setHistoryConfirmError(null);
-                setHistoryConfirm({ app, count: historyCounts[app.id] ?? 0 });
-              }}
-            />
-          ))
-        : null}
-
-      {!loading && !addPanelOpen && visibleApps.length === 0 ? (
-        <div className="settings-row excluded-apps-row">
-          <div className="desc">
-            {query ? t("settings.privacy.excludedAppsNoMatches") : t("settings.privacy.excludedAppsEmpty")}
+                  </ul>
+                ) : null}
+                {candidatesLoaded && !hasCandidates ? (
+                  <p className="excluded-apps-empty">
+                    {query ? t("settings.privacy.excludedItemsNoMatches") : t("settings.privacy.excludedItemsPickerEmpty")}
+                  </p>
+                ) : null}
+                {addErrorKey ? <p className="excluded-apps-note" role="alert">{t("settings.privacy.excludedAppsAddError")}</p> : null}
+              </div>
+            ) : null}</AnchoredPresence>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+        {!loading && items.length > 0 ? (
+          <ul className="excluded-apps-chips" aria-label={t("settings.privacy.excludedItemsTitle")}>
+            {items.map((rule) => {
+              const count = historyCounts[rule.id] ?? 0;
+              return (
+                <li key={rule.id}>
+                  <ExcludedChip
+                    name={rule.name}
+                    count={count}
+                    icon={glyphFor({ kind: kindOf(rule), name: rule.name, bundleId: rule.bundleId ?? null })}
+                    pastCountLabel={t("settings.privacy.excludedAppsPastCount", { count })}
+                    removeLabel={t("settings.privacy.excludedAppsRemove")}
+                    deletePastLabel={t("settings.privacy.excludedAppsDeletePastCount", { count })}
+                    pending={rowPending[rule.id]}
+                    chipRef={(button) => {
+                      if (button) chipRefs.current.set(rule.id, button);
+                      else chipRefs.current.delete(rule.id);
+                    }}
+                    onRemove={() => void handleRemove(rule.id)}
+                    onDeleteHistory={() => {
+                      setHistoryConfirmError(null);
+                      setHistoryConfirm({ app: rule, count });
+                    }}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        {!loading && items.length === 0 ? (
+          <p className="excluded-apps-empty">{t("settings.privacy.excludedItemsEmpty")}</p>
+        ) : null}
+        {!loading ? items.filter((rule) => rowErrors[rule.id]).map((rule) => (
+          <p key={rule.id} className="excluded-apps-note" role="alert">
+            <span>{t(`settings.privacy.excludedAppsError.${rowErrors[rule.id]}`)} · {rule.name}</span>
+            {rowErrors[rule.id] === "count" ? (
+              <button type="button" className="settings-btn excluded-apps-btn" disabled={Boolean(rowPending[rule.id])} aria-busy={rowPending[rule.id] === "count"} onClick={() => void refreshHistoryCount(rule)}>
+                <ActionLabel busy={rowPending[rule.id] === "count"}>{t("common.retry")}</ActionLabel>
+              </button>
+            ) : null}
+          </p>
+        )) : null}
+      </div>
 
       <ModalPresence>
         {historyConfirm ? (
@@ -472,92 +545,280 @@ export function AppExclusionSettingsRows({ deviceSyncEnabled = false }: { readon
   );
 }
 
-function pickerKey(item: { name: string; bundleId?: string | null }): string {
-  return item.bundleId || item.name;
+/**
+ * A lettered mark for a site in this list. It never looks the icon up, because
+ * fetching an uncached favicon would send the very address the user is hiding.
+ */
+function ExcludedSiteGlyph({ domain }: { readonly domain: string }) {
+  return (
+    <span className="site-favicon site-favicon--fallback" style={{ width: 20, height: 20 }} aria-hidden="true">
+      {domain[0]?.toUpperCase() ?? "•"}
+    </span>
+  );
 }
 
 /**
- * One candidate in the add picker. Its request state shows on the entry the
- * user pressed: a spinner at the end while saving, and the failure text in the
- * same place afterwards, so the list keeps its height either way.
+ * Sites already recorded on this computer, by time spent, to pick from. A
+ * subdomain is left out when its parent is listed, because the parent's rule
+ * already covers it.
  */
-function PickerEntry({
+async function recentSites(): Promise<Candidate[]> {
+  const candidates = await trackerClient.searchClassificationRuleCandidates({ query: "", targetKind: "site" });
+  const seen = new Set<string>();
+  const sites: Candidate[] = [];
+  for (const candidate of candidates) {
+    const domain = candidate.targetKind === "site" ? normalizeExcludedSite(candidate.targetValue) : null;
+    if (!domain || seen.has(domain)) continue;
+    seen.add(domain);
+    sites.push({ kind: "site", name: domain, bundleId: null });
+  }
+  return sites.filter((site) => !sites.some((other) => site.name.endsWith(`.${other.name}`)));
+}
+
+function pickerKey(item: Candidate): string {
+  return `${item.kind}:${item.bundleId || item.name}`;
+}
+
+/**
+ * One candidate in the add picker, shaped like the chips it becomes. Its
+ * request state shows on the chip the user pressed: a spinner at the end while
+ * saving, and a warning edge after a failure, with the message under the list.
+ */
+function PickerChip({
   busy,
   disabled,
-  error,
+  failed,
   onPick,
   children,
 }: {
   readonly busy: boolean;
   readonly disabled: boolean;
-  readonly error: string | null;
+  readonly failed: boolean;
   readonly onPick: () => void;
   readonly children: ReactNode;
 }) {
   return (
-    <>
-      <button type="button" className="excluded-apps-item__pick" disabled={disabled} aria-busy={busy} onClick={onPick}>
-        <span className="excluded-apps-item__identity">{children}</span>
-        {busy ? <span className="action-label__spinner excluded-apps-item__spinner" aria-hidden="true" /> : null}
-      </button>
-      {error ? <span className="excluded-apps-item__note excluded-apps-item__note--error" role="alert">{error}</span> : null}
-    </>
+    <button type="button" className="excluded-apps-chip" data-failed={failed || undefined} disabled={disabled} aria-busy={busy} onClick={onPick}>
+      {children}
+      {busy ? <span className="action-label__spinner excluded-apps-chip__spinner" aria-hidden="true" /> : null}
+    </button>
   );
 }
 
-function ExcludedAppRow({
-  app,
+type ChipMenuPlacement = { readonly block: "below" | "above"; readonly inline: "start" | "end" };
+
+const CHIP_MENU_GAP = 4;
+const CHIP_MENU_MARGIN = 8;
+
+const menuIconProps = {
+  viewBox: "0 0 16 16",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.4,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+
+function chipMenuItems(menu: HTMLElement | null): HTMLElement[] {
+  return Array.from(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? []);
+}
+
+/**
+ * One excluded app or site. The whole chip opens a small menu, the same one
+ * History rows use: Unblock, and, while past records remain, deleting them. A
+ * count on the chip says when there is something left to delete. It carries no
+ * ⋮ (owner decision 2026-10-16); the hover and open states mark it as a control.
+ */
+function ExcludedChip({
+  name,
   count,
-  iconSrc,
+  icon,
+  pastCountLabel,
   removeLabel,
-  removeNamed,
-  deletePastCount,
+  deletePastLabel,
+  pending,
+  chipRef,
   onRemove,
   onDeleteHistory,
-  pending,
-  error,
-  retryCountLabel,
-  onRetryCount,
-  removeButtonRef,
 }: {
-  readonly app: ExcludedAppRule;
+  readonly name: string;
   readonly count: number;
-  readonly iconSrc: string | null;
+  readonly icon: ReactNode;
+  readonly pastCountLabel: string;
   readonly removeLabel: string;
-  readonly removeNamed: string;
-  readonly deletePastCount: string;
+  readonly deletePastLabel: string;
+  readonly pending?: "remove" | "delete" | "count";
+  readonly chipRef: (button: HTMLButtonElement | null) => void;
   readonly onRemove: () => void;
   readonly onDeleteHistory: () => void;
-  readonly pending?: "remove" | "delete" | "count";
-  readonly error: string | null;
-  readonly retryCountLabel: string | null;
-  readonly onRetryCount: () => void;
-  readonly removeButtonRef: (button: HTMLButtonElement | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<ChipMenuPlacement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Keyboard opening lands on an item; a pointer leaves focus on the chip.
+  const focusOnOpen = useRef<"first" | "last" | null>(null);
+  const busy = Boolean(pending);
+
+  useEffect(() => {
+    if (busy) setOpen(false);
+  }, [busy]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlacement(null);
+      return;
+    }
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+    const anchor = trigger.getBoundingClientRect();
+    // offsetWidth and offsetHeight ignore the entry animation's scale.
+    const roomBelow = window.innerHeight - anchor.bottom - CHIP_MENU_GAP - CHIP_MENU_MARGIN;
+    const roomAbove = anchor.top - CHIP_MENU_GAP - CHIP_MENU_MARGIN;
+    setPlacement({
+      block: menu.offsetHeight > roomBelow && roomAbove > roomBelow ? "above" : "below",
+      inline: anchor.left + menu.offsetWidth > window.innerWidth - CHIP_MENU_MARGIN ? "end" : "start",
+    });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !placement || !focusOnOpen.current) return;
+    const items = chipMenuItems(menuRef.current);
+    (focusOnOpen.current === "first" ? items[0] : items[items.length - 1])?.focus({ preventScroll: true });
+    focusOnOpen.current = null;
+  }, [open, placement]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && (triggerRef.current?.contains(target) || menuRef.current?.contains(target))) return;
+      close();
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      const items = chipMenuItems(menuRef.current);
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      let next: HTMLElement | undefined;
+      switch (event.key) {
+        case "Escape":
+        case "Tab":
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+          triggerRef.current?.focus({ preventScroll: true });
+          return;
+        case "ArrowDown":
+          next = items[index < 0 ? 0 : (index + 1) % items.length];
+          break;
+        case "ArrowUp":
+          next = items[index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length];
+          break;
+        case "Home":
+          next = items[0];
+          break;
+        case "End":
+          next = items[items.length - 1];
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      next?.focus({ preventScroll: true });
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("blur", close);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("blur", close);
+    };
+  }, [open]);
+
+  // One highlight, like a native menu: the pointer moves focus along with it.
+  const followPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (document.activeElement !== event.currentTarget) event.currentTarget.focus({ preventScroll: true });
+  };
+  const releasePointerFocus = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && menuRef.current?.contains(active)) active.blur();
+  };
+
+  // The chosen item leaves with the menu, so focus returns to the chip first;
+  // the list and the confirmation then move it on from there.
+  const choose = (action: () => void) => {
+    triggerRef.current?.focus({ preventScroll: true });
+    setOpen(false);
+    action();
+  };
+
   return (
-    <div className="settings-row excluded-apps-row">
-      <div>
-        <div className="excluded-apps-item__identity">
-          <AppGlyph appName={app.name} iconSrc={iconSrc} size="sm" />
-          <span className="excluded-apps-item__name">{app.name}</span>
+    <>
+      <button
+        ref={(button) => {
+          triggerRef.current = button;
+          chipRef(button);
+        }}
+        type="button"
+        className="excluded-apps-chip"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={busy}
+        aria-busy={pending === "remove" || pending === "delete"}
+        title={name.length > 32 ? name : undefined}
+        onClick={(event) => {
+          if (open) {
+            setOpen(false);
+            return;
+          }
+          // Enter and Space click with a detail of 0.
+          focusOnOpen.current = event.detail === 0 ? "first" : null;
+          setOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (open || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
+          event.preventDefault();
+          focusOnOpen.current = event.key === "ArrowDown" ? "first" : "last";
+          setOpen(true);
+        }}
+      >
+        {icon}
+        <span className="excluded-apps-chip__name">{name}</span>
+        {count > 0 ? <span className="excluded-apps-chip__count">{pastCountLabel}</span> : null}
+        {pending === "remove" ? <span className="action-label__spinner excluded-apps-chip__spinner" aria-hidden="true" /> : null}
+      </button>
+      <AnchoredPresence>{open ? (
+        <div
+          ref={menuRef}
+          className="excluded-apps-chip-menu"
+          role="menu"
+          aria-label={name}
+          data-placement={placement?.block ?? "below"}
+          data-align={placement?.inline ?? "start"}
+          style={placement ? undefined : { visibility: "hidden" }}
+          onPointerLeave={releasePointerFocus}
+        >
+          <button type="button" role="menuitem" tabIndex={-1} onPointerMove={followPointer} onClick={() => choose(onRemove)}>
+            <svg {...menuIconProps}><rect x="3" y="7" width="10" height="6.5" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7" /></svg>
+            {removeLabel}
+          </button>
+          {count > 0 ? (
+            <>
+              <div className="excluded-apps-chip-menu__separator" role="separator" />
+              <button type="button" role="menuitem" tabIndex={-1} className="danger" onPointerMove={followPointer} onClick={() => choose(onDeleteHistory)}>
+                <svg {...menuIconProps}><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1" /></svg>
+                {deletePastLabel}
+              </button>
+            </>
+          ) : null}
         </div>
-      </div>
-      <div className="ctrl excluded-apps-item__actions">
-        {error ? <span className="excluded-apps-item__note excluded-apps-item__note--error" role="alert">{error}</span> : null}
-        {retryCountLabel ? (
-          <button type="button" className="settings-btn excluded-apps-btn" disabled={Boolean(pending)} aria-busy={pending === "count"} onClick={onRetryCount}>
-            <ActionLabel busy={pending === "count"}>{retryCountLabel}</ActionLabel>
-          </button>
-        ) : null}
-        {count > 0 ? (
-          <button type="button" disabled={Boolean(pending)} aria-busy={pending === "delete"} className="excluded-apps-item__history" onClick={onDeleteHistory}>
-            <ActionLabel busy={pending === "delete"}>{deletePastCount}</ActionLabel>
-          </button>
-        ) : null}
-        <button ref={removeButtonRef} type="button" disabled={Boolean(pending)} aria-busy={pending === "remove"} className="settings-btn excluded-apps-btn" onClick={onRemove} aria-label={removeNamed}>
-          <ActionLabel busy={pending === "remove"}>{removeLabel}</ActionLabel>
-        </button>
-      </div>
-    </div>
+      ) : null}</AnchoredPresence>
+    </>
   );
 }

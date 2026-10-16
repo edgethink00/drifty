@@ -71,7 +71,7 @@
 .modal-btn[aria-busy="true"]:disabled,
 .app-btn[aria-busy="true"]:disabled,
 .settings-btn[aria-busy="true"]:disabled,
-.excluded-apps-item__history[aria-busy="true"]:disabled {
+.excluded-apps-chip[aria-busy="true"]:disabled {
   cursor: wait;
   opacity: 1;
 }

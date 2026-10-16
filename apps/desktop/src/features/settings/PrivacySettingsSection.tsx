@@ -3,7 +3,7 @@ import type { DeleteHistoryRangeResult } from "@drifty/domain";
 
 import { AiPrivacyDetailsModal } from "./AiPrivacyDetailsModal";
 import { AiDataSendingRows } from "./AiPrivacyReview";
-import { AppExclusionSettingsRows } from "./AppExclusionSettingsRows";
+import { ExclusionSettingsRows } from "./AppExclusionSettingsRows";
 import { HistoryDeletionNotice } from "./HistoryDeletionNotice";
 import { DeleteHistoryModal } from "./DeleteHistoryModal";
 import { DriftySharingRows } from "./DriftySharingRows";
@@ -32,7 +32,7 @@ export function PrivacySettingsSection({
     <div className="settings-section settings-section--privacy">
       <div className="settings-block">
         <h3>{t("settings.section.privacy")}</h3>
-        <AppExclusionSettingsRows deviceSyncEnabled={deviceSyncEnabled} />
+        <ExclusionSettingsRows deviceSyncEnabled={deviceSyncEnabled} />
       </div>
       <SettingsCollapsibleCard
         searchReveal="privacy-ai"

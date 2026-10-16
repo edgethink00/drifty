@@ -40,7 +40,7 @@ from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
 from app.storage.database_maintenance import initialize_closed_wal_sidecars
-from app.tracker.app_exclusion import match_app_exclusion, redact_snapshot
+from app.tracker.app_exclusion import match_exclusion, redact_snapshot
 from app.platform_locks import (
     lock_exclusive,
     lock_exclusive_nonblocking,
@@ -1497,7 +1497,10 @@ def save_excluded_app(payload: dict):
             "updatedAt": payload.get("updatedAt"),
         })
         return response(True, {"id": rule_id, "name": name, "bundleId": bundle_id, "source": source})
-    rule = database().save_excluded_app(rule_id, name, bundle_id, source)
+    try:
+        rule = database().save_excluded_app(rule_id, name, bundle_id, source)
+    except ValueError as error:
+        return response(False, error=str(error))
     return response(True, rule)
 
 
@@ -1514,7 +1517,8 @@ def get_excluded_app_history_count(payload: dict):
     if not isinstance(name, str):
         return response(False, error="name is required")
     bundle_id = payload.get("bundleId") or payload.get("bundle_id")
-    count = database().get_excluded_app_history_count(name, bundle_id)
+    site_domain = payload.get("siteDomain") or payload.get("site_domain")
+    count = database().get_excluded_app_history_count(name, bundle_id, site_domain)
     return response(True, {"count": count})
 
 
@@ -1523,7 +1527,8 @@ def delete_excluded_app_history(payload: dict):
     if not isinstance(name, str):
         return response(False, error="name is required")
     bundle_id = payload.get("bundleId") or payload.get("bundle_id")
-    deleted = database().delete_excluded_app_history(name, bundle_id)
+    site_domain = payload.get("siteDomain") or payload.get("site_domain")
+    deleted = database().delete_excluded_app_history(name, bundle_id, site_domain)
     return response(True, {"deleted": deleted})
 
 
@@ -1918,7 +1923,7 @@ def get_current_snapshot():
         return response(True)
     if DB_PATH.exists():
         excluded_rules = database().get_excluded_app_rules()
-        match = match_app_exclusion(snapshot.app_name, snapshot.bundle_id, excluded_rules)
+        match = match_exclusion(snapshot.app_name, snapshot.bundle_id, snapshot.site_domain, snapshot.site_url, excluded_rules)
         if match:
             snapshot = redact_snapshot(snapshot, match.source)
     return response(

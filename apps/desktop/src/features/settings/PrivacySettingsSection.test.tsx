@@ -91,7 +91,8 @@ describe("PrivacySettingsSection", () => {
     render(<PrivacySettingsSection />);
 
     expect(screen.queryByRole("switch", { name: "Usage statistics" })).toBeNull();
-    expect(await screen.findByRole("button", { name: /Add app/i })).toBeTruthy();
+    expect(await screen.findByRole("searchbox", { name: "App name or site address" })).toBeTruthy();
+    expect(screen.getByText("Apps and sites not to record")).toBeTruthy();
     expect(screen.queryByText("Database")).toBeNull();
     expect(screen.getByRole("button", { name: "Data sharing details" }).getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByRole("button", { name: "Delete history…" })).toBeTruthy();

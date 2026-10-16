@@ -44,8 +44,10 @@ from app.storage.database_maintenance import (
 from app.tracker.app_exclusion import (
     DEFAULT_EXCLUDED_APPS,
     REDACTED_APP_NAME,
+    SITE_RULE_PREFIX,
     ExcludedAppRule,
-    match_app_exclusion,
+    match_exclusion,
+    normalize_excluded_site,
     redact_snapshot,
 )
 
@@ -118,6 +120,11 @@ class BrowserHistoryBackfillResult:
     segment_id: int
     site_url: str | None
     youtube_video_id: str | None
+
+
+
+def _excluded_rule_kind(rule_id: str) -> str:
+    return "site" if rule_id.startswith(SITE_RULE_PREFIX) else "app"
 
 
 @dataclass(frozen=True)
@@ -1040,11 +1047,17 @@ class TrackerDatabase:
                     "bundleId": row["bundle_id"],
                     "source": row["source"],
                     "createdAt": row["created_at"],
+                    "kind": _excluded_rule_kind(row["id"]),
                 }
                 for row in rows
             ]
 
     def save_excluded_app(self, id: str, name: str, bundle_id: str | None = None, source: str = "user") -> dict[str, Any]:
+        if id.startswith(SITE_RULE_PREFIX):
+            domain = normalize_excluded_site(id[len(SITE_RULE_PREFIX):])
+            if not domain:
+                raise ValueError("Enter a site address such as example.com.")
+            id, name, bundle_id = SITE_RULE_PREFIX + domain, domain, None
         now_iso = datetime.now(timezone.utc).isoformat()
         with self.connect() as conn:
             conn.execute(
@@ -1060,7 +1073,7 @@ class TrackerDatabase:
                 """,
                 (id, name, bundle_id, source, now_iso),
             )
-        return {"id": id, "name": name, "bundleId": bundle_id, "source": source, "createdAt": now_iso}
+        return {"id": id, "name": name, "bundleId": bundle_id, "source": source, "createdAt": now_iso, "kind": _excluded_rule_kind(id)}
 
     def delete_excluded_app(self, id: str) -> bool:
         with self.connect() as conn:
@@ -1085,6 +1098,7 @@ class TrackerDatabase:
                     "createdAt": row["created_at"],
                     "tombstone": bool(row["tombstone"]),
                     "updatedAt": row["updated_at"] or row["created_at"],
+                    "kind": _excluded_rule_kind(row["id"]),
                 }
                 for row in rows
             ]
@@ -1116,19 +1130,19 @@ class TrackerDatabase:
                 ),
             )
 
-    def get_excluded_app_history_count(self, name: str, bundle_id: str | None = None) -> int:
+    def get_excluded_app_history_count(self, name: str, bundle_id: str | None = None, site_domain: str | None = None) -> int:
         with self.connect() as conn:
             row = conn.execute(
-                f"SELECT COUNT(*) as count FROM activity_segments WHERE {self._excluded_app_history_predicate(bundle_id)}",
-                self._excluded_app_history_params(name, bundle_id),
+                f"SELECT COUNT(*) as count FROM activity_segments WHERE {self._excluded_app_history_predicate(bundle_id, site_domain)}",
+                self._excluded_app_history_params(name, bundle_id, site_domain),
             ).fetchone()
             return int(row["count"]) if row else 0
 
-    def delete_excluded_app_history(self, name: str, bundle_id: str | None = None) -> int:
+    def delete_excluded_app_history(self, name: str, bundle_id: str | None = None, site_domain: str | None = None) -> int:
         with self.connect() as conn:
             rows = conn.execute(
-                f"SELECT id FROM activity_segments WHERE {self._excluded_app_history_predicate(bundle_id)}",
-                self._excluded_app_history_params(name, bundle_id),
+                f"SELECT id FROM activity_segments WHERE {self._excluded_app_history_predicate(bundle_id, site_domain)}",
+                self._excluded_app_history_params(name, bundle_id, site_domain),
             ).fetchall()
         segment_ids = [str(row["id"]) for row in rows]
         if not segment_ids:
@@ -1136,13 +1150,20 @@ class TrackerDatabase:
         return self.delete_activity_segments(segment_ids)
 
     @staticmethod
-    def _excluded_app_history_predicate(bundle_id: str | None) -> str:
+    def _excluded_app_history_predicate(bundle_id: str | None, site_domain: str | None = None) -> str:
+        if normalize_excluded_site(site_domain):
+            # The site itself and its subdomains, however the browser named the host.
+            return "lower(trim(site_domain, '.')) = ? OR lower(trim(site_domain, '.')) LIKE ? ESCAPE '\\'"
         if bundle_id:
             return "lower(bundle_id) = lower(?) OR lower(app_name) = lower(?)"
         return "lower(app_name) = lower(?)"
 
     @staticmethod
-    def _excluded_app_history_params(name: str, bundle_id: str | None) -> tuple[str, ...]:
+    def _excluded_app_history_params(name: str, bundle_id: str | None, site_domain: str | None = None) -> tuple[str, ...]:
+        domain = normalize_excluded_site(site_domain)
+        if domain:
+            escaped = domain.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            return (domain, "%." + escaped)
         if bundle_id:
             return (bundle_id, name)
         return (name,)
@@ -1331,7 +1352,7 @@ class TrackerDatabase:
                 # mutation, not a row another process replaced after our read.
                 conn.execute("BEGIN IMMEDIATE")
             excluded_rules = self._get_excluded_app_rules(conn)
-            match = match_app_exclusion(snapshot.app_name, snapshot.bundle_id, excluded_rules)
+            match = match_exclusion(snapshot.app_name, snapshot.bundle_id, snapshot.site_domain, snapshot.site_url, excluded_rules)
             if match:
                 snapshot = redact_snapshot(snapshot, match.source)
 
@@ -1799,7 +1820,12 @@ class TrackerDatabase:
         skipped_duplicate_count = 0
         with self.connect() as conn:
             overlap_index = self._browser_history_import_overlap_index(conn, segments)
+            excluded_rules = self._get_excluded_app_rules(conn)
             for segment in segments:
+                # Imported browsing honors the same exclusions as live capture;
+                # an excluded app or site never enters history this way either.
+                if match_exclusion(segment.app_name, segment.bundle_id, segment.site_domain, segment.site_url, excluded_rules):
+                    continue
                 # A re-run can regroup visits into a session with a new import key
                 # (e.g. the session gained a visit), and imports can cover time the
                 # live tracker already recorded. Skip any segment whose
@@ -2977,7 +3003,7 @@ class TrackerDatabase:
                 # are local sensor/context fields and are intentionally ignored even
                 # if a malformed or older peer includes them in a sync payload.
                 rules = self._get_excluded_app_rules(conn)
-                match = match_app_exclusion(item.get("appName"), item.get("bundleId"), rules)
+                match = match_exclusion(item.get("appName"), item.get("bundleId"), item.get("siteDomain"), item.get("siteUrl"), rules)
                 exclusion_source = item.get("exclusionSource")
                 if match or exclusion_source or item.get("appName") == REDACTED_APP_NAME:
                     item = {

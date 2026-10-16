@@ -123,8 +123,8 @@ export type TrackerCommandMap = {
   tracker_get_excluded_apps: { args: { query?: { includeTombstones?: boolean } }; result: ExcludedAppRule[] };
   tracker_save_excluded_app: { args: { query: ExcludedAppRule }; result: ExcludedAppRule };
   tracker_delete_excluded_app: { args: { query: { id: string } }; result: { deleted: boolean } };
-  tracker_get_excluded_app_history_count: { args: { query: { name: string; bundleId?: string | null } }; result: { count: number } };
-  tracker_delete_excluded_app_history: { args: { query: { name: string; bundleId?: string | null } }; result: { deleted: number } };
+  tracker_get_excluded_app_history_count: { args: { query: { name: string; bundleId?: string | null; siteDomain?: string | null } }; result: { count: number } };
+  tracker_delete_excluded_app_history: { args: { query: { name: string; bundleId?: string | null; siteDomain?: string | null } }; result: { deleted: number } };
   tracker_get_recent_apps: { args: { query?: { limit?: number } }; result: Array<{ name: string; bundleId: string | null; lastSeenAt: string; totalSeconds: number }> };
   tracker_delete_activity_segments: { args: { query: { ids: readonly string[] } }; result: { deleted: number } };
   tracker_delete_history_range: { args: { query: DeleteHistoryRangeQuery }; result: DeleteHistoryRangeResult };

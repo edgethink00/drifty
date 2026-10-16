@@ -309,9 +309,9 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   {
     id: "settings.privacy.excludedApps",
     section: "privacy",
-    titleKey: "settings.privacy.excludedAppsTitle",
-    keywords: "앱 제외 기록하지 않을 앱 password manager exclude unblock 비밀번호 관리자",
-    descriptionKey: "settings.privacy.excludedAppsSubtitle",
+    titleKey: "settings.privacy.excludedItemsTitle",
+    keywords: "앱 제외 기록하지 않을 앱 사이트 제외 웹사이트 은행 password manager exclude unblock site website domain 비밀번호 관리자",
+    descriptionKey: "settings.privacy.excludedItemsDesc",
   },
   {
     id: "settings.privacy.productAnalyticsTitle",

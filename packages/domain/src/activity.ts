@@ -208,6 +208,42 @@ export interface ExcludedAppRule {
   readonly tombstone?: boolean;
   readonly updatedAt?: string;
   readonly createdAt?: string;
+  /** "site" for a site rule, whose id is `site:<domain>`; older trackers omit it. */
+  readonly kind?: "app" | "site";
+}
+
+/**
+ * A site the user keeps out of history shares the excluded-app list (and its
+ * account sync) under this id prefix, e.g. "site:kbstar.com".
+ */
+export const EXCLUDED_SITE_RULE_PREFIX = "site:";
+
+export function isExcludedSiteRule(rule: Pick<ExcludedAppRule, "id" | "kind">): boolean {
+  return rule.kind === "site" || rule.id.startsWith(EXCLUDED_SITE_RULE_PREFIX);
+}
+
+const EXCLUDED_SITE_LABEL = /^[a-z0-9\u00a1-\uffff](?:[a-z0-9\u00a1-\uffff-]*[a-z0-9\u00a1-\uffff])?$/u;
+
+/**
+ * The bare host a site rule stores: lowercased, without scheme, path, port or a
+ * leading "www.", with a non-ASCII host in punycode. Null when the text cannot
+ * name a site. Mirrors the tracker's normalize_excluded_site so the settings
+ * list shows what is saved.
+ */
+export function normalizeExcludedSite(value: string | null | undefined): string | null {
+  const text = (value ?? "").trim().toLowerCase();
+  if (!text) return null;
+  let host: string;
+  try {
+    host = new URL(text.includes("://") ? text : `http://${text}`).hostname;
+  } catch {
+    return null;
+  }
+  host = host.replace(/^\.+|\.+$/gu, "");
+  if (host.startsWith("www.")) host = host.slice(4);
+  const labels = host.split(".");
+  if (labels.length < 2 || !labels.every((label) => EXCLUDED_SITE_LABEL.test(label))) return null;
+  return host;
 }
 
 export const DEFAULT_EXCLUDED_APPS: readonly ExcludedAppRule[] = [

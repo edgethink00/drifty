@@ -207,6 +207,8 @@ pub struct ExcludedAppDeleteQuery {
 pub struct ExcludedAppHistoryQuery {
     pub name: String,
     pub bundle_id: Option<String>,
+    /// Set for an excluded site; its past records are matched by domain.
+    pub site_domain: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -969,7 +971,7 @@ pub async fn tracker_get_excluded_app_history_count(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .get_excluded_app_history_count(&app, query.name, query.bundle_id)
+            .get_excluded_app_history_count(&app, query.name, query.bundle_id, query.site_domain)
             .map_err(|error| error.to_string())
     })
     .await
@@ -985,7 +987,7 @@ pub async fn tracker_delete_excluded_app_history(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .delete_excluded_app_history(&app, query.name, query.bundle_id)
+            .delete_excluded_app_history(&app, query.name, query.bundle_id, query.site_domain)
             .map_err(|error| error.to_string())
     })
     .await

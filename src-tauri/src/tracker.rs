@@ -609,11 +609,12 @@ impl TrackerController {
         app: &AppHandle,
         name: String,
         bundle_id: Option<String>,
+        site_domain: Option<String>,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "get_excluded_app_history_count",
-            json!({ "name": name, "bundleId": bundle_id }),
+            json!({ "name": name, "bundleId": bundle_id, "siteDomain": site_domain }),
         )
     }
 

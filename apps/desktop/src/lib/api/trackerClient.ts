@@ -362,12 +362,12 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_delete_excluded_app", { query: { id } });
     return result ?? { deleted: false };
   },
-  async getExcludedAppHistoryCount(query: { name: string; bundleId?: string | null }) {
+  async getExcludedAppHistoryCount(query: { name: string; bundleId?: string | null; siteDomain?: string | null }) {
     if (shouldUsePreviewData()) return { count: 0 };
     const result = await safeInvoke("tracker_get_excluded_app_history_count", { query });
     return result ?? { count: 0 };
   },
-  async deleteExcludedAppHistory(query: { name: string; bundleId?: string | null }) {
+  async deleteExcludedAppHistory(query: { name: string; bundleId?: string | null; siteDomain?: string | null }) {
     if (shouldUsePreviewData()) return { deleted: 0 };
     const result = await safeInvoke("tracker_delete_excluded_app_history", { query });
     return result ?? { deleted: 0 };
