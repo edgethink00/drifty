@@ -62,6 +62,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_delete_activity_segments",
   "tracker_delete_history_range",
   "tracker_search_classification_rule_candidates",
+  "tracker_preview_classification_rule",
   "tracker_apply_classification_rules",
   "tracker_save_classifications",
   "tracker_refresh_non_ai_classifications",

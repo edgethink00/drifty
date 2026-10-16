@@ -1449,6 +1449,13 @@ def save_classification_rule(payload: dict):
     return response(True, rule)
 
 
+def preview_classification_rule(payload: dict):
+    rule_input = payload.get("input", payload)
+    if not isinstance(rule_input, dict):
+        return response(False, error="input must be an object")
+    return response(True, database().preview_classification_rule(rule_input))
+
+
 def delete_classification_rule(payload: dict):
     rule_id = payload.get("id")
     if not isinstance(rule_id, str) or not rule_id:
@@ -2263,6 +2270,7 @@ COMMANDS = {
     "delete_activity_segments": delete_activity_segments,
     "delete_history_range": delete_history_range,
     "search_classification_rule_candidates": search_classification_rule_candidates,
+    "preview_classification_rule": preview_classification_rule,
     "apply_classification_rules": apply_classification_rules,
     "save_classifications": save_classifications,
     "refresh_non_ai_classifications": refresh_non_ai_classifications,

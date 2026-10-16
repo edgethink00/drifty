@@ -2120,25 +2120,8 @@ class TrackerDatabase:
             ).fetchall()
         return [self._serialize_rule(row) for row in rows]
 
-    def save_classification_rule(self, rule_input: dict[str, Any]) -> dict[str, Any]:
-        target_kind = str(rule_input.get("targetKind", rule_input.get("target_kind", ""))).strip()
-        if target_kind not in VALID_RULE_TARGET_KINDS:
-            raise ValueError("targetKind must be 'site' or 'app'")
-
-        # Old IPv6 exact-URL rows lost their brackets. Permit an unchanged
-        # row to be disabled without guessing its ambiguous host/port spelling.
-        existing_id = rule_input.get("id")
-        if existing_id and rule_input.get("enabled") is False:
-            with self.connect() as conn:
-                existing = conn.execute("SELECT * FROM classification_rules WHERE id = ?", (str(existing_id),)).fetchone()
-                if existing and existing["target_kind"] == "site" and ":" in existing["target_value"]:
-                    serialized = self._serialize_rule(existing)
-                    fields = ("targetKind", "targetValue", "matchScope", "detailKind", "detailValue", "category", "productivity", "confidence")
-                    if all(rule_input.get(key) == serialized[key] for key in fields):
-                        conn.execute("UPDATE classification_rules SET enabled = 0, updated_at = ? WHERE id = ?", (datetime.now(timezone.utc).isoformat(), str(existing_id)))
-                        conn.execute("DELETE FROM activity_classifications WHERE source = 'rule' AND classification_rule_id = ?", (str(existing_id),))
-                        return self._serialize_rule(conn.execute("SELECT * FROM classification_rules WHERE id = ?", (str(existing_id),)).fetchone())
-
+    def _classification_rule_identity(self, target_kind: str, rule_input: dict[str, Any]) -> dict[str, Any]:
+        """The normalized fields that identify a rule, shared by save and preview."""
         raw_target_value = str(rule_input.get("targetValue", rule_input.get("target_value", ""))).strip()
         normalized_target_value = self._normalize_rule_target(target_kind, raw_target_value)
         if not normalized_target_value:
@@ -2159,7 +2142,141 @@ class TrackerDatabase:
                 raise ValueError("detailKind and detailValue are required for detail rules")
             detail_value = normalized_detail_value if detail_kind == "siteUrl" else raw_detail_value
 
-        target_value = normalized_target_value if target_kind == "site" else raw_target_value
+        return {
+            "target_kind": target_kind,
+            "target_value": normalized_target_value if target_kind == "site" else raw_target_value,
+            "normalized_target_value": normalized_target_value,
+            "match_scope": match_scope,
+            "detail_kind": detail_kind,
+            "detail_value": detail_value,
+            "normalized_detail_value": normalized_detail_value,
+        }
+
+    @staticmethod
+    def _classification_rule_key(rule: Any) -> tuple[str, str, str, str, str]:
+        """The rule's unique key, as the classification_rules table enforces it."""
+        return (
+            rule["target_kind"],
+            rule["normalized_target_value"],
+            rule["match_scope"],
+            rule["detail_kind"] or "",
+            rule["normalized_detail_value"] or "",
+        )
+
+    def preview_classification_rule(self, rule_input: dict[str, Any]) -> dict[str, Any]:
+        """How many captured records saving this rule would apply to, without writing.
+
+        The candidate takes the place a newly saved rule takes: it replaces an
+        enabled rule with the same key and, being the newest, comes first among
+        rules of its scope, so detail rules keep their records from a whole-app
+        or whole-site rule. Manual classifications are counted apart because
+        apply_classification_rules never overwrites them, so matchedCount is
+        exactly the appliedCount that saving and applying the rule produces.
+        """
+        target_kind = str(rule_input.get("targetKind", rule_input.get("target_kind", ""))).strip()
+        if target_kind not in VALID_RULE_TARGET_KINDS:
+            raise ValueError("targetKind must be 'site' or 'app'")
+        candidate = {
+            "id": "preview",
+            **self._classification_rule_identity(target_kind, rule_input),
+            "category": None,
+            "productivity": None,
+            "confidence": None,
+        }
+        candidate_key = self._classification_rule_key(candidate)
+
+        with self.connect() as conn:
+            existing = [
+                rule for rule in self._enabled_classification_rules(conn)
+                if self._classification_rule_key(rule) != candidate_key
+            ]
+            rows = conn.execute(
+                """
+                    SELECT
+                        segment.id,
+                        segment.app_name,
+                        segment.bundle_id,
+                        segment.site_domain,
+                        segment.site_url,
+                        segment.site_title,
+                        segment.window_title,
+                        segment.duration_seconds,
+                        video.title AS youtube_title,
+                        classification.source AS stored_source
+                    FROM activity_segments AS segment
+                    LEFT JOIN youtube_video_metadata AS video ON video.video_id = segment.youtube_video_id
+                    LEFT JOIN activity_classifications AS classification ON classification.segment_id = segment.id
+                """
+            ).fetchall()
+
+        detail_rules = [rule for rule in existing if rule["match_scope"] == "detail"]
+        surface_rules = [rule for rule in existing if rule["match_scope"] != "detail"]
+        ordered = (
+            [candidate, *detail_rules, *surface_rules]
+            if candidate["match_scope"] == "detail"
+            else [*detail_rules, candidate, *surface_rules]
+        )
+
+        # Surface matching depends only on these captured values. Cache, per
+        # surface, the ordered rules that match it (none when the candidate
+        # does not), so most records are ruled out by one lookup and only
+        # detail rules are checked per record.
+        missing = object()
+        surface_rules_by_key: dict[tuple[str | None, str | None, str | None], list[Any] | None] = {}
+        matched_count = 0
+        matched_seconds = 0.0
+        manual_count = 0
+        for segment in rows:
+            surface_key = (
+                segment["site_domain"] or segment["site_url"],
+                segment["bundle_id"], segment["app_name"],
+            )
+            candidates = surface_rules_by_key.get(surface_key, missing)
+            if candidates is missing:
+                normalized: dict[str, str] = {}
+                candidates = (
+                    [rule for rule in ordered if self._rule_surface_matches(segment, rule, normalized)]
+                    if self._rule_surface_matches(segment, candidate, normalized)
+                    else None
+                )
+                if len(surface_rules_by_key) < 20_000:
+                    surface_rules_by_key[surface_key] = candidates
+            if candidates is None or self._first_detail_match(segment, candidates, {}) is not candidate:
+                continue
+            if segment["stored_source"] == "manual":
+                manual_count += 1
+                continue
+            matched_count += 1
+            matched_seconds += float(segment["duration_seconds"] or 0)
+
+        return {"matchedCount": matched_count, "matchedSeconds": matched_seconds, "manualCount": manual_count}
+
+    def save_classification_rule(self, rule_input: dict[str, Any]) -> dict[str, Any]:
+        target_kind = str(rule_input.get("targetKind", rule_input.get("target_kind", ""))).strip()
+        if target_kind not in VALID_RULE_TARGET_KINDS:
+            raise ValueError("targetKind must be 'site' or 'app'")
+
+        # Old IPv6 exact-URL rows lost their brackets. Permit an unchanged
+        # row to be disabled without guessing its ambiguous host/port spelling.
+        existing_id = rule_input.get("id")
+        if existing_id and rule_input.get("enabled") is False:
+            with self.connect() as conn:
+                existing = conn.execute("SELECT * FROM classification_rules WHERE id = ?", (str(existing_id),)).fetchone()
+                if existing and existing["target_kind"] == "site" and ":" in existing["target_value"]:
+                    serialized = self._serialize_rule(existing)
+                    fields = ("targetKind", "targetValue", "matchScope", "detailKind", "detailValue", "category", "productivity", "confidence")
+                    if all(rule_input.get(key) == serialized[key] for key in fields):
+                        conn.execute("UPDATE classification_rules SET enabled = 0, updated_at = ? WHERE id = ?", (datetime.now(timezone.utc).isoformat(), str(existing_id)))
+                        conn.execute("DELETE FROM activity_classifications WHERE source = 'rule' AND classification_rule_id = ?", (str(existing_id),))
+                        return self._serialize_rule(conn.execute("SELECT * FROM classification_rules WHERE id = ?", (str(existing_id),)).fetchone())
+
+        identity = self._classification_rule_identity(target_kind, rule_input)
+        target_value = identity["target_value"]
+        normalized_target_value = identity["normalized_target_value"]
+        match_scope = identity["match_scope"]
+        detail_kind = identity["detail_kind"]
+        detail_value = identity["detail_value"]
+        normalized_detail_value = identity["normalized_detail_value"]
         category = str(rule_input["category"])
         productivity = str(rule_input["productivity"])
         enabled = 1 if rule_input.get("enabled", True) else 0
@@ -5446,6 +5563,16 @@ class TrackerDatabase:
         for rule in rules:
             if not self._rule_surface_matches(segment, rule, surfaces):
                 continue
+            if rule["match_scope"] == "detail" and not self._rule_detail_matches(segment, rule, details):
+                continue
+            return rule
+        return None
+
+    def _first_detail_match(
+        self, segment: sqlite3.Row, rules: list[Any], details: dict[str, set[str]],
+    ) -> Any | None:
+        """The first of these rules, whose surfaces already match, that also matches in detail."""
+        for rule in rules:
             if rule["match_scope"] == "detail" and not self._rule_detail_matches(segment, rule, details):
                 continue
             return rule

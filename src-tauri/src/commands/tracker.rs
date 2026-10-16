@@ -1451,6 +1451,22 @@ pub async fn tracker_delete_history_range(
 }
 
 #[tauri::command]
+pub async fn tracker_preview_classification_rule(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ClassificationRuleSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .preview_classification_rule(&app, query.input)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_search_classification_rule_candidates(
     app: AppHandle,
     controller: State<'_, TrackerController>,

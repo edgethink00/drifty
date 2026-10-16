@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-preview-classification-rule"
+description = "Enables the tracker_preview_classification_rule command without any pre-configured scope."
+commands.allow = ["tracker_preview_classification_rule"]
+
+[[permission]]
+identifier = "deny-tracker-preview-classification-rule"
+description = "Denies the tracker_preview_classification_rule command without any pre-configured scope."
+commands.deny = ["tracker_preview_classification_rule"]

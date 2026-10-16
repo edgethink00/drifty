@@ -11,7 +11,7 @@ import { DateNavigator } from "../../components/DateNavigator";
 import { NavChevronIcon } from "../../components/NavChevronIcon";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatLocalizedTimeLabel, localeForDisplayLanguage } from "../../lib/formatting";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import { CategoryIcon, RulesIcon } from "../categories/definitionIcons";
 import { PencilGlyph } from "../../components/PencilGlyph";
@@ -23,6 +23,7 @@ import {
 } from "./classificationFocusRate";
 import type { ClassificationPanelStyle } from "./ClassificationBreakdownCards";
 import { ClassificationCorrectionPopover } from "./ClassificationCorrectionPopover";
+import { useClassificationRulePreview } from "./useClassificationRulePreview";
 import {
   buildCaptureSliceGroups,
   captureRowSurfaceDetails,
@@ -35,6 +36,7 @@ import {
   type ClassificationSourceSummary,
 } from "./classificationViewData";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import type { TranslationKey } from "../localization/translations";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 type ClassificationPageProps = {
@@ -209,6 +211,7 @@ export function ClassificationPage({
   const surfaceCorrectionButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailCorrectionButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const [recentlyCorrectedRowId, setRecentlyCorrectedRowId] = useState<string | null>(null);
+  const rulePreview = useClassificationRulePreview(classificationCorrectionDraft);
   const lastDraftRef = useRef<ClassificationCorrectionDraft | null>(null);
 
   useEffect(() => {
@@ -248,11 +251,24 @@ export function ClassificationPage({
     const detailKindLabel = inlineCorrectionDetailLabel(draft.detailKind, t, effectiveLanguage);
     const surfaceKindLabel = t(selectedClassificationSourceSummary.usageKind === "site" ? "classification.domain" : "classification.app");
     const recordCount = correctedRow?.count ?? 0;
+    // Once the tracker answers, the note says how many past records the rule
+    // applies to; until then, or if it cannot, it reads as before.
+    const pastCount = rulePreview && !isRecordsCorrection ? rulePreview.matchedCount : null;
+    const pastValues = rulePreview ? {
+      count: rulePreview.matchedCount.toLocaleString(localeForDisplayLanguage(effectiveLanguage)),
+      duration: formatLocalizedCompactDurationFromSeconds(rulePreview.matchedSeconds, effectiveLanguage),
+    } : null;
+    const countedScope = (keys: readonly [TranslationKey, TranslationKey, TranslationKey], params: Record<string, string>) =>
+      t(pastCount === 0 ? keys[0] : pastCount === 1 ? keys[1] : keys[2], { ...params, ...pastValues });
     const scopeDescription = isRecordsCorrection
       ? t("classification.correction.recordsScope", { count: recordCount })
       : isDetailCorrection
-        ? t("classification.correction.detailScope", { detail: detailKindLabel })
-        : t("classification.correction.surfaceScope", { target: targetLabel });
+        ? pastCount === null
+          ? t("classification.correction.detailScope", { detail: detailKindLabel })
+          : countedScope(["classification.correction.detailScopeNone", "classification.correction.detailScopeOne", "classification.correction.detailScopeCount"], { detail: detailKindLabel })
+        : pastCount === null
+          ? t("classification.correction.surfaceScope", { target: targetLabel })
+          : countedScope(["classification.correction.surfaceScopeNone", "classification.correction.surfaceScopeOne", "classification.correction.surfaceScopeCount"], { target: targetLabel });
     const scopeBadge = isRecordsCorrection
       ? t("classification.correction.recordsBadge")
       : isDetailCorrection

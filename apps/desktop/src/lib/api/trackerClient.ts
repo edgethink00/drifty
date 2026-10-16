@@ -65,6 +65,7 @@ import type {
 } from "@drifty/domain";
 import {
   previewAppIcons,
+  previewClassificationRule,
   previewDeleteActivitySegments,
   previewDeleteProject,
   previewHourlySummary,
@@ -401,6 +402,11 @@ export const trackerClient: TrackerApi = {
   async searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery) {
     const result = await safeInvoke("tracker_search_classification_rule_candidates", { query });
     return result ?? [];
+  },
+  async previewClassificationRule(input: ClassificationRuleInput) {
+    if (shouldUsePreviewData()) return previewClassificationRule(input);
+    const result = await safeInvoke("tracker_preview_classification_rule", { query: { input } });
+    return result ?? { matchedCount: 0, matchedSeconds: 0, manualCount: 0 };
   },
   async applyClassificationRules(query?: ClassificationQuery) {
     const result = await safeInvoke("tracker_apply_classification_rules", { query });

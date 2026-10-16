@@ -1,10 +1,12 @@
-import { buildHourlySummary, topSites as buildTopSites } from "@drifty/domain";
+import { buildHourlySummary, findMatchingClassificationRule, topSites as buildTopSites } from "@drifty/domain";
 import type {
   ActivityCategory,
   ActivityClassificationRecord,
   ActivitySegment,
   AppIconMap,
   AppIdentity,
+  ClassificationRuleInput,
+  ClassificationRulePreview,
   HourBucket,
   ProductivityLabel,
   Project,
@@ -19,6 +21,8 @@ import type {
   TrackerStatus,
 } from "@drifty/domain";
 import { localDateKey } from "../formatting";
+
+const PREVIEW_FIXTURE_REASON = "Preview fixture classification";
 
 type PreviewActivitySegment = ActivitySegment & { category: ActivityCategory; productivity: ProductivityLabel };
 type PreviewSegmentSpec = readonly [
@@ -182,7 +186,7 @@ function makeSegment(
     // A fixed productivity applies to classified time, not manual corrections.
     source: PREVIEW_LEVELS ? "llm" : "manual",
     confidence: 0.96,
-    reason: "Preview fixture classification",
+    reason: PREVIEW_FIXTURE_REASON,
     classifiedAt: endedAt,
   };
 
@@ -432,6 +436,29 @@ export function previewSaveClassifications(
     });
   }
   return { saved: classifications.length };
+}
+
+/**
+ * The tracker's rule preview over the synthetic records; preview mode keeps no
+ * rules. Fixtures carry a pinned "manual" source only so they read the same on
+ * every screen; they stand for automatic results here, and only a correction
+ * made in preview counts as the user's own.
+ */
+export function previewClassificationRule(input: ClassificationRuleInput): ClassificationRulePreview {
+  let matchedCount = 0;
+  let matchedSeconds = 0;
+  let manualCount = 0;
+  for (const segment of previewSegments()) {
+    if (!findMatchingClassificationRule(segment, [{ ...input, enabled: true }])) continue;
+    const stored = segment.classification;
+    if (stored?.source === "manual" && stored.reason !== PREVIEW_FIXTURE_REASON) {
+      manualCount += 1;
+      continue;
+    }
+    matchedCount += 1;
+    matchedSeconds += segment.durationSeconds;
+  }
+  return { matchedCount, matchedSeconds, manualCount };
 }
 
 export function previewDeleteActivitySegments(ids: readonly string[]): { deleted: number } {

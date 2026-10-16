@@ -34,6 +34,7 @@ export const trackerInvokeCommands = [
   "tracker_delete_activity_segments",
   "tracker_delete_history_range",
   "tracker_search_classification_rule_candidates",
+  "tracker_preview_classification_rule",
   "tracker_apply_classification_rules",
   "tracker_save_classifications",
   "tracker_refresh_non_ai_classifications",
@@ -130,6 +131,10 @@ export type TrackerCommandMap = {
   tracker_search_classification_rule_candidates: {
     args: { query: ClassificationRuleCandidateQuery };
     result: ClassificationRuleCandidate[];
+  };
+  tracker_preview_classification_rule: {
+    args: { query: { input: ClassificationRuleInput } };
+    result: ClassificationRulePreview;
   };
   tracker_apply_classification_rules: {
     args: { query: ClassificationQuery | undefined };
@@ -502,6 +507,18 @@ export interface ClassificationRuleApplyResult {
   matchedCount: number;
   appliedCount: number;
   skippedCount: number;
+}
+
+/**
+ * How many records already captured on this computer a classification rule
+ * would apply to, before anything is written. matchedCount equals the
+ * appliedCount that saving and applying the rule produces; manual
+ * classifications stay and are counted apart.
+ */
+export interface ClassificationRulePreview {
+  matchedCount: number;
+  matchedSeconds: number;
+  manualCount: number;
 }
 
 export interface ActivityClassificationRecord {
@@ -898,6 +915,7 @@ export interface TrackerApi {
   deleteActivitySegments(ids: readonly string[]): Promise<{ deleted: number }>;
   deleteHistoryRange(query: DeleteHistoryRangeQuery): Promise<DeleteHistoryRangeResult>;
   searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery): Promise<ClassificationRuleCandidate[]>;
+  previewClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRulePreview>;
   applyClassificationRules(query?: ClassificationQuery): Promise<ClassificationRuleApplyResult>;
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;

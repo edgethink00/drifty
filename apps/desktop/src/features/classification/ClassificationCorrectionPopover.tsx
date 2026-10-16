@@ -145,7 +145,9 @@ export function ClassificationCorrectionPopover({
 
   const updatePlacement = useCallback(() => {
     if (!cardRef.current) return;
-    const measured = cardRef.current.getBoundingClientRect().height;
+    // Layout height: the reveal animation scales the card, and placing it again
+    // mid-reveal (when the scope note gains its count) would leave it short.
+    const measured = cardRef.current.offsetHeight;
     const rowCounted = changed || cardRef.current.dataset.reserveChange === "true";
     const height = rowCounted ? measured : measured + CLASSIFICATION_CORRECTION_CHANGE_ROW_HEIGHT;
     const viewport = { width: window.innerWidth, height: window.innerHeight };
@@ -180,7 +182,9 @@ export function ClassificationCorrectionPopover({
       window.removeEventListener("resize", throttledUpdatePlacement);
       window.removeEventListener("scroll", throttledUpdatePlacement, true);
     };
-  }, [updatePlacement, throttledUpdatePlacement, notice]);
+    // The scope note gains its record count a moment after opening; a note
+    // that wraps onto another line moves the card's edge, so place it again.
+  }, [updatePlacement, throttledUpdatePlacement, notice, scopeDescription]);
 
   // Wait until placement makes the card visible before focusing it. Coordinate
   // updates and category edits must not move focus again.

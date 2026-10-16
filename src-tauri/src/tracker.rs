@@ -621,6 +621,15 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_recent_apps", json!({ "limit": limit }))
     }
 
+    /// What saving a classification rule would do to existing records; writes nothing.
+    pub fn preview_classification_rule(
+        &self,
+        app: &AppHandle,
+        input: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "preview_classification_rule", json!({ "input": input }))
+    }
+
     pub fn search_classification_rule_candidates(
         &self,
         app: &AppHandle,
@@ -1301,6 +1310,7 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
         | "get_excluded_app_history_count"
         | "get_recent_apps"
         | "search_classification_rule_candidates"
+        | "preview_classification_rule"
         | "get_projects"
         | "get_project_assignments"
         | "get_dev_signals"
@@ -2634,6 +2644,7 @@ mod tests {
             "get_excluded_app_history_count",
             "get_recent_apps",
             "search_classification_rule_candidates",
+            "preview_classification_rule",
             "get_projects",
             "get_project_assignments",
             "get_dev_signals",
