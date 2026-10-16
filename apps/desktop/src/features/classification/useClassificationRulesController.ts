@@ -67,7 +67,7 @@ export function useClassificationRulesController({
       const saved = await trackerClient.saveClassificationRule(input);
       if (!saved) throw new Error("The classification could not be saved. Try again.");
       const applyResult = await trackerClient.applyClassificationRules();
-      setClassificationRuleApplyResult(applyResult);
+      setClassificationRuleApplyResult(input.enabled === false ? null : await savedRuleApplyResult(input, applyResult));
       setClassificationRuleMessage(t("classification.rules.saved"));
       setClassificationRules(await trackerClient.getClassificationRules());
       await onRefreshSelectedDay();
@@ -134,4 +134,17 @@ export function useClassificationRulesController({
     loadClassificationRules,
     saveClassificationRule,
   };
+}
+
+/**
+ * What saving did for this one rule. Applying re-runs every enabled rule, so
+ * its totals also count records other rules hold; asking the rule preview again
+ * once applied gives this rule's own records, the number its edit form showed
+ * before saving. Without that answer the totals are shown as before. A rule
+ * saved off applies to nothing, so it reports no count.
+ */
+async function savedRuleApplyResult(input: ClassificationRuleInput, applyResult: ClassificationRuleApplyResult): Promise<ClassificationRuleApplyResult> {
+  const preview = await Promise.resolve().then(() => trackerClient.previewClassificationRule(input)).catch(() => null);
+  if (!preview) return applyResult;
+  return { matchedCount: preview.matchedCount + preview.manualCount, appliedCount: preview.matchedCount, skippedCount: preview.manualCount };
 }

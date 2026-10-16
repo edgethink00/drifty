@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ActivitySegment, ClassificationRule } from "@drifty/domain";
+import { trackerClient } from "../../lib/api/trackerClient";
 import { ClassificationSavedRulesList } from "./ClassificationSavedRulesList";
 
 const rule: ClassificationRule = { id: "existing", targetKind: "site", targetValue: "example.com", matchScope: "detail", detailKind: "siteUrl", detailValue: "https://example.com/course", category: "learning", productivity: "focus", enabled: false, confidence: 0.9 };
@@ -18,6 +19,7 @@ function chooseFromOptions(target: string, item: "Edit" | "Remove") {
   fireEvent.click(screen.getByRole("menuitem", { name: item }));
 }
 afterEach(cleanup);
+afterEach(() => vi.restoreAllMocks());
 describe("saved classification management", () => {
   it("keeps an empty list to its message, without a zero count or the one-time edit note", () => {
     setup([]);
@@ -121,5 +123,35 @@ describe("saved classification management", () => {
     fireEvent.change(search, { target: { value: "" } });
     expect(screen.getAllByRole("article")).toHaveLength(24);
   });
-
+  it("says how many past records an enabled rule's edit applies to, asking once per opened form", async () => {
+    const preview = vi.spyOn(trackerClient, "previewClassificationRule").mockResolvedValue({ matchedCount: 1234, matchedSeconds: 21000, manualCount: 0 });
+    setup([{ ...rule, enabled: true }]);
+    chooseFromOptions("https://example.com/course", "Edit");
+    expect(await screen.findByText("Applies to 1,234 past records (5h 50m) and future ones.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("combobox", { name: "Category" }));
+    fireEvent.click(screen.getByRole("option", { name: "Communication" }));
+    expect(screen.getByText("Applies to 1,234 past records (5h 50m) and future ones.")).toBeTruthy();
+    expect(preview).toHaveBeenCalledTimes(1);
+    expect(preview).toHaveBeenCalledWith(expect.objectContaining({ targetKind: "site", targetValue: "example.com", matchScope: "detail", detailKind: "siteUrl", detailValue: "https://example.com/course", enabled: true }));
+  });
+  it("keeps the one-time edit sentence only when such records exist, and says a turned-off rule applies to nothing", async () => {
+    const preview = vi.spyOn(trackerClient, "previewClassificationRule").mockResolvedValue({ matchedCount: 1, matchedSeconds: 1500, manualCount: 2 });
+    setup([{ ...rule, enabled: true }, { ...rule, id: "off", detailValue: "https://example.com/off" }]);
+    chooseFromOptions("https://example.com/course", "Edit");
+    expect(await screen.findByText("Applies to 1 past record (25m) and future ones. One-time manual edits stay.")).toBeTruthy();
+    chooseFromOptions("https://example.com/off", "Edit");
+    expect(screen.getByText("While it's off, it doesn't apply to any records.")).toBeTruthy();
+    expect(preview).toHaveBeenCalledTimes(1);
+  });
+  it("says when no past record changes, and reads as before when the count is unavailable", async () => {
+    vi.spyOn(trackerClient, "previewClassificationRule")
+      .mockResolvedValueOnce({ matchedCount: 0, matchedSeconds: 0, manualCount: 0 })
+      .mockRejectedValueOnce(new Error("tracker unavailable"));
+    setup([{ ...rule, enabled: true }, { ...rule, id: "second", enabled: true, detailValue: "https://example.com/second" }]);
+    chooseFromOptions("https://example.com/course", "Edit");
+    expect(await screen.findByText("No past records change; future ones will.")).toBeTruthy();
+    chooseFromOptions("https://example.com/second", "Edit");
+    await waitFor(() => expect(screen.getByText("Matching existing and future records will update. One-time manual edits stay.")).toBeTruthy());
+    expect(screen.getAllByRole("button", { name: "Save changes" })).toHaveLength(2);
+  });
 });

@@ -65,3 +65,37 @@ describe("rule target validation", () => {
     expect(result.current.classificationRulesError).toBeNull();
   });
 });
+
+describe("saved rule result", () => {
+  const input: ClassificationRuleInput = { targetKind: "site", targetValue: "youtube.com", category: "learning", productivity: "focus", enabled: true };
+  const saved: ClassificationRule = { ...input, id: "youtube", matchScope: "surface", detailKind: null, detailValue: null,
+    confidence: 1, enabled: true, createdAt: "2026-10-16", updatedAt: "2026-10-16" };
+  function setup() {
+    vi.spyOn(trackerClient, "saveClassificationRule").mockImplementation(async (next) => ({ ...saved, enabled: next.enabled ?? true }));
+    // Applying re-runs every enabled rule, so its totals include another rule's 6 records.
+    vi.spyOn(trackerClient, "applyClassificationRules").mockResolvedValue({ matchedCount: 25, appliedCount: 24, skippedCount: 1 });
+    vi.spyOn(trackerClient, "getClassificationRules").mockResolvedValue([saved]);
+    const preview = vi.spyOn(trackerClient, "previewClassificationRule").mockResolvedValue({ matchedCount: 18, matchedSeconds: 21000, manualCount: 1 });
+    const { result } = renderHook(() => useClassificationRulesController({ managerOpen: false,
+      t: ((key: string) => key) as LocalizationController["t"], onRefreshSelectedDay: vi.fn().mockResolvedValue(undefined) }));
+    return { preview, result };
+  }
+
+  it("reports the records the saved rule itself took, as its edit form counted them", async () => {
+    const { preview, result } = setup();
+    await act(async () => expect(await result.current.saveClassificationRule(input)).toBe(true));
+    expect(preview).toHaveBeenCalledExactlyOnceWith(input);
+    expect(result.current.classificationRuleApplyResult).toEqual({ matchedCount: 19, appliedCount: 18, skippedCount: 1 });
+  });
+
+  it("keeps the overall totals when the rule's own count is unavailable, and no count for a rule turned off", async () => {
+    const { preview, result } = setup();
+    preview.mockRejectedValueOnce(new Error("tracker unavailable"));
+    await act(async () => expect(await result.current.saveClassificationRule(input)).toBe(true));
+    expect(result.current.classificationRuleApplyResult).toEqual({ matchedCount: 25, appliedCount: 24, skippedCount: 1 });
+    await act(() => result.current.handleToggleClassificationRule(saved, false));
+    expect(result.current.classificationRuleApplyResult).toBeNull();
+    expect(result.current.classificationRuleMessage).toBe("classification.rules.saved");
+    expect(preview).toHaveBeenCalledOnce();
+  });
+});

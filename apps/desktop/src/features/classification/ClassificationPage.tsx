@@ -24,6 +24,7 @@ import {
 import type { ClassificationPanelStyle } from "./ClassificationBreakdownCards";
 import { ClassificationCorrectionPopover } from "./ClassificationCorrectionPopover";
 import { useClassificationRulePreview } from "./useClassificationRulePreview";
+import { classificationRulePreviewInput } from "./classificationRulePreview";
 import {
   buildCaptureSliceGroups,
   captureRowSurfaceDetails,
@@ -211,7 +212,7 @@ export function ClassificationPage({
   const surfaceCorrectionButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailCorrectionButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const [recentlyCorrectedRowId, setRecentlyCorrectedRowId] = useState<string | null>(null);
-  const rulePreview = useClassificationRulePreview(classificationCorrectionDraft);
+  const rulePreview = useClassificationRulePreview(classificationCorrectionDraft ? classificationRulePreviewInput(classificationCorrectionDraft) : null);
   const lastDraftRef = useRef<ClassificationCorrectionDraft | null>(null);
 
   useEffect(() => {

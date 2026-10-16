@@ -73,6 +73,23 @@ class ClassificationRulePreviewTests(unittest.TestCase):
         self.assertEqual(applied["appliedCount"], preview["matchedCount"])
         self.assertEqual(applied["skippedCount"], preview["manualCount"])
 
+    def test_after_applying_it_counts_only_the_records_the_saved_rule_holds(self) -> None:
+        self.db.save_classification_rule({"targetKind": "app", "targetValue": "com.microsoft.VSCode",
+                                          "category": "workspace", "productivity": "focus"})
+        rule = {"targetKind": "site", "targetValue": "example.com", "category": "learning", "productivity": "focus"}
+        saved = self.db.save_classification_rule(rule)
+
+        applied = self.db.apply_classification_rules()
+        after = self.db.preview_classification_rule(rule)
+
+        # Applying re-runs every enabled rule, so its totals include the app rule's record too.
+        self.assertEqual((applied["appliedCount"], applied["skippedCount"]), (3, 1))
+        self.assertEqual((after["matchedCount"], after["matchedSeconds"], after["manualCount"]), (2, 600 + 660, 1))
+        with self.db.connect() as conn:
+            held = conn.execute("SELECT COUNT(*) FROM activity_classifications WHERE classification_rule_id = ?",
+                                (saved["id"],)).fetchone()[0]
+        self.assertEqual(held, after["matchedCount"])
+
     def test_an_existing_detail_rule_keeps_its_records_from_a_whole_site_rule(self) -> None:
         self.db.save_classification_rule({"targetKind": "site", "targetValue": "example.com", "matchScope": "detail",
                                           "detailKind": "siteTitle", "detailValue": "API guide",

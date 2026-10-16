@@ -2171,7 +2171,10 @@ class TrackerDatabase:
         rules of its scope, so detail rules keep their records from a whole-app
         or whole-site rule. Manual classifications are counted apart because
         apply_classification_rules never overwrites them, so matchedCount is
-        exactly the appliedCount that saving and applying the rule produces.
+        exactly the number of records the rule holds once saved and applied.
+        Applying re-runs every enabled rule, so its appliedCount also counts
+        records other rules hold; asked again after applying, this still
+        answers for the one rule.
         """
         target_kind = str(rule_input.get("targetKind", rule_input.get("target_kind", ""))).strip()
         if target_kind not in VALID_RULE_TARGET_KINDS:

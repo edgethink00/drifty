@@ -21,8 +21,10 @@ import {
   classificationActivityLabel,
   classificationRuleAppIconSrc,
 } from "../classification/classificationViewData";
+import { useClassificationRulePreview } from "../classification/useClassificationRulePreview";
 import type { LocalizationController } from "../localization/LocalizationContext";
 import { ActionLabel } from "../../components/ActionLabel";
+import { formatLocalizedCompactDurationFromSeconds, localeForDisplayLanguage } from "../../lib/formatting";
 
 type ClassificationSavedRulesListProps = {
   /** The id of a heading outside the list that names it (the rules sheet's
@@ -169,6 +171,7 @@ function ClassificationSavedRuleCard({
   onDeleteClassificationRule,
   onToggleClassificationRule,
 }: ClassificationSavedRuleCardProps) {
+  const { effectiveLanguage } = useLocalization();
   const deletedCategories = useDeletedCategories();
   const categoryChoices = useCategoryChoices();
   const [editing, setEditing] = useState(false);
@@ -180,6 +183,9 @@ function ClassificationSavedRuleCard({
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const busy = saving || classificationRuleDeletingId !== null;
+  // A rule that stays off applies to nothing when saved, so only an enabled
+  // rule asks how many past records it takes.
+  const rulePreview = useClassificationRulePreview(editing && rule.enabled ? savedRulePreviewInput(rule) : null);
   const presentation = classificationRulePresentation(rule, classificationRuleSegments, t);
   const metadataLabel = [localizedCategoryLabel(rule.category, t), localizedProductivityLabel(rule.productivity, t), presentation.scopeLabel].join(" · ");
   const categoryDotStyle = { "--classification-rule-color": categoryControlColor(rule.category, categoryColorOverrides) } as CSSProperties;
@@ -296,7 +302,7 @@ function ClassificationSavedRuleCard({
             <button type="button" className="settings-btn" onClick={() => setEditing(false)} disabled={busy}>{t("common.cancel")}</button>
             <button type="submit" className="settings-btn settings-btn--primary" aria-label={t(busy ? "settings.classification.saving" : "classification.rules.save")} disabled={busy} aria-busy={busy}><ActionLabel busy={busy} busyLabel={t("settings.classification.saving")}>{t("common.save")}</ActionLabel></button>
           </div>
-          <p>{t("classification.rules.editNotice")}</p>
+          <p>{rule.enabled ? savedRuleEditNotice(rulePreview, t, effectiveLanguage) : t("classification.rules.editNoticeOff")}</p>
         </form>
       ) : null}
       {confirmDelete ? (
@@ -315,6 +321,39 @@ function ClassificationSavedRuleCard({
 function revealOpenPicker(event: SyntheticEvent<HTMLFormElement>) {
   const form = event.currentTarget;
   requestAnimationFrame(() => form.querySelector<HTMLElement>('[role="listbox"]')?.scrollIntoView?.({ block: "nearest" }));
+}
+
+/** The saved rule as it would be saved again; its category does not change which records it takes. */
+function savedRulePreviewInput(rule: ClassificationRule): ClassificationRuleInput {
+  return {
+    targetKind: rule.targetKind,
+    targetValue: rule.targetValue,
+    matchScope: rule.matchScope,
+    detailKind: rule.detailKind,
+    detailValue: rule.detailValue,
+    category: rule.category,
+    productivity: rule.productivity,
+    enabled: true,
+    confidence: rule.confidence,
+  };
+}
+
+/**
+ * How far saving the edited rule reaches, once the tracker has counted it.
+ * The one-time edit sentence stays only when such records would be passed over.
+ */
+function savedRuleEditNotice(
+  preview: ReturnType<typeof useClassificationRulePreview>,
+  t: LocalizationController["t"],
+  language: ReturnType<typeof useLocalization>["effectiveLanguage"],
+): string {
+  if (!preview) return t("classification.rules.editNotice");
+  const values = {
+    count: preview.matchedCount.toLocaleString(localeForDisplayLanguage(language)),
+    duration: formatLocalizedCompactDurationFromSeconds(preview.matchedSeconds, language),
+  };
+  const reach = t(preview.matchedCount === 0 ? "classification.rules.editNoticeNone" : preview.matchedCount === 1 ? "classification.rules.editNoticeOne" : "classification.rules.editNoticeCount", values);
+  return preview.manualCount > 0 ? reach + " " + t("classification.rules.editNoticeManual") : reach;
 }
 
 type ClassificationRulePresentation = {

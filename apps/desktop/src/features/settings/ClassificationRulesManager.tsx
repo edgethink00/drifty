@@ -138,6 +138,7 @@ export function ClassificationRulesManager({
 function localizedApplyResult(result: ClassificationRuleApplyResult, t: ReturnType<typeof useLocalization>["t"]): string {
   // A new site or app with no history matches nothing yet; "0 updated, 0 unchanged" reads like a failure.
   if (result.matchedCount === 0) return t("classification.rules.applyNone");
+  if (result.skippedCount === 0) return t("classification.rules.applySummaryAll", { applied: result.appliedCount });
   return t("classification.rules.applySummary", {
     matched: result.matchedCount,
     applied: result.appliedCount,
