@@ -488,6 +488,117 @@
 
 /* ── breakdown panel ───────────────────────────────────────────────────── */
 
+/* A commit-free day still has its real timeline and rhythm. Let their column
+   fit the available panel height, including the empty repository card. The
+   Breakdown keeps the same bottom edge and scrolls its own details like Week. */
+.page--agents-empty-day {
+  display: flex;
+  flex: 0 1 auto;
+  min-height: 0;
+  padding-bottom: var(--breakdown-edge-gap);
+}
+
+.page--agents-empty-day > .week-v2-grid--day {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.page--agents-empty-day .day-split__main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.page--agents-empty-day .day-split__main > .pg-head,
+.page--agents-empty-day .dashboard-insight-stack {
+  flex: 0 0 auto;
+}
+
+.page--agents-empty-day .flow-breakdown-layout {
+  flex: 0 1 auto;
+  min-height: 10rem;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.page--agents-empty-day .flow-breakdown-layout__chart {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.page--agents-empty-day .agents-flow-card {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.page--agents-empty-day .flow-chart-grid {
+  height: calc(var(--flow-breakdown-cell-min-height) * var(--flow-row-count));
+  max-height: 100%;
+  min-height: 0;
+  grid-template-rows: repeat(var(--flow-row-count), minmax(0, 1fr));
+}
+
+.page--agents-empty-day .flow-breakdown-layout__chart .flow-cell {
+  min-height: 0;
+}
+
+.page--agents-empty-day .app-usage-panel {
+  display: flex;
+  flex: 1 1 208px;
+  min-height: min-content;
+}
+
+.page--agents-empty-day .app-usage-empty.empty-state {
+  flex: 1;
+  min-height: 0;
+  padding-block: var(--space-3);
+}
+
+.page--agents-empty-day .week-v2-side {
+  min-height: 0;
+}
+
+.page--agents-empty-day .week-v2-grid--side-open > .week-v2-side {
+  padding-inline: 6px;
+}
+
+.page--agents-empty-day .week-v2-grid--side-open .week-v2-side__content {
+  position: static;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  padding-inline: 6px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-soft) 34%, transparent) transparent;
+}
+
+@media (max-height: 680px) {
+  .page--agents-empty-day .insight-chart-panel {
+    padding-block: 8px;
+  }
+
+  .page--agents-empty-day .insight-panel-head {
+    margin-bottom: 4px;
+  }
+
+  .page--agents-empty-day .focus-drift__svg {
+    height: 3.5rem;
+  }
+}
+
+/* At the Windows minimum height the plot can be shorter than its minute
+   labels. Thin only the axis labels; every cell and the current-time marker
+   remain available at the selected detail interval. */
+@media (max-height: 640px) {
+  .page--agents-empty-day .agents-flow-card[data-flow-interval="3"] .flow-chart-row:not(:nth-child(3n + 1)):not(.flow-chart-row--time-label) .flow-chart-row-label,
+  .page--agents-empty-day .agents-flow-card:not([data-flow-interval="3"]) .flow-chart-row:nth-child(2n):not(.flow-chart-row--time-label) .flow-chart-row-label {
+    visibility: hidden;
+  }
+}
+
 /* Agent events reuse Week geometry but carry either concurrency tones or the
    shared repo palette. Their text foreground follows the encoded tone rather
    than assuming every event color is dark. */

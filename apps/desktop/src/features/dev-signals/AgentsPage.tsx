@@ -1776,7 +1776,7 @@ export function AgentsPage({
   }
 
   return (
-    <div className="page page--agents" aria-busy={loading}>
+    <div className={`page page--agents${repos.length === 0 ? " page--agents-empty-day" : ""}`} aria-busy={loading}>
       <div className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}`}>
         <div className="day-split__main">
           {pageHead}
