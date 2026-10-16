@@ -53,6 +53,8 @@ export interface WeeklyBreakdownDay {
   neutralSeconds: number;
   driftSeconds: number;
   categorySeconds: Partial<Record<ActivityCategory, number>>;
+  /** The neutral part of categorySeconds; an added productivity level shows it under its own name. */
+  neutralCategorySeconds?: Partial<Record<ActivityCategory, number>>;
   /** Seconds per project id (averaged by occurrences like categorySeconds). Empty when no project map supplied. */
   projectSeconds: Partial<Record<string, number>>;
 }
@@ -103,6 +105,7 @@ export function buildWeeklyBreakdown(
   const neutral = Array.from({ length: 7 }, () => 0);
   const drift = Array.from({ length: 7 }, () => 0);
   const categories = Array.from({ length: 7 }, () => new Map<ActivityCategory, number>());
+  const neutralCategories = Array.from({ length: 7 }, () => new Map<ActivityCategory, number>());
   const projects = Array.from({ length: 7 }, () => new Map<string, number>());
   const dates = Array.from({ length: 7 }, () => new Set<string>());
   const hidden = hiddenWeekdayIndexes(visibility);
@@ -119,6 +122,7 @@ export function buildWeeklyBreakdown(
     else if (productivity === "drift") drift[index] += seconds;
     else if (category !== "unknown") neutral[index] += seconds;
     categories[index].set(category, (categories[index].get(category) ?? 0) + seconds);
+    if (productivity === "neutral" && category !== "unknown") neutralCategories[index].set(category, (neutralCategories[index].get(category) ?? 0) + seconds);
     dates[index].add(localDateKey(started));
   }
 
@@ -145,6 +149,8 @@ export function buildWeeklyBreakdown(
     const occurrences = Math.max(dates[index].size, 1);
     const categorySeconds: Partial<Record<ActivityCategory, number>> = {};
     for (const [category, seconds] of categories[index]) categorySeconds[category] = seconds / occurrences;
+    const neutralCategorySeconds: Partial<Record<ActivityCategory, number>> = {};
+    for (const [category, seconds] of neutralCategories[index]) neutralCategorySeconds[category] = seconds / occurrences;
     const projectSeconds: Partial<Record<string, number>> = {};
     for (const [projectId, seconds] of projects[index]) projectSeconds[projectId] = seconds / occurrences;
     return {
@@ -155,6 +161,7 @@ export function buildWeeklyBreakdown(
       neutralSeconds: neutral[index] / occurrences,
       driftSeconds: drift[index] / occurrences,
       categorySeconds,
+      neutralCategorySeconds,
       projectSeconds,
     };
   });

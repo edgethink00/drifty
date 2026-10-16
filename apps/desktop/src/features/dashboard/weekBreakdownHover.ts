@@ -1,5 +1,6 @@
 import { aggregateDeviceElapsedTime, clipDeviceElapsedTimeSegment, classifyActivity } from "@drifty/domain";
-import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
+import type { ActivitySegment, ClassificationOptions, ProductivityLevel } from "@drifty/domain";
+import { productivityKeyFor } from "../productivity-levels/productivityLevelView";
 import { buildCompactActivityBreakdown } from "./compactChartBreakdown";
 import type { CompactClassificationBreakdownRow } from "./HoverCards";
 import { splitSegmentIntoDayOverlaps } from "./weekCalendar";
@@ -17,6 +18,8 @@ type WeekBreakdownHoverInput = {
   readonly mode: WeekDashboardColorMode;
   readonly key: string | readonly string[];
   readonly day?: string;
+  /** Added productivity levels: in productivity mode a level's key holds its neutral time. */
+  readonly levels?: readonly ProductivityLevel[];
 };
 
 /**
@@ -35,6 +38,7 @@ export function buildWeekBreakdownHoverRows({
   mode,
   key,
   day,
+  levels = [],
 }: WeekBreakdownHoverInput): CompactClassificationBreakdownRow[] {
   const rangeStartDay = day ?? startDay;
   const rangeEndDay = day ?? endDay;
@@ -46,7 +50,7 @@ export function buildWeekBreakdownHoverRows({
     const matches = mode === "project"
       ? keys.includes(projectBySegmentId?.get(segment.id) ?? WEEK_NO_PROJECT_KEY)
       : mode === "productivity"
-      ? keys.includes(classification.productivity)
+      ? keys.includes(productivityKeyFor(classification.category, classification.productivity, levels))
       : keys.includes(classification.category);
     if (!matches) continue;
 

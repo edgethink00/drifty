@@ -135,6 +135,29 @@ function secondsBetween(startedAt: string, endedAt: string) {
   return Math.max(0, Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000));
 }
 
+/**
+ * ?previewLevels=1 (browser preview only) shows added productivity levels: the
+ * fixtures read as classified time, so fixed productivity applies to them, and
+ * a "휴식" level holding entertainment is set up once if there is no level yet.
+ */
+const PREVIEW_LEVELS = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("previewLevels") === "1";
+
+function seedPreviewLevel(): void {
+  if (!PREVIEW_LEVELS || "__TAURI_INTERNALS__" in window) return;
+  try {
+    const productivityKey = "drifty.productivityCustomizations.v1";
+    const categoryKey = "drifty.categoryCustomizations.v1";
+    const productivity = JSON.parse(window.localStorage.getItem(productivityKey) ?? "{}") as Record<string, unknown>;
+    if (Object.keys(productivity).some((key) => key.startsWith("level-"))) return;
+    window.localStorage.setItem(productivityKey, JSON.stringify({ ...productivity, "level-rest0001": { name: "휴식", color: "#5b86b5", createdAt: "2026-10-16T00:00:00.000Z" } }));
+    const categories = JSON.parse(window.localStorage.getItem(categoryKey) ?? "{}") as Record<string, unknown>;
+    window.localStorage.setItem(categoryKey, JSON.stringify({ ...categories, entertainment: { productivity: "neutral", level: "level-rest0001" } }));
+  } catch {
+    // Without storage the preview simply shows no level.
+  }
+}
+seedPreviewLevel();
+
 function previewBundleId(appName: string) {
   return PREVIEW_APP_BUNDLE_IDS[appName] ?? `com.fixture.${appName.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
 }
@@ -156,7 +179,8 @@ function makeSegment(
   const classification: PreviewActivitySegment["classification"] = overrides.classification ?? {
     category,
     productivity,
-    source: "manual",
+    // A fixed productivity applies to classified time, not manual corrections.
+    source: PREVIEW_LEVELS ? "llm" : "manual",
     confidence: 0.96,
     reason: "Preview fixture classification",
     classifiedAt: endedAt,

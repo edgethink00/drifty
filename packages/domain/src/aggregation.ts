@@ -66,6 +66,8 @@ export interface CategoryDuration {
   totalSeconds: number;
   segments: number;
   ratio: number;
+  /** The neutral part of totalSeconds; an added productivity level shows it under its own name. */
+  neutralSeconds?: number;
 }
 
 export interface ProductivityDuration {
@@ -1251,27 +1253,29 @@ export function computePreservedFocusStrikeSeconds(
 
 export function buildCategoryDurations(segments: ActivitySegment[], options?: ClassificationOptions): CategoryDuration[] {
   segments = aggregateDeviceElapsedTime(segments);
-  const totals = CATEGORY_ORDER.map((category) => ({
+  const totals: CategoryDuration[] = CATEGORY_ORDER.map((category) => ({
     category,
     totalSeconds: 0,
     segments: 0,
     ratio: 0,
+    neutralSeconds: 0,
   }));
   const totalSeconds = totalDurationSeconds(segments);
 
   for (const segment of segments) {
     if (isExcludedSegment(segment)) continue;
-    const { category } = classifyActivity(segment, options);
+    const { category, productivity } = classifyActivity(segment, options);
     let target = totals.find((entry) => entry.category === category);
     // A user-added category joins the list the first time it has time,
     // ahead of unclassified, which stays last.
     if (!target && isCustomActivityCategory(category)) {
-      target = { category, totalSeconds: 0, segments: 0, ratio: 0 };
+      target = { category, totalSeconds: 0, segments: 0, ratio: 0, neutralSeconds: 0 };
       totals.splice(totals.length - 1, 0, target);
     }
     if (!target) continue;
     target.totalSeconds += segment.durationSeconds;
     target.segments += 1;
+    if (productivity === "neutral") target.neutralSeconds = (target.neutralSeconds ?? 0) + segment.durationSeconds;
   }
 
   return totals.map((entry) => ({

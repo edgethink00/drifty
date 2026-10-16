@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { TranslationKey } from "./translations";
 import { translateFor, type TranslationParams } from "./translate";
 import { parseCategoryNameOverrideKey, withCategoryNameOverrides } from "./categoryNameOverrides";
-import { useCategoryNameOverrideKey, useCustomCategoryColorVariables } from "../settings/categoryCustomizationStore";
+import { useCategoryNameOverrideKey, useCustomCategoryColorVariables, useProductivityLevelStyles } from "../settings/categoryCustomizationStore";
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
@@ -41,6 +41,7 @@ export function useLocalizationController(): LocalizationController {
   const [effectiveLanguage, setDisplayLanguage] = useState<DisplayLanguage>(resolveInitialDisplayLanguage);
   const categoryNameKey = useCategoryNameOverrideKey();
   useCustomCategoryColorVariables();
+  useProductivityLevelStyles();
 
   useEffect(() => {
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, effectiveLanguage);

@@ -177,6 +177,32 @@ describe("insight weekly builders", () => {
     ]);
   });
 
+  it("stacks an added productivity level under the Neutral cap with the neutral time it holds", () => {
+    const weekly = [
+      {
+        weekdayIndex: 0,
+        weekday: "Mon",
+        isActive: true,
+        focusSeconds: 1800,
+        neutralSeconds: 3000,
+        driftSeconds: 600,
+        categorySeconds: { entertainment: 2400, communication: 1200 },
+        neutralCategorySeconds: { entertainment: 1800, communication: 1200 },
+        projectSeconds: {},
+      },
+    ];
+
+    const chart = buildWeeklyChartView(weekly, "productivity", [], [], [{ id: "level-rest0001", name: "Rest", color: "#5b86b5", categories: ["entertainment"] }]);
+
+    expect(chart.columns[0]?.segments.map((segment) => [segment.key, segment.seconds])).toEqual([
+      ["focus", 1800],
+      ["drift", 600],
+      ["level-rest0001", 1800],
+      ["neutral", 1200],
+    ]);
+    expect(chart.columns[0]?.totalSeconds).toBe(5400);
+  });
+
   it("keeps productivity series order when Drift is larger than Focus", () => {
     const weekly = [
       {

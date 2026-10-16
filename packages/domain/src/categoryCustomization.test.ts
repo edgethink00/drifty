@@ -13,6 +13,7 @@ import {
   deletedCategoryCutoffs,
   normalizeCategoryCustomizations,
   normalizeProductivityCustomizations,
+  productivityLevels,
   productivityNameOverrides,
 } from "./categoryCustomization";
 import {
@@ -311,3 +312,33 @@ describe("user-added categories", () => {
   });
 });
 
+describe("added productivity levels", () => {
+  it("keeps up to three named levels, the oldest first, with a color and no description", () => {
+    const at = (minute: number) => new Date(Date.UTC(2026, 9, 16, 0, minute)).toISOString();
+    const normalized = normalizeProductivityCustomizations({
+      "level-rest0001": { name: " 휴식 ", description: "never used", color: "#5B86B5", createdAt: at(1) },
+      "level-late0004": { name: "넷째", createdAt: at(4) },
+      "level-two00002": { name: "둘째", createdAt: at(2) },
+      "level-thr00003": { name: "셋째", createdAt: at(3) },
+      "level-noname01": { color: "#000000" },
+      "level-BAD": { name: "x" },
+    });
+    expect(normalized["level-rest0001"]).toEqual({ name: "휴식", color: "#5b86b5", createdAt: at(1) });
+    expect(Object.keys(normalized).sort()).toEqual(["level-rest0001", "level-thr00003", "level-two00002"]);
+  });
+
+  it("stores a category fixed to a level as neutral, so every score counts it as neutral", () => {
+    const categories = normalizeCategoryCustomizations({ entertainment: { productivity: "drift", level: "level-rest0001" } });
+    expect(categories.entertainment).toEqual({ productivity: "neutral", level: "level-rest0001" });
+    expect(categoryProductivityPreferences(categories)).toEqual({ entertainment: "neutral" });
+    const levels = productivityLevels(normalizeProductivityCustomizations({ "level-rest0001": { name: "휴식", color: "#5b86b5" } }), categories);
+    expect(levels).toEqual([{ id: "level-rest0001", name: "휴식", color: "#5b86b5", categories: ["entertainment"] }]);
+  });
+
+  it("counts each category's neutral time, which a level shows under its own name", () => {
+    const watched = segment({ classification: { category: "entertainment", productivity: "drift", source: "llm", confidence: 0.8 } });
+    const options = { categoryProductivity: { entertainment: "neutral" as const } };
+    const entertainment = buildCategoryDurations([watched], options).find((entry) => entry.category === "entertainment");
+    expect(entertainment).toMatchObject({ totalSeconds: 600, neutralSeconds: 600 });
+  });
+});

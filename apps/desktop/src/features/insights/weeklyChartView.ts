@@ -1,5 +1,5 @@
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
-import type { ActivityCategory, ProductivityLabel } from "@drifty/domain";
+import type { ActivityCategory, ProductivityLabel, ProductivityLevel } from "@drifty/domain";
 import type { DonutCategorySlice, WeeklyBreakdownDay } from "./insightData";
 
 export type WeeklyChartMode = "productivity" | "category" | "project";
@@ -71,23 +71,46 @@ export function buildWeeklyChartView(
   mode: WeeklyChartMode,
   categorySeries: DonutCategorySlice[],
   projectSeries: readonly WeeklyChartProjectSeriesItem[] = [],
+  levels: readonly ProductivityLevel[] = [],
 ): WeeklyChartView {
   // Unclassified ("unknown") time is excluded from the category lens so the three
   // modes share a denominator (classified time) and their bars match in length.
   const classifiedCategorySeries = categorySeries.filter((slice) => slice.category !== "unknown");
+  // Added productivity levels stack under neutral, which stays the cap.
+  const productivitySeries = [
+    ...FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.filter((productivity) => productivity !== "neutral").map((productivity) => ({ key: productivity as string, color: PRODUCTIVITY_COLORS[productivity] })),
+    ...levels.map((level) => ({ key: level.id as string, color: level.color })),
+    { key: "neutral", color: PRODUCTIVITY_COLORS.neutral },
+  ];
   const series: WeeklyChartSeriesItem[] = mode === "productivity"
-    ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity, order) => ({ key: productivity, color: PRODUCTIVITY_COLORS[productivity], order }))
+    ? productivitySeries.map((item, order) => ({ ...item, order }))
     : mode === "project"
       ? projectSeries.map((item, order) => ({ key: item.key, color: item.color, order }))
       : classifiedCategorySeries.map((slice, order) => ({ key: slice.category, color: CATEGORY_COLORS[slice.category], order }));
+
+  // Each added level's share of a day's neutral time (a level holds only neutral time).
+  const levelSecondsByDay = new Map<WeeklyBreakdownDay, Map<string, number>>();
+  const levelSecondsFor = (day: WeeklyBreakdownDay): Map<string, number> => {
+    const cached = levelSecondsByDay.get(day);
+    if (cached) return cached;
+    const result = new Map<string, number>();
+    let left = day.neutralSeconds;
+    for (const level of levels) {
+      const seconds = Math.min(left, level.categories.reduce((sum, category) => sum + (day.neutralCategorySeconds?.[category] ?? 0), 0));
+      if (seconds > 0) result.set(level.id, seconds);
+      left -= seconds;
+    }
+    levelSecondsByDay.set(day, result);
+    return result;
+  };
 
   const valueFor = (day: WeeklyBreakdownDay, key: WeeklyChartSeriesItem["key"]): number => {
     if (mode === "productivity") {
       switch (key) {
         case "focus": return day.focusSeconds;
-        case "neutral": return day.neutralSeconds;
+        case "neutral": return Math.max(0, day.neutralSeconds - [...levelSecondsFor(day).values()].reduce((sum, seconds) => sum + seconds, 0));
         case "drift": return day.driftSeconds;
-        default: return 0;
+        default: return levelSecondsFor(day).get(key) ?? 0;
       }
     }
     if (mode === "project") return day.projectSeconds[key] ?? 0;

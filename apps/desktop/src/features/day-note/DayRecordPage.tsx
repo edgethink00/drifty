@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   activityTimeBounds, aggregateDeviceElapsedTime, classifyActivity, logicalDayEndExclusiveMs, logicalDayStartMs, shiftIsoDate,
-  type ActivitySegment, type AppIconMap, type ClassificationOptions,
+  type ActivitySegment, type AppIconMap, type ClassificationOptions, type ProductivityLevel,
 } from "@drifty/domain";
 import { DateNavigator } from "../../components/DateNavigator";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
@@ -9,6 +9,8 @@ import { mergeActivitySegments } from "../../lib/activitySegments";
 import type { CompactHistoryLoad, CompactHistoryRange } from "../dashboard/compactHistoryCache";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { DisplayLanguage } from "../localization/languagePreference";
+import { levelFor } from "../productivity-levels/productivityLevelView";
+import { useProductivityLevels } from "../settings/categoryCustomizationStore";
 import { DailyFigures } from "./DailyFigures";
 import type { DayCategory, DaySpan } from "./dayNoteFixture";
 import "./dayNote.css";
@@ -39,7 +41,7 @@ const COPY = {
 const CATEGORY: Record<string, DayCategory> = { social_media: "socialMedia" };
 
 /** The day's segments as the board's spans: minutes after the day's midnight, clipped to the app's day. */
-export function daySpansFromSegments(segments: readonly ActivitySegment[], day: string, startOfDayMinutes: number, options?: ClassificationOptions): DaySpan[] {
+export function daySpansFromSegments(segments: readonly ActivitySegment[], day: string, startOfDayMinutes: number, options?: ClassificationOptions, levels: readonly ProductivityLevel[] = []): DaySpan[] {
   const from = logicalDayStartMs(day, startOfDayMinutes);
   const to = logicalDayEndExclusiveMs(day, startOfDayMinutes);
   const midnight = new Date(day + "T00:00:00").getTime();
@@ -51,11 +53,13 @@ export function daySpansFromSegments(segments: readonly ActivitySegment[], day: 
     const clippedEnd = Math.min(end, to);
     if (clippedEnd <= clippedStart) continue;
     const { category, productivity } = classifyActivity(segment, options);
+    const level = levelFor(category, productivity, levels);
     spans.push({
       start: (clippedStart - midnight) / 60000,
       end: (clippedEnd - midnight) / 60000,
       kind: productivity,
       category: CATEGORY[category] ?? (category as DayCategory),
+      ...(level ? { level: level.id } : {}),
       app: segment.appName,
       ...(segment.bundleId ? { bundleId: segment.bundleId } : {}),
       ...(segment.siteDomain ? { site: segment.siteDomain } : {}),
@@ -97,6 +101,7 @@ type DayRecordPageProps = {
 
 export function DayRecordPage({ loadHistory, recentSegments, classificationOptions, startOfDayMinutes, appIcons }: DayRecordPageProps) {
   const { effectiveLanguage } = useLocalization();
+  const productivityLevels = useProductivityLevels();
   const lang: DisplayLanguage = effectiveLanguage === "ko" ? "ko" : "en";
   const c = COPY[lang];
   const today = logicalTodayIsoDate(startOfDayMinutes);
@@ -117,8 +122,8 @@ export function DayRecordPage({ loadHistory, recentSegments, classificationOptio
   const spans = useMemo(() => {
     if (!ready || !history) return [];
     const segments = day === today ? mergeActivitySegments(history.segments, recentSegments) : [...history.segments];
-    return daySpansFromSegments(segments, day, startOfDayMinutes, { ...classificationOptions, fallbackCandidates: segments });
-  }, [ready, history, day, today, recentSegments, startOfDayMinutes, classificationOptions]);
+    return daySpansFromSegments(segments, day, startOfDayMinutes, { ...classificationOptions, fallbackCandidates: segments }, productivityLevels);
+  }, [ready, history, day, today, recentSegments, startOfDayMinutes, classificationOptions, productivityLevels]);
   const isToday = day === today;
   return (
     <div className="page dn dn-page dn-live">

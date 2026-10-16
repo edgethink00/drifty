@@ -1,3 +1,4 @@
+import { isCustomActivityCategory } from "@drifty/domain";
 import type { DayCategory, DayKind, DaySpan } from "./dayNoteFixture";
 
 export const DAY_CATEGORIES: readonly DayCategory[] = ["workspace", "learning", "communication", "music", "game", "socialMedia", "entertainment", "shopping", "utility", "unknown"];
@@ -23,7 +24,8 @@ export function dailyFigures(input: readonly DaySpan[], windowStart = 240, cellM
   const end = start + 1440;
   const valid = input.filter(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start)
     .map(s => ({ ...s, start: Math.max(start, s.start), end: Math.min(end, s.end),
-      category: DAY_CATEGORIES.includes(s.category) ? s.category : "unknown" as DayCategory }))
+      // A user-added category keeps its own row.
+      category: DAY_CATEGORIES.includes(s.category) || isCustomActivityCategory(s.category) ? s.category : "unknown" as DayCategory }))
     .filter(s => s.end > s.start);
   const edges = [...new Set(valid.flatMap(s => [s.start, s.end]))].sort((a, b) => a - b);
   const priority: Record<DayKind, number> = { drift: 3, focus: 2, neutral: 1 };
@@ -37,15 +39,21 @@ export function dailyFigures(input: readonly DaySpan[], windowStart = 240, cellM
     const from = start + i * step;
     return members.reduce((sum, s) => sum + Math.max(0, Math.min(s.end, from + step) - Math.max(s.start, from)), 0);
   });
+  // Rows in order: the built-in categories with the added ones before
+  // Unclassified; focus, drift, neutral with added levels after neutral.
+  const addedCategories = [...new Set(spans.map(s => s.category).filter(isCustomActivityCategory))];
+  const categoryKeys: readonly DayCategory[] = [...DAY_CATEGORIES.filter(category => category !== "unknown"), ...addedCategories, "unknown"];
+  const levels = [...new Set(spans.map(s => s.level).filter((level): level is string => Boolean(level)))];
+  const keyOf = (by: DailyRowKind, s: DaySpan) => (by === "category" ? s.category : by === "productivity" ? s.level ?? s.kind : s.project);
   const rowsBy = (by: DailyRowKind): DailyRow[] => {
-    const keys: readonly string[] = by === "category" ? DAY_CATEGORIES : by === "productivity" ? DAY_KINDS
+    const keys: readonly string[] = by === "category" ? categoryKeys : by === "productivity" ? [...DAY_KINDS, ...levels]
       : [...new Set(spans.map(s => s.project).filter((name): name is string => Boolean(name)))];
     return keys.map(key => {
-      const members = spans.filter(s => (by === "category" ? s.category : by === "productivity" ? s.kind : s.project) === key);
+      const members = spans.filter(s => keyOf(by, s) === key);
       return { key, minutes: members.reduce((sum, s) => sum + s.end - s.start, 0), cells: cellsOf(members) };
     }).filter(row => row.minutes > 0).sort((a, b) => (by === "project" ? b.minutes - a.minutes : 0));
   };
-  const rows: CategoryRow[] = DAY_CATEGORIES.map(category => {
+  const rows: CategoryRow[] = categoryKeys.map(category => {
     const members = spans.filter(s => s.category === category);
     const cells = Array.from({ length: 1440 / step }, (_, i) => {
       const from = start + i * step;
@@ -59,7 +67,7 @@ export function dailyFigures(input: readonly DaySpan[], windowStart = 240, cellM
     const to = from + step;
     const totals = new Map<string, { appName: string; bundleId?: string; site?: string; minutes: number }>();
     for (const s of spans) {
-      if ((by === "category" ? s.category : by === "productivity" ? s.kind : s.project) !== key) continue;
+      if (keyOf(by, s) !== key) continue;
       const minutes = Math.max(0, Math.min(s.end, to) - Math.max(s.start, from));
       if (!minutes) continue;
       /* A Chrome extension page records its 32-letter extension id as the site; show the browser instead. */

@@ -8,6 +8,7 @@ import type { TranslationKey } from "../localization/translations";
 import { durationLabel } from "../insights/read/readFormat";
 import { formatRhythmHourLabel } from "../insights/InsightCards";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
+import { useProductivityLevels } from "../settings/categoryCustomizationStore";
 import { resolveInitialStartOfDayMinutes } from "../settings/settingsStorage";
 import { clockLabel } from "./dayNoteMetrics";
 import type { DayCategory, DaySpan } from "./dayNoteFixture";
@@ -51,6 +52,7 @@ function tier(value: number, max: number): 1 | 2 | 3 {
 
 export function DailyFigures({ spans, lang, appIcons = {} }: { spans: readonly DaySpan[]; lang: DisplayLanguage; appIcons?: AppIconMap }) {
   const { t } = useLocalization();
+  const levels = useProductivityLevels();
   const [hover, setHover] = useState<CompactClassificationHoverState | null>(null);
   const start = resolveInitialStartOfDayMinutes();
   const figures = useMemo(() => dailyFigures(spans, start, CELL_MINUTES), [spans, start]);
@@ -71,13 +73,14 @@ export function DailyFigures({ spans, lang, appIcons = {} }: { spans: readonly D
   const groups: DailyRowKind[] = spans.some((span) => Boolean(span.project)) ? ["productivity", "category", "project"] : ["productivity", "category"];
   const firstHour = Math.floor(figures.start / 60);
   const hours = Array.from({ length: 24 }, (_, i) => (firstHour + i) % 24);
+  const levelOf = (key: string) => levels.find((level) => level.id === key);
   const rowsOf = (kind: DailyRowKind) => figures.rowsBy(kind).map((row, index) => ({
     ...row,
     // A user-added category reads by its own name (through the name overrides).
     name: kind === "category"
       ? t(CATEGORY_KEYS[row.key as DayCategory] ?? "activity.category.custom", { id: row.key })
-      : kind === "productivity" ? t(`activity.productivity.${row.key}` as TranslationKey) : row.key,
-    tone: kind === "category" ? color(row.key as DayCategory) : kind === "productivity" ? KIND_COLORS[row.key]! : PROJECT_TONES[index % PROJECT_TONES.length]!,
+      : kind === "productivity" ? levelOf(row.key)?.name ?? t(`activity.productivity.${row.key}` as TranslationKey) : row.key,
+    tone: kind === "category" ? color(row.key as DayCategory) : kind === "productivity" ? levelOf(row.key)?.color ?? KIND_COLORS[row.key]! : PROJECT_TONES[index % PROJECT_TONES.length]!,
   }));
 
   return (

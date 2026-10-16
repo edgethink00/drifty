@@ -5,6 +5,8 @@ import {
   categoryProductivityPreferences,
   customCategoryIds,
   deletedCategories,
+  productivityLevels,
+  type ProductivityLevel,
   deletedCategoryCutoffs,
   productivityNameOverrides,
   type ActivityCategory,
@@ -99,6 +101,28 @@ export function useCustomCategoryColorVariables(): void {
     document.head.appendChild(element);
     return () => element.remove();
   }, [customizations]);
+}
+
+/** The live added productivity levels, each with the categories fixed to it. */
+export function useProductivityLevels(): readonly ProductivityLevel[] {
+  const categories = useCategoryCustomizations();
+  const productivity = useProductivityCustomizations();
+  return useMemo(() => productivityLevels(productivity, categories), [categories, productivity]);
+}
+
+/** Each added level's color on the classes the charts color productivity by. */
+export function useProductivityLevelStyles(): void {
+  const levels = useProductivityLevels();
+  useEffect(() => {
+    if (levels.length === 0) return undefined;
+    const element = document.createElement("style");
+    element.dataset.driftyProductivityLevels = "";
+    element.textContent = levels
+      .map((level) => ".flow-cell--" + level.id + ", .productivity-dot--" + level.id + " { background: " + level.color + "; }")
+      .join("\n");
+    document.head.appendChild(element);
+    return () => element.remove();
+  }, [levels]);
 }
 
 /** Categories the user deleted. Pickers leave them out, except an item's current value. */

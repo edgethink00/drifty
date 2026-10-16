@@ -12,6 +12,8 @@ export type WeekCategorySlice = {
   category: ActivityCategory;
   totalSeconds: number;
   ratio: number;
+  /** The neutral part of totalSeconds; an added productivity level shows it under its own name. */
+  neutralSeconds?: number;
 };
 
 export type WeekProductivitySlice = {
@@ -102,9 +104,9 @@ export function buildWeekDayRows(
 ): WeekDayRow[] {
   const days = buildIsoDayList(startDay, endDay);
 
-  const rows = new Map<string, { totalSeconds: number; focusSeconds: number; categories: Map<ActivityCategory, number>; productivity: Map<ProductivityLabel, number> }>();
+  const rows = new Map<string, { totalSeconds: number; focusSeconds: number; categories: Map<ActivityCategory, number>; neutralCategories: Map<ActivityCategory, number>; productivity: Map<ProductivityLabel, number> }>();
   for (const day of days) {
-    rows.set(day, { totalSeconds: 0, focusSeconds: 0, categories: new Map(), productivity: new Map() });
+    rows.set(day, { totalSeconds: 0, focusSeconds: 0, categories: new Map(), neutralCategories: new Map(), productivity: new Map() });
   }
 
   for (const segment of aggregateDeviceElapsedTime(segments)) {
@@ -115,6 +117,7 @@ export function buildWeekDayRows(
       row.totalSeconds += overlap.durationSeconds;
       if (classification.productivity === "focus") row.focusSeconds += overlap.durationSeconds;
       row.categories.set(classification.category, (row.categories.get(classification.category) ?? 0) + overlap.durationSeconds);
+      if (classification.productivity === "neutral") row.neutralCategories.set(classification.category, (row.neutralCategories.get(classification.category) ?? 0) + overlap.durationSeconds);
       row.productivity.set(classification.productivity, (row.productivity.get(classification.productivity) ?? 0) + overlap.durationSeconds);
     }
   }
@@ -123,7 +126,7 @@ export function buildWeekDayRows(
     const row = rows.get(day)!;
     const date = new Date(`${day}T12:00:00`);
     const slices = Array.from(row.categories.entries())
-      .map(([category, total]) => ({ category, totalSeconds: total, ratio: row.totalSeconds > 0 ? total / row.totalSeconds : 0 }))
+      .map(([category, total]) => ({ category, totalSeconds: total, ratio: row.totalSeconds > 0 ? total / row.totalSeconds : 0, neutralSeconds: row.neutralCategories.get(category) ?? 0 }))
       .filter((slice) => slice.totalSeconds > 0)
       .sort((left, right) => right.totalSeconds - left.totalSeconds);
     const productivitySlices = Array.from(row.productivity.entries())

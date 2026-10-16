@@ -2,6 +2,8 @@ import {
   CUSTOMIZABLE_CATEGORIES,
   CUSTOMIZABLE_PRODUCTIVITY_LABELS,
   isCustomActivityCategory,
+  isCustomProductivityLevel,
+  type CustomProductivityLevel,
   type ActivityCategory,
   type CategoryCustomization,
   type CategoryCustomizations,
@@ -61,7 +63,15 @@ export function targetsListedCard(target: CategoryEditorTarget, customizations: 
   return target.group !== "category" || listsCategory(target.key, customizations);
 }
 
-export type ProductivityChoice = "default" | ProductivityLabel;
+/** Where a category counts: Drifty's call, a built-in productivity, or an added level. */
+export type ProductivityChoice = "default" | ProductivityLabel | CustomProductivityLevel;
+
+/** The stored productivity fields for a choice: an added level is kept with neutral. */
+function productivityFields(choice: ProductivityChoice): Pick<CategoryCustomization, "productivity" | "level"> {
+  if (choice === "default") return {};
+  if (isCustomProductivityLevel(choice)) return { productivity: "neutral", level: choice };
+  return { productivity: choice };
+}
 
 /** A productivity label or category as the editor shows it: saved, or drafted. */
 export type DefinitionValue = {
@@ -123,7 +133,7 @@ export function savedCategoryValue(category: ActivityCategory, customizations: C
     name: customization?.name ?? "",
     description: customization?.description?.trim() || defaultDescription,
     color: normalizeHex(categoryControlColor(category, colors)),
-    productivity: customization?.productivity ?? "default",
+    productivity: customization?.level ?? customization?.productivity ?? "default",
   };
 }
 
@@ -134,7 +144,7 @@ export function savedAddedCategoryValue(category: ActivityCategory, customizatio
     name: customization?.name ?? "",
     description: customization?.description?.trim() ?? "",
     color: normalizeHex(customization?.color ?? fallbackColor),
-    productivity: customization?.productivity ?? "default",
+    productivity: customization?.level ?? customization?.productivity ?? "default",
   };
 }
 
@@ -147,7 +157,7 @@ export function addedCategoryCustomizationFrom(draft: DefinitionValue, saved: Ca
   return {
     name: draft.name.trim(),
     ...(description ? { description } : {}),
-    ...(draft.productivity !== "default" ? { productivity: draft.productivity } : {}),
+    ...productivityFields(draft.productivity),
     color: normalizeHex(draft.color),
     createdAt: saved?.createdAt ?? createdAt,
     ...(saved?.deletedAt ? { deletedAt: saved.deletedAt } : {}),
@@ -198,7 +208,7 @@ export function categoryCustomizationFrom(draft: DefinitionValue, defaultName: s
   const next: CategoryCustomization = {
     ...(name && name !== defaultName ? { name } : {}),
     ...(description && description !== defaultDescription.trim() ? { description } : {}),
-    ...(draft.productivity !== "default" ? { productivity: draft.productivity } : {}),
+    ...productivityFields(draft.productivity),
   };
   return Object.keys(next).length > 0 ? next : null;
 }

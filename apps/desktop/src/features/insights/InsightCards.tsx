@@ -19,6 +19,8 @@ import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { INSIGHT_EVIDENCE_PANEL_ID } from "./insightEvidence";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
+import { neutralSecondsByCategory, productivityKeyFor, withLevelRingEntries } from "../productivity-levels/productivityLevelView";
+import { useProductivityLevels } from "../settings/categoryCustomizationStore";
 
 
 /**
@@ -70,6 +72,7 @@ export function WeeklyCategoryRow({
   onModeChange: (mode: WeeklyChartMode) => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
+  const levels = useProductivityLevels();
   // A vanished project set (or an empty range) must not strand the chart in project mode.
   const effectiveMode: WeeklyChartMode = mode === "project" && !projectModeAvailable ? "category" : mode;
   const hoverSegments = effectiveMode === "project" ? projectSegments : segments;
@@ -79,7 +82,7 @@ export function WeeklyCategoryRow({
     [categoryTotals],
   );
   const hasData = weekly.some((day) => day.isActive);
-  const chart = useMemo(() => buildWeeklyChartView(weekly, effectiveMode, categorySeries, projectSeries), [categorySeries, effectiveMode, projectSeries, weekly]);
+  const chart = useMemo(() => buildWeeklyChartView(weekly, effectiveMode, categorySeries, projectSeries, levels), [categorySeries, effectiveMode, levels, projectSeries, weekly]);
   const productivityDonut = useMemo(() => {
     const view = buildDonutView("productivity", categorySeries, productivityTotals);
     return {
@@ -91,11 +94,15 @@ export function WeeklyCategoryRow({
 
   // Shared Day-rail inputs: durations, one composition bar, coloured dots.
   const railProductivityEntries = useMemo(
-    () => buildProductivityRingEntries(productivityDurations).map((entry) => ({
-      ...entry,
-      label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
-    })),
-    [productivityDurations, t],
+    () => withLevelRingEntries(
+      buildProductivityRingEntries(productivityDurations).map((entry) => ({
+        ...entry,
+        label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
+      })),
+      levels,
+      neutralSecondsByCategory(categoryTotals),
+    ),
+    [categoryTotals, levels, productivityDurations, t],
   );
   const railProductivityCenterPercent = useMemo(() => buildProductivityCenterPercent(productivityDurations), [productivityDurations]);
   const railCategoryEntries = useMemo(() => buildClassifiedCategoryEntries(categoryTotals), [categoryTotals]);
@@ -144,13 +151,19 @@ export function WeeklyCategoryRow({
 
     if (effectiveMode === "productivity") {
       const totalSeconds = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.reduce((sum, productivity) => sum + productivityTotals[productivity], 0);
-      const productivityEntries = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({
-        key: productivity,
-        label: localizedProductivityLabel(productivity, t),
-        seconds: productivityTotals[productivity],
-        color: PRODUCTIVITY_COLORS[productivity],
-        dotClassName: `productivity-dot--${productivity}`,
-      }));
+      // Added levels hold part of neutral's time, as on the composition rail.
+      const levelEntries = railProductivityEntries.filter((entry) => levels.some((level) => level.id === entry.key));
+      const levelSeconds = levelEntries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
+      const productivityEntries = [
+        ...FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({
+          key: productivity as string,
+          label: localizedProductivityLabel(productivity, t),
+          seconds: productivity === "neutral" ? Math.max(0, productivityTotals.neutral - levelSeconds) : productivityTotals[productivity],
+          color: PRODUCTIVITY_COLORS[productivity],
+          dotClassName: `productivity-dot--${productivity}`,
+        })),
+        ...levelEntries.map((entry) => ({ key: entry.key, label: entry.label, seconds: entry.totalSeconds, color: entry.color, dotClassName: entry.dotClassName ?? "" })),
+      ];
 
       for (const entry of productivityEntries) {
         if (entry.seconds <= 0) continue;
@@ -160,7 +173,10 @@ export function WeeklyCategoryRow({
           shareLabel: `${Math.round((entry.seconds / Math.max(totalSeconds, 1)) * 100)}%`,
           dotClassName: entry.dotClassName,
           color: entry.color,
-          appBreakdown: buildBreakdown((segment) => classifyActivity(segment, classificationOptions).productivity === entry.key),
+          appBreakdown: buildBreakdown((segment) => {
+            const classification = classifyActivity(segment, classificationOptions);
+            return productivityKeyFor(classification.category, classification.productivity, levels) === entry.key;
+          }),
         });
       }
     } else if (effectiveMode === "project") {
@@ -196,7 +212,7 @@ export function WeeklyCategoryRow({
     }
 
     return entries;
-  }, [classificationOptions, effectiveLanguage, effectiveMode, hoverSegments, productivityTotals, railProjectEntries, projectMeta, projectBySegmentId, railCategoryEntries, t]);
+  }, [classificationOptions, effectiveLanguage, effectiveMode, hoverSegments, levels, productivityTotals, railProductivityEntries, railProjectEntries, projectMeta, projectBySegmentId, railCategoryEntries, t]);
 
   function showAggregateHover(key: string, x: number, y: number) {
     const payload = hoverPayloads.get(key);
@@ -219,7 +235,7 @@ export function WeeklyCategoryRow({
       }
       const classification = classifyActivity(activitySegment, classificationOptions);
       return effectiveMode === "productivity"
-        ? classification.productivity === segment.key
+        ? productivityKeyFor(classification.category, classification.productivity, levels) === segment.key
         : classification.category === segment.key;
     });
     const occurrences = Math.max(weekdayDates.size, 1);

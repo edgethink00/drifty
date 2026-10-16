@@ -33,6 +33,8 @@ export type DaySpan = {
   readonly end: number;
   readonly kind: DayKind;
   readonly category: DayCategory;
+  /** The added productivity level the span shows under (neutral time in a category fixed to it). */
+  readonly level?: string;
   readonly ref?: DayRef;
   /** The project the span is assigned to, when the user has projects. */
   readonly project?: string;

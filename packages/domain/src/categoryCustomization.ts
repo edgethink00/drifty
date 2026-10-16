@@ -40,6 +40,31 @@ export interface CategoryCustomization {
   readonly color?: string;
   /** When a user-added category was created; it orders the added categories. */
   readonly createdAt?: string;
+  /** The added productivity level this category is fixed to (its productivity is then neutral). */
+  readonly level?: CustomProductivityLevel;
+}
+
+/**
+ * A productivity level the user added beside focus, neutral, and drift. It
+ * groups the categories fixed to it under its own name and color in the app;
+ * wherever a score is kept (focus share, leaderboard, share card) its time is
+ * neutral, so a category fixed to it is stored as neutral with this id.
+ */
+export type CustomProductivityLevel = `level-${string}`;
+
+const CUSTOM_PRODUCTIVITY_LEVEL_PATTERN = /^level-[a-z0-9]{4,32}$/;
+
+export function isCustomProductivityLevel(value: unknown): value is CustomProductivityLevel {
+  return typeof value === "string" && CUSTOM_PRODUCTIVITY_LEVEL_PATTERN.test(value);
+}
+
+/** Added productivity levels allowed beside the three built-in ones. */
+export const MAX_ADDED_PRODUCTIVITY_LEVELS = 3;
+
+/** A new id for a user-added productivity level. */
+export function newProductivityLevelId(random: () => number = Math.random): CustomProductivityLevel {
+  const suffix = Array.from({ length: 8 }, () => Math.floor(random() * 36).toString(36)).join("");
+  return `level-${suffix}`;
 }
 
 /** Built-in and user-added categories together; the editor allows up to this many. */
@@ -73,7 +98,9 @@ export function normalizeCategoryCustomization(value: unknown): CategoryCustomiz
   const record = value as Record<string, unknown>;
   const name = cleanCategoryName(record.name);
   const description = cleanCategoryDescription(record.description);
-  const productivity = isProductivityLabel(record.productivity) ? record.productivity : null;
+  // A category fixed to an added level counts as neutral wherever a score is kept.
+  const level = isCustomProductivityLevel(record.level) ? record.level : null;
+  const productivity = level ? "neutral" : isProductivityLabel(record.productivity) ? record.productivity : null;
   const deletedAt = typeof record.deletedAt === "string" && Number.isFinite(Date.parse(record.deletedAt))
     ? new Date(record.deletedAt).toISOString()
     : null;
@@ -82,6 +109,7 @@ export function normalizeCategoryCustomization(value: unknown): CategoryCustomiz
     ...(name ? { name } : {}),
     ...(description ? { description } : {}),
     ...(productivity ? { productivity } : {}),
+    ...(level ? { level } : {}),
     ...(deletedAt ? { deletedAt } : {}),
   };
 }
@@ -207,9 +235,12 @@ export const CUSTOMIZABLE_PRODUCTIVITY_LABELS: readonly ProductivityLabel[] = LI
 export interface ProductivityCustomization {
   readonly name?: string;
   readonly description?: string;
+  /** An added level's color and creation time (its order). Deleting a level removes it. */
+  readonly color?: string;
+  readonly createdAt?: string;
 }
 
-export type ProductivityCustomizations = Readonly<Partial<Record<ProductivityLabel, ProductivityCustomization>>>;
+export type ProductivityCustomizations = Readonly<Partial<Record<ProductivityLabel | CustomProductivityLevel, ProductivityCustomization>>>;
 
 export function normalizeProductivityCustomization(value: unknown): ProductivityCustomization | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -223,15 +254,67 @@ export function normalizeProductivityCustomization(value: unknown): Productivity
   };
 }
 
+/**
+ * An added level needs a name; its color and creation time come along. It
+ * has no description: the classifier picks only focus, neutral, or drift, and
+ * a level holds the categories fixed to it.
+ */
+export function normalizeProductivityLevelCustomization(value: unknown): ProductivityCustomization | null {
+  const entry = normalizeProductivityCustomization(value);
+  if (!entry?.name) return null;
+  const record = value as Record<string, unknown>;
+  const color = typeof record.color === "string" && /^#[0-9a-f]{6}$/i.test(record.color) ? record.color.toLowerCase() : null;
+  const createdAt = isoTime(record.createdAt);
+  return { name: entry.name, ...(color ? { color } : {}), ...(createdAt ? { createdAt } : {}) };
+}
+
 export function normalizeProductivityCustomizations(value: unknown): ProductivityCustomizations {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;
-  const result: Partial<Record<ProductivityLabel, ProductivityCustomization>> = {};
+  const result: Partial<Record<ProductivityLabel | CustomProductivityLevel, ProductivityCustomization>> = {};
   for (const label of CUSTOMIZABLE_PRODUCTIVITY_LABELS) {
     const entry = normalizeProductivityCustomization(record[label]);
     if (entry) result[label] = entry;
   }
+  // At most three added levels, the oldest first.
+  const levels = Object.keys(record)
+    .filter(isCustomProductivityLevel)
+    .flatMap((key) => {
+      const entry = normalizeProductivityLevelCustomization(record[key]);
+      return entry ? [[key, entry] as const] : [];
+    })
+    .sort(([leftKey, left], [rightKey, right]) => (left.createdAt ?? "").localeCompare(right.createdAt ?? "") || leftKey.localeCompare(rightKey))
+    .slice(0, MAX_ADDED_PRODUCTIVITY_LEVELS);
+  for (const [key, entry] of levels) result[key] = entry;
   return result;
+}
+
+/** The added levels' ids in the order they were made. */
+export function productivityLevelIds(productivity: ProductivityCustomizations): CustomProductivityLevel[] {
+  return (Object.keys(productivity).filter(isCustomProductivityLevel) as CustomProductivityLevel[])
+    .sort((left, right) => (productivity[left]?.createdAt ?? "").localeCompare(productivity[right]?.createdAt ?? "") || left.localeCompare(right));
+}
+
+/** An added productivity level as the app draws it, with the live categories fixed to it. */
+export interface ProductivityLevel {
+  readonly id: CustomProductivityLevel;
+  readonly name: string;
+  readonly color: string;
+  readonly categories: readonly ActivityCategory[];
+}
+
+/**
+ * The added levels in the order they were made, each with the live
+ * categories fixed to it. A level is display only: its time is the neutral
+ * time of those categories.
+ */
+export function productivityLevels(productivity: ProductivityCustomizations, categories: CategoryCustomizations): ProductivityLevel[] {
+  return productivityLevelIds(productivity).map((id) => ({
+    id,
+    name: productivity[id]?.name ?? "",
+    color: productivity[id]?.color ?? "#9b968b",
+    categories: definedCategories(categories).filter((category) => categories[category]?.level === id && !categories[category]?.deletedAt),
+  }));
 }
 
 export function productivityNameOverrides(customizations: ProductivityCustomizations): Readonly<Partial<Record<ProductivityLabel, string>>> {

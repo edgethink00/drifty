@@ -126,6 +126,32 @@ describe("FlowChartView color mode", () => {
     expect(within(legend()).getByText("Unclassified")).toBeTruthy();
   });
 
+  it("shows an added productivity level after neutral, in its own color, wherever productivity is drawn", () => {
+    window.localStorage.setItem("drifty.productivityCustomizations.v1", JSON.stringify({ "level-rest0001": { name: "Rest", color: "#5b86b5" } }));
+    window.localStorage.setItem("drifty.categoryCustomizations.v1", JSON.stringify({ entertainment: { productivity: "neutral", level: "level-rest0001" } }));
+    try {
+      render(
+        <FlowChartView
+          blocks={[makeFlowBlock(), makeFlowBlock({ id: "flow-block-2", minuteOfDay: 14 * 60 + 3, category: "entertainment", productivity: "neutral", siteDomain: "youtube.com" })]}
+          appIcons={{}}
+          intervalMinutes={3}
+        />,
+      );
+      const legend = () => screen.getByLabelText("Flow chart tones");
+      // Category view: the level is a group holding the category fixed to it.
+      expect(within(legend()).getByText("Rest")).toBeTruthy();
+      expect(within(legend()).getByLabelText("Rest categories").querySelector(".flow-chart-legend__dot--entertainment")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+      expect(Array.from(legend().querySelectorAll(".flow-chart-legend__parent")).map((chip) => chip.textContent)).toEqual(["Focus", "Neutral", "Rest", "Drift"]);
+      const cell = screen.getByRole("button", { name: /^entertainment.*rest/i });
+      expect(cell.classList.contains("flow-cell--level-rest0001")).toBe(true);
+    } finally {
+      window.localStorage.removeItem("drifty.productivityCustomizations.v1");
+      window.localStorage.removeItem("drifty.categoryCustomizations.v1");
+    }
+  });
+
   it("keeps the empty-day legend on a single row by omitting the Unclassified chip", () => {
     render(<FlowChartView blocks={[]} appIcons={{}} intervalMinutes={3} showEmptyGrid />);
 

@@ -16,6 +16,8 @@ import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, log
 import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
 import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
+import { neutralSecondsByCategory, withLevelRingEntries } from "../productivity-levels/productivityLevelView";
+import { useProductivityLevels } from "../settings/categoryCustomizationStore";
 import { buildCompactClassificationBreakdown } from "./compactChartBreakdown";
 import { BreakdownSidePanel } from "./BreakdownSidePanelChrome";
 import type { CompactRingEntry } from "./CompactRingChart";
@@ -205,6 +207,7 @@ export function DashboardPage({
   onRevealSettled,
 }: DashboardPageProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const productivityLevels = useProductivityLevels();
   const dayMainRef = useRef<HTMLDivElement>(null);
   useDayChartHeightTransfer(dayMainRef, dashPeriod === "Today" && !initialDataLoading);
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
@@ -251,10 +254,14 @@ export function DashboardPage({
       : effectiveLanguage === "ko" ? "0분" : "0m"
     : null;
   const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
-  const dayProductivityRingEntries = buildProductivityRingEntries(dashboardProductivityTotals).map((entry) => ({
-    ...entry,
-    label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
-  }));
+  const dayProductivityRingEntries = withLevelRingEntries(
+    buildProductivityRingEntries(dashboardProductivityTotals).map((entry) => ({
+      ...entry,
+      label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
+    })),
+    productivityLevels,
+    neutralSecondsByCategory(dashboardCategoryTotals),
+  );
   const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardProductivityTotals);
   const showProjectDonut = flowColorMode === "project" && (flowProjectRingEntries?.length ?? 0) > 0;
   // Week keeps the integrated calendar header while Day keeps its standalone

@@ -3,8 +3,11 @@ import {
   isCustomActivityCategory,
   normalizeCategoryCustomization,
   normalizeCustomCategoryCustomization,
+  isCustomProductivityLevel,
   normalizeProductivityCustomization,
+  normalizeProductivityLevelCustomization,
   type ActivityCategory,
+  type CustomProductivityLevel,
   type CategoryCustomization,
   type CategoryCustomizations,
   type ProductivityCustomization,
@@ -17,7 +20,8 @@ import { writeCategoryCustomizations, writeProductivityCustomizations } from "./
 /** One save from the category editor. Omitted keys stay as they are; null restores the built-in definition. */
 export type DefinitionChanges = {
   readonly categories?: Readonly<Partial<Record<ActivityCategory, CategoryCustomization | null>>>;
-  readonly productivity?: Readonly<Partial<Record<ProductivityLabel, ProductivityCustomization | null>>>;
+  /** Built-in labels and added levels; null removes an added level. */
+  readonly productivity?: Readonly<Partial<Record<ProductivityLabel | CustomProductivityLevel, ProductivityCustomization | null>>>;
 };
 
 export type CategoryCustomizationController = {
@@ -38,7 +42,7 @@ export function useCategoryCustomizationController(): CategoryCustomizationContr
 
   const saveDefinitions = useCallback(async (changes: DefinitionChanges) => {
     const categoryEntries = Object.entries(changes.categories ?? {}) as [ActivityCategory, CategoryCustomization | null][];
-    const productivityEntries = Object.entries(changes.productivity ?? {}) as [ProductivityLabel, ProductivityCustomization | null][];
+    const productivityEntries = Object.entries(changes.productivity ?? {}) as [ProductivityLabel | CustomProductivityLevel, ProductivityCustomization | null][];
     if (categoryEntries.length > 0) {
       const merged: Partial<Record<ActivityCategory, CategoryCustomization>> = { ...customizations };
       for (const [category, next] of categoryEntries) {
@@ -52,9 +56,12 @@ export function useCategoryCustomizationController(): CategoryCustomizationContr
       writeCategoryCustomizations(merged);
     }
     if (productivityEntries.length > 0) {
-      const merged: Partial<Record<ProductivityLabel, ProductivityCustomization>> = { ...productivityCustomizations };
+      const merged: Partial<Record<ProductivityLabel | CustomProductivityLevel, ProductivityCustomization>> = { ...productivityCustomizations };
       for (const [label, next] of productivityEntries) {
-        const normalized = next ? normalizeProductivityCustomization(next) : null;
+        // An added level keeps its name, color, and creation time.
+        const normalized = next
+          ? isCustomProductivityLevel(label) ? normalizeProductivityLevelCustomization(next) : normalizeProductivityCustomization(next)
+          : null;
         if (normalized) merged[label] = normalized;
         else delete merged[label];
       }

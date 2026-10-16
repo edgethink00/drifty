@@ -33,6 +33,16 @@ describe("daily category flow", () => {
     expect(short.total).toBe(10);
     expect(full.total).toBe(160);
   });
+  it("gives an added productivity level and an added category their own rows", () => {
+    const result = dailyFigures([
+      span(0, 30, "focus"),
+      { ...span(30, 50, "neutral", "entertainment"), level: "level-rest0001" },
+      span(50, 60, "neutral", "custom-side0001"),
+      span(60, 65, "neutral", "unknown"),
+    ], 0);
+    expect(result.rowsBy("productivity").map(row => [row.key, row.minutes])).toEqual([["focus", 30], ["neutral", 15], ["level-rest0001", 20]]);
+    expect(result.rowsBy("category").map(row => [row.key, row.minutes])).toEqual([["workspace", 30], ["entertainment", 20], ["custom-side0001", 10], ["unknown", 5]]);
+  });
   it("does not invent category rows or time on an empty day", () => {
     const result = dailyFigures([]);
     expect(result.total).toBe(0);

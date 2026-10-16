@@ -527,34 +527,87 @@ describe("CategoryEditorSheet", () => {
     expect(card("집중")?.textContent).toContain("학습");
   });
 
-  it("adds productivity levels in the browser preview without saving them, beside an undoable category deletion", () => {
-    const props = renderSheet({ initialTarget: { group: "category" }, allowStructureEdits: true });
+  it("adds a productivity level after neutral that saves with its name, color, and the categories fixed to it", async () => {
+    const props = renderSheet({ initialTarget: { group: "productivity" } });
     const tagsOf = (name: string) => Array.from(card(name)?.querySelectorAll(".category-editor__tag") ?? [], (tag) => tag.textContent);
 
-    // Deleting a category leaves an undoable strip and takes it off its level.
-    openCard("쇼핑");
-    fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
-    expect(card("쇼핑")).toBeUndefined();
-    expect(screen.getByText("저장하면 새 활동에는 쓰지 않아요")).toBeTruthy();
-    fireEvent.click(tab("생산성"));
-    expect(tagsOf("딴짓")).not.toContain("쇼핑");
-
-    // A new level takes a category from the level it was under.
     fireEvent.click(screen.getByRole("button", { name: "새 단계" }));
-    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "가벼운 일" } });
+    // A new level has a name and a color, and no description: the classifier never picks it.
+    expect(screen.getByRole("region", { name: "새 단계" }).closest("li")?.classList.contains("is-new")).toBe(true);
+    expect((within(pane()).getByLabelText("이름") as HTMLInputElement).placeholder).toBe("예: 가벼운 일");
+    expect(within(pane()).queryByLabelText("설명")).toBeNull();
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "휴식" } });
     fireEvent.click(within(pane()).getByRole("button", { name: "카테고리 추가" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /커뮤니케이션/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /엔터테인먼트/ }));
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(tagsOf("가벼운 일")).toEqual(["커뮤니케이션"]);
-    expect(tagsOf("중립")).not.toContain("커뮤니케이션");
 
-    // Undo brings the category back; none of it is saved.
-    fireEvent.click(tab("카테고리"));
-    fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
-    expect(card("쇼핑")).toBeTruthy();
-    expect(screen.getByText("생산성 추가는 미리보기라 아직 저장되지 않아요.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "저장" })).toBeNull();
+    expect(tagsOf("휴식")).toEqual(["엔터테인먼트"]);
+    expect(tagsOf("딴짓")).not.toContain("엔터테인먼트");
+    const order = screen.getAllByRole("button").filter((button) => button.classList.contains("category-editor__card-button")).map((button) => button.textContent?.slice(0, 2));
+    expect(order).toEqual(["집중", "중립", "휴식", "딴짓"]);
+    await save();
+
+    const changes = vi.mocked(props.onSaveDefinitions).mock.calls[0]?.[0];
+    const [id, level] = Object.entries(changes?.productivity ?? {})[0] ?? [];
+    expect(id).toMatch(/^level-[a-z0-9]{8}$/);
+    expect(level).toEqual({ name: "휴식", color: expect.stringMatching(/^#[0-9a-f]{6}$/), createdAt: expect.any(String) });
+    // The category counts as neutral wherever a score is kept.
+    expect(changes?.categories).toEqual({ entertainment: { productivity: "neutral", level: id } });
+  });
+
+  it("asks for a new level's name once it holds a category, and drops one left untouched", async () => {
+    const props = renderSheet({ initialTarget: { group: "productivity" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "새 단계" }));
+    fireEvent.click(within(pane()).getByRole("button", { name: "카테고리 추가" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /음악/ }));
+    await save();
     expect(props.onSaveDefinitions).not.toHaveBeenCalled();
+    expect(within(pane()).getByRole("alert").textContent).toBe("저장하려면 단계 이름을 적어 주세요.");
+
+    fireEvent.click(within(pane()).getByRole("button", { name: "추가 취소" }));
+    fireEvent.click(screen.getByRole("button", { name: "새 단계" }));
+    await save();
+    expect(props.onSaveDefinitions).not.toHaveBeenCalled();
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+  it("deletes a saved level so its categories go back to Drifty's judgment, with an undo until Save", async () => {
+    const props = renderSheet({
+      initialTarget: { group: "productivity", key: "focus" },
+      productivityCustomizations: { "level-rest0001": { name: "휴식", color: "#5b86b5", createdAt: "2026-10-16T00:00:00.000Z" } },
+      categoryCustomizations: { entertainment: { productivity: "neutral", level: "level-rest0001" } },
+    });
+    const tagsOf = (name: string) => Array.from(card(name)?.querySelectorAll(".category-editor__tag") ?? [], (tag) => tag.textContent);
+
+    // The built-in levels stay; an added one can go.
+    expect(within(pane()).queryByRole("button", { name: "삭제" })).toBeNull();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(tagsOf("휴식")).toEqual(["엔터테인먼트"]);
+    openCard("휴식");
+    fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+    expect(screen.getByText("저장하면 지워져요")).toBeTruthy();
+    expect(tagsOf("딴짓")).toContain("엔터테인먼트");
+    fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
+    expect(tagsOf("휴식")).toEqual(["엔터테인먼트"]);
+
+    openCard("휴식");
+    fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+    await save();
+    expect(props.onSaveDefinitions).toHaveBeenCalledWith({ categories: { entertainment: null }, productivity: { "level-rest0001": null } });
+  });
+
+  it("stops adding at six productivity levels", () => {
+    const levels = Object.fromEntries(Array.from({ length: 3 }, (_, index) => [
+      "level-full000" + index,
+      { name: "단계 " + index, color: "#5b86b5", createdAt: new Date(Date.UTC(2026, 9, 16, 0, index)).toISOString() },
+    ]));
+    renderSheet({ initialTarget: { group: "productivity" }, productivityCustomizations: levels });
+
+    expect(card("단계 2")).toBeTruthy();
+    const add = screen.getByRole("button", { name: "새 단계" }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    expect(add.title).toBe("생산성은 6단계까지 둘 수 있어요.");
   });
 
   it("answers ⌘/Ctrl+Enter with the primary button: Done before a change, Save after", async () => {
@@ -575,21 +628,13 @@ describe("CategoryEditorSheet", () => {
     expect(fresh.onSaveDefinitions).not.toHaveBeenCalled();
   });
 
-  it("keeps the built-in productivity levels in the preview while an added one can go", () => {
-    renderSheet({ initialTarget: { group: "productivity", key: "focus" }, allowStructureEdits: true });
-
-    expect(within(pane()).queryByRole("button", { name: "삭제" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "새 단계" }));
-    expect(within(pane()).getByRole("button", { name: "추가 취소" })).toBeTruthy();
-  });
-
-  it("deletes and adds categories, adds no level outside the preview, and never deletes a built-in level", () => {
+  it("deletes and adds categories and adds levels, but never deletes a built-in level", () => {
     renderSheet();
 
     expect(within(pane()).getByRole("button", { name: "삭제" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "새 카테고리" })).toBeTruthy();
     fireEvent.click(tab("생산성"));
-    expect(screen.queryByRole("button", { name: "새 단계" })).toBeNull();
+    expect(screen.getByRole("button", { name: "새 단계" })).toBeTruthy();
     openCard("집중");
     expect(within(pane()).queryByRole("button", { name: "삭제" })).toBeNull();
   });

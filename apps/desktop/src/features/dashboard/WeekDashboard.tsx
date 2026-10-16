@@ -5,7 +5,7 @@ import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventSty
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedDuration, formatLocalizedCompactHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel, ProductivityLevel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
 import {
   WeekActivityInspector,
@@ -27,6 +27,8 @@ import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
 import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
+import { levelFor, neutralSecondsByCategory, withLevelRingEntries, withLevelSlices } from "../productivity-levels/productivityLevelView";
+import { useProductivityLevels } from "../settings/categoryCustomizationStore";
 import { BreakdownSidePanel } from "./BreakdownSidePanelChrome";
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationHoverState } from "./HoverCards";
@@ -146,6 +148,7 @@ function buildWeekSideTrendChart(
   language: "en" | "ko",
   t: LocalizationController["t"],
   projectSlicesByDay?: ReadonlyMap<string, readonly WeekProjectSlice[]>,
+  levels: readonly ProductivityLevel[] = [],
 ): WeekSideTrendChart {
   const chartRows = colorMode === "project" ? rows.map(row => ({ ...row, totalSeconds: (projectSlicesByDay?.get(row.day) ?? []).reduce((sum, slice) => sum + slice.seconds, 0) })) : rows;
   const maxHours = Math.max(...chartRows.map((row) => row.totalSeconds / 3600), 0);
@@ -171,12 +174,16 @@ function buildWeekSideTrendChart(
     const slices = colorMode === "project"
       ? projectSlicesByDay?.get(row.day) ?? []
       : colorMode === "productivity"
-      ? row.productivitySlices.map((slice) => ({
-          key: slice.productivity,
-          seconds: slice.totalSeconds,
-          color: PRODUCTIVITY_COLORS[slice.productivity],
-          label: localizedProductivityLabel(slice.productivity, t),
-        }))
+      ? withLevelSlices(
+          row.productivitySlices.map((slice) => ({
+            key: slice.productivity,
+            seconds: slice.totalSeconds,
+            color: PRODUCTIVITY_COLORS[slice.productivity],
+            label: localizedProductivityLabel(slice.productivity, t),
+          })),
+          levels,
+          neutralSecondsByCategory(row.slices),
+        )
       : row.slices.map((slice) => ({
           key: slice.category,
           seconds: slice.totalSeconds,
@@ -325,6 +332,7 @@ export function WeekDashboard({
   onRevealSettled,
 }: WeekDashboardProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const productivityLevels = useProductivityLevels();
   // Controlled by DashboardPage in the app (shared Day/Week preference);
   // standalone renders fall back to local state so the toggle still works.
   const [localSideOpen, setLocalSideOpen] = useState(true);
@@ -376,18 +384,22 @@ export function WeekDashboard({
         ? t("dashboard.week.googleCalendarError")
         : null;
   const activeCategoryEntries = buildActiveCategoryEntries(categoryEntries);
-  const productivityRingEntries = buildProductivityRingEntries(productivityEntries).map((entry) => ({
-    ...entry,
-    label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
-  }));
+  const productivityRingEntries = withLevelRingEntries(
+    buildProductivityRingEntries(productivityEntries).map((entry) => ({
+      ...entry,
+      label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
+    })),
+    productivityLevels,
+    neutralSecondsByCategory(categoryEntries),
+  );
   const productivityCenterPercent = buildProductivityCenterPercent(productivityEntries);
   const summaryMetrics = useMemo(
     () => buildWeekSummaryMetrics(rows, segments, totalSeconds, effectiveLanguage, t),
     [effectiveLanguage, rows, segments, t, totalSeconds],
   );
   const sideTrendChart = useMemo(
-    () => buildWeekSideTrendChart(rows, colorMode, effectiveLanguage, t, projectView?.slicesByDay),
-    [colorMode, effectiveLanguage, rows, t, projectView],
+    () => buildWeekSideTrendChart(rows, colorMode, effectiveLanguage, t, projectView?.slicesByDay, productivityLevels),
+    [colorMode, effectiveLanguage, rows, t, projectView, productivityLevels],
   );
   const buildHoverRows = useCallback((key: string | readonly string[], mode: WeekDashboardColorMode, day?: string) => (
     buildWeekBreakdownHoverRows({
@@ -400,13 +412,15 @@ export function WeekDashboard({
       mode,
       key,
       day,
+      levels: productivityLevels,
     })
-  ), [classificationOptions, endDay, segments, startDay, startOfDayMinutes, projectView]);
+  ), [classificationOptions, endDay, segments, startDay, startOfDayMinutes, projectView, productivityLevels]);
   const buildLegendHoverRows = useCallback((request: FlowLegendBreakdownRequest) => {
     switch (request.kind) {
       case "category": return buildHoverRows(request.category, "category");
       case "category-group": return buildHoverRows(request.categories, "category");
       case "productivity": return buildHoverRows(request.productivity, "productivity");
+      case "level": return buildHoverRows(request.level, "productivity");
     }
   }, [buildHoverRows]);
   const hasUnclassified = categoryEntries.some((entry) => entry.category === "unknown" && entry.totalSeconds > 0);
@@ -870,7 +884,7 @@ export function WeekDashboard({
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 1px)` : "1px",
                         width: event.laneCount > 1 ? "calc(100% - 31px)" : "calc(100% - 7px)",
                         zIndex: event.laneCount > 1 ? 10 + event.lane : 3,
-                        "--event-tone": colorMode === "project" ? event.projectColor : colorMode === "productivity" ? PRODUCTIVITY_COLORS[event.productivity] : CATEGORY_COLORS[event.category],
+                        "--event-tone": colorMode === "project" ? event.projectColor : colorMode === "productivity" ? levelFor(event.category, event.productivity, productivityLevels)?.color ?? PRODUCTIVITY_COLORS[event.productivity] : CATEGORY_COLORS[event.category],
                       };
                       return (
                         <article

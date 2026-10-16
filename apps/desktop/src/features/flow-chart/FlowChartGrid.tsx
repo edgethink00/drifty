@@ -8,6 +8,8 @@ import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 import { NO_PROJECT_COLOR } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import { levelFor } from "../productivity-levels/productivityLevelView";
+import { useProductivityLevels } from "../settings/categoryCustomizationStore";
 
 type FlowProjectCellStyle = CSSProperties & Record<"--flow-project-color", string>;
 
@@ -59,6 +61,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
   inspectedGroup = null,
   readOnlyPreview,
 }: FlowChartGridProps) {
+  const productivityLevels = useProductivityLevels();
   const { effectiveLanguage, t } = useLocalization();
   const rowMinuteOffsets = useMemo(
     () => Array.from({ length: 60 / intervalMinutes }, (_, index) => index * intervalMinutes),
@@ -66,11 +69,11 @@ export const FlowChartGrid = memo(function FlowChartGrid({
   );
   const cellAriaLabelsByMinute = useMemo(() => buildCellGroupAriaLabels(hoverGroupsByCell, {
     categoryLabel: ({ category }) => localizedCategoryLabel(category, t),
-    productivityLabel: ({ productivity }) => localizedProductivityLabel(productivity, t),
+    productivityLabel: ({ category, productivity }) => levelFor(category, productivity, productivityLevels)?.name ?? localizedProductivityLabel(productivity, t),
     durationLabel: (seconds) => formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage),
     timeBlockPrefix: effectiveLanguage === "ko" ? "시간대" : "Time block",
     durationPrefix: effectiveLanguage === "ko" ? "소요 시간" : "Duration",
-  }), [effectiveLanguage, hoverGroupsByCell, t]);
+  }), [effectiveLanguage, hoverGroupsByCell, productivityLevels, t]);
   // The grid is one tab stop: only one cell is in the tab order and the arrow
   // keys move between cells, so the controls after the chart are one Tab away
   // instead of a hundred. It starts on the day's earliest cell.
@@ -196,7 +199,8 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                   : "";
                 const colorClass = isProjectMode
                   ? "flow-cell--project"
-                  : `flow-cell--${colorMode === "productivity" ? block.productivity : block.category}`;
+                  // An added level colors its neutral time in its own color.
+                  : `flow-cell--${colorMode === "productivity" ? levelFor(block.category, block.productivity, productivityLevels)?.id ?? block.productivity : block.category}`;
                 const remoteDeviceClass = block.deviceId ? " flow-cell--remote-device" : "";
                 const cellStyle: FlowProjectCellStyle | undefined = isProjectMode
                   ? { "--flow-project-color": block.projectColor ?? NO_PROJECT_COLOR }

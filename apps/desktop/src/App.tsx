@@ -12118,7 +12118,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       <ModalPresence>{categoryEditorTarget ? (
         <CategoryEditorSheet
           initialTarget={categoryEditorTarget}
-          allowStructureEdits={isPreviewSurface}
           intelligenceUnavailable={editorIntelligenceLocked}
           onOpenIntelligence={() => {
             setCategoryEditorTarget(null);
