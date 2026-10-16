@@ -1017,6 +1017,58 @@ describe("CategoryEditorSheet", () => {
     expect(persist.mock.calls[1][0].categories.shopping).toEqual(action === "delete" ? { deletedAt: expect.any(String) } : { name: "장보기" });
   });
 
+  it("adds, moves, levels, deletes, and restores in one sitting, and opens again as saved", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(CATEGORY_CUSTOMIZATION_STORAGE_KEY, JSON.stringify({ shopping: { name: "장보기", deletedAt: "2026-10-15T12:00:00.000Z" } }));
+    const close = vi.fn();
+    function ControlledSheet({ target }: { readonly target: CategoryEditorSheetProps["initialTarget"] }) {
+      const controller = useCategoryCustomizationController();
+      return <CategoryEditorSheet initialTarget={target} categoryCustomizations={controller.customizations}
+        productivityCustomizations={controller.productivityCustomizations} categoryOrder={controller.categoryOrder}
+        categoryColorOverrides={{}} appThemeColorOverrides={{}}
+        showProjects={false} projects={[]} onSaveDefinitions={controller.saveDefinitions}
+        onCategoryColorChange={vi.fn()} onCategoryColorReset={vi.fn()} onProductivityColorChange={vi.fn()} onProductivityColorReset={vi.fn()}
+        onSaveProject={async () => true} onDeleteProject={async () => true} onClose={close} />;
+    }
+    const order = () => Array.from(screen.getByRole("list", { name: "카테고리" }).querySelectorAll("[data-card^='category:']"), (item) => item.getAttribute("data-card")?.slice(9));
+    try {
+      render(<LocalizationTestProvider language="ko"><ControlledSheet target={{ group: "category" }} /></LocalizationTestProvider>);
+      fireEvent.click(screen.getByRole("button", { name: "새 카테고리" }));
+      fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "운동" } });
+      fireEvent.click(within(pane()).getByRole("button", { name: "접기" }));
+      fireEvent.keyDown(card("운동")!, { key: "ArrowUp", altKey: true });
+      openCard("게임");
+      fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+      fireEvent.click(within(screen.getByRole("list", { name: "삭제함" })).getByRole("button", { name: "복원" }));
+      fireEvent.click(tab("생산성"));
+      fireEvent.click(screen.getByRole("button", { name: "새 단계" }));
+      fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "휴식" } });
+      fireEvent.click(within(pane()).getByRole("button", { name: "카테고리 추가" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /운동/ }));
+      fireEvent.keyDown(window, { key: "Escape" });
+      await save();
+
+      expect(close).toHaveBeenCalledOnce();
+      const categories: Readonly<Record<string, unknown>> = readCategoryCustomizations();
+      const levels: Readonly<Record<string, unknown>> = readProductivityCustomizations();
+      const [custom] = Object.keys(categories).filter((key) => key.startsWith("custom-"));
+      const [level] = Object.keys(levels).filter((key) => key.startsWith("level-"));
+      expect(categories[custom]).toMatchObject({ name: "운동", productivity: "neutral", level });
+      expect(categories.game).toEqual({ deletedAt: expect.any(String) });
+      expect(categories.shopping).toEqual({ name: "장보기" });
+      expect(levels[level]).toMatchObject({ name: "휴식" });
+      expect(readCategoryOrder().slice(-2)).toEqual([custom, "utility"]);
+
+      cleanup();
+      render(<LocalizationTestProvider language="ko"><ControlledSheet target={{ group: "category" }} /></LocalizationTestProvider>);
+      expect(order()).toEqual(["workspace", "learning", "communication", "music", "social_media", "entertainment", "shopping", custom, "utility"]);
+      expect(card("장보기")).toBeTruthy();
+      expect(within(screen.getByRole("list", { name: "삭제함" })).getByText("게임")).toBeTruthy();
+      fireEvent.click(tab("생산성"));
+      expect(Array.from(card("휴식")?.querySelectorAll(".category-editor__tag") ?? [], (tag) => tag.textContent)).toEqual(["운동"]);
+    } finally { window.localStorage.clear(); }
+  });
+
   it("puts a category under a productivity label from that label's card", async () => {
     const props = renderSheet({ initialTarget: { group: "productivity", key: "drift" } });
 
