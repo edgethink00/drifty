@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TranslationKey } from "./translations";
 import { translateFor, type TranslationParams } from "./translate";
 import { parseCategoryNameOverrideKey, withCategoryNameOverrides } from "./categoryNameOverrides";
@@ -6,10 +6,8 @@ import { useCategoryNameOverrideKey, useCustomCategoryColorVariables, useProduct
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
-  hasExplicitDisplayLanguagePreference,
   migrateLegacyDisplayLanguagePreference,
   resolveInitialDisplayLanguage,
-  resolveSystemDisplayLanguage,
   type DisplayLanguage,
 } from "./languagePreference";
 
@@ -41,8 +39,10 @@ export function useLocalization(): LocalizationController {
 
 export function useLocalizationController(): LocalizationController {
   const [effectiveLanguage, setEffectiveLanguage] = useState<DisplayLanguage>(resolveInitialDisplayLanguage);
+  const hasLiveManualChoice = useRef(false);
 
   const setDisplayLanguage = useCallback((language: DisplayLanguage) => {
+    hasLiveManualChoice.current = true;
     try {
       window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, language);
       window.localStorage.removeItem(LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY);
@@ -58,8 +58,9 @@ export function useLocalizationController(): LocalizationController {
   useEffect(() => {
     migrateLegacyDisplayLanguagePreference();
     const followSystemLanguage = () => {
-      if (!hasExplicitDisplayLanguagePreference()) {
-        setEffectiveLanguage(resolveSystemDisplayLanguage(window.navigator));
+      if (!hasLiveManualChoice.current) {
+        // Resolve stored and deliberate legacy choices even if migration could not write.
+        setEffectiveLanguage(resolveInitialDisplayLanguage(window.navigator));
       }
     };
     window.addEventListener("languagechange", followSystemLanguage);

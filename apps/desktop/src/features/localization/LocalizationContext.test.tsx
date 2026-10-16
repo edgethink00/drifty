@@ -105,6 +105,37 @@ describe("display language preference", () => {
     act(() => window.dispatchEvent(new Event("languagechange")));
     expect(screen.getByText("설정")).toBeTruthy();
   });
+  it("keeps a live manual choice during system changes when preference writes fail", () => {
+    let preferredLanguages = ["en-US"];
+    vi.spyOn(window.navigator, "languages", "get").mockImplementation(() => preferredLanguages);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Preference writes blocked", "SecurityError");
+    });
+    render(<ControllerHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Toggle language" }));
+    expect(screen.getByText("설정")).toBeTruthy();
+
+    preferredLanguages = ["es-MX"];
+    act(() => window.dispatchEvent(new Event("languagechange")));
+    expect(screen.getByText("설정")).toBeTruthy();
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
+  });
+
+  it("retains deliberate legacy English when migration writes fail and the system changes", () => {
+    window.localStorage.setItem("drifty.displayLanguage", "en");
+    let preferredLanguages = ["ko-KR"];
+    vi.spyOn(window.navigator, "languages", "get").mockImplementation(() => preferredLanguages);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Preference writes blocked", "SecurityError");
+    });
+    render(<ControllerHarness />);
+    expect(screen.getByText("Settings")).toBeTruthy();
+
+    preferredLanguages = ["es-ES"];
+    act(() => window.dispatchEvent(new Event("languagechange")));
+    expect(screen.getByText("Settings")).toBeTruthy();
+  });
+
   it.each(["en-US", "ja-JP", "de-DE"])("repairs the old implicit Korean default on a %s system", (language) => {
     window.localStorage.setItem("drifty.displayLanguage", "ko");
     expect(resolveInitialDisplayLanguage({ language, languages: [language] })).toBe("en");
