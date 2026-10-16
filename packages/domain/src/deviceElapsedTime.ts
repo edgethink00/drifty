@@ -115,10 +115,17 @@ export function clipDeviceElapsedTimeSegment(segment: ActivitySegment, window?: 
   if (!projection) {
     if (!window) return segment;
     const bounds = sampledActivityTimeBounds(segment);
-    // Invalid/nonpositive records retain their existing filtering semantics.
+    if (!Number.isFinite(window.start) || !Number.isFinite(window.end)) return segment;
     if (!Number.isFinite(bounds.start) || !(bounds.end > bounds.start)
-      || !Number.isFinite(window.start) || !Number.isFinite(window.end)) return segment;
-    if (window.start <= bounds.start && window.end >= bounds.end) return segment;
+      || isExcludedSegment(segment) || isFailedForegroundCaptureSegment(segment)) {
+      return preserveCapturedActivityDuration(segment, {
+        ...segment,
+        durationSeconds: 0,
+        [elapsedProjection]: { start: window.start, end: window.start, intervals: [], capturedDensity: 0 },
+      } as ProjectedSegment);
+    }
+    // An explicit summary window carries sampled density into drawing and
+    // breakdown consumers even when it contains the complete raw record.
     const start = Math.max(window.start, bounds.start);
     const end = Math.max(start, Math.min(window.end, bounds.end));
     const capturedDensity = segment.durationSeconds * 1000 / (bounds.end - bounds.start);
@@ -136,11 +143,11 @@ export function clipDeviceElapsedTimeSegment(segment: ActivitySegment, window?: 
     const clippedEnd = Math.min(end, interval.end);
     return clippedEnd > clippedStart ? [{ ...interval, start: clippedStart, end: clippedEnd }] : [];
   });
-  return {
+  return preserveCapturedActivityDuration(segment, {
     ...segment,
     durationSeconds: intervals.reduce((sum, interval) => sum + (interval.end - interval.start) / 1000 * interval.rate, 0),
     [elapsedProjection]: { start: Math.max(start, projection.start), end: Math.min(end, projection.end), intervals, capturedDensity: projection.capturedDensity },
-  } as ProjectedSegment;
+  } as ProjectedSegment);
 }
 
 /** Recorded samples spread across their observed span; an initial point sample

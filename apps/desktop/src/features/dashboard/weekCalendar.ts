@@ -6,6 +6,7 @@ import type { StartOfWeek } from "../settings/settingsStorage";
 import { categoryLabel } from "../../lib/activityLabels";
 import { UI_LOCALE, buildIsoDayList, formatCalendarMinuteLabel, formatCompactDurationFromSeconds } from "../../lib/formatting";
 import type { CSSProperties } from "react";
+import { buildLogicalDayDrawingBuckets } from "./logicalDayDrawingBuckets";
 
 export type WeekCategorySlice = {
   category: ActivityCategory;
@@ -209,6 +210,7 @@ export function buildWeekCalendarEvents(
   type WeekCalendarBucket = {
     startMinute: number;
     endMinute: number;
+    intervals: readonly { readonly start: number; readonly end: number }[];
     sourceIntervals: WeekCalendarSourceInterval[];
   };
   type WeekCalendarBucketComponent = {
@@ -226,10 +228,16 @@ export function buildWeekCalendarEvents(
     productivity: ProductivityLabel;
     classificationSource: ClassificationSource;
   };
-  const bucketsByDay = new Map<string, WeekCalendarBucket[]>(days.map((day) => [day, Array.from({ length: Math.ceil((maxMinute - minMinute) / bucketMinutes) }, (_, index) => {
-    const startMinute = minMinute + index * bucketMinutes;
-    return { startMinute, endMinute: Math.min(maxMinute, startMinute + bucketMinutes), sourceIntervals: [] };
-  })]));
+  const bucketsByDay = new Map<string, WeekCalendarBucket[]>(days.map((day) => [day,
+    buildLogicalDayDrawingBuckets(day, bucketMinutes, startOfDayMinutes)
+      .filter((bucket) => bucket.startMinute >= minMinute && bucket.startMinute < maxMinute)
+      .map((bucket) => ({
+        startMinute: bucket.startMinute,
+        endMinute: Math.min(maxMinute, bucket.endMinute),
+        intervals: bucket.intervals,
+        sourceIntervals: [],
+      })),
+  ]));
 
   function topEntry<K>(totals: Map<K, number>): [K, number] | null {
     return Array.from(totals.entries()).sort((left, right) => right[1] - left[1])[0] ?? null;
@@ -387,40 +395,34 @@ export function buildWeekCalendarEvents(
       const buckets = bucketsByDay.get(overlap.day);
       if (!buckets) continue;
 
-      const dayStartMs = logicalDayStartMs(overlap.day, startOfDayMinutes);
-      const startMinute = Math.max(minMinute, Math.floor((overlap.startedAt.getTime() - dayStartMs) / 60000));
-      const endMinute = Math.min(maxMinute, Math.ceil((overlap.endedAt.getTime() - dayStartMs) / 60000));
-      if (endMinute <= minMinute || startMinute >= maxMinute) continue;
-
       for (const bucket of buckets) {
-        const bucketStartMs = dayStartMs + bucket.startMinute * 60 * 1000;
-        const bucketEndMs = dayStartMs + bucket.endMinute * 60 * 1000;
-        const overlapStartMs = Math.max(overlap.startedAt.getTime(), bucketStartMs);
-        const overlapEndMs = Math.min(overlap.endedAt.getTime(), bucketEndMs);
-        const overlapMs = overlapEndMs - overlapStartMs;
-        if (overlapMs <= 0) continue;
-        const overlapSeconds = (sampledTime ? sampledActivitySecondsWithinInterval : activitySecondsWithinInterval)(segment, overlapStartMs, overlapEndMs);
-        if (overlapSeconds <= 0) continue;
-        let intervalStartMinute = Math.max(bucket.startMinute, Math.round((overlapStartMs - dayStartMs) / 60000));
-        let intervalEndMinute = Math.min(bucket.endMinute, Math.round((overlapEndMs - dayStartMs) / 60000));
-        if (intervalEndMinute <= intervalStartMinute) {
-          // Sub-minute slice: keep it only when it carries enough activity to matter visually.
-          if (overlapSeconds < 30) continue;
-          intervalStartMinute = Math.min(Math.max(bucket.startMinute, intervalStartMinute), bucket.endMinute - 1);
-          intervalEndMinute = intervalStartMinute + 1;
+        for (const bucketInterval of bucket.intervals) {
+          const overlapStartMs = Math.max(overlap.startedAt.getTime(), bucketInterval.start);
+          const overlapEndMs = Math.min(overlap.endedAt.getTime(), bucketInterval.end);
+          if (overlapEndMs <= overlapStartMs) continue;
+          const overlapSeconds = (sampledTime ? sampledActivitySecondsWithinInterval : activitySecondsWithinInterval)(segment, overlapStartMs, overlapEndMs);
+          if (overlapSeconds <= 0) continue;
+          let intervalStartMinute = Math.max(bucket.startMinute, Math.round(bucket.startMinute + (overlapStartMs - bucketInterval.start) / 60000));
+          let intervalEndMinute = Math.min(bucket.endMinute, Math.round(bucket.startMinute + (overlapEndMs - bucketInterval.start) / 60000));
+          if (intervalEndMinute <= intervalStartMinute) {
+            // Sub-minute slice: keep it only when it carries enough activity to matter visually.
+            if (overlapSeconds < 30) continue;
+            intervalStartMinute = Math.min(Math.max(bucket.startMinute, intervalStartMinute), bucket.endMinute - 1);
+            intervalEndMinute = intervalStartMinute + 1;
+          }
+          bucket.sourceIntervals.push({
+            startMinute: intervalStartMinute,
+            endMinute: intervalEndMinute,
+            category: classification.category,
+            productivity: classification.productivity,
+            appName: weekCalendarSegmentLabel(segment),
+            identity,
+            classificationSource: classification.source,
+            aiClassification: classification.source === "llm",
+            seconds: overlapSeconds,
+            segmentId: segment.id,
+          });
         }
-        bucket.sourceIntervals.push({
-          startMinute: intervalStartMinute,
-          endMinute: intervalEndMinute,
-          category: classification.category,
-          productivity: classification.productivity,
-          appName: weekCalendarSegmentLabel(segment),
-          identity,
-          classificationSource: classification.source,
-          aiClassification: classification.source === "llm",
-          seconds: overlapSeconds,
-          segmentId: segment.id,
-        });
       }
     }
   }

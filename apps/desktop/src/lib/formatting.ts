@@ -1,4 +1,4 @@
-import { logicalDayEndExclusiveMs, logicalDayIsoDateForDate, logicalDayStartMs, shiftIsoDate } from "@drifty/domain";
+import { logicalDayEndExclusiveMs, logicalDayIsoDateForDate, logicalDayStartMs, sampledActivityTimeBounds, shiftIsoDate } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 import type { DisplayLanguage } from "../features/localization/languagePreference";
 
@@ -186,7 +186,10 @@ export function buildIsoDayList(startDay: string, endDay: string): string[] {
 }
 
 export function formatCalendarMinuteLabel(day: string, minuteOfDay: number, startOfDayMinutes = 0): string {
-  return formatTimeLabel(new Date(logicalDayStartMs(day, startOfDayMinutes) + minuteOfDay * 60 * 1000));
+  void day;
+  const clockMinute = ((startOfDayMinutes + minuteOfDay) % (24 * 60) + 24 * 60) % (24 * 60);
+  const clock = new Date(Date.UTC(2000, 0, 1, 0, clockMinute));
+  return new Intl.DateTimeFormat(UI_LOCALE, { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(clock);
 }
 
 export function formatLocalizedCalendarMinuteLabel(
@@ -195,10 +198,15 @@ export function formatLocalizedCalendarMinuteLabel(
   language: DisplayLanguage,
   startOfDayMinutes = 0,
 ): string {
-  return formatLocalizedTimeLabel(
-    new Date(logicalDayStartMs(day, startOfDayMinutes) + minuteOfDay * 60 * 1000),
-    language,
-  );
+  void day;
+  const clockMinute = ((startOfDayMinutes + minuteOfDay) % (24 * 60) + 24 * 60) % (24 * 60);
+  const clock = new Date(Date.UTC(2000, 0, 1, 0, clockMinute));
+  return new Intl.DateTimeFormat(language === "en" ? UI_LOCALE : "ko-KR", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
+  }).format(clock);
 }
 
 export function formatCompactHourLabel(hour: number): string {
@@ -287,14 +295,24 @@ export function formatDeviceTimeZone(now = new Date()): string {
   }
 }
 
-export function filterSegmentsForRange(segments: ActivitySegment[], start: string, end: string): ActivitySegment[] {
-  const startMs = Date.parse(start);
-  const endMs = Date.parse(end);
+export function filterSegmentsForRange(
+  segments: readonly ActivitySegment[],
+  start: string,
+  end: string,
+  clipWindow?: { readonly start: number; readonly end: number },
+): ActivitySegment[] {
+  // Generic callers keep exact inclusive endpoints. Summary callers supply
+  // their real half-open logical window, including the final query second.
+  const startMs = clipWindow?.start ?? Date.parse(start);
+  const endMs = clipWindow?.end ?? Date.parse(end);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return [];
 
   return segments.filter((segment) => {
-    const segmentStart = Date.parse(segment.startedAt);
-    const segmentEnd = Date.parse(segment.endedAt);
-    return segmentEnd >= startMs && segmentStart <= endMs;
+    const rawStart = Date.parse(segment.startedAt);
+    const rawEnd = Date.parse(segment.endedAt);
+    if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawEnd < rawStart) return false;
+    const { start: segmentStart, end: segmentEnd } = sampledActivityTimeBounds(segment);
+    return segmentEnd >= startMs && (clipWindow ? segmentStart < endMs : segmentStart <= endMs);
   });
 }
 

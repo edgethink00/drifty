@@ -1,4 +1,4 @@
-import type { ActivitySegment } from "@drifty/domain";
+import { totalDurationSeconds, type ActivitySegment } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
 import { buildAttentionRhythm } from "./attentionRhythm";
 import { selectInsightSegments } from "./insightSegments";
@@ -24,6 +24,12 @@ function segmentBetween(id: string, startedAt: string, endedAt: string): Activit
   };
 }
 
+const monthQueryRange = { start: "2026-06-03T00:00:00", end: "2026-07-02T23:59:59" };
+const monthClipWindow = {
+  start: Date.parse(monthQueryRange.start),
+  end: Date.parse(monthQueryRange.end) + 1000,
+};
+
 describe("selectInsightSegments", () => {
   it("keeps the final second of the display window separate from the query's inclusive end", () => {
     const crossing = segmentBetween("crossing", "2026-07-03T03:59:00", "2026-07-03T04:01:00");
@@ -48,7 +54,8 @@ describe("selectInsightSegments", () => {
     const segments = selectInsightSegments({
       historySegments,
       selectedDaySegments,
-      range: { start: "2026-06-03T00:00:00", end: "2026-07-02T23:59:59" },
+      range: monthQueryRange,
+      endExclusiveMs: monthClipWindow.end,
     });
 
     expect(segments.map((segment) => segment.id)).toEqual(["history-monday", "live-thursday"]);
@@ -70,7 +77,8 @@ describe("selectInsightSegments", () => {
         failedCapture,
       ],
       selectedDaySegments: [],
-      range: { start: "2026-06-03T00:00:00", end: "2026-07-02T23:59:59" },
+      range: monthQueryRange,
+      endExclusiveMs: monthClipWindow.end,
     });
 
     expect(segments.map((segment) => segment.id)).toEqual(["history-monday"]);
@@ -83,7 +91,8 @@ describe("selectInsightSegments", () => {
     const segments = selectInsightSegments({
       historySegments: [],
       selectedDaySegments,
-      range: { start: "2026-06-03T00:00:00", end: "2026-07-02T23:59:59" },
+      range: monthQueryRange,
+      endExclusiveMs: monthClipWindow.end,
     });
 
     const cells = buildAttentionRhythm(segments, undefined, {
@@ -105,7 +114,8 @@ describe("selectInsightSegments", () => {
       historySegments,
       supplementalSegments: recentWeekSegments,
       selectedDaySegments: [],
-      range: { start: "2026-06-03T00:00:00", end: "2026-07-02T23:59:59" },
+      range: monthQueryRange,
+      endExclusiveMs: monthClipWindow.end,
     });
     const cells = buildAttentionRhythm(segments, undefined, {
       averagingRange: { startDay: "2026-06-03", endDay: "2026-07-02" },
@@ -113,5 +123,22 @@ describe("selectInsightSegments", () => {
 
     expect(segments.map((segment) => segment.id)).toEqual(["older-friday", "recent-friday"]);
     expect(cells.find((cell) => cell.weekdayIndex === 4 && cell.hour === 9)).toMatchObject({ state: "focus" });
+  });
+
+  it("keeps the inclusive query range's final second in the half-open Trends consumer window", () => {
+    const finalSecond = segmentBetween(
+      "final-second",
+      "2026-07-02T23:59:59.000",
+      "2026-07-03T00:00:00.000",
+    );
+
+    const segments = selectInsightSegments({
+      historySegments: [finalSecond],
+      selectedDaySegments: [],
+      range: monthQueryRange,
+      endExclusiveMs: monthClipWindow.end,
+    });
+
+    expect(totalDurationSeconds(segments)).toBe(1);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ActivitySegment } from "@drifty/domain";
+import { clipDeviceElapsedTimeSegment, type ActivitySegment } from "@drifty/domain";
+import { selectInsightSegments } from "../features/insights/insightSegments";
 import { filterSegmentsForRange } from "./formatting";
 import { selectDashboardSegments } from "../features/dashboard/dashboardWeekData";
 
@@ -23,7 +24,7 @@ function segment(id: string, startedAt: string, endedAt = startedAt): ActivitySe
 }
 
 describe("activity range selection contract", () => {
-  it("includes touching endpoints across offsets and preserves input references and order", () => {
+  it("includes touching endpoints and forward positive points across offsets while preserving references and order", () => {
     const end = segment("duplicate", "2026-09-30T10:00:00+09:00");
     const start = segment("duplicate", "2026-09-29T23:59:00Z", "2026-09-30T00:00:00Z");
     const spanning = segment("spanning", "2026-09-29T23:00:00Z", "2026-09-30T02:00:00Z");
@@ -35,10 +36,11 @@ describe("activity range selection contract", () => {
 
     const result = filterSegmentsForRange(rows, range.start, range.end);
 
-    expect(result).toEqual([end, start, spanning]);
+    expect(result).toEqual([end, before, start, spanning]);
     expect(result[0]).toBe(end);
-    expect(result[1]).toBe(start);
-    expect(result[2]).toBe(spanning);
+    expect(result[1]).toBe(before);
+    expect(result[2]).toBe(start);
+    expect(result[3]).toBe(spanning);
     expect(result).not.toBe(rows);
   });
 
@@ -89,5 +91,39 @@ describe("activity range selection contract", () => {
 
     expect(result).toEqual([row]);
     expect(result[0]).toBe(row);
+  });
+});
+
+
+describe("summary selection agrees with exact logical clipping", () => {
+  it.each(["Today", "Week", "Month"] as const)("preserves forward and final-second samples for %s", (dashPeriod) => {
+    for (const [startedAt, durationSeconds, expected] of [
+      ["2026-10-04T23:59:58Z", 60, [2, 58]],
+      ["2026-10-04T23:59:59.500Z", 1, [0.5, 0.5]],
+    ] as const) {
+      const raw = { ...segment("boundary", startedAt), durationSeconds };
+      const dashboardTotals: number[] = [];
+      const insightTotals: number[] = [];
+      for (const day of ["2026-10-04", "2026-10-05"]) {
+        const visibleRange = { start: day + "T00:00:00Z", end: day + "T23:59:59Z", startDay: day, endDay: day };
+        const clipWindow = { start: Date.parse(visibleRange.start), end: Date.parse(visibleRange.end) + 1000 };
+        const selected = selectDashboardSegments({
+          dashPeriod,
+          compactHistorySource: { range: visibleRange, segments: [raw] },
+          historySource: { range: visibleRange, segments: [raw] },
+          requiredHistoryRange: visibleRange,
+          selectedDaySegments: dashPeriod === "Today" ? [raw] : [],
+          visibleRange,
+          clipWindow,
+        });
+        dashboardTotals.push(selected.reduce((sum, row) => sum + clipDeviceElapsedTimeSegment(row, clipWindow).durationSeconds, 0));
+        insightTotals.push(selectInsightSegments({
+          historySegments: [raw], selectedDaySegments: [], range: visibleRange, endExclusiveMs: clipWindow.end,
+        }).reduce((sum, row) => sum + row.durationSeconds, 0));
+      }
+      expect(dashboardTotals).toEqual(expected);
+      expect(insightTotals).toEqual(expected);
+      expect(raw.durationSeconds).toBe(durationSeconds);
+    }
   });
 });

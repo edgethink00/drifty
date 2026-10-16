@@ -97,6 +97,29 @@ class LiveTailTests(unittest.TestCase):
         self.assertEqual(self.tail("1", "2026-10-03T12:00:00+00:00",
                                   start="2026-10-02T00:00:00+00:00", end="2026-10-03T00:00:00+00:00"), [])
 
+    def test_range_loads_a_positive_point_sample_through_its_effective_end(self) -> None:
+        self.db.insert_segment({
+            "started_at": "2026-10-04T23:59:58+00:00",
+            "ended_at": "2026-10-04T23:59:58+00:00",
+            "duration_seconds": 60,
+            "app_name": "Boundary point",
+            "bundle_id": "qa.boundary-point",
+            "window_title": None,
+            "platform": "macos",
+            "source": "manual",
+            "confidence": None,
+            "raw_context_json": "{}",
+        })
+
+        page = self.tail(
+            None,
+            None,
+            start="2026-10-05T00:00:00+00:00",
+            end="2026-10-05T23:59:59+00:00",
+        )
+
+        self.assertEqual([row["appName"] for row in page], ["Boundary point"])
+
     def test_unchanged_normal_capture_is_not_replayed(self) -> None:
         self.capture("Current", "2026-10-03T12:00:00+00:00")
         self.assertEqual(self.tail("1", "2026-10-03T12:00:00+00:00"), [])

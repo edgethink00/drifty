@@ -1,13 +1,13 @@
 import { aggregateDeviceElapsedTime, activitySecondsWithinInterval } from "@drifty/domain";
-import { classifyActivityDetailed, logicalDayStartMs, logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
+import { classifyActivityDetailed, logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { getInsightSurfaceIdentity } from "../insights/insightData";
 import type { DriftSurfaceAccumulator } from "../insights/insightData";
 import { formatCompactHourLabel, formatQuarterHourLabel } from "../../lib/formatting";
 import type { CSSProperties } from "react";
 import { scoreFocusDriftWindowShare } from "./focusDriftScoring";
+import { buildLogicalDayDrawingBuckets } from "./logicalDayDrawingBuckets";
 import {
-  FOCUS_DRIFT_BUCKET_COUNT,
   FOCUS_DRIFT_BUCKET_MINUTES,
   FOCUS_DRIFT_CHART_BOUNDS,
   FOCUS_DRIFT_MINUTES_PER_DAY,
@@ -204,8 +204,7 @@ export function applyFocusDriftReplayReveal(input: FocusDriftReplayRevealInput):
 
 export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
   segments = aggregateDeviceElapsedTime(segments);
-  const dayStartMs = logicalDayStartMs(day, startOfDayMinutes);
-  const buckets = Array.from({ length: FOCUS_DRIFT_BUCKET_COUNT }, (_, index) => ({
+  const buckets = buildLogicalDayDrawingBuckets(day, FOCUS_DRIFT_BUCKET_MINUTES, startOfDayMinutes).map((window) => ({
     focusSeconds: 0,
     driftSeconds: 0,
     trackedSeconds: 0,
@@ -215,7 +214,8 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     driftCaptures: 0,
     focusSources: new Map<string, FocusDriftSourceAccumulator>(),
     driftSources: new Map<string, FocusDriftSourceAccumulator>(),
-    bucketStartMinute: index * FOCUS_DRIFT_BUCKET_MINUTES,
+    bucketStartMinute: window.startMinute,
+    intervals: window.intervals,
   }));
   const boundedCurrentMinute = currentMinuteOfDay === null || currentMinuteOfDay === undefined
     ? null
@@ -235,9 +235,10 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     const sourceIdentity = productivity === "focus" || productivity === "drift" ? getInsightSurfaceIdentity(segment) : null;
 
     for (const bucket of buckets) {
-      const bucketStartMs = dayStartMs + bucket.bucketStartMinute * 60 * 1000;
-      const bucketEndMs = bucketStartMs + FOCUS_DRIFT_BUCKET_MINUTES * 60 * 1000;
-      const overlapSeconds = activitySecondsWithinInterval(segment, bucketStartMs, bucketEndMs);
+      const overlapSeconds = bucket.intervals.reduce(
+        (sum, interval) => sum + activitySecondsWithinInterval(segment, interval.start, interval.end),
+        0,
+      );
       if (overlapSeconds <= 0) continue;
 
       bucket.trackedSeconds += overlapSeconds;

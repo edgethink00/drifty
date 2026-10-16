@@ -504,9 +504,13 @@ function forEachFlowBucketContribution(
     let cursor = new Date(start);
 
     while (cursor < end) {
-      const blockStart = new Date(cursor);
       const bucketMinute = Math.floor(cursor.getMinutes() / intervalMinutes) * intervalMinutes;
-      blockStart.setMinutes(bucketMinute, 0, 0);
+      // A local setter resolves an ambiguous fall-back time to its first
+      // occurrence. Round within this actual occurrence so the next bucket
+      // always advances, including the repeated hour (or half-hour).
+      const offsetInBucket = (cursor.getMinutes() - bucketMinute) * 60_000
+        + cursor.getSeconds() * 1000 + cursor.getMilliseconds();
+      const blockStart = new Date(cursor.getTime() - offsetInBucket);
       const blockEnd = new Date(blockStart.getTime() + intervalMs);
 
       if (logicalDayIsoDateForDate(blockStart, boundaryMinutes) !== day) {

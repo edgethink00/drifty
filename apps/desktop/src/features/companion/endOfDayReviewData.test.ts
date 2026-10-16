@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "@drifty/domain";
+import { activitySecondsWithinInterval } from "@drifty/domain";
 
 import { selectEndOfDayReviewDaySegments, sumEndOfDayReviewTrackedSeconds } from "./endOfDayReviewData";
 
@@ -44,7 +45,11 @@ describe("end-of-day review readiness", () => {
     const excluded = segment({ id: "excluded", source: "nsworkspace", durationSeconds: 10800, exclusionSource: "user", ...(remote ? { deviceId: "pc" } : {}) });
     const input = [observed, excluded];
     const original = JSON.stringify(input);
-    expect(selectEndOfDayReviewDaySegments(input, "2026-08-23")).toEqual([observed]);
+    const selected = selectEndOfDayReviewDaySegments(input, "2026-08-23");
+    // Window projections carry in-memory allocation metadata. All serialized
+    // activity fields and the observed record's full minute must stay intact.
+    expect(JSON.parse(JSON.stringify(selected))).toEqual([observed]);
+    expect(activitySecondsWithinInterval(selected[0]!, Date.parse(observed.startedAt), Date.parse(observed.endedAt))).toBe(60);
     expect(sumEndOfDayReviewTrackedSeconds(input, "2026-08-23")).toBe(60);
     expect(JSON.stringify(input)).toBe(original);
   });

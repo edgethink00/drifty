@@ -58,7 +58,7 @@ def fetch_live_tail(
         WHERE 1=1
     """
     params: list[Any] = []
-    query = database._append_overlap_filters(query, params, start, end, "activity_segments")
+    query = database._append_timeline_overlap_filters(query, params, start, end, "activity_segments")
 
     tail_filters: list[str] = []
     if after_ended_at:

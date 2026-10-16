@@ -7312,8 +7312,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       requiredHistoryRange: dashPeriod === "Week" ? dashboardWeekHistoryRange : dashboardRange,
       selectedDaySegments: segments,
       visibleRange: dashboardRange,
+      clipWindow: {
+        start: logicalDayStartMs(dashboardRange.startDay, startOfDayMinutes),
+        end: logicalDayEndExclusiveMs(dashboardRange.endDay, startOfDayMinutes),
+      },
     });
-  }, [dashPeriod, dashboardHistorySource, dashboardRange, dashboardWeekCompactSource, dashboardWeekHistoryRange, segments]);
+  }, [dashPeriod, dashboardHistorySource, dashboardRange, dashboardWeekCompactSource, dashboardWeekHistoryRange, segments, startOfDayMinutes]);
   const {
     effectiveSelectedDaySegments: unfilteredEffectiveSelectedDaySegments,
     effectiveDashboardSegments: unfilteredEffectiveDashboardSegments,
@@ -8231,7 +8235,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const shouldBuildClassificationModels = activeTab === "classification";
   const classificationSegments = useMemo(() => aggregateDeviceElapsedTime((
     shouldBuildClassificationModels && classificationRange === "Week"
-      ? filterSegmentsForRange(historySegments, classificationWeekRange.start, classificationWeekRange.end)
+      ? filterSegmentsForRange(historySegments, classificationWeekRange.start, classificationWeekRange.end, {
+          start: Date.parse(classificationWeekRange.start),
+          end: logicalDayEndExclusiveMs(classificationWeekRange.endDay, startOfDayMinutes),
+        })
       : shouldBuildClassificationModels ? segments : EMPTY_ACTIVITY_SEGMENTS
   ).filter((segment) => !isFailedForegroundCaptureSegment(segment)))
     .map(segment => clipDeviceElapsedTimeSegment(segment, classificationRange === "Week"

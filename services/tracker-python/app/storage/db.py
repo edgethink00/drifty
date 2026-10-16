@@ -357,6 +357,26 @@ class TrackerDatabase:
                 CREATE INDEX IF NOT EXISTS idx_activity_segments_ended_at
                 ON activity_segments(datetime(ended_at));
 
+                -- Timeline summaries spread a positive recorded duration over
+                -- at least that much wall-clock time. Index the same effective
+                -- end used by the domain so a point/short timestamp span can be
+                -- found in the following logical window without scanning the
+                -- complete activity table.
+                CREATE INDEX IF NOT EXISTS idx_activity_segments_sampled_end_at
+                ON activity_segments(
+                  CASE
+                    WHEN julianday(started_at) IS NOT NULL
+                      AND julianday(ended_at) IS NOT NULL
+                      AND julianday(ended_at) >= julianday(started_at)
+                      AND duration_seconds > 0
+                    THEN max(
+                      julianday(ended_at),
+                      julianday(started_at) + duration_seconds / 86400.0
+                    )
+                    ELSE julianday(ended_at)
+                  END
+                );
+
                 CREATE TABLE IF NOT EXISTS tracker_meta (
                   key TEXT PRIMARY KEY,
                   value TEXT NOT NULL
@@ -1928,6 +1948,61 @@ class TrackerDatabase:
                 query += f" AND history_ends_after({ended_at}, ?)"
                 params.append(TrackerDatabase._normalize_range_bound(start))
         if end:
+            query += f" AND datetime({started_at}) <= datetime(?)"
+            params.append(TrackerDatabase._normalize_range_bound(end))
+        return query
+
+    @staticmethod
+    def _sampled_effective_end_sql(table_name: str | None = None) -> str:
+        """SQL equivalent of the domain's sampledActivityTimeBounds end.
+
+        Keep raw timestamps and recorded duration unchanged. Only valid positive
+        samples expand. Other rows retain the legacy raw-end read predicate,
+        including exclusion of malformed ends from bounded reads, so paged and
+        full reads keep the same identities. Exclusion/failed-capture policy
+        remains a consumer concern.
+        """
+        started_at = f"{table_name}.started_at" if table_name else "started_at"
+        ended_at = f"{table_name}.ended_at" if table_name else "ended_at"
+        duration_seconds = f"{table_name}.duration_seconds" if table_name else "duration_seconds"
+        return f"""
+            CASE
+              WHEN julianday({started_at}) IS NOT NULL
+                AND julianday({ended_at}) IS NOT NULL
+                AND julianday({ended_at}) >= julianday({started_at})
+                AND {duration_seconds} > 0
+              THEN max(
+                julianday({ended_at}),
+                julianday({started_at}) + {duration_seconds} / 86400.0
+              )
+              ELSE julianday({ended_at})
+            END
+        """
+
+    @staticmethod
+    def _append_timeline_overlap_filters(
+        query: str,
+        params: list[Any],
+        start: str | None,
+        end: str | None,
+        table_name: str | None = None,
+    ) -> str:
+        """Append inclusive query bounds for timeline rows.
+
+        Tracker range DTOs are second-precision and inclusive. Consumers clip
+        the returned rows to their exact half-open logical window. The effective
+        end predicate is deliberately limited to timeline row reads; aggregate
+        SQL endpoints keep their established timestamp contract.
+        """
+        started_at = f"{table_name}.started_at" if table_name else "started_at"
+        if start:
+            query += f" AND ({TrackerDatabase._sampled_effective_end_sql(table_name)}) >= julianday(?)"
+            params.append(TrackerDatabase._normalize_range_bound(start))
+        if end:
+            # Range DTO ends are inclusive and second-precision. Keep the
+            # established datetime() comparison so 23:59:59.500 belongs to
+            # the 23:59:59 final query second as well as any forward sample
+            # overlap in the following window.
             query += f" AND datetime({started_at}) <= datetime(?)"
             params.append(TrackerDatabase._normalize_range_bound(end))
         return query
@@ -4891,7 +4966,7 @@ class TrackerDatabase:
             WHERE 1=1
         """
         params: list[Any] = []
-        query = self._append_overlap_filters(query, params, start, end)
+        query = self._append_timeline_overlap_filters(query, params, start, end, "activity_segments")
         query += " ORDER BY started_at ASC"
         if limit:
             query += " LIMIT ?"
@@ -4950,7 +5025,7 @@ class TrackerDatabase:
             WHERE 1=1
         """
         params: list[Any] = []
-        query = self._append_overlap_filters(query, params, start, end, "activity_segments")
+        query = self._append_timeline_overlap_filters(query, params, start, end, "activity_segments")
         cursor_segment_id = self._parse_timeline_page_cursor_segment_id(before_segment_id)
         if before_ended_at and cursor_segment_id is not None:
             normalized_before_ended_at = self._normalize_range_bound(before_ended_at)
@@ -5042,7 +5117,7 @@ class TrackerDatabase:
             WHERE 1=1
         """
         params: list[Any] = []
-        sql = self._append_overlap_filters(sql, params, start, end, "activity_segments")
+        sql = self._append_timeline_overlap_filters(sql, params, start, end, "activity_segments")
         for token in tokens:
             field_predicates = [
                 f"lower(coalesce({field}, '')) LIKE ? ESCAPE '\\'"
@@ -5129,7 +5204,7 @@ class TrackerDatabase:
             WHERE 1=1
         """
         params: list[Any] = []
-        query = self._append_overlap_filters(query, params, start, end, "activity_segments")
+        query = self._append_timeline_overlap_filters(query, params, start, end, "activity_segments")
         query += " ORDER BY activity_segments.started_at ASC"
         with self.connect() as conn:
             rows = fetch_row_dicts(conn, query, tuple(params))
@@ -5160,7 +5235,7 @@ class TrackerDatabase:
             WHERE 1=1
         """
         params: list[Any] = []
-        query = self._append_overlap_filters(query, params, start, end)
+        query = self._append_timeline_overlap_filters(query, params, start, end)
         query += " ORDER BY started_at ASC"
         with self.connect() as conn:
             rows = fetch_row_dicts(conn, query, tuple(params))

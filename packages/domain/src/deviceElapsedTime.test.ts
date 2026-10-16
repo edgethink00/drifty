@@ -54,7 +54,12 @@ describe("single-device logical-window display totals", () => {
   it("keeps whole-window and unbounded original records intact, and clips outside records to zero", () => {
     const record = { ...segment("whole", 0, 1), startedAt: "2026-10-14T04:01:00Z", endedAt: "2026-10-14T04:02:00Z", durationSeconds: 55 };
     expect(clipDeviceElapsedTimeSegment(record)).toBe(record);
-    expect(clipDeviceElapsedTimeSegment(record, { start: boundary, end: boundary + day })).toBe(record);
+    const original = JSON.stringify(record);
+    const projected = clipDeviceElapsedTimeSegment(record, { start: boundary, end: boundary + day });
+    expect(JSON.stringify(projected)).toBe(original);
+    expect(JSON.stringify(record)).toBe(original);
+    expect(capturedActivityDurationSeconds(projected)).toBe(55);
+    expect(activitySecondsWithinInterval(projected, boundary, boundary + day)).toBe(55);
     expect(clipDeviceElapsedTimeSegment(record, { start: boundary - day, end: boundary }).durationSeconds).toBe(0);
   });
 });
@@ -197,7 +202,75 @@ describe("cross-device elapsed time", () => {
     expect(buildDailyTotals(records, "2026-10-03", "2026-10-04", 240)).toEqual([{ day: "2026-10-03", totalSeconds: 900 }, { day: "2026-10-04", totalSeconds: 900 }]);
     expect(buildRollingFocusSeconds(records, "2026-10-04", "2026-10-04", undefined, 240)).toBe(900);
     const start = logicalDayStartMs("2026-10-04", 240);
-    expect(sum(aggregateDeviceElapsedTime(records).map(value => clipDeviceElapsedTimeSegment(value, { start, end: start + 86_400_000 })))).toBe(900);
+    const clipped = aggregateDeviceElapsedTime(records).map(value => clipDeviceElapsedTimeSegment(value, { start, end: start + 86_400_000 }));
+    expect(sum(clipped)).toBe(900);
+    expect(clipped.map(value => clipDeviceElapsedTimeSegment(value, { start, end: start + 86_400_000 }))).toEqual(clipped);
+  });
+
+  it("clips a raw single-device summary at a logical window without mutating captured records", () => {
+    const record = {
+      ...segment("overnight", 0, 20),
+      startedAt: "2026-10-04T23:50:00.000Z",
+      endedAt: "2026-10-05T00:10:00.000Z",
+      durationSeconds: 1200,
+    };
+    const original = JSON.stringify(record);
+    const midnight = Date.parse("2026-10-05T00:00:00.000Z");
+    expect(clipDeviceElapsedTimeSegment(record)).toBe(record);
+    const first = clipDeviceElapsedTimeSegment(record, { start: midnight - 86_400_000, end: midnight });
+    const second = clipDeviceElapsedTimeSegment(record, { start: midnight, end: midnight + 86_400_000 });
+
+    for (const clipped of [first, second]) {
+      expect(clipped.durationSeconds).toBe(600);
+      expect(totalDurationSeconds([clipped])).toBe(600);
+      expect(buildAppUsageSummaries([clipped])[0].totalSeconds).toBe(600);
+      expect(buildCategoryDurations([clipped]).find(value => value.category === "workspace")?.totalSeconds).toBe(600);
+      expect(buildProductivityDurations([clipped]).find(value => value.productivity === "focus")?.totalSeconds).toBe(600);
+      expect(clipped).toMatchObject({ id: record.id, startedAt: record.startedAt, endedAt: record.endedAt });
+      expect(capturedActivityDurationSeconds(clipped)).toBe(1200);
+    }
+    expect(JSON.stringify(record)).toBe(original);
+  });
+
+  it("preserves sampled density, point samples, exclusions and invalid-record handling while clipping raw summaries", () => {
+    const start = Date.parse("2026-10-04T23:50:00.000Z");
+    const midnight = Date.parse("2026-10-05T00:00:00.000Z");
+    const sparse = {
+      ...segment("sparse", 0, 20),
+      startedAt: new Date(start).toISOString(),
+      endedAt: new Date(start + 20 * 60_000).toISOString(),
+      durationSeconds: 120,
+    };
+    expect(clipDeviceElapsedTimeSegment(sparse, { start, end: midnight }).durationSeconds).toBe(60);
+    expect(clipDeviceElapsedTimeSegment(sparse, { start: midnight, end: start + 20 * 60_000 }).durationSeconds).toBe(60);
+
+    const point = { ...segment("point", 0, 1), startedAt: new Date(midnight).toISOString(), endedAt: new Date(midnight).toISOString() };
+    expect(clipDeviceElapsedTimeSegment(point, { start: midnight, end: midnight + 60_000 }).durationSeconds).toBe(60);
+    expect(clipDeviceElapsedTimeSegment(point, { start: midnight - 60_000, end: midnight }).durationSeconds).toBe(0);
+
+    const excluded = { ...sparse, id: "excluded", exclusionSource: "user" as const };
+    const failed = { ...sparse, id: "failed", appName: "Unavailable", bundleId: null, platform: "windows" as const, source: "unknown" as const };
+    const malformed = { ...sparse, id: "malformed", startedAt: "invalid" };
+    const negative = { ...sparse, id: "negative", durationSeconds: -1 };
+    expect([excluded, failed, malformed, negative].map(record => clipDeviceElapsedTimeSegment(record, { start, end: start + 20 * 60_000 }).durationSeconds)).toEqual([0, 0, 0, 0]);
+  });
+
+  it("uses custom logical boundaries and keeps repeated clipping idempotent", () => {
+    const record = {
+      ...segment("four-am", 0, 20),
+      startedAt: "2026-10-04T03:50:00",
+      endedAt: "2026-10-04T04:10:00",
+      durationSeconds: 1200,
+    };
+    const start = logicalDayStartMs("2026-10-04", 240);
+    const end = logicalDayStartMs("2026-10-05", 240);
+    const clipped = clipDeviceElapsedTimeSegment(record, { start, end });
+    const clippedAgain = clipDeviceElapsedTimeSegment(clipped, { start, end });
+
+    expect(clipped.durationSeconds).toBe(600);
+    expect(clippedAgain.durationSeconds).toBe(600);
+    expect(clippedAgain).toEqual(clipped);
+    expect(capturedActivityDurationSeconds(clippedAgain)).toBe(1200);
   });
 
   it("allocates each hour/bucket at its actual overlap instead of scaling the entire session uniformly", () => {

@@ -17,9 +17,10 @@ type InsightSegmentSelectionInput = {
 };
 
 export function selectInsightSegments(input: InsightSegmentSelectionInput): ActivitySegment[] {
-  const historySegments = filterSegmentsForRange(input.historySegments, input.range.start, input.range.end);
-  const supplementalSegments = filterSegmentsForRange(input.supplementalSegments ?? [], input.range.start, input.range.end);
-  const selectedDaySegments = filterSegmentsForRange(input.selectedDaySegments, input.range.start, input.range.end);
+  const clipWindow = { start: Date.parse(input.range.start), end: input.endExclusiveMs ?? Date.parse(input.range.end) };
+  const historySegments = filterSegmentsForRange(input.historySegments, input.range.start, input.range.end, clipWindow);
+  const supplementalSegments = filterSegmentsForRange(input.supplementalSegments ?? [], input.range.start, input.range.end, clipWindow);
+  const selectedDaySegments = filterSegmentsForRange(input.selectedDaySegments, input.range.start, input.range.end, clipWindow);
   // Trends reads history directly, outside the dashboard's filtered arrays, so
   // failed Windows foreground captures have to be dropped here as well.
   return aggregateDeviceElapsedTime(mergeActivitySegments(mergeActivitySegments(historySegments, supplementalSegments), selectedDaySegments)

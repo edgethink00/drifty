@@ -51,6 +51,9 @@ it.each(["scheduler", "memory"])("cancels %s's old-owner work before another req
     useMemorySuggestions({ownerId: id, provider: entry === "memory" && enabled ? {kind: "cloud"} : null, language: "en", document});
   }, {initialProps: {id: owner, enabled: true}});
   await act(async () => { await vi.advanceTimersByTimeAsync(entry === "scheduler" ? SUGGESTION_SCHEDULER_FIRST_CHECK_MS : 0); });
+  // Soul lookup uses real Web Crypto. Advancing fake timers alone does not
+  // settle that work; wait until the real SDK is holding the response body.
+  await act(async () => { await vi.waitFor(() => expect(finish).toBeTypeOf("function")); });
   expect(transport).toHaveBeenCalledTimes(1);
   owner = "owner-b"; sdk.setAuth("synthetic-owner-b");
   hook.rerender({id: owner, enabled: false});

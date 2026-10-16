@@ -236,6 +236,32 @@ class TrackerDatabaseTests(unittest.TestCase):
         segment.update(overrides)
         self.database.insert_segment(segment)
 
+    def test_bounded_timeline_readers_keep_legacy_invalid_end_exclusion_when_paging(self) -> None:
+        for index in range(8):
+            self._insert_activity_segment(index)
+        self._insert_activity_segment(8, ended_at="invalid", duration_seconds=60)
+        start, end = "2026-04-06T00:00:00+00:00", "2026-04-06T23:59:59+00:00"
+        expected = {row["id"] for row in self.database.fetch_timeline("2026-04-06")}
+        self.assertEqual(len(expected), 8)
+        for reader in (self.database.timeline_page, self.database.search_timeline_page):
+            cursor = None
+            observed = []
+            for _ in range(12):
+                options = {
+                    "start": start, "end": end, "limit": 1,
+                    "before_ended_at": cursor["beforeEndedAt"] if cursor else None,
+                    "before_segment_id": cursor["beforeSegmentId"] if cursor else None,
+                }
+                page = reader("Code", **options) if reader == self.database.search_timeline_page else reader(**options)
+                observed.extend(item["id"] for item in page["items"])
+                if not page["hasMore"]:
+                    break
+                cursor = page["nextCursor"]
+            else:
+                self.fail("bounded pagination did not terminate")
+            self.assertEqual(set(observed), expected)
+            self.assertEqual(len(observed), len(expected))
+
     def test_timeline_page_defaults_to_200_rows_and_returns_cursor(self) -> None:
         for index in range(205):
             self._insert_activity_segment(index)
@@ -1021,6 +1047,106 @@ class TrackerDatabaseTests(unittest.TestCase):
 
         self.assertIn("idx_activity_segments_started_at", indexes)
         self.assertIn("idx_activity_segments_ended_at", indexes)
+        self.assertIn("idx_activity_segments_sampled_end_at", indexes)
+
+    def test_timeline_row_reads_use_sampled_effective_end_across_range_queries(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-10-04T23:59:58+00:00",
+                "ended_at": "2026-10-04T23:59:58+00:00",
+                "duration_seconds": 60,
+                "app_name": "Forward point",
+                "bundle_id": "dev.forward-point",
+                "window_title": None,
+                "platform": "macos",
+                "source": "manual",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-10-04T23:50:00+00:00",
+                "ended_at": "2026-10-04T23:55:00+00:00",
+                "duration_seconds": 1200,
+                "app_name": "Long duration",
+                "bundle_id": "dev.long-duration",
+                "window_title": None,
+                "platform": "macos",
+                "source": "manual",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+        start = "2026-10-05T00:00:00+00:00"
+        end = "2026-10-05T23:59:59+00:00"
+        with self.database.connect() as conn:
+            ids_by_app = {
+                row["app_name"]: str(row["id"])
+                for row in conn.execute("SELECT id, app_name FROM activity_segments")
+            }
+        expected_ids = {ids_by_app["Forward point"], ids_by_app["Long duration"]}
+
+        self.assertEqual({str(row["id"]) for row in self.database.timeline(start, end)}, expected_ids)
+        self.assertEqual(
+            {item["id"] for item in self.database.timeline_page(start, end, limit=10)["items"]},
+            expected_ids,
+        )
+        self.assertEqual(
+            {item["id"] for item in self.database.search_timeline_page("duration", start, end, limit=10)["items"]},
+            {ids_by_app["Long duration"]},
+        )
+        self.assertEqual(
+            {item["id"] for item in self.database.dashboard_week_timeline(start, end)},
+            expected_ids,
+        )
+        self.assertEqual(
+            {item["id"] for item in self.database.project_trend_timeline(start, end)},
+            expected_ids,
+        )
+
+        for app_name, started_at, ended_at, duration_seconds in (
+            ("Subsecond point", "2026-10-04T23:59:59.500+00:00", "2026-10-04T23:59:59.500+00:00", 1),
+            ("Invalid end", "2026-10-04T23:59:58+00:00", "invalid", 60),
+            ("Reversed end", "2026-10-04T23:59:58+00:00", "2026-10-04T23:59:57+00:00", 60),
+            ("Zero duration", "2026-10-04T23:59:58+00:00", "2026-10-04T23:59:58+00:00", 0),
+            ("Negative duration", "2026-10-04T23:59:58+00:00", "2026-10-04T23:59:58+00:00", -1),
+        ):
+            self.database.insert_segment(
+                {
+                    "started_at": started_at,
+                    "ended_at": ended_at,
+                    "duration_seconds": duration_seconds,
+                    "app_name": app_name,
+                    "bundle_id": None,
+                    "window_title": None,
+                    "platform": "macos",
+                    "source": "manual",
+                    "confidence": None,
+                    "raw_context_json": "{}",
+                }
+            )
+        next_window_apps = {row["app_name"] for row in self.database.timeline(start, end)}
+        self.assertIn("Subsecond point", next_window_apps)
+        self.assertNotIn("Invalid end", next_window_apps)
+        self.assertNotIn("Reversed end", next_window_apps)
+        self.assertNotIn("Zero duration", next_window_apps)
+        self.assertNotIn("Negative duration", next_window_apps)
+        first_window_apps = {
+            row["app_name"]
+            for row in self.database.timeline(
+                "2026-10-04T00:00:00+00:00",
+                "2026-10-04T23:59:59+00:00",
+            )
+        }
+        self.assertIn("Subsecond point", first_window_apps)
+
+        query = "SELECT id FROM activity_segments WHERE 1=1"
+        params: list[object] = []
+        query = self.database._append_timeline_overlap_filters(query, params, start, end)
+        with self.database.connect() as conn:
+            plan = [row["detail"] for row in conn.execute(f"EXPLAIN QUERY PLAN {query}", params)]
+        self.assertTrue(any("idx_activity_segments_sampled_end_at" in detail for detail in plan), plan)
 
     def test_existing_import_keys_gain_segment_lookup_without_changing_rows(self) -> None:
         segment_id = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")

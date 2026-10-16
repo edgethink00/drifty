@@ -45,7 +45,12 @@ describe("synced elapsed time across display models", () => {
   });
 
   it("matches Trends summary and focus-calendar totals without mutating stored history", () => {
-    const selected = selectInsightSegments({ historySegments: records, selectedDaySegments: [], range: { start: "2026-10-04T00:00:00", end: "2026-10-05T00:00:00" } });
+    const selected = selectInsightSegments({
+      historySegments: records,
+      selectedDaySegments: [],
+      range: { start: "2026-10-04T00:00:00", end: "2026-10-05T00:00:00" },
+      endExclusiveMs: Date.parse("2026-10-05T00:00:00"),
+    });
     expect(totalDurationSeconds(selected)).toBe(1800);
     const calendar = buildFocusCalendar(selected, "2026-10-04", "2026-10-04");
     expect(calendar[0]).toMatchObject({ trackedSeconds: 1800, focusSeconds: 900 });

@@ -1,4 +1,4 @@
-import { aggregateDeviceElapsedTime, classifyActivityDetailed } from "@drifty/domain";
+import { aggregateDeviceElapsedTime, classifyActivityDetailed, logicalDayStartMs, logicalDayEndExclusiveMs } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { buildIsoDayList, filterSegmentsForRange, getLogicalDayRange } from "../../lib/formatting";
 import { buildWeekCalendarEvents, buildWeekDayRows } from "./weekCalendar";
@@ -220,7 +220,10 @@ function buildClassificationBySegmentId(
 
 function filterSegmentsForLogicalDay(segments: ActivitySegment[], day: string, startOfDayMinutes: number): ActivitySegment[] {
   const range = getLogicalDayRange(day, day, startOfDayMinutes);
-  return filterSegmentsForRange(segments, range.start, range.end);
+  return filterSegmentsForRange(segments, range.start, range.end, {
+    start: logicalDayStartMs(day, startOfDayMinutes),
+    end: logicalDayEndExclusiveMs(day, startOfDayMinutes),
+  });
 }
 
 function buildWeekDashboardSegmentSignature(segments: readonly ActivitySegment[]): string {
