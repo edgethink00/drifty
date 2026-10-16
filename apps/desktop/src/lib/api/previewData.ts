@@ -1,5 +1,8 @@
 import { buildHourlySummary, findMatchingClassificationRule, topSites as buildTopSites } from "@drifty/domain";
 import type {
+  ActivityBlockLabelRecord,
+  ActivityBlockLabelSaveInput,
+  ActivityBlockUserLabelInput,
   ActivityCategory,
   ActivityClassificationRecord,
   ActivitySegment,
@@ -417,6 +420,44 @@ export function previewProjectAssignments(query: TimelineQuery): ProjectAssignme
       assignedAt: segment.endedAt,
     };
   });
+}
+
+const previewActivityBlockLabels = new Map<string, ActivityBlockLabelRecord>();
+
+function previewLabelKey(blockKey: string, source: ActivityBlockLabelRecord["source"]): string {
+  return source + "|" + blockKey;
+}
+
+/** In-memory labels for the browser preview; nothing is generated or persisted. */
+export function previewGetActivityBlockLabels(query: TimelineQuery): ActivityBlockLabelRecord[] {
+  const start = "day" in query ? query.day : query.start.slice(0, 10);
+  const end = "day" in query ? query.day : query.end.slice(0, 10);
+  return [...previewActivityBlockLabels.values()].filter((label) => label.logicalDay >= start && label.logicalDay <= end);
+}
+
+export function previewSaveActivityBlockLabels(labels: readonly ActivityBlockLabelSaveInput[]): { saved: number; skipped: number } {
+  for (const label of labels) {
+    previewActivityBlockLabels.set(previewLabelKey(label.blockKey, "ai"), { ...label, source: "ai" });
+  }
+  return { saved: labels.length, skipped: 0 };
+}
+
+export function previewSaveActivityBlockUserLabel(label: ActivityBlockUserLabelInput, previousBlockKey?: string | null): ActivityBlockLabelRecord {
+  if (previousBlockKey && previousBlockKey !== label.blockKey) previewActivityBlockLabels.delete(previewLabelKey(previousBlockKey, "user"));
+  const title = label.title.trim();
+  const record: ActivityBlockLabelRecord = {
+    ...label,
+    source: "user",
+    status: title ? "user" : "hidden",
+    title,
+    description: title ? label.description.trim() : "",
+  };
+  previewActivityBlockLabels.set(previewLabelKey(label.blockKey, "user"), record);
+  return record;
+}
+
+export function previewDeleteActivityBlockUserLabel(blockKey: string): { deleted: number } {
+  return { deleted: previewActivityBlockLabels.delete(previewLabelKey(blockKey, "user")) ? 1 : 0 };
 }
 
 export function previewSaveProjectAssignments(

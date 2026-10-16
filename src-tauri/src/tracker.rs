@@ -746,6 +746,20 @@ impl TrackerController {
         )
     }
 
+    pub fn get_activity_block_labels(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_activity_block_labels",
+            build_period_payload(day, start, end),
+        )
+    }
+
     pub fn get_team_project_assignments(
         &self,
         app: &AppHandle,
@@ -1318,6 +1332,7 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
         | "get_agent_concurrency_peak"
         | "get_dev_repos"
         | "get_project_window_assignments"
+        | "get_activity_block_labels"
         | "get_team_projects"
         | "get_team_project_assignments"
         | "get_project_pass_runs"
@@ -2301,6 +2316,9 @@ mod tests {
         "delete_project_anchor",
         "save_project_assignments",
         "save_project_window_assignments",
+        "save_activity_block_labels",
+        "save_activity_block_user_label",
+        "delete_activity_block_user_label",
         "upsert_team_projects",
         "save_team_project_assignments",
         "record_project_pass",
@@ -2652,6 +2670,7 @@ mod tests {
             "get_agent_concurrency_peak",
             "get_dev_repos",
             "get_project_window_assignments",
+            "get_activity_block_labels",
             "get_team_projects",
             "get_team_project_assignments",
             "get_project_pass_runs",

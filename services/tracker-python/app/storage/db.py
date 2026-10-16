@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
 from app.fs_safety import ensure_directory
+from app.storage import activity_block_labels
 from app.storage.ai_review_schema import ensure_ai_review_schema
 from app.storage.sync_deletion_barrier import (
     SyncDeletionBarrier, ensure_received_deletion_schema, sync_account_scope,
@@ -673,6 +674,7 @@ class TrackerDatabase:
             self._ensure_columns(conn)
             self._ensure_sync_schema(conn)
             ensure_ai_review_schema(conn)
+            activity_block_labels.ensure_activity_block_label_schema(conn)
             self._ensure_default_excluded_apps(conn)
 
     def _ensure_columns(self, conn: sqlite3.Connection) -> None:
@@ -2727,6 +2729,7 @@ class TrackerDatabase:
                         f"DELETE FROM activity_classifications WHERE ai_result = 1 AND segment_id IN ({deletion_subquery})",
                         tuple(segment_params),
                     )
+                    activity_block_labels.delete_ai_labels_for_segments(conn, segment_subquery, tuple(segment_params))
                 if delete_youtube_metadata:
                     if has_range:
                         conn.execute(
@@ -4263,6 +4266,30 @@ class TrackerDatabase:
                 }
             )
         return result
+
+    def get_activity_block_labels(
+        self, start: str | None = None, end: str | None = None
+    ) -> list[dict[str, Any]]:
+        normalized_start = self._normalize_range_bound(start) if start else None
+        normalized_end = self._normalize_range_bound(end) if end else None
+        with self.connect() as conn:
+            return activity_block_labels.get_labels(conn, normalized_start, normalized_end)
+
+    def save_activity_block_labels(self, labels: list[Any]) -> dict[str, int]:
+        if not labels:
+            return {"saved": 0, "skipped": 0}
+        with self.connect() as conn:
+            return activity_block_labels.save_ai_labels(conn, labels, parse_iso_datetime)
+
+    def save_activity_block_user_label(
+        self, label: Any, previous_block_key: Any = None
+    ) -> dict[str, Any]:
+        with self.connect() as conn:
+            return activity_block_labels.save_user_label(conn, label, previous_block_key, parse_iso_datetime)
+
+    def delete_activity_block_user_label(self, block_key: Any) -> dict[str, int]:
+        with self.connect() as conn:
+            return activity_block_labels.delete_user_label(conn, block_key)
 
     def get_team_projects(self) -> list[dict[str, Any]]:
         with self.connect() as conn:

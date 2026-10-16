@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
 import type {
+  ActivityBlockLabelRecord,
+  ActivityBlockLabelSaveInput,
+  ActivityBlockUserLabelInput,
   ActivityClassificationRecord,
   ActivitySegment,
   AppIconMap,
@@ -66,6 +69,10 @@ import type {
 import {
   previewAppIcons,
   previewClassificationRule,
+  previewDeleteActivityBlockUserLabel,
+  previewGetActivityBlockLabels,
+  previewSaveActivityBlockLabels,
+  previewSaveActivityBlockUserLabel,
   previewDeleteActivitySegments,
   previewDeleteProject,
   previewHourlySummary,
@@ -535,6 +542,27 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return [];
     const result = await safeInvoke("tracker_get_project_window_assignments", { query });
     return result ?? [];
+  },
+  async getActivityBlockLabels(query: TimelineQuery): Promise<ActivityBlockLabelRecord[]> {
+    if (shouldUsePreviewData()) return previewGetActivityBlockLabels(query);
+    const result = await safeInvoke("tracker_get_activity_block_labels", { query });
+    return result ?? [];
+  },
+  async saveActivityBlockLabels(labels: ActivityBlockLabelSaveInput[]) {
+    if (shouldUsePreviewData()) return previewSaveActivityBlockLabels(labels);
+    const result = await safeInvoke("tracker_save_activity_block_labels", { query: { labels } });
+    return result ?? { saved: 0, skipped: labels.length };
+  },
+  async saveActivityBlockUserLabel(label: ActivityBlockUserLabelInput, previousBlockKey?: string | null): Promise<ActivityBlockLabelRecord> {
+    if (shouldUsePreviewData()) return previewSaveActivityBlockUserLabel(label, previousBlockKey);
+    const result = await safeInvoke("tracker_save_activity_block_user_label", { query: { label, previousBlockKey: previousBlockKey ?? null } });
+    if (!result) throw new Error("The tracker is not available.");
+    return result;
+  },
+  async deleteActivityBlockUserLabel(blockKey: string) {
+    if (shouldUsePreviewData()) return previewDeleteActivityBlockUserLabel(blockKey);
+    const result = await safeInvoke("tracker_delete_activity_block_user_label", { query: { blockKey } });
+    return result ?? { deleted: 0 };
   },
   async getTeamProjects() {
     const result = await safeInvoke("tracker_get_team_projects");

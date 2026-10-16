@@ -1,6 +1,7 @@
 import type { ActivityCategory, ActivitySegment, CurrentActivitySnapshot, ExcludedAppRule, HourBucket, ProductivityLabel, SiteDuration, StoredClassificationSource, TrackerStatus } from "./activity";
 import type { AdaptiveContextSourceFamily } from "./adaptiveContentContext";
 import type { ProjectPassWindowSegmentOverlap } from "./projectPassWindow";
+import type { ActivityBlockLabelRecord, ActivityBlockLabelSaveInput, ActivityBlockUserLabelInput } from "./activityBlockLabels";
 
 export const trackerInvokeCommands = [
   "tracker_get_status",
@@ -55,6 +56,10 @@ export const trackerInvokeCommands = [
   "tracker_get_project_assignments",
   "tracker_save_project_window_assignments",
   "tracker_get_project_window_assignments",
+  "tracker_get_activity_block_labels",
+  "tracker_save_activity_block_labels",
+  "tracker_save_activity_block_user_label",
+  "tracker_delete_activity_block_user_label",
   "tracker_get_team_projects",
   "tracker_upsert_team_projects",
   "tracker_save_team_project_assignments",
@@ -174,6 +179,16 @@ export type TrackerCommandMap = {
     result: ProjectAssignmentsSaveResult;
   };
   tracker_get_project_window_assignments: { args: { query: TimelineQuery }; result: ProjectWindowAssignmentRecord[] };
+  tracker_get_activity_block_labels: { args: { query: TimelineQuery }; result: ActivityBlockLabelRecord[] };
+  tracker_save_activity_block_labels: {
+    args: { query: { labels: ActivityBlockLabelSaveInput[] } };
+    result: { saved: number; skipped: number };
+  };
+  tracker_save_activity_block_user_label: {
+    args: { query: { label: ActivityBlockUserLabelInput; previousBlockKey?: string | null } };
+    result: ActivityBlockLabelRecord;
+  };
+  tracker_delete_activity_block_user_label: { args: { query: { blockKey: string } }; result: { deleted: number } };
   tracker_get_team_projects: { args: undefined; result: TeamProject[] };
   tracker_upsert_team_projects: {
     args: { query: { organizationId: string; projects: TeamProjectInput[] } };
@@ -940,6 +955,11 @@ export interface TrackerApi {
   getProjectAssignments(query: TimelineQuery): Promise<ProjectAssignmentRecord[]>;
   saveProjectWindowAssignments(assignments: ProjectWindowAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;
   getProjectWindowAssignments(query: TimelineQuery): Promise<ProjectWindowAssignmentRecord[]>;
+  /** Local block labels. Optional so partial tracker implementations keep the existing display. */
+  getActivityBlockLabels?(query: TimelineQuery): Promise<ActivityBlockLabelRecord[]>;
+  saveActivityBlockLabels?(labels: ActivityBlockLabelSaveInput[]): Promise<{ saved: number; skipped: number }>;
+  saveActivityBlockUserLabel?(label: ActivityBlockUserLabelInput, previousBlockKey?: string | null): Promise<ActivityBlockLabelRecord>;
+  deleteActivityBlockUserLabel?(blockKey: string): Promise<{ deleted: number }>;
   getTeamProjects(): Promise<TeamProject[]>;
   upsertTeamProjects(organizationId: string, projects: TeamProjectInput[]): Promise<TeamProject[]>;
   saveTeamProjectAssignments(assignments: TeamProjectAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;

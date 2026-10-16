@@ -14,6 +14,8 @@ import {
 import type { WeekCalendarEvent } from "./weekCalendar";
 import { buildWeekActivityInspectorEvent } from "./weekActivityInspectorEvent";
 import { useLocalization } from "../localization/LocalizationContext";
+import { useActivityLabels } from "../activity-labels/ActivityLabelsContext";
+import { activityLabelForWeekEvent, type ActivityInspectorLabel } from "../activity-labels/activityInspectorLabel";
 
 const HOVERED_WEEK_CALENDAR_EVENT_Z_INDEX = "29";
 // Retargeting only waits long enough for the current portal geometry to settle.
@@ -33,6 +35,8 @@ type WeekCalendarHoverLayerProps = {
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
   readonly projectBySegmentId?: ReadonlyMap<string, string | null>;
   readonly disabled?: boolean;
+  /** With timeline cards: each drawn block's name, by event id (weekCardBlocks.ts). */
+  readonly cardLabels?: ReadonlyMap<string, ActivityInspectorLabel | null>;
 };
 
 type AnchoredWeekHover = {
@@ -87,8 +91,10 @@ export function WeekCalendarHoverLayer({
   projectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
   projectBySegmentId = EMPTY_PROJECT_BY_SEGMENT_ID,
   disabled = false,
+  cardLabels,
 }: WeekCalendarHoverLayerProps) {
   const { t } = useLocalization();
+  const activityLabels = useActivityLabels();
   const projectsById = useMemo(
     () => new Map(projectOptions.flatMap((project) => project.id ? [[project.id, project] as const] : [])),
     [projectOptions],
@@ -319,6 +325,15 @@ export function WeekCalendarHoverLayer({
   const actionsDisabledReason = hoverEvent
     ? resolveActivityActionsDisabledReason(hoverEvent, hoverSegments, activityActionsEnabled, t)
     : null;
+  const hoverLabel = hover
+    ? cardLabels?.has(hover.event.id)
+      ? cardLabels.get(hover.event.id) ?? null
+      : activityLabelForWeekEvent(
+        activityLabels,
+        hover.anchorElement.closest<HTMLElement>(".week-v2-calendar__day-column")?.dataset.weekDay,
+        hover.event.segmentIds,
+      )
+    : null;
   return !disabled && hover ? (
     <ActivityInspectorPreview
       event={hoverEvent!}
@@ -331,6 +346,7 @@ export function WeekCalendarHoverLayer({
       actionsDisabledReason={actionsDisabledReason}
       classificationOptions={classificationOptions}
       projectOptions={projectOptions}
+      activityLabel={hoverLabel}
       onDismiss={dismissPreview}
     />
   ) : null;

@@ -14,6 +14,8 @@ import { blockDetailLabel, blockDisplayName, formatGroupTimeRange } from "./flow
 import { useFlowChartHoverDelegation, type AnchoredFlowHoverState } from "./useFlowChartHoverDelegation";
 import { useLocalization } from "../localization/LocalizationContext";
 import { buildActivityDevices } from "../device-sync/deviceTimelineLabels";
+import { useActivityLabels } from "../activity-labels/ActivityLabelsContext";
+import { activityLabelForFlowRange } from "../activity-labels/activityInspectorLabel";
 
 const EMPTY_ACTIVITY_SEGMENTS_BY_ID = new Map<string, ActivitySegment>();
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
@@ -123,6 +125,22 @@ export function buildFlowActivityInspectorEvent(
   };
 }
 
+/** The work block around a Day-view hover range, if one has a name or can get one. */
+export function flowGroupActivityLabel(
+  controller: ReturnType<typeof useActivityLabels>,
+  group: FlowBlockHoverGroup,
+  startOfDayMinutes: number,
+) {
+  return activityLabelForFlowRange(
+    controller,
+    group.block.day,
+    group.startMinuteOfDay,
+    group.endMinuteOfDay,
+    startOfDayMinutes,
+    group.displaySegmentIds ?? group.segmentIds,
+  );
+}
+
 // Day and Week share the same anchored, read-only preview. Clicking a block
 // pins the editor; preview pointer events must never cover neighboring cells.
 export function FlowHoverLayer({
@@ -142,6 +160,7 @@ export function FlowHoverLayer({
   pinnedGroup = null,
 }: FlowHoverLayerProps) {
   const { t } = useLocalization();
+  const activityLabels = useActivityLabels();
   const [hoveredBlock, setHoveredBlock] = useState<AnchoredFlowHoverState | null>(null);
   const { dismissHover } = useFlowChartHoverDelegation({
     gridElement,
@@ -165,6 +184,7 @@ export function FlowHoverLayer({
   const actionsDisabledReason = previewEvent
     ? resolveActivityActionsDisabledReason(previewEvent, previewSegments, activityActionsEnabled, t)
     : null;
+  const previewLabel = hoveredBlock ? flowGroupActivityLabel(activityLabels, hoveredBlock.group, boundaryMinutes) : null;
 
   return (
     <>
@@ -191,6 +211,7 @@ export function FlowHoverLayer({
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}
           projectOptions={projectOptions}
+          activityLabel={previewLabel}
           onDismiss={dismissHover}
         />
       ) : null}

@@ -10,8 +10,8 @@ import {
 import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { supabase } from "../../lib/supabase/client";
 import type { NativeOpenAiChatResponse } from "./managedLocalAiChat";
-import { parseProjectPassOutput, type ProjectPassInference, type ProjectPassInferenceResult } from "./aiProjectReviewService";
-import { dispatchProjectPassChat } from "./projectPassChatResponse";
+import { parseProjectPassOutput, type ProjectPassInference, type ProjectPassOutput } from "./aiProjectReviewService";
+import { dispatchAnalysisChat, type AnalysisChatProtocol, type AnalysisChatResult } from "./projectPassChatResponse";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 // OpenAI's public API is OpenAI-compatible, so it rides the shared chat path.
@@ -52,7 +52,24 @@ function openRouterModels(setup: AnalysisAiSetupState): string[] {
   return [primary, ...normalizeOpenRouterFallbackModels(primary, setup.openRouterFallbackModels)];
 }
 
-function buildOpenAiCompatibleRequest(baseUrl: string, apiKey: string | null, models: string[], prompt: string, privacy: boolean): Record<string, unknown> {
+/** Per-feature request budget and answer format for an analysis-model call. */
+export interface AnalysisInferenceProtocol<T> extends AnalysisChatProtocol<T> {
+  readonly maxTokens: number;
+  readonly timeoutMs: number;
+  /** Body for the Drifty Cloud review endpoint; a bare prompt is its legacy passthrough. */
+  readonly cloudContent: (prompt: string, promptInput?: ProjectPassPromptInput) => string;
+}
+
+export type AnalysisTextInference<T> = (prompt: string, promptInput?: ProjectPassPromptInput) => Promise<AnalysisChatResult<T>>;
+
+interface RequestBudget {
+  readonly maxTokens: number;
+  readonly timeoutMs: number;
+}
+
+const PROJECT_PASS_BUDGET: RequestBudget = { maxTokens: PROJECT_PASS_MAX_TOKENS, timeoutMs: PROJECT_PASS_TIMEOUT_MS };
+
+function buildOpenAiCompatibleRequest(baseUrl: string, apiKey: string | null, models: string[], prompt: string, privacy: boolean, budget: RequestBudget = PROJECT_PASS_BUDGET): Record<string, unknown> {
   const modelShape = models.length === 1 ? { model: models[0] } : { models };
   // `privacy` marks the OpenRouter route; direct OpenAI and custom endpoints
   // also need the reasoning-model token-limit field.
@@ -63,33 +80,33 @@ function buildOpenAiCompatibleRequest(baseUrl: string, apiKey: string | null, mo
     ...modelShape,
     ...(privacy ? { provider: OPENROUTER_PRIVACY_PROVIDER, headers: { "HTTP-Referer": "https://drifty.so", "X-OpenRouter-Title": "Drifty" } } : {}),
     messages: [{ role: "user", content: prompt }],
-    maxTokens: PROJECT_PASS_MAX_TOKENS,
+    maxTokens: budget.maxTokens,
     ...(parameterFlags.omitTemperature ? parameterFlags : { ...parameterFlags, temperature: 0 }),
-    timeoutMs: PROJECT_PASS_TIMEOUT_MS,
+    timeoutMs: budget.timeoutMs,
   };
 }
 
-function buildAnthropicRequest(apiKey: string, model: string, prompt: string): Record<string, unknown> {
+function buildAnthropicRequest(apiKey: string, model: string, prompt: string, budget: RequestBudget = PROJECT_PASS_BUDGET): Record<string, unknown> {
   return {
     apiKey,
     model,
     messages: [{ role: "user", content: prompt }],
-    maxTokens: PROJECT_PASS_MAX_TOKENS,
+    maxTokens: budget.maxTokens,
     // Claude 5-generation models reject temperature on the Messages API.
     ...(modelRejectsTemperature(model) ? {} : { temperature: 0 }),
-    timeoutMs: PROJECT_PASS_TIMEOUT_MS,
+    timeoutMs: budget.timeoutMs,
   };
 }
 
-function buildCloudReviewRequest(supabaseUrl: string, accessToken: string, anonKey: string, content: string): Record<string, unknown> {
+function buildCloudReviewRequest(supabaseUrl: string, accessToken: string, anonKey: string, content: string, budget: RequestBudget = PROJECT_PASS_BUDGET): Record<string, unknown> {
   return {
     baseUrl: `${supabaseUrl}/functions/v1/${REVIEW_EDGE_FUNCTION}`,
     apiKey: accessToken,
     model: "drifty-cloud",
     messages: [{ role: "user", content }],
-    maxTokens: PROJECT_PASS_MAX_TOKENS,
+    maxTokens: budget.maxTokens,
     temperature: 0,
-    timeoutMs: PROJECT_PASS_TIMEOUT_MS,
+    timeoutMs: budget.timeoutMs,
     headers: { apikey: anonKey },
   };
 }
@@ -152,9 +169,9 @@ export function buildReviewChunkContent(input: ProjectPassPromptInput): string {
   });
 }
 
-function cloudResultFromInjected(result: ProjectPassCloudResponse): ProjectPassInferenceResult {
+function cloudResultFromInjected<T>(result: ProjectPassCloudResponse, protocol: AnalysisChatProtocol<T>): AnalysisChatResult<T> {
   return {
-    output: parseProjectPassOutput(result.content),
+    output: protocol.parse(result.content),
     usage: {
       model: result.model ?? null,
       provider: "cloud",
@@ -173,7 +190,12 @@ function cloudHttpError(status: number, detail: string): Error {
  * Build a provider-bound ProjectPassInference from the analysis slot config.
  * Secrets (keys) must already be resolved onto `setup` by the caller (Keychain).
  */
-function createProviderProjectPassInference(setup: AnalysisAiSetupState, deps: ProjectPassInferenceDeps = {}, cloudRecovery = false): ProjectPassInference {
+function createProviderAnalysisInference<T>(
+  setup: AnalysisAiSetupState,
+  deps: ProjectPassInferenceDeps,
+  cloudRecovery: boolean,
+  protocol: AnalysisInferenceProtocol<T>,
+): AnalysisTextInference<T> {
   const assertCurrent = () => {
     if ((deps.isRequestCurrent && !deps.isRequestCurrent()) || (cloudRecovery && !deps.canFallbackToCloud?.())) {
       throw new Error("Intelligence settings changed during analysis.");
@@ -185,12 +207,13 @@ function createProviderProjectPassInference(setup: AnalysisAiSetupState, deps: P
   const invokeChat = (request: Record<string, unknown>) => { assertCurrent(); return chat(request); };
   const invokeAnthropicChat = (request: Record<string, unknown>) => { assertCurrent(); return anthropicChat(request); };
 
-  return async (prompt: string, promptInput?: ProjectPassPromptInput): Promise<ProjectPassInferenceResult> => {
+  const budget: RequestBudget = { maxTokens: protocol.maxTokens, timeoutMs: protocol.timeoutMs };
+  return async (prompt: string, promptInput?: ProjectPassPromptInput): Promise<AnalysisChatResult<T>> => {
     assertCurrent();
     if (setup.provider === "cloud") {
       if (deps.invokeCloud) {
         const result = await deps.invokeCloud(prompt);
-        return cloudResultFromInjected(result);
+        return cloudResultFromInjected(result, protocol);
       }
       if (!supabase) throw new Error("Supabase is not configured.");
       const { data } = await supabase.auth.getSession();
@@ -210,63 +233,83 @@ function createProviderProjectPassInference(setup: AnalysisAiSetupState, deps: P
       const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "");
       // Structured chunk when available (Option D); a bare prompt still works as
       // a legacy passthrough for any caller that does not thread the structure.
-      const cloudContent = promptInput ? buildReviewChunkContent(promptInput) : prompt;
-      return dispatchProjectPassChat(invokeChat, {
-        request: buildCloudReviewRequest(supabaseUrl, accessToken, anonKey, cloudContent),
+      const cloudContent = protocol.cloudContent(prompt, promptInput);
+      return dispatchAnalysisChat(invokeChat, {
+        request: buildCloudReviewRequest(supabaseUrl, accessToken, anonKey, cloudContent, budget),
         fallbackModel: "drifty-cloud",
         provider: "cloud",
         shape: "openai",
         throwHttpError: cloudHttpError,
-      });
+      }, protocol);
     }
     if (setup.provider === "openrouter") {
       const models = openRouterModels(setup);
       const primaryModel = models[0];
       if (!setup.openRouterApiKey.trim() || !primaryModel) return { output: null, usage: { provider: "openrouter" } };
-      return dispatchProjectPassChat(invokeChat, {
-        request: buildOpenAiCompatibleRequest(OPENROUTER_BASE_URL, setup.openRouterApiKey.trim(), models, prompt, true),
+      return dispatchAnalysisChat(invokeChat, {
+        request: buildOpenAiCompatibleRequest(OPENROUTER_BASE_URL, setup.openRouterApiKey.trim(), models, prompt, true, budget),
         fallbackModel: primaryModel,
         provider: "openrouter",
         shape: "openai",
-      });
+      }, protocol);
     }
     if (setup.provider === "openai") {
       const apiKey = setup.openaiApiKey.trim();
       const model = setup.openaiModel.trim();
       if (!apiKey || !model) return { output: null, usage: { provider: "openai" } };
-      return dispatchProjectPassChat(invokeChat, {
-        request: buildOpenAiCompatibleRequest(OPENAI_BASE_URL, apiKey, [model], prompt, false),
+      return dispatchAnalysisChat(invokeChat, {
+        request: buildOpenAiCompatibleRequest(OPENAI_BASE_URL, apiKey, [model], prompt, false, budget),
         fallbackModel: model,
         provider: "openai",
         shape: "openai",
-      });
+      }, protocol);
     }
     if (setup.provider === "anthropic") {
       const apiKey = setup.anthropicApiKey.trim();
       const model = setup.anthropicModel.trim();
       if (!apiKey || !model) return { output: null, usage: { provider: "anthropic" } };
-      return dispatchProjectPassChat(invokeAnthropicChat, {
-        request: buildAnthropicRequest(apiKey, model, prompt),
+      return dispatchAnalysisChat(invokeAnthropicChat, {
+        request: buildAnthropicRequest(apiKey, model, prompt, budget),
         fallbackModel: model,
         provider: "anthropic",
         shape: "anthropic",
-      });
+      }, protocol);
     }
     const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl);
     const model = setup.selfHostedModel.trim();
     if (!baseUrl || !model) return { output: null, usage: { provider: "self_hosted" } };
-    return dispatchProjectPassChat(invokeChat, {
-      request: buildOpenAiCompatibleRequest(baseUrl, setup.selfHostedApiKey.trim() || null, [model], prompt, false),
+    return dispatchAnalysisChat(invokeChat, {
+      request: buildOpenAiCompatibleRequest(baseUrl, setup.selfHostedApiKey.trim() || null, [model], prompt, false, budget),
       fallbackModel: model,
       provider: "self_hosted",
       shape: "openai",
-    });
+    }, protocol);
   };
 }
 
+const PROJECT_PASS_INFERENCE_PROTOCOL: AnalysisInferenceProtocol<ProjectPassOutput> = {
+  parse: (content) => parseProjectPassOutput(content),
+  repairInstruction: 'The previous response was not valid JSON. Return only a valid JSON object with top-level arrays "assignments" and "corrections". Do not include markdown, code fences, comments, or explanations.',
+  maxTokens: PROJECT_PASS_MAX_TOKENS,
+  timeoutMs: PROJECT_PASS_TIMEOUT_MS,
+  cloudContent: (prompt, promptInput) => (promptInput ? buildReviewChunkContent(promptInput) : prompt),
+};
+
 
 export function createProjectPassInference(setup: AnalysisAiSetupState, deps: ProjectPassInferenceDeps = {}): ProjectPassInference {
-  const preferred = createProviderProjectPassInference(setup, deps, deps.cloudRecovery ?? false);
+  return createAnalysisTextInference(setup, deps, PROJECT_PASS_INFERENCE_PROTOCOL);
+}
+
+/**
+ * Analysis-model call with the user's configured provider and the same Cloud
+ * fallback rule as the project pass. Each feature supplies its answer format.
+ */
+export function createAnalysisTextInference<T>(
+  setup: AnalysisAiSetupState,
+  deps: ProjectPassInferenceDeps,
+  protocol: AnalysisInferenceProtocol<T>,
+): AnalysisTextInference<T> {
+  const preferred = createProviderAnalysisInference(setup, deps, deps.cloudRecovery ?? false, protocol);
   let rejected = false;
   return async (prompt, input) => {
     if (!rejected) {
@@ -277,6 +320,6 @@ export function createProjectPassInference(setup: AnalysisAiSetupState, deps: Pr
       if (!deps.canFallbackToCloud?.()) return result;
     }
     if (!deps.canFallbackToCloud?.()) return { output: null, usage: { provider: setup.provider } };
-    return createProviderProjectPassInference({ ...setup, provider: "cloud" }, deps, true)(prompt, input);
+    return createProviderAnalysisInference({ ...setup, provider: "cloud" }, deps, true, protocol)(prompt, input);
   };
 }

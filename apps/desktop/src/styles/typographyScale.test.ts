@@ -32,6 +32,13 @@ const EXCLUDED = [
   "features/pet-mode/petMode.css",
 ];
 
+/** Sizes the owner approved below the floor, each recorded in docs/product-decisions.md. */
+const APPROVED_BELOW_FLOOR: readonly { readonly file: string; readonly rem: number }[] = [
+  // Week work names sit 4% under the floor to fit more of the name in a block
+  // (owner decision 2026-10-16, "Timeline cards (Day/Week)").
+  { file: "features/activity-labels/activity-labels.css", rem: 0.66 },
+];
+
 function collectCssFiles(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -64,8 +71,10 @@ describe("app typography floor", () => {
         const matches = line.matchAll(/font-size:\s*(\.?[0-9.]+)rem/g);
         for (const match of matches) {
           const value = Number.parseFloat(match[1]);
-          if (Number.isFinite(value) && value < TYPE_FLOOR_REM) {
-            violations.push(`${relative(SRC_ROOT, file)}:${index + 1} -> ${value}rem`);
+          const rel = relative(SRC_ROOT, file).replace(/\\/g, "/");
+          const approved = APPROVED_BELOW_FLOOR.some((entry) => entry.file === rel && entry.rem === value);
+          if (Number.isFinite(value) && value < TYPE_FLOOR_REM && !approved) {
+            violations.push(`${rel}:${index + 1} -> ${value}rem`);
           }
         }
       });

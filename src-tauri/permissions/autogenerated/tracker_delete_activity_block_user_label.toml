@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-delete-activity-block-user-label"
+description = "Enables the tracker_delete_activity_block_user_label command without any pre-configured scope."
+commands.allow = ["tracker_delete_activity_block_user_label"]
+
+[[permission]]
+identifier = "deny-tracker-delete-activity-block-user-label"
+description = "Denies the tracker_delete_activity_block_user_label command without any pre-configured scope."
+commands.deny = ["tracker_delete_activity_block_user_label"]

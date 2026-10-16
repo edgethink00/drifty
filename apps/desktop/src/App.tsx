@@ -512,6 +512,8 @@ import type { ClassificationPanelStyle } from "./features/classification/Classif
 import { FocusDriftSection, FocusDriftSummaryTiles } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { ActivityLabelsContext } from "./features/activity-labels/ActivityLabelsContext";
+import { useActivityBlockLabels } from "./features/activity-labels/useActivityBlockLabels";
 import { buildDashboardProjectBySegmentId } from "./features/dashboard/dashboardActivityProjects";
 import type {
   ActivityInspectorAttribute,
@@ -9291,6 +9293,27 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   const dashboardActivityActionsEnabled = !isDashboardDemoReplayActive
     && (isPreviewSurface || !shouldBlockLocalTrackerAccess);
+  // Short work names for Day/Week blocks, generated from recorded titles and
+  // stored next to the activity. Replays and the Month view keep their display.
+  const activityBlockLabels = useActivityBlockLabels({
+    tracker: trackerClient,
+    active: activeTab === "dashboard" && dashPeriod !== "Month" && dashboardActivityActionsEnabled,
+    startDay: effectiveDashboardRange.startDay,
+    endDay: effectiveDashboardRange.endDay,
+    weekCalendarEvents: dashPeriod === "Week" ? weekCalendarEvents : null,
+    segments: effectiveDashboardSegments,
+    classificationOptions: dashboardClassificationOptions,
+    startOfDayMinutes,
+    language: localization.effectiveLanguage === "ko" ? "ko" : "en",
+    analysisConnected: projectAnalysisConnected,
+    analysisSetup: analysisModel.effectiveAnalysisSetup,
+    analysisOwnerId: user?.id ?? null,
+    analysisCloudRecovery: analysisModel.usingCloudRecovery,
+    requestScopeKey: analysisModel.requestScopeKey,
+    canFallbackToCloud: analysisModel.canFallbackNow,
+    resolveOpenRouterKey: analysisModel.resolveOpenRouterKey,
+    onProviderUnavailable: analysisModel.markUnavailable,
+  });
 
   const handleSaveDashboardActivityValues = useCallback(async (
     field: ActivityInspectorAttribute,
@@ -11412,6 +11435,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
+          <ActivityLabelsContext.Provider value={activityBlockLabels}>
           <DashboardPage
             funnelEnabled={funnelEnabled}
             funnelResultEnabled={!loading && !upgradePlanModalOpen && !onboardingOpen && !preparingFirstDay}
@@ -11492,6 +11516,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             revealSegmentId={historyRecordReveal}
             onRevealSettled={clearHistoryRecordReveal}
           />
+          </ActivityLabelsContext.Provider>
         ) : null}
 
         {/* Agents: local agent time and commit output. */}

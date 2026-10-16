@@ -23,7 +23,8 @@ import { FlowChartHeader } from "./FlowChartHeader";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHoverCards";
-import { buildFlowActivityInspectorEvent, FlowHoverLayer } from "./FlowHoverLayer";
+import { buildFlowActivityInspectorEvent, flowGroupActivityLabel, FlowHoverLayer } from "./FlowHoverLayer";
+import { useActivityLabels } from "../activity-labels/ActivityLabelsContext";
 import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { AnchoredFlowHoverState } from "./useFlowChartHoverDelegation";
 import type { ProjectLegendEntry } from "./projectFlowView";
@@ -130,6 +131,7 @@ export function FlowChartView({
   activityInspectorRef.current = activityInspector;
   const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
+  const activityLabels = useActivityLabels();
   const currentLogicalMinute = currentMinuteOfDay !== null && currentMinuteOfDay !== undefined ? logicalMinuteOfDay(currentMinuteOfDay, boundaryMinutes) : null;
   const currentHourIndex = currentLogicalMinute !== null ? Math.floor(currentLogicalMinute / 60) : null;
   const currentMinuteOffset = currentLogicalMinute !== null
@@ -353,6 +355,7 @@ export function FlowChartView({
           onClassify={onClassifyActivity}
           onDelete={onDeleteActivity}
           classificationOptions={classificationOptions}
+          activityLabel={flowGroupActivityLabel(activityLabels, activityInspector.group, boundaryMinutes)}
           onEditCategories={onEditCategories}
         />
       ) : null}

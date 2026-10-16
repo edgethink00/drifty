@@ -236,6 +236,39 @@ impl TrackerController {
         )
     }
 
+    pub fn save_activity_block_labels(
+        &self,
+        app: &AppHandle,
+        labels: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "save_activity_block_labels", json!({ "labels": labels }))
+    }
+
+    pub fn save_activity_block_user_label(
+        &self,
+        app: &AppHandle,
+        label: Value,
+        previous_block_key: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "save_activity_block_user_label",
+            json!({ "label": label, "previousBlockKey": previous_block_key }),
+        )
+    }
+
+    pub fn delete_activity_block_user_label(
+        &self,
+        app: &AppHandle,
+        block_key: String,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "delete_activity_block_user_label",
+            json!({ "blockKey": block_key }),
+        )
+    }
+
     pub fn upsert_team_projects(
         &self,
         app: &AppHandle,

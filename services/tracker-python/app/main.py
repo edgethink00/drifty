@@ -39,6 +39,7 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "browser-publ
 from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
+from app.storage.activity_block_labels import ActivityBlockLabelError
 from app.storage.database_maintenance import initialize_closed_wal_sidecars
 from app.tracker.app_exclusion import match_exclusion, redact_snapshot
 from app.platform_locks import (
@@ -1806,6 +1807,35 @@ def get_project_window_assignments(payload: dict):
     return response(True, database().get_project_window_assignments(start, end))
 
 
+def get_activity_block_labels(payload: dict):
+    start, end = day_bounds(payload)
+    return response(True, database().get_activity_block_labels(start, end))
+
+
+def save_activity_block_labels(payload: dict):
+    labels = payload.get("labels", [])
+    if not isinstance(labels, list):
+        return response(False, error="labels must be a list")
+    return response(True, database().save_activity_block_labels(labels))
+
+
+def save_activity_block_user_label(payload: dict):
+    try:
+        saved = database().save_activity_block_user_label(
+            payload.get("label"), payload.get("previousBlockKey")
+        )
+    except ActivityBlockLabelError as error:
+        return response(False, error=str(error))
+    return response(True, saved)
+
+
+def delete_activity_block_user_label(payload: dict):
+    try:
+        return response(True, database().delete_activity_block_user_label(payload.get("blockKey")))
+    except ActivityBlockLabelError as error:
+        return response(False, error=str(error))
+
+
 def upsert_team_projects(payload: dict):
     organization_id = payload.get("organizationId", payload.get("organization_id"))
     if not isinstance(organization_id, str) or not organization_id.strip():
@@ -2299,6 +2329,10 @@ COMMANDS = {
     "get_project_assignments": get_project_assignments,
     "save_project_window_assignments": save_project_window_assignments,
     "get_project_window_assignments": get_project_window_assignments,
+    "get_activity_block_labels": get_activity_block_labels,
+    "save_activity_block_labels": save_activity_block_labels,
+    "save_activity_block_user_label": save_activity_block_user_label,
+    "delete_activity_block_user_label": delete_activity_block_user_label,
     "upsert_team_projects": upsert_team_projects,
     "get_team_projects": get_team_projects,
     "save_team_project_assignments": save_team_project_assignments,

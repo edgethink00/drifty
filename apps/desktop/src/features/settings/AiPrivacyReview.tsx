@@ -422,6 +422,12 @@ export function AiPrivacyDetails() {
             <dt>{t("settings.aiPrivacy.projectDefinitions")}</dt>
             <dd>{t("settings.aiPrivacy.projectDefinitionsReceipt")}</dd>
           </div>
+          {/* Timeline cards send one finished stretch's records in time order,
+              a shape no classification request has, so they get their own entry. */}
+          <div className="ai-privacy-review__glossary-item">
+            <dt>{t("settings.aiPrivacy.timelineCards")}</dt>
+            <dd>{t("settings.aiPrivacy.timelineCardsReceipt")}</dd>
+          </div>
           {/* Category descriptions are the other user-written text a provider
               can read: the model needs them to follow the user's boundaries. */}
           <div className="ai-privacy-review__glossary-item">

@@ -20,6 +20,7 @@ import {
   useState,
   type CSSProperties,
   type MutableRefObject,
+  type ReactNode,
   type RefObject,
   type SVGProps,
 } from "react";
@@ -36,6 +37,8 @@ import { buildActivityDevices, type ActivityDeviceSource } from "../device-sync/
 import { DeviceSourceIcon } from "../device-sync/DeviceSourceIcon";
 import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
 import { ActionLabel } from "../../components/ActionLabel";
+import { ActivityLabelRow, ActivityLabelVisibilityAction } from "../activity-labels/ActivityLabelCard";
+import type { ActivityInspectorLabel } from "../activity-labels/activityInspectorLabel";
 
 const INSPECTOR_WIDTH_PX = 304;
 const MAX_VISIBLE_ACTIVITY_ROWS = 4;
@@ -126,6 +129,8 @@ type WeekActivityInspectorProps = {
     productivity: ProductivityLabel,
   ) => Promise<void>;
   readonly onDelete?: (segmentIds: readonly string[]) => Promise<void>;
+  /** The block's work name, resolved live by the caller so edits show at once. */
+  readonly activityLabel?: ActivityInspectorLabel | null;
 };
 
 type InspectorValues = {
@@ -561,14 +566,27 @@ function ActivityInspectorHeader({
   );
 }
 
-function AttributeChip({ color, label }: { readonly color: string; readonly label: string }) {
+function AttributeChip({
+  color,
+  label,
+  more,
+  hint,
+}: {
+  readonly color: string;
+  readonly label: string;
+  /** Mixed records: a short "and others" mark after the dominant value. */
+  readonly more?: string;
+  readonly hint?: string;
+}) {
   return (
     <span
       className="week-activity-inspector__chip"
       style={{ "--inspector-chip-color": color } as CSSProperties & Record<"--inspector-chip-color", string>}
+      title={hint}
     >
       <i aria-hidden="true" />
       <span>{label}</span>
+      {more ? <span className="week-activity-inspector__chip-more">{more}</span> : null}
     </span>
   );
 }
@@ -605,7 +623,12 @@ function DirectAttributeRow({
   const content = (
     <>
       <span className="week-activity-inspector__attribute-label">{label}</span>
-      <AttributeChip color={color} label={valueLabel} />
+      <AttributeChip
+        color={color}
+        label={valueLabel}
+        more={mixed ? t("dashboard.week.inspector.mixedMore") : undefined}
+        hint={mixed ? t("dashboard.week.inspector.dominantValuesSummary") : undefined}
+      />
       <span className="week-activity-inspector__attribute-chevron" aria-hidden="true"><ChevronIcon direction="down" /></span>
     </>
   );
@@ -848,6 +871,8 @@ function ActivityInspectorBody({
   mixedOverride,
   regroupedBlockCount = 1,
   descriptionId,
+  workRow = null,
+  labelAction = null,
   expandedAttribute,
   triggerRefs,
   canAssignProject = false,
@@ -871,6 +896,10 @@ function ActivityInspectorBody({
   readonly mixedOverride?: { readonly hasMixedCategory: boolean; readonly hasMixedProductivity: boolean };
   readonly regroupedBlockCount?: number;
   readonly descriptionId: string;
+  /** Day cards: the work block's name, shown as the first attribute row. */
+  readonly workRow?: ReactNode;
+  /** Pinned cards: hide or show the block's work name, listed above delete. */
+  readonly labelAction?: ReactNode;
   readonly expandedAttribute?: ActivityInspectorAttribute | null;
   readonly triggerRefs?: RefObject<Partial<Record<ActivityInspectorAttribute, HTMLButtonElement | null>>>;
   readonly canAssignProject?: boolean;
@@ -932,25 +961,15 @@ function ActivityInspectorBody({
       mixed: mixed.hasMixedProductivity && values.productivity === event.productivity,
     },
   ];
-  const hasMixedValues = rows.some((row) => row.mixed);
-
   return (
     <>
-      {/* The note describes the whole block, so it closes the header above the
-          divider instead of reading like a title for the attribute rows. It
-          sits outside the attribute container, so the card's aria-describedby
-          lists its id separately to keep it in the announced description. */}
-      {hasMixedValues ? (
-        <p className="week-activity-inspector__mixed-summary" id={`${descriptionId}-mixed`}>
-          {t("dashboard.week.inspector.dominantValuesSummary")}
-        </p>
-      ) : null}
       {regroupedBlockCount > 1 ? (
         <div className="week-activity-inspector__regroup-notice" role="status">
           {t("dashboard.week.inspector.regroupedBlocks", { count: regroupedBlockCount })}
         </div>
       ) : null}
       <div className="week-activity-inspector__attributes" id={descriptionId}>
+        {workRow}
         {event.hasPartialSourceActivity ? (
           <p className="week-activity-inspector__scope-note">
             {t("dashboard.week.inspector.sourceActivityScope")}
@@ -1005,6 +1024,7 @@ function ActivityInspectorBody({
       {error ? <p className="week-activity-inspector__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
 
       <div className="week-activity-inspector__actions week-activity-inspector__actions--destructive">
+        {labelAction}
         {readOnly ? (
           <div className="week-activity-inspector__action week-activity-inspector__action--danger">
             <span className="week-activity-inspector__action-icon"><TrashIcon /></span>
@@ -1059,6 +1079,7 @@ export function ActivityInspectorPreview({
   actionsDisabledReason,
   classificationOptions,
   projectOptions = [],
+  activityLabel = null,
   onDismiss,
 }: {
   readonly event: ActivityInspectorEvent;
@@ -1071,6 +1092,7 @@ export function ActivityInspectorPreview({
   readonly actionsDisabledReason: string | null;
   readonly classificationOptions?: ClassificationOptions;
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
+  readonly activityLabel?: ActivityInspectorLabel | null;
   readonly onDismiss: () => void;
 }) {
   const previewRef = useRef<HTMLDivElement>(null);
@@ -1082,7 +1104,7 @@ export function ActivityInspectorPreview({
   const layout = useAnchoredCardLayout(
     anchorElement,
     previewRef,
-    `${event.id}:${showProjectAttribute ? "project" : "no-project"}`,
+    `${event.id}:${showProjectAttribute ? "project" : "no-project"}:${activityLabel?.display?.title ?? ""}`,
     onDismiss,
   );
   const dialogId = `activity-inspector-preview-${event.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -1147,7 +1169,7 @@ export function ActivityInspectorPreview({
         style={layout.style}
         role="tooltip"
         aria-labelledby={titleId}
-        aria-describedby={`${descriptionId}-mixed ${descriptionId}`}
+        aria-describedby={descriptionId}
         data-mode="peek"
         data-side={layout.side}
       >
@@ -1164,6 +1186,7 @@ export function ActivityInspectorPreview({
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}
           descriptionId={descriptionId}
+          workRow={<ActivityLabelRow label={activityLabel} />}
         />
       </div>
     </>,
@@ -1188,6 +1211,7 @@ export function WeekActivityInspector({
   onAssignProject,
   onClassify,
   onDelete,
+  activityLabel = null,
   onEditCategories,
 }: WeekActivityInspectorProps) {
   const { t } = useLocalization();
@@ -1525,7 +1549,7 @@ export function WeekActivityInspector({
       aria-modal="false"
       tabIndex={-1}
       aria-labelledby="week-activity-inspector-title"
-      aria-describedby="week-activity-inspector-description-mixed week-activity-inspector-description"
+      aria-describedby="week-activity-inspector-description"
       data-view={view}
       data-mode="pinned"
       data-side={layout.side}
@@ -1580,6 +1604,8 @@ export function WeekActivityInspector({
             hasMixedProductivity: new Set(segmentValues.map((item) => item.productivity)).size > 1,
           }}
           descriptionId="week-activity-inspector-description"
+          workRow={<ActivityLabelRow label={activityLabel} />}
+          labelAction={<ActivityLabelVisibilityAction label={activityLabel} />}
           expandedAttribute={expandedAttribute}
           triggerRefs={triggerRefs}
           canAssignProject={Boolean(onSaveValues || onAssignProject)}

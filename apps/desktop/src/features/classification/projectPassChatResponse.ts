@@ -1,5 +1,5 @@
 import { analysisUnavailableReasonFromHttp } from "../settings/intelligenceRouting";
-import { parseProjectPassOutput, type ProjectPassInferenceResult } from "./aiProjectReviewService";
+import { parseProjectPassOutput, type ProjectPassInferenceResult, type ProjectPassOutput } from "./aiProjectReviewService";
 import type { NativeOpenAiChatResponse } from "./managedLocalAiChat";
 
 const PROJECT_PASS_REPAIR_RESPONSE_CHAR_LIMIT = 24_000;
@@ -34,10 +34,31 @@ interface RepairOptions extends ProjectPassChatDispatchOptions {
   readonly firstLatencyMs: number | null;
 }
 
+/** Parses one analysis answer; a null result triggers a single JSON repair turn. */
+export interface AnalysisChatProtocol<T> {
+  readonly parse: (content: string) => T | null;
+  readonly repairInstruction: string;
+}
+
+export type AnalysisChatResult<T> = Omit<ProjectPassInferenceResult, "output"> & { readonly output: T | null };
+
+const PROJECT_PASS_PROTOCOL: AnalysisChatProtocol<ProjectPassOutput> = {
+  parse: (content) => parseProjectPassOutput(content),
+  repairInstruction: PROJECT_PASS_REPAIR_INSTRUCTION,
+};
+
 export async function dispatchProjectPassChat(
   invokeChat: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse>,
   options: ProjectPassChatDispatchOptions,
 ): Promise<ProjectPassInferenceResult> {
+  return dispatchAnalysisChat(invokeChat, options, PROJECT_PASS_PROTOCOL);
+}
+
+export async function dispatchAnalysisChat<T>(
+  invokeChat: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse>,
+  options: ProjectPassChatDispatchOptions,
+  protocol: AnalysisChatProtocol<T>,
+): Promise<AnalysisChatResult<T>> {
   const response = await invokeChat(options.request);
   const status = responseStatus(response);
   const latencyMs = responseLatency(response);
@@ -46,16 +67,16 @@ export async function dispatchProjectPassChat(
   const parsed = parseNativeBody(response.body);
   const usage = usageForShape(options.shape, parsed, options.fallbackModel);
   const content = contentForShape(options.shape, parsed);
-  const output = parseProjectPassOutput(content);
+  const output = protocol.parse(content);
   if (output) return { output, usage: usagePayload(options.provider, usage, latencyMs) };
 
   return (
-    (await repairProjectPassChat(invokeChat, {
+    (await repairAnalysisChat(invokeChat, {
       ...options,
       malformedContent: content,
       firstUsage: usage,
       firstLatencyMs: latencyMs,
-    })) ?? { output: null, usage: usagePayload(options.provider, usage, latencyMs) }
+    }, protocol)) ?? { output: null, usage: usagePayload(options.provider, usage, latencyMs) }
   );
 }
 
@@ -72,7 +93,7 @@ function parseNativeBody(body: unknown): Record<string, unknown> {
   return isRecord(body) ? body : {};
 }
 
-function httpFailure(options: ProjectPassChatDispatchOptions, response: NativeOpenAiChatResponse, latencyMs: number | null): ProjectPassInferenceResult {
+function httpFailure(options: ProjectPassChatDispatchOptions, response: NativeOpenAiChatResponse, latencyMs: number | null): AnalysisChatResult<never> {
   const status = responseStatus(response);
   const detail = typeof response.body === "string" ? response.body.slice(0, 300) : "";
   if (options.throwHttpError) throw options.throwHttpError(status, detail);
@@ -81,11 +102,12 @@ function httpFailure(options: ProjectPassChatDispatchOptions, response: NativeOp
   return { output: null, usage: { provider: options.provider, latencyMs }, ...(unavailableReason ? { unavailableReason } : {}) };
 }
 
-async function repairProjectPassChat(
+async function repairAnalysisChat<T>(
   invokeChat: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse>,
   options: RepairOptions,
-): Promise<ProjectPassInferenceResult | null> {
-  const repairRequest = buildRepairRequest(options.request, options.malformedContent);
+  protocol: AnalysisChatProtocol<T>,
+): Promise<AnalysisChatResult<T> | null> {
+  const repairRequest = buildRepairRequest(options.request, options.malformedContent, protocol.repairInstruction);
   if (!repairRequest) return null;
 
   const response = await invokeChat(repairRequest);
@@ -100,18 +122,18 @@ async function repairProjectPassChat(
   const parsed = parseNativeBody(response.body);
   const repairUsage = usageForShape(options.shape, parsed, options.fallbackModel);
   return {
-    output: parseProjectPassOutput(contentForShape(options.shape, parsed)),
+    output: protocol.parse(contentForShape(options.shape, parsed)),
     usage: usagePayload(options.provider, mergeChatUsage(options.firstUsage, repairUsage), latencyMs),
   };
 }
 
-function buildRepairRequest(request: Record<string, unknown>, malformedContent: string): Record<string, unknown> | null {
+function buildRepairRequest(request: Record<string, unknown>, malformedContent: string, repairInstruction: string): Record<string, unknown> | null {
   if (!malformedContent.trim()) return null;
   const messages = requestMessages(request);
   if (!messages) return null;
   return {
     ...request,
-    messages: [...messages, { role: "assistant", content: trimRepairContent(malformedContent) }, { role: "user", content: PROJECT_PASS_REPAIR_INSTRUCTION }],
+    messages: [...messages, { role: "assistant", content: trimRepairContent(malformedContent) }, { role: "user", content: repairInstruction }],
   };
 }
 

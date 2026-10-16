@@ -8,6 +8,9 @@ import { buildWeekCalendarEvents, type WeekCalendarEvent, type WeekDayRow } from
 import { readAppStyles } from "../../test/readStyles";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
+import { ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, activityBlockLabelKey, type ActivityBlockLabelRecord } from "@drifty/domain";
+import { ActivityLabelsContext } from "../activity-labels/ActivityLabelsContext";
+import { buildActivityLabelBlocks, buildActivityLabelIndex, type ActivityLabelBlock } from "../activity-labels/activityLabelBlocks";
 
 const styles = readAppStyles();
 
@@ -576,12 +579,12 @@ describe("WeekDashboard activity inspector", () => {
     expect(within(inspector).queryByText("Shared attributes for 2 activities")).toBeNull();
     expect(within(inspector).queryByText("Selection saves immediately")).toBeNull();
     expect(within(inspector).getByText("Focus")).toBeTruthy();
-    expect(within(inspector).getByText(/Mixed values · showing dominant/)).toBeTruthy();
+    expect(within(inspector).queryByText(/Mixed values · showing dominant/)).toBeNull();
     const describedText = (inspector.getAttribute("aria-describedby") ?? "")
       .split(/\s+/)
       .map((id) => document.getElementById(id)?.textContent ?? "")
       .join(" ");
-    expect(describedText).toContain("Mixed values · showing dominant");
+    expect(describedText).toContain("+ more");
     expect(within(inspector).queryByText("Focus · dominant")).toBeNull();
     expect(within(inspector).queryByText("Workspace · dominant")).toBeNull();
     expect(within(inspector).queryByRole("button", { name: /Change Project/ })).toBeNull();
@@ -2042,3 +2045,215 @@ describe("WeekDashboard Project mode", () => {
     await waitFor(() => expect(onAssignProject).toHaveBeenNthCalledWith(2, [raw], "build"));
   });
 });
+
+
+describe("WeekDashboard block work names", () => {
+  const day = "2024-01-03";
+  const namedEvent = makeWeekCalendarEvent({ id: "event-named", segmentIds: ["week-focus-code"], appName: "Visual Studio Code" });
+  const events = new Map<string, WeekCalendarEvent[]>([[day, [namedEvent]]]);
+
+  function controller(labels: ActivityBlockLabelRecord[], saveUserLabel = vi.fn(async () => undefined)) {
+    const blocks = buildActivityLabelBlocks(events, {
+      startOfDayMinutes: 0,
+      segmentsById: new Map(weekSegments.map((segment) => [segment.id, segment])),
+      labels,
+      language: "en",
+      nowMs: Date.parse("2024-01-08T00:00:00"),
+    });
+    return { index: buildActivityLabelIndex(blocks), editingEnabled: true, saveUserLabel, resetUserLabel: vi.fn(async () => undefined) };
+  }
+
+  const userLabel = (title: string): ActivityBlockLabelRecord => ({
+    blockKey: activityBlockLabelKey(day, ["week-focus-code"]),
+    source: "user",
+    logicalDay: day,
+    blockStartedAt: "2024-01-03T09:00:00.000Z",
+    blockEndedAt: "2024-01-03T10:00:00.000Z",
+    segmentIds: ["week-focus-code"],
+    status: title ? "user" : "hidden",
+    title,
+    description: title ? "Client A" : "",
+  });
+
+  function renderWithLabels(value: ReturnType<typeof controller> | null) {
+    return render(
+      <ActivityLabelsContext.Provider value={value}>
+        {weekDashboardElement({ calendarEvents: events, activityActionsEnabled: true })}
+      </ActivityLabelsContext.Provider>,
+    );
+  }
+
+  it("shows the block's work name in place of the app name and keeps the app name without one", () => {
+    const { unmount } = renderWithLabels(controller([userLabel("Checkout retry review")]));
+    const block = document.querySelector(".week-v2-calendar__event")!;
+    expect(block.querySelector("strong")?.textContent).toBe("Checkout retry review");
+    expect(screen.getByRole("button", { name: /^Checkout retry review, / })).toBeTruthy();
+    unmount();
+
+    renderWithLabels(controller([userLabel("")]));
+    expect(document.querySelector(".week-v2-calendar__event strong")?.textContent).toBe("Visual Studio Code");
+  });
+
+  it("puts the dominant icon and work name in a grouped block's icon row and keeps the icons without one", () => {
+    const grouped = makeWeekCalendarEvent({
+      id: "event-grouped-named",
+      segmentIds: ["week-focus-code"],
+      isGroupedCluster: true,
+      identities: [
+        { id: "code", label: "Visual Studio Code", appName: "Visual Studio Code", bundleId: null, browserName: null, siteDomain: null, siteTitle: null, seconds: 3000, firstStartMinute: 0 },
+        { id: "docs", label: "docs.example", appName: "Safari", bundleId: null, browserName: "Safari", siteDomain: "docs.example", siteTitle: null, seconds: 600, firstStartMinute: 10 },
+      ],
+    });
+    const groupedEvents = new Map<string, WeekCalendarEvent[]>([[day, [grouped]]]);
+    const value = (() => {
+      const blocks = buildActivityLabelBlocks(groupedEvents, {
+        startOfDayMinutes: 0,
+        segmentsById: new Map(weekSegments.map((segment) => [segment.id, segment])),
+        labels: [userLabel("Checkout retry review")],
+        language: "en",
+        nowMs: Date.parse("2024-01-08T00:00:00"),
+      });
+      return { index: buildActivityLabelIndex(blocks), editingEnabled: true, saveUserLabel: vi.fn(async () => undefined), resetUserLabel: vi.fn(async () => undefined) };
+    })();
+    const { unmount } = render(
+      <ActivityLabelsContext.Provider value={value}>
+        {weekDashboardElement({ calendarEvents: groupedEvents })}
+      </ActivityLabelsContext.Provider>,
+    );
+    const block = document.querySelector(".week-v2-calendar__event")!;
+    expect(block.querySelector(".week-v2-calendar__identity-strip")).toBeNull();
+    expect(block.querySelector(".week-v2-calendar__event-work-text")?.textContent).toBe("Checkout retry review");
+    // The dominant app's icon leads the name.
+    expect(block.querySelector(".week-v2-calendar__event-work-label")?.firstElementChild?.classList.contains("week-v2-calendar__event-work-icon")).toBe(true);
+    expect(block.querySelector(".week-v2-calendar__event-label")).toBeNull();
+    unmount();
+
+    render(weekDashboardElement({ calendarEvents: groupedEvents }));
+    expect(document.querySelector(".week-v2-calendar__identity-strip")).not.toBeNull();
+    expect(document.querySelector(".week-v2-calendar__event-work-label")).toBeNull();
+  });
+
+  function openPinnedCard() {
+    const openButton = screen.getByRole("button", { name: /Open activity details/ });
+    setElementRect(openButton.closest(".week-v2-calendar__event")!, 80, 90, 120, 40);
+    fireEvent.click(openButton);
+  }
+
+  it("shows the name beneath the pinned card's app title and hides it without touching the activity", async () => {
+    const value = controller([userLabel("Checkout retry review")]);
+    const { unmount } = renderWithLabels(value);
+    openPinnedCard();
+
+    // The card keeps its app title; the name and note sit beneath it.
+    const inspector = screen.getByRole("dialog", { name: "Visual Studio Code" });
+    const nameRow = inspector.querySelector<HTMLElement>(".activity-label-row")!;
+    expect(within(nameRow).getByText("Checkout retry review")).toBeTruthy();
+    expect(within(nameRow).getByText("Client A")).toBeTruthy();
+    fireEvent.click(within(inspector).getByRole("button", { name: "Hide task name" }));
+    await waitFor(() => expect(value.saveUserLabel).toHaveBeenCalledTimes(1));
+    expect(value.saveUserLabel.mock.calls[0]).toEqual([expect.objectContaining({ segmentIds: ["week-focus-code"] }), "", ""]);
+    unmount();
+
+    // A hidden name leaves the app title and offers the name back.
+    const hidden = controller([userLabel("")]);
+    renderWithLabels(hidden);
+    openPinnedCard();
+    const hiddenCard = screen.getByRole("dialog", { name: "Visual Studio Code" });
+    fireEvent.click(within(hiddenCard).getByRole("button", { name: "Show task name" }));
+    await waitFor(() => expect(hidden.resetUserLabel).toHaveBeenCalledTimes(1));
+  });
+
+  const timelineCard = (title: string, start: string, end: string, segmentIds: string[]): ActivityBlockLabelRecord => ({
+    blockKey: day + ":w:" + title, source: "ai", logicalDay: day,
+    blockStartedAt: new Date(day + "T" + start + ":00").toISOString(), blockEndedAt: new Date(day + "T" + end + ":00").toISOString(),
+    segmentIds, status: "ready", title, description: "", reason: "card:strict", language: "en",
+    promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, updatedAt: "2024-01-04T00:00:00Z",
+  });
+
+  function renderCards(calendarEvents: Map<string, WeekCalendarEvent[]>, labels: ActivityBlockLabelRecord[]) {
+    const blocks = buildActivityLabelBlocks(calendarEvents, {
+      startOfDayMinutes: 0,
+      segmentsById: new Map(weekSegments.map((segment) => [segment.id, segment])),
+      labels,
+      language: "en",
+      nowMs: Date.parse("2024-01-08T00:00:00"),
+    });
+    const value = {
+      index: buildActivityLabelIndex(blocks),
+      editingEnabled: true,
+      saveUserLabel: vi.fn<(block: ActivityLabelBlock, title: string, description: string) => Promise<void>>(async () => undefined),
+      resetUserLabel: vi.fn(async () => undefined),
+    };
+    render(
+      <ActivityLabelsContext.Provider value={value}>
+        {weekDashboardElement({ calendarEvents, activityActionsEnabled: true })}
+      </ActivityLabelsContext.Provider>,
+    );
+    return value;
+  }
+
+  it("draws one card's blocks as one named block and hides the name on every block it holds", async () => {
+    const calendarEvents = new Map<string, WeekCalendarEvent[]>([[day, [
+      makeWeekCalendarEvent({ id: "event-code", segmentIds: ["week-focus-code"], appName: "Visual Studio Code" }),
+      makeWeekCalendarEvent({ id: "event-browser", segmentIds: ["week-drift-browser"], appName: "Safari", topMinutes: 10 * 60, durationMinutes: 15, activeDurationMinutes: 15, productivity: "drift" }),
+    ]]]);
+    const value = renderCards(calendarEvents, [timelineCard("Checkout retry review", "09:00", "10:15", ["week-focus-code", "week-drift-browser"])]);
+
+    const blocks = document.querySelectorAll(".week-v2-calendar__event");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].querySelector(".week-v2-calendar__event-work-text")?.textContent).toBe("Checkout retry review");
+    // The merged block keeps its own card's colour and gives its whole range.
+    expect(blocks[0].classList.contains("week-v2-calendar__event--focus")).toBe(true);
+    expect(screen.getByRole("button", { name: /^Checkout retry review, 9:00 AM–10:15 AM/ })).toBeTruthy();
+
+    openPinnedCard();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Hide task name" }));
+    await waitFor(() => expect(value.saveUserLabel).toHaveBeenCalledTimes(2));
+    expect(value.saveUserLabel.mock.calls.map(([block]) => block.segmentIds)).toEqual([["week-focus-code"], ["week-drift-browser"]]);
+  });
+
+  it("draws a block no taller than the space before the next one", () => {
+    const calendarEvents = new Map<string, WeekCalendarEvent[]>([[day, [
+      makeWeekCalendarEvent({ id: "event-short", segmentIds: ["week-focus-code"], durationMinutes: 20, activeDurationMinutes: 20 }),
+      makeWeekCalendarEvent({ id: "event-long", segmentIds: ["week-drift-browser"], topMinutes: 9 * 60 + 21, durationMinutes: 60, activeDurationMinutes: 60 }),
+    ]]]);
+    renderCards(calendarEvents, [
+      timelineCard("Short review", "09:00", "09:20", ["week-focus-code"]),
+      timelineCard("Long build", "09:21", "10:21", ["week-drift-browser"]),
+    ]);
+
+    const [short, long] = Array.from(document.querySelectorAll<HTMLElement>(".week-v2-calendar__event"));
+    // 21 minutes at the default 42px hour, less a 1px gap; the layout alone would draw 28px.
+    expect(parseFloat(short.style.height)).toBeCloseTo(13.7, 1);
+    expect(short.querySelector(".week-v2-calendar__event-work-label")).not.toBeNull();
+    // Under 14px the icon and name do not fit whole, so the block shows its colour alone.
+    expect(short.querySelector(".week-v2-calendar__event-work-text")).toBeNull();
+    expect(long.querySelector(".week-v2-calendar__event-work-text")?.textContent).toBe("Long build");
+  });
+
+  it("shows a named block's icon and name together wherever both fit whole", () => {
+    const identity = (id: string) => [{ id, label: id, appName: id, bundleId: null, browserName: null, siteDomain: null, siteTitle: null, seconds: 1200, firstStartMinute: 0 }];
+    const calendarEvents = new Map<string, WeekCalendarEvent[]>([[day, [
+      makeWeekCalendarEvent({ id: "event-a", segmentIds: ["seg-a"], durationMinutes: 20, activeDurationMinutes: 20, identities: identity("A") }),
+      makeWeekCalendarEvent({ id: "event-b", segmentIds: ["seg-b"], topMinutes: 9 * 60 + 25, durationMinutes: 18, activeDurationMinutes: 18, identities: identity("B") }),
+      makeWeekCalendarEvent({ id: "event-c", segmentIds: ["seg-c"], topMinutes: 9 * 60 + 44, durationMinutes: 60, activeDurationMinutes: 60, identities: identity("C") }),
+    ]]]);
+    renderCards(calendarEvents, [
+      timelineCard("First", "09:00", "09:20", ["seg-a"]),
+      timelineCard("Second", "09:25", "09:43", ["seg-b"]),
+      timelineCard("Third", "09:44", "10:44", ["seg-c"]),
+    ]);
+
+    const [first, second, third] = Array.from(document.querySelectorAll<HTMLElement>(".week-v2-calendar__event"));
+    // 16.5px holds the 11.7px icon and a name line inside its borders; 12.3px does not, so it shows its colour alone.
+    expect(parseFloat(first.style.height)).toBeCloseTo(16.5, 1);
+    expect(first.querySelector(".week-v2-calendar__event-work-icon")).not.toBeNull();
+    expect(first.querySelector(".week-v2-calendar__event-work-text")?.textContent).toBe("First");
+    expect(parseFloat(second.style.height)).toBeCloseTo(12.3, 1);
+    expect(second.querySelector(".week-v2-calendar__event-work-icon")).toBeNull();
+    expect(second.querySelector(".week-v2-calendar__event-work-text")).toBeNull();
+    expect(third.querySelector(".week-v2-calendar__event-work-icon")).not.toBeNull();
+    expect(third.querySelector(".week-v2-calendar__event-work-text")?.textContent).toBe("Third");
+  });
+});
+

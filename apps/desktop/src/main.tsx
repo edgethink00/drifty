@@ -18,6 +18,7 @@ import "./styles/hover-metadata-chip.css";
 import "./features/dashboard/compact-charts.css";
 import "./features/flow-chart/flow-chart.css";
 import "./features/dashboard/week-dashboard.css";
+import "./features/activity-labels/activity-labels.css";
 import "./features/dashboard/month-calendar.css";
 import "./features/insights/insights.css";
 import "./styles/page-tabs.css";

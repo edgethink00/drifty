@@ -199,9 +199,13 @@ describe("PrivacySettingsSection", () => {
         // Project matching also sends what the user wrote when defining a project;
         // live classification does not, so it needs its own glossary entry.
         "Your project names and descriptions",
+        // Timeline cards send one finished stretch's records in time order.
+        "Timeline cards",
         // Category descriptions are the other user-written text a provider can read.
         "Your category and productivity descriptions",
       ]);
+      expect(within(glossary).getByText(/each finished stretch of activity \(at most three hours\)/i)).toBeTruthy();
+      expect(within(glossary).getByText(/both Window title and Content context off there are no titles to describe/i)).toBeTruthy();
       // The channel name is a real outbound field; the glossary carries its coverage.
       expect(within(glossary).getByText(/YouTube channel name/i)).toBeTruthy();
       expect(within(glossary).getByText(/separate anonymous HTTPS request/i)).toBeTruthy();

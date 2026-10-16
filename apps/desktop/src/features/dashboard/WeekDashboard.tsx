@@ -47,7 +47,16 @@ import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProduc
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 import { WeekDashboardLoadingBreakdown, WeekDashboardLoadingLegend } from "./WeekDashboardLoadingState";
+import { useActivityLabels } from "../activity-labels/ActivityLabelsContext";
+import { activityLabelForWeekEvent } from "../activity-labels/activityInspectorLabel";
+import { arrangeWeekCardBlocks, weekNextBlockTopMinutes, weekWorkNameMinHeight } from "./weekCardBlocks";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
+
+const WEEK_WORK_LABEL_TWO_LINE_MIN_HEIGHT_PX = 32;
+// A block with a work name keeps its icon 4px below the top border from this
+// height up (4px + the 11.7px icon + room above the bottom border); a thinner
+// block centres it.
+const WEEK_WORK_ICON_TOP_ROW_MIN_HEIGHT_PX = 18;
 
 /* Width of .week-v2-calendar__time-rail: the calendar body's first grid column. */
 const WEEK_CALENDAR_TIME_RAIL_REM = 2;
@@ -352,6 +361,18 @@ export function WeekDashboard({
     noProjectLabel: t("projects.chart.noProject"), unavailableProjectLabel: t("dashboard.week.inspector.unavailableProject"),
   }) : null, [colorMode, segments, projectAssignments, projectWindowAssignments, projectOptions, calendarEvents, startDay, endDay, startOfDayMinutes, t]);
   const renderedCalendarEvents = projectView?.calendarEvents ?? calendarEvents;
+  // With timeline cards the Week draws one block per card and folds short
+  // blocks into their neighbours (weekCardBlocks.ts). Project mode keeps its
+  // per-project slices and lanes.
+  const activityLabels = useActivityLabels();
+  const cardBlocks = useMemo(() => activityLabels && colorMode !== "project"
+    ? arrangeWeekCardBlocks(renderedCalendarEvents, activityLabels.index, { startOfDayMinutes, keepSegmentId: revealSegmentId })
+    : null, [activityLabels, colorMode, renderedCalendarEvents, revealSegmentId, startOfDayMinutes]);
+  const arrangedCalendarEvents = cardBlocks?.eventsByDay ?? renderedCalendarEvents;
+  const cardLabels = useMemo(
+    () => cardBlocks ? new Map([...cardBlocks.names].map(([id, name]) => [id, name.label])) : undefined,
+    [cardBlocks],
+  );
   const [legendHover, setLegendHover] = useState<FlowLegendHoverState | null>(null);
   const [breakdownHover, setBreakdownHover] = useState<CompactClassificationHoverState | null>(null);
   const [activityInspector, setActivityInspector] = useState<WeekActivityInspectorState | null>(null);
@@ -463,18 +484,18 @@ export function WeekDashboard({
   const revealTarget = useMemo(() => {
     if (!revealSegmentId) return null;
     for (const row of calendarRows) {
-      const event = renderedCalendarEvents.get(row.day)?.find((candidate) => candidate.segmentIds.includes(revealSegmentId));
+      const event = arrangedCalendarEvents.get(row.day)?.find((candidate) => candidate.segmentIds.includes(revealSegmentId));
       if (event) return { day: row.day, eventId: event.id, topMinutes: event.topMinutes };
     }
     return null;
-  }, [calendarRows, renderedCalendarEvents, revealSegmentId]);
+  }, [arrangedCalendarEvents, calendarRows, revealSegmentId]);
 
   const autoScrollTargetMinute = useMemo(() => {
     if (revealTarget) return Math.min(maxCalendarMinute, minCalendarMinute + revealTarget.topMinutes);
     if (currentCalendarDay === undefined && realCurrentCalendarMinute !== null) return realCurrentCalendarMinute;
 
     const earliestEventOffset = calendarRows.reduce<number | null>((earliest, row) => {
-      const firstEvent = renderedCalendarEvents.get(row.day)?.[0];
+      const firstEvent = arrangedCalendarEvents.get(row.day)?.[0];
       if (!firstEvent) return earliest;
       return earliest === null ? firstEvent.topMinutes : Math.min(earliest, firstEvent.topMinutes);
     }, null);
@@ -482,14 +503,17 @@ export function WeekDashboard({
     return earliestEventOffset === null
       ? minCalendarMinute
       : Math.min(maxCalendarMinute, Math.max(minCalendarMinute, minCalendarMinute + earliestEventOffset));
-  }, [renderedCalendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute, revealTarget]);
+  }, [arrangedCalendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute, revealTarget]);
 
   const displayCalendarEvents = useMemo(() => {
-    if (effectiveLanguage === "en") return renderedCalendarEvents;
+    const mergedIds = cardBlocks?.mergedIds;
+    if (effectiveLanguage === "en" && !mergedIds?.size) return arrangedCalendarEvents;
 
-    return new Map(Array.from(renderedCalendarEvents.entries()).map(([day, events]) => [
+    return new Map(Array.from(arrangedCalendarEvents.entries()).map(([day, events]) => [
       day,
       events.map((event) => {
+        // English labels come from the week model; a merged card block's are built here.
+        if (effectiveLanguage === "en" && !mergedIds?.has(event.id)) return event;
         const startMinute = minCalendarMinute + event.topMinutes;
         const endMinute = startMinute + event.durationMinutes;
         const startLabel = formatLocalizedCalendarMinuteLabel(day, startMinute, effectiveLanguage, startOfDayMinutes);
@@ -510,7 +534,7 @@ export function WeekDashboard({
         return { ...event, startLabel, endLabel, detailSummary, detailTitle };
       }),
     ]));
-  }, [renderedCalendarEvents, effectiveLanguage, minCalendarMinute, startOfDayMinutes, t]);
+  }, [arrangedCalendarEvents, cardBlocks, effectiveLanguage, minCalendarMinute, startOfDayMinutes, t]);
 
   // The calendar squishes (no horizontal scroll) while the Breakdown panel is
   // open, so the identity strips must adapt to the live day-column width
@@ -875,6 +899,25 @@ export function WeekDashboard({
                     })}
                     {events.map((event) => {
                       const eventLayout = buildWeekCalendarEventLayout(event, calendarHourHeight, rootFontSizePx);
+                      // The block's own work name replaces the app/site text when one is accepted.
+                      const cardName = cardBlocks?.names.get(event.id);
+                      const workLabel = cardBlocks
+                        ? cardName?.label?.display ?? null
+                        : activityLabels?.index.forSegments(row.day, event.segmentIds)?.display ?? null;
+                      // With timeline cards a block is drawn no taller than the space
+                      // before the next one, so blocks never overlap.
+                      const nextTopMinutes = cardBlocks ? weekNextBlockTopMinutes(events, event) : null;
+                      const spaceBeforeNext = nextTopMinutes === null ? Infinity : ((nextTopMinutes - event.topMinutes) / 60) * calendarHourHeight - 1;
+                      const drawnHeight = Math.max(3, Math.min(eventLayout.eventHeight, spaceBeforeNext));
+                      const drawnClipped = drawnHeight < eventLayout.eventHeight;
+                      const drawnCompact = eventLayout.isCompactEvent || drawnClipped;
+                      const drawnTiny = eventLayout.isTinyEvent || drawnHeight < 12;
+                      // A name needs a block the size of 30 minutes.
+                      // The icon and name show together wherever both fit whole; a
+                      // thinner block shows its colour alone (the hover still names it).
+                      const showsWorkName = Boolean(workLabel) && drawnHeight >= weekWorkNameMinHeight(rootFontSizePx);
+                      // Two 0.6875rem lines at 1.15 line height need about 32px with the card chrome.
+                      const wrapsWorkLabel = showsWorkName && !drawnCompact && drawnHeight >= WEEK_WORK_LABEL_TWO_LINE_MIN_HEIGHT_PX;
                       const identityStrip = planWeekIdentityStrip(
                         event.identities.length,
                         event.hiddenIdentityCount,
@@ -884,7 +927,7 @@ export function WeekDashboard({
                       const horizontalInset = 1 + WEEK_CALENDAR_EVENT_RIGHT_INSET_PX;
                       const eventStyle: WeekCalendarEventStyle = {
                         top: formatWeekDashboardAxisPixelValue((event.topMinutes / 60) * calendarHourHeight),
-                        height: formatWeekDashboardAxisPixelValue(eventLayout.eventHeight),
+                        height: formatWeekDashboardAxisPixelValue(drawnHeight),
                         // Blocks hug the left of their day (1px) and leave the free space on
                         // the right (5px), the direction concurrent lanes already cascade in.
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 1px)` : "1px",
@@ -894,7 +937,7 @@ export function WeekDashboard({
                       };
                       return (
                         <article
-                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 1 ? " week-v2-calendar__event--stacked" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}${activityInspector?.event.id === event.id ? " is-inspected" : ""}`}
+                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${drawnTiny ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 1 ? " week-v2-calendar__event--stacked" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${drawnCompact ? " week-v2-calendar__event--compact" : ""}${workLabel ? " week-v2-calendar__event--named" : ""}${workLabel && drawnHeight < WEEK_WORK_ICON_TOP_ROW_MIN_HEIGHT_PX ? " week-v2-calendar__event--named-thin" : ""}${activityInspector?.event.id === event.id ? " is-inspected" : ""}`}
                           data-funnel-classified-result={event.category !== "unknown" && event.segmentIds.some((id) => classifiedResultIds?.has(id)) ? "true" : undefined}
                           data-event-id={event.id}
                           key={event.id}
@@ -910,7 +953,7 @@ export function WeekDashboard({
                           <button
                             type="button"
                             className="week-v2-calendar__event-open"
-                            aria-label={`${event.detailTitle.replace(/\n/g, ", ")}. ${t("dashboard.week.openActivity")}.`}
+                            aria-label={`${workLabel ? workLabel.title + ", " : ""}${event.detailTitle.replace(/\n/g, ", ")}. ${t("dashboard.week.openActivity")}.`}
                             aria-haspopup="dialog"
                             aria-expanded={activityInspector?.event.id === event.id}
                             data-activity-inspector-trigger="true"
@@ -918,7 +961,7 @@ export function WeekDashboard({
                             onClick={(clickEvent) => openActivityInspector(event, clickEvent.currentTarget)}
                           >
                             <span className={`category-dot category-dot--${event.category}`} style={colorMode === "project" ? { background: event.projectColor } : undefined} aria-hidden="true" />
-                            {eventLayout.showsIdentityStrip ? (
+                            {eventLayout.showsIdentityStrip && !workLabel ? (
                               <span
                                 className="week-v2-calendar__identity-strip"
                                 style={identityStrip.tilePx !== 18 ? {
@@ -937,14 +980,36 @@ export function WeekDashboard({
                                 ) : null}
                               </span>
                             ) : null}
-                            {eventLayout.hidesInlineText ? null : <strong className={event.isGroupedCluster && eventLayout.showsIdentityStrip ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
-                            {!eventLayout.isCompactEvent ? (
+                            {eventLayout.hidesInlineText ? null : (
+                              <strong
+                                // A grouped block's app list sits in its icon strip and its text is
+                                // only for screen readers. A work name replaces that strip: it says
+                                // more than the icons, and the hover card still lists every app.
+                                className={workLabel
+                                  ? "week-v2-calendar__event-work-label" + (wrapsWorkLabel ? " week-v2-calendar__event-work-label--wrap" : "")
+                                  : event.isGroupedCluster && eventLayout.showsIdentityStrip ? "week-v2-calendar__event-label" : undefined}
+                                data-work-label-origin={workLabel?.origin}
+                              >
+                                {workLabel ? (
+                                  <>
+                                    {/* The block's dominant app leads its work name. */}
+                                    {event.identities[0] && showsWorkName ? (
+                                      <span className="week-v2-calendar__identity week-v2-calendar__event-work-icon" aria-hidden="true">
+                                        {canMountIdentityIcons ? <WeekCalendarIdentityIcon appIcons={appIcons} identity={event.identities[0]} /> : null}
+                                      </span>
+                                    ) : null}
+                                    {showsWorkName ? <span className="week-v2-calendar__event-work-text">{workLabel.title}</span> : null}
+                                  </>
+                                ) : event.appName}
+                              </strong>
+                            )}
+                            {!drawnCompact ? (
                               <small className="week-v2-calendar__event-time">
                                 <span>{event.startLabel}</span>
                                 <span>–{event.endLabel}</span>
                               </small>
                             ) : null}
-                            {eventLayout.showsInlineDetail ? <em className="week-v2-calendar__event-detail"><span>{event.detailSummary}</span></em> : null}
+                            {eventLayout.showsInlineDetail && !drawnClipped ? <em className="week-v2-calendar__event-detail"><span>{event.detailSummary}</span></em> : null}
                           </button>
                         </article>
                       );
@@ -976,6 +1041,7 @@ export function WeekDashboard({
           projectOptions={projectOptions}
           projectBySegmentId={projectBySegmentId}
           disabled={initialDataLoading || activityInspector !== null}
+          cardLabels={cardLabels}
         />
         {activityInspector ? (
           <WeekActivityInspector
@@ -996,6 +1062,9 @@ export function WeekDashboard({
             onClassify={onClassifyActivity}
             onDelete={onDeleteActivity}
             classificationOptions={classificationOptions}
+            activityLabel={cardLabels?.has(activityInspector.sourceEventId)
+              ? cardLabels.get(activityInspector.sourceEventId) ?? null
+              : activityLabelForWeekEvent(activityLabels, activityInspector.sourceDay, activityInspector.sourceSegmentIds)}
             onEditCategories={onEditCategories}
           />
         ) : null}

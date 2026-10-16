@@ -1,0 +1,150 @@
+/* Block work names. Day and Week cards keep their own app/site header; the
+   block's name and note sit beneath it across the card's full width. The
+   pinned card can hide a name. */
+
+/* Work name: spans the card from the rail inset to the trailing edge with no
+   label column, above the attribute rows. */
+.activity-label-row {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px var(--inspector-rail-inset) 7px;
+}
+
+.activity-label-row__title {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 640;
+  line-height: 1rem;
+}
+
+.activity-label-row__description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.activity-label-row__more {
+  display: grid;
+  gap: 1px;
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+
+.activity-label-row__more li {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.activity-label-row__more li > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-label-row__time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hide/show sits with the card's other actions and, like delete, draws its
+   icon without a filled box so it stays quieter than the card's content. */
+.activity-label-visibility .week-activity-inspector__action-icon {
+  background: transparent;
+  color: var(--text-soft);
+}
+
+.activity-label-visibility__error {
+  margin: 0 var(--inspector-rail-inset) 4px;
+  color: var(--warn);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+/* Week block: the dominant app's icon leads the work name. A name is usually
+   longer than an app name, so its text sits below the 11px type floor
+   (owner decision 2026-10-16: 4% under it) and the icon is 10% smaller than
+   the app strip's, to fit more of the name. The icon has one size and sits
+   3px inside the border in every block, whatever inline padding the block's
+   height class gives its button (--week-event-inset-x, week-dashboard.css).
+   The block keeps the heights weekCalendarEventLayout.ts computes for 0.75rem
+   text. */
+.week-v2-calendar__event .week-v2-calendar__event-work-label {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  height: auto;
+  margin-left: calc(3px - var(--week-event-inset-x, 7px));
+  font-size: 0.66rem;
+  line-height: 1.12;
+}
+
+/* A block with a work name starts its name row 3px below the top border in
+   every height class, so icons and names line up across the column; a block
+   too thin for that (WeekDashboard.tsx) centres its icon instead. */
+.week-v2-calendar__event.week-v2-calendar__event--named .week-v2-calendar__event-open {
+  justify-content: flex-start;
+  row-gap: 1px;
+  padding-block: 3px;
+  /* The time (and a detail) follows the name only where the block has room
+     for it below the name as drawn, on one line or two. A line that does not
+     fit wraps into a second column far outside the block, so it is hidden
+     whole instead of cut; the range stays in the hover card and the title. */
+  flex-wrap: wrap;
+  align-content: flex-start;
+  column-gap: 1000px;
+  overflow: hidden;
+}
+
+.week-v2-calendar__event--named .week-v2-calendar__event-open > :is(.week-v2-calendar__event-time, .week-v2-calendar__event-detail) {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+/* The time sits 6px below the name, apart from it. */
+.week-v2-calendar__event--named .week-v2-calendar__event-open > .week-v2-calendar__event-time {
+  margin-top: 5px;
+}
+
+.week-v2-calendar__event.week-v2-calendar__event--named-thin .week-v2-calendar__event-open {
+  justify-content: center;
+  padding-block: 0;
+}
+
+.week-v2-calendar__event .week-v2-calendar__event-work-icon {
+  --week-identity-tile: 11.7px;
+}
+
+.week-v2-calendar__event-work-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Two-line names wrap beside the icon, which stays on the first line. */
+.week-v2-calendar__event .week-v2-calendar__event-work-label--wrap {
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.week-v2-calendar__event-work-label--wrap .week-v2-calendar__event-work-text {
+  display: -webkit-box;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

@@ -332,6 +332,25 @@ pub struct ProjectWindowAssignmentsSaveQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ActivityBlockLabelsSaveQuery {
+    pub labels: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityBlockUserLabelSaveQuery {
+    pub label: serde_json::Value,
+    pub previous_block_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityBlockUserLabelDeleteQuery {
+    pub block_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TeamProjectsUpsertQuery {
     pub organization_id: String,
     pub projects: serde_json::Value,
@@ -1279,6 +1298,70 @@ pub async fn tracker_get_project_window_assignments(
     async_runtime::spawn_blocking(move || {
         controller
             .get_project_window_assignments(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_activity_block_labels(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DayQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_activity_block_labels(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_activity_block_labels(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ActivityBlockLabelsSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_activity_block_labels(&app, query.labels)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_activity_block_user_label(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ActivityBlockUserLabelSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_activity_block_user_label(&app, query.label, query.previous_block_key)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_delete_activity_block_user_label(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ActivityBlockUserLabelDeleteQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .delete_activity_block_user_label(&app, query.block_key)
             .map_err(|error| error.to_string())
     })
     .await
