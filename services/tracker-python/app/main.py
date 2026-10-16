@@ -506,7 +506,13 @@ def is_running(*, deadline: float | None = None) -> bool:
 
 def _observed_tracker_running(*, deadline: float | None = None) -> bool | None:
     query_kwargs = {"deadline": deadline} if deadline is not None else {}
-    pid = _read_tracker_pid()
+    try:
+        pid = _read_tracker_pid()
+    except PermissionError:
+        # A denied PID-state directory must not abort a readable live tail.
+        # Observation can use the existing exact-DB process scan; PID writes
+        # and lifecycle operations still require their locked state access.
+        pid = None
     if pid is not None and _process_exists(pid):
         ownership = _tracker_process_ownership(pid, **query_kwargs)
         if ownership != "unrelated":
