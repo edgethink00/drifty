@@ -68,6 +68,15 @@ export function mergeActivitySegments(baseSegments: readonly ActivitySegment[], 
 }
 
 export function selectActivitySegment(existing: ActivitySegment, incoming: ActivitySegment): ActivitySegment {
+  const existingRevision = activitySegmentRevision(existing);
+  const incomingRevision = activitySegmentRevision(incoming);
+  if (existingRevision !== null && incomingRevision !== null && existingRevision !== incomingRevision) {
+    // A newer local row revision is authoritative even when an idle trim made
+    // the interval shorter or removed a classification. Do not fill fields
+    // from the stale copy across this boundary.
+    return incomingRevision > existingRevision ? incoming : existing;
+  }
+
   const existingEndedAtMs = activitySegmentEndedAtMs(existing);
   const incomingEndedAtMs = activitySegmentEndedAtMs(incoming);
 
@@ -78,6 +87,12 @@ export function selectActivitySegment(existing: ActivitySegment, incoming: Activ
 
   if (existing.classification && !incoming.classification) return existing;
   return incoming;
+}
+
+function activitySegmentRevision(segment: ActivitySegment): number | null {
+  return typeof segment.revision === "number" && Number.isFinite(segment.revision)
+    ? segment.revision
+    : null;
 }
 
 export function preserveClassification(segment: ActivitySegment, fallbackSegment: ActivitySegment): ActivitySegment {

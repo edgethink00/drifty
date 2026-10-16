@@ -5087,6 +5087,7 @@ class TrackerDatabase:
         query = f"""
             SELECT
                 activity_segments.id,
+                activity_segments.sync_seq,
                 activity_segments.started_at,
                 activity_segments.ended_at,
                 activity_segments.duration_seconds,

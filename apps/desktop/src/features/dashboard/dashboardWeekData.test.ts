@@ -154,6 +154,32 @@ describe("selectDashboardSegments", () => {
     expect(selected[0]?.classification?.category).toBe("workspace");
   });
 
+  it("lets a newer selected-day revision shrink a stale compact Week row", () => {
+    const staleCompact = {
+      ...segment("same-segment", "2026-05-20T12:00:00", "2026-05-20T12:03:05"),
+      durationSeconds: 185,
+      revision: 37,
+    } as ActivitySegment & { readonly revision: number };
+    const trimmedLive = {
+      ...segment("same-segment", "2026-05-20T12:00:00", "2026-05-20T12:01:00"),
+      durationSeconds: 60,
+      revision: 38,
+    } as ActivitySegment & { readonly revision: number };
+
+    const selected = selectDashboardSegments({
+      compactHistorySource: source(currentWeekThroughToday, [staleCompact]),
+      dashPeriod: "Week",
+      historySource: null,
+      requiredHistoryRange: currentWeekThroughToday,
+      selectedDaySegments: [trimmedLive],
+      visibleRange: visibleCurrentWeek,
+    });
+
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toBe(trimmedLive);
+    expect(selected[0]?.durationSeconds).toBe(60);
+  });
+
   it("keeps Today selection on selected-day segments and ignores week sources", () => {
     const todaySegment = segment("today-only", "2026-05-20T12:00:00", "2026-05-20T12:30:00");
     const compactSegment = segment("compact-focus", "2026-05-19T10:00:00", "2026-05-19T10:30:00");

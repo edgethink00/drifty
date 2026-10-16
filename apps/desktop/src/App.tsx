@@ -2861,6 +2861,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   ]);
 
   const refreshRequestRef = useRef(0);
+  const timelineRefreshEpochRef = useRef(0);
+  const fullTimelineRefreshEpochRef = useRef<number | null>(null);
   const trackerMutationGenerationRef = useRef(0);
   const trackerStopInFlightRef = useRef(false);
   const lastFullDayRefreshAtRef = useRef(0);
@@ -4037,6 +4039,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     const requestId = refreshRequestRef.current + 1;
     refreshRequestRef.current = requestId;
+    const timelineRefreshEpoch = timelineRefreshEpochRef.current + 1;
+    timelineRefreshEpochRef.current = timelineRefreshEpoch;
+    fullTimelineRefreshEpochRef.current = timelineRefreshEpoch;
     const trackerMutationGeneration = trackerMutationGenerationRef.current;
     historyRefreshRequestRef.current += 1;
     if (isRequiredCurrentSnapshotRefresh) requiredCurrentSnapshotRefreshInFlightRef.current = true;
@@ -4184,6 +4189,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const materializedArchiveTimelines = archiveTimelineLoad?.materialized ?? null;
       const alarmDay = currentDriftAlarmDay();
       const isAlarmDayRefresh = day === alarmDay;
+      const ownsTimeline = timelineRefreshEpochRef.current === timelineRefreshEpoch;
 
       if (
         isForegroundRefresh
@@ -4193,7 +4199,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         setCurrentSnapshot(nextCurrentSnapshot);
         setAwaitingFirstCurrentSnapshot(false);
       }
-      if (isAlarmDayRefresh) {
+      if (isAlarmDayRefresh && ownsTimeline) {
         liveDriftAlarmTimelineUnavailableRef.current = false;
         liveDriftAlarmSegmentsRef.current = [];
         updateDriftAlarmBaseSegments(day, materializedTimeline.segments);
@@ -4201,8 +4207,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
         }
       }
-      setSegments(materializedTimeline.segments);
-      setSegmentsLoadedDay(day);
+      if (ownsTimeline) {
+        segmentsRef.current = materializedTimeline.segments;
+        setSegments(materializedTimeline.segments);
+        setSegmentsLoadedDay(day);
+        setHourly(buildHourlySummary(materializedTimeline.segments));
+      }
       if (archiveTimelineLoad !== null && !shouldLoadDashboardWeekHistory) {
         setHistorySegments(archiveTimelineLoad.materialized.segments);
         setHistorySegmentsLoadedRange(archiveTimelineLoad.loadedRange);
@@ -4212,7 +4222,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         setHistoryLoadMoreError(null);
       }
       if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "idle" });
-      setHourly(buildHourlySummary(materializedTimeline.segments));
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
       if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       setClassificationMetrics(nextClassificationMetrics);
@@ -4226,10 +4235,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       void (async () => {
         try {
           const hourlySummary = await trackerClient.getHourlySummary(selectedDayRange);
-          if (refreshRequestRef.current !== requestId) return;
+          if (
+            refreshRequestRef.current !== requestId
+            || timelineRefreshEpochRef.current !== timelineRefreshEpoch
+          ) return;
           setHourly(hourlySummary.length > 0 ? hourlySummary : buildHourlySummary(materializedTimeline.segments));
         } catch {
-          if (refreshRequestRef.current !== requestId) return;
+          if (
+            refreshRequestRef.current !== requestId
+            || timelineRefreshEpochRef.current !== timelineRefreshEpoch
+          ) return;
         }
       })();
 
@@ -4275,6 +4290,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (refreshRequestRef.current === requestId) {
         setLoading(false);
         setHasLoadedOnce(true);
+      }
+      if (fullTimelineRefreshEpochRef.current === timelineRefreshEpoch) {
+        fullTimelineRefreshEpochRef.current = null;
       }
     }
   }
@@ -4900,10 +4918,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   const refreshLiveTail = useCallback(async (day: string): Promise<boolean> => {
     if (liveTailRefreshInFlightRef.current) return false;
+    if (fullTimelineRefreshEpochRef.current !== null) return false;
     if (shouldBlockLocalTrackerAccess) return false;
     if (selectedDayRef.current !== day) return false;
 
     liveTailRefreshInFlightRef.current = true;
+    const timelineRefreshEpoch = timelineRefreshEpochRef.current + 1;
+    timelineRefreshEpochRef.current = timelineRefreshEpoch;
     const trackerMutationGeneration = trackerMutationGenerationRef.current;
     const recordingRequest = beginRecordingCheck();
     try {
@@ -4918,6 +4939,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (
         selectedDayRef.current !== day
         || trackerMutationGenerationRef.current !== trackerMutationGeneration
+        || timelineRefreshEpochRef.current !== timelineRefreshEpoch
       ) return false;
 
       acceptRecordingCapture(recordingRequest, liveTail.trackerMode !== "unavailable");

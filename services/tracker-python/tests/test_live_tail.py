@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 import sqlite3
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ import unittest
 from app.storage.db import BROWSER_HISTORY_IMPORT_SOURCE, TrackerDatabase
 from app.storage.live_tail import fetch_live_tail
 from app.tracker.capture_contract import Snapshot
+from app.tracker.capture_timeline import CaptureTimeline
 
 
 class LiveTailTests(unittest.TestCase):
@@ -113,6 +115,74 @@ class LiveTailTests(unittest.TestCase):
         self.capture("Middle", "2026-10-03T11:00:00+00:00")
         page = self.tail(None, None, 2)
         self.assertEqual([row["id"] for row in page], ["3", "1"])
+
+    def test_normal_capture_idle_trim_advances_revision_across_all_local_timelines(self) -> None:
+        timeline = CaptureTimeline()
+        started_at = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+        for sample_index in range(37):
+            tick = float(sample_index * 5)
+            mutation = self.db.record_snapshot(
+                Snapshot(
+                    observed_at=(started_at + timedelta(seconds=tick)).isoformat(),
+                    app_name="Drifty",
+                    bundle_id="so.drifty",
+                    window_title="Focused QA",
+                    source="nsworkspace",
+                ),
+                sample_seconds=5,
+            )
+            timeline.remember(
+                mutation,
+                tick,
+                min(tick, 60.0),
+                passive=False,
+                continuous=True,
+            )
+
+        full_before = self.db.timeline()[0]
+        self.assertEqual(full_before["duration_seconds"], 185)
+        self.assertEqual(self.db._serialize_row(full_before)["revision"], 37)
+
+        timeline.queue_input_stop(60.0)
+        self.db.trim_captured_segments(list(timeline.pending_input_trims.values()))
+
+        full_after = self.db.timeline()[0]
+        live_after = self.tail("1", "2026-10-03T12:03:00+00:00")[0]
+        compact_after = self.db.dashboard_week_timeline(
+            "2026-10-03T00:00:00+00:00",
+            "2026-10-04T00:00:00+00:00",
+        )[0]
+        self.assertEqual(full_after["duration_seconds"], 60)
+        self.assertEqual(self.db._serialize_row(full_after)["revision"], 38)
+        self.assertEqual(live_after["durationSeconds"], 60)
+        self.assertEqual(live_after["revision"], 38)
+        self.assertEqual(compact_after["durationSeconds"], 60)
+        self.assertEqual(compact_after["revision"], 38)
+
+    def test_classification_delete_advances_the_surviving_row_revision(self) -> None:
+        self.capture("Current", "2026-10-03T12:00:00+00:00")
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO activity_classifications (
+                    segment_id, input_fingerprint, category, productivity,
+                    source, confidence, classified_at
+                ) VALUES (1, 'classification-delete', 'workspace', 'focus',
+                          'manual', 1, '2026-10-03T12:00:00+00:00')
+                """
+            )
+            classified_revision = int(conn.execute(
+                "SELECT sync_seq FROM activity_segments WHERE id = 1"
+            ).fetchone()["sync_seq"])
+            conn.execute("DELETE FROM activity_classifications WHERE segment_id = 1")
+            deleted_revision = int(conn.execute(
+                "SELECT sync_seq FROM activity_segments WHERE id = 1"
+            ).fetchone()["sync_seq"])
+
+        self.assertGreater(deleted_revision, classified_revision)
+        serialized = self.db._serialize_row(self.db.timeline()[0])
+        self.assertEqual(serialized["revision"], deleted_revision)
+        self.assertNotIn("classification", serialized)
 
 
 if __name__ == "__main__":

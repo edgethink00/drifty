@@ -87,6 +87,9 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "deviceId": row.get("origin_device_id"),
         "exclusionSource": row.get("exclusion_source"),
     }
+    revision = row.get("sync_seq")
+    if isinstance(revision, int):
+        serialized["revision"] = revision
     engagement_evidence = row_engagement_evidence(row)
     if engagement_evidence is not None:
         serialized["engagementEvidence"] = engagement_evidence
@@ -114,6 +117,9 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
         "platform": row.get("platform", "macos"),
         "source": row.get("source", "unknown"),
     }
+    revision = row.get("sync_seq")
+    if isinstance(revision, int):
+        serialized["revision"] = revision
     engagement_evidence = row_engagement_evidence(row)
     if engagement_evidence is not None:
         serialized["engagementEvidence"] = engagement_evidence

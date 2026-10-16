@@ -114,6 +114,8 @@ export interface ClassificationOptions {
 
 export interface ActivitySegment {
   id: string;
+  /** Monotonic local row revision. Absent on preview, legacy, and non-tracker payloads. */
+  revision?: number;
   startedAt: string;
   endedAt: string;
   durationSeconds: number;
