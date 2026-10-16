@@ -299,7 +299,8 @@ export function CategoryEditorSheet({
   const editorCategories: readonly ActivityCategory[] = [...LISTED_CATEGORIES, ...savedAddedCategories,
     ...addedCategories.map((entry) => entry.id).filter((category) => !savedAddedCategories.some((saved) => saved === category))];
   const isAddedCategory = (category: ActivityCategory) => isCustomActivityCategory(category);
-  const isNewCategory = (category: ActivityCategory) => addedCategories.some((entry) => entry.id === category);
+  const isNewCategory = (category: ActivityCategory) => addedCategories.some((entry) => entry.id === category)
+    && !savedAddedCategories.some((saved) => saved === category);
 
   // Added productivity levels: the saved ones in the order they were made,
   // then the ones added in this sitting. A level deleted now stays listed as
@@ -887,7 +888,7 @@ export function CategoryEditorSheet({
             ? t("categoryEditor.deleteRulesOff", { count: ruleCountByCategory?.[target.key] ?? 0 })
             : null}
         </span>
-        <QuietButton icon={<ResetIcon />} label={t("categoryEditor.undoDelete")} onClick={() => setDeletedKeys((previous) => previous.filter((key) => key !== definitionKey(target)))} />
+        <QuietButton icon={<ResetIcon />} label={t("categoryEditor.undoDelete")} disabled={locked || (target.group === "category" && liveCategories.length >= MAX_CATEGORY_COUNT)} onClick={() => setDeletedKeys((previous) => previous.filter((key) => key !== definitionKey(target)))} />
       </div>
     </li>
   );
@@ -1375,7 +1376,11 @@ export function CategoryEditorSheet({
                     <div className="category-editor__deleted">
                       <span className="category-editor__swatch" aria-hidden="true" />
                       <span className="category-editor__deleted-name">{definitionName(target)}</span>
-                      <QuietButton icon={<ResetIcon />} label={t("categoryEditor.restoreDeleted")} disabled={locked || liveCategories.length >= MAX_CATEGORY_COUNT} onClick={() => setRestoredKeys((previous) => [...previous, definitionKey(target)])} />
+                      <QuietButton icon={<ResetIcon />} label={t("categoryEditor.restoreDeleted")} disabled={locked || liveCategories.length >= MAX_CATEGORY_COUNT} onClick={() => {
+                        // A prior write may have saved deletion before the rest failed.
+                        setDeletedKeys((previous) => previous.filter((key) => key !== definitionKey(target)));
+                        setRestoredKeys((previous) => [...previous, definitionKey(target)]);
+                      }} />
                     </div>
                   </li>
                 );

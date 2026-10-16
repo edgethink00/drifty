@@ -751,6 +751,52 @@ describe("CategoryEditorSheet", () => {
     } finally { write.mockRestore(); window.localStorage.clear(); }
   });
 
+  it.each(["delete", "restore after partial deletion"] as const)("can %s a category already persisted by a partially failed save", async (action) => {
+    window.localStorage.clear();
+    const close = vi.fn();
+    function ControlledSheet() {
+      const controller = useCategoryCustomizationController();
+      return <CategoryEditorSheet initialTarget={{ group: "category" }} categoryCustomizations={controller.customizations}
+        productivityCustomizations={controller.productivityCustomizations} categoryColorOverrides={{}} appThemeColorOverrides={{}}
+        showProjects={false} projects={[]} onSaveDefinitions={controller.saveDefinitions}
+        onCategoryColorChange={vi.fn()} onCategoryColorReset={vi.fn()} onProductivityColorChange={vi.fn()} onProductivityColorReset={vi.fn()}
+        onSaveProject={async () => true} onDeleteProject={async () => true} onClose={close} />;
+    }
+    render(<LocalizationTestProvider language="ko"><ControlledSheet /></LocalizationTestProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "새 카테고리" }));
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "사이드 프로젝트" } });
+    openCard("집중");
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "집중 업무" } });
+    const original = Storage.prototype.setItem;
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY) throw new DOMException("Synthetic storage full", "QuotaExceededError");
+      original.call(this, key, value);
+    });
+    try {
+      await save();
+      const ids = Object.keys(readCategoryCustomizations()).filter(key => key.startsWith("custom-"));
+      expect(ids).toHaveLength(1);
+      openCard("사이드 프로젝트");
+      // The first store already committed this identity, so a draft-only
+      // discard would leave the category alive and make it reappear.
+      expect(within(pane()).queryByRole("button", { name: "추가 취소" })).toBeNull();
+      fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+      if (action === "restore after partial deletion") {
+        await save();
+        fireEvent.click(within(screen.getByRole("list", { name: "삭제함" })).getByRole("button", { name: "복원" }));
+        expect(card("사이드 프로젝트")).toBeTruthy();
+      }
+      write.mockRestore();
+      await save();
+      const saved = Object.entries(readCategoryCustomizations()).find(([id]) => id === ids[0])?.[1];
+      expect(saved?.name).toBe("사이드 프로젝트");
+      if (action === "delete") expect(saved?.deletedAt).toEqual(expect.any(String));
+      else expect(saved?.deletedAt).toBeUndefined();
+      expect(readProductivityCustomizations().focus?.name).toBe("집중 업무");
+      expect(close).toHaveBeenCalledOnce();
+    } finally { write.mockRestore(); window.localStorage.clear(); }
+  });
+
   it("keeps restoration within the twenty-category limit and allows it after making room", () => {
     const added = Object.fromEntries(Array.from({ length: MAX_CATEGORY_COUNT - CUSTOMIZABLE_CATEGORIES.length + 1 }, (_, index) => [
       "custom-full" + String(index).padStart(4, "0"),
@@ -766,6 +812,14 @@ describe("CategoryEditorSheet", () => {
     expect(restore).toHaveProperty("disabled", false);
     fireEvent.click(restore);
     expect(card("쇼핑")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "새 카테고리" })).toHaveProperty("disabled", true);
+    const undoLearning = within(screen.getByText("학습").closest("li")!).getByRole("button", { name: "되돌리기" });
+    expect(undoLearning).toHaveProperty("disabled", true);
+    openCard("음악");
+    fireEvent.click(within(pane()).getByRole("button", { name: "삭제" }));
+    expect(undoLearning).toHaveProperty("disabled", false);
+    fireEvent.click(undoLearning);
+    expect(card("학습")).toBeTruthy();
     expect(screen.getByRole("button", { name: "새 카테고리" })).toHaveProperty("disabled", true);
   });
 
