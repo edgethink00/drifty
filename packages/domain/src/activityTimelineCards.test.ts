@@ -167,4 +167,13 @@ describe("activity timeline cards", () => {
       .toEqual([{ startRef: "r1", endRef: "r2", status: "limited", title: "A", description: "", refs: ["r1"] }]);
     expect(parseActivityTimelineCardOutput("not json")).toBeNull();
   });
+
+  it("reads card refs, not the title evidence's, and recovers an answer that closes one level too often", () => {
+    const card = "{\"start_ref\":\"r1\",\"end_ref\":\"r4\",\"title_evidence\":{\"activities\":[{\"activity\":\"Checkout retry\",\"refs\":[\"r1\",\"r3\"],\"minutes\":18},{\"activity\":\"Docs\",\"refs\":[\"r2\"],\"minutes\":3}],\"selected\":\"Checkout retry\"},\"status\":\"ready\",\"title\":\"Checkout retry handler\",\"description\":\"\",\"refs\":[\"r1\",\"r3\"]}";
+    const expected = [{ startRef: "r1", endRef: "r4", status: "ready", title: "Checkout retry handler", description: "", refs: ["r1", "r3"] }];
+    expect(parseActivityTimelineCardOutput("{\"cards\":[" + card + "]}")).toEqual(expected);
+    expect(parseActivityTimelineCardOutput("{\"cards\":[" + card + "]}]}")).toEqual(expected);
+    // A cut-off answer is not completed.
+    expect(parseActivityTimelineCardOutput("{\"cards\":[" + card)).toBeNull();
+  });
 });
