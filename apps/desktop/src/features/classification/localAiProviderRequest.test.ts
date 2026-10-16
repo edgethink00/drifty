@@ -153,6 +153,21 @@ describe("toLocalProviderRequest", () => {
     });
   });
 
+  it("asks a local provider for userProductivity only while a productivity definition exists", () => {
+    const provider = { provider: "openrouter_byok", apiKey: "test-key", model: "google/gemini-3.1-flash-lite" } as const;
+    const requiredFields = (request: LocalAiProviderRequest | null) => {
+      const format = request?.request["responseFormat"] as { json_schema: { schema: { properties: { results: { items: { required: string[] } } } } } };
+      return format.json_schema.schema.properties.results.items.required;
+    };
+    const defined = toLocalProviderRequest(provider, [{ ...basePayload, categoryGuidance: [{ productivity: "neutral", description: "Slack, even for work" }] }], null);
+    const categoryOnly = toLocalProviderRequest(provider, [{ ...basePayload, categoryGuidance: [{ category: "learning", description: "Conference talks" }] }], null);
+
+    expect(requiredFields(defined)).toContain("userProductivity");
+    expect(promptFromRequest(defined)).toContain('"userProductivity":string');
+    expect(requiredFields(categoryOnly)).not.toContain("userProductivity");
+    expect(promptFromRequest(categoryOnly)).not.toContain("userProductivity");
+  });
+
   it("omits Reddit-specific prompt guidance for non-Reddit payloads", () => {
     const prompt = promptFor([basePayload]);
 

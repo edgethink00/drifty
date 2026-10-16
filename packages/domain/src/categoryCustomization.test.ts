@@ -20,11 +20,14 @@ import {
 } from "./categoryCustomization";
 import {
   hasLiveCategoryDescriptions,
+  LIVE_PRODUCTIVITY_MATCH_INSTRUCTION,
   liveAddedCategoryIds,
   liveAllowedCategoriesLine,
   liveCategoryGuidancePromptLines,
   normalizeLiveCategoryGuidance,
   normalizeLiveReturnedCategory,
+  normalizeLiveUserProductivity,
+  resolveLiveActivityClassificationProductivity,
 } from "./liveClassificationPolicy";
 import { buildLiveClassificationPrompt, LIVE_CATEGORY_DEFINITIONS, LIVE_INTENT_FIRST_RUBRIC } from "./liveClassificationPrompt";
 import { isContentDependentYouTubeActivity } from "./youtubeClassification";
@@ -236,6 +239,44 @@ describe("productivity definitions", () => {
     expect(intent).toContain('<user_productivity_guidance>[{"productivity":"drift","description":"Reaction videos"}]</user_productivity_guidance>');
     expect(productivityOnly).toContain("<user_productivity_guidance>");
     expect(productivityOnly).not.toContain("<user_category_guidance>");
+  });
+});
+
+describe("productivity a matched definition names", () => {
+  const slack = { id: "s", appName: "Slack", title: "#design-review", durationSeconds: 600 };
+
+  it("replaces the intent mapping on surfaces no rule pins", () => {
+    expect(resolveLiveActivityClassificationProductivity("work_support", "communication", slack)).toBe("focus");
+    expect(resolveLiveActivityClassificationProductivity("work_support", "communication", slack, null, "neutral")).toBe("neutral");
+    expect(resolveLiveActivityClassificationProductivity("informational", "learning", { id: "n", appName: "Arc", domain: "news.example", durationSeconds: 600 }, null, "drift")).toBe("drift");
+  });
+
+  it("leaves dedicated work apps and the workspace, game, and music categories to their rule", () => {
+    expect(resolveLiveActivityClassificationProductivity("work_execution", "workspace", { id: "x", appName: "Xcode", durationSeconds: 600 }, null, "drift")).toBe("focus");
+    expect(resolveLiveActivityClassificationProductivity("work_execution", "utility", { id: "t", appName: "Terminal", durationSeconds: 600 }, null, "drift")).toBe("focus");
+    expect(resolveLiveActivityClassificationProductivity("leisure", "game", { id: "g", appName: "Steam", durationSeconds: 600 }, null, "focus")).toBe("drift");
+    expect(resolveLiveActivityClassificationProductivity("leisure", "music", { id: "m", appName: "Spotify", durationSeconds: 600 }, null, "drift"))
+      .toBe(resolveLiveActivityClassificationProductivity("leisure", "music", { id: "m", appName: "Spotify", durationSeconds: 600 }));
+  });
+
+  it("reads none or anything unexpected as no match", () => {
+    expect(normalizeLiveUserProductivity("neutral")).toBe("neutral");
+    expect(normalizeLiveUserProductivity("none")).toBeNull();
+    expect(normalizeLiveUserProductivity("sleep")).toBeNull();
+    expect(normalizeLiveUserProductivity(undefined)).toBeNull();
+  });
+
+  it("asks the production prompt for userProductivity only while a productivity definition exists", () => {
+    const items = [{ id: "a", appName: "Slack", title: "#design-review", durationSeconds: 600 }];
+    const withDefinition = buildLiveClassificationPrompt(items, null, { intentFirst: true, categoryGuidance: [{ productivity: "neutral", description: "Slack, even for work" }] });
+    const categoryOnly = buildLiveClassificationPrompt(items, null, { intentFirst: true, categoryGuidance: [{ category: "learning", description: "Conference talks" }] });
+    const productivityOnly = buildLiveClassificationPrompt(items, null, { productivityOnly: true, categoryGuidance: [{ productivity: "neutral", description: "Slack, even for work" }] });
+
+    expect(withDefinition).toContain(LIVE_PRODUCTIVITY_MATCH_INSTRUCTION);
+    expect(withDefinition).toContain('"intent":string,"userProductivity":string,"confidence":number');
+    expect(categoryOnly).not.toContain(LIVE_PRODUCTIVITY_MATCH_INSTRUCTION);
+    expect(categoryOnly).not.toContain("userProductivity");
+    expect(productivityOnly).not.toContain("userProductivity");
   });
 });
 

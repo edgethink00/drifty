@@ -5,13 +5,18 @@ import {
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
 } from "../settings/localAiSetup";
-import { liveAllowedCategories, liveAllowedCategoriesLine, liveCategoryGuidancePromptLines } from "@drifty/domain";
+import { hasLiveProductivityGuidance, LIVE_USER_PRODUCTIVITY_VALUES, liveAllowedCategories, liveAllowedCategoriesLine, liveCategoryGuidancePromptLines, liveIntentFirstShapeLine } from "@drifty/domain";
 import type { LiveCategoryGuidance, LiveClassificationMemoryContext } from "@drifty/domain";
 import type { EnhancedContextProviderPayload } from "./contentContextEgressPolicy";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-/** The strict schema; its category enum also holds the request's added categories. */
+/**
+ * The strict schema; its category enum also holds the request's added
+ * categories, and it asks for userProductivity when the user wrote
+ * productivity definitions.
+ */
 function openRouterLiveIntentResponseFormat(categoryGuidance: readonly LiveCategoryGuidance[]) {
+  const match = hasLiveProductivityGuidance(categoryGuidance);
   return {
     ...OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT,
     json_schema: {
@@ -26,7 +31,11 @@ function openRouterLiveIntentResponseFormat(categoryGuidance: readonly LiveCateg
               properties: {
                 ...OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT.json_schema.schema.properties.results.items.properties,
                 category: { type: "string", enum: [...liveAllowedCategories(categoryGuidance)] },
+                ...(match ? { userProductivity: { type: "string", enum: [...LIVE_USER_PRODUCTIVITY_VALUES] } } : {}),
               },
+              required: match
+                ? ["id", "category", "intent", "userProductivity", "confidence", "reason"]
+                : OPENROUTER_LIVE_INTENT_RESPONSE_FORMAT.json_schema.schema.properties.results.items.required,
             },
           },
         },
@@ -408,10 +417,10 @@ export function buildClassificationPrompt(
     liveAllowedCategoriesLine(categoryGuidance),
     "Use only these intents: work_execution, work_support, informational, in_between, personal_admin, leisure, unknown.",
     CATEGORY_DEFINITIONS,
-    ...liveCategoryGuidancePromptLines(categoryGuidance),
+    ...liveCategoryGuidancePromptLines(categoryGuidance, { matchUserProductivity: true }),
     INTENT_FIRST_RUBRIC,
     ...matchedContextualDecisionGuidance(memoryContext),
-    "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"intent\":string,\"confidence\":number,\"reason\":string}]}. Do not output productivity. Do not include raw titles, domains, or work profile details in the reason.",
+    liveIntentFirstShapeLine(categoryGuidance),
     JSON.stringify(payload.map((item) => promptItem(item, enhancedRetryContext))),
   ].join("\n");
 }

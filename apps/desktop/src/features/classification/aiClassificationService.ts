@@ -1,7 +1,7 @@
 import { browserContentCluesForSegment, normalizeBrowserContentClues, builtInCategoryOrUnknown, isCustomActivityCategory } from "@drifty/domain";
 import { readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD, enhancedRetryImproves, retryEvidenceForRecord } from "./enhancedContextRetryPolicy";
-import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
+import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, hasLiveProductivityGuidance, isYouTubeBrowsePage, normalizeLiveUserProductivity, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
 import { classificationGuidanceFromCustomizations, hasLiveCategoryDescriptions, isContentDependentYouTubeActivity, isExcludedSegment } from "@drifty/domain";
 import type {
   AdaptiveContentContext,
@@ -124,6 +124,8 @@ type EdgeClassification = {
   category?: unknown;
   intent?: unknown;
   productivity?: unknown;
+  /** Local intent providers: the productivity a user productivity definition names for this activity. */
+  userProductivity?: unknown;
   confidence?: unknown;
   reason?: unknown;
   model?: unknown;
@@ -907,8 +909,11 @@ export async function toMinimizedPayload(
   // reused once the descriptions change, and vice versa.
   const guided = categoryGuidance.length > 0;
   const baseInputFingerprint = await fingerprint(JSON.stringify(providerInput));
+  // Productivity definitions are read through userProductivity since
+  // guidance v2, so answers kept from before must not be reused for them.
+  const guidanceVersion = hasLiveProductivityGuidance(categoryGuidance) ? { guidanceVersion: 2 } : {};
   const inputFingerprint = guided
-    ? await fingerprint(JSON.stringify({ ...providerInput, categoryGuidance }))
+    ? await fingerprint(JSON.stringify({ ...providerInput, categoryGuidance, ...guidanceVersion }))
     : baseInputFingerprint;
 
   return {
@@ -2395,7 +2400,7 @@ function resolveProviderProductivity(
 ): ProductivityLabel | null {
   const item = toLiveClassificationPromptItem(payload);
   if (isLiveActivityIntent(classification.intent)) {
-    return resolveLiveActivityClassificationProductivity(classification.intent, builtInCategoryOrUnknown(category), item, memoryContext);
+    return resolveLiveActivityClassificationProductivity(classification.intent, builtInCategoryOrUnknown(category), item, memoryContext, normalizeLiveUserProductivity(classification.userProductivity));
   }
   if (!isProductivityLabel(classification.productivity)) return null;
   // Cloud responses and older local providers already contain productivity;
@@ -2412,7 +2417,8 @@ function resolveRawProviderProductivity(
   classification: EdgeClassification,
 ): ProductivityLabel | null {
   if (isLiveActivityIntent(classification.intent)) {
-    return productivityForLiveActivityIntent(classification.intent);
+    // A matched user definition is the provider's own productivity decision.
+    return normalizeLiveUserProductivity(classification.userProductivity) ?? productivityForLiveActivityIntent(classification.intent);
   }
   return isProductivityLabel(classification.productivity)
     ? classification.productivity

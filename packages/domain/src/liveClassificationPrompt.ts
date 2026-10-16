@@ -17,6 +17,7 @@ import {
   LIVE_PRODUCTIVITY_LABELS,
   liveAllowedCategoriesLine,
   liveCategoryGuidancePromptLines,
+  liveIntentFirstShapeLine,
   type LiveActivityCategory,
   type LiveCategoryGuidance,
   type LiveClassificationMemoryContext,
@@ -217,7 +218,10 @@ export function buildLiveClassificationPrompt(
   const evidenceFirst = options.evidenceFirst === true;
   const omitReason = options.omitReason === true;
   const productivityOnly = options.productivityOnly === true;
-  const categoryGuidanceLines = liveCategoryGuidancePromptLines(options.categoryGuidance, { includeCategories: !productivityOnly });
+  // The production intent-first prompt asks for userProductivity; the other
+  // (evaluation) shapes keep their own output fields.
+  const matchUserProductivity = intentFirst && !productivityOnly && !evidenceFirst;
+  const categoryGuidanceLines = liveCategoryGuidancePromptLines(options.categoryGuidance, { includeCategories: !productivityOnly, matchUserProductivity });
   return [
     productivityOnly
       ? "Classify only the task intent of each activity. The caller derives productivity; do not classify category or explain."
@@ -292,9 +296,7 @@ export function buildLiveClassificationPrompt(
           ? 'Return compact JSON only in the shape {"results":[{"id":string,"category":string,"workRelation":string,"leisureEvidence":string,"confidence":number}]}. Do not output productivity, intent, or reason.'
           : 'Return JSON only in the shape {"results":[{"id":string,"category":string,"workRelation":string,"leisureEvidence":string,"confidence":number,"reason":string}]}. Do not output productivity or intent.'
         : intentFirst
-          ? omitReason
-            ? 'Return compact JSON only in the shape {"results":[{"id":string,"category":string,"intent":string,"confidence":number}]}. Do not output productivity or reason.'
-            : 'Return JSON only in the shape {"results":[{"id":string,"category":string,"intent":string,"confidence":number,"reason":string}]}. Do not output productivity. Do not include raw titles, domains, or work profile details in the reason.'
+          ? liveIntentFirstShapeLine(options.categoryGuidance, omitReason)
           : omitReason
             ? 'Return compact JSON only in the shape {"results":[{"id":string,"category":string,"productivity":string,"confidence":number}]}. Do not output reason.'
             : 'Return JSON only in the shape {"results":[{"id":string,"category":string,"productivity":string,"confidence":number,"reason":string}]}. Do not include raw titles, domains, or work profile details in the reason.',
