@@ -5319,7 +5319,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [categoryColorOverrides]);
 
   useEffect(() => {
-    applyAppThemeColorOverrides(document.documentElement.style, appThemeColorOverrides);
+    applyAppThemeColorOverrides(document.documentElement.style, appThemeColorOverrides, theme);
+  }, [appThemeColorOverrides, theme]);
+
+  useEffect(() => {
     persistAppThemeColorOverrides(appThemeColorOverrides);
   }, [appThemeColorOverrides]);
 

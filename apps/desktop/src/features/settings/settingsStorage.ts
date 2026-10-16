@@ -2,6 +2,7 @@ import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
 import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel } from "@drifty/domain";
 import { isCustomActivityCategory, normalizeCategoryCustomizations, normalizeCategoryOrder, normalizeProductivityCustomizations, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
+import { darkAccentTone } from "../../lib/accentTone";
 import { changedDefinitionKeys, stableJson, stampDefinitions } from "./categoryDefinitionLedger";
 
 export type ThemeMode = "light" | "dark";
@@ -287,9 +288,25 @@ export function contrastingInk(hex: string): "#0f0f0d" | "#ffffff" {
   return luminance > 0.55 ? "#0f0f0d" : "#ffffff";
 }
 
+const DEFAULT_ACCENT_COLOR = "#5f7f31";
+
+/**
+ * The accent the document should paint for a saved accent in this theme, or
+ * undefined to fall back to the built-in tokens. Picking moss itself, which a
+ * palette pick stores as its hex, falls back too so dark mode keeps moss's own
+ * dark value. Other picks get their lighter dark tone in dark mode.
+ */
+export function accentColorForTheme(color: string | undefined, theme: ThemeMode): string | undefined {
+  if (!color || !isHexColor(color)) return undefined;
+  const hex = color.trim().toLowerCase();
+  if (hex === DEFAULT_ACCENT_COLOR) return undefined;
+  return theme === "dark" ? darkAccentTone(hex) : hex;
+}
+
 export function derivedThemeColorCustomProperties(
   key: AppThemeColorKey,
   color: string | undefined,
+  theme: ThemeMode = "light",
 ): ReadonlyArray<{ readonly property: string; readonly value: string | null }> {
   switch (key) {
     case "accent":
@@ -299,7 +316,9 @@ export function derivedThemeColorCustomProperties(
         { property: "--accent-mid", value: `color-mix(in srgb, ${color} 46%, var(--surface))` },
         { property: "--accent-wash", value: `color-mix(in srgb, ${color} 62%, var(--surface))` },
         { property: "--accent-strong", value: `color-mix(in srgb, ${color} 78%, var(--text))` },
-        { property: "--on-accent", value: contrastingInk(color) },
+        // A dark-mode accent is always light, and the built-in dark accent
+        // carries dark ink, so text on it stays dark there.
+        { property: "--on-accent", value: theme === "dark" ? "#0f0f0d" : contrastingInk(color) },
       ];
     case "productivityFocus":
       return [{ property: "--productivity-focus-soft", value: color ? `color-mix(in srgb, ${color} 18%, var(--surface))` : null }];
@@ -310,12 +329,12 @@ export function derivedThemeColorCustomProperties(
   }
 }
 
-export function applyAppThemeColorOverrides(target: CSSStyleDeclaration, overrides: AppThemeColorOverrides): void {
+export function applyAppThemeColorOverrides(target: CSSStyleDeclaration, overrides: AppThemeColorOverrides, theme: ThemeMode = "light"): void {
   for (const option of APP_THEME_COLOR_OPTIONS) {
-    const color = overrides[option.key];
+    const color = option.key === "accent" ? accentColorForTheme(overrides.accent, theme) : overrides[option.key];
     if (color) target.setProperty(option.cssVariable, color);
     else target.removeProperty(option.cssVariable);
-    for (const derived of derivedThemeColorCustomProperties(option.key, color)) {
+    for (const derived of derivedThemeColorCustomProperties(option.key, color, theme)) {
       if (derived.value) target.setProperty(derived.property, derived.value);
       else target.removeProperty(derived.property);
     }
