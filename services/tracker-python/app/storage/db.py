@@ -4943,6 +4943,10 @@ class TrackerDatabase:
                 # an idle trim, a history deletion, or a rule deletion commits from
                 # another connection. Skip that row inside the same statement instead of
                 # letting a foreign-key failure roll back every other row in the batch.
+                # Repeated fresh built-in answers are not refresh events. Compare
+                # their meaning in the UPSERT itself so overlapping readers cannot
+                # both bump sync_seq. Keep the first timestamps, but still let an
+                # ordinary local write clear any existing sync/protection marker.
                 cursor = conn.execute(
                     """
                     INSERT INTO activity_classifications (
@@ -4987,15 +4991,42 @@ class TrackerDatabase:
                         ai_result = excluded.ai_result,
                         stale = excluded.stale,
                         classification_rule_id = excluded.classification_rule_id
-                    WHERE excluded.source = 'manual'
-                       OR (
-                         activity_classifications.source != 'manual'
-                         AND (
-                           activity_classifications.source != 'rule'
-                           OR activity_classifications.classification_rule_id IS NULL
-                           OR excluded.classification_rule_id IS NOT NULL
-                         )
-                       )
+                    WHERE (
+                        excluded.source = 'manual'
+                        OR (
+                          activity_classifications.source != 'manual'
+                          AND (
+                            activity_classifications.source != 'rule'
+                            OR activity_classifications.classification_rule_id IS NULL
+                            OR excluded.classification_rule_id IS NOT NULL
+                          )
+                        )
+                    )
+                    AND NOT (
+                        excluded.source IN ('app-db', 'domain-db', 'youtube')
+                        AND excluded.ai_result = 0
+                        AND excluded.stale = 0
+                        AND excluded.taxonomy_version IS NOT NULL
+                        AND excluded.taxonomy_version IS NOT ''
+                        AND activity_classifications.input_fingerprint IS excluded.input_fingerprint
+                        AND activity_classifications.category IS excluded.category
+                        AND activity_classifications.productivity IS excluded.productivity
+                        AND activity_classifications.source IS excluded.source
+                        AND activity_classifications.confidence IS excluded.confidence
+                        AND activity_classifications.reason IS excluded.reason
+                        AND activity_classifications.model IS excluded.model
+                        AND activity_classifications.prompt_version IS excluded.prompt_version
+                        AND activity_classifications.taxonomy_version IS excluded.taxonomy_version
+                        AND activity_classifications.request_id IS excluded.request_id
+                        AND activity_classifications.latency_ms IS excluded.latency_ms
+                        AND activity_classifications.ai_result IS excluded.ai_result
+                        AND activity_classifications.stale IS excluded.stale
+                        AND activity_classifications.classification_rule_id IS excluded.classification_rule_id
+                        AND NOT EXISTS (
+                            SELECT 1 FROM sync_classification_provenance
+                            WHERE segment_id = excluded.segment_id
+                        )
+                    )
                     """,
                     (
                         segment_id,

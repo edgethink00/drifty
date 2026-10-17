@@ -4,8 +4,11 @@ import json
 import sqlite3
 import sys
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Barrier
 from unittest.mock import patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +48,188 @@ class ClassificationWriteGuardsTests(unittest.TestCase):
         return self.db.record_project_pass({"rangeStart": "2026-04-06T00:00:00Z",
                                             "rangeEnd": "2026-04-07T00:00:00Z", "trigger": "manual",
                                             "correctionsCount": 0})["id"]
+
+    def builtin_record(self, source: str = "app-db", **fields: object) -> dict:
+        return self.record(source, **{
+            "taxonomyVersion": "builtin-heuristics-v3", "aiResult": False, "stale": False,
+            "inputFingerprint": f"builtin:builtin-heuristics-v3:{self.sid}:09:00:09:03",
+            "classifiedAt": "2026-04-06T10:00:00+00:00", **fields,
+        })
+
+    def stored_state(self) -> dict:
+        with self.db.connect() as conn:
+            return {
+                "classification": dict(conn.execute(
+                    "SELECT * FROM activity_classifications WHERE segment_id = ?", (self.sid,),
+                ).fetchone()),
+                "seq": conn.execute("SELECT sync_seq FROM activity_segments WHERE id = ?", (self.sid,)).fetchone()[0],
+                "counter": conn.execute("SELECT seq FROM sync_counter WHERE id = 1").fetchone()[0],
+                "provenance": [dict(row) for row in conn.execute(
+                    "SELECT * FROM sync_classification_provenance WHERE segment_id = ?", (self.sid,),
+                )],
+            }
+
+    def test_overlapping_builtin_refreshes_from_two_connections_save_nine_only_once(self) -> None:
+        records = []
+        for group in ("stale", "old", "unversioned"):
+            for source in ("app-db", "domain-db", "youtube"):
+                self.db.insert_segment({"started_at": "2026-04-06T11:00:00Z",
+                                        "ended_at": "2026-04-06T11:03:00Z",
+                                        "duration_seconds": 180, "app_name": "Synthetic refresh"})
+                sid = self.db.connect().execute("SELECT max(id) FROM activity_segments").fetchone()[0]
+                record = self.builtin_record(source, segmentId=sid, inputFingerprint=f"builtin:{sid}")
+                self.assertEqual(self.db.save_classifications([{
+                    **record, "stale": group == "stale",
+                    "taxonomyVersion": None if group == "unversioned" else (
+                        "builtin-heuristics-v2" if group == "old" else record["taxonomyVersion"]
+                    ),
+                }]), 1)
+                records.append(record)
+        before = self.db.connect().execute("SELECT seq FROM sync_counter WHERE id = 1").fetchone()[0]
+        ready = Barrier(3, timeout=10)
+
+        def refresh() -> int:
+            database = TrackerDatabase(self.db.db_path, perform_maintenance=False)
+            try:
+                database.connect()
+                ready.wait()  # Both independent jobs hold the same precomputed stale-nine batch.
+                return database.save_classifications(records)
+            finally:
+                database.close()
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            jobs = [workers.submit(refresh) for _ in range(2)]
+            ready.wait()
+            saved = sorted(job.result(timeout=15) for job in jobs)
+        self.assertEqual(saved, [0, 9])
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT seq FROM sync_counter WHERE id = 1").fetchone()[0] - before, 9)
+            rows = conn.execute("SELECT * FROM activity_classifications ORDER BY segment_id").fetchall()
+        self.assertEqual(len(rows), 9)
+        self.assertTrue(all(row["stale"] == 0 and row["taxonomy_version"] == "builtin-heuristics-v3" for row in rows))
+        self.assertEqual(self.db.save_classifications(records), 0)
+
+    def test_builtin_timestamp_only_retries_preserve_first_times_and_sync_sequence(self) -> None:
+        for source in ("app-db", "domain-db", "youtube"):
+            with self.subTest(source=source):
+                record = self.builtin_record(source)
+                with patch("app.storage.db.datetime") as clock:
+                    clock.now.return_value = datetime.fromisoformat("2026-04-06T10:00:01+00:00")
+                    self.assertEqual(self.db.save_classifications([record]), 1)
+                before = self.stored_state()
+                with patch("app.storage.db.datetime") as clock:
+                    clock.now.return_value = datetime.fromisoformat("2026-04-06T12:00:01+00:00")
+                    self.assertEqual(self.db.save_classifications([
+                        {**record, "classifiedAt": "2026-04-06T12:00:00+00:00"},
+                    ]), 0)
+                self.assertEqual(self.stored_state(), before)
+
+    def test_changed_builtin_answers_and_metadata_are_saved(self) -> None:
+        record = self.builtin_record()
+        self.assertEqual(self.db.save_classifications([record]), 1)
+        changes = {
+            "category": "learning", "productivity": "focus", "source": "domain-db",
+            "confidence": 0.8, "reason": "New evidence", "model": "metadata-model",
+            "promptVersion": "prompt-v2", "taxonomyVersion": "builtin-heuristics-v4",
+            "inputFingerprint": "builtin:changed-input", "requestId": "new-request",
+            "latencyMs": 0, "aiResult": True, "stale": True,
+        }
+        for field, value in changes.items():
+            with self.subTest(field=field):
+                before = self.stored_state()
+                changed = {**record, field: value}
+                self.assertEqual(self.db.save_classifications([changed]), 1)
+                after = self.stored_state()
+                self.assertEqual(after["counter"], before["counter"] + 1)
+                self.assertGreater(after["seq"], before["seq"])
+                if field not in ("aiResult", "stale"):
+                    # Non-null metadata compares by value too; it does not disable idempotency.
+                    self.assertEqual(self.db.save_classifications([changed]), 0)
+                    self.assertEqual(self.stored_state(), after)
+                self.assertEqual(self.db.save_classifications([record]), 1)
+
+    def test_extended_segment_with_a_new_builtin_input_fingerprint_is_saved(self) -> None:
+        record = self.builtin_record()
+        self.db.save_classifications([record])
+        with self.db.connect() as conn:
+            conn.execute("UPDATE activity_segments SET ended_at = ?, duration_seconds = 240 WHERE id = ?",
+                         ("2026-04-06T09:04:00Z", self.sid))
+        before = self.stored_state()
+        extended = {**record, "inputFingerprint": f"builtin:builtin-heuristics-v3:{self.sid}:09:00:09:04"}
+        self.assertEqual(self.db.save_classifications([extended]), 1)
+        after = self.stored_state()
+        self.assertEqual(after["counter"], before["counter"] + 1)
+        self.assertNotEqual(after["classification"]["input_fingerprint"], before["classification"]["input_fingerprint"])
+        self.assertEqual(self.db.save_classifications([extended]), 0)
+
+    def test_null_and_empty_builtin_metadata_are_distinct_answers(self) -> None:
+        record = self.builtin_record()
+        self.db.save_classifications([record])
+        for field in ("reason", "model", "promptVersion", "requestId"):
+            with self.subTest(field=field):
+                empty = {**record, field: ""}
+                self.assertEqual(self.db.save_classifications([empty]), 1)
+                self.assertEqual(self.db.save_classifications([empty]), 0)
+                self.assertEqual(self.db.save_classifications([record]), 1)
+
+    def test_identical_unqualified_or_non_builtin_attempts_keep_existing_write_behavior(self) -> None:
+        records = [self.builtin_record(taxonomyVersion=None), self.builtin_record(taxonomyVersion=""),
+                   self.builtin_record(stale=True), self.builtin_record(aiResult=True)]
+        records.extend(self.builtin_record(source) for source in
+                       ("manual", "llm", "rule", "ai_review", "fallback", "system", "unknown"))
+        for record in records:
+            with self.subTest(source=record["source"], taxonomy=record["taxonomyVersion"],
+                              stale=record["stale"], ai=record["aiResult"]):
+                with self.db.connect() as conn:
+                    conn.execute("DELETE FROM activity_classifications WHERE segment_id = ?", (self.sid,))
+                self.assertEqual(self.db.save_classifications([record]), 1)
+                before = self.stored_state()
+                self.assertEqual(self.db.save_classifications([record]), 1)
+                self.assertEqual(self.stored_state()["counter"], before["counter"] + 1)
+
+    def test_identical_builtin_claims_still_clear_existing_provenance(self) -> None:
+        record = self.builtin_record()
+        self.db.save_classifications([record])
+        for provenance in ("sync", "legacy", "local-protected"):
+            with self.subTest(provenance=provenance):
+                with self.db.connect() as conn:
+                    conn.execute("INSERT INTO sync_classification_provenance(segment_id, provenance) VALUES (?, ?)",
+                                 (self.sid, provenance))
+                before = self.stored_state()
+                self.assertEqual(self.db.save_classifications([record]), 1)
+                after = self.stored_state()
+                self.assertEqual(after["counter"], before["counter"] + 1)
+                self.assertEqual(after["provenance"], [])
+                self.assertEqual(self.db.save_classifications([record]), 0)
+                self.assertEqual(self.stored_state(), after)
+
+    def test_identical_builtin_after_an_actual_sync_receipt_clears_ownership_once(self) -> None:
+        uid = "80000000-0000-0000-0000-000000000001"
+        remote = {
+            "segmentUid": uid, "originDeviceId": "80000000-0000-0000-0000-000000000002",
+            "startedAt": "2026-04-06T09:00:00Z", "endedAt": "2026-04-06T09:03:00Z",
+            "durationSeconds": 180, "appName": "Code", "platform": "windows",
+            "classification": {"source": "app-db", "category": "workspace", "productivity": "focus",
+                               "confidence": 0.9, "classifiedAt": "2026-04-06T10:00:00+00:00"},
+        }
+        self.db.apply_synced_segments([remote])
+        self.sid = self.db.connect().execute(
+            "SELECT id FROM activity_segments WHERE segment_uid = ?", (uid,),
+        ).fetchone()[0]
+        record = self.builtin_record(category="workspace", productivity="focus", confidence=0.9,
+                                     inputFingerprint=f"sync:{uid}")
+        self.assertEqual(self.db.save_classifications([record]), 1)
+        # A subsequent receipt retains the existing taxonomy but restores sync ownership.
+        self.db.apply_synced_segments([remote])
+        before = self.stored_state()
+        self.assertEqual(before["classification"]["taxonomy_version"], record["taxonomyVersion"])
+        self.assertEqual(before["provenance"][0]["provenance"], "sync")
+        self.assertEqual(self.db.save_classifications([record]), 1)
+        after = self.stored_state()
+        self.assertEqual(after["counter"], before["counter"] + 1)
+        self.assertEqual(after["provenance"], [])
+        self.assertEqual(self.db.save_classifications([record]), 0)
+        self.assertEqual(self.stored_state(), after)
 
     def test_late_automatic_results_preserve_materialized_user_rules(self) -> None:
         rule = self.rule()
