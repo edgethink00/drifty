@@ -4,6 +4,7 @@ import type { ActivitySegment, AppIconMap, ClassificationOptions, ExcludedAppRul
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
+import { historyPageDestination } from "./historyPageUrl";
 import type { HistoryRecordSurface, HistoryRowMenuActions } from "./HistoryRowMenu";
 import { historyToolbarActionReserve } from "./historyToolbar";
 import { ActionLabel } from "../../components/ActionLabel";
@@ -234,6 +235,7 @@ export function HistoryView({
   ), [isSearching, normalizedQuery, recentHistoryWindow, searchableRows, searchUsesBackend]);
 
   const renderedRows = isSearching && visibleRows.length > renderLimit ? visibleRows.slice(0, renderLimit) : visibleRows;
+  const segmentsById = useMemo(() => new Map(segments.map((segment) => [segment.id, segment])), [segments]);
   const hiddenCount = isSearching ? visibleRows.length - renderedRows.length : 0;
   const hasLocalRowsToReveal = isSearching ? hiddenCount > 0 : recentHistoryWindow?.hasMore === true;
   const canLoadBackendRows = (!isSearching || searchUsesBackend) && !hasLocalRowsToReveal && hasMoreSegments && onLoadMore !== undefined;
@@ -571,6 +573,7 @@ export function HistoryView({
                     located={row.id === locatedRowId}
                     menu={rowMenu}
                     onSelectedChange={toggleRow}
+                    pageUrl={historyPageDestination(row, segmentsById)}
                     row={row}
                     selected={row.segmentIds.every((segmentId) => selectedIds.has(segmentId))}
                   />

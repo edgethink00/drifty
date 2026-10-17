@@ -1,5 +1,91 @@
 /* Feature CSS Phase 1. */
 
+/* A1: keep the title's normal ink; a quiet arrow and hover underline identify links. */
+.history-row__identity-copy .history-page-title {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  color: inherit;
+  font: inherit;
+}
+
+.history-row__identity-copy strong:has(.history-page-title) {
+  overflow: visible;
+}
+
+.history-row__identity-copy .history-page-link,
+.history-row__identity-copy .history-page-link:visited {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text);
+  font: inherit;
+  text-decoration: none;
+}
+
+.history-row__identity-copy .history-page-link__text {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-page-link .external-link-icon {
+  flex: 0 0 12px;
+  color: var(--text-soft);
+  opacity: 0.55;
+}
+
+.history-row__identity-copy .history-page-link:hover,
+.history-row__identity-copy .history-page-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.history-page-link:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--text-muted);
+  outline-offset: 4px;
+}
+
+.history-page-path {
+  color: var(--text-soft);
+  font-style: normal;
+  opacity: 0.8;
+}
+
+.history-page-destination {
+  position: fixed;
+  z-index: 90;
+  display: grid;
+  gap: 2px;
+  max-width: min(32rem, calc(100vw - 32px));
+  max-height: min(12rem, 40vh);
+  overflow: hidden;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 5px 18px #00000016;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.history-page-destination strong {
+  color: var(--text);
+  font-size: inherit;
+  font-weight: 500;
+}
+
 .page--history {
   display: flex;
   flex: 1 1 auto;

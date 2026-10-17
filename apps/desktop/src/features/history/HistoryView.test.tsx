@@ -575,6 +575,37 @@ describe("HistoryView located record", () => {
   });
 });
 
+describe("HistoryView page links", () => {
+  afterEach(() => cleanup());
+
+  it("opens from the title while the remaining row still selects records", () => {
+    render(<HistoryView appIcons={{}} segments={historySegments} deleting={false} onDeleteSelected={vi.fn()} />);
+    const link = screen.getByRole("link", { name: /API reference/ });
+    const selection = screen.getByRole("checkbox", { name: /select api reference/i }) as HTMLInputElement;
+    fireEvent.click(link);
+    expect(selection.checked).toBe(false);
+    fireEvent.click(screen.getByText("/api"));
+    expect(selection.checked).toBe(true);
+    fireEvent.click(selection);
+    expect(selection.checked).toBe(false);
+    expect(screen.queryByRole("link", { name: /Issue triage/ })).toBeNull();
+  });
+
+  it("removes the link when a same-title record adds another destination and preserves calendar context", () => {
+    const onOpenRecord = vi.fn();
+    const props = { appIcons: {}, deleting: false, onDeleteSelected: vi.fn(), onOpenRecord };
+    const { rerender } = render(<HistoryView {...props} segments={[historySegments[0]!]} />);
+    expect(screen.getByRole("link", { name: /API reference/ })).toBeTruthy();
+    const second = { ...historySegments[0]!, id: "other", startedAt: "2026-06-10T09:10:00+00:00", endedAt: "2026-06-10T09:20:00+00:00", siteUrl: "https://docs.example.com/other" };
+    rerender(<HistoryView {...props} segments={[historySegments[0]!, second]} />);
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Options for API reference" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show in week calendar" }));
+    expect(onOpenRecord).toHaveBeenCalledWith(expect.objectContaining({ siteUrl: "https://docs.example.com/api", segmentIds: ["1", "other"] }), "week");
+  });
+});
+
 describe("HistoryView row menu", () => {
   afterEach(() => cleanup());
 
