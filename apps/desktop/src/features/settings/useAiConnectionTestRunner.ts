@@ -34,36 +34,57 @@ export function useAiConnectionTestRunner({
   onLocalAiConnectionTestResult,
   autoTestPaused = false,
 }: UseAiConnectionTestRunnerOptions): UseAiConnectionTestRunnerResult {
-  const [result, setResult] = useState<AiConnectionTestResult | null>(null);
+  const [taggedResult, setTaggedResult] = useState<{ readonly revision: number; readonly result: AiConnectionTestResult } | null>(null);
+  const identity = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud"
+    ? "cloud" : `${localAiSetup.provider}:${localAiSetupFingerprint(localAiSetup) ?? "unconfigured"}`;
+  const configurationRef = useRef({ identity, revision: 0 });
+  if (configurationRef.current.identity !== identity) {
+    configurationRef.current = { identity, revision: configurationRef.current.revision + 1 };
+  }
+  const revision = configurationRef.current.revision;
+  const result = taggedResult?.revision === revision ? taggedResult.result : null;
+  const mountedRef = useRef(true);
+  const requestRef = useRef(0);
   const [running, setRunning] = useState(false);
   const [runningFingerprint, setRunningFingerprint] = useState<string | null>(null);
   const runningRef = useRef(false);
   const latestSetupRef = useRef(localAiSetup);
   const completedAutoFingerprintRef = useRef<string | null>(null);
 
+  latestSetupRef.current = localAiSetup;
   useEffect(() => {
-    latestSetupRef.current = localAiSetup;
-  }, [localAiSetup]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // Keep the in-flight claim across StrictMode's effect remount. A real
+      // unmount stays guarded by mountedRef; the remount can finish this probe.
+    };
+  }, []);
 
   const clearResult = useCallback(() => {
-    setResult(null);
+    setTaggedResult(null);
   }, []);
 
   const runForSetup = useCallback(async (
     setupSnapshot: LocalAiSetupState,
     options: RunAiConnectionTestOptions,
   ): Promise<boolean> => {
-    if (runningRef.current) return false;
+    if (!mountedRef.current || runningRef.current) return false;
     const fingerprint = localAiSetupFingerprint(setupSnapshot);
+    const snapshotRevision = configurationRef.current.revision;
+    const requestId = ++requestRef.current;
+    const isCurrent = () => mountedRef.current && requestId === requestRef.current
+      && snapshotRevision === configurationRef.current.revision
+      && isConnectionTestResultCurrent(setupSnapshot, latestSetupRef.current);
     runningRef.current = true;
     setRunning(true);
     setRunningFingerprint(fingerprint);
-    setResult(null);
+    setTaggedResult(null);
     try {
       const isCloudRoute = setupSnapshot.provider === "managed_local" && setupSnapshot.driftyRoute === "cloud";
       const nextResult = isCloudRoute ? await testCloudAiConnection() : await testLocalAiConnection(setupSnapshot);
-      if (!isConnectionTestResultCurrent(setupSnapshot, latestSetupRef.current)) return false;
-      setResult(nextResult);
+      if (!isCurrent()) return false;
+      setTaggedResult({ revision: snapshotRevision, result: nextResult });
       if (!isCloudRoute) onLocalAiConnectionTestResult(setupSnapshot, nextResult);
       if (options.captureAnalytics) {
         capturePostHogEvent("ai_setup_action", {
@@ -74,10 +95,17 @@ export function useAiConnectionTestRunner({
         });
       }
       return true;
+    } catch {
+      if (!isCurrent()) return false;
+      const failure: AiConnectionTestResult = { kind: "error", issueKind: "provider", message: "Connection test failed." };
+      setTaggedResult({ revision: snapshotRevision, result: failure });
+      return true;
     } finally {
-      runningRef.current = false;
-      setRunning(false);
-      setRunningFingerprint(null);
+      if (mountedRef.current && requestId === requestRef.current) {
+        runningRef.current = false;
+        setRunning(false);
+        setRunningFingerprint(null);
+      }
     }
   }, [onLocalAiConnectionTestResult]);
 
@@ -87,7 +115,7 @@ export function useAiConnectionTestRunner({
   }, [autoTestPaused, localAiSetup]);
 
   useEffect(() => {
-    setResult(null);
+    setTaggedResult(null);
     if (!autoFingerprint) completedAutoFingerprintRef.current = null;
   }, [autoFingerprint]);
 

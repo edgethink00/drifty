@@ -5,7 +5,9 @@ import { testLocalAiConnection, testOpenAiCompatibleConnection, type AiConnectio
 import { OpenRouterConnectionFields } from "./OpenRouterSetupPanel";
 import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
 import { ModalPresence } from "../../components/ModalPresence";
-import { ActionLabel } from "../../components/ActionLabel";
+import { AiConnectionTestAction } from "./AiConnectionTestAction";
+import { testAnthropicConnection } from "./anthropicConnectionTest";
+import { testCloudAiConnection } from "./cloudAiConnectionTest";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { AiSetupConnectionDetails, AiSetupSectionCard } from "./AiSetupSectionCards";
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
@@ -79,12 +81,13 @@ type SummaryInfo = {
   readonly ready: boolean;
 };
 
-type CustomEndpointTestConfiguration = {
+type ConnectionTestConfiguration = {
   readonly provider: AnalysisProvider;
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
   readonly fallbackModels: string;
+  readonly cloudSelectable: boolean;
 };
 
 type TaggedConnectionTestResult = {
@@ -258,27 +261,36 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
   const activeConnectionTestRef = useRef<{ readonly requestId: number; readonly configurationRevision: number } | null>(null);
   const customEndpointBaseUrl = normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl);
   const customEndpointModel = setup.selfHostedModel.trim();
-  const customEndpointConfiguration: CustomEndpointTestConfiguration = {
+  const connectionTestConfiguration: ConnectionTestConfiguration = {
     provider: setup.provider,
-    baseUrl: setup.provider === "openrouter" ? "https://openrouter.ai/api/v1" : customEndpointBaseUrl ?? "",
-    apiKey: setup.provider === "openrouter" ? sharedOpenRouterKey.trim() : setup.selfHostedApiKey.trim(),
-    model: setup.provider === "openrouter" ? setup.openRouterModel : customEndpointModel,
-    fallbackModels: JSON.stringify(setup.openRouterFallbackModels),
+    baseUrl: setup.provider === "self_hosted" ? customEndpointBaseUrl ?? "" : "",
+    apiKey: setup.provider === "openrouter" ? sharedOpenRouterKey.trim()
+      : setup.provider === "openai" ? setup.openaiApiKey.trim()
+      : setup.provider === "anthropic" ? setup.anthropicApiKey.trim()
+      : setup.provider === "self_hosted" ? setup.selfHostedApiKey.trim() : "",
+    model: setup.provider === "openrouter" ? setup.openRouterModel
+      : setup.provider === "openai" ? setup.openaiModel.trim()
+      : setup.provider === "anthropic" ? setup.anthropicModel.trim()
+      : setup.provider === "self_hosted" ? customEndpointModel : "",
+    fallbackModels: setup.provider === "openrouter" ? JSON.stringify(setup.openRouterFallbackModels) : "",
+    cloudSelectable: setup.provider === "cloud" && cloudSelectable,
   };
-  const customEndpointConfigurationRef = useRef({ configuration: customEndpointConfiguration, revision: 0 });
-  if (!configurationsMatch(customEndpointConfigurationRef.current.configuration, customEndpointConfiguration)) {
-    customEndpointConfigurationRef.current = {
-      configuration: customEndpointConfiguration,
-      revision: customEndpointConfigurationRef.current.revision + 1,
+  const connectionTestConfigurationRef = useRef({ configuration: connectionTestConfiguration, revision: 0 });
+  if (!configurationsMatch(connectionTestConfigurationRef.current.configuration, connectionTestConfiguration)) {
+    connectionTestConfigurationRef.current = {
+      configuration: connectionTestConfiguration,
+      revision: connectionTestConfigurationRef.current.revision + 1,
     };
   }
-  const customEndpointConfigurationRevision = customEndpointConfigurationRef.current.revision;
-  const connectionTestable = setup.provider === "openrouter"
-    ? Boolean(sharedOpenRouterKey.trim())
-    : setup.provider === "self_hosted" && Boolean(customEndpointBaseUrl && customEndpointModel);
-  const connectionTestRunning = runningConfigurationRevision === customEndpointConfigurationRevision;
+  const connectionTestConfigurationRevision = connectionTestConfigurationRef.current.revision;
+  const connectionTestable = effectiveSetup.provider === setup.provider && (setup.provider === "cloud"
+    ? cloudSelectable
+    : setup.provider === "self_hosted"
+      ? Boolean(customEndpointBaseUrl && customEndpointModel)
+      : Boolean(connectionTestConfiguration.apiKey && connectionTestConfiguration.model));
+  const connectionTestRunning = runningConfigurationRevision === connectionTestConfigurationRevision;
   const connectionTestResult = taggedConnectionTestResult
-    && taggedConnectionTestResult.configurationRevision === customEndpointConfigurationRevision
+    && taggedConnectionTestResult.configurationRevision === connectionTestConfigurationRevision
     ? taggedConnectionTestResult.result
     : null;
 
@@ -320,8 +332,8 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
 
   const handleTestConnection = async () => {
     if (!connectionTestable) return;
-    const configuration = customEndpointConfiguration;
-    const configurationRevision = customEndpointConfigurationRevision;
+    const configuration = connectionTestConfiguration;
+    const configurationRevision = connectionTestConfigurationRevision;
     if (activeConnectionTestRef.current?.configurationRevision === configurationRevision) return;
     const requestId = ++connectionTestRequestRef.current;
     activeConnectionTestRef.current = { requestId, configurationRevision };
@@ -330,21 +342,25 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
     try {
       const result = configuration.provider === "openrouter"
         ? await testLocalAiConnection({ ...pickerSetup, provider: "openrouter_byok", openRouterApiKey: configuration.apiKey })
-        : await testOpenAiCompatibleConnection({
-        baseUrl: configuration.baseUrl,
-        apiKey: configuration.apiKey,
-        model: configuration.model,
-      });
+        : configuration.provider === "cloud"
+          ? await testCloudAiConnection()
+          : configuration.provider === "anthropic"
+            ? await testAnthropicConnection({ apiKey: configuration.apiKey, model: configuration.model })
+            : await testOpenAiCompatibleConnection({
+              baseUrl: configuration.provider === "openai" ? "https://api.openai.com/v1" : configuration.baseUrl,
+              apiKey: configuration.apiKey,
+              model: configuration.model,
+            });
       if (
         requestId === connectionTestRequestRef.current
-        && customEndpointConfigurationRef.current.revision === configurationRevision
+        && connectionTestConfigurationRef.current.revision === configurationRevision
       ) {
         setTaggedConnectionTestResult({ configurationRevision, result });
       }
     } catch {
       if (
         requestId === connectionTestRequestRef.current
-        && customEndpointConfigurationRef.current.revision === configurationRevision
+        && connectionTestConfigurationRef.current.revision === configurationRevision
       ) {
         setTaggedConnectionTestResult({
           configurationRevision,
@@ -376,18 +392,9 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
       <ModelBeingUsedCard
         regionAriaLabel={t("settings.intelligence.modelBeingUsedAria")}
         heading={t("settings.ai.intelligenceRoute")}
-        headingAction={effectiveSetup.provider === setup.provider && (setup.provider === "self_hosted" || setup.provider === "openrouter") ? (
-          <button
-            type="button"
-            className="settings-btn ai-setup-current-model__test"
-            aria-label={connectionTestRunning ? t("settings.ai.testing") : t("settings.ai.testConnectionAria")}
-            aria-busy={connectionTestRunning ? "true" : undefined}
-            disabled={connectionTestRunning || !connectionTestable}
-            onClick={() => void handleTestConnection()}
-          >
-            <ActionLabel busy={connectionTestRunning} busyLabel={t("settings.ai.testing")}>{t("settings.ai.testConnection")}</ActionLabel>
-          </button>
-        ) : null}
+        connectionAction={
+          <AiConnectionTestAction running={connectionTestRunning} disabled={!connectionTestable} onTest={handleTestConnection} />
+        }
         tone={summaryTone}
         statusLabel={summary.statusLabel}
         statusProviderLabel={summary.providerLabel}
@@ -401,7 +408,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
         modelOptions={modelOptions}
         modelPlaceholder={t("settings.intelligence.selectModel")}
         onModelChange={handleModelChange}
-        statusMessage={localizedConnectionTestMessage}
+        statusMessage={connectionTestRunning ? null : localizedConnectionTestMessage}
         statusMessageKind={displayedConnectionTestResult?.kind ?? null}
       />
       <AiSetupConnectionDetails ariaLabel={t("settings.intelligence.providersAria")}>
@@ -544,8 +551,8 @@ function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk-..." }
 }
 
 function configurationsMatch(
-  left: CustomEndpointTestConfiguration | null,
-  right: CustomEndpointTestConfiguration | null,
+  left: ConnectionTestConfiguration | null,
+  right: ConnectionTestConfiguration | null,
 ): boolean {
   return Boolean(
     left
@@ -554,7 +561,8 @@ function configurationsMatch(
     && left.baseUrl === right.baseUrl
     && left.apiKey === right.apiKey
     && left.model === right.model
-    && left.fallbackModels === right.fallbackModels,
+    && left.fallbackModels === right.fallbackModels
+    && left.cloudSelectable === right.cloudSelectable,
   );
 }
 

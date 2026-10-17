@@ -6,15 +6,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntelligenceSetupPanel, type IntelligenceSetupPanelProps } from "./IntelligenceSetupPanel";
 import { DEFAULT_ANALYSIS_AI_SETUP, type AnalysisAiSetupState } from "./analysisModelSetup";
 
-const { testOpenAiCompatibleConnectionMock, testLocalAiConnectionMock } = vi.hoisted(() => ({
+const { testOpenAiCompatibleConnectionMock, testLocalAiConnectionMock, testAnthropicConnectionMock, testCloudAiConnectionMock } = vi.hoisted(() => ({
   testOpenAiCompatibleConnectionMock: vi.fn(),
   testLocalAiConnectionMock: vi.fn(),
+  testAnthropicConnectionMock: vi.fn(),
+  testCloudAiConnectionMock: vi.fn(),
 }));
 
 vi.mock("./aiConnectionTest", () => ({
   testOpenAiCompatibleConnection: testOpenAiCompatibleConnectionMock,
   testLocalAiConnection: testLocalAiConnectionMock,
 }));
+
+vi.mock("./anthropicConnectionTest", () => ({ testAnthropicConnection: testAnthropicConnectionMock }));
+vi.mock("./cloudAiConnectionTest", () => ({ testCloudAiConnection: testCloudAiConnectionMock }));
 
 function buildSetup(overrides: Partial<AnalysisAiSetupState> = {}): AnalysisAiSetupState {
   return { ...DEFAULT_ANALYSIS_AI_SETUP, ...overrides };
@@ -43,10 +48,51 @@ function summaryRegion() {
 
 describe("IntelligenceSetupPanel", () => {
   beforeEach(() => {
+    testAnthropicConnectionMock.mockReset().mockResolvedValue({ kind: "success", message: "Connected in 18 ms." });
+    testCloudAiConnectionMock.mockReset().mockResolvedValue({ kind: "success", message: "Cloud AI connected in 42 ms." });
     testLocalAiConnectionMock.mockReset();
     testLocalAiConnectionMock.mockResolvedValue({ kind: "success", message: "Connected in 18 ms." });
     testOpenAiCompatibleConnectionMock.mockReset();
     testOpenAiCompatibleConnectionMock.mockResolvedValue({ kind: "success", message: "Connected in 18 ms." });
+  });
+
+  it.each(["openai", "anthropic", "cloud"] as const)("tests the selected %s provider below the model controls", async (provider) => {
+    renderPanel({ setup: buildSetup({ provider, openaiApiKey: "test-key", openaiModel: "gpt-5-mini", anthropicApiKey: "test-anthropic", anthropicModel: "claude-test" }) });
+    const region = summaryRegion();
+    expect(region.querySelector(".ai-setup-current-model__status")?.textContent).toBe("");
+    const button = within(region).getByRole("button", { name: "Test AI connection" });
+    expect(button.closest(".ai-setup-current-model__feedback")).not.toBeNull();
+    fireEvent.click(button);
+    expect(await within(region).findByText(provider === "cloud" ? "Cloud AI connected in 42 ms." : "Connected in 18 ms.")).toBeTruthy();
+    if (provider === "openai") expect(testOpenAiCompatibleConnectionMock).toHaveBeenCalledWith({ baseUrl: "https://api.openai.com/v1", apiKey: "test-key", model: "gpt-5-mini" });
+    if (provider === "anthropic") expect(testAnthropicConnectionMock).toHaveBeenCalledWith({ apiKey: "test-anthropic", model: "claude-test" });
+    if (provider === "cloud") expect(testCloudAiConnectionMock).toHaveBeenCalledOnce();
+  });
+
+  it.each(["openai", "anthropic", "cloud"] as const)("keeps the %s action visible and disabled while unavailable", (provider) => {
+    renderPanel({ setup: buildSetup({ provider, openaiApiKey: "", anthropicApiKey: "" }), cloudSelectable: false });
+    expect(within(summaryRegion()).getByRole("button", { name: "Test AI connection" })).toHaveProperty("disabled", true);
+    expect(summaryRegion().querySelector(".ai-setup-current-model__status")?.textContent).toBe("");
+    expect(testCloudAiConnectionMock).not.toHaveBeenCalled();
+    expect(testAnthropicConnectionMock).not.toHaveBeenCalled();
+    expect(testOpenAiCompatibleConnectionMock).not.toHaveBeenCalled();
+  });
+
+  it("clears the direct-provider result and rejects a late probe after key changes", async () => {
+    let finish: ((result: { kind: "success"; message: string }) => void) | undefined;
+    testAnthropicConnectionMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const setup = buildSetup({ provider: "anthropic", anthropicApiKey: "first-key", anthropicModel: "claude-test" });
+    const rendered = renderPanel({ setup });
+    fireEvent.click(within(summaryRegion()).getByRole("button", { name: "Test AI connection" }));
+    expect(summaryRegion().querySelector(".ai-setup-current-model__status")?.textContent).toBe("");
+    rendered.rerender(<IntelligenceSetupPanel {...rendered.props} setup={{ ...setup, anthropicApiKey: "second-key" }} />);
+    finish?.({ kind: "success", message: "Connected in 999 ms." });
+    await waitFor(() => expect(within(summaryRegion()).getByRole("button", { name: "Test AI connection" })).toHaveProperty("disabled", false));
+    expect(within(summaryRegion()).queryByText("Connected in 999 ms.")).toBeNull();
+    fireEvent.click(within(summaryRegion()).getByRole("button", { name: "Test AI connection" }));
+    expect(await within(summaryRegion()).findByText("Connected in 18 ms.")).toBeTruthy();
+    rendered.rerender(<IntelligenceSetupPanel {...rendered.props} setup={{ ...setup, anthropicModel: "next-model" }} />);
+    expect(within(summaryRegion()).queryByText("Connected in 18 ms.")).toBeNull();
   });
 
   it("tests OpenRouter with the shared key and Intelligence primary and fallback models", async () => {

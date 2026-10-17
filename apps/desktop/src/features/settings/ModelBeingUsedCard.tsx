@@ -5,14 +5,13 @@ import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 
 /**
  * Presentational "Model being used" card shared by the Classification and
- * Intelligence AI-setup tabs so both read identically: a heading row (with an
- * optional action), a status pill row, and a provider / model selector pair.
+ * Intelligence AI-setup tabs so both read identically: a heading, provider / model selectors, and a connection feedback row.
  * Callers own all data prep; this component only renders the shell.
  */
 export type ModelBeingUsedCardProps = {
   readonly regionAriaLabel: string;
   readonly heading?: string;
-  readonly headingAction?: ReactNode;
+  readonly connectionAction?: ReactNode;
   readonly tone: AiConnectionTone;
   readonly statusLabel: string;
   readonly statusProviderLabel: string;
@@ -33,7 +32,7 @@ export type ModelBeingUsedCardProps = {
 export function ModelBeingUsedCard({
   regionAriaLabel,
   heading = "Model being used",
-  headingAction,
+  connectionAction,
   tone,
   statusLabel,
   statusProviderLabel,
@@ -54,7 +53,6 @@ export function ModelBeingUsedCard({
     <section className="ai-setup-model-zone" aria-label={regionAriaLabel}>
       <div className="ai-setup-model-zone__head">
         <h4 className="ai-setup-provider-heading">{heading}</h4>
-        {headingAction}
       </div>
       <div className={`ai-setup-current-model${classNameForConnectionTone(tone)}`}>
         <div
@@ -86,19 +84,23 @@ export function ModelBeingUsedCard({
             onChange={onModelChange}
           />
         </div>
-        {/* The status line always holds one line of space, so a connection
-            test's result fills it instead of pushing the sections below. */}
-        {statusMessage ? (
-          <p
-            key="message"
-            className={`ai-setup-current-model__status${statusMessageKind ? ` is-${statusMessageKind}` : ""}`}
-            role={statusMessageKind === "error" ? "alert" : "status"}
-          >
-            {statusMessage}
-          </p>
-        ) : (
-          <p key="empty" className="ai-setup-current-model__status" aria-hidden="true" />
-        )}
+        <div className="ai-setup-current-model__feedback">
+          {/* The status line always holds one line of space, so a connection
+              test's result fills it instead of pushing the sections below. */}
+          {statusMessage ? (
+            <p
+              key="message"
+              className={`ai-setup-current-model__status${statusMessageKind ? ` is-${statusMessageKind}` : ""}`}
+              role={statusMessageKind === "error" ? "alert" : "status"}
+              aria-atomic="true"
+            >
+              {statusMessage}
+            </p>
+          ) : (
+            <p key="empty" className="ai-setup-current-model__status" aria-hidden="true" />
+          )}
+          {connectionAction}
+        </div>
       </div>
     </section>
   );

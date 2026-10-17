@@ -58,14 +58,75 @@
   gap: var(--space-3);
   justify-content: space-between;
   min-width: 0;
-  /* Keep the head the same height whether or not it carries an action button
-     (Classification has a Test-connection button, Intelligence does not) so the
-     two tabs line up pixel-for-pixel. */
+  /* Shared heading height keeps both AI sections aligned. */
   min-height: 2rem;
 }
 
+.ai-setup-current-model__feedback {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  min-width: 0;
+  /* The parent grid contributes 8px: the text line starts 9px below selectors.
+     Compensate the extra 5px below to preserve the accordion's position. */
+  margin-top: calc(9px - var(--space-2));
+  margin-bottom: calc(-0.75rem - 5px);
+}
+
 .ai-setup-current-model__test {
+  align-items: flex-start;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
   flex: 0 0 auto;
+  font: 11px/16px var(--font-mono);
+  gap: 6px;
+  padding: 0;
+  position: relative;
+}
+
+/* Extend the hit area while keeping the selected plain-text treatment. */
+.ai-setup-current-model__test::before {
+  content: "";
+  position: absolute;
+  inset: -6px -4px;
+}
+
+.ai-setup-current-model__test svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.ai-setup-current-model__test:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ai-setup-current-model__test:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--text));
+  outline-offset: 5px;
+}
+
+.ai-setup-current-model__test:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ai-setup-current-model__test .is-running {
+  animation: ai-connection-test-spin 1.3s linear infinite;
+}
+
+@keyframes ai-connection-test-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-setup-current-model__test .is-running { animation: none; }
 }
 
 /* The in-card connection pill is redundant with the top chrome status bar and
@@ -79,12 +140,10 @@
   font-size: var(--type-setting-desc-size);
   line-height: 1.4;
   margin: 0;
-  /* The line is always there so a test result fills it instead of pushing the
-     sections below. It sits 4px under the selectors and hangs 12px into the
-     gap before the next section, so an empty line costs about 9px. */
+  /* Reserve the empty line so success/error feedback does not shift the form. */
   min-height: 1.4em;
-  margin-top: calc(var(--space-1) - var(--space-2));
-  margin-bottom: -0.75rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ai-setup-current-model.is-error .ai-setup-current-model__status {

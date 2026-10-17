@@ -6,7 +6,7 @@ import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar"
 import { DRIFTY_CLOUD_MODEL_ID, driftyModelOptions, isSelectableManagedModel } from "./AiSetupDriftyModelOptions";
 import { DeleteManagedModelModal } from "./DeleteManagedModelModal";
 import { ModalPresence } from "../../components/ModalPresence";
-import { ActionLabel } from "../../components/ActionLabel";
+import { AiConnectionTestAction } from "./AiConnectionTestAction";
 import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
@@ -106,7 +106,7 @@ export function AiSetupModelBeingUsed({
   };
   const managedRuntimeOwnsStatusMessage = selectedProvider === "drifty"
     && driftyRoute === "local"
-    && connectionStatus.tone !== "ok";
+    && connectionStatus.tone === "error";
   const localizedConnectionTestMessage = connectionTestMessage && connectionTestKind
     ? localizeAiConnectionTestMessage(connectionTestMessage, connectionTestKind, effectiveLanguage, t)
     : connectionTestMessage;
@@ -219,16 +219,8 @@ export function AiSetupModelBeingUsed({
     <ModelBeingUsedCard
       regionAriaLabel={t("settings.ai.modelBeingUsed")}
       heading={t("settings.ai.classificationRoute")}
-      headingAction={
-        <button
-          type="button"
-          className="settings-btn ai-setup-current-model__test"
-          aria-label={t("settings.ai.testConnectionAria")}
-          disabled={connectionTestDisabled}
-          onClick={() => void onTestConnection()}
-        >
-          <ActionLabel busy={connectionTestRunning} busyLabel={t("settings.ai.testing")}>{t("settings.ai.testConnection")}</ActionLabel>
-        </button>
+      connectionAction={
+        <AiConnectionTestAction running={connectionTestRunning} disabled={connectionTestDisabled} onTest={onTestConnection} />
       }
       tone={connectionStatus.tone}
       statusLabel={localizedConnectionStatus.label}
@@ -247,7 +239,7 @@ export function AiSetupModelBeingUsed({
       onModelChange={handleModelChange}
       statusMessage={managedRuntimeOwnsStatusMessage
         ? localizedConnectionStatus.label
-        : localizedConnectionTestMessage}
+        : connectionTestRunning ? null : localizedConnectionTestMessage}
       statusMessageKind={managedRuntimeOwnsStatusMessage
         ? (connectionStatus.tone === "error" ? "error" : null)
         : connectionTestKind}
