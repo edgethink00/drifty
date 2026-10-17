@@ -172,13 +172,22 @@ html {
   /* Expressed in rem so the sidebar keeps pace with the viewport-linked type
      scale. A fixed pixel rail plus larger labels is effectively a narrower
      sidebar, which wraps nav and CTA copy at wide window sizes. */
-  --sidebar-expanded-width: 11.5rem;
+  --sidebar-expanded-width: 11.0625rem;
   --sidebar-collapsed-width: 3.375rem;
   /* Both sidebar variants share one horizontal grid: rail gutter first, then
      row content inset. Keeping these separate lets the collapsed rail retain
      its own centering while expanded Main and Settings icons stay aligned. */
   --sidebar-inline-gutter: 8px;
-  --sidebar-row-inline-padding: 10px;
+  --sidebar-row-inline-padding: 7.5px;
+  --sidebar-nav-icon-size: 16px;
+  --sidebar-nav-gap: 8px;
+  --sidebar-expanded-icon-center: calc(
+    var(--sidebar-inline-gutter) + var(--sidebar-row-inline-padding) + var(--sidebar-nav-icon-size) / 2
+  );
+  /* The mark fills the middle of a 28px SVG; share the menu icon centre. */
+  --sidebar-brand-inline-padding: calc(
+    var(--sidebar-row-inline-padding) + var(--sidebar-nav-icon-size) / 2 - 14px
+  );
   /* Usable content column inside the expanded sidebar: the rail width minus
      its gutter on both sides. Titlebar navigation and sidebar cards share
      this edge so controls do not drift away from the rail's content grid. */

@@ -7,7 +7,7 @@
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sidebar-nav-gap);
   width: 100%;
   min-height: var(--nav-item-height);
   padding: 0 var(--sidebar-row-inline-padding);
@@ -32,7 +32,7 @@
   color: var(--text);
   box-shadow: none;
 }
-.nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+.nav-item svg { width: var(--sidebar-nav-icon-size); height: var(--sidebar-nav-icon-size); flex-shrink: 0; }
 .nav-item > span:not(.nav-item__hover-label):not(.status-badge) {
   max-width: 9rem;
   min-width: 0;

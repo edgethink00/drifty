@@ -162,12 +162,15 @@
 
 .sidebar--collapsed {
   /* Every standalone mark lands on the 27px centre of the 54px rail. The
-     offsets are the measured deltas from each expanded left anchor; keeping
+     offset follows the shared expanded icon centre; keeping
      them on transform lets collapse and expansion use the shell's 380ms ride
      without changing flex alignment at frame zero. */
-  --sidebar-collapse-brand-align-x: 1px;
-  --sidebar-collapse-nav-icon-align-x: 2px;
-  --sidebar-collapse-settings-icon-align-x: 1px;
+  --sidebar-collapse-mark-align-x: calc(
+    var(--sidebar-collapsed-width) / 2 - var(--sidebar-expanded-icon-center)
+  );
+  --sidebar-collapse-brand-align-x: var(--sidebar-collapse-mark-align-x);
+  --sidebar-collapse-nav-icon-align-x: var(--sidebar-collapse-mark-align-x);
+  --sidebar-collapse-settings-icon-align-x: var(--sidebar-collapse-mark-align-x);
   /* The collapsed account button carries its own padding (see below), so the
      avatar already lands on the rail centre without a transform nudge. */
   --sidebar-collapse-account-align-x: 0px;
@@ -241,7 +244,7 @@
   gap: 0;
   width: 100%;
   justify-content: flex-start;
-  padding: 10px 4px;
+  padding: 10px var(--sidebar-brand-inline-padding);
   margin: 0 0 4px;
   transform: translateX(var(--sidebar-collapse-brand-align-x));
 }
@@ -277,7 +280,7 @@
     width: 100%;
     min-width: 0;
     height: var(--nav-item-height);
-    padding: 0 10px;
+    padding: 0 var(--sidebar-row-inline-padding);
     border-radius: 10px;
     overflow: hidden;
   }
@@ -302,8 +305,8 @@
   }
 
   .sidebar--collapsed .nav-item > svg {
-    width: 14px;
-    height: 14px;
+    width: var(--sidebar-nav-icon-size);
+    height: var(--sidebar-nav-icon-size);
     transform: translateX(var(--sidebar-collapse-nav-icon-align-x));
   }
 
@@ -343,7 +346,7 @@
     min-height: var(--nav-item-height);
     display: grid;
     place-items: center start;
-    padding: 0 10px;
+    padding: 0 var(--sidebar-row-inline-padding);
     border-radius: 10px;
     position: relative;
     text-align: center;

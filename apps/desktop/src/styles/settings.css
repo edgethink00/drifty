@@ -117,7 +117,7 @@
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sidebar-nav-gap);
   padding: 8px 12px;
   border-radius: 8px;
   font-family: var(--font-sans);
@@ -149,11 +149,11 @@
 }
 
 .settings-nav-item__icon svg {
-  width: 15px;
-  height: 15px;
+  width: var(--sidebar-nav-icon-size);
+  height: var(--sidebar-nav-icon-size);
   display: block;
   overflow: visible;
-  /* Lucide 24-viewBox strokes sit slightly high in a 15px slot; nudge ink onto the label cap-height. */
+  /* Lucide 24-viewBox strokes sit slightly high in their slot; nudge ink onto the label cap-height. */
   transform: translateY(0.5px);
 }
 

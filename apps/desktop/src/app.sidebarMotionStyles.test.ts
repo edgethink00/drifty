@@ -124,9 +124,9 @@ describe("sidebar motion styles", () => {
     const reducedMotionBlock = styles.match(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?transition-duration: 0\.01ms !important;[\s\S]*?\n\}/)?.[0] ?? "";
 
     expect(collapsedSidebarBlock).toContain("align-items: flex-start;");
-    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-brand-align-x: 1px;");
-    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-nav-icon-align-x: 2px;");
-    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-settings-icon-align-x: 1px;");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-brand-align-x: var(--sidebar-collapse-mark-align-x);");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-nav-icon-align-x: var(--sidebar-collapse-mark-align-x);");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-settings-icon-align-x: var(--sidebar-collapse-mark-align-x);");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-account-align-x: 0px;");
     // The scroll box lends 4px per side to focus rings (margin-inline -4px,
     // padding-inline 4px), so the collapsed box is 8px wider and its content
@@ -216,7 +216,7 @@ describe("sidebar motion styles", () => {
     expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("margin: 0;");
     expect(collapsedNavItemBlock).toContain("justify-content: flex-start;");
     expect(collapsedNavItemBlock).toContain("width: 100%;");
-    expect(collapsedNavItemBlock).toContain("padding: 0 10px;");
+    expect(collapsedNavItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
   });
 
 
@@ -288,7 +288,7 @@ describe("sidebar motion styles", () => {
     const settingsNavLabelBlock = cssBlock(styles, ".sidebar--settings .nav-label");
 
     expect(styles).toContain("--sidebar-inline-gutter: 8px;");
-    expect(styles).toContain("--sidebar-row-inline-padding: 10px;");
+    expect(styles).toContain("--sidebar-row-inline-padding: 7.5px;");
     expect(sidebarBlock).toContain("padding: var(--window-chrome-height) var(--sidebar-inline-gutter) var(--content-panel-gap);");
     expect(settingsSidebarBlock).toContain("padding-inline: var(--sidebar-inline-gutter);");
     expect(navItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
@@ -321,8 +321,8 @@ describe("sidebar motion styles", () => {
     expect(iconBlock).toContain("justify-content: center;");
     expect(iconBlock).toContain("line-height: 0;");
     expect(iconBlock).toContain("overflow: visible;");
-    expect(iconSvgBlock).toContain("width: 15px;");
-    expect(iconSvgBlock).toContain("height: 15px;");
+    expect(iconSvgBlock).toContain("width: var(--sidebar-nav-icon-size);");
+    expect(iconSvgBlock).toContain("height: var(--sidebar-nav-icon-size);");
     expect(iconSvgBlock).toContain("display: block;");
     expect(iconSvgBlock).toContain("overflow: visible;");
     expect(iconSvgBlock).toContain("transform: translateY(0.5px);");
