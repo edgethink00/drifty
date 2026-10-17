@@ -1,4 +1,5 @@
 import type { AppIconVariantId } from "../../lib/api/appIconClient";
+import { BALANCED_PRESETS, normalizeHex } from "../../lib/colorPalette";
 import { canStartCloudTrial, canStartIndividualCheckout } from "../billing/billingEligibility";
 import type { BillingEntitlement } from "../billing/billingService";
 import {
@@ -10,9 +11,10 @@ import {
 
 /**
  * Pro looks: every Dock icon except Classic and Midnight (so Plum, Flow, Retro
- * and the cats) and four of the six pet coats are Pro. Classic, Midnight and
- * the Ivory and Grey coats stay free for everyone. A 7-day
- * trial, an individual plan and an organization seat all open every look.
+ * and the cats), four of the six pet coats, and every accent color except Moss
+ * and Charcoal (custom colors included) are Pro. Classic, Midnight, the Ivory
+ * and Grey coats, Moss and Charcoal stay free for everyone. A 7-day trial, an
+ * individual plan and an organization seat all open every look.
  */
 export const FREE_APP_ICONS: ReadonlySet<AppIconVariantId> = new Set(["classic", "midnight"]);
 export const FREE_PET_COATS: ReadonlySet<PetModeCoat> = new Set(["ivory", "grey"]);
@@ -20,12 +22,41 @@ export const FREE_PET_COATS: ReadonlySet<PetModeCoat> = new Set(["ivory", "grey"
 export const FREE_FALLBACK_APP_ICON: AppIconVariantId = "classic";
 export const FREE_FALLBACK_PET_COAT: PetModeCoat = "ivory";
 
+/** The built-in accent; an unset accent is Moss, and Pro accents fall back to it. */
+export const DEFAULT_ACCENT = "#5f7f31";
+const CHARCOAL_ACCENT = "#4d4b45";
+export const FREE_ACCENTS: ReadonlySet<string> = new Set([DEFAULT_ACCENT, CHARCOAL_ACCENT]);
+/** The accent look a locked "More colors" opens: no color is tried on. */
+export const CUSTOM_ACCENT = "custom";
+/**
+ * The accent row: Moss and Charcoal first, then the shared palette in order
+ * without Fern and Coral. Fern sits next to Moss and is the Focus default;
+ * Coral sits between Rose and Rust and is the Entertainment default. Both stay
+ * in the category palette.
+ */
+const ACCENT_ROW_OMITTED: ReadonlySet<string> = new Set(["fern", "coral"]);
+export const ACCENT_SWATCHES: readonly { readonly id: string; readonly color: string }[] = [
+  ...[DEFAULT_ACCENT, CHARCOAL_ACCENT].flatMap((color) => BALANCED_PRESETS.filter((preset) => preset.color === color)),
+  ...BALANCED_PRESETS.filter((preset) => !FREE_ACCENTS.has(preset.color) && !ACCENT_ROW_OMITTED.has(preset.id)),
+];
+
+/** The saved accent as an accent look id: a lowercase hex, Moss when unset. */
+export function accentLookId(saved: string | undefined | null): string {
+  return saved ? normalizeHex(saved) : DEFAULT_ACCENT;
+}
+
 export type ProLook =
   | { readonly kind: "icon"; readonly id: AppIconVariantId }
-  | { readonly kind: "coat"; readonly id: PetModeCoat };
+  | { readonly kind: "coat"; readonly id: PetModeCoat }
+  /** A lowercase hex, or CUSTOM_ACCENT for the custom color picker. */
+  | { readonly kind: "accent"; readonly id: string };
 
 export function isProLook(look: ProLook): boolean {
-  return look.kind === "icon" ? !FREE_APP_ICONS.has(look.id) : !FREE_PET_COATS.has(look.id);
+  switch (look.kind) {
+    case "icon": return !FREE_APP_ICONS.has(look.id);
+    case "coat": return !FREE_PET_COATS.has(look.id);
+    case "accent": return !FREE_ACCENTS.has(look.id);
+  }
 }
 
 export function sameLook(a: ProLook | null, b: ProLook | null): boolean {
@@ -83,9 +114,15 @@ export function isLookLocked(look: ProLook, input: {
   readonly currentIcon: AppIconVariantId | null;
   readonly currentCoat: PetModeCoat;
   readonly keptCoat: PetModeCoat | null;
+  /** The accent in use as an accent look id; Moss when not given. */
+  readonly currentAccent?: string;
+  readonly keptAccent?: string | null;
 }): boolean {
   if (!isProLook(look) || !isKnownWithoutPro(input.access)) return false;
   if (look.kind === "icon") return look.id !== input.currentIcon;
+  if (look.kind === "accent") {
+    return look.id === CUSTOM_ACCENT || (look.id !== (input.currentAccent ?? DEFAULT_ACCENT) && look.id !== input.keptAccent);
+  }
   return look.id !== input.currentCoat && look.id !== input.keptCoat;
 }
 
@@ -96,6 +133,8 @@ export function isLookPending(look: ProLook, access: ProLooksAccess): boolean {
 
 const COAT_LOCK_STARTED_KEY = "drifty.pet.coatLockStarted";
 const KEPT_COAT_KEY = "drifty.pet.coatKeptFromFree";
+const ACCENT_LOCK_STARTED_KEY = "drifty.accent.lockStarted";
+const KEPT_ACCENT_KEY = "drifty.accent.keptFromFree";
 const REVERTED_LOOKS_KEY = "drifty.proLooks.reverted";
 
 /**
@@ -118,9 +157,36 @@ export function resolveKeptCoat(storage: Storage | null = safeStorage()): PetMod
   }
 }
 
+function isAccentHex(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+}
+
+/**
+ * Every accent was free until this version. The first launch of a build that
+ * locks them remembers a Pro accent (or custom color) already in use, and that
+ * accent stays open for good, as a coat kept from before coats were locked
+ * does. Switching to any other Pro accent still needs Pro.
+ */
+export function resolveKeptAccent(currentAccent: string | undefined, storage: Storage | null = safeStorage()): string | null {
+  if (!storage) return null;
+  try {
+    if (storage.getItem(ACCENT_LOCK_STARTED_KEY) === null) {
+      if (isAccentHex(currentAccent) && !FREE_ACCENTS.has(normalizeHex(currentAccent))) {
+        storage.setItem(KEPT_ACCENT_KEY, normalizeHex(currentAccent));
+      }
+      storage.setItem(ACCENT_LOCK_STARTED_KEY, "1");
+    }
+    const kept = storage.getItem(KEPT_ACCENT_KEY);
+    return isAccentHex(kept) && !FREE_ACCENTS.has(normalizeHex(kept)) ? normalizeHex(kept) : null;
+  } catch {
+    return null;
+  }
+}
+
 export type RevertedLooks = {
   readonly icon?: AppIconVariantId;
   readonly coat?: PetModeCoat;
+  readonly accent?: string;
 };
 
 export function readRevertedLooks(storage: Storage | null = safeStorage()): RevertedLooks | null {
@@ -128,11 +194,12 @@ export function readRevertedLooks(storage: Storage | null = safeStorage()): Reve
   try {
     const raw = storage.getItem(REVERTED_LOOKS_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { icon?: unknown; coat?: unknown };
-    const next: { icon?: AppIconVariantId; coat?: PetModeCoat } = {};
+    const parsed = JSON.parse(raw) as { icon?: unknown; coat?: unknown; accent?: unknown };
+    const next: { icon?: AppIconVariantId; coat?: PetModeCoat; accent?: string } = {};
     if (typeof parsed.icon === "string" && !FREE_APP_ICONS.has(parsed.icon as AppIconVariantId)) next.icon = parsed.icon as AppIconVariantId;
     if (isPetModeCoat(parsed.coat) && !FREE_PET_COATS.has(parsed.coat)) next.coat = parsed.coat;
-    return next.icon || next.coat ? next : null;
+    if (isAccentHex(parsed.accent) && !FREE_ACCENTS.has(normalizeHex(parsed.accent))) next.accent = normalizeHex(parsed.accent);
+    return next.icon || next.coat || next.accent ? next : null;
   } catch {
     return null;
   }
@@ -141,7 +208,7 @@ export function readRevertedLooks(storage: Storage | null = safeStorage()): Reve
 export function writeRevertedLooks(value: RevertedLooks | null, storage: Storage | null = safeStorage()): void {
   if (!storage) return;
   try {
-    if (!value || (!value.icon && !value.coat)) storage.removeItem(REVERTED_LOOKS_KEY);
+    if (!value || (!value.icon && !value.coat && !value.accent)) storage.removeItem(REVERTED_LOOKS_KEY);
     else storage.setItem(REVERTED_LOOKS_KEY, JSON.stringify(value));
   } catch {
     // A lost record only means the look is not restored automatically.

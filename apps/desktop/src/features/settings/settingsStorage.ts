@@ -233,8 +233,6 @@ export const APP_THEME_COLOR_OPTIONS = [
   { key: "productivityNeutral", label: "Neutral", cssVariable: "--productivity-neutral", defaultColor: "#9b968b" },
 ] satisfies ReadonlyArray<ColorOption<AppThemeColorKey>>;
 
-export const APP_THEME_ACCENT_COLOR_OPTIONS = APP_THEME_COLOR_OPTIONS.filter((option) => option.key === "accent");
-
 export const APP_THEME_PRODUCTIVITY_COLOR_OPTIONS = APP_THEME_COLOR_OPTIONS.filter((option) => option.key !== "accent");
 
 export const CATEGORY_COLOR_OPTIONS = [

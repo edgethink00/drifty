@@ -6,7 +6,7 @@ import type { BillingEntitlement } from "../billing/billingService";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { PET_MODE_COAT_PREVIEW_STORAGE_KEY, PET_MODE_COAT_STORAGE_KEY, resolveInitialPetModeCoat, type PetModeCoat } from "../pet-mode/petModeData";
 import { PetCoatPicker } from "../settings/PetCoatPicker";
-import { isLookLocked, resolveKeptCoat, resolveProLooksAccess, type ProLooksAccess } from "./proLooks";
+import { isLookLocked, readRevertedLooks, resolveKeptAccent, resolveKeptCoat, resolveProLooksAccess, writeRevertedLooks, type ProLooksAccess } from "./proLooks";
 import { ProLooksProvider, useProLooksController } from "./useProLooksController";
 
 vi.mock("../../lib/api/appIconClient", async (importActual) => ({
@@ -64,6 +64,42 @@ describe("Pro looks access", () => {
     expect(isLookLocked({ kind: "coat", id: "grey" }, input)).toBe(false);
     expect(isLookLocked({ kind: "coat", id: "apricot" }, input)).toBe(false);
     expect(isLookLocked({ kind: "coat", id: "charcoal" }, input)).toBe(true);
+  });
+
+  it("leaves Moss and Charcoal free, locks every other accent and custom colors, and never the accent in use", () => {
+    const base = { access: { state: "upgrade" } as ProLooksAccess, currentIcon: "classic" as const, currentCoat: "ivory" as const, keptCoat: null };
+    expect(isLookLocked({ kind: "accent", id: "#5f7f31" }, base)).toBe(false);
+    expect(isLookLocked({ kind: "accent", id: "#4d4b45" }, base)).toBe(false);
+    expect(isLookLocked({ kind: "accent", id: "#9b5b91" }, base)).toBe(true);
+    expect(isLookLocked({ kind: "accent", id: "custom" }, base)).toBe(true);
+    expect(isLookLocked({ kind: "accent", id: "#9b5b91" }, { ...base, currentAccent: "#9b5b91" })).toBe(false);
+    expect(isLookLocked({ kind: "accent", id: "#123456" }, { ...base, keptAccent: "#123456" })).toBe(false);
+    expect(isLookLocked({ kind: "accent", id: "custom" }, { ...base, keptAccent: "#123456" })).toBe(true);
+    expect(isLookLocked({ kind: "accent", id: "#9b5b91" }, { ...base, access: { state: "unknown" } })).toBe(false);
+    expect(isLookLocked({ kind: "accent", id: "custom" }, { ...base, access: { state: "open", trialEndsAt: null, trialing: false } })).toBe(false);
+  });
+});
+
+describe("accents kept from before the lock", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("remembers a Pro or custom accent in use on the first launch only", () => {
+    expect(resolveKeptAccent("#B9565B")).toBe("#b9565b");
+    expect(resolveKeptAccent("#9b5b91")).toBe("#b9565b");
+  });
+
+  it("keeps nothing for an unset or free accent", () => {
+    expect(resolveKeptAccent(undefined)).toBeNull();
+    window.localStorage.clear();
+    expect(resolveKeptAccent("#4d4b45")).toBeNull();
+    expect(resolveKeptAccent("#9b5b91")).toBeNull();
+  });
+
+  it("remembers a put-away accent alongside icons and coats", () => {
+    writeRevertedLooks({ accent: "#9B5B91" });
+    expect(readRevertedLooks()).toEqual({ accent: "#9b5b91" });
+    writeRevertedLooks({ accent: "#5f7f31" });
+    expect(readRevertedLooks()).toBeNull();
   });
 });
 

@@ -10,6 +10,7 @@ import catIvoryIcon from "../../assets/app-icons/cat-ivory.png";
 import catCharcoalIcon from "../../assets/app-icons/cat-charcoal.png";
 import catPlumIcon from "../../assets/app-icons/cat-plum.png";
 import type { AppIconVariantId } from "../../lib/api/appIconClient";
+import { presetForColor } from "../../lib/colorPalette";
 import type { LocalizationController } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import type { PetModeCoat } from "../pet-mode/petModeData";
@@ -61,7 +62,17 @@ export function localizedPetCoatLabel(
   return t(PET_COAT_LABEL_KEYS[coat]);
 }
 
+/** A palette accent's own name; any other color is the person's own. */
+export function localizedAccentLabel(color: string, t: LocalizationController["t"]): string {
+  const preset = presetForColor(color);
+  return preset ? t(`settings.appearance.preset.${preset.id}` as TranslationKey) : t("settings.appearance.customAccentName");
+}
+
 export function localizedProLookLabel(look: ProLook, t: LocalizationController["t"]): string {
-  return look.kind === "icon" ? t(APP_ICON_LABEL_KEYS[look.id]) : localizedPetCoatLabel(look.id, t);
+  switch (look.kind) {
+    case "icon": return t(APP_ICON_LABEL_KEYS[look.id]);
+    case "coat": return localizedPetCoatLabel(look.id, t);
+    case "accent": return localizedAccentLabel(look.id, t);
+  }
 }
 

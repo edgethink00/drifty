@@ -658,8 +658,7 @@
   box-shadow: var(--field-focus-shadow);
 }
 
-.content--settings .settings-mode-option:focus-visible,
-.content--settings .settings-color-more:has(input:focus-visible) {
+.content--settings .settings-mode-option:focus-visible {
   outline: 2px solid var(--settings-focus-ring);
   outline-offset: 2px;
   border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
@@ -781,235 +780,6 @@
 
 .content--settings .settings-section--appearance .settings-row__actions .settings-btn {
   flex: 0 0 auto;
-}
-
-.content--settings .settings-section--appearance .settings-color-editor {
-  align-items: flex-start;
-}
-
-/* ── Color roles: chips at rest, one anchored palette on demand ─────────── */
-.content--settings .settings-section--appearance .settings-color-roles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  width: 100%;
-}
-
-.content--settings .settings-section--appearance .settings-color-row--inline .settings-color-roles {
-  width: auto;
-  justify-content: flex-end;
-}
-
-.content--settings .settings-section--appearance .settings-color-role {
-  position: relative;
-}
-
-.content--settings .settings-section--appearance .settings-color-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-height: 2rem;
-  padding: 0.3rem 0.6rem 0.3rem 0.55rem;
-  border: 1px solid var(--settings-control-border);
-  border-radius: var(--settings-control-radius);
-  background: var(--settings-control-bg);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 0.78125rem;
-  font-weight: 560;
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.content--settings .settings-section--appearance .settings-color-row--inline .settings-color-chip {
-  min-height: var(--settings-control-height);
-  padding-inline: 0.7rem 0.6rem;
-}
-
-.content--settings .settings-section--appearance .settings-color-chip:hover,
-.content--settings .settings-section--appearance .settings-color-role.is-open .settings-color-chip {
-  border-color: color-mix(in srgb, var(--text) 20%, var(--line));
-  background: var(--settings-control-bg-hover);
-}
-
-.content--settings .settings-section--appearance .settings-color-chip:focus-visible {
-  outline: 2px solid var(--settings-focus-ring);
-  outline-offset: 2px;
-}
-
-.content--settings .settings-section--appearance .settings-color-chip__dot {
-  width: 0.8rem;
-  height: 0.8rem;
-  flex: none;
-  border-radius: 0.25rem;
-  background: var(--swatch-color);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
-}
-
-.content--settings .settings-section--appearance .settings-color-chip__chevron {
-  width: 0.36rem;
-  height: 0.36rem;
-  margin-left: 0.1rem;
-  border-right: 1.5px solid var(--text-soft);
-  border-bottom: 1.5px solid var(--text-soft);
-  transform: rotate(45deg) translateY(-0.08rem);
-  transition: transform var(--transition-fast);
-}
-
-.content--settings .settings-section--appearance .settings-color-role.is-open .settings-color-chip__chevron {
-  transform: rotate(225deg) translate(-0.08rem, -0.08rem);
-}
-
-/* A touched role gets a hairline marker so a glance shows what was changed. */
-.content--settings .settings-section--appearance .settings-color-chip.is-overridden::after {
-  content: "";
-  width: 4px;
-  height: 4px;
-  margin-left: 0.1rem;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-}
-
-.content--settings .settings-section--appearance .settings-color-popover {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  left: 0;
-  z-index: var(--z-settings-popover);
-  display: grid;
-  gap: var(--space-2);
-  width: max-content;
-  min-width: 22rem;
-  padding: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: 0 12px 30px color-mix(in srgb, #000 28%, transparent);
-  animation: settings-color-pop var(--transition-fast) var(--ease-out-quart);
-}
-
-.content--settings .settings-section--appearance .settings-color-popover--end {
-  left: auto;
-  right: 0;
-}
-
-@keyframes settings-color-pop {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .content--settings .settings-section--appearance .settings-color-popover {
-    animation: none;
-  }
-}
-
-.content--settings .settings-section--appearance .settings-color-popover__footer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
-}
-
-.content--settings .settings-section--appearance .settings-color-more,
-.content--settings .settings-section--appearance .settings-color-default {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--text) 14%, var(--line));
-  border-radius: calc(var(--settings-control-radius) - 2px);
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
-  cursor: pointer;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.content--settings .settings-section--appearance .settings-color-current {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-right: auto;
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  /* The hovered swatch's name and owner change this caption's length. Keeping
-     it out of the popover's intrinsic width stops an end-anchored palette
-     from widening and sliding its swatches out from under the pointer. The
-     fixed two-line height gives the owner ("used by Communication") its own
-     second line under the color name, so the footer never moves on hover. */
-  contain: inline-size;
-  height: calc(2 * 1.35em);
-  color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
-  line-height: 1.35;
-}
-
-.content--settings .settings-section--appearance .settings-color-current__text {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.content--settings .settings-section--appearance .settings-color-current__name,
-.content--settings .settings-section--appearance .settings-color-current__owner {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.content--settings .settings-section--appearance .settings-color-current__owner {
-  font-family: var(--font-sans);
-  letter-spacing: 0;
-}
-
-.content--settings .settings-section--appearance .settings-color-more:hover,
-.content--settings .settings-section--appearance .settings-color-default:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--text) 28%, var(--line));
-}
-
-.content--settings .settings-section--appearance .settings-color-more,
-.content--settings .settings-section--appearance .settings-color-default {
-  flex: 0 0 auto;
-  height: 1.45rem;
-  padding: 0 0.55rem;
-  border-style: dashed;
-  color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.71875rem;
-  min-width: 5.5rem;
-  text-transform: none;
-}
-
-.content--settings .settings-section--appearance .settings-color-default {
-  border-style: solid;
-  min-width: 4.1rem;
-}
-
-.content--settings .settings-section--appearance .settings-color-default:disabled {
-  cursor: default;
-  opacity: 0.44;
-}
-
-.content--settings .settings-section--appearance .settings-color-more input[type="color"] {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.content--settings .settings-section--appearance .settings-color-more input[type="color"]::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.content--settings .settings-section--appearance .settings-color-more input[type="color"]::-webkit-color-swatch {
-  border: 0;
-  border-radius: calc(var(--settings-control-radius) - 4px);
 }
 
 .settings-row--classification-metrics .classification-metrics-grid {
@@ -1684,6 +1454,120 @@
 @media (prefers-reduced-motion: reduce) {
   .content--settings .app-icon-swatch { transition: none; }
   .content--settings .app-icon-swatch:hover { transform: none; }
+}
+
+/* Accent: every color spread out in its row under the description, the way the
+   app icons sit. One line always: a circle is at most 30px and shrinks with
+   the window (23px in the 960px minimum window), with the spare width spread
+   between circles. Locks use the Pro look badge at the icon corner, scaled to
+   the smaller circle. In dark mode a circle shows the lighter tone the app
+   paints for that accent. */
+.content--settings .settings-row--accent {
+  position: relative;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.content--settings .settings-row--accent .ctrl {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.content--settings .accent-picker {
+  display: grid;
+  grid-template-columns: repeat(var(--accent-count, 21), minmax(0, 1.875rem));
+  column-gap: 0.375rem;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.125rem 0.125rem 0.25rem;
+}
+
+.content--settings .accent-swatch {
+  --swatch-shown: var(--swatch-color);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 1.875rem;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 50%;
+  background: var(--swatch-shown);
+  cursor: pointer;
+  transition:
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+:root[data-theme="dark"] .content--settings .accent-swatch {
+  --swatch-shown: var(--swatch-color-dark, var(--swatch-color));
+  --swatch-ink: #0f0f0d;
+}
+
+.content--settings .accent-swatch:hover {
+  transform: translateY(-1px);
+}
+
+.content--settings .accent-swatch:focus-visible,
+.content--settings .accent-swatch--custom:focus-within {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 3px;
+}
+
+.content--settings .accent-swatch.is-selected {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--swatch-shown);
+}
+
+.content--settings .accent-swatch.is-trying-on {
+  outline: 1.5px dashed var(--accent);
+  outline-offset: 3px;
+}
+
+.content--settings .accent-swatch__check {
+  width: 42%;
+  height: 42%;
+  fill: none;
+  stroke: var(--swatch-ink, #ffffff);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.content--settings .accent-swatch.is-selected .accent-swatch__check {
+  opacity: 1;
+}
+
+.content--settings .accent-swatch .pro-look-lock {
+  right: -3px;
+  bottom: -3px;
+  transform: scale(0.72);
+  transform-origin: 100% 100%;
+}
+
+.content--settings .accent-swatch--custom {
+  border-color: transparent;
+  background: conic-gradient(from 0deg, #b9565b, #b58a2a, #5f7f31, #2f7f78, #476f8f, #7b5ea7, #9b5b91, #b9565b);
+}
+
+.content--settings .accent-swatch--custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content--settings .accent-swatch { transition: none; }
+  .content--settings .accent-swatch:hover { transform: none; }
 }
 
 .pet-mode-lab {

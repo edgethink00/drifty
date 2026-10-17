@@ -235,6 +235,75 @@
   stroke: var(--pet-coat-ink);
 }
 
+/* An accent in a Pro sheet header: a small app window painted in that color. */
+.pro-look-thumb--accent {
+  --look-accent-shown: var(--look-accent, var(--accent));
+  display: grid;
+  grid-template-columns: 13px 1fr;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+:root[data-theme="dark"] .pro-look-thumb--accent {
+  --look-accent-shown: var(--look-accent-dark, var(--accent));
+}
+
+.pro-look-thumb--accent.is-custom {
+  border: 0;
+  background: conic-gradient(from 0deg, #b9565b, #b58a2a, #5f7f31, #2f7f78, #476f8f, #7b5ea7, #9b5b91, #b9565b);
+}
+
+.pro-look-thumb--accent.is-custom > * {
+  display: none;
+}
+
+.pro-look-thumb__side,
+.pro-look-thumb__main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 4px;
+}
+
+.pro-look-thumb__side {
+  background: var(--bg-2);
+}
+
+.pro-look-thumb__main {
+  padding: 8px 6px;
+}
+
+.pro-look-thumb__side i,
+.pro-look-thumb__main i {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.pro-look-thumb__side i.is-on {
+  background: color-mix(in srgb, var(--look-accent-shown) 45%, var(--surface));
+}
+
+.pro-look-thumb__main i.is-label {
+  width: 55%;
+  background: var(--look-accent-shown);
+}
+
+.pro-look-thumb__main i.is-bar {
+  width: 85%;
+  background: var(--look-accent-shown);
+}
+
+.pro-look-thumb__main i.is-toggle {
+  width: 15px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--look-accent-shown);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pro-look-popover {
     animation: none;

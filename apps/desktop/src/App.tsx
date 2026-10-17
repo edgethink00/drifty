@@ -1873,6 +1873,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     appIconsSupported: hostPlatform === "macos",
     coat: petModeCoat,
     setCoat: setPetModeCoat,
+    accent: appThemeColorOverrides.accent,
+    setAccent: (accent) => setAppThemeColorOverrides((current) => {
+      const next = { ...current };
+      if (accent) next.accent = accent;
+      else delete next.accent;
+      return next;
+    }),
     flowOpen: authModalOpen || upgradePlanModalOpen || cloudTrialStarting
       || billingCheckoutAwaitingConfirmation || billingCheckoutLoadingInterval !== null,
     requestSignIn: requestCloudBillingAuth,
@@ -5319,8 +5326,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [categoryColorOverrides]);
 
   useEffect(() => {
-    applyAppThemeColorOverrides(document.documentElement.style, appThemeColorOverrides, theme);
-  }, [appThemeColorOverrides, theme]);
+    // A locked accent being tried on paints the app without being saved.
+    const tryOn = proLooks.preview?.kind === "accent" ? proLooks.preview.id : null;
+    applyAppThemeColorOverrides(document.documentElement.style, tryOn ? { ...appThemeColorOverrides, accent: tryOn } : appThemeColorOverrides, theme);
+  }, [appThemeColorOverrides, proLooks.preview, theme]);
 
   useEffect(() => {
     persistAppThemeColorOverrides(appThemeColorOverrides);

@@ -44,7 +44,7 @@ describe("ProDecisionSheet", () => {
     const value = within(dialog).getByRole("list", { name: "Included with Pro" });
     expect(within(value).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "Cloud AI classification · Claude 5.5", "Project analysis · GPT-6", "Activity sync across 3 computers", "No downloads or API keys",
-      "4 pet coats",
+      "4 pet coats and every accent color",
     ]);
     expect(within(dialog).getByText("Cancel anytime.")).toBeTruthy();
     expect(within(dialog).queryByRole("button", { name: /local ai/i })).toBeNull();
@@ -168,7 +168,7 @@ describe("ProDecisionSheet opened from a locked Pro look", () => {
   });
   afterEach(() => cleanup());
 
-  it("names the look beside its picture, keeps the plans, and lists every app icon on macOS", () => {
+  it("names the look beside its picture, keeps the plans, and lists every app icon and accent color on macOS", () => {
     render(<ProDecisionSheet
       open context="trial-ended" funnelEnabled trialEndsAt="2026-10-08T06:30:00.000Z" unclassifiedSeconds={7800}
       billingCheckoutLoadingInterval={null} onSelectBillingPlan={vi.fn()} onDismiss={vi.fn()}
@@ -181,7 +181,7 @@ describe("ProDecisionSheet opened from a locked Pro look", () => {
     expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
     const value = within(dialog).getByRole("list", { name: "Included with Pro" });
     const lines = within(value).getAllByRole("listitem");
-    expect(lines[lines.length - 1].textContent).toBe("4 pet coats and every app icon");
+    expect(lines[lines.length - 1].textContent).toBe("4 pet coats, every app icon and accent color");
   });
 
   it("shows a coat on the desktop cat it would dress", () => {
@@ -193,6 +193,26 @@ describe("ProDecisionSheet opened from a locked Pro look", () => {
     const dialog = screen.getByRole("dialog", { name: "‘Sage’ is a Pro coat" });
     expect(within(dialog).getByText("Start Pro and your desktop cat wears it right away. Cloud AI classification comes with it.")).toBeTruthy();
     expect(dialog.querySelector(".pro-look-thumb--coat")).toBeTruthy();
+  });
+
+  it("shows an accent on a small app window painted in it, and its own colors as Pro", () => {
+    const view = render(<ProDecisionSheet
+      open context="upgrade" funnelEnabled trialEndsAt={null} unclassifiedSeconds={null}
+      billingCheckoutLoadingInterval={null} onSelectBillingPlan={vi.fn()} onDismiss={vi.fn()}
+      look={{ kind: "accent", id: "#9b5b91" }}
+    />);
+    const dialog = screen.getByRole("dialog", { name: "‘Plum’ is a Pro accent color" });
+    expect(within(dialog).getByText("Start Pro and the whole app takes this color right away. Cloud AI classification comes with it.")).toBeTruthy();
+    const thumb = dialog.querySelector<HTMLElement>(".pro-look-thumb--accent");
+    expect(thumb?.style.getPropertyValue("--look-accent")).toBe("#9b5b91");
+    view.unmount();
+
+    render(<ProDecisionSheet
+      open context="upgrade" funnelEnabled trialEndsAt={null} unclassifiedSeconds={null}
+      billingCheckoutLoadingInterval={null} onSelectBillingPlan={vi.fn()} onDismiss={vi.fn()}
+      look={{ kind: "accent", id: "custom" }}
+    />);
+    expect(screen.getByRole("dialog", { name: "Your own accent colors are Pro" }).querySelector(".pro-look-thumb--accent.is-custom")).toBeTruthy();
   });
 });
 

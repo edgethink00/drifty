@@ -1,13 +1,54 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { darkAccentTone } from "../../lib/accentTone";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import { getPetModeCoatSpec } from "../pet-mode/petModeData";
 import { PetCoatSwatchCat } from "../settings/PetCoatSwatchCat";
 import { trialDaysRemaining } from "../sidebar/SidebarCtaSlot";
 import { APP_ICON_PREVIEWS, localizedProLookLabel } from "./proLookCatalog";
-import { isKnownWithoutPro, sameLook, type ProLook, type ProLooksAccess } from "./proLooks";
+import { CUSTOM_ACCENT, isKnownWithoutPro, sameLook, type ProLook, type ProLooksAccess } from "./proLooks";
 import type { ProLooksController } from "./useProLooksController";
 import "./proLooks.css";
+
+type LookCopy = {
+  readonly title: TranslationKey;
+  readonly previewTitle: TranslationKey;
+  readonly guest: TranslationKey;
+  readonly upgrade: TranslationKey;
+  readonly previewHint: TranslationKey;
+  readonly trialNote: TranslationKey;
+  readonly putAway: TranslationKey;
+};
+
+const LOOK_COPY: Readonly<Record<ProLook["kind"], LookCopy>> = {
+  icon: {
+    title: "settings.proLooks.iconTitle",
+    previewTitle: "settings.proLooks.iconPreviewTitle",
+    guest: "settings.proLooks.iconGuest",
+    upgrade: "settings.proLooks.iconUpgrade",
+    previewHint: "settings.proLooks.iconPreviewHint",
+    trialNote: "settings.proLooks.trialIconNote",
+    putAway: "settings.proLooks.iconPutAway",
+  },
+  coat: {
+    title: "settings.proLooks.coatTitle",
+    previewTitle: "settings.proLooks.coatPreviewTitle",
+    guest: "settings.proLooks.coatGuest",
+    upgrade: "settings.proLooks.coatUpgrade",
+    previewHint: "settings.proLooks.coatPreviewHint",
+    trialNote: "settings.proLooks.trialCoatNote",
+    putAway: "settings.proLooks.coatPutAway",
+  },
+  accent: {
+    title: "settings.proLooks.accentTitle",
+    previewTitle: "settings.proLooks.accentPreviewTitle",
+    guest: "settings.proLooks.accentGuest",
+    upgrade: "settings.proLooks.accentUpgrade",
+    previewHint: "settings.proLooks.accentPreviewHint",
+    trialNote: "settings.proLooks.trialAccentNote",
+    putAway: "settings.proLooks.accentPutAway",
+  },
+};
 
 function LockGlyph() {
   return (
@@ -61,19 +102,20 @@ function bubbleBodyKey(look: ProLook, access: ProLooksAccess): TranslationKey {
     case "unknown":
       return "settings.proLooks.checking";
     case "guest":
-      return look.kind === "icon" ? "settings.proLooks.iconGuest" : "settings.proLooks.coatGuest";
+      return LOOK_COPY[look.kind].guest;
     case "trial-available":
       return "settings.proLooks.trialAvailable";
     case "unavailable":
       return "settings.proLooks.unavailable";
     default:
-      return look.kind === "icon" ? "settings.proLooks.iconUpgrade" : "settings.proLooks.coatUpgrade";
+      return LOOK_COPY[look.kind].upgrade;
   }
 }
 
 export function proLookTitle(look: ProLook, t: ReturnType<typeof useLocalization>["t"]): string {
+  if (look.kind === "accent" && look.id === CUSTOM_ACCENT) return t("settings.proLooks.accentCustomTitle");
   const name = localizedProLookLabel(look, t);
-  return t(look.kind === "icon" ? "settings.proLooks.iconTitle" : "settings.proLooks.coatTitle", { name });
+  return t(LOOK_COPY[look.kind].title, { name });
 }
 
 /**
@@ -115,7 +157,7 @@ function ProLookBubble({ looks, look, checking, container }: {
   const tryingOn = !checking && sameLook(looks.preview, look);
   const name = localizedProLookLabel(look, t);
   const title = tryingOn
-    ? t(look.kind === "icon" ? "settings.proLooks.iconPreviewTitle" : "settings.proLooks.coatPreviewTitle", { name })
+    ? t(LOOK_COPY[look.kind].previewTitle, { name })
     : proLookTitle(look, t);
   const actionKey = checking ? null : proLookActionKey(looks.access);
 
@@ -181,7 +223,7 @@ function ProLookBubble({ looks, look, checking, container }: {
       <p className="pro-look-popover__body">{t(bubbleBodyKey(look, looks.access))}</p>
       {tryingOn ? (
         <p className="pro-look-popover__body">
-          {t(look.kind === "icon" ? "settings.proLooks.iconPreviewHint" : "settings.proLooks.coatPreviewHint")}
+          {t(LOOK_COPY[look.kind].previewHint)}
         </p>
       ) : null}
       <div className="pro-look-popover__actions">
@@ -214,23 +256,25 @@ export function ProLookRowNote({ looks, kind }: {
     return (
       <p className="pro-look-note">
         <OpenLockGlyph />
-        <span>{t(kind === "icon" ? "settings.proLooks.trialIconNote" : "settings.proLooks.trialCoatNote", { left })}</span>
+        <span>{t(LOOK_COPY[kind].trialNote, { left })}</span>
       </p>
     );
   }
   if (looks.trialStartFailed === kind) {
     return <p className="pro-look-note" role="alert">{t("billing.trialActivation.failed")}</p>;
   }
-  const putAway = kind === "icon" ? looks.reverted?.icon : looks.reverted?.coat;
-  if (!putAway || !isKnownWithoutPro(access)) return null;
-  const look: ProLook = kind === "icon"
-    ? { kind: "icon", id: looks.reverted?.icon ?? "classic" }
-    : { kind: "coat", id: looks.reverted?.coat ?? "ivory" };
+  const reverted = looks.reverted;
+  if (!isKnownWithoutPro(access) || !reverted) return null;
+  let look: ProLook | null = null;
+  if (kind === "icon" && reverted.icon) look = { kind: "icon", id: reverted.icon };
+  else if (kind === "coat" && reverted.coat) look = { kind: "coat", id: reverted.coat };
+  else if (kind === "accent" && reverted.accent) look = { kind: "accent", id: reverted.accent };
+  if (!look) return null;
   const actionKey = proLookActionKey(access);
   return (
     <p className="pro-look-note pro-look-note--put-away">
       <LockGlyph />
-      <span>{t(kind === "icon" ? "settings.proLooks.iconPutAway" : "settings.proLooks.coatPutAway", { name: localizedProLookLabel(look, t) })}</span>
+      <span>{t(LOOK_COPY[kind].putAway, { name: localizedProLookLabel(look, t) })}</span>
       {actionKey ? (
         <button type="button" className="pro-look-note__action" onClick={() => looks.unlockReverted(kind)}>{t(actionKey)}</button>
       ) : null}
@@ -244,6 +288,20 @@ export function ProLookThumbnail({ look }: { readonly look: ProLook }) {
     return (
       <span className="pro-look-thumb" aria-hidden="true">
         <img src={APP_ICON_PREVIEWS[look.id]} alt="" draggable={false} />
+      </span>
+    );
+  }
+  if (look.kind === "accent") {
+    // A small app window painted in the accent: sidebar selection, a label and a toggle.
+    const color = look.id === CUSTOM_ACCENT ? null : look.id;
+    return (
+      <span
+        className={"pro-look-thumb pro-look-thumb--accent" + (color ? "" : " is-custom")}
+        aria-hidden="true"
+        style={color ? { "--look-accent": color, "--look-accent-dark": darkAccentTone(color) } as CSSProperties : undefined}
+      >
+        <span className="pro-look-thumb__side"><i className="is-on" /><i /><i /></span>
+        <span className="pro-look-thumb__main"><i className="is-label" /><i /><i className="is-bar" /><i className="is-toggle" /></span>
       </span>
     );
   }

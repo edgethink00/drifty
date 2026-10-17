@@ -35,7 +35,7 @@ function Tick() {
  * tiles and no row dividers. Every line maps to a shipped Pro entitlement.
  */
 export function ProSheetValue({ looksLineKey = "billing.proSheet.plus.coats" }: {
-  /** The Pro looks line: coats everywhere, plus every app Dock icon on macOS. */
+  /** The Pro looks line: coats and accent colors everywhere, plus every app Dock icon on macOS. */
   readonly looksLineKey?: TranslationKey;
 }) {
   const { t } = useLocalization();

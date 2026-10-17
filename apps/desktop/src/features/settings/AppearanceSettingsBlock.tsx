@@ -1,9 +1,9 @@
 import { WindowsBlurSettingsRow } from "./WindowsBlurSettingsRow";
 import { AppIconSettingsRow } from "./AppIconSettingsRow";
+import { AccentColorRow } from "./AccentColorRow";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
-import { AccentColorControl, type AppThemeColorKey } from "./SettingsColorControls";
+import type { AppThemeColorKey } from "./SettingsColorControls";
 import type { AppThemeColorOverrides, ThemePreference } from "./settingsStorage";
-import { APP_THEME_ACCENT_COLOR_OPTIONS } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
 import { SettingsSelect } from "./SettingsSelect";
 
@@ -36,7 +36,7 @@ export function AppearanceSettingsBlock({
   const { t } = useLocalization();
 
   // The block keeps the Appearance styling scope (settings-section--appearance)
-  // so the accent chip and its palette look the same inside General.
+  // inside General.
   return (
     <div className="settings-block settings-block--appearance settings-section--appearance"><h3>{t("settings.section.appearance")}</h3>
       <div data-setting-id="settings.appearance.theme" className="settings-row"><div><div className="lbl">{t("settings.appearance.theme")}</div><div className="desc">{t("settings.appearance.themeDescription")}</div></div><div className="ctrl"><SettingsSelect
@@ -50,11 +50,10 @@ export function AppearanceSettingsBlock({
         onChange={onThemeChange}
       /></div></div>
       {hostPlatform === "windows" && <WindowsBlurSettingsRow enabled={windowsBlurEnabled} onEnabledChange={onWindowsBlurEnabledChange} />}
-      <AccentColorControl
-        accentOptions={APP_THEME_ACCENT_COLOR_OPTIONS}
-        overrides={appThemeColorOverrides}
-        onColorChange={onAppThemeColorChange}
-        onColorReset={onAppThemeColorReset}
+      <AccentColorRow
+        accent={appThemeColorOverrides.accent}
+        onAccentChange={(color) => onAppThemeColorChange("accent", color)}
+        onAccentReset={() => onAppThemeColorReset("accent")}
       />
       {hostPlatform === "macos" && <AppIconSettingsRow />}
     </div>

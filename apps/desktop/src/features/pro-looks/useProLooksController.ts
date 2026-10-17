@@ -8,6 +8,10 @@ import {
 } from "../../lib/api/appIconClient";
 import type { PetModeCoat } from "../pet-mode/petModeData";
 import {
+  accentLookId,
+  CUSTOM_ACCENT,
+  DEFAULT_ACCENT,
+  FREE_ACCENTS,
   FREE_APP_ICONS,
   FREE_FALLBACK_APP_ICON,
   FREE_FALLBACK_PET_COAT,
@@ -16,6 +20,7 @@ import {
   isLookLocked,
   isProLook,
   readRevertedLooks,
+  resolveKeptAccent,
   resolveKeptCoat,
   sameLook,
   writePetCoatPreview,
@@ -42,6 +47,10 @@ export type ProLooksControllerInput = {
   readonly appIconsSupported: boolean;
   readonly coat: PetModeCoat;
   readonly setCoat: (coat: PetModeCoat) => void;
+  /** The saved accent color (a hex); unset means the built-in Moss. */
+  readonly accent?: string;
+  /** Saves an accent; null clears it back to Moss. */
+  readonly setAccent?: (accent: string | null) => void;
   /** Sign-in, the Pro sheet, a trial start or a checkout is on screen or in progress. */
   readonly flowOpen: boolean;
   readonly requestSignIn: () => void;
@@ -59,8 +68,12 @@ export type ProLooksController = {
   readonly coat: PetModeCoat;
   /** A coat in use before coats were locked; it stays open. */
   readonly keptCoat: PetModeCoat | null;
+  /** The accent in use as an accent look id (a lowercase hex; Moss when unset). */
+  readonly accent: string;
+  /** An accent in use before accents were locked; it stays open. */
+  readonly keptAccent: string | null;
   readonly popover: ProLooksPopover | null;
-  /** The look tried on in the Dock or on the desktop pet right now. */
+  /** The look tried on in the Dock, on the desktop pet or across the app right now. */
   readonly preview: ProLook | null;
   /** Looks put away when Pro ended, brought back when Pro starts again. */
   readonly reverted: RevertedLooks | null;
@@ -77,14 +90,16 @@ export type ProLooksController = {
 };
 
 /**
- * Pro looks on one device: which icons and coats are locked, the try-on that a
- * locked pick starts (the Dock icon or the desktop pet actually changes while
- * its bubble is open), the unlock flow behind the bubble's button, and putting
- * Pro looks away when Pro ends. A try-on is never saved: closing the bubble,
- * leaving the page, abandoning the flow or quitting puts the saved look back.
+ * Pro looks on one device: which icons, coats and accents are locked, the
+ * try-on that a locked pick starts (the Dock icon, the desktop pet or the app's
+ * accent actually changes while its bubble is open), the unlock flow behind the
+ * bubble's button, and putting Pro looks away when Pro ends. A try-on is never
+ * saved: closing the bubble, leaving the page, abandoning the flow or quitting
+ * puts the saved look back.
  */
 export function useProLooksController(input: ProLooksControllerInput): ProLooksController {
   const { access, appIconsSupported, coat, setCoat, flowOpen } = input;
+  const accent = accentLookId(input.accent);
   const latest = useRef(input);
   latest.current = input;
 
@@ -92,6 +107,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   const [iconSaving, setIconSaving] = useState(false);
   const [appIconFailure, setAppIconFailure] = useState<{ reason: unknown } | null>(null);
   const [keptCoat] = useState(() => resolveKeptCoat());
+  const [keptAccent] = useState(() => resolveKeptAccent(input.accent));
   const [popover, setPopover] = useState<ProLooksPopover | null>(null);
   const [preview, setPreview] = useState<ProLook | null>(null);
   const [pending, setPending] = useState<ProLook | null>(null);
@@ -106,7 +122,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   pendingRef.current = pending;
 
   const setReverted = useCallback((next: RevertedLooks | null) => {
-    const value = next && (next.icon || next.coat) ? next : null;
+    const value = next && (next.icon || next.coat || next.accent) ? next : null;
     revertedRef.current = value;
     writeRevertedLooks(value);
     setRevertedState(value);
@@ -158,13 +174,19 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   }, []);
 
   const isLocked = useCallback(
-    (look: ProLook) => isLookLocked(look, { access, currentIcon: appIcon, currentCoat: coat, keptCoat }),
-    [access, appIcon, coat, keptCoat],
+    (look: ProLook) => isLookLocked(look, { access, currentIcon: appIcon, currentCoat: coat, keptCoat, currentAccent: accent, keptAccent }),
+    [access, accent, appIcon, coat, keptAccent, keptCoat],
   );
 
   const isInUse = useCallback(
-    (look: ProLook) => (look.kind === "icon" ? look.id === appIcon : look.id === coat || look.id === keptCoat),
-    [appIcon, coat, keptCoat],
+    (look: ProLook) => {
+      switch (look.kind) {
+        case "icon": return look.id === appIcon;
+        case "coat": return look.id === coat || look.id === keptCoat;
+        case "accent": return look.id === accent || look.id === keptAccent;
+      }
+    },
+    [accent, appIcon, coat, keptAccent, keptCoat],
   );
 
   const apply = useCallback((look: ProLook) => {
@@ -175,11 +197,16 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
       if (look.id !== appIcon || appIconFailure) {
         saveAppIcon(look.id, appIcon, () => forgetReverted("icon", remembered));
       } else if (!iconSaving) forgetReverted("icon", remembered);
+    } else if (look.kind === "accent") {
+      // "More colors" has no color of its own; once open, its picker saves one.
+      if (look.id === CUSTOM_ACCENT) return;
+      if (look.id !== accent) latest.current.setAccent?.(look.id === DEFAULT_ACCENT ? null : look.id);
+      forgetReverted("accent", remembered);
     } else {
       if (look.id !== coat) setCoat(look.id);
       forgetReverted("coat", remembered);
     }
-  }, [appIcon, appIconFailure, coat, forgetReverted, iconSaving, saveAppIcon, setCoat]);
+  }, [accent, appIcon, appIconFailure, coat, forgetReverted, iconSaving, saveAppIcon, setCoat]);
 
   const endFlow = useCallback(() => {
     setPending(null);
@@ -232,7 +259,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
       return;
     }
     setPopover({ look, mode: "locked" });
-    if (!pendingRef.current) setPreview(look);
+    if (!pendingRef.current) setPreview(canTryOn(look) ? look : null);
   }, [access.state, apply, isInUse, isLocked]);
 
   const closePopover = useCallback(() => {
@@ -247,9 +274,10 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   }, [popover, startFlow]);
 
   const unlockReverted = useCallback((kind: ProLook["kind"]) => {
-    const look: ProLook | null = kind === "icon"
-      ? (reverted?.icon ? { kind: "icon", id: reverted.icon } : null)
-      : (reverted?.coat ? { kind: "coat", id: reverted.coat } : null);
+    let look: ProLook | null = null;
+    if (kind === "icon" && reverted?.icon) look = { kind: "icon", id: reverted.icon };
+    else if (kind === "coat" && reverted?.coat) look = { kind: "coat", id: reverted.coat };
+    else if (kind === "accent" && reverted?.accent) look = { kind: "accent", id: reverted.accent };
     if (!look) return;
     setPopover(null);
     setPreview(null);
@@ -262,7 +290,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
     const look = popover.look;
     if (isLocked(look)) {
       setPopover({ look, mode: "locked" });
-      if (!pendingRef.current) setPreview(look);
+      if (!pendingRef.current) setPreview(canTryOn(look) ? look : null);
       return;
     }
     setPopover(null);
@@ -273,7 +301,8 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   useEffect(() => {
     if (!pending || access.state !== "open") return;
     apply(pending);
-    setUnlockedLook(pending);
+    // "More colors" applied nothing, so the notice names no look for it.
+    setUnlockedLook(canTryOn(pending) ? pending : null);
     setPopover(null);
     endFlow();
   }, [access.state, apply, endFlow, pending]);
@@ -320,7 +349,7 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
   // quietly. They are remembered, so starting Pro again brings them back.
   useEffect(() => {
     if (pending || !isKnownWithoutPro(access)) return;
-    const next: { icon?: AppIconVariantId; coat?: PetModeCoat } = { ...(reverted ?? {}) };
+    const next: { icon?: AppIconVariantId; coat?: PetModeCoat; accent?: string } = { ...(reverted ?? {}) };
     let changed = false;
     if (appIconsSupported && appIcon !== null && !FREE_APP_ICONS.has(appIcon) && !iconSaving && !appIconFailure) {
       next.icon = appIcon;
@@ -332,8 +361,14 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
       setCoat(FREE_FALLBACK_PET_COAT);
       changed = true;
     }
+    const saveAccent = latest.current.setAccent;
+    if (saveAccent && !FREE_ACCENTS.has(accent) && accent !== keptAccent) {
+      next.accent = accent;
+      saveAccent(null);
+      changed = true;
+    }
     if (changed) setReverted(next);
-  }, [access, appIcon, appIconFailure, appIconsSupported, coat, iconSaving, keptCoat, pending, reverted, saveAppIcon, setCoat, setReverted]);
+  }, [access, accent, appIcon, appIconFailure, appIconsSupported, coat, iconSaving, keptAccent, keptCoat, pending, reverted, saveAppIcon, setCoat, setReverted]);
 
   useEffect(() => {
     if (access.state !== "open" || !reverted) return;
@@ -347,7 +382,11 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
       if (coat === FREE_FALLBACK_PET_COAT) setCoat(reverted.coat);
       forgetReverted("coat", reverted.coat);
     }
-  }, [access.state, appIcon, appIconFailure, appIconsSupported, coat, forgetReverted, iconSaving, reverted, saveAppIcon, setCoat]);
+    if (reverted.accent && latest.current.setAccent) {
+      if (accent === DEFAULT_ACCENT) latest.current.setAccent(reverted.accent);
+      forgetReverted("accent", reverted.accent);
+    }
+  }, [access.state, accent, appIcon, appIconFailure, appIconsSupported, coat, forgetReverted, iconSaving, reverted, saveAppIcon, setCoat]);
 
   // The try-on lasts while its bubble is open, or while the unlock it started
   // is still under way.
@@ -380,6 +419,8 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
     appIconFailure,
     coat,
     keptCoat,
+    accent,
+    keptAccent,
     popover,
     preview: shownPreview,
     reverted,
@@ -395,6 +436,11 @@ export function useProLooksController(input: ProLooksControllerInput): ProLooksC
 }
 
 const ProLooksContext = createContext<ProLooksController | null>(null);
+
+/** "More colors" opens a picker rather than a color, so it has nothing to try on. */
+function canTryOn(look: ProLook): boolean {
+  return !(look.kind === "accent" && look.id === CUSTOM_ACCENT);
+}
 
 export const ProLooksProvider = ProLooksContext.Provider;
 

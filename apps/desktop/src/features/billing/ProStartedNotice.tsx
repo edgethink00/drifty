@@ -39,7 +39,7 @@ export function ProStartedNotice({ onDismiss, look = null }: ProStartedNoticePro
         <strong>{t("billing.proStarted.title")}</strong>
         <span className="cloud-trial-started-notice__detail">
           {look
-            ? t(look.kind === "icon" ? "billing.proStarted.lookIconDetail" : "billing.proStarted.lookCoatDetail", { name: localizedProLookLabel(look, t) })
+            ? t(look.kind === "icon" ? "billing.proStarted.lookIconDetail" : look.kind === "accent" ? "billing.proStarted.lookAccentDetail" : "billing.proStarted.lookCoatDetail", { name: localizedProLookLabel(look, t) })
             : t("billing.proStarted.detail")}
         </span>
       </span>

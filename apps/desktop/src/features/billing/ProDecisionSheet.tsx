@@ -131,7 +131,7 @@ function DecisionSheet({
   const { title, fact } = look
     ? {
       title: proLookTitle(look, t),
-      fact: t(look.kind === "icon" ? "billing.proSheet.lookIconFact" : "billing.proSheet.lookCoatFact"),
+      fact: t(look.kind === "icon" ? "billing.proSheet.lookIconFact" : look.kind === "accent" ? "billing.proSheet.lookAccentFact" : "billing.proSheet.lookCoatFact"),
     }
     : stateHeader;
   const checkoutLabel = checkoutOpening
