@@ -1812,11 +1812,16 @@ def get_activity_block_labels(payload: dict):
     return response(True, database().get_activity_block_labels(start, end))
 
 
-def save_activity_block_labels(payload: dict):
-    labels = payload.get("labels", [])
-    if not isinstance(labels, list):
-        return response(False, error="labels must be a list")
-    return response(True, database().save_activity_block_labels(labels))
+def get_activity_timeline_cards(payload: dict):
+    start, end = day_bounds(payload)
+    return response(True, database().get_activity_timeline_cards(start, end))
+
+
+def save_activity_timeline_window(payload: dict):
+    window = payload.get("window")
+    if not isinstance(window, dict):
+        return response(False, error="window must be an object")
+    return response(True, database().save_activity_timeline_window(window))
 
 
 def save_activity_block_user_label(payload: dict):
@@ -2330,7 +2335,8 @@ COMMANDS = {
     "save_project_window_assignments": save_project_window_assignments,
     "get_project_window_assignments": get_project_window_assignments,
     "get_activity_block_labels": get_activity_block_labels,
-    "save_activity_block_labels": save_activity_block_labels,
+    "get_activity_timeline_cards": get_activity_timeline_cards,
+    "save_activity_timeline_window": save_activity_timeline_window,
     "save_activity_block_user_label": save_activity_block_user_label,
     "delete_activity_block_user_label": delete_activity_block_user_label,
     "upsert_team_projects": upsert_team_projects,

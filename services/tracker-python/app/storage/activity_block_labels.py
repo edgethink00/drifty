@@ -1,12 +1,14 @@
-"""Local short work labels for timeline blocks.
+"""Local user choices for timeline blocks.
 
-A label is derived from the titles of the records a block contains, or typed by
-the user. It is stored locally only, next to the activity it describes, and is
-never part of device sync or any shared surface. Every label keeps links to its
-source records so that permanent deletion also removes text derived from them:
+A user label records what the user decided for one Day/Week block: today only
+"hide the task name" (an empty title). It is stored locally only, next to the
+activity it describes, and is never part of device sync or any shared surface.
+It keeps links to its records, follows the remaining ones when some are
+deleted, and disappears with the last.
 
-* deleting any record removes AI labels that summarized it;
-* user labels keep their remaining links and disappear with their last record.
+AI descriptions live in their own tables (activity_timeline_cards.py). Rows
+with source 'ai' were written only by unreleased builds and are removed when
+the schema is opened.
 """
 
 from __future__ import annotations
@@ -68,10 +70,7 @@ BEGIN
 END;
 """
 
-AI_STATUSES = {"ready", "limited", "abstain", "rejected"}
 MAX_KEY_LENGTH = 160
-MAX_AI_TITLE_LENGTH = 80
-MAX_AI_DESCRIPTION_LENGTH = 240
 MAX_USER_TITLE_LENGTH = 80
 MAX_USER_DESCRIPTION_LENGTH = 300
 MAX_META_LENGTH = 120
@@ -86,6 +85,8 @@ class ActivityBlockLabelError(ValueError):
 
 def ensure_activity_block_label_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(ACTIVITY_BLOCK_LABEL_SCHEMA)
+    # Timeline cards moved to activity_timeline_* tables before any release.
+    conn.execute("DELETE FROM activity_block_labels WHERE source = 'ai'")
 
 
 def _text(value: Any, limit: int) -> str:
@@ -208,47 +209,6 @@ def _upsert_label(conn: sqlite3.Connection, source: str, block: dict[str, Any], 
     return int(row[0])
 
 
-def save_ai_labels(conn: sqlite3.Connection, labels: list[Any], parse: Callable[[str], datetime]) -> dict[str, int]:
-    """Store AI answers. A label whose records were deleted meanwhile is dropped."""
-    saved = 0
-    skipped = 0
-    timestamp = datetime.now(timezone.utc).isoformat()
-    for item in labels:
-        if not isinstance(item, dict):
-            skipped += 1
-            continue
-        block = _block_fields(item, parse)
-        status = item.get("status")
-        if block is None or status not in AI_STATUSES:
-            skipped += 1
-            continue
-        title = _text(item.get("title"), MAX_AI_TITLE_LENGTH) if status in {"ready", "limited"} else ""
-        description = _text(item.get("description"), MAX_AI_DESCRIPTION_LENGTH) if status in {"ready", "limited"} else ""
-        if status in {"ready", "limited"} and not title:
-            skipped += 1
-            continue
-        if not conn.in_transaction:
-            conn.execute("BEGIN IMMEDIATE")
-        existing = _existing_segment_ids(conn, block["segment_ids"])
-        if existing != set(block["segment_ids"]):
-            skipped += 1
-            continue
-        label_id = _upsert_label(conn, "ai", block, {
-            "status": status,
-            "title": title,
-            "description": description,
-            "evidence_fingerprint": _optional_text(item.get("evidenceFingerprint"), MAX_KEY_LENGTH),
-            "reason": _optional_text(item.get("reason")),
-            "language": _optional_text(item.get("language"), 8),
-            "model": _optional_text(item.get("model")),
-            "provider": _optional_text(item.get("provider"), 32),
-            "prompt_version": _optional_text(item.get("promptVersion"), 64),
-        }, timestamp)
-        _replace_links(conn, label_id, block["segment_ids"])
-        saved += 1
-    return {"saved": saved, "skipped": skipped}
-
-
 def save_user_label(
     conn: sqlite3.Connection,
     item: Any,
@@ -292,18 +252,6 @@ def delete_user_label(conn: sqlite3.Connection, block_key: Any) -> dict[str, int
     return {"deleted": cursor.rowcount}
 
 
-def delete_ai_labels_for_segments(conn: sqlite3.Connection, segment_subquery: Optional[str], params: tuple[Any, ...]) -> None:
-    """Part of deleting AI results: remove AI labels for the selected records."""
-    if segment_subquery is None:
-        conn.execute("DELETE FROM activity_block_labels WHERE source = 'ai'")
-        return
-    conn.execute(
-        "DELETE FROM activity_block_labels WHERE source = 'ai' AND id IN ("
-        f"SELECT label_id FROM activity_block_label_segments WHERE segment_id IN ({segment_subquery}))",
-        params,
-    )
-
-
 def _select_labels(conn: sqlite3.Connection, where: str, params: list[Any]) -> list[dict[str, Any]]:
     rows = conn.execute(
         f"""
@@ -342,7 +290,7 @@ def _select_labels(conn: sqlite3.Connection, where: str, params: list[Any]) -> l
 
 
 def get_labels(conn: sqlite3.Connection, start: Optional[str], end: Optional[str]) -> list[dict[str, Any]]:
-    clauses = []
+    clauses = ["l.source = 'user'"]
     params: list[Any] = []
     if start:
         clauses.append("datetime(l.block_ended_at) > datetime(?)")
@@ -350,7 +298,6 @@ def get_labels(conn: sqlite3.Connection, start: Optional[str], end: Optional[str
     if end:
         clauses.append("datetime(l.block_started_at) < datetime(?)")
         params.append(end)
-    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    return _select_labels(conn, where, params)
+    return _select_labels(conn, "WHERE " + " AND ".join(clauses), params)
 
 

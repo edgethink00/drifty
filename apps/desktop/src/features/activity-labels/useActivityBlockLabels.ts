@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ACTIVITY_TIMELINE_MIN_WINDOW_TITLE_COVERAGE,
   ACTIVITY_TIMELINE_SESSION_GAP_MS,
-  activityTimelineCardSaveInputs,
   activityTimelineTitleCoverage,
   activityTimelineWindowAnswered,
+  activityTimelineWindowSaveInput,
   buildActivityTimelineCardPrompt,
   buildActivityTimelineRecords,
   buildActivityTimelineWindows,
@@ -15,6 +15,7 @@ import {
   type ActivityBlockLabelLanguage,
   type ActivityBlockLabelRecord,
   type ActivityTimelineWindow,
+  type ActivityTimelineWindowRecord,
   type ActivitySegment,
   type ClassificationOptions,
   type TrackerApi,
@@ -42,6 +43,7 @@ const BUDGET_BACKOFF_MS = 30 * 60_000;
 /** Background cadence for today's and yesterday's windows. */
 const BACKGROUND_TICK_MS = 10 * 60_000;
 const EMPTY_LABELS: readonly ActivityBlockLabelRecord[] = [];
+const EMPTY_WINDOWS: readonly ActivityTimelineWindowRecord[] = [];
 
 export type ActivityLabelsController = {
   readonly index: ActivityLabelIndex;
@@ -114,10 +116,14 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   } = args;
   const background = args.background ?? false;
   const policy = usePrivacyPolicy();
-  const supported = Boolean(tracker.getActivityBlockLabels && tracker.saveActivityBlockLabels);
+  const supported = Boolean(tracker.getActivityBlockLabels && tracker.getActivityTimelineCards && tracker.saveActivityTimelineWindow);
   const range = useMemo(() => getLogicalDayRange(startDay, endDay, startOfDayMinutes), [endDay, startDay, startOfDayMinutes]);
   const rangeKey = range.start + "|" + range.end;
-  const [labelState, setLabelState] = useState<{ readonly key: string; readonly labels: readonly ActivityBlockLabelRecord[] }>({ key: "", labels: EMPTY_LABELS });
+  const [labelState, setLabelState] = useState<{
+    readonly key: string;
+    readonly labels: readonly ActivityBlockLabelRecord[];
+    readonly windows: readonly ActivityTimelineWindowRecord[];
+  }>({ key: "", labels: EMPTY_LABELS, windows: EMPTY_WINDOWS });
   const [nowMs, setNowMs] = useState(() => (args.now ?? Date.now)());
   const [revision, setRevision] = useState(0);
   const mountedRef = useRef(true);
@@ -149,13 +155,14 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   }, [active]);
 
   const reload = useCallback(async () => {
-    if (!supported || !tracker.getActivityBlockLabels) return;
+    if (!supported || !tracker.getActivityBlockLabels || !tracker.getActivityTimelineCards) return;
     const key = rangeKey;
+    const query = { start: range.start, end: range.end };
     try {
-      const labels = await tracker.getActivityBlockLabels({ start: range.start, end: range.end });
-      if (mountedRef.current) setLabelState({ key, labels });
+      const [labels, windows] = await Promise.all([tracker.getActivityBlockLabels(query), tracker.getActivityTimelineCards(query)]);
+      if (mountedRef.current) setLabelState({ key, labels, windows });
     } catch {
-      if (mountedRef.current) setLabelState({ key, labels: EMPTY_LABELS });
+      if (mountedRef.current) setLabelState({ key, labels: EMPTY_LABELS, windows: EMPTY_WINDOWS });
     }
   }, [range.end, range.start, rangeKey, supported, tracker]);
 
@@ -177,9 +184,10 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   }, [active, classificationOptions, endDay, segments, startDay, startOfDayMinutes, weekCalendarEvents]);
 
   const labels = labelState.key === rangeKey ? labelState.labels : EMPTY_LABELS;
+  const storedWindows = labelState.key === rangeKey ? labelState.windows : EMPTY_WINDOWS;
   const blocks = useMemo(
-    () => buildActivityLabelBlocks(eventsByDay, { startOfDayMinutes, segmentsById, labels, language, nowMs }),
-    [eventsByDay, labels, language, nowMs, segmentsById, startOfDayMinutes],
+    () => buildActivityLabelBlocks(eventsByDay, { startOfDayMinutes, segmentsById, labels, windows: storedWindows, language, nowMs }),
+    [eventsByDay, labels, language, nowMs, segmentsById, startOfDayMinutes, storedWindows],
   );
   const index = useMemo(() => buildActivityLabelIndex(blocks), [blocks]);
 
@@ -217,7 +225,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   ): Promise<"saved" | "stop"> => {
     const records = buildActivityTimelineRecords(window, recordsById, policy);
     attemptedRef.current.add(window.key + "|" + language);
-    let rows = activityTimelineCardSaveInputs(window, [], language, {});
+    let input = activityTimelineWindowSaveInput(window, [], language, {});
     if (activityTimelineTitleCoverage(records) >= ACTIVITY_TIMELINE_MIN_WINDOW_TITLE_COVERAGE) {
       if (!consumeActivityLabelRequest(analysisSetup.provider, localDay(Date.now()))) {
         attemptedRef.current.delete(window.key + "|" + language);
@@ -233,10 +241,10 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         return "stop";
       }
       const { cards } = decideActivityTimelineCards(window, records, listed, result.output, language);
-      rows = activityTimelineCardSaveInputs(window, cards, language, result.usage);
+      input = activityTimelineWindowSaveInput(window, cards, language, result.usage);
     }
     if (!isCurrent()) return "stop";
-    await tracker.saveActivityBlockLabels?.(rows);
+    await tracker.saveActivityTimelineWindow?.(input);
     return "saved";
   }, [analysisSetup.provider, buildInference, language, policy, tracker]);
   // The background run calls the latest describeWindow through a ref so its
@@ -250,7 +258,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     // Latest finished window first: closed by a later record or a long break.
     const window = windows
       .filter((candidate) => !attemptedRef.current.has(candidate.key + "|" + language)
-        && !activityTimelineWindowAnswered(candidate, labels, language)
+        && !activityTimelineWindowAnswered(candidate, storedWindows, language)
         && (candidate.followed || nowMs - candidate.endMs >= ACTIVITY_TIMELINE_SESSION_GAP_MS + ACTIVITY_LABEL_SETTLE_MS))
       .sort((left, right) => right.endMs - left.endMs)[0];
     if (!window) return;
@@ -275,7 +283,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         if (saved && mountedRef.current) setRevision((value) => value + 1);
       }
     })();
-  }, [active, analysisConnected, describeWindow, labelState.key, labels, language, nowMs, rangeKey, scope, segmentsById, startOfDayMinutes, supported, tracker, windows]);
+  }, [active, analysisConnected, describeWindow, labelState.key, language, nowMs, rangeKey, scope, segmentsById, startOfDayMinutes, storedWindows, supported, tracker, windows]);
 
   // Background: like the hourly project pass, cards for today's and
   // yesterday's finished windows are made whether or not Day or Week is open,
@@ -287,12 +295,12 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   }, [background]);
 
   useEffect(() => {
-    if (!background || !supported || !analysisConnected || !tracker.getActivityBlockLabels) return;
+    if (!background || !supported || !analysisConnected || !tracker.getActivityTimelineCards) return;
     if (runningRef.current || Date.now() < backoffUntilRef.current) return;
     runningRef.current = true;
     const requestScope = backgroundScope;
     const isCurrent = () => mountedRef.current && backgroundScopeRef.current === requestScope;
-    const readLabels = tracker.getActivityBlockLabels.bind(tracker);
+    const readWindows = tracker.getActivityTimelineCards.bind(tracker);
     void (async () => {
       let saved = false;
       try {
@@ -301,7 +309,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         const days = [shiftIsoDate(today, -1), today];
         const span = getLogicalDayRange(days[0], today, startOfDayMinutes);
         const [stored, recent] = await Promise.all([
-          readLabels({ start: span.start, end: span.end }),
+          readWindows({ start: span.start, end: span.end }),
           tracker.getTimeline({ start: span.start, end: span.end }),
         ]);
         if (!isCurrent()) return;

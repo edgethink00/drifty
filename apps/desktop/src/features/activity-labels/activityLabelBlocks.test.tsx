@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, activityBlockLabelKey, type ActivityBlockLabelRecord, type ActivitySegment } from "@drifty/domain";
+import {
+  ACTIVITY_TIMELINE_CARD_PROMPT_VERSION,
+  activityBlockLabelKey,
+  type ActivityBlockLabelRecord,
+  type ActivitySegment,
+  type ActivityTimelineWindowRecord,
+} from "@drifty/domain";
 import { ActivityInspectorPreview, WeekActivityInspector, type ActivityInspectorEvent } from "../dashboard/WeekActivityInspector";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { activityLabelForFlowRange } from "./activityInspectorLabel";
@@ -35,41 +41,45 @@ const user: ActivityBlockLabelRecord = {
   title: "Checkout retry review", description: "Read the retry handler.",
 };
 
-function blocks(labels: ActivityBlockLabelRecord[], now = "2026-10-14T18:00:00") {
+function blocks(labels: ActivityBlockLabelRecord[], windows: ActivityTimelineWindowRecord[] = [], now = "2026-10-14T18:00:00") {
   return buildActivityLabelBlocks(events, {
     startOfDayMinutes: 0,
     segmentsById: new Map(segments.map((item) => [item.id, item])),
     labels,
+    windows,
     language: "en",
     nowMs: new Date(now).getTime(),
   });
 }
 
 describe("activity label blocks", () => {
-  function card(title: string, start: string, end: string, extra: Partial<ActivityBlockLabelRecord> = {}): ActivityBlockLabelRecord {
+  /** One described window holding the given cards. */
+  function windowOf(...cards: [title: string, start: string, end: string][]): ActivityTimelineWindowRecord {
+    const at = (time: string) => new Date(DAY + "T" + time + ":00").toISOString();
     return {
-      blockKey: DAY + ":w:x:" + title, source: "ai", logicalDay: DAY,
-      blockStartedAt: new Date(DAY + "T" + start + ":00").toISOString(), blockEndedAt: new Date(DAY + "T" + end + ":00").toISOString(),
-      segmentIds: ["1", "2"], status: "ready", title, description: "", reason: "card:strict", language: "en",
-      promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, updatedAt: "2026-10-14T12:00:00Z", ...extra,
+      windowKey: DAY + ":w:x", language: "en", logicalDay: DAY,
+      startedAt: at(cards[0][1]), endedAt: at(cards[cards.length - 1][2]),
+      promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, createdAt: "2026-10-14T12:00:00Z",
+      cards: cards.map(([title, start, end], position) => ({
+        position, startedAt: at(start), endedAt: at(end), status: "ready" as const, variant: "strict" as const,
+        title, description: "", segmentIds: ["1", "2"],
+      })),
     };
   }
 
   it("names a block by the timeline card covering most of it and lists the other cards inside", () => {
-    const [named, short] = blocks([card("Checkout flow review", "09:00", "10:00"), card("Retry handler reading", "10:00", "10:30")]);
+    const [named, short] = blocks([], [windowOf(["Checkout flow review", "09:00", "10:00"], ["Retry handler reading", "10:00", "10:30"])]);
     expect(named.display).toMatchObject({ title: "Checkout flow review", origin: "ai" });
     expect(named.otherCards.map((other) => other.title)).toEqual(["Retry handler reading"]);
     expect(short.display).toBeNull();
   });
 
-  it("keeps the user's hidden choice, ignores old block-level rows, and lets a newer card replace an older one", () => {
+  it("keeps the user's hidden choice, ignores old block-level rows and cards in another language", () => {
     const hidden = { ...user, status: "hidden" as const, title: "", description: "" };
-    expect(blocks([hidden, card("Checkout flow review", "09:00", "10:30")])[0].display).toBeNull();
+    expect(blocks([hidden], [windowOf(["Checkout flow review", "09:00", "10:30"])])[0].display).toBeNull();
     const oldBlockRow = { ...user, source: "ai" as const, status: "ready" as const, promptVersion: "activity-block-label-v1", language: "en" };
     expect(blocks([oldBlockRow])[0].display).toBeNull();
-    const older = card("Old name", "09:00", "10:30", { updatedAt: "2026-10-14T11:00:00Z" });
-    const newer = card("New name", "09:05", "10:30", { blockKey: DAY + ":w:y:new" });
-    expect(blocks([older, newer])[0].display?.title).toBe("New name");
+    expect(blocks([], [{ ...windowOf(["Checkout flow review", "09:00", "10:30"]), language: "ko" }])[0].display).toBeNull();
   });
 
   it("finds the work block around a Day hover slice and says when it covers more", () => {

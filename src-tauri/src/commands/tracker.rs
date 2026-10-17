@@ -332,8 +332,8 @@ pub struct ProjectWindowAssignmentsSaveQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ActivityBlockLabelsSaveQuery {
-    pub labels: serde_json::Value,
+pub struct ActivityTimelineWindowSaveQuery {
+    pub window: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1321,15 +1321,31 @@ pub async fn tracker_get_activity_block_labels(
 }
 
 #[tauri::command]
-pub async fn tracker_save_activity_block_labels(
+pub async fn tracker_get_activity_timeline_cards(
     app: AppHandle,
     controller: State<'_, TrackerController>,
-    query: ActivityBlockLabelsSaveQuery,
+    query: DayQuery,
 ) -> Result<serde_json::Value, String> {
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .save_activity_block_labels(&app, query.labels)
+            .get_activity_timeline_cards(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_activity_timeline_window(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ActivityTimelineWindowSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_activity_timeline_window(&app, query.window)
             .map_err(|error| error.to_string())
     })
     .await

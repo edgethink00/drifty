@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "./activity";
-import { activityBlockLabelEvidenceTitle, type ActivityBlockLabelRecord } from "./activityBlockLabels";
+import { activityBlockLabelEvidenceTitle } from "./activityBlockLabels";
 import {
   ACTIVITY_TIMELINE_CARD_PROMPT_VERSION,
-  activityTimelineCardSaveInputs,
   activityTimelineWindowAnswered,
+  activityTimelineWindowSaveInput,
   buildActivityTimelineCardPrompt,
   buildActivityTimelineRecords,
   buildActivityTimelineWindows,
@@ -13,6 +13,7 @@ import {
   parseActivityTimelineCardOutput,
   storedActivityTimelineCards,
   type ActivityTimelineCardModelItem,
+  type ActivityTimelineWindowRecord,
 } from "./activityTimelineCards";
 
 const DAY = "2026-10-14";
@@ -148,18 +149,23 @@ describe("activity timeline cards", () => {
     expect(cards[0].segmentIds).toEqual(["a", "b"]);
   });
 
-  it("stores cards with a window marker and reads back the newest card for each stretch", () => {
+  it("stores a window with its cards and reads its cards back in this language and prompt version", () => {
     const { window, records, listed } = prepare(segments);
     const { cards } = decideActivityTimelineCards(window, records, listed, [item("r1", "r1", "Checkout retry review", ["r1"])], "en");
-    const rows = activityTimelineCardSaveInputs(window, cards, "en", { model: "m" });
-    expect(rows.map((row) => [row.reason, row.status])).toEqual([["card:strict", "ready"], ["window", "abstain"]]);
-    const stored = rows.map((row, index): ActivityBlockLabelRecord => ({ ...row, source: "ai", updatedAt: "2026-10-14T0" + index + ":00:00Z" }));
-    expect(activityTimelineWindowAnswered(window, stored, "en")).toBe(true);
-    expect(activityTimelineWindowAnswered(window, stored, "ko")).toBe(false);
-    const newer = { ...stored[0], blockKey: "other", title: "Checkout retry handler", updatedAt: "2026-10-15T00:00:00Z" };
-    expect(storedActivityTimelineCards([...stored, newer], "en").map((card) => card.record.title)).toEqual(["Checkout retry handler"]);
-    expect(storedActivityTimelineCards(stored.map((row) => ({ ...row, promptVersion: "old" })), "en")).toEqual([]);
-    expect(ACTIVITY_TIMELINE_CARD_PROMPT_VERSION).toBe(rows[0].promptVersion);
+    const input = activityTimelineWindowSaveInput(window, cards, "en", { model: "m" });
+    expect(input).toMatchObject({ windowKey: window.key, language: "en", segmentIds: window.segmentIds, promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, model: "m", provider: null });
+    expect(input.cards.map((card) => [card.title, card.variant, card.status])).toEqual([["Checkout retry review", "strict", "ready"]]);
+    // The tracker returns what was stored, with each card's position.
+    const stored: ActivityTimelineWindowRecord = { ...input, createdAt: "2026-10-14T12:00:00Z", cards: input.cards.map((card, position) => ({ ...card, position })) };
+    expect(activityTimelineWindowAnswered(window, [stored], "en")).toBe(true);
+    expect(activityTimelineWindowAnswered(window, [stored], "ko")).toBe(false);
+    const [read] = storedActivityTimelineCards([stored], "en");
+    expect(read.record).toMatchObject({ blockKey: window.key + ":c1", source: "ai", title: "Checkout retry review", status: "ready", segmentIds: input.cards[0].segmentIds });
+    expect(read.variant).toBe("strict");
+    expect(storedActivityTimelineCards([stored], "ko")).toEqual([]);
+    expect(storedActivityTimelineCards([{ ...stored, promptVersion: "old" }], "en")).toEqual([]);
+    // A window answered with no cards is still answered.
+    expect(activityTimelineWindowAnswered(window, [{ ...stored, cards: [] }], "en")).toBe(true);
   });
 
   it("parses fenced answers and drops malformed cards", () => {

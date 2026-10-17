@@ -11,6 +11,7 @@ import {
   type ActivityBlockLabelLanguage,
   type ActivityBlockLabelRecord,
   type ActivityBlockLabelResolution,
+  type ActivityTimelineWindowRecord,
   type ActivitySegment,
 } from "@drifty/domain";
 
@@ -80,7 +81,10 @@ function cardsForBlock(cards: readonly StoredActivityTimelineCard[], startMs: nu
 export type ActivityLabelBlockOptions = {
   readonly startOfDayMinutes: number;
   readonly segmentsById: ReadonlyMap<string, ActivitySegment>;
+  /** The user's choices per block (hide a name). */
   readonly labels: readonly ActivityBlockLabelRecord[];
+  /** Described windows with their cards. */
+  readonly windows: readonly ActivityTimelineWindowRecord[];
   readonly language: ActivityBlockLabelLanguage;
   readonly nowMs: number;
 };
@@ -94,7 +98,7 @@ export function buildActivityLabelBlocks(
   options: ActivityLabelBlockOptions,
 ): ActivityLabelBlock[] {
   const labelsByDay = new Map<string, ActivityBlockLabelRecord[]>();
-  const cards = storedActivityTimelineCards(options.labels, options.language);
+  const cards = storedActivityTimelineCards(options.windows, options.language);
   for (const label of options.labels) {
     const list = labelsByDay.get(label.logicalDay) ?? [];
     list.push(label);

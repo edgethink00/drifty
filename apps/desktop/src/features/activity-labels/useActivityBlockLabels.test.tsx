@@ -3,10 +3,11 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ActivityBlockLabelRecord,
-  ActivityBlockLabelSaveInput,
   ActivityBlockUserLabelInput,
   ActivitySegment,
   ActivityTimelineCardModelItem,
+  ActivityTimelineWindowRecord,
+  ActivityTimelineWindowSaveInput,
   TrackerApi,
 } from "@drifty/domain";
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
@@ -58,13 +59,19 @@ const SEGMENTS: ActivitySegment[] = FULL_SEGMENTS.map((item) => ({ ...item, wind
 
 function fakeTracker() {
   const store = new Map<string, ActivityBlockLabelRecord>();
+  const windows = new Map<string, ActivityTimelineWindowRecord>();
   let clock = 0;
   const tracker = {
     getTimeline: vi.fn(async () => FULL_SEGMENTS),
     getActivityBlockLabels: vi.fn(async () => [...store.values()]),
-    saveActivityBlockLabels: vi.fn(async (labels: ActivityBlockLabelSaveInput[]) => {
-      for (const label of labels) store.set("ai|" + label.blockKey, { ...label, source: "ai", updatedAt: new Date(Date.UTC(2026, 9, 14, 0, 0, clock++)).toISOString() });
-      return { saved: labels.length, skipped: 0 };
+    getActivityTimelineCards: vi.fn(async () => [...windows.values()]),
+    saveActivityTimelineWindow: vi.fn(async (window: ActivityTimelineWindowSaveInput) => {
+      windows.set(window.windowKey + "|" + window.language, {
+        ...window,
+        createdAt: new Date(Date.UTC(2026, 9, 14, 0, 0, clock++)).toISOString(),
+        cards: window.cards.map((card, position) => ({ ...card, position })),
+      });
+      return { saved: 1, replaced: 0, cards: window.cards.length };
     }),
     saveActivityBlockUserLabel: vi.fn(async (label: ActivityBlockUserLabelInput, previous?: string | null) => {
       if (previous) store.delete("user|" + previous);
@@ -131,9 +138,9 @@ describe("useActivityBlockLabels", () => {
     expect(blockFor(result.current, ["11"])?.display).toMatchObject({ origin: "ai", status: "ready", description: "" });
     await waitFor(() => expect(blockFor(result.current, ["21", "22"])?.display).toMatchObject({ title: "Drifty pricing review", status: "limited" }));
     expect(blockFor(result.current, ["31"])?.display).toBeNull();
-    const saved = tracker.saveActivityBlockLabels.mock.calls.flatMap(([labels]) => labels);
-    expect(saved.find((label) => label.title === "Drifty pricing review")).toMatchObject({ reason: "card:partial" });
-    expect(saved.filter((label) => label.reason === "window")).toHaveLength(3);
+    const saved = tracker.saveActivityTimelineWindow.mock.calls.map(([window]) => window);
+    expect(saved).toHaveLength(3);
+    expect(saved.flatMap((window) => window.cards).find((card) => card.title === "Drifty pricing review")).toMatchObject({ variant: "partial" });
     // The untitled chat window is settled without a request.
     expect(inferenceCalls).toHaveLength(2);
     expect(inferenceCalls.some((prompt) => prompt.includes("checkout-retry.ts"))).toBe(true);
@@ -145,9 +152,10 @@ describe("useActivityBlockLabels", () => {
     const { tracker } = fakeTracker();
     const { result } = renderHook(() => useActivityBlockLabels(args(tracker)));
     await waitFor(() => expect(inferenceCalls).toHaveLength(2));
-    await waitFor(() => expect(tracker.saveActivityBlockLabels.mock.calls.flatMap(([labels]) => labels).filter((label) => label.reason === "window")).toHaveLength(3));
+    await waitFor(() => expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(3));
     expect(blockFor(result.current, ["11"])?.display).toBeNull();
-    expect(tracker.saveActivityBlockLabels.mock.calls.flatMap(([labels]) => labels).filter((label) => label.reason?.startsWith("card:"))).toEqual([]);
+    // Each window is still stored, without cards, so it is not asked again.
+    expect(tracker.saveActivityTimelineWindow.mock.calls.flatMap(([window]) => window.cards)).toEqual([]);
   });
 
   it("lets the user's choice for a block win over the card and return to it", async () => {
@@ -186,7 +194,7 @@ describe("useActivityBlockLabels", () => {
     const untitled = fakeTracker();
     renderHook(() => useActivityBlockLabels(args(untitled.tracker)));
     // Cards have no switch of their own; with no title allowed, every window is settled on the device.
-    await waitFor(() => expect(untitled.tracker.saveActivityBlockLabels).toHaveBeenCalled());
+    await waitFor(() => expect(untitled.tracker.saveActivityTimelineWindow).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(inferenceCalls).toHaveLength(0);
     cleanup();
@@ -198,9 +206,9 @@ describe("useActivityBlockLabels", () => {
     const spent = fakeTracker();
     renderHook(() => useActivityBlockLabels(args(spent.tracker)));
     // The untitled window is settled without the model; the rest wait for tomorrow's budget.
-    await waitFor(() => expect(spent.tracker.saveActivityBlockLabels).toHaveBeenCalled());
+    await waitFor(() => expect(spent.tracker.saveActivityTimelineWindow).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(spent.tracker.saveActivityBlockLabels.mock.calls.flatMap(([labels]) => labels).map((label) => label.reason)).toEqual(["window"]);
+    expect(spent.tracker.saveActivityTimelineWindow.mock.calls.map(([window]) => window.cards.length)).toEqual([0]);
     expect(inferenceCalls).toHaveLength(0);
   });
 
@@ -215,7 +223,7 @@ describe("useActivityBlockLabels", () => {
     const { tracker } = fakeTracker();
     const { result } = renderHook(() => useActivityBlockLabels(args(tracker, { active: false, background: true })));
     // Two titled windows go to the model, the untitled one is settled on the device.
-    await waitFor(() => expect(tracker.saveActivityBlockLabels).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(3));
     expect(inferenceCalls).toHaveLength(2);
     expect(tracker.getTimeline).toHaveBeenCalledTimes(1);
     expect(tracker.getTimeline).toHaveBeenCalledWith({ start: "2026-10-13T00:00:00", end: "2026-10-14T23:59:59" });
@@ -227,16 +235,16 @@ describe("useActivityBlockLabels", () => {
     inferenceCalls.length = 0;
     const open = fakeTracker();
     renderHook(() => useActivityBlockLabels(args(open.tracker, { active: false, background: true, now: () => new Date(DAY + "T13:45:00").getTime() })));
-    await waitFor(() => expect(open.tracker.saveActivityBlockLabels).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(open.tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(2));
     await new Promise((resolve) => setTimeout(resolve, 20));
     const openWindowStart = new Date(DAY + "T13:00:00").getTime();
-    const savedStarts = open.tracker.saveActivityBlockLabels.mock.calls.flatMap(([labels]) => labels).map((label) => Date.parse(label.blockStartedAt));
+    const savedStarts = open.tracker.saveActivityTimelineWindow.mock.calls.map(([window]) => Date.parse(window.startedAt));
     expect(savedStarts.every((start) => start < openWindowStart)).toBe(true);
     cleanup();
     const idle = fakeTracker();
     renderHook(() => useActivityBlockLabels(args(idle.tracker, { active: false, background: true, analysisConnected: false })));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(idle.tracker.getTimeline).not.toHaveBeenCalled();
-    expect(idle.tracker.saveActivityBlockLabels).not.toHaveBeenCalled();
+    expect(idle.tracker.saveActivityTimelineWindow).not.toHaveBeenCalled();
   });
 });

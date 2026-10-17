@@ -236,12 +236,12 @@ impl TrackerController {
         )
     }
 
-    pub fn save_activity_block_labels(
+    pub fn save_activity_timeline_window(
         &self,
         app: &AppHandle,
-        labels: Value,
+        window: Value,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "save_activity_block_labels", json!({ "labels": labels }))
+        self.invoke::<Value>(app, "save_activity_timeline_window", json!({ "window": window }))
     }
 
     pub fn save_activity_block_user_label(

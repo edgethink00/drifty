@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
 import type {
   ActivityBlockLabelRecord,
-  ActivityBlockLabelSaveInput,
+  ActivityTimelineWindowRecord,
+  ActivityTimelineWindowSaveInput,
+  ActivityTimelineWindowSaveResult,
   ActivityBlockUserLabelInput,
   ActivityClassificationRecord,
   ActivitySegment,
@@ -71,7 +73,8 @@ import {
   previewClassificationRule,
   previewDeleteActivityBlockUserLabel,
   previewGetActivityBlockLabels,
-  previewSaveActivityBlockLabels,
+  previewGetActivityTimelineCards,
+  previewSaveActivityTimelineWindow,
   previewSaveActivityBlockUserLabel,
   previewDeleteActivitySegments,
   previewDeleteProject,
@@ -548,10 +551,15 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_get_activity_block_labels", { query });
     return result ?? [];
   },
-  async saveActivityBlockLabels(labels: ActivityBlockLabelSaveInput[]) {
-    if (shouldUsePreviewData()) return previewSaveActivityBlockLabels(labels);
-    const result = await safeInvoke("tracker_save_activity_block_labels", { query: { labels } });
-    return result ?? { saved: 0, skipped: labels.length };
+  async getActivityTimelineCards(query: TimelineQuery): Promise<ActivityTimelineWindowRecord[]> {
+    if (shouldUsePreviewData()) return previewGetActivityTimelineCards(query);
+    const result = await safeInvoke("tracker_get_activity_timeline_cards", { query });
+    return result ?? [];
+  },
+  async saveActivityTimelineWindow(window: ActivityTimelineWindowSaveInput): Promise<ActivityTimelineWindowSaveResult> {
+    if (shouldUsePreviewData()) return previewSaveActivityTimelineWindow(window);
+    const result = await safeInvoke("tracker_save_activity_timeline_window", { query: { window } });
+    return result ?? { saved: 0, replaced: 0, cards: 0 };
   },
   async saveActivityBlockUserLabel(label: ActivityBlockUserLabelInput, previousBlockKey?: string | null): Promise<ActivityBlockLabelRecord> {
     if (shouldUsePreviewData()) return previewSaveActivityBlockUserLabel(label, previousBlockKey);

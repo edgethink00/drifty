@@ -668,18 +668,6 @@ export interface ActivityBlockLabelTarget {
   readonly segmentIds: readonly string[];
 }
 
-export interface ActivityBlockLabelSaveInput extends ActivityBlockLabelTarget {
-  readonly status: "ready" | "limited" | "abstain" | "rejected";
-  readonly title: string;
-  readonly description: string;
-  readonly evidenceFingerprint: string;
-  readonly reason?: string | null;
-  readonly language: ActivityBlockLabelLanguage;
-  readonly model?: string | null;
-  readonly provider?: string | null;
-  readonly promptVersion: string;
-}
-
 export interface ActivityBlockUserLabelInput extends ActivityBlockLabelTarget {
   /** Empty hides the label for this block. */
   readonly title: string;

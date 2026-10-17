@@ -8,7 +8,7 @@ import { buildWeekCalendarEvents, type WeekCalendarEvent, type WeekDayRow } from
 import { readAppStyles } from "../../test/readStyles";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
-import { ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, activityBlockLabelKey, type ActivityBlockLabelRecord } from "@drifty/domain";
+import { ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, activityBlockLabelKey, type ActivityBlockLabelRecord, type ActivityTimelineWindowRecord } from "@drifty/domain";
 import { ActivityLabelsContext } from "../activity-labels/ActivityLabelsContext";
 import { buildActivityLabelBlocks, buildActivityLabelIndex, type ActivityLabelBlock } from "../activity-labels/activityLabelBlocks";
 
@@ -2057,6 +2057,7 @@ describe("WeekDashboard block work names", () => {
       startOfDayMinutes: 0,
       segmentsById: new Map(weekSegments.map((segment) => [segment.id, segment])),
       labels,
+      windows: [],
       language: "en",
       nowMs: Date.parse("2024-01-08T00:00:00"),
     });
@@ -2110,6 +2111,7 @@ describe("WeekDashboard block work names", () => {
         startOfDayMinutes: 0,
         segmentsById: new Map(weekSegments.map((segment) => [segment.id, segment])),
         labels: [userLabel("Checkout retry review")],
+        windows: [],
         language: "en",
         nowMs: Date.parse("2024-01-08T00:00:00"),
       });
@@ -2163,18 +2165,23 @@ describe("WeekDashboard block work names", () => {
     await waitFor(() => expect(hidden.resetUserLabel).toHaveBeenCalledTimes(1));
   });
 
-  const timelineCard = (title: string, start: string, end: string, segmentIds: string[]): ActivityBlockLabelRecord => ({
-    blockKey: day + ":w:" + title, source: "ai", logicalDay: day,
-    blockStartedAt: new Date(day + "T" + start + ":00").toISOString(), blockEndedAt: new Date(day + "T" + end + ":00").toISOString(),
-    segmentIds, status: "ready", title, description: "", reason: "card:strict", language: "en",
-    promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, updatedAt: "2024-01-04T00:00:00Z",
-  });
+  /** A described window holding one card. */
+  const timelineCard = (title: string, start: string, end: string, segmentIds: string[]): ActivityTimelineWindowRecord => {
+    const startedAt = new Date(day + "T" + start + ":00").toISOString();
+    const endedAt = new Date(day + "T" + end + ":00").toISOString();
+    return {
+      windowKey: day + ":w:" + title, language: "en", logicalDay: day, startedAt, endedAt,
+      promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, createdAt: "2024-01-04T00:00:00Z",
+      cards: [{ position: 0, startedAt, endedAt, status: "ready", variant: "strict", title, description: "", segmentIds }],
+    };
+  };
 
-  function renderCards(calendarEvents: Map<string, WeekCalendarEvent[]>, labels: ActivityBlockLabelRecord[]) {
+  function renderCards(calendarEvents: Map<string, WeekCalendarEvent[]>, windows: ActivityTimelineWindowRecord[], labels: ActivityBlockLabelRecord[] = []) {
     const blocks = buildActivityLabelBlocks(calendarEvents, {
       startOfDayMinutes: 0,
       segmentsById: new Map(weekSegments.map((segment) => [segment.id, segment])),
       labels,
+      windows,
       language: "en",
       nowMs: Date.parse("2024-01-08T00:00:00"),
     });

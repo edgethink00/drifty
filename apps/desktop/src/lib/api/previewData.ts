@@ -1,7 +1,9 @@
 import { buildHourlySummary, findMatchingClassificationRule, topSites as buildTopSites } from "@drifty/domain";
 import type {
   ActivityBlockLabelRecord,
-  ActivityBlockLabelSaveInput,
+  ActivityTimelineWindowRecord,
+  ActivityTimelineWindowSaveInput,
+  ActivityTimelineWindowSaveResult,
   ActivityBlockUserLabelInput,
   ActivityCategory,
   ActivityClassificationRecord,
@@ -435,11 +437,37 @@ export function previewGetActivityBlockLabels(query: TimelineQuery): ActivityBlo
   return [...previewActivityBlockLabels.values()].filter((label) => label.logicalDay >= start && label.logicalDay <= end);
 }
 
-export function previewSaveActivityBlockLabels(labels: readonly ActivityBlockLabelSaveInput[]): { saved: number; skipped: number } {
-  for (const label of labels) {
-    previewActivityBlockLabels.set(previewLabelKey(label.blockKey, "ai"), { ...label, source: "ai" });
+const previewTimelineWindows = new Map<string, ActivityTimelineWindowRecord>();
+
+/** In-memory timeline cards for the browser preview, replaced like the tracker does. */
+export function previewGetActivityTimelineCards(query: TimelineQuery): ActivityTimelineWindowRecord[] {
+  const start = "day" in query ? query.day : query.start.slice(0, 10);
+  const end = "day" in query ? query.day : query.end.slice(0, 10);
+  return [...previewTimelineWindows.values()].filter((window) => window.logicalDay >= start && window.logicalDay <= end);
+}
+
+export function previewSaveActivityTimelineWindow(window: ActivityTimelineWindowSaveInput): ActivityTimelineWindowSaveResult {
+  let replaced = 0;
+  for (const [key, stored] of previewTimelineWindows) {
+    const overlaps = stored.startedAt < window.endedAt && stored.endedAt > window.startedAt;
+    if (stored.language === window.language && (stored.windowKey === window.windowKey || overlaps)) {
+      previewTimelineWindows.delete(key);
+      replaced += 1;
+    }
   }
-  return { saved: labels.length, skipped: 0 };
+  previewTimelineWindows.set(window.windowKey + "|" + window.language, {
+    windowKey: window.windowKey,
+    language: window.language,
+    logicalDay: window.logicalDay,
+    startedAt: window.startedAt,
+    endedAt: window.endedAt,
+    promptVersion: window.promptVersion,
+    model: window.model,
+    provider: window.provider,
+    createdAt: new Date().toISOString(),
+    cards: window.cards.map((card, position) => ({ ...card, position })),
+  });
+  return { saved: 1, replaced, cards: window.cards.length };
 }
 
 export function previewSaveActivityBlockUserLabel(label: ActivityBlockUserLabelInput, previousBlockKey?: string | null): ActivityBlockLabelRecord {

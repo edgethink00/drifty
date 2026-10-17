@@ -12,7 +12,6 @@ import {
   type ActivityBlockLabelLanguage,
   type ActivityBlockLabelModelStatus,
   type ActivityBlockLabelRecord,
-  type ActivityBlockLabelSaveInput,
 } from "./activityBlockLabels";
 import { activitySecondsWithinInterval } from "./deviceElapsedTime";
 
@@ -28,8 +27,10 @@ import { activitySecondsWithinInterval } from "./deviceElapsedTime";
  * (Dayflow's titleEvidence) and names the largest; the tally itself is
  * working data and is not stored.
  *
- * Cards are stored in the block-label table: one row per card and one
- * "window" marker row, so a finished window is asked about once.
+ * The tracker stores each described window once per language with its cards
+ * (activity_timeline_windows / activity_timeline_cards), so a finished window
+ * is asked about once; deleting any of its records removes the window, and a
+ * newer window replaces the ones it overlaps.
  */
 export const ACTIVITY_TIMELINE_CARD_PROMPT_VERSION = "activity-timeline-card-v1";
 export const ACTIVITY_TIMELINE_SESSION_GAP_MS = 20 * 60 * 1000;
@@ -45,7 +46,6 @@ const MAX_LISTED_RECORDS = 260;
 const MIN_SOFT_CARD_SECONDS = 3 * 60;
 const MAX_TITLE_CHARS = { ko: 32, en: 48 } as const;
 const MAX_DESCRIPTION_CHARS = { ko: 90, en: 140 } as const;
-const WINDOW_REASON = "window";
 
 export type ActivityTimelineWindow = {
   readonly key: string;
@@ -522,58 +522,88 @@ export function decideActivityTimelineCards(
   return { cards, rejected };
 }
 
-/** Rows to store for one answered window: its cards and the window marker. */
-export function activityTimelineCardSaveInputs(
+/** One stored card of a described window, as the tracker returns it. */
+export type ActivityTimelineStoredCard = {
+  readonly position: number;
+  readonly startedAt: string;
+  readonly endedAt: string;
+  readonly status: "ready" | "limited";
+  readonly variant: ActivityTimelineCardVariant;
+  readonly title: string;
+  readonly description: string;
+  readonly segmentIds: readonly string[];
+};
+
+/** A described window in one language with its cards (possibly none). */
+export type ActivityTimelineWindowRecord = {
+  readonly windowKey: string;
+  readonly language: string;
+  readonly logicalDay: string;
+  readonly startedAt: string;
+  readonly endedAt: string;
+  readonly promptVersion: string;
+  readonly model?: string | null;
+  readonly provider?: string | null;
+  readonly createdAt?: string | null;
+  readonly cards: readonly ActivityTimelineStoredCard[];
+};
+
+export type ActivityTimelineWindowSaveInput = {
+  readonly windowKey: string;
+  readonly language: ActivityBlockLabelLanguage;
+  readonly logicalDay: string;
+  readonly startedAt: string;
+  readonly endedAt: string;
+  readonly segmentIds: readonly string[];
+  readonly promptVersion: string;
+  readonly model: string | null;
+  readonly provider: string | null;
+  readonly cards: readonly Omit<ActivityTimelineStoredCard, "position">[];
+};
+
+export type ActivityTimelineWindowSaveResult = { readonly saved: number; readonly replaced: number; readonly cards: number };
+
+/** What to store for one answered window; a window without cards is stored too, so it is not asked again. */
+export function activityTimelineWindowSaveInput(
   window: ActivityTimelineWindow,
   cards: readonly ActivityTimelineCard[],
   language: ActivityBlockLabelLanguage,
   usage: { readonly model?: string | null; readonly provider?: string | null },
-): ActivityBlockLabelSaveInput[] {
-  const common = {
-    logicalDay: window.day,
-    evidenceFingerprint: window.key,
+): ActivityTimelineWindowSaveInput {
+  return {
+    windowKey: window.key,
     language,
+    logicalDay: window.day,
+    startedAt: new Date(window.startMs).toISOString(),
+    endedAt: new Date(window.endMs).toISOString(),
+    segmentIds: window.segmentIds,
+    promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION,
     model: usage.model ?? null,
     provider: usage.provider ?? null,
-    promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION,
-  };
-  return [
-    ...cards.map((card, index) => ({
-      ...common,
-      blockKey: window.key + ":c" + (index + 1),
-      blockStartedAt: new Date(card.startMs).toISOString(),
-      blockEndedAt: new Date(card.endMs).toISOString(),
-      segmentIds: card.segmentIds,
+    cards: cards.map((card) => ({
+      startedAt: new Date(card.startMs).toISOString(),
+      endedAt: new Date(card.endMs).toISOString(),
       status: card.status,
+      variant: card.variant,
       title: card.title,
       description: card.description,
-      reason: "card:" + card.variant,
+      segmentIds: card.segmentIds,
     })),
-    {
-      ...common,
-      blockKey: window.key,
-      blockStartedAt: new Date(window.startMs).toISOString(),
-      blockEndedAt: new Date(window.endMs).toISOString(),
-      segmentIds: window.segmentIds,
-      status: "abstain" as const,
-      title: "",
-      description: "",
-      reason: WINDOW_REASON,
-    },
-  ];
+  };
 }
 
 /** True when this window was already answered in this language. */
 export function activityTimelineWindowAnswered(
   window: ActivityTimelineWindow,
-  labels: readonly ActivityBlockLabelRecord[],
+  stored: readonly ActivityTimelineWindowRecord[],
   language: ActivityBlockLabelLanguage,
 ): boolean {
-  return labels.some((label) => label.source === "ai" && label.blockKey === window.key
-    && label.promptVersion === ACTIVITY_TIMELINE_CARD_PROMPT_VERSION && label.language === language);
+  return stored.some((record) => record.windowKey === window.key && record.language === language
+    && record.promptVersion === ACTIVITY_TIMELINE_CARD_PROMPT_VERSION);
 }
 
 export type StoredActivityTimelineCard = {
+  /** The card in the record shape Day and Week display (source "ai"). */
   readonly record: ActivityBlockLabelRecord;
   readonly startMs: number;
   readonly endMs: number;
@@ -581,30 +611,43 @@ export type StoredActivityTimelineCard = {
 };
 
 /**
- * Stored cards in this language, newest first per overlapping stretch: a
- * window answered again after a record deletion replaces its older cards.
+ * Stored cards in this language and prompt version, in time order. The
+ * tracker already keeps one window per stretch and language.
  */
 export function storedActivityTimelineCards(
-  labels: readonly ActivityBlockLabelRecord[],
+  windows: readonly ActivityTimelineWindowRecord[],
   language: ActivityBlockLabelLanguage,
 ): StoredActivityTimelineCard[] {
-  const cards = labels
-    .filter((label) => label.source === "ai" && label.promptVersion === ACTIVITY_TIMELINE_CARD_PROMPT_VERSION
-      && label.language === language && (label.status === "ready" || label.status === "limited") && label.title.trim()
-      && (label.reason ?? "").startsWith("card:"))
-    .map((record) => ({
-      record,
-      startMs: Date.parse(record.blockStartedAt),
-      endMs: Date.parse(record.blockEndedAt),
-      variant: ((record.reason ?? "").slice(5) || "strict") as ActivityTimelineCardVariant,
-    }))
-    .filter((card) => Number.isFinite(card.startMs) && card.endMs > card.startMs)
-    .sort((a, b) => (b.record.updatedAt ?? "").localeCompare(a.record.updatedAt ?? "") || a.startMs - b.startMs);
-  const kept: StoredActivityTimelineCard[] = [];
-  for (const card of cards) {
-    const span = card.endMs - card.startMs;
-    const clash = kept.some((other) => Math.min(card.endMs, other.endMs) - Math.max(card.startMs, other.startMs) > span * 0.5);
-    if (!clash) kept.push(card);
+  const out: StoredActivityTimelineCard[] = [];
+  for (const window of windows) {
+    if (window.language !== language || window.promptVersion !== ACTIVITY_TIMELINE_CARD_PROMPT_VERSION) continue;
+    for (const card of window.cards) {
+      const startMs = Date.parse(card.startedAt);
+      const endMs = Date.parse(card.endedAt);
+      if (!Number.isFinite(startMs) || !(endMs > startMs) || !card.title.trim()) continue;
+      out.push({
+        record: {
+          blockKey: window.windowKey + ":c" + (card.position + 1),
+          source: "ai",
+          logicalDay: window.logicalDay,
+          blockStartedAt: card.startedAt,
+          blockEndedAt: card.endedAt,
+          segmentIds: card.segmentIds,
+          status: card.status,
+          title: card.title,
+          description: card.description,
+          language: window.language,
+          model: window.model ?? null,
+          provider: window.provider ?? null,
+          promptVersion: window.promptVersion,
+          createdAt: window.createdAt ?? null,
+          updatedAt: window.createdAt ?? null,
+        },
+        startMs,
+        endMs,
+        variant: card.variant,
+      });
+    }
   }
-  return kept.sort((a, b) => a.startMs - b.startMs);
+  return out.sort((left, right) => left.startMs - right.startMs);
 }
