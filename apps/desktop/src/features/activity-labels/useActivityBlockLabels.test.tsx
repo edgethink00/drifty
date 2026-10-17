@@ -208,5 +208,35 @@ describe("useActivityBlockLabels", () => {
     const { tracker } = fakeTracker();
     expect(renderHook(() => useActivityBlockLabels(args(tracker, { active: false }))).result.current).toBeNull();
     expect(renderHook(() => useActivityBlockLabels(args({} as ReturnType<typeof fakeTracker>["tracker"]))).result.current).toBeNull();
+    expect(tracker.getTimeline).not.toHaveBeenCalled();
+  });
+
+  it("describes today's and yesterday's finished windows in the background while Day and Week are closed", async () => {
+    const { tracker } = fakeTracker();
+    const { result } = renderHook(() => useActivityBlockLabels(args(tracker, { active: false, background: true })));
+    // Two titled windows go to the model, the untitled one is settled on the device.
+    await waitFor(() => expect(tracker.saveActivityBlockLabels).toHaveBeenCalledTimes(3));
+    expect(inferenceCalls).toHaveLength(2);
+    expect(tracker.getTimeline).toHaveBeenCalledTimes(1);
+    expect(tracker.getTimeline).toHaveBeenCalledWith({ start: "2026-10-13T00:00:00", end: "2026-10-14T23:59:59" });
+    // Nothing is shown while the dashboard is closed.
+    expect(result.current).toBeNull();
+    cleanup();
+
+    // A window still open (no later record, no long break) waits, and no model means no reads.
+    inferenceCalls.length = 0;
+    const open = fakeTracker();
+    renderHook(() => useActivityBlockLabels(args(open.tracker, { active: false, background: true, now: () => new Date(DAY + "T13:45:00").getTime() })));
+    await waitFor(() => expect(open.tracker.saveActivityBlockLabels).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const openWindowStart = new Date(DAY + "T13:00:00").getTime();
+    const savedStarts = open.tracker.saveActivityBlockLabels.mock.calls.flatMap(([labels]) => labels).map((label) => Date.parse(label.blockStartedAt));
+    expect(savedStarts.every((start) => start < openWindowStart)).toBe(true);
+    cleanup();
+    const idle = fakeTracker();
+    renderHook(() => useActivityBlockLabels(args(idle.tracker, { active: false, background: true, analysisConnected: false })));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(idle.tracker.getTimeline).not.toHaveBeenCalled();
+    expect(idle.tracker.saveActivityBlockLabels).not.toHaveBeenCalled();
   });
 });

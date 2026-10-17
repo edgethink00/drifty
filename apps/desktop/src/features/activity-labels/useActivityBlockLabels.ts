@@ -10,6 +10,8 @@ import {
   buildActivityTimelineWindows,
   decideActivityTimelineCards,
   listedActivityTimelineRecords,
+  logicalDayIsoDateForDate,
+  shiftIsoDate,
   type ActivityBlockLabelLanguage,
   type ActivityBlockLabelRecord,
   type ActivityTimelineWindow,
@@ -37,6 +39,8 @@ import { createActivityLabelInference, type ActivityLabelInference } from "./act
 const CLOCK_TICK_MS = 60_000;
 const FAILURE_BACKOFF_MS = 15 * 60_000;
 const BUDGET_BACKOFF_MS = 30 * 60_000;
+/** Background cadence for today's and yesterday's windows. */
+const BACKGROUND_TICK_MS = 10 * 60_000;
 const EMPTY_LABELS: readonly ActivityBlockLabelRecord[] = [];
 
 export type ActivityLabelsController = {
@@ -50,6 +54,11 @@ export type UseActivityBlockLabelsArgs = {
   readonly tracker: TrackerApi;
   /** Dashboard Day/Week is showing live tracker data (not a replay or preview fixture). */
   readonly active: boolean;
+  /**
+   * Make cards for today's and yesterday's finished windows even while Day
+   * and Week are closed (live tracker only, never a replay or preview).
+   */
+  readonly background?: boolean;
   readonly startDay: string;
   readonly endDay: string;
   /** Week view's canonical blocks; Day view computes its own from the same segments. */
@@ -89,8 +98,9 @@ function localDay(ms: number): string {
 
 /**
  * Loads stored timeline cards for the visible Day/Week range, asks the
- * analysis model to describe finished activity windows one at a time in the
- * background, and exposes the user's per-block choice to hide a name. Every
+ * analysis model to describe finished activity windows one at a time (the
+ * range on screen, and today's and yesterday's windows in the background),
+ * and exposes the user's per-block choice to hide a name. Every
  * failure is silent: the block keeps its existing app/site text.
  * Like project analysis it has no switch of its own: it asks whenever an
  * Intelligence model is connected, and the AI privacy title switches decide
@@ -102,6 +112,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     language, analysisConnected, analysisSetup, requestScopeKey, resolveOpenRouterKey, analysisOwnerId,
     analysisCloudRecovery, canFallbackToCloud, onProviderUnavailable,
   } = args;
+  const background = args.background ?? false;
   const policy = usePrivacyPolicy();
   const supported = Boolean(tracker.getActivityBlockLabels && tracker.saveActivityBlockLabels);
   const range = useMemo(() => getLogicalDayRange(startDay, endDay, startOfDayMinutes), [endDay, startDay, startOfDayMinutes]);
@@ -119,6 +130,10 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   nowRef.current = args.now;
   const scope = [rangeKey, language, requestScopeKey, policy.windowTitle, policy.contentContext].join("|");
   scopeRef.current = scope;
+  const backgroundScope = [language, requestScopeKey, policy.windowTitle, policy.contentContext, startOfDayMinutes].join("|");
+  const backgroundScopeRef = useRef("");
+  backgroundScopeRef.current = backgroundScope;
+  const [backgroundTick, setBackgroundTick] = useState(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -178,18 +193,56 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     });
   }, [active, endDay, segments, startDay, startOfDayMinutes]);
 
-  const buildInference = useCallback(async (): Promise<ActivityLabelInference> => {
+  const buildInference = useCallback(async (isRequestCurrent: () => boolean): Promise<ActivityLabelInference> => {
     const setup = { ...analysisSetup };
     if (setup.provider === "openrouter") setup.openRouterApiKey = (await resolveOpenRouterKey()) ?? "";
-    const requestScope = scopeRef.current;
     return createActivityLabelInference(setup, {
-      isRequestCurrent: () => mountedRef.current && scopeRef.current === requestScope,
+      isRequestCurrent,
       expectedCloudUserId: analysisOwnerId,
       cloudRecovery: analysisCloudRecovery,
       canFallbackToCloud,
       onProviderUnavailable,
     });
   }, [analysisCloudRecovery, analysisOwnerId, analysisSetup, canFallbackToCloud, onProviderUnavailable, resolveOpenRouterKey]);
+
+  /**
+   * Describes one finished window from full local records and stores its cards
+   * with the window marker. "stop" means the budget, a failure or a scope
+   * change ended this run; the caller tries again later.
+   */
+  const describeWindow = useCallback(async (
+    window: ActivityTimelineWindow,
+    recordsById: ReadonlyMap<string, ActivitySegment>,
+    isCurrent: () => boolean,
+  ): Promise<"saved" | "stop"> => {
+    const records = buildActivityTimelineRecords(window, recordsById, policy);
+    attemptedRef.current.add(window.key + "|" + language);
+    let rows = activityTimelineCardSaveInputs(window, [], language, {});
+    if (activityTimelineTitleCoverage(records) >= ACTIVITY_TIMELINE_MIN_WINDOW_TITLE_COVERAGE) {
+      if (!consumeActivityLabelRequest(analysisSetup.provider, localDay(Date.now()))) {
+        attemptedRef.current.delete(window.key + "|" + language);
+        backoffUntilRef.current = Date.now() + BUDGET_BACKOFF_MS;
+        return "stop";
+      }
+      const listed = listedActivityTimelineRecords(records);
+      const inference = await buildInference(isCurrent);
+      const result = await inference(buildActivityTimelineCardPrompt(listed, records, language));
+      if (!isCurrent()) return "stop";
+      if (!result.output) {
+        backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
+        return "stop";
+      }
+      const { cards } = decideActivityTimelineCards(window, records, listed, result.output, language);
+      rows = activityTimelineCardSaveInputs(window, cards, language, result.usage);
+    }
+    if (!isCurrent()) return "stop";
+    await tracker.saveActivityBlockLabels?.(rows);
+    return "saved";
+  }, [analysisSetup.provider, buildInference, language, policy, tracker]);
+  // The background run calls the latest describeWindow through a ref so its
+  // effect re-runs only on its tick, connection and scope, not on every render.
+  const describeWindowRef = useRef(describeWindow);
+  describeWindowRef.current = describeWindow;
 
   useEffect(() => {
     if (!active || !supported || !analysisConnected || labelState.key !== rangeKey) return;
@@ -214,28 +267,57 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         if (!isCurrent()) return;
         const recordsById = new Map(segmentsById);
         for (const segment of fullSegments) recordsById.set(segment.id, segment);
-        const records = buildActivityTimelineRecords(window, recordsById, policy);
-        attemptedRef.current.add(window.key + "|" + language);
-        let rows = activityTimelineCardSaveInputs(window, [], language, {});
-        if (activityTimelineTitleCoverage(records) >= ACTIVITY_TIMELINE_MIN_WINDOW_TITLE_COVERAGE) {
-          if (!consumeActivityLabelRequest(analysisSetup.provider, localDay(Date.now()))) {
-            attemptedRef.current.delete(window.key + "|" + language);
-            backoffUntilRef.current = Date.now() + BUDGET_BACKOFF_MS;
-            return;
-          }
-          const listed = listedActivityTimelineRecords(records);
-          const inference = await buildInference();
-          const result = await inference(buildActivityTimelineCardPrompt(listed, records, language));
-          if (!isCurrent()) return;
-          if (!result.output) {
-            backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
-            return;
-          }
-          const { cards } = decideActivityTimelineCards(window, records, listed, result.output, language);
-          rows = activityTimelineCardSaveInputs(window, cards, language, result.usage);
-        }
-        if (isCurrent()) {
-          await tracker.saveActivityBlockLabels?.(rows);
+        saved = (await describeWindow(window, recordsById, isCurrent)) === "saved";
+      } catch {
+        backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
+      } finally {
+        runningRef.current = false;
+        if (saved && mountedRef.current) setRevision((value) => value + 1);
+      }
+    })();
+  }, [active, analysisConnected, describeWindow, labelState.key, labels, language, nowMs, rangeKey, scope, segmentsById, startOfDayMinutes, supported, tracker, windows]);
+
+  // Background: like the hourly project pass, cards for today's and
+  // yesterday's finished windows are made whether or not Day or Week is open,
+  // at start and every few minutes, latest first, one request at a time.
+  useEffect(() => {
+    if (!background) return;
+    const interval = window.setInterval(() => setBackgroundTick((value) => value + 1), BACKGROUND_TICK_MS);
+    return () => window.clearInterval(interval);
+  }, [background]);
+
+  useEffect(() => {
+    if (!background || !supported || !analysisConnected || !tracker.getActivityBlockLabels) return;
+    if (runningRef.current || Date.now() < backoffUntilRef.current) return;
+    runningRef.current = true;
+    const requestScope = backgroundScope;
+    const isCurrent = () => mountedRef.current && backgroundScopeRef.current === requestScope;
+    const readLabels = tracker.getActivityBlockLabels.bind(tracker);
+    void (async () => {
+      let saved = false;
+      try {
+        const now = (nowRef.current ?? Date.now)();
+        const today = logicalDayIsoDateForDate(new Date(now), startOfDayMinutes);
+        const days = [shiftIsoDate(today, -1), today];
+        const span = getLogicalDayRange(days[0], today, startOfDayMinutes);
+        const [stored, recent] = await Promise.all([
+          readLabels({ start: span.start, end: span.end }),
+          tracker.getTimeline({ start: span.start, end: span.end }),
+        ]);
+        if (!isCurrent()) return;
+        const recordsById = new Map(recent.map((segment) => [segment.id, segment]));
+        const pending = days
+          .flatMap((day) => {
+            const dayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+            return buildActivityTimelineWindows(day, recent, Date.parse(dayRange.start), Date.parse(dayRange.end));
+          })
+          .filter((candidate) => !attemptedRef.current.has(candidate.key + "|" + language)
+            && !activityTimelineWindowAnswered(candidate, stored, language)
+            && (candidate.followed || now - candidate.endMs >= ACTIVITY_TIMELINE_SESSION_GAP_MS + ACTIVITY_LABEL_SETTLE_MS))
+          .sort((left, right) => right.endMs - left.endMs);
+        for (const candidate of pending) {
+          if (!isCurrent() || Date.now() < backoffUntilRef.current) break;
+          if ((await describeWindowRef.current(candidate, recordsById, isCurrent)) !== "saved") break;
           saved = true;
         }
       } catch {
@@ -245,7 +327,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         if (saved && mountedRef.current) setRevision((value) => value + 1);
       }
     })();
-  }, [active, analysisConnected, analysisSetup.provider, buildInference, labelState.key, labels, language, nowMs, policy, rangeKey, scope, segmentsById, startOfDayMinutes, supported, tracker, windows]);
+  }, [analysisConnected, background, backgroundScope, backgroundTick, language, startOfDayMinutes, supported, tracker]);
 
   const saveUserLabel = useCallback(async (block: ActivityLabelBlock, title: string, description: string) => {
     if (!tracker.saveActivityBlockUserLabel) throw new Error("Block labels are unavailable.");
@@ -278,4 +360,3 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     };
   }, [active, index, resetUserLabel, saveUserLabel, supported, tracker.saveActivityBlockUserLabel]);
 }
-

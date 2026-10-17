@@ -9310,6 +9310,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const activityBlockLabels = useActivityBlockLabels({
     tracker: trackerClient,
     active: activeTab === "dashboard" && dashPeriod !== "Month" && dashboardActivityActionsEnabled,
+    // Like the hourly project pass, recent cards are made while other tabs are open.
+    background: dashboardActivityActionsEnabled && !isPreviewSurface,
     startDay: effectiveDashboardRange.startDay,
     endDay: effectiveDashboardRange.endDay,
     weekCalendarEvents: dashPeriod === "Week" ? weekCalendarEvents : null,
