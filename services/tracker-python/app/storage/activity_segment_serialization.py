@@ -244,6 +244,7 @@ def dashboard_week_classification_payload(row: Mapping[str, RowValue]) -> dict[s
         "source": row.get("classification_source") or "unknown",
         "confidence": row.get("classification_confidence") or 0,
         "aiResult": bool(row.get("classification_ai_result")),
+        "taxonomyVersion": row.get("classification_taxonomy_version"),
         "stale": bool(row.get("classification_stale")),
     }
     if row.get("classification_rule_id"):

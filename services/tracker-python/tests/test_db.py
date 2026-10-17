@@ -1910,6 +1910,7 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(compact["classification"]["category"], "learning")
         self.assertEqual(compact["classification"]["productivity"], "focus")
         self.assertEqual(compact["classification"]["source"], "llm")
+        self.assertEqual(compact["classification"]["taxonomyVersion"], "v1")
         self.assertNotIn("windowTitle", compact)
         self.assertNotIn("browserAutomationError", compact)
         self.assertNotIn("youtubeDescription", compact)

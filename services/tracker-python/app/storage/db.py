@@ -5438,6 +5438,7 @@ class TrackerDatabase:
                 activity_classifications.source AS classification_source,
                 activity_classifications.confidence AS classification_confidence,
                 activity_classifications.ai_result AS classification_ai_result,
+                activity_classifications.taxonomy_version AS classification_taxonomy_version,
                 activity_classifications.stale AS classification_stale,
                 activity_classifications.classification_rule_id AS classification_rule_id,
                 sync_classification_provenance.rule_snapshot_kind AS classification_rule_snapshot_kind
