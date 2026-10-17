@@ -4,6 +4,7 @@ import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, FlowBlock } from "@drifty/domain";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
+import { WEEK_TIME_SCALE_STORAGE_KEY } from "./weekDashboardScalePreference";
 import { DashboardPage } from "./DashboardPage";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
@@ -111,6 +112,22 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
 }
 
 describe("DashboardPage date navigator", () => {
+  it("keeps the chosen Week time scale across remounts", () => {
+    window.localStorage.removeItem(WEEK_TIME_SCALE_STORAGE_KEY);
+    try {
+      renderDashboardWithNoData({ dashPeriod: "Week", dashboardReplay: null });
+      const scale = screen.getByRole<HTMLSelectElement>("combobox", { name: "Time scale" });
+      expect(scale.value).toBe("75");
+      fireEvent.change(scale, { target: { value: "100" } });
+      expect(document.querySelector<HTMLElement>(".week-v2")?.dataset.weekAxisScalePercent).toBe("100");
+      cleanup();
+      renderDashboardWithNoData({ dashPeriod: "Week", dashboardReplay: null });
+      expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Time scale" }).value).toBe("100");
+    } finally {
+      window.localStorage.removeItem(WEEK_TIME_SCALE_STORAGE_KEY);
+    }
+  });
+
   it.each([
     ["loading", true],
     ["loaded", false],

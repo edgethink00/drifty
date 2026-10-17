@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { useState } from "react";
+import type { WeekTimeScale } from "./weekDashboardScalePreference";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivityCategory, ActivitySegment, CategoryDuration, ProductivityDuration, ProductivityLabel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
@@ -131,6 +133,7 @@ type WeekDashboardRenderOverrides = {
   readonly projectWindowAssignments?: readonly ProjectWindowAssignmentRecord[];
   readonly activityActionsEnabled?: boolean;
   readonly axisScalePercent?: number;
+  readonly onAxisScalePercentChange?: (scale: WeekTimeScale) => void;
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
   readonly googleCalendarEvents?: Map<string, GoogleCalendarWeekEvent[]>;
   readonly googleCalendarStatus?: "disabled" | "disconnected" | "loading" | "ready" | "error";
@@ -452,6 +455,58 @@ describe("WeekDashboard axis scale", () => {
 
     expect(dashboard?.dataset.weekAxisScalePercent).toBe("75");
     expect(calendarBody?.style.height).toBe("1008px");
+  });
+
+  it("keeps the visible center time when the user enlarges the timeline", () => {
+    function AdjustableWeek() {
+      const [scale, setScale] = useState<WeekTimeScale>(75);
+      return weekDashboardElement({ axisScalePercent: scale, onAxisScalePercentChange: setScale });
+    }
+    const { container } = render(<AdjustableWeek />);
+    const scroller = container.querySelector<HTMLElement>(".week-v2-calendar__scroller")!;
+    const body = container.querySelector<HTMLElement>(".week-v2-calendar__body")!;
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => Number.parseFloat(body.style.height) + 20 });
+    setElementRect(scroller, 0, 100, 900, 400);
+    body.getBoundingClientRect = () => ({ ...scroller.getBoundingClientRect(), top: 120 - scroller.scrollTop });
+    scroller.scrollTop = 400;
+    const centerMinute = (scroller.scrollTop + 200 - 20) / 42 * 60;
+    fireEvent.change(screen.getByRole("combobox", { name: "Time scale" }), { target: { value: "100" } });
+    expect(body.style.height).toBe("1344px");
+    expect((scroller.scrollTop + 200 - 20) / 56 * 60).toBeCloseTo(centerMinute);
+    fireEvent.change(screen.getByRole("combobox", { name: "Time scale" }), { target: { value: "125" } });
+    expect(body.style.height).toBe("1680px");
+    expect((scroller.scrollTop + 200 - 20) / 70 * 60).toBeCloseTo(centerMinute);
+    fireEvent.change(screen.getByRole("combobox", { name: "Time scale" }), { target: { value: "75" } });
+    expect(scroller.scrollTop).toBeCloseTo(400);
+  });
+
+  it("does not jump back to now when opening details after zoom and a clock-minute change", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-03T10:00:00"));
+    try {
+      function AdjustableWeek() {
+        const [scale, setScale] = useState<WeekTimeScale>(75);
+        return weekDashboardElement({ axisScalePercent: scale, onAxisScalePercentChange: setScale,
+          calendarEvents: new Map([["2024-01-03", [makeWeekCalendarEvent()]]]) });
+      }
+      const { container } = render(<AdjustableWeek />);
+      const scroller = container.querySelector<HTMLElement>(".week-v2-calendar__scroller")!;
+      const body = container.querySelector<HTMLElement>(".week-v2-calendar__body")!;
+      Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+      Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => Number.parseFloat(body.style.height) + 20 });
+      setElementRect(scroller, 0, 100, 900, 400);
+      body.getBoundingClientRect = () => ({ ...scroller.getBoundingClientRect(), top: 120 - scroller.scrollTop });
+      scroller.scrollTop = 400;
+      fireEvent.change(screen.getByRole("combobox", { name: "Time scale" }), { target: { value: "100" } });
+      const chosenPosition = scroller.scrollTop;
+      vi.setSystemTime(new Date("2024-01-03T10:01:00"));
+      fireEvent.click(container.querySelector<HTMLButtonElement>(".week-v2-calendar__event-open")!);
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      expect(scroller.scrollTop).toBeCloseTo(chosenPosition);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("scales the calendar y-axis while keeping event and current-time geometry aligned", () => {

@@ -323,6 +323,7 @@ export const SPANISH_PART_2 = {
   "dashboard.week.googleCalendarAllDay": "Todo el día",
   "dashboard.week.googleCalendarEvent": "Evento planificado: {{title}}, {{time}}",
   "dashboard.week.openActivity": "Abrir detalles de la actividad",
+  "dashboard.week.timeScale": "Escala de tiempo",
   "dashboard.week.currentTime": "Hora actual {{time}}",
   "dashboard.week.breakdownAria": "Desglose de tiempo de la semana",
   "dashboard.week.breakdownSubject": "desglose de la semana",

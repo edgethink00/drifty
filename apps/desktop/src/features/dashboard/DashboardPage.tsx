@@ -30,7 +30,7 @@ import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, ty
 import { ShareCardModal, type ShareCardModalCard } from "../share/ShareCardModal";
 import { useShareCardPreparation } from "../share/useShareCardPreparation";
 import { buildShareCardData, buildShareWeekCardData } from "../share/shareCard";
-import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
+import { initialWeekTimeScale, persistWeekTimeScale } from "./weekDashboardScalePreference";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
@@ -217,6 +217,7 @@ export function DashboardPage({
   useDayChartHeightTransfer(dayMainRef, dashPeriod === "Today" && !initialDataLoading);
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
   const [shareCardOpen, setShareCardOpen] = useState(false);
+  const [weekTimeScale, setWeekTimeScale] = useState(initialWeekTimeScale);
   // Shared by the Day view and WeekDashboard: the Breakdown side panel is one
   // surface across both dashboards, so its collapse state lives here (and in
   // localStorage) instead of per view.
@@ -414,7 +415,8 @@ export function DashboardPage({
           startOfDayMinutes={startOfDayMinutes}
           currentCalendarDay={weekCurrentCalendarDay ?? undefined}
           currentMinuteOfDay={weekCurrentMinuteOfDay ?? undefined}
-          axisScalePercent={WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT}
+          axisScalePercent={weekTimeScale}
+          onAxisScalePercentChange={scale => setWeekTimeScale(persistWeekTimeScale(scale))}
           sideOpen={breakdownOpen}
           onToggleSide={toggleBreakdown}
           onSelectDay={navigationRefreshEnabled ? (day) => {

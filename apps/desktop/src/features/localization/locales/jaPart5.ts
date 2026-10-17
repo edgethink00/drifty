@@ -34,6 +34,7 @@ export const JAPANESE_PART_5 = {
   "dashboard.week.googleCalendarAllDay": "終日",
   "dashboard.week.googleCalendarEvent": "予定：{{title}}、{{time}}",
   "dashboard.week.openActivity": "アクティビティの詳細を開く",
+  "dashboard.week.timeScale": "時間軸の拡大",
   "dashboard.week.currentTime": "現在時刻 {{time}}",
   "dashboard.week.breakdownAria": "週の時間の内訳",
   "dashboard.week.breakdownSubject": "週の内訳",

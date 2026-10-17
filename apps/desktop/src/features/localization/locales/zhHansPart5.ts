@@ -34,6 +34,7 @@ export const SIMPLIFIED_CHINESE_PART_5 = {
   "dashboard.week.googleCalendarAllDay": "全天",
   "dashboard.week.googleCalendarEvent": "计划事件：{{title}}，{{time}}",
   "dashboard.week.openActivity": "打开活动详情",
+  "dashboard.week.timeScale": "时间轴缩放",
   "dashboard.week.currentTime": "当前时间 {{time}}",
   "dashboard.week.breakdownAria": "周时间明细",
   "dashboard.week.breakdownSubject": "周明细",
