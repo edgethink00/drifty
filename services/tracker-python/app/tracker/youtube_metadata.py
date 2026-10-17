@@ -3,8 +3,6 @@ from __future__ import annotations
 import html
 import json
 import re
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 
 
@@ -25,15 +23,6 @@ class YouTubeVideoMetadata:
     upload_date: str | None = None
     source: str = "watch-page"
 
-
-def fetch_youtube_metadata(site_url: str, video_id: str, timeout_seconds: float = 2.0) -> YouTubeVideoMetadata:
-    request = urllib.request.Request(_canonical_watch_url(site_url, video_id), headers={
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-    })
-    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-        page = response.read().decode("utf-8", errors="replace")
-    return parse_youtube_watch_metadata(page, video_id)
 
 
 def parse_youtube_watch_metadata(page: str, video_id: str) -> YouTubeVideoMetadata:
@@ -57,12 +46,6 @@ def parse_youtube_watch_metadata(page: str, video_id: str) -> YouTubeVideoMetada
         upload_date=_clean_text(microformat.get("uploadDate")),
     )
 
-
-def _canonical_watch_url(site_url: str, video_id: str) -> str:
-    parsed = urllib.parse.urlparse(site_url)
-    if parsed.hostname == "music.youtube.com":
-        return f"https://music.youtube.com/watch?v={urllib.parse.quote(video_id)}&hl=en&gl=US"
-    return f"https://www.youtube.com/watch?v={urllib.parse.quote(video_id)}&hl=en&gl=US"
 
 
 def _extract_initial_player_response(page: str) -> dict:

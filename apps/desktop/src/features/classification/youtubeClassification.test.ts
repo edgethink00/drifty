@@ -26,6 +26,16 @@ function youtubeSegment(overrides: Partial<ActivitySegment> = {}): ActivitySegme
 }
 
 describe("YouTube classification", () => {
+  it.each(["Education", "Music", "Science & Technology"])("does not replace missing %s metadata with a drift verdict", (officialCategory) => {
+    const captured = youtubeSegment({
+      siteTitle: "Synthetic video title - YouTube",
+      youtubeCategory: null, youtubeTitle: null, youtubeDescription: null,
+      youtubeChannelName: null, youtubeKeywords: null,
+    });
+    expect(classifyActivityDetailed(captured)).toMatchObject({ category: "unknown", productivity: "neutral" });
+    expect(classifyActivityDetailed({ ...captured, youtubeCategory: officialCategory }).category).not.toBe("unknown");
+  });
+
   it("classifies entertainment-category music playlist metadata as music", () => {
     const classification = classifyActivityDetailed(youtubeSegment());
 

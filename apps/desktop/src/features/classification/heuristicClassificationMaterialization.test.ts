@@ -50,6 +50,15 @@ function storedClassification(
 }
 
 describe("materializeBuiltInHeuristicClassifications", () => {
+  it("keeps a newly captured video without official metadata available to classification", () => {
+    const captured = segment({ id: "uncached-video", appName: "Chrome", browserName: "Chrome",
+      siteDomain: "youtube.com", siteUrl: "https://www.youtube.com/watch?v=uncached",
+      youtubeVideoId: "uncached", siteTitle: "A lecture - YouTube", youtubeCategory: null });
+    const result = materializeBuiltInHeuristicClassifications({ segments: [captured] });
+    expect(result.classifications).toEqual([]);
+    expect(result.segments[0].classification).toBe(captured.classification);
+  });
+
   it("stores app domain and youtube built-in heuristic results when no authoritative row exists", () => {
     const appSegment = segment({ id: "app", appName: "Xcode", bundleId: "com.apple.dt.xcode" });
     const domainSegment = segment({

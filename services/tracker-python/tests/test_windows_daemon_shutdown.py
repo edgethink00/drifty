@@ -597,9 +597,7 @@ class DaemonCooperativeLifecycleTests(unittest.TestCase):
                     tracker_main, "engagement_decision_for_tick", return_value=SimpleNamespace(should_capture=True)
                 ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
                     tracker_main, "current_snapshot", side_effect=read_snapshot
-                ) as snapshot, patch.object(tracker_main, "backfill_browser_history_context") as backfill, patch.object(
-                    tracker_main, "enqueue_youtube_metadata_fetch"
-                ) as youtube:
+                ) as snapshot, patch.object(tracker_main, "backfill_browser_history_context") as backfill, patch("urllib.request.urlopen") as youtube:
                     order, tick, sleep = self.run_daemon(event, owner=owner, tick_side_effect=real_tick)
                 snapshot.assert_called_once_with(include_system_transient=False)
                 self.last_db.record_snapshot.assert_not_called()

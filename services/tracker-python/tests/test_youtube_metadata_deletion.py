@@ -9,13 +9,11 @@ from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from app import main as tracker_main
 from app.storage.db import TrackerDatabase
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
@@ -65,7 +63,7 @@ class YouTubeMetadataDeletionTests(unittest.TestCase):
         self.db.save_youtube_metadata(YouTubeVideoMetadata(video_id="backfilled-video"))
         self.db.save_youtube_metadata(YouTubeVideoMetadata(video_id="retained-cache"))
         entered, release = threading.Event(), threading.Event()
-        worker_errors = []
+        writer_errors = []
 
         def writer():
             try:
@@ -80,7 +78,7 @@ class YouTubeMetadataDeletionTests(unittest.TestCase):
                         if not release.wait(5):
                             raise RuntimeError("QA backfill writer release timeout")
             except BaseException as error:
-                worker_errors.append(error)
+                writer_errors.append(error)
 
         # Release the producer when deletion requests a SQLite transaction.
         # A deferred BEGIN after reading targets sees stale metadata; admission
@@ -101,7 +99,7 @@ class YouTubeMetadataDeletionTests(unittest.TestCase):
             release.set()
             thread.join(5)
         self.assertFalse(thread.is_alive())
-        self.assertEqual(worker_errors, [])
+        self.assertEqual(writer_errors, [])
         self.assertEqual(connection.execute(
             "SELECT COUNT(*) FROM activity_segments"
         ).fetchone()[0], 0)
@@ -151,57 +149,60 @@ class YouTubeMetadataDeletionTests(unittest.TestCase):
         self.db.delete_activity_segments([segment_id])
         self.assertEqual(self.metadata_ids(), set())
 
-    def run_late_worker(self, fails=False, retain_reference=False):
+    def run_late_writer(self, fails=False, retain_reference=False):
         video_id = "late-video"
         segment_id = self.add_activity(video_id)
         if retain_reference:
             self.add_activity(video_id, minute=2)
         entered = threading.Event()
         release = threading.Event()
-        worker_errors = []
-
-        def fetch(*args, **kwargs):
-            entered.set()
-            if not release.wait(5):
-                raise RuntimeError("QA worker release timeout")
-            if fails:
-                raise OSError("Synthetic network error")
-            return YouTubeVideoMetadata(video_id=video_id, title="Synthetic late title")
+        writer_errors = []
 
         def run():
+            # Keep the storage race regression independently of the retired
+            # network worker: a delayed write still must check live references.
+            db = TrackerDatabase(self.path, perform_maintenance=False)
             try:
-                tracker_main._fetch_youtube_metadata_background(self.path, video_id, "https://www.youtube.com/watch?v=" + video_id)
+                entered.set()
+                if not release.wait(5):
+                    raise RuntimeError("QA writer release timeout")
+                if fails:
+                    db.save_youtube_metadata_failure(video_id, require_activity_reference=True)
+                else:
+                    db.save_youtube_metadata(
+                        YouTubeVideoMetadata(video_id=video_id, title="Synthetic late title"),
+                        require_activity_reference=True,
+                    )
             except BaseException as error:
-                worker_errors.append(error)
-
-        tracker_main._YOUTUBE_METADATA_IN_FLIGHT.add(video_id)
-        with patch.object(tracker_main, "fetch_youtube_metadata", side_effect=fetch):
-            thread = threading.Thread(target=run)
-            thread.start()
-            try:
-                self.assertTrue(entered.wait(5))
-                self.db.delete_activity_segments([segment_id])
+                writer_errors.append(error)
             finally:
-                release.set()
-                thread.join(5)
-            self.assertFalse(thread.is_alive())
-        self.assertEqual(worker_errors, [])
-        self.assertNotIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
+                db.close()
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        try:
+            self.assertTrue(entered.wait(5))
+            self.db.delete_activity_segments([segment_id])
+        finally:
+            release.set()
+            thread.join(5)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(writer_errors, [])
 
     def test_late_success_does_not_recreate_deleted_metadata(self):
-        self.run_late_worker()
+        self.run_late_writer()
         self.assertEqual(self.metadata_ids(), set())
 
     def test_late_failure_does_not_recreate_deleted_metadata(self):
-        self.run_late_worker(fails=True)
+        self.run_late_writer(fails=True)
         self.assertEqual(self.metadata_ids(), set())
 
     def test_late_success_with_remaining_reference_is_saved(self):
-        self.run_late_worker(retain_reference=True)
+        self.run_late_writer(retain_reference=True)
         self.assertEqual(self.metadata_ids(), {"late-video"})
 
     def test_late_failure_with_remaining_reference_is_saved(self):
-        self.run_late_worker(fails=True, retain_reference=True)
+        self.run_late_writer(fails=True, retain_reference=True)
         self.assertEqual(self.metadata_ids(), {"late-video"})
         with self.db.connect() as conn:
             self.assertEqual(conn.execute("SELECT status FROM youtube_video_metadata").fetchone()[0], "failed")

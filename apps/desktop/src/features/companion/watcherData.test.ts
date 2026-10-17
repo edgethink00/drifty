@@ -37,18 +37,22 @@ const liveYouTube: CurrentActivitySnapshot = {
 };
 
 describe("buildLiveWatcherSnapshot", () => {
-  it("classifies a live YouTube drift even when the dashboard day ended in focus", () => {
+  it.each([
+    { shorts: false, category: "unknown", productivity: "neutral" },
+    { shorts: true, category: "entertainment", productivity: "drift" },
+  ] as const)("does not inherit dashboard focus for a live video (shorts: $shorts)", ({ shorts, category, productivity }) => {
+    const current = { ...liveYouTube, youtubeIsShorts: shorts };
     const dashboardDay = buildWatcherSnapshot([historicalFocus]);
-    const reusedCompanion = buildWatcherSnapshotFromCurrent(liveYouTube, [historicalFocus], null, {
+    const reusedCompanion = buildWatcherSnapshotFromCurrent(current, [historicalFocus], null, {
       fallbackCandidates: [historicalFocus],
     });
-    const live = buildLiveWatcherSnapshot(liveYouTube, [historicalFocus]);
+    const live = buildLiveWatcherSnapshot(current, [historicalFocus]);
 
     expect(dashboardDay.productivity).toBe("focus");
-    expect(reusedCompanion.productivity).toBe("drift");
+    expect(reusedCompanion.productivity).toBe(productivity);
     expect(live).toMatchObject({
-      productivity: "drift",
-      category: "entertainment",
+      productivity,
+      category,
       contextLabel: "youtube.com",
     });
   });

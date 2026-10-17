@@ -632,7 +632,7 @@ class MacosWorkspaceTests(unittest.TestCase):
                  patch.object(tracker_main, 'current_power_state', return_value=power), \
                  patch.object(tracker_main, 'seconds_since_last_input', return_value=0.0), \
                  patch.object(tracker_main, '_apply_developer_diagnostics_env'), \
-                 patch.object(tracker_main, 'enqueue_youtube_metadata_fetch'), \
+                 patch("urllib.request.urlopen"), \
                  patch.object(tracker_main, 'backfill_browser_history_context'):
                 self.assertIsNotNone(tracker_main._daemon_tick(db, None))
 

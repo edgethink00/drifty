@@ -2425,9 +2425,7 @@ class TrackerMainTests(unittest.TestCase):
                 return_value=SimpleNamespace(should_capture=True, is_passive=passive),
             ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
                 tracker_main, "current_snapshot",
-            ) as foreground, patch.object(tracker_main.time, "monotonic") as clock, patch.object(
-                tracker_main, "enqueue_youtube_metadata_fetch",
-            ), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
+            ) as foreground, patch.object(tracker_main.time, "monotonic") as clock, patch("urllib.request.urlopen"), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
                 tracker_main, "SAMPLE_SECONDS", 5,
             ):
                 previous = None
@@ -2730,9 +2728,7 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "current_snapshot", return_value=snapshot
             ), patch.object(
                 tracker_main.time, "monotonic", return_value=190.0
-            ), patch.object(
-                tracker_main, "enqueue_youtube_metadata_fetch"
-            ), patch.object(
+            ), patch("urllib.request.urlopen"), patch.object(
                 tracker_main, "backfill_browser_history_context"
             ), patch.object(
                 tracker_main.time, "sleep", side_effect=[None, KeyboardInterrupt]
@@ -2885,9 +2881,7 @@ class TrackerMainTests(unittest.TestCase):
                         tracker_main, "current_power_state", return_value=power
                     ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
                         tracker_main, "current_snapshot", return_value=snapshot
-                    ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
-                        tracker_main, "enqueue_youtube_metadata_fetch"
-                    ), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
+                    ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch("urllib.request.urlopen"), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
                         tracker_main, "capture_tracker_exception"
                     ) as capture_exception, patch.object(tracker_main.sys, "stderr", MagicMock()) as stderr, patch.object(
                         tracker_main.time, "sleep", side_effect=wait
@@ -3139,7 +3133,7 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main, "seconds_since_last_input", return_value=0.0
         ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
             tracker_main, "current_snapshot", return_value=snapshot
-        ), patch.object(tracker_main, "enqueue_youtube_metadata_fetch") as metadata_fetch, patch.object(
+        ), patch("urllib.request.urlopen") as metadata_fetch, patch.object(
             tracker_main, "backfill_browser_history_context"
         ) as history_backfill:
             next_tick = tracker_main._daemon_tick(mock_db, 37.0)
@@ -3193,9 +3187,7 @@ class TrackerMainTests(unittest.TestCase):
                 return_value=SimpleNamespace(should_capture=True, is_passive=passive),
             ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
                 tracker_main, "current_snapshot", side_effect=snapshots,
-            ), patch.object(tracker_main.time, "monotonic", side_effect=(100.0,) * 3 + (100.0 + elapsed,) * 3), patch.object(
-                tracker_main, "enqueue_youtube_metadata_fetch",
-            ), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
+            ), patch.object(tracker_main.time, "monotonic", side_effect=(100.0,) * 3 + (100.0 + elapsed,) * 3), patch("urllib.request.urlopen"), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
                 tracker_main, "SAMPLE_SECONDS", 5,
             ):
                 previous_tick = tracker_main._daemon_tick(database, None)
@@ -3232,7 +3224,7 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main, "seconds_since_last_input", return_value=0.0
         ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
             tracker_main, "current_snapshot", return_value=snapshot
-        ), patch.object(tracker_main, "enqueue_youtube_metadata_fetch"), patch.object(
+        ), patch("urllib.request.urlopen"), patch.object(
             tracker_main, "backfill_browser_history_context"
         ):
             self.assertIsNotNone(tracker_main._daemon_tick(mock_db, None))
@@ -3267,7 +3259,7 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "seconds_since_last_input", return_value=0.0
             ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
                 tracker_main, "current_snapshot", side_effect=[failed, recovered]
-            ), patch.object(tracker_main, "enqueue_youtube_metadata_fetch"), patch.object(
+            ), patch("urllib.request.urlopen"), patch.object(
                 tracker_main, "backfill_browser_history_context"
             ):
                 self.assertIsNone(tracker_main._daemon_tick(db, None))
@@ -3384,9 +3376,7 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main,
                 "current_snapshot",
                 side_effect=[RuntimeError("apple event failed"), snapshot],
-            ), patch.object(
-                tracker_main, "enqueue_youtube_metadata_fetch"
-            ), patch.object(
+            ), patch("urllib.request.urlopen"), patch.object(
                 tracker_main, "backfill_browser_history_context"
             ), patch.object(
                 tracker_main.sys, "stderr", MagicMock()
@@ -3428,9 +3418,7 @@ class TrackerMainTests(unittest.TestCase):
                 side_effect=[snapshot, RuntimeError("database is locked"), snapshot],
             ), patch.object(
                 tracker_main.time, "monotonic", side_effect=[100.0, 190.0]
-            ), patch.object(
-                tracker_main, "enqueue_youtube_metadata_fetch"
-            ), patch.object(
+            ), patch("urllib.request.urlopen"), patch.object(
                 tracker_main, "backfill_browser_history_context"
             ), patch.object(
                 tracker_main.sys, "stderr", MagicMock()
@@ -3496,9 +3484,7 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main, "current_snapshot", return_value=snapshot
         ), patch.object(
             tracker_main.time, "monotonic", return_value=42.0
-        ), patch.object(
-            tracker_main, "enqueue_youtube_metadata_fetch"
-        ), patch.object(
+        ), patch("urllib.request.urlopen"), patch.object(
             tracker_main, "backfill_browser_history_context"
         ):
             next_tick = tracker_main._daemon_tick(mock_db, None)
@@ -3533,9 +3519,7 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main, "current_snapshot", return_value=snapshot
         ), patch.object(
             tracker_main.time, "monotonic", return_value=42.0
-        ), patch.object(
-            tracker_main, "enqueue_youtube_metadata_fetch"
-        ), patch.object(
+        ), patch("urllib.request.urlopen"), patch.object(
             tracker_main, "backfill_browser_history_context"
         ):
             next_tick = tracker_main._daemon_tick(mock_db, 37.0)
@@ -3575,9 +3559,7 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main, "current_foreground_audio_sample", return_value=audio_sample
         ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
             tracker_main, "current_snapshot", return_value=snapshot
-        ), patch.object(tracker_main.time, "monotonic", return_value=50.0), patch.object(
-            tracker_main, "enqueue_youtube_metadata_fetch"
-        ), patch.object(tracker_main, "backfill_browser_history_context"):
+        ), patch.object(tracker_main.time, "monotonic", return_value=50.0), patch("urllib.request.urlopen"), patch.object(tracker_main, "backfill_browser_history_context"):
             tracker_main._daemon_tick(mock_db, None)
 
         mock_db.record_snapshot.assert_called_once_with(
@@ -3585,131 +3567,6 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main.SAMPLE_SECONDS,
             max_merge_gap_seconds=0,
         )
-
-    def test_enqueue_youtube_metadata_fetch_skips_cached_video(self) -> None:
-        with temp_dir_closing_databases() as tmp:
-            db_path = Path(tmp) / "tracker.sqlite3"
-            mock_db = MagicMock()
-            mock_db.youtube_metadata_should_fetch.return_value = False
-            with patch.object(tracker_main, "TrackerDatabase") as constructor, patch(
-                "app.main.threading.Thread"
-            ) as thread:
-                mock_db.db_path = db_path
-                tracker_main.enqueue_youtube_metadata_fetch(
-                    mock_db,
-                    "abc123",
-                    "https://www.youtube.com/watch?v=abc123",
-                )
-
-        constructor.assert_not_called()
-        thread.assert_not_called()
-
-    def test_enqueue_youtube_metadata_fetch_starts_background_worker(self) -> None:
-        with temp_dir_closing_databases() as tmp:
-            db_path = Path(tmp) / "tracker.sqlite3"
-            mock_db = MagicMock()
-            mock_db.youtube_metadata_should_fetch.return_value = True
-            with patch.object(tracker_main, "TrackerDatabase") as constructor, patch(
-                "app.main.threading.Thread"
-            ) as thread:
-                mock_db.db_path = db_path
-                tracker_main.enqueue_youtube_metadata_fetch(
-                    mock_db,
-                    "abc123",
-                    "https://www.youtube.com/watch?v=abc123",
-                )
-
-        constructor.assert_not_called()
-        thread.assert_called_once_with(
-            target=tracker_main._fetch_youtube_metadata_background,
-            args=(db_path, "abc123", "https://www.youtube.com/watch?v=abc123"),
-            daemon=True,
-        )
-        thread.return_value.start.assert_called_once()
-        tracker_main._YOUTUBE_METADATA_IN_FLIGHT.discard("abc123")
-
-    def test_youtube_worker_owns_and_closes_connection_after_fetch_failure(self) -> None:
-        db_path = Path("/tmp/metadata-worker-test.sqlite3")
-        worker_db = MagicMock()
-        worker_db.youtube_metadata_should_fetch.return_value = True
-        tracker_main._YOUTUBE_METADATA_IN_FLIGHT.add("worker-video")
-        with patch.object(tracker_main, "TrackerDatabase", return_value=worker_db) as constructor, patch.object(
-            tracker_main, "fetch_youtube_metadata", side_effect=OSError("network unavailable")
-        ):
-            tracker_main._fetch_youtube_metadata_background(
-                db_path, "worker-video", "https://www.youtube.com/watch?v=worker-video"
-            )
-        constructor.assert_called_once_with(db_path, perform_maintenance=False)
-        worker_db.save_youtube_metadata_failure.assert_called_once_with("worker-video", require_activity_reference=True)
-        worker_db.close.assert_called_once()
-        self.assertNotIn("worker-video", tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
-
-    def test_youtube_worker_start_failure_does_not_block_tracking_or_retry(self) -> None:
-        db = MagicMock()
-        db.db_path = Path("/tmp/metadata-start-test.sqlite3")
-        db.youtube_metadata_should_fetch.return_value = True
-        video_id = "start-failure-video"
-        tracker_main._YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)
-        try:
-            with patch("app.main.threading.Thread") as thread:
-                thread.return_value.start.side_effect = [RuntimeError("can't start new thread"), None]
-                tracker_main.enqueue_youtube_metadata_fetch(db, video_id, "https://www.youtube.com/watch?v=" + video_id)
-                self.assertNotIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
-                tracker_main.enqueue_youtube_metadata_fetch(db, video_id, "https://www.youtube.com/watch?v=" + video_id)
-                self.assertEqual(thread.return_value.start.call_count, 2)
-                self.assertIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
-        finally:
-            tracker_main._YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)
-
-    def test_youtube_worker_close_failure_still_clears_inflight(self) -> None:
-        worker_db = MagicMock()
-        worker_db.youtube_metadata_should_fetch.return_value = False
-        worker_db.close.side_effect = RuntimeError("close failed")
-        video_id = "close-failure-video"
-        tracker_main._YOUTUBE_METADATA_IN_FLIGHT.add(video_id)
-        with patch.object(tracker_main, "TrackerDatabase", return_value=worker_db):
-            with self.assertRaisesRegex(RuntimeError, "close failed"):
-                tracker_main._fetch_youtube_metadata_background(
-                    Path("/tmp/metadata-close-test.sqlite3"), video_id, "https://www.youtube.com/watch?v=" + video_id,
-                )
-        self.assertNotIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
-
-    def test_youtube_worker_writes_real_sqlite_on_its_own_thread(self) -> None:
-        from app.tracker.youtube_metadata import YouTubeVideoMetadata
-
-        threads = []
-        real_thread = tracker_main.threading.Thread
-        def capture_thread(**kwargs):
-            thread = real_thread(**kwargs)
-            threads.append(thread)
-            return thread
-
-        video_id = "separate-connection-video"
-        with temp_dir_closing_databases() as tmp:
-            db = TrackerDatabase(Path(tmp) / "tracker.sqlite3")
-            db.record_snapshot(Snapshot(
-                observed_at="2026-10-03T09:00:00+00:00",
-                app_name="Synthetic Browser", bundle_id="fixture.browser",
-                window_title="Synthetic QA video", source="accessibility",
-                youtube_video_id=video_id,
-            ), 5)
-            try:
-                with patch("app.main.threading.Thread", side_effect=capture_thread), patch.object(
-                    tracker_main, "fetch_youtube_metadata",
-                    return_value=YouTubeVideoMetadata(video_id=video_id, title="Synthetic QA title"),
-                ):
-                    tracker_main.enqueue_youtube_metadata_fetch(db, video_id, "https://www.youtube.com/watch?v=" + video_id)
-                    self.assertEqual(len(threads), 1)
-                    threads[0].join(timeout=5)
-                    self.assertFalse(threads[0].is_alive())
-                with db.connect() as conn:
-                    row = conn.execute("SELECT title, status FROM youtube_video_metadata WHERE video_id = ?", (video_id,)).fetchone()
-                self.assertEqual((row["title"], row["status"]), ("Synthetic QA title", "ok"))
-                self.assertNotIn(video_id, tracker_main._YOUTUBE_METADATA_IN_FLIGHT)
-            finally:
-                for thread in threads:
-                    thread.join(timeout=5)
-                db.close()
 
     def test_serve_processes_requests_echoes_id_and_survives_errors(self) -> None:
         import io

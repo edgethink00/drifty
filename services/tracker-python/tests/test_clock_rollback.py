@@ -129,7 +129,7 @@ class TrackerClockRollbackTests(unittest.TestCase):
                         patches.enter_context(patch.object(tracker_main, "current_power_state", return_value=SimpleNamespace(should_capture=True)))
                         patches.enter_context(patch.object(tracker_main, "current_snapshot", side_effect=lambda **kwargs: self._snapshot(wall[0].isoformat())))
                         patches.enter_context(patch.object(tracker_main, "current_foreground_audio_sample", return_value=SimpleNamespace(available=False, active=False, reason="owned-no-audio")))
-                        for name in ("enqueue_youtube_metadata_fetch", "backfill_browser_history_context", "_apply_developer_diagnostics_env"):
+                        for name in ("backfill_browser_history_context", "_apply_developer_diagnostics_env"):
                             patches.enter_context(patch.object(tracker_main, name))
                         last_tick = None
                         for elapsed in range(0, 236, 5):

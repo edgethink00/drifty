@@ -129,7 +129,10 @@ function resolveDriftAlarmGateSubject(segment: ActivitySegment): DriftAlarmGateS
   if (skipReason) return { kind: "skip", reason: skipReason };
 
   const deterministicClassification = classifyActivityDetailed(segment, { includeAiClassifications: false });
-  if (deterministicClassification.source !== "youtube" || deterministicClassification.productivity !== "drift") {
+  // A candidate selected before metadata disappeared must still clear the AI
+  // gate. An unknown video cannot authorize delivery by skipping validation.
+  if (deterministicClassification.source !== "youtube"
+    || (deterministicClassification.productivity !== "drift" && deterministicClassification.category !== "unknown")) {
     return { kind: "skip", reason: "not-deterministic-youtube-drift" };
   }
   const selectedReason = selectedYouTubeDriftReason(segment);

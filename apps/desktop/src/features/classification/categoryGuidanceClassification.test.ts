@@ -137,6 +137,13 @@ describe("category guidance in AI classification", () => {
     expect(saved[0].inputFingerprint).not.toBe(body.items[0].inputFingerprint);
   });
 
+  it("sends an uncached video to the configured classifier without requiring custom descriptions", async () => {
+    const service = await loadService({ unclassified: [youtubeVideo("uncached", { youtubeCategory: null })] });
+    await service.runAiClassification({ day: "2026-10-10" });
+    expect(service.invoke).toHaveBeenCalledTimes(1);
+    expect(service.saveClassifications.mock.calls[0][0][0]).toMatchObject({ segmentId: "uncached", source: "llm", category: "learning" });
+  });
+
   it("lets the model read a YouTube video's topic only while descriptions exist", async () => {
     const withGuidance = await loadService({ guidance: true, unclassified: [youtubeVideo("v1")] });
     await withGuidance.runAiClassification({ day: "2026-10-10" });

@@ -107,6 +107,14 @@ export function classifyYouTubeActivityWithBasis(
     };
   }
 
+  // Local capture keeps the video identity without fetching its official
+  // category. Missing metadata is not evidence of leisure: leave new videos
+  // available to user rules or the configured classifier instead of persisting
+  // the entertainment fallback before either can inspect the topic.
+  if (segment.youtubeVideoId && !officialCategory) {
+    return { classification: { category: "unknown", productivity: "neutral" }, basis: "video" };
+  }
+
   return { classification: { category: "entertainment", productivity: "drift" }, basis: "video" };
 }
 

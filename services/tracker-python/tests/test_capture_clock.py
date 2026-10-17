@@ -59,7 +59,7 @@ class CaptureClockTests(unittest.TestCase):
         self.stack.enter_context(patch.object(main, "current_snapshot", side_effect=self.snapshot))
         self.stack.enter_context(patch.object(main, "current_foreground_audio_sample", side_effect=lambda:
             SimpleNamespace(available=True, active=self.audio, reason="owned_fixture")))
-        for name in ("_apply_developer_diagnostics_env", "enqueue_youtube_metadata_fetch",
+        for name in ("_apply_developer_diagnostics_env",
                      "backfill_browser_history_context"):
             self.stack.enter_context(patch.object(main, name))
 

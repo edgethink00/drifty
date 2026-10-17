@@ -1507,7 +1507,7 @@ describe('domain helpers', () => {
     expect(classification).toEqual({ category: 'music', productivity: 'neutral' });
   });
 
-  it('keeps ordinary YouTube watch pages as entertainment when no stronger signal exists', () => {
+  it('keeps uncached YouTube watch pages unclassified when no stronger signal exists', () => {
     for (const siteDomain of ['youtube.com', 'www.youtube.com']) {
       expect(classifyActivity({
         ...segments[0],
@@ -1516,7 +1516,7 @@ describe('domain helpers', () => {
         siteTitle: 'A day in my life',
         siteUrl: 'https://www.youtube.com/watch?v=abc123',
         youtubeVideoId: 'abc123',
-      })).toEqual({ category: 'entertainment', productivity: 'drift' });
+      })).toEqual({ category: 'unknown', productivity: 'neutral' });
     }
   });
 
@@ -1572,7 +1572,7 @@ describe('domain helpers', () => {
       youtubeVideoId: 'abc123',
     });
 
-    expect(classification).toEqual({ category: 'entertainment', productivity: 'drift' });
+    expect(classification).toEqual({ category: 'unknown', productivity: 'neutral' });
   });
 
   it('classifies YouTube Shorts as entertainment even when other signals look musical', () => {

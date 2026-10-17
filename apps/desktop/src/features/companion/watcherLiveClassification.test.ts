@@ -57,9 +57,9 @@ describe("live pet classification", () => {
   });
 
   it("honors disabled AI impact and ignores stale AI results", () => {
-    expect(buildLiveWatcherSnapshot(current, [active()], { includeAiClassifications: false }).productivity).toBe("drift");
+    expect(buildLiveWatcherSnapshot(current, [active()], { includeAiClassifications: false })).toMatchObject({ category: "unknown", productivity: "neutral" });
     const stale = active({ classification: { ...active().classification!, stale: true } });
-    expect(buildLiveWatcherSnapshot(current, [stale]).productivity).toBe("drift");
+    expect(buildLiveWatcherSnapshot(current, [stale])).toMatchObject({ category: "unknown", productivity: "neutral" });
   });
 
   it("retains the active video's captured metadata", () => {
@@ -87,7 +87,7 @@ describe("live pet classification", () => {
   it("does not search older same-video segments when the newest segment is unclassified", () => {
     const old = active({ id: "old", endedAt: "2026-09-05T18:31:59.000Z" });
     const newest = active({ id: "new", classification: null, startedAt: "2026-09-05T18:32:00.000Z", durationSeconds: 15 });
-    expect(buildLiveWatcherSnapshot(current, [old, newest])).toMatchObject({ productivity: "drift", durationSeconds: 15 });
+    expect(buildLiveWatcherSnapshot(current, [old, newest])).toMatchObject({ category: "unknown", productivity: "neutral", durationSeconds: 15 });
   });
 
   it.each([
@@ -96,7 +96,7 @@ describe("live pet classification", () => {
     { label: "remote device", patch: { deviceId: "other-device" } },
     { label: "browser history import", patch: { source: "browser-history-import" as const } },
   ])("does not inherit $label", ({ patch }) => {
-    expect(buildLiveWatcherSnapshot(current, [active(patch)])).toMatchObject({ productivity: "drift", durationSeconds: 0 });
+    expect(buildLiveWatcherSnapshot(current, [active(patch)])).toMatchObject({ category: "unknown", productivity: "neutral", durationSeconds: 0 });
   });
 
   it("does not transfer a native app verdict between differently titled windows", () => {
@@ -110,7 +110,7 @@ describe("live pet classification", () => {
     const old = active({ id: "old", startedAt: "2026-09-05T18:30:00.000Z" });
     const newest = active({ id: "new", classification: null });
     for (const segments of [[old, newest], [newest, old]]) {
-      expect(buildLiveWatcherSnapshot(current, segments).productivity).toBe("drift");
+      expect(buildLiveWatcherSnapshot(current, segments)).toMatchObject({ category: "unknown", productivity: "neutral" });
     }
     const ambiguous = active({ id: "other", classification: null });
     expect(buildLiveWatcherSnapshot(current, [active(), ambiguous]).durationSeconds).toBe(0);
