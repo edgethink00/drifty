@@ -231,13 +231,49 @@ const LANGUAGE_RULES: Record<ActivityBlockLabelLanguage, string> = {
   ].join("\n"),
 };
 
+/** One listed record as the prompt shows it: [ref, start, end, seconds, app, site, title]. */
+export type ActivityTimelineCardPromptRow = readonly [string, string, string, number, string, string | null, string | null];
+
+/**
+ * Everything one card request carries. Drifty Cloud receives this instead of
+ * the prompt text and builds the same prompt on the server
+ * (supabase/functions/review-activity/timelineCardPrompt.ts, pinned by
+ * timelineCardPromptParity.test.ts), so the paid model only ever sees this
+ * prompt.
+ */
+export type ActivityTimelineCardPromptInput = {
+  readonly promptVersion: string;
+  readonly language: ActivityBlockLabelLanguage;
+  readonly recordedSeconds: number;
+  readonly untitledSeconds: number;
+  readonly records: readonly ActivityTimelineCardPromptRow[];
+};
+
+export function activityTimelineCardPromptInput(
+  listed: readonly ActivityTimelineRecord[],
+  allRecords: readonly ActivityTimelineRecord[],
+  language: ActivityBlockLabelLanguage,
+): ActivityTimelineCardPromptInput {
+  const recorded = allRecords.reduce((sum, record) => sum + record.seconds, 0);
+  const untitled = allRecords.filter((record) => !record.title).reduce((sum, record) => sum + record.seconds, 0);
+  return {
+    promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION,
+    language,
+    recordedSeconds: Math.round(recorded),
+    untitledSeconds: Math.round(untitled),
+    records: listed.map((record) => [record.ref, clock(record.startMs), clock(record.endMs), Math.round(record.seconds), record.app, record.site, record.title]),
+  };
+}
+
 export function buildActivityTimelineCardPrompt(
   listed: readonly ActivityTimelineRecord[],
   allRecords: readonly ActivityTimelineRecord[],
   language: ActivityBlockLabelLanguage,
 ): string {
-  const recorded = allRecords.reduce((sum, record) => sum + record.seconds, 0);
-  const untitled = allRecords.filter((record) => !record.title).reduce((sum, record) => sum + record.seconds, 0);
+  return buildActivityTimelineCardPromptFromInput(activityTimelineCardPromptInput(listed, allRecords, language));
+}
+
+export function buildActivityTimelineCardPromptFromInput(input: ActivityTimelineCardPromptInput): string {
   return [
     "# Task",
     "You turn one stretch of a person's own time-tracking timeline into timeline cards. Return JSON only.",
@@ -277,13 +313,13 @@ export function buildActivityTimelineCardPrompt(
     "- title_evidence is working data; the title stays a short label following the language rules below.",
     "",
     "## Language and length",
-    LANGUAGE_RULES[language],
+    LANGUAGE_RULES[input.language],
     "Keep product and document names as written in the records. Do not mix in other scripts.",
     "",
     "# Stretch",
-    JSON.stringify({ recorded_seconds: Math.round(recorded), untitled_seconds: Math.round(untitled), records: listed.length }),
+    JSON.stringify({ recorded_seconds: input.recordedSeconds, untitled_seconds: input.untitledSeconds, records: input.records.length }),
     "# Records",
-    ...listed.map((record) => JSON.stringify([record.ref, clock(record.startMs), clock(record.endMs), Math.round(record.seconds), record.app, record.site, record.title])),
+    ...input.records.map((row) => JSON.stringify(row)),
     "",
   ].join("\n");
 }

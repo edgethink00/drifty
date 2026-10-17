@@ -5,7 +5,8 @@ import {
   activityTimelineTitleCoverage,
   activityTimelineWindowAnswered,
   activityTimelineWindowSaveInput,
-  buildActivityTimelineCardPrompt,
+  activityTimelineCardPromptInput,
+  buildActivityTimelineCardPromptFromInput,
   buildActivityTimelineRecords,
   buildActivityTimelineWindows,
   decideActivityTimelineCards,
@@ -226,15 +227,18 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     const records = buildActivityTimelineRecords(window, recordsById, policy);
     attemptedRef.current.add(window.key + "|" + language);
     let input = activityTimelineWindowSaveInput(window, [], language, {});
-    if (activityTimelineTitleCoverage(records) >= ACTIVITY_TIMELINE_MIN_WINDOW_TITLE_COVERAGE) {
+    // Too few titles, or only runs too short to list: nothing to ask about,
+    // so the window is stored without cards and keeps its app display.
+    const listed = listedActivityTimelineRecords(records);
+    if (listed.length > 0 && activityTimelineTitleCoverage(records) >= ACTIVITY_TIMELINE_MIN_WINDOW_TITLE_COVERAGE) {
       if (!consumeActivityLabelRequest(analysisSetup.provider, localDay(Date.now()))) {
         attemptedRef.current.delete(window.key + "|" + language);
         backoffUntilRef.current = Date.now() + BUDGET_BACKOFF_MS;
         return "stop";
       }
-      const listed = listedActivityTimelineRecords(records);
       const inference = await buildInference(isCurrent);
-      const result = await inference(buildActivityTimelineCardPrompt(listed, records, language));
+      const promptInput = activityTimelineCardPromptInput(listed, records, language);
+      const result = await inference(buildActivityTimelineCardPromptFromInput(promptInput), promptInput);
       if (!isCurrent()) return "stop";
       if (!result.output) {
         backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;

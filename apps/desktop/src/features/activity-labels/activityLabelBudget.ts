@@ -4,8 +4,8 @@ export const ACTIVITY_LABEL_REQUEST_BUDGET_STORAGE_KEY = "drifty.activityBlockLa
 
 /**
  * Labels are a convenience, so they get their own small daily request budget.
- * Drifty Cloud shares its analysis quota with the project pass; the lower cap
- * keeps label generation from starving project attribution.
+ * Drifty Cloud counts card requests in their own server pool (up to 72 a day
+ * across devices); the lower per-device cap keeps Cloud spending small.
  */
 export const ACTIVITY_LABEL_DAILY_REQUEST_LIMIT: Readonly<Record<"cloud" | "other", number>> = {
   cloud: 24,

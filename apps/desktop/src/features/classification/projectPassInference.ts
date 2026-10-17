@@ -52,15 +52,18 @@ function openRouterModels(setup: AnalysisAiSetupState): string[] {
   return [primary, ...normalizeOpenRouterFallbackModels(primary, setup.openRouterFallbackModels)];
 }
 
-/** Per-feature request budget and answer format for an analysis-model call. */
-export interface AnalysisInferenceProtocol<T> extends AnalysisChatProtocol<T> {
+/**
+ * Per-feature request budget and answer format for an analysis-model call.
+ * I is the structured input Drifty Cloud builds the prompt from.
+ */
+export interface AnalysisInferenceProtocol<T, I = ProjectPassPromptInput> extends AnalysisChatProtocol<T> {
   readonly maxTokens: number;
   readonly timeoutMs: number;
   /** Body for the Drifty Cloud review endpoint; a bare prompt is its legacy passthrough. */
-  readonly cloudContent: (prompt: string, promptInput?: ProjectPassPromptInput) => string;
+  readonly cloudContent: (prompt: string, promptInput?: I) => string;
 }
 
-export type AnalysisTextInference<T> = (prompt: string, promptInput?: ProjectPassPromptInput) => Promise<AnalysisChatResult<T>>;
+export type AnalysisTextInference<T, I = ProjectPassPromptInput> = (prompt: string, promptInput?: I) => Promise<AnalysisChatResult<T>>;
 
 interface RequestBudget {
   readonly maxTokens: number;
@@ -190,12 +193,12 @@ function cloudHttpError(status: number, detail: string): Error {
  * Build a provider-bound ProjectPassInference from the analysis slot config.
  * Secrets (keys) must already be resolved onto `setup` by the caller (Keychain).
  */
-function createProviderAnalysisInference<T>(
+function createProviderAnalysisInference<T, I>(
   setup: AnalysisAiSetupState,
   deps: ProjectPassInferenceDeps,
   cloudRecovery: boolean,
-  protocol: AnalysisInferenceProtocol<T>,
-): AnalysisTextInference<T> {
+  protocol: AnalysisInferenceProtocol<T, I>,
+): AnalysisTextInference<T, I> {
   const assertCurrent = () => {
     if ((deps.isRequestCurrent && !deps.isRequestCurrent()) || (cloudRecovery && !deps.canFallbackToCloud?.())) {
       throw new Error("Intelligence settings changed during analysis.");
@@ -208,7 +211,7 @@ function createProviderAnalysisInference<T>(
   const invokeAnthropicChat = (request: Record<string, unknown>) => { assertCurrent(); return anthropicChat(request); };
 
   const budget: RequestBudget = { maxTokens: protocol.maxTokens, timeoutMs: protocol.timeoutMs };
-  return async (prompt: string, promptInput?: ProjectPassPromptInput): Promise<AnalysisChatResult<T>> => {
+  return async (prompt: string, promptInput?: I): Promise<AnalysisChatResult<T>> => {
     assertCurrent();
     if (setup.provider === "cloud") {
       if (deps.invokeCloud) {
@@ -304,11 +307,11 @@ export function createProjectPassInference(setup: AnalysisAiSetupState, deps: Pr
  * Analysis-model call with the user's configured provider and the same Cloud
  * fallback rule as the project pass. Each feature supplies its answer format.
  */
-export function createAnalysisTextInference<T>(
+export function createAnalysisTextInference<T, I = ProjectPassPromptInput>(
   setup: AnalysisAiSetupState,
   deps: ProjectPassInferenceDeps,
-  protocol: AnalysisInferenceProtocol<T>,
-): AnalysisTextInference<T> {
+  protocol: AnalysisInferenceProtocol<T, I>,
+): AnalysisTextInference<T, I> {
   const preferred = createProviderAnalysisInference(setup, deps, deps.cloudRecovery ?? false, protocol);
   let rejected = false;
   return async (prompt, input) => {
