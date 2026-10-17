@@ -14,24 +14,9 @@ use objc2_app_kit::{
 #[cfg(target_os = "macos")]
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-enum QuitConfirmationLanguage {
-    #[default]
-    English,
-    Korean,
-    Spanish,
-}
+use crate::localization::NativeLanguage as QuitConfirmationLanguage;
 
 impl QuitConfirmationLanguage {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "en" => Ok(Self::English),
-            "ko" => Ok(Self::Korean),
-            "es" => Ok(Self::Spanish),
-            _ => Err(format!("Unsupported quit confirmation language: {value}")),
-        }
-    }
-
     fn copy(self) -> QuitConfirmationCopy {
         match self {
             Self::English => QuitConfirmationCopy {
@@ -63,6 +48,16 @@ impl QuitConfirmationLanguage {
                 pause_failed_title: "No se pudo pausar el registro",
                 pause_failed_body: "No se pudo confirmar la pausa. Es posible que la actividad siga registrándose. Intenta pausarla de nuevo desde el menú o sal de Drifty para detener el registro.",
                 dismiss: "Aceptar",
+            },
+            _ => QuitConfirmationCopy {
+                title: self.text("Quit Drifty and stop tracking?"),
+                body: self.text("Drifty automatically stops recording while your Mac sleeps. If you quit, no new activity is recorded until you open Drifty again."),
+                keep_tracking: self.text("Keep Tracking"),
+                pause_instead: self.text("Pause Instead"),
+                quit_drifty: self.text("Quit Drifty"),
+                pause_failed_title: self.text("Tracking could not be paused"),
+                pause_failed_body: self.text("Drifty could not confirm the pause, so tracking may still be active. Try pausing again from the menu, or quit Drifty to stop recording."),
+                dismiss: self.text("OK"),
             },
         }
     }
@@ -352,7 +347,10 @@ mod tests {
             "Tracking could not be paused"
         );
         assert_eq!(QuitConfirmationLanguage::Korean.copy().dismiss, "확인");
-        assert!(QuitConfirmationLanguage::parse("ja").is_err());
+        assert!(QuitConfirmationLanguage::parse("xx").is_err());
+        for tag in ["ja", "pt-BR", "zh-Hans", "fr", "de"] {
+            assert_ne!(QuitConfirmationLanguage::parse(tag).unwrap().copy().title, QuitConfirmationLanguage::English.copy().title);
+        }
     }
 
     #[cfg(target_os = "macos")]

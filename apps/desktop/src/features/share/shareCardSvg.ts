@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 // Self-contained SVG renderer for Drifty's single shareable focus statement.
 //
 // The card deliberately exposes one aggregate only: focused time. It never
@@ -35,7 +36,7 @@ export interface ShareCardRenderOptions {
   readonly data: ShareCardData;
   readonly format: ShareCardFormat;
   readonly theme: ShareCardTheme;
-  readonly language?: "en" | "ko" | "es";
+  readonly language?: DisplayLanguage;
   readonly story?: ShareCardStory;
   readonly background?: ShareCardBackground;
   readonly lookIndex?: number;
@@ -47,7 +48,7 @@ export interface ShareWeekCardRenderOptions {
   readonly data: ShareWeekCardData;
   readonly format: ShareCardFormat;
   readonly theme: ShareCardTheme;
-  readonly language?: "en" | "ko" | "es";
+  readonly language?: DisplayLanguage;
   readonly story?: ShareCardStory;
   readonly background?: ShareCardBackground;
   readonly lookIndex?: number;

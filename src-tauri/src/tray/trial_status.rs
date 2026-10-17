@@ -42,10 +42,12 @@ impl TrialStatus {
                 Some(match language {
                     TrayLanguage::Korean => format!("Pro 체험 {days}일 남음"),
                     TrayLanguage::Spanish => format!("Prueba de Pro · {} {days} {}", if days == 1 { "queda" } else { "quedan" }, if days == 1 { "día" } else { "días" }),
+                    language if language.is_additional() => language.text("Pro trial · days left: {{count}}").replace("{{count}}", &days.to_string()),
                     TrayLanguage::English => format!(
                         "Pro trial · {days} {} left",
                         if days == 1 { "day" } else { "days" }
                     ),
+                    _ => unreachable!("all native display languages covered"),
                 })
             }
         }

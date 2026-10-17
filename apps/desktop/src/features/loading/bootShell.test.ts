@@ -33,7 +33,7 @@ describe("boot shell preview", () => {
     { preferred: "en-US", label: "Loading Drifty", status: "Loading Drifty…" },
     { preferred: "es-US", label: "Cargando Drifty", status: "Cargando Drifty…" },
     { preferred: "ko-KR", label: "Drifty 불러오는 중", status: "Drifty 불러오는 중…" },
-    { preferred: "fr-ES", label: "Loading Drifty", status: "Loading Drifty…" },
+    { preferred: "fr-ES", label: "Chargement de Drifty", status: "Chargement de Drifty…" },
   ])("uses the first device language on the boot shell for $preferred", ({ preferred, label, status }) => {
     const languagesSpy = vi.spyOn(window.navigator, "languages", "get").mockReturnValue([preferred]);
     try {

@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { localeForDisplayLanguage } from "../../lib/formatting";
@@ -696,7 +697,7 @@ export function SidebarCtaSlot({
   );
 }
 
-function formatResourceCapacity(bytes: number, language: "en" | "ko" | "es"): string {
+function formatResourceCapacity(bytes: number, language: DisplayLanguage): string {
   const gibibytes = bytes / (1024 ** 3);
   const rounded = Math.round(gibibytes * 10) / 10;
   const locale = localeForDisplayLanguage(language);

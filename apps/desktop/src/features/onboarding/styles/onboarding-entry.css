@@ -598,3 +598,19 @@
     display: none;
   }
 }
+
+/* Eight languages remain reachable without squeezing the entry headline. */
+.dc-onb-language-select {
+  appearance: auto;
+  min-width: 0;
+  max-width: min(190px, 100%);
+  padding: 5px 8px;
+  border: 1px solid var(--dc-onb-line);
+  border-radius: 8px;
+  background: var(--dc-onb-surface);
+  color: var(--dc-onb-text);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.dc-onb-language-select:focus-visible { outline: 2px solid var(--dc-onb-accent); outline-offset: 2px; }

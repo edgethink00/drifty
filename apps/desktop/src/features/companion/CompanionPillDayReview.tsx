@@ -1,3 +1,4 @@
+import { formatLocalizedTimeLabel } from "../../lib/formatting";
 import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
@@ -341,6 +342,7 @@ function formatReviewClockDuration(seconds: number): string {
 
 /** 09:00 → "9:00 AM", 14:05 → "2:05 PM"; minutes matter for a streak start. */
 function formatClockShort(date: Date, language: LocalizationController["effectiveLanguage"]): string {
+  if (language !== "en" && language !== "ko" && language !== "es") return formatLocalizedTimeLabel(date, language);
   const hour = date.getHours();
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;

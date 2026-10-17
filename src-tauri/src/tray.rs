@@ -79,36 +79,7 @@ const TRAY_TITLE_SCALE: f64 = 1.03;
 // Tray display language
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) enum TrayLanguage {
-    #[default]
-    English,
-    Korean,
-    Spanish,
-}
-
-impl TrayLanguage {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "en" => Ok(Self::English),
-            "ko" => Ok(Self::Korean),
-            "es" => Ok(Self::Spanish),
-            _ => Err(format!("Unsupported tray language: {value}")),
-        }
-    }
-
-    pub(crate) fn is_korean(self) -> bool {
-        self == Self::Korean
-    }
-
-    pub(crate) fn pick(self, english: &'static str, korean: &'static str, spanish: &'static str) -> &'static str {
-        match self {
-            Self::English => english,
-            Self::Korean => korean,
-            Self::Spanish => spanish,
-        }
-    }
-}
+pub(crate) use crate::localization::NativeLanguage as TrayLanguage;
 
 #[derive(Default)]
 pub struct TrayLanguageState(Mutex<TrayLanguage>);
@@ -473,12 +444,24 @@ fn tray_menu_plan(app: &AppHandle) -> TrayMenuPlan {
     let lang = latest_tray_language(app);
     let ko = lang.is_korean();
 
-    let drift_alerts_status = if lang == TrayLanguage::Spanish {
+    let drift_alerts_status = if lang.is_additional() {
+        let english = drift_alerts_status_label(&drift_status, false);
+        lang.text(&english).to_string()
+    } else if lang == TrayLanguage::Spanish {
         spanish_drift_alerts_status_label(&drift_status)
     } else {
         drift_alerts_status_label(&drift_status, ko)
     };
-    let drift_summary = if lang == TrayLanguage::Spanish {
+    let drift_summary = if lang.is_additional() {
+        drift_summary_label(&drift_status, false).map(|summary| {
+            if let Some(value) = summary.strip_prefix("Last check: ") {
+                let value = match value {
+                    "Not checking" => lang.text("Not checking"), "Recorded" => lang.text("Recorded"), "Never" => lang.text("Never"), _ => value,
+                };
+                lang.text("Last check: {{time}}").replace("{{time}}", value)
+            } else { summary }
+        })
+    } else if lang == TrayLanguage::Spanish {
         spanish_drift_summary_label(&drift_status)
     } else {
         drift_summary_label(&drift_status, ko)
@@ -687,6 +670,7 @@ fn pause_status_label(
                 TrayLanguage::English => format!("Paused · resumes at {time}"),
                 TrayLanguage::Korean => format!("일시 정지됨 · {time}에 다시 시작"),
                 TrayLanguage::Spanish => format!("Pausado · se reanuda a las {time}"),
+                _ => lang.text("Paused · resumes at {{time}}").replace("{{time}}", &time),
             })
         }
         TrackingPauseSnapshot::ResumeFailed { .. } => {
@@ -701,7 +685,7 @@ fn local_clock_label(unix_seconds: i64, lang: TrayLanguage) -> String {
     let Some(utc) = DateTime::<Utc>::from_timestamp(unix_seconds, 0) else {
         return "unknown time".to_string();
     };
-    if lang == TrayLanguage::Spanish {
+    if lang != TrayLanguage::English && lang != TrayLanguage::Korean {
         return utc.with_timezone(&Local).format("%H:%M").to_string();
     }
     let label = utc.with_timezone(&Local).format("%I:%M %p").to_string();
@@ -1232,6 +1216,7 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang:
                 TrayLanguage::English => format!("{focused} focused"),
                 TrayLanguage::Korean => format!("{focused} 집중"),
                 TrayLanguage::Spanish => format!("Foco {focused}"),
+                _ => lang.text("{{duration}} focused").replace("{{duration}}", &focused),
             };
             let _ = tray.set_title(Some(&title));
             apply_tray_title_typography(&tray, title, lang);
@@ -1239,6 +1224,7 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang:
                 TrayLanguage::English => format!("Drifty · {focused} focused today"),
                 TrayLanguage::Korean => format!("Drifty · 오늘 {focused} 집중"),
                 TrayLanguage::Spanish => format!("Drifty · {focused} de concentración hoy"),
+                _ => lang.text("Drifty · {{duration}} focused today").replace("{{duration}}", &focused),
             }));
         }
         TrayDisplayMode::DonutFocusTime => {
@@ -1247,6 +1233,7 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang:
                 TrayLanguage::English => format!("{focused} focused"),
                 TrayLanguage::Korean => format!("{focused} 집중"),
                 TrayLanguage::Spanish => format!("Foco {focused}"),
+                _ => lang.text("{{duration}} focused").replace("{{duration}}", &focused),
             };
             let _ = tray.set_title(Some(&title));
             apply_tray_title_typography(&tray, title, lang);
@@ -1254,6 +1241,7 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang:
                 TrayLanguage::English => format!("Drifty · {focused} focused today · productivity mix"),
                 TrayLanguage::Korean => format!("Drifty · 오늘 {focused} 집중 · 생산성 비율"),
                 TrayLanguage::Spanish => format!("Drifty · {focused} de concentración hoy · distribución de productividad"),
+                _ => lang.text("Drifty · {{duration}} focused today · productivity mix").replace("{{duration}}", &focused),
             }));
         }
     }

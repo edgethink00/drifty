@@ -1,3 +1,4 @@
+import { localeForDisplayLanguage } from "../../lib/formatting";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { DONUT_CIRCUMFERENCE, NO_PROJECT_KEY, WEEKLY_BREAKDOWN_WEEKDAYS, buildDonutView, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./insightData";
@@ -344,7 +345,9 @@ export function AttentionRhythmCard({
     const koreanWeekdays = ["월", "화", "수", "목", "금", "토", "일"] as const;
     const spanishWeekdays = ["L", "M", "X", "J", "V", "S", "D"] as const;
     return fallbackIndexes.map((weekdayIndex) => (
-      effectiveLanguage === "ko"
+      !["en", "ko", "es"].includes(effectiveLanguage)
+        ? new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { weekday: "short" }).format(new Date(2026, 0, 5 + weekdayIndex))
+        : effectiveLanguage === "ko"
         ? koreanWeekdays[weekdayIndex] ?? ""
         : effectiveLanguage === "es"
           ? spanishWeekdays[weekdayIndex] ?? ""

@@ -113,7 +113,7 @@ describe("approved UI polish contracts", () => {
     // Four fixed columns inside the detail panel left ~70px per value, which
     // turned "Not classified" into "Not classifie…".
     const grid = ruleBody(classification, ".classification-panel-view__activity-classification {");
-    expect(grid).toContain("repeat(auto-fit, minmax(5rem, 1fr))");
+    expect(grid).toContain("repeat(auto-fit, minmax(7rem, 1fr))");
     const block = classification.slice(
       classification.indexOf(".classification-panel-view__activity-classification {"),
       classification.indexOf("/* Reclassification popover"),

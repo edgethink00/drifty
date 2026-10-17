@@ -82,7 +82,7 @@ describe("display language preference", () => {
   it("uses preferred language rather than country or a lower-priority Spanish language", () => {
     expect(resolveSystemDisplayLanguage({ languages: ["en-MX", "es-MX"] })).toBe("en");
     expect(resolveSystemDisplayLanguage({ languages: ["es-US", "en-US"] })).toBe("es");
-    expect(resolveSystemDisplayLanguage({ languages: ["fr-ES", "es-ES"] })).toBe("en");
+    expect(resolveSystemDisplayLanguage({ languages: ["fr-ES", "es-ES"] })).toBe("fr");
   });
 
   it("follows a changed system language until the user explicitly chooses one", () => {
@@ -136,9 +136,9 @@ describe("display language preference", () => {
     expect(screen.getByText("Settings")).toBeTruthy();
   });
 
-  it.each(["en-US", "ja-JP", "de-DE"])("repairs the old implicit Korean default on a %s system", (language) => {
+  it.each([["en-US", "en"], ["ja-JP", "ja"], ["de-DE", "de"]])("repairs the old implicit Korean default on a %s system", (language, expected) => {
     window.localStorage.setItem("drifty.displayLanguage", "ko");
-    expect(resolveInitialDisplayLanguage({ language, languages: [language] })).toBe("en");
+    expect(resolveInitialDisplayLanguage({ language, languages: [language] })).toBe(expected);
   });
 
   it("preserves English from the unversioned preference on Korean systems", () => {

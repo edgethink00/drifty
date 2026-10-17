@@ -1,3 +1,5 @@
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { Menu, MenuItem, type MenuItemOptions, type MenuOptions } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauriRuntime } from "../companion/watcherBridge";
@@ -17,14 +19,14 @@ export type PetModeNativeMenuActions = {
 };
 
 export type PetModeNativeMenuState = {
-  readonly language?: "en" | "ko" | "es";
+  readonly language?: DisplayLanguage;
   readonly presenceMode?: PetPresenceMode;
 };
 
 export type PetModeAutomaticCloseMenuState = {
   readonly savedEnabled: boolean;
   readonly override: PetQuickControlsAutomaticCloseOverridePayload | null;
-  readonly language?: "en" | "ko" | "es";
+  readonly language?: DisplayLanguage;
 };
 
 async function popupPetMenu(items: NonNullable<MenuOptions["items"]>): Promise<boolean> {
@@ -63,7 +65,7 @@ async function popupPetMenu(items: NonNullable<MenuOptions["items"]>): Promise<b
   }
 }
 
-function petModeMenuCopy(language: "en" | "ko" | "es") {
+function legacyPetModeMenuCopy(language: "en" | "ko" | "es") {
   if (language === "ko") {
     return {
       openDashboard: "Drifty 열기",
@@ -106,7 +108,7 @@ function petModeMenuCopy(language: "en" | "ko" | "es") {
   };
 }
 
-function automaticCloseMenuCopy(language: "en" | "ko" | "es") {
+function legacyAutomaticCloseMenuCopy(language: "en" | "ko" | "es") {
   if (language === "ko") {
     return {
       pause15: "15분 멈추기",
@@ -281,4 +283,14 @@ export async function openNativePetTurnOffSuggestionMenu(
       action: actions.onConfirmTurnOff,
     },
   ]);
+}
+
+function translatedMenu<T extends Record<string, string>>(copy: T, language: DisplayLanguage): T {
+  return Object.fromEntries(Object.entries(copy).map(([key, value]) => [key, supplementalText(language, value)])) as T;
+}
+function petModeMenuCopy(language: DisplayLanguage) {
+  return isAdditionalDisplayLanguage(language) ? translatedMenu(legacyPetModeMenuCopy("en"), language) : legacyPetModeMenuCopy(language);
+}
+function automaticCloseMenuCopy(language: DisplayLanguage) {
+  return isAdditionalDisplayLanguage(language) ? translatedMenu(legacyAutomaticCloseMenuCopy("en"), language) : legacyAutomaticCloseMenuCopy(language);
 }

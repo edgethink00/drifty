@@ -1,3 +1,4 @@
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { isTauriRuntime } from "./watcherBridge";
 import type { DisplayLanguage } from "../localization/languagePreference";
 
@@ -117,6 +118,15 @@ function notificationCopy(
   restoredEnabled: boolean,
   language: DisplayLanguage,
 ): { title: string; body: string } {
+  if (isAdditionalDisplayLanguage(language)) {
+    const period = supplementalText(language, override.kind === "15" ? "15-minute" : override.kind === "60" ? "1-hour" : "until-midnight");
+    return {
+      title: supplementalText(language, restoredEnabled ? "Auto-close is back on" : "Auto-close is back off"),
+      body: supplementalText(language, "Your {{period}} {{action}} ended. Drifty restored your saved setting.", {
+        period, action: supplementalText(language, override.enabled ? "temporary activation" : "pause"),
+      }),
+    };
+  }
   if (language === "ko") {
     const period = override.kind === "15"
       ? "15분"

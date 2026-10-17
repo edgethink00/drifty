@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { shiftIsoDate, type ProductivityDuration } from "@drifty/domain";
 import type { WeekDayRow } from "../dashboard/weekCalendar";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
@@ -31,6 +32,7 @@ export function leaderboardShareStoryIds(card: ShareCardModalCard, hasRank: bool
 }
 
 type BuildLeaderboardShareCardInput = {
+  readonly language?: DisplayLanguage;
   readonly period: LeaderboardPeriod;
   /** Logical today; the leaderboard windows end on this day. */
   readonly windowEndDay: string;
@@ -43,7 +45,7 @@ type BuildLeaderboardShareCardInput = {
  * since there is no monthly card. Matching the leaderboard window lets the card
  * show the live rank instead of an estimate.
  */
-export function buildLeaderboardShareCard({ period, windowEndDay, dailyProductivity }: BuildLeaderboardShareCardInput): ShareCardModalCard {
+export function buildLeaderboardShareCard({ period, windowEndDay, dailyProductivity, language = "en" }: BuildLeaderboardShareCardInput): ShareCardModalCard {
   const byDay = new Map(dailyProductivity.map((point) => [point.day, point]));
   const pointFor = (day: string): DailyProductivityPoint => byDay.get(day) ?? { day, focus: 0, drift: 0, neutral: 0 };
 
@@ -53,7 +55,7 @@ export function buildLeaderboardShareCard({ period, windowEndDay, dailyProductiv
     return {
       kind: "day",
       data: buildShareCardData({
-        language: "en",
+        language: language === "ko" ? "en" : language,
         day: windowEndDay,
         totalSeconds: pointTotal(today),
         categoryTotals: [],
@@ -74,7 +76,7 @@ export function buildLeaderboardShareCard({ period, windowEndDay, dailyProductiv
   return {
     kind: "week",
     data: buildShareWeekCardData({
-      language: "en",
+      language: language === "ko" ? "en" : language,
       startDay,
       endDay: windowEndDay,
       totalSeconds: days.reduce((sum, point) => sum + pointTotal(point), 0),

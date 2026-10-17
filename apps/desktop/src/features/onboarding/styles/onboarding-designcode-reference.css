@@ -919,7 +919,10 @@
 }
 
 .dc-onb-toggle__label {
-  width: 20px;
+  width: auto;
+  min-width: 20px;
+  flex-shrink: 0;
+  white-space: nowrap;
   color: var(--dc-onb-soft);
   font-size: 13px;
   text-align: left;
@@ -944,7 +947,7 @@
 }
 
 .dc-onb-toggle--compact .dc-onb-toggle__label {
-  width: 24px;
+  min-width: 24px;
   font-weight: 500;
 }
 
@@ -1550,9 +1553,13 @@
   font-size: 12.5px;
 }
 
-/* What is ready, in one line: "Drifty Cloud 7-day free trial available ·
-   Account connected · Tracking ready". The AI state is the only emphasis. */
+/* AI, account and tracking readiness share one line when they fit; longer
+   translated states wrap between items. Only the AI state is emphasized. */
 .dc-onb-ready-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 4px;
   margin: 0 0 18px;
   color: var(--dc-onb-text);
   font-size: 13.5px;
@@ -1669,7 +1676,10 @@
 }
 
 .dc-onb-card .onb-browser-history-preference__toggle .onb-toggle__label {
-  width: 24px;
+  width: auto;
+  min-width: 24px;
+  flex-shrink: 0;
+  white-space: nowrap;
   color: var(--dc-onb-soft);
   font-size: 13px;
   font-weight: 500;

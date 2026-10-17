@@ -1,3 +1,4 @@
+import { formatLocalizedDuration } from "../../lib/formatting";
 import { FLOW_INTERVAL_OPTIONS, type FlowIntervalMinutes } from "@drifty/domain";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -30,7 +31,7 @@ export function FlowDetailSelect({
   const { effectiveLanguage, t } = useLocalization();
   const options = FLOW_INTERVAL_OPTIONS.map((optionMinutes) => ({
     value: FLOW_DETAIL_VALUE_BY_INTERVAL[optionMinutes],
-    label: effectiveLanguage === "ko" ? `${optionMinutes}분` : effectiveLanguage === "es" ? `${optionMinutes} min` : `${optionMinutes}m`,
+    label: formatLocalizedDuration(optionMinutes * 60, effectiveLanguage),
   }));
   return (
     <SettingsSelect

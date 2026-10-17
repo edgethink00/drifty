@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { useMemo, useState, type ReactNode } from "react";
 import { ActionLabel } from "../../components/ActionLabel";
 import { formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
@@ -164,9 +165,9 @@ export function LeaderboardView({
   const shareWindowEndDay = shareContext?.windowEndDay ?? null;
   const shareCard = useMemo(() => (
     shareCardOpen && shareWindowEndDay && shareAvailable
-      ? buildLeaderboardShareCard({ period: activePeriod, windowEndDay: shareWindowEndDay, dailyProductivity: dailyProductivity ?? [] })
+      ? buildLeaderboardShareCard({ language: effectiveLanguage, period: activePeriod, windowEndDay: shareWindowEndDay, dailyProductivity: dailyProductivity ?? [] })
       : null
-  ), [activePeriod, dailyProductivity, shareAvailable, shareCardOpen, shareWindowEndDay]);
+  ), [activePeriod, dailyProductivity, effectiveLanguage, shareAvailable, shareCardOpen, shareWindowEndDay]);
   const shareStoryIds = useMemo(
     () => (shareCard ? leaderboardShareStoryIds(shareCard, shareHasRank, shareHasSeries) : undefined),
     [shareCard, shareHasRank, shareHasSeries],
@@ -534,7 +535,7 @@ function resolveParticipantCount(rows: readonly LeaderboardRow[], ownParticipant
   return resolved < observedMinimum ? null : resolved;
 }
 
-function resolvePublicNamePreview(profileDisplayName?: string | null, email?: string | null, language: "en" | "ko" | "es" = "en") {
+function resolvePublicNamePreview(profileDisplayName?: string | null, email?: string | null, language: DisplayLanguage = "en") {
   const trimmedName = profileDisplayName?.trim();
   if (trimmedName) return trimmedName;
   const emailPrefix = email?.split("@")[0]?.trim();

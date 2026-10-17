@@ -4,6 +4,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import { LocalizationProvider, type DisplayLanguage } from "../localization/LocalizationContext";
+import { translateFor } from "../localization/translate";
 
 const residualCapChart = {
   gridlines: [],
@@ -29,6 +31,29 @@ const emptyChart = {
 };
 
 describe("WeeklyTrendChart", () => {
+  it.each([
+    ["ja", "月", /30\s*分/u, /1\.5\s*時間/u],
+    ["pt-BR", "seg.", /30\s*min/u, /1,5\s*h/u],
+    ["zh-Hans", "周一", /30\s*分钟/u, /1\.5\s*小时/u],
+    ["fr", "lun.", /30\s*min/u, /1,5\s*h/u],
+    ["de", /^Mo\.?$/u, /30\s*Min\./u, /1,5\s*Std\./u],
+  ] as const)("localizes visible weekdays and spoken/chart duration units in %s", (language, monday, minutes, hours) => {
+    const controller = { effectiveLanguage: language as DisplayLanguage, setDisplayLanguage: vi.fn(), t: translateFor("en") };
+    const { container } = render(
+      <LocalizationProvider controller={controller}>
+        <WeeklyTrendChart chart={{ ...residualCapChart, gridlines: [{ label: "1.5h", topPct: 50 }] }} hasData mode="productivity"
+          onHideSegmentHover={vi.fn()} onModeChange={vi.fn()} onMoveSegmentHover={vi.fn()} onShowSegmentHover={vi.fn()} />
+      </LocalizationProvider>,
+    );
+    const weekday = container.querySelector(".wt-daylabel")?.textContent;
+    if (typeof monday === "string") expect(weekday).toBe(monday);
+    else expect(weekday).toMatch(monday);
+    const description = container.querySelector(".wt-seg")?.getAttribute("aria-label");
+    expect(description).toContain(`${weekday} · focus ·`);
+    expect(description).toMatch(minutes);
+    expect(container.querySelector(".wt-gridlabel")?.textContent).toMatch(hours);
+  });
+
   it("exposes the chart mode picker as a labeled single-selection control", () => {
     const onModeChange = vi.fn();
 

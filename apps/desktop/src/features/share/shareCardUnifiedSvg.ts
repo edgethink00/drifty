@@ -1,4 +1,8 @@
 // @ts-nocheck
+import type { DisplayLanguage } from "../localization/languageCatalog";
+import { supplementalText, isAdditionalDisplayLanguage } from "../localization/supplementalCopy";
+import { localeForDisplayLanguage, formatLocalizedDuration } from "../../lib/formatting";
+import { translateFor } from "../localization/translate";
 // Unified share-card lineup ported from qa-share-freedom.html.
 // Keeps Wispr-style chrome + per-card accent cycling (CARD_LOOKS).
 // It is intentionally kept as a self-contained SVG template while the beta
@@ -28,7 +32,7 @@ export type UnifiedShareStoryId =
   | "WR4";
 
 export type ShareCardTheme = "light" | "dark";
-export type ShareCardLanguage = "en" | "ko" | "es";
+export type ShareCardLanguage = DisplayLanguage;
 
 /**
  * A privacy-safe, live leaderboard fact. The count is returned with the
@@ -123,9 +127,8 @@ function minutesFromSeconds(seconds: number | null | undefined): number {
 }
 
 function localizedProductivityLabel(key: "focus" | "neutral" | "drift"): string {
-  if (selectedLanguage === "es") return { focus: "Concentración", neutral: "Neutro", drift: "Distracción" }[key];
-  if (selectedLanguage !== "ko") return { focus: "Focus", neutral: "Neutral", drift: "Drift" }[key];
-  return { focus: "집중", neutral: "중립", drift: "딴짓" }[key];
+  return translateFor(selectedLanguage)(`activity.productivity.${key}`);
+
 }
 
 function productivityPercentages(data: Pick<ShareCardData | ShareWeekCardData, "productivitySlices" | "totalSeconds" | "focusPercent">) {
@@ -156,7 +159,7 @@ function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks, c
   }));
   const productivitySlices = (data.productivitySlices ?? []).map((slice) => ({
     key: slice.key,
-    label: localizedProductivityLabel(slice.key) ?? (selectedLanguage === "ko" ? "기타" : selectedLanguage === "es" ? "Otros" : "Other"),
+    label: localizedProductivityLabel(slice.key) ?? ((isAdditionalDisplayLanguage(selectedLanguage) ? supplementalText(selectedLanguage, "Other") : selectedLanguage === "ko" ? "기타" : selectedLanguage === "es" ? "Otros" : "Other")),
     pct: Math.min(100, finiteNonNegative(slice.ratio) * 100),
     minutes: minutesFromSeconds(slice.seconds),
   }));
@@ -380,7 +383,13 @@ const syncSwatchesToLook = (look) => {
 const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const SIZE = { label: 34, support: 40, body: 48, footer: 34, metricFloor: 180 };
 const clampSize = (size, floor = SIZE.support) => Math.max(size ?? floor, floor);
-const tx = (x, y, value, o = {}) => `<text x="${x}" y="${y}" font-family="${o.font ?? F.sans}" font-size="${clampSize(o.size, o.floor ?? SIZE.support)}" fill="${o.fill ?? '#000'}" ${o.weight ? `font-weight="${o.weight}"` : ''} ${o.spacing != null ? `letter-spacing="${o.spacing}"` : ''} ${o.anchor ? `text-anchor="${o.anchor}"` : ''} ${o.italic ? 'font-style="italic"' : ''}>${esc(value)}</text>`;
+const tx = (x, y, value, o = {}) => {
+  const baseSize = clampSize(o.size, o.floor ?? SIZE.support);
+  const widthUnits = [...String(value)].reduce((sum, char) => sum + (/[^\u0000-\u024f]/u.test(char) ? 1 : char === ' ' ? 0.3 : 0.6), 0);
+  const available = o.maxWidth ?? (o.anchor === 'middle' ? Math.max(1, 2 * Math.min(x - 84, 1116 - x)) : o.anchor === 'end' ? Math.max(1, x - 84) : Math.max(1, 1116 - x));
+  const size = isAdditionalDisplayLanguage(selectedLanguage) && widthUnits > 0 ? Math.min(baseSize, available / widthUnits) : baseSize;
+  return `<text x="${x}" y="${y}" font-family="${o.font ?? F.sans}" font-size="${size}" fill="${o.fill ?? '#000'}" ${o.weight ? `font-weight="${o.weight}"` : ''} ${o.spacing != null ? `letter-spacing="${o.spacing}"` : ''} ${o.anchor ? `text-anchor="${o.anchor}"` : ''} ${o.italic ? 'font-style="italic"' : ''}>${esc(value)}</text>`;
+};
 // Align logo optical center to drifty.so text center (font-size 34 → ~y 813).
 const mark = (p, x = 84, y = 834, opacity = 1, inv) => `<svg x="${x}" y="${y - 41}" width="148" height="41" viewBox="48 236 1680 471" preserveAspectRatio="xMinYMid meet" opacity="${opacity}"><image x="0" y="0" width="2030" height="1035" href="${LOGO}"${(inv ?? (p === dark)) ? ' filter="url(#invert)"' : ''}/></svg>`;
 const footerY = (h = H) => (h >= H_RICH ? { logo: 1094, url: 1088 } : { logo: 834, url: 828 });
@@ -486,11 +495,31 @@ const spanishCardCopy = (english: string): string => {
   if (english.startsWith("to reveal your live focus rank for ")) return english.replace("to reveal your live focus rank for ", "para ver tu puesto en tiempo real de ");
   return english;
 };
-const localized = (english: string, korean: string) => selectedLanguage === 'ko' ? korean : selectedLanguage === 'es' ? spanishCardCopy(english) : english;
+const localized = (english: string, korean: string) => {
+  if (selectedLanguage === 'ko') return korean;
+  if (selectedLanguage === 'es') return spanishCardCopy(english);
+  if (!isAdditionalDisplayLanguage(selectedLanguage)) return english;
+  const exact = supplementalText(selectedLanguage, english);
+  if (exact !== english) return exact;
+  const patterns = [
+    [/^Top (.+)%$/u, "Top {{percent}}%", "percent"],
+    [/^Your rank for (.+) shows after the next refresh\.$/u, "Your rank for {{scope}} shows after the next refresh.", "scope"],
+    [/^From (.+) leaderboard participants$/u, "From {{count}} leaderboard participants", "count"],
+    [/^of focused work in (.+)$/u, "of focused work in {{period}}", "period"],
+    [/^of focused work on (.+)$/u, "of focused work on {{day}}", "day"],
+    [/^to reveal your live focus rank for (.+)$/u, "to reveal your live focus rank for {{scope}}", "scope"],
+  ] as const;
+  for (const [pattern, key, param] of patterns) {
+    const match = pattern.exec(english);
+    if (match) return supplementalText(selectedLanguage, key, { [param]: match[1] });
+  }
+  return english;
+};
 const formatDuration = (minutes) => {
   const m = Math.max(0, Math.round(Number(minutes) || 0));
   const h = Math.floor(m / 60);
   const mm = m % 60;
+  if (isAdditionalDisplayLanguage(selectedLanguage)) return formatLocalizedDuration(m * 60, selectedLanguage);
   if (selectedLanguage === 'ko') {
     if (h <= 0) return `${mm}분`;
     if (mm === 0) return `${h}시간`;
@@ -539,10 +568,8 @@ let AVG_DAILY_FOCUS_MINUTES = 0;
 const dailyAverageMinutes = () => Math.max(0, Math.round(AVG_DAILY_FOCUS_MINUTES));
 const peakDayLabel = () => localized('Tue', '화');
 const metric = () => formatDuration(FOCUS_MINUTES);
-const shareNumberLocale = () => selectedLanguage === 'es' ? 'es-ES' : selectedLanguage === 'ko' ? 'ko-KR' : 'en-US';
-const pctLabel = (v) => selectedLanguage === 'es'
-  ? parseFloat(v.toPrecision(2)).toLocaleString('es-ES', { useGrouping: false, maximumSignificantDigits: 2 })
-  : String(parseFloat(v.toPrecision(2)));
+const shareNumberLocale = () => selectedLanguage === "es" ? "es-ES" : localeForDisplayLanguage(selectedLanguage);
+const pctLabel = (v) => parseFloat(v.toPrecision(2)).toLocaleString(shareNumberLocale(), { useGrouping: false, maximumSignificantDigits: 2 });
 let TOTAL_USERS = 2858;
 const rankPlace = () => Math.max(1, RANK_PLACE);
 const placeLabel = () => `#${rankPlace().toLocaleString(shareNumberLocale())}`;
@@ -778,6 +805,7 @@ const categoryPalette = (p) => (p === dark ? CATEGORY_COLORS_DARK : CATEGORY_COL
 const productivityPalette = (p) => (p === dark ? PRODUCTIVITY_COLORS_DARK : PRODUCTIVITY_COLORS_LIGHT);
 const formatHoursDecimal = (minutes) => {
   const hours = Math.max(0, Math.round((minutes / 60) * 10) / 10);
+  if (isAdditionalDisplayLanguage(selectedLanguage)) return new Intl.NumberFormat(shareNumberLocale(), { style: "unit", unit: "hour", unitDisplay: "short", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(hours);
   return selectedLanguage === 'ko' ? `${hours.toFixed(1)}시간` : selectedLanguage === 'es' ? `${hours.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h` : `${hours.toFixed(1)}h`;
 };
 const pointOnCircle = (cx, cy, r, ratio) => {
@@ -912,7 +940,7 @@ function dashProductivity(p, id) {
   const legendGap = 72;
   const legendColW = 360;
   // Longer Spanish names need their own line above the duration.
-  const stackedLegend = selectedLanguage === 'es';
+  const stackedLegend = selectedLanguage === 'es' || isAdditionalDisplayLanguage(selectedLanguage);
   const rowGap = stackedLegend ? 128 : 100;
   const blockW = dialSize + legendGap + legendColW;
   const blockLeft = panelX + Math.round((panelW - blockW) / 2);

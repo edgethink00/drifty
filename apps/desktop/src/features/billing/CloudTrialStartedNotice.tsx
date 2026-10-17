@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { useFloatingNotice } from "../../components/useFloatingNotice";
 import { FloatingNoticePortal } from "../../components/FloatingNoticePortal";
 import type { BillingEntitlement } from "./billingService";
@@ -110,7 +111,7 @@ export function CloudTrialStartedNotice({
 export function formatCloudTrialStartedDetail(
   trialEndsAt: string | null,
   accessSource: CloudTrialStartedNoticeModel["accessSource"],
-  language: "en" | "ko" | "es",
+  language: DisplayLanguage,
   t: LocalizationController["t"],
 ): string {
   // Each variant owns a whole sentence rather than a subject slot: Korean

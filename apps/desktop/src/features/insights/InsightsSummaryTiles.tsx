@@ -2,9 +2,10 @@ import { logicalDayIsoDateForDate } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 import type { InsightRange } from "../dashboard/dashboardPeriods";
 import { MetricTile } from "../../components/MetricTile";
-import { formatDuration, formatLocalizedDuration } from "../../lib/formatting";
+import { formatDuration, formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { WeeklyBreakdownDay } from "./insightData";
+import { isAdditionalDisplayLanguage } from "../localization/supplementalCopy";
 
 const KOREAN_WEEKDAYS = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"] as const;
 
@@ -53,7 +54,9 @@ export function InsightsSummaryTiles({ productivityTotals, range, segments, week
     null,
   );
   const peakLabel = peakDay
-    ? (isKorean ? KOREAN_WEEKDAYS[peakDay.weekdayIndex] ?? peakDay.weekday : isSpanish ? spanishWeekdays[peakDay.weekdayIndex] ?? peakDay.weekday : peakDay.weekday)
+    ? (isAdditionalDisplayLanguage(effectiveLanguage)
+      ? new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { weekday: "long" }).format(new Date(2024, 0, 1 + peakDay.weekdayIndex, 12))
+      : isKorean ? KOREAN_WEEKDAYS[peakDay.weekdayIndex] ?? peakDay.weekday : isSpanish ? spanishWeekdays[peakDay.weekdayIndex] ?? peakDay.weekday : peakDay.weekday)
     : t("trends.summary.empty");
 
   function duration(totalSeconds: number) {
@@ -100,7 +103,9 @@ export function InsightsPeakWeekday({ weekly, range }: Pick<InsightsSummaryTiles
     null,
   );
   if (!peak) return null;
-  const label = effectiveLanguage === "ko" ? KOREAN_WEEKDAYS[peak.weekdayIndex] : effectiveLanguage === "es" ? ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][peak.weekdayIndex] : peak.weekday;
+  const label = isAdditionalDisplayLanguage(effectiveLanguage)
+    ? new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { weekday: "long" }).format(new Date(2024, 0, 1 + peak.weekdayIndex, 12))
+    : effectiveLanguage === "ko" ? KOREAN_WEEKDAYS[peak.weekdayIndex] : effectiveLanguage === "es" ? ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][peak.weekdayIndex] : peak.weekday;
   const duration = effectiveLanguage !== "en"
     ? formatLocalizedDuration(peak.focusSeconds, effectiveLanguage)
     : formatDuration(peak.focusSeconds);

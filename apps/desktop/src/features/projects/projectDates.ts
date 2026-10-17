@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import { shiftIsoDate } from "@drifty/domain";
 import type { useLocalization } from "../localization/LocalizationContext";
@@ -12,7 +13,7 @@ export const PROJECT_LIBRARY_WINDOW_DAYS = 7;
  * ago" within the week, otherwise a short date (with the year only when it
  * differs from today's).
  */
-export function formatProjectLastActivity(day: string | undefined, today: string, language: "en" | "ko" | "es", t: Translate): string {
+export function formatProjectLastActivity(day: string | undefined, today: string, language: DisplayLanguage, t: Translate): string {
   if (!day) return "—";
   if (day === today) return t("projects.day.today");
   if (day === shiftIsoDate(today, -1)) return t("projects.day.yesterday");

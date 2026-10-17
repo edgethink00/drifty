@@ -26,7 +26,7 @@ paused auto-close spells out when it lifts, so that state needs its own
 width; each value is the widest string the state can render (for English,
 "Paused until 10:48pm"). Slack inside a narrower reading is absorbed by the
 two auto grid tracks. */
-/* Each non-Windows value is the widest measured reading plus a three-point margin. The
+/* The original English/Korean frames retain their measured three-point margin. The
 tracks ellipsize rather than overflow, so a width rounded flush to the
 longest string truncates it: the first pass rounded English "Off" to its
 exact 281.2pt and lost the last letter. WebKit and Chromium measure these
@@ -45,6 +45,20 @@ const PET_QUICK_CONTROLS_KO_PAUSED_WIDTH: f64 = 330.0;
 #[cfg(not(target_os = "windows"))]
 const PET_QUICK_CONTROLS_KO_PAUSED_WIDTH: f64 = 290.0;
 const PET_QUICK_CONTROLS_EN_PAUSED_WIDTH: f64 = 330.0;
+// Actual component/CSS readings in Chromium and WebKit, including every clock
+// minute, indefinite pauses and feedback states. Round up and leave seven more
+// points so no label is flush with the ellipsis boundary. Portuguese keeps its
+// wider idle frame for both states: resuming while a native menu still holds
+// the paused frame must also fit the auto-close label and off state.
+const PET_QUICK_CONTROLS_LOCALIZED_WIDTHS: [(&str, f64, f64); 6] = [
+    ("es", 444.0, 450.0),
+    ("ja", 357.0, 391.0),
+    ("pt-BR", 496.0, 496.0),
+    ("zh-Hans", 302.0, 310.0),
+    ("fr", 415.0, 422.0),
+    ("de", 443.0, 454.0),
+];
+const PET_QUICK_CONTROLS_MAX_WIDTH: f64 = 496.0;
 #[cfg(target_os = "windows")]
 const PET_QUICK_CONTROLS_MIN_WIDTH: f64 = PET_QUICK_CONTROLS_EN_IDLE_WIDTH;
 #[cfg(not(target_os = "windows"))]
@@ -155,7 +169,7 @@ fn is_supported_quick_controls_state(state: &PetQuickControlsState) -> bool {
         })
         .unwrap_or(true);
     override_supported
-        && matches!(state.language.as_str(), "en" | "ko" | "es")
+        && crate::localization::NativeLanguage::parse(&state.language).is_ok()
         && matches!(state.theme.as_str(), "light" | "dark")
 }
 
@@ -167,11 +181,25 @@ fn quick_controls_paused(state: &PetQuickControlsState) -> bool {
 }
 
 fn quick_controls_width(language: &str, paused: bool) -> f64 {
-    match (language == "en", paused) {
-        (true, false) => PET_QUICK_CONTROLS_EN_IDLE_WIDTH,
-        (true, true) => PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
-        (false, false) => PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
-        (false, true) => PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
+    let (idle_width, paused_width) = if language == "en" {
+        (
+            PET_QUICK_CONTROLS_EN_IDLE_WIDTH,
+            PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
+        )
+    } else {
+        PET_QUICK_CONTROLS_LOCALIZED_WIDTHS
+            .iter()
+            .find(|(tag, _, _)| *tag == language)
+            .map(|(_, idle, paused)| (*idle, *paused))
+            .unwrap_or((
+                PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
+                PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
+            ))
+    };
+    if paused {
+        paused_width
+    } else {
+        idle_width
     }
 }
 
@@ -359,8 +387,7 @@ fn position_windows_quick_controls(
         .set_position(position)
         .map_err(|error| error.to_string())?;
     let (_, minimum) = quick_controls_physical_frame(layout, PET_QUICK_CONTROLS_MIN_WIDTH, scale)?;
-    let (_, maximum) =
-        quick_controls_physical_frame(layout, PET_QUICK_CONTROLS_EN_PAUSED_WIDTH, scale)?;
+    let (_, maximum) = quick_controls_physical_frame(layout, PET_QUICK_CONTROLS_MAX_WIDTH, scale)?;
     window
         .set_min_size(Some(minimum))
         .map_err(|error| error.to_string())?;
@@ -450,16 +477,22 @@ pub fn set_pet_quick_controls_acknowledgement_held(app: &AppHandle, held: bool) 
             PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
         ));
         let app_for_main = app.clone();
-        let _ = app.run_on_main_thread(crate::panic_guard::contained("pet_quick_controls::set_pet_quick_controls_acknowledgement_held", move || {
-            if PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_GENERATION.load(Ordering::Relaxed) != generation
-                || !PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD.swap(false, Ordering::Relaxed)
-            {
-                return;
-            }
-            if let Some(window) = app_for_main.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
-                let _ = hide_pet_quick_controls_window(&window);
-            }
-        }));
+        let _ = app.run_on_main_thread(crate::panic_guard::contained(
+            "pet_quick_controls::set_pet_quick_controls_acknowledgement_held",
+            move || {
+                if PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_GENERATION.load(Ordering::Relaxed)
+                    != generation
+                    || !PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD.swap(false, Ordering::Relaxed)
+                {
+                    return;
+                }
+                if let Some(window) =
+                    app_for_main.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL)
+                {
+                    let _ = hide_pet_quick_controls_window(&window);
+                }
+            },
+        ));
     });
 }
 
@@ -521,10 +554,7 @@ pub fn setup_pet_quick_controls_window(app: &tauri::App) -> tauri::Result<()> {
     .title("Drifty Pet Controls")
     .inner_size(PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
     .min_inner_size(PET_QUICK_CONTROLS_MIN_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
-    .max_inner_size(
-        PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
-        PET_QUICK_CONTROLS_HEIGHT,
-    )
+    .max_inner_size(PET_QUICK_CONTROLS_MAX_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
     .decorations(false)
     .shadow(false)
     .resizable(false)
@@ -959,6 +989,7 @@ mod tests {
         PetQuickControlsState, PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
         PET_QUICK_CONTROLS_EN_IDLE_WIDTH, PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
         PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
+        PET_QUICK_CONTROLS_LOCALIZED_WIDTHS, PET_QUICK_CONTROLS_MAX_WIDTH,
         PET_QUICK_CONTROLS_MIN_WIDTH, PET_QUICK_CONTROLS_SCREEN_INSET,
     };
     use serde_json::json;
@@ -1041,7 +1072,7 @@ mod tests {
     }
 
     #[test]
-    fn widens_the_panel_only_while_the_pause_spells_out_its_end() {
+    fn sizes_the_panel_for_the_language_and_pause_reading() {
         let paused = Some(PetQuickControlsAutomaticCloseOverride {
             enabled: false,
             kind: "60".to_string(),
@@ -1089,8 +1120,41 @@ mod tests {
             PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
         ] {
             assert!(width >= PET_QUICK_CONTROLS_MIN_WIDTH);
-            assert!(width <= PET_QUICK_CONTROLS_EN_PAUSED_WIDTH);
+            assert!(width <= PET_QUICK_CONTROLS_MAX_WIDTH);
         }
+    }
+
+    #[test]
+    fn localized_frames_fit_the_measured_text_with_a_rounding_margin() {
+        // Largest actual frontend readings across Chromium/WebKit. These
+        // independently measured bounds catch a new tag falling back to the
+        // shorter Korean frame, including the earlier Spanish regression.
+        for (language, idle_content, paused_content) in [
+            ("es", 436.21875_f64, 442.703125_f64),
+            ("ja", 349.5, 383.265625),
+            ("pt-BR", 488.4375, 429.4375),
+            ("zh-Hans", 294.75, 302.515625),
+            ("fr", 407.40625, 414.375),
+            ("de", 435.4375, 446.390625),
+        ] {
+            for (paused, content_width) in [(false, idle_content), (true, paused_content)] {
+                let frame = quick_controls_width(language, paused);
+                let required = if language == "pt-BR" {
+                    idle_content.max(paused_content)
+                } else {
+                    content_width
+                };
+                assert!(frame >= required + 3.0, "{language}, paused={paused}");
+                assert!(frame <= required + 8.0, "{language}, paused={paused}");
+                assert!(frame >= PET_QUICK_CONTROLS_MIN_WIDTH);
+                assert!(frame <= PET_QUICK_CONTROLS_MAX_WIDTH);
+            }
+        }
+        assert_eq!(
+            quick_controls_width("pt-BR", false),
+            quick_controls_width("pt-BR", true),
+            "Portuguese must remain readable when a menu holds the paused frame during resume"
+        );
     }
 
     #[test]
@@ -1136,7 +1200,7 @@ mod tests {
             follow_system: false,
         };
         let unsupported_language = PetQuickControlsState {
-            language: "ja".to_string(),
+            language: "xx".to_string(),
             ..supported.clone()
         };
         let unsupported_theme = PetQuickControlsState {
@@ -1267,7 +1331,7 @@ mod tests {
             0.0,
             640.0,
             480.0,
-            PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
+            PET_QUICK_CONTROLS_MAX_WIDTH,
         );
         let right = layout_pet_quick_controls(
             -100.0,
@@ -1278,15 +1342,15 @@ mod tests {
             0.0,
             640.0,
             480.0,
-            PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
+            PET_QUICK_CONTROLS_MAX_WIDTH,
         );
 
         assert!((left.x - (-632.0)).abs() < f64::EPSILON);
-        assert!((right.x - (-338.0)).abs() < f64::EPSILON);
+        assert!((right.x - (-504.0)).abs() < f64::EPSILON);
         for layout in [left, right] {
             assert!(layout.x >= -640.0 + PET_QUICK_CONTROLS_SCREEN_INSET);
             assert!(
-                layout.x + PET_QUICK_CONTROLS_EN_PAUSED_WIDTH
+                layout.x + PET_QUICK_CONTROLS_MAX_WIDTH
                     <= -640.0 + 640.0 - PET_QUICK_CONTROLS_SCREEN_INSET
             );
         }
@@ -1302,22 +1366,28 @@ mod tests {
                 PET_QUICK_CONTROLS_EN_IDLE_WIDTH,
                 PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
             ),
-        ] {
+        ]
+        .into_iter()
+        .chain(PET_QUICK_CONTROLS_LOCALIZED_WIDTHS.map(|(_, idle, paused)| (idle, paused)))
+        {
             assert!(!super::quick_controls_resize_needed(
                 true, true, idle, paused
             ));
             assert!(!super::quick_controls_resize_needed(
                 true, true, paused, idle
             ));
-            assert!(super::quick_controls_resize_needed(
-                false, true, idle, paused
-            ));
+            let changes_width = (idle - paused).abs() > 0.5;
+            assert_eq!(
+                super::quick_controls_resize_needed(false, true, idle, paused),
+                changes_width
+            );
             assert!(!super::quick_controls_resize_needed(
                 false, false, paused, paused
             ));
-            assert!(super::quick_controls_resize_needed(
-                true, false, idle, paused
-            ));
+            assert_eq!(
+                super::quick_controls_resize_needed(true, false, idle, paused),
+                changes_width
+            );
         }
     }
 }

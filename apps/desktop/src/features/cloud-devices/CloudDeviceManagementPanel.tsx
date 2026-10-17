@@ -363,7 +363,7 @@ function formatCloudDeviceCount(
   return t("settings.cloudDevices.inUseCount", { active: activeCount, max: maxActiveDevices });
 }
 
-export function formatCloudDeviceLastSeen(value: string, language: "en" | "ko" | "es", t: LocalizationController["t"]): string {
+export function formatCloudDeviceLastSeen(value: string, language: DisplayLanguage, t: LocalizationController["t"]): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return t("settings.cloudDevices.lastSeenUnknown");
   const formatted = new Intl.DateTimeFormat(localeForDisplayLanguage(language), {

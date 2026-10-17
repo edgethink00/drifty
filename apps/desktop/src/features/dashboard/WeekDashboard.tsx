@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import type { Ref } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
@@ -123,7 +124,7 @@ function buildWeekSummaryMetrics(
   rows: readonly WeekDayRow[],
   segments: readonly ActivitySegment[],
   totalSeconds: number,
-  language: "en" | "ko" | "es",
+  language: DisplayLanguage,
   t: LocalizationController["t"],
 ): WeekSummaryMetrics {
   const activeRows = rows.filter((row) => row.totalSeconds > 0);
@@ -155,7 +156,7 @@ const WEEK_SIDE_TREND_STEP_CANDIDATES = [0.25, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10
 function buildWeekSideTrendChart(
   rows: WeekDayRow[],
   colorMode: WeekDashboardColorMode,
-  language: "en" | "ko" | "es",
+  language: DisplayLanguage,
   t: LocalizationController["t"],
   projectSlicesByDay?: ReadonlyMap<string, readonly WeekProjectSlice[]>,
   levels: readonly ProductivityLevel[] = [],

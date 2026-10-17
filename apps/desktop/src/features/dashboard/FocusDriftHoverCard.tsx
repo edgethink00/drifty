@@ -1,3 +1,5 @@
+import { translateFor } from "../localization/translate";
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedQuarterHourLabel } from "../../lib/formatting";
@@ -197,9 +199,9 @@ function formatFocusDriftSourceDetail(source: FocusDriftSourceSummary, language:
       ? t("dashboard.today.website")
       : source.detail;
   const surface = source.siteDomain
-    ? language === "ko" ? `${detail} · ${source.appName}` : language === "es" ? `${detail} en ${source.appName}` : `${detail} via ${source.appName}`
+    ? isAdditionalDisplayLanguage(language) ? supplementalText(language, "{{v0}} via {{v1}}", { v0: detail, v1: source.appName }) : language === "ko" ? `${detail} · ${source.appName}` : language === "es" ? `${detail} en ${source.appName}` : `${detail} via ${source.appName}`
     : detail;
-  const captures = language === "ko" ? `캡처 ${source.captures}개` : language === "es" ? `${source.captures} ${source.captures === 1 ? "captura" : "capturas"}` : `${source.captures} ${source.captures === 1 ? "capture" : "captures"}`;
+  const captures = isAdditionalDisplayLanguage(language) ? t("dashboard.today.captures", { count: source.captures }) : language === "ko" ? `캡처 ${source.captures}개` : language === "es" ? `${source.captures} ${source.captures === 1 ? "captura" : "capturas"}` : `${source.captures} ${source.captures === 1 ? "capture" : "captures"}`;
   return `${surface} · ${formatLocalizedCompactDurationFromSeconds(source.seconds, language)} · ${captures}`;
 }
 
@@ -213,6 +215,12 @@ function formatFocusDriftSourceShare(
 }
 
 export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDriftHoverKind, language: DisplayLanguage = "en", startOfDayMinutes = 0): string {
+  if (isAdditionalDisplayLanguage(language)) {
+    const t = translateFor(language);
+    const part = (key: "focus" | "drift", seconds: number, score: number) => `${t(`activity.productivity.${key}`)}: ${formatSharePercent(score)}, ${formatLocalizedDuration(seconds, language)}`;
+    const sources = ([point.topFocusSource, point.topDriftSource] as const).filter((source): source is FocusDriftSourceSummary => Boolean(source)).map((source) => `${source.label}: ${formatLocalizedCompactDurationFromSeconds(source.seconds, language)}, ${t("dashboard.today.captures", { count: source.captures })}`);
+    return `${formatLocalizedQuarterHourLabel(point.bucketStartMinute + startOfDayMinutes, language)}. ${part("focus", point.focusSeconds, point.focusScore)}; ${part("drift", point.driftSeconds, point.driftScore)}; ${t("dashboard.today.tracked")}: ${formatLocalizedCompactDurationFromSeconds(point.trackedSeconds, language)}. ${sources.join(". ")}`;
+  }
   const kindLabel = language === "ko" ? (kind === "focus" ? "집중" : "딴짓") : language === "es" ? (kind === "focus" ? "concentración" : "distracción") : HOVER_KIND_LABELS[kind];
   const pointLabel = formatLocalizedQuarterHourLabel(point.bucketStartMinute + startOfDayMinutes, language);
   const focusPercent = formatSharePercent(point.focusScore);

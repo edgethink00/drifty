@@ -11,6 +11,7 @@ import {
   classifySourceKey,
 } from "./classificationViewData";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
+import type { DisplayLanguage } from "../localization/languageCatalog";
 
 function chatgpt(id: string, startedAt: string, durationSeconds: number, windowTitle?: string): ActivitySegment {
   const started = new Date(`${startedAt}+00:00`);
@@ -36,7 +37,7 @@ const SEGMENTS = [
   chatgpt("named-1", "2026-09-09T09:40:00", 400, "릴리스 노트 초안 다듬기 - drifty_mac"),
 ];
 
-function renderPage(overrides: Partial<Parameters<typeof ClassificationPage>[0]> = {}) {
+function renderPage(overrides: Partial<Parameters<typeof ClassificationPage>[0]> = {}, language: DisplayLanguage = "ko") {
   const rows = buildClassificationActivityRows(SEGMENTS);
   const sources = buildClassificationSourceSummaries(SEGMENTS, {});
   const totalSeconds = SEGMENTS.reduce((sum, item) => sum + item.durationSeconds, 0);
@@ -44,7 +45,7 @@ function renderPage(overrides: Partial<Parameters<typeof ClassificationPage>[0]>
   const onStartClassificationDetailCorrection = vi.fn();
 
   render(
-    <LocalizationTestProvider language="ko">
+    <LocalizationTestProvider language={language}>
       <ClassificationPage
         appIcons={{}}
         canShiftClassificationForward={false}
@@ -132,5 +133,17 @@ describe("classification activity list, unnamed captures", () => {
     expect(dialog.getAttribute("data-positioned")).toBe("true");
     expect(screen.getByText("이 기록만")).toBeTruthy();
     expect(screen.getByText(/이 기록 2건만 바뀝니다/)).toBeTruthy();
+  });
+});
+
+describe("classification source share localization", () => {
+  it.each([
+    ["de", "1,9%"], ["fr", "1,9%"], ["pt-BR", "1,9%"],
+    ["ja", "1.9%"], ["zh-Hans", "1.9%"],
+    ["en", "1.9%"], ["ko", "1.9%"], ["es", "1.9%"],
+  ] as const)("formats a small source share in %s without changing its precision", (language, expected) => {
+    const source = buildClassificationSourceSummaries(SEGMENTS, {})[0];
+    renderPage({ classificationSourceSummaries: [{ ...source, shareOfTotal: 0.019 }] }, language);
+    expect(document.querySelector(".classification-panel-view__source-measure span")?.textContent).toBe(expected);
   });
 });

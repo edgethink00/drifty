@@ -1,3 +1,5 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
+import { localeForDisplayLanguage } from "../../lib/formatting";
 export const LEADERBOARD_GRAPH_STYLES = [
   "off",
   "default",
@@ -58,9 +60,10 @@ const KOREAN_WEEKDAY_LETTERS = ["일", "월", "화", "수", "목", "금", "토"]
 const ENGLISH_WEEKDAY_LETTERS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
 const SPANISH_WEEKDAY_LETTERS = ["D", "L", "M", "X", "J", "V", "S"] as const;
 
-export function sparklineWeekdayLetter(day: string, language: "en" | "ko" | "es"): string {
+export function sparklineWeekdayLetter(day: string, language: DisplayLanguage): string {
   const date = new Date(`${day}T12:00:00`);
   if (Number.isNaN(date.getTime())) return "";
+  if (language !== "en" && language !== "ko" && language !== "es") return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: "narrow" }).format(date);
   if (language === "ko") return KOREAN_WEEKDAY_LETTERS[date.getDay()] ?? "";
   if (language === "es") return SPANISH_WEEKDAY_LETTERS[date.getDay()] ?? "";
   return ENGLISH_WEEKDAY_LETTERS[date.getDay()] ?? "";

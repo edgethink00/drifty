@@ -287,6 +287,12 @@
   text-wrap: wrap;
 }
 
+/* Japanese punctuation stays attached to its phrase at narrow rail widths. */
+.sidebar-cta-slot__detail:lang(ja) {
+  word-break: normal;
+  line-break: strict;
+}
+
 /* Managed local downloads are passive status, not another CTA. The existing
  * green tone remains, while the action row gives way to a compact live meter. */
 .sidebar-cta-slot--download {

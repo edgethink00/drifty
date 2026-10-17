@@ -1296,7 +1296,7 @@ export const ENGLISH_TRANSLATIONS = {
   "trends.read.wait.left": "{{value}} left",
   "trends.read.wait.readyTitle": "Your first read is ready",
   "trends.read.wait.readyBody": "It reads {{range}}. After that, a new read arrives every Monday.",
-  "trends.read.wait.disclosure": "Sends daily totals per app or site. Your timeline, window titles and URLs stay on this device.",
+  "trends.read.wait.disclosure": "Sends daily totals per app or site for this analysis. Your timeline, window titles and URLs are not sent for this analysis.",
   "trends.read.evidenceSwitching": "Switching between apps, average day",
   "trends.read.evidenceFlow": "Where an average day went",
   "trends.read.graphAria": "Switching between apps on an average day of {{group}}",
@@ -2410,7 +2410,7 @@ export const ENGLISH_TRANSLATIONS = {
   "settings.data.sessions": "Sessions logged",
   "settings.data.sessionsToday": "{{count}} today",
   "settings.privacy.rawTitle": "Raw tracking history is not published",
-  "settings.privacy.rawChip": "Raw history local",
+  "settings.privacy.rawChip": "Raw history is not public",
   "settings.privacy.cloudDescription": "If you connect Drifty Cloud and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total, refreshed about once an hour. Other participants can see roughly which hours you're active, but raw tracking history is never published there.",
   "settings.privacy.aggregatesChip": "Aggregates only",
   "settings.privacy.claimsLede": "Privacy principles",
@@ -2546,7 +2546,7 @@ export const ENGLISH_TRANSLATIONS = {
   "settings.aiPrivacy.contextFieldsAria": "Request context fields",
   "settings.aiPrivacy.announceAdded": "{{label}} added back to the request.",
   "settings.aiPrivacy.announceRemoved": "{{label}} removed from the request.",
-  "settings.aiPrivacy.rawLocal": "Raw tracking stays local",
+  "settings.aiPrivacy.rawLocal": "Raw tracking is not sent to the AI provider",
   "settings.aiPrivacy.requiredFieldsAria": "Required AI classification fields",
   "settings.aiPrivacy.optionalFieldsAria": "Optional AI classification fields",
   "settings.aiPrivacy.appContext": "App name and basic app context",
@@ -3417,7 +3417,7 @@ export const ENGLISH_TRANSLATIONS = {
   "social.profile.visitorTitle": "Public preview",
   "social.profile.privacyKicker": "Privacy controls",
   "social.profile.shareTitle": "What you share",
-  "social.profile.shareDetail": "Public fields and aggregates only. Raw activity stays local.",
+  "social.profile.shareDetail": "Only public fields and aggregates are shared. Raw activity is not public.",
 } as const;
 
 export type TranslationKey = keyof typeof ENGLISH_TRANSLATIONS;

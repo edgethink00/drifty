@@ -1,3 +1,5 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
+import { isDisplayLanguage } from "../localization/languageCatalog";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "../companion/watcherBridge";
@@ -770,7 +772,7 @@ export type PetQuickControlsStatePayload = {
   readonly automaticCloseEnabled: boolean;
   readonly automaticCloseSavedEnabled: boolean;
   readonly automaticCloseOverride: PetQuickControlsAutomaticCloseOverridePayload | null;
-  readonly language: "en" | "ko" | "es";
+  readonly language: DisplayLanguage;
   readonly theme: "light" | "dark";
   readonly followSystem?: boolean;
 };
@@ -797,7 +799,7 @@ function isPetQuickControlsStatePayload(value: unknown): value is PetQuickContro
     && typeof payload.automaticCloseSavedEnabled === "boolean"
     && (payload.automaticCloseOverride === null
       || isPetQuickControlsAutomaticCloseOverridePayload(payload.automaticCloseOverride))
-    && (payload.language === "en" || payload.language === "ko" || payload.language === "es")
+    && isDisplayLanguage(payload.language)
     && (payload.theme === "light" || payload.theme === "dark")
     && (payload.followSystem === undefined || typeof payload.followSystem === "boolean");
 }

@@ -1,3 +1,4 @@
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import type {
   ActivitySegment,
   AppIconMap,
@@ -311,7 +312,7 @@ export function TrendsPageBody({
           <>
             {rhythmAndAlarm}
             <details className="insights-reduced__sources insights-retained__analysis">
-              <summary>{effectiveLanguage === "ko" ? "기간별 상세 분석 · 주간 그래프, 생산성, 카테고리" : effectiveLanguage === "es" ? "Detalles del período · gráfico semanal, productividad y categorías" : "Period details · weekly graph, productivity, categories"}</summary>
+              <summary>{(isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "Period details · weekly graph, productivity, categories") : effectiveLanguage === "ko" ? "기간별 상세 분석 · 주간 그래프, 생산성, 카테고리" : effectiveLanguage === "es" ? "Detalles del período · gráfico semanal, productividad y categorías" : "Period details · weekly graph, productivity, categories")}</summary>
               {weeklyBlock("all")}
             </details>
           </>
@@ -344,7 +345,7 @@ export function TrendsPageBody({
         ) : rhythmCard}
         {arrangement === "f" ? (
           <details className="insights-reduced__sources">
-            <summary>{effectiveLanguage === "ko" ? "앱과 집중 전환 자세히 보기" : effectiveLanguage === "es" ? "Explorar apps y cambios de concentración" : "Explore apps and focus transitions"}</summary>
+            <summary>{(isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "Explore apps and focus transitions") : effectiveLanguage === "ko" ? "앱과 집중 전환 자세히 보기" : effectiveLanguage === "es" ? "Explorar apps y cambios de concentración" : "Explore apps and focus transitions")}</summary>
             {sourcesBlock}
           </details>
         ) : sourcesBlock}

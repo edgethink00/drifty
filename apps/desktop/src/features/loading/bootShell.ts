@@ -9,6 +9,11 @@ const bootCopy: Record<DisplayLanguage, { readonly label: string; readonly statu
   en: { label: "Loading Drifty", status: "Loading Drifty…", visible: "drifty loading…" },
   ko: { label: "Drifty 불러오는 중", status: "Drifty 불러오는 중…", visible: "drifty 불러오는 중…" },
   es: { label: "Cargando Drifty", status: "Cargando Drifty…", visible: "Cargando Drifty…" },
+  ja: { label: "Driftyを読み込み中", status: "Driftyを読み込み中…", visible: "drifty 読み込み中…" },
+  "pt-BR": { label: "Carregando Drifty", status: "Carregando Drifty…", visible: "drifty carregando…" },
+  "zh-Hans": { label: "正在加载Drifty", status: "正在加载Drifty…", visible: "drifty 加载中…" },
+  fr: { label: "Chargement de Drifty", status: "Chargement de Drifty…", visible: "drifty chargement…" },
+  de: { label: "Drifty wird geladen", status: "Drifty wird geladen…", visible: "drifty wird geladen…" },
 };
 
 export function localizeBootShell(): void {

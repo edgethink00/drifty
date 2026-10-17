@@ -1,3 +1,5 @@
+import { languageDisplayName } from "../../localization/languageCatalog";
+import { isAdditionalDisplayLanguage, supplementalText } from "../../localization/supplementalCopy";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { PET_MODE_PAW_CONTACT_FRAME } from "../../pet-mode/petModeData";
 import { PetModeCat } from "../../pet-mode/PetModeCat";
@@ -31,6 +33,7 @@ function taskbarClock(language: DisplayLanguage) {
   const ko = language === "ko";
   const time = new Intl.DateTimeFormat(localeForDisplayLanguage(language), { hour: "numeric", minute: "2-digit" }).format(SAMPLE_NOW).replace(/\u202f/g, " ");
   const y = SAMPLE_NOW.getFullYear(), m = SAMPLE_NOW.getMonth() + 1, d = SAMPLE_NOW.getDate();
+  if (!["en", "ko", "es"].includes(language)) return { time, date: new Intl.DateTimeFormat(localeForDisplayLanguage(language), { year: "numeric", month: "2-digit", day: "2-digit" }).format(SAMPLE_NOW) };
   return { time, date: language === "es" ? d + "/" + m + "/" + y : ko ? y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0") : m + "/" + d + "/" + y };
 }
 
@@ -135,11 +138,11 @@ export function NarrativeGuideIllustration({ step, hostPlatform = "macos", theme
     category: t("common.category"), productivity: t("common.productivity"), project: t("common.project"), breakdown: t("dashboard.today.breakdown"),
     total: t("common.total"), sessions: t("common.sessions"), topApp: t("classification.topApp"), focusRate: t("classification.focusRate"), title: t("classification.title"),
     dayShort: t("common.day"), weekShort: t("common.week"), now: t("common.now"),
-    focusValue: formatLocalizedCompactDurationFromSeconds(FOCUS_SECONDS, effectiveLanguage), focusWord: ko ? "집중했습니다" : effectiveLanguage === "es" ? "Concentración durante" : "Focused for", focusValueFirst: ko, share: t("dashboard.today.share"),
+    focusValue: formatLocalizedCompactDurationFromSeconds(FOCUS_SECONDS, effectiveLanguage), focusWord: (isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "Focused for") : ko ? "집중했습니다" : effectiveLanguage === "es" ? "Concentración durante" : "Focused for"), focusValueFirst: ko, share: t("dashboard.today.share"),
     date: new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { month: ko ? "long" : "short", day: "numeric", weekday: "short" }).format(SAMPLE_DAY),
     menuClock: menuBarClock(effectiveLanguage), trayTime: taskbarClock(effectiveLanguage).time, trayDate: taskbarClock(effectiveLanguage).date,
     hours: [0, 1, 2, 3, 4, 5, 6, 7].map(i => formatLocalizedCompactHourLabel(4 + i * 3, effectiveLanguage)), cancel: t("common.cancel"), apply: t("classification.correction.apply"),
-    settings: t("postOnboarding.sidebarGuide.settingsLabel"), aiSettings: t("account.aiSettings"), language: t("postOnboarding.sidebarGuide.languageLabel"), languageValue: ko ? "한국어" : effectiveLanguage === "es" ? "Español" : "English",
+    settings: t("postOnboarding.sidebarGuide.settingsLabel"), aiSettings: t("account.aiSettings"), language: t("postOnboarding.sidebarGuide.languageLabel"), languageValue: languageDisplayName(effectiveLanguage),
     darkMode: t("account.darkMode"), pet: t("settings.pet.show"), update: t("account.checkForUpdates"), feedback: t("account.sendFeedback"), signIn: t("account.signIn"), recording: t("tracker.trackingNow"),
     workspace: t("activity.category.workspace"), learning: t("activity.category.learning"), communication: t("activity.category.communication"), music: t("activity.category.music"), game: t("activity.category.game"),
     socialMedia: t("activity.category.socialMedia"), entertainment: t("activity.category.entertainment"), shopping: t("activity.category.shopping"), utility: t("activity.category.utility"),

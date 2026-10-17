@@ -1,3 +1,4 @@
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { memo, useId, useMemo, useState } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import { logicalMinuteOfDay, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
@@ -79,8 +80,8 @@ export const FlowChartGrid = memo(function FlowChartGrid({
     categoryLabel: ({ category }) => localizedCategoryLabel(category, t),
     productivityLabel: ({ category, productivity }) => levelFor(category, productivity, productivityLevels)?.name ?? localizedProductivityLabel(productivity, t),
     durationLabel: (seconds) => formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage),
-    timeBlockPrefix: effectiveLanguage === "ko" ? "시간대" : effectiveLanguage === "es" ? "Franja horaria" : "Time block",
-    durationPrefix: effectiveLanguage === "ko" ? "소요 시간" : effectiveLanguage === "es" ? "Duración" : "Duration",
+    timeBlockPrefix: (isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "Time block") : effectiveLanguage === "ko" ? "시간대" : effectiveLanguage === "es" ? "Franja horaria" : "Time block"),
+    durationPrefix: (isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "Duration") : effectiveLanguage === "ko" ? "소요 시간" : effectiveLanguage === "es" ? "Duración" : "Duration"),
   }), [effectiveLanguage, hoverGroupsByCell, productivityLevels, t]);
   const phoneCellAriaLabels = useMemo(() => {
     const labels = new Map<number, string>();

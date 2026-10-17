@@ -1,3 +1,4 @@
+import { DISPLAY_LANGUAGES, languageDisplayName } from "../localization/languageCatalog";
 import type { ReactNode } from "react";
 import { Toggle } from "../../components/Toggle";
 import { SettingsSelect } from "./SettingsSelect";
@@ -6,7 +7,7 @@ import type { StartOfWeek } from "./settingsStorage";
 import {
   START_OF_DAY_OPTIONS,
 } from "./settingsStorage";
-import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
+import { useLocalization } from "../localization/LocalizationContext";
 import { formatStartOfDayOptionLabel, localeForDisplayLanguage } from "../../lib/formatting";
 import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
@@ -65,11 +66,7 @@ export function GeneralSettingsSection({
   onStartOfWeekChange,
 }: GeneralSettingsSectionProps) {
   const { effectiveLanguage, setDisplayLanguage, t } = useLocalization();
-  const languageOptions = [
-    { value: "en", label: t("settings.general.languageEnglish") },
-    { value: "ko", label: t("settings.general.languageKorean") },
-    { value: "es", label: t("settings.general.languageSpanish") },
-  ] satisfies ReadonlyArray<{ value: DisplayLanguage; label: string }>;
+  const languageOptions = DISPLAY_LANGUAGES.map(({ value }) => ({ value, label: languageDisplayName(value, t) }));
   const startOfWeekOptions = [
     { value: "monday", label: t("settings.weekday.monday") },
     { value: "sunday", label: t("settings.weekday.sunday") },

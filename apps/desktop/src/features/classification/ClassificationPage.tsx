@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import {
   type ActivityCategory,
   type AppIconMap,
@@ -39,6 +40,19 @@ import {
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
+
+function formatSourceShare(share: number, language: DisplayLanguage): string {
+  const percent = share * 100;
+  if (!isAdditionalDisplayLanguage(language)) {
+    return percent >= 10 ? `${Math.round(percent)}%` : `${percent.toFixed(1)}%`;
+  }
+  const fractionDigits = percent >= 10 ? 0 : 1;
+  return `${percent.toLocaleString(localeForDisplayLanguage(language), {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  })}%`;
+}
 
 type ClassificationPageProps = {
   readonly appIcons: AppIconMap;
@@ -123,23 +137,31 @@ function inlineCorrectionDetailLabel(
   return label.charAt(0).toLocaleLowerCase("en") + label.slice(1);
 }
 
-function localizeClassificationSummaryValue(value: string, language: "en" | "ko" | "es"): string {
+function localizeClassificationSummaryValue(value: string, language: DisplayLanguage, t: LocalizationController["t"]): string {
+  const categories: Readonly<Record<string, ActivityCategory>> = {
+    Workspace: "workspace", Learning: "learning", Communication: "communication",
+    Music: "music", Game: "game", "Social media": "social_media",
+    Entertainment: "entertainment", Shopping: "shopping", Utility: "utility", Unclassified: "unknown",
+  };
+  const category = categories[value];
+  if (category) return localizedCategoryLabel(category, t);
+  if (value === "Other") return t("activity.category.custom");
+  const productivity: Readonly<Record<string, ProductivityLabel>> = { Focus: "focus", Drift: "drift", Neutral: "neutral" };
+  const level = productivity[value];
+  if (level) return localizedProductivityLabel(level, t);
   if (language === "en") return value;
+  if (language === "es") {
+    const spanishLabels: Readonly<Record<string, string>> = {
+      Mixed: "Mixto", "Confidence unavailable": "Confianza no disponible", "Mixed confidence": "Confianza mixta",
+      "AI cache": "Caché de IA", AI: "IA", Predefined: "Predefinido", "Keyword rule": "Regla por palabra clave",
+      Fallback: "Clasificación alternativa", Manual: "Manual", "Custom rule": "Regla personalizada",
+      Stored: "Guardado", "Not classified yet": "Aún sin clasificar",
+    };
+    return spanishLabels[value] ?? value;
+  }
+  if (language !== "ko") return supplementalText(language, value);
   const labels: Readonly<Record<string, string>> = {
     Mixed: "혼합",
-    Workspace: "작업",
-    Learning: "학습",
-    Communication: "커뮤니케이션",
-    Music: "음악",
-    Game: "게임",
-    "Social media": "소셜 미디어",
-    Entertainment: "엔터테인먼트",
-    Shopping: "쇼핑",
-    Utility: "유틸리티",
-    Unclassified: "미분류",
-    Focus: "집중",
-    Drift: "딴짓",
-    Neutral: "중립",
     "Confidence unavailable": "신뢰도 정보 없음",
     "Mixed confidence": "신뢰도 혼합",
     "AI cache": "AI 캐시",
@@ -154,13 +176,20 @@ function localizeClassificationSummaryValue(value: string, language: "en" | "ko"
   return labels[value] ?? value;
 }
 
-function localizeCaptureSurfaceDetail(value: string, language: "en" | "ko" | "es"): string {
+function localizeCaptureSurfaceDetail(value: string, language: DisplayLanguage, t: LocalizationController["t"]): string {
   if (language === "en") return value;
-  return value
-    .replace(/^App:/u, "앱:")
-    .replace(/^Browser:/u, "브라우저:")
-    .replace(/^Domain:/u, "도메인:")
-    .replace(/^Channel:/u, "채널:");
+  const labels: Readonly<Record<string, string>> = language === "ko"
+    ? { App: "앱", Browser: "브라우저", Domain: "도메인", Channel: "채널" }
+    : language === "es"
+      ? { App: t("classification.composer.kindApp"), Browser: "Navegador", Domain: "Dominio", Channel: "Canal" }
+      : {
+        App: t("classification.composer.kindApp"),
+        Browser: supplementalText(language, "Browser"),
+        Domain: supplementalText(language, "Domain"),
+        Channel: supplementalText(language, "Channel"),
+      };
+  // Translate only the generated field prefix; captured names remain untouched.
+  return value.replace(/^(App|Browser|Domain|Channel):/u, (_match, prefix: string) => `${labels[prefix]}:`);
 }
 
 export function ClassificationPage({
@@ -506,7 +535,7 @@ export function ClassificationPage({
                           </div>
                           <div className="classification-panel-view__source-measure">
                             <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</strong>
-                            <span>{item.shareOfTotal * 100 >= 10 ? `${Math.round(item.shareOfTotal * 100)}%` : `${(item.shareOfTotal * 100).toFixed(1)}%`}</span>
+                            <span>{formatSourceShare(item.shareOfTotal, effectiveLanguage)}</span>
                           </div>
                         </button>
                       );
@@ -641,7 +670,7 @@ export function ClassificationPage({
                               </button>
                             </div>
                             {isExpanded ? (() => {
-                              const surfaceDetails = captureRowSurfaceDetails(row.segments).map((detail) => localizeCaptureSurfaceDetail(detail, effectiveLanguage));
+                              const surfaceDetails = captureRowSurfaceDetails(row.segments).map((detail) => localizeCaptureSurfaceDetail(detail, effectiveLanguage, t));
                               const summary = classificationRowSummary(row.segments, classificationOptions);
                               return (
                                 <div id={detailsId} className="classification-panel-view__activity-details" role="region" aria-label={t("classification.captureDetailsFor", { label: rowLabel })}>
@@ -656,12 +685,12 @@ export function ClassificationPage({
                                     ) : null}
                                     {summary ? (
                                       <dl className="classification-panel-view__activity-classification" aria-label={t("classification.summary")}>
-                                        <div><dt>{t("common.category")}</dt><dd>{localizeClassificationSummaryValue(summary.categoryLabel, effectiveLanguage)}</dd></div>
-                                        <div><dt>{t("common.productivity")}</dt><dd>{localizeClassificationSummaryValue(summary.productivityLabel, effectiveLanguage)}</dd></div>
+                                        <div><dt>{t("common.category")}</dt><dd>{localizeClassificationSummaryValue(summary.categoryLabel, effectiveLanguage, t)}</dd></div>
+                                        <div><dt>{t("common.productivity")}</dt><dd>{localizeClassificationSummaryValue(summary.productivityLabel, effectiveLanguage, t)}</dd></div>
                                         {devModeEnabled || summary.sourceLabel === "Manual" || summary.sourceLabel === "Custom rule"
-                                          ? <div><dt>{t("common.source")}</dt><dd>{localizeClassificationSummaryValue(summary.sourceLabel, effectiveLanguage)}</dd></div>
+                                          ? <div><dt>{t("common.source")}</dt><dd>{localizeClassificationSummaryValue(summary.sourceLabel, effectiveLanguage, t)}</dd></div>
                                           : null}
-                                        <div><dt>{t("classification.confidence")}</dt><dd>{localizeClassificationSummaryValue(summary.confidenceLabel, effectiveLanguage)}</dd></div>
+                                        <div><dt>{t("classification.confidence")}</dt><dd>{localizeClassificationSummaryValue(summary.confidenceLabel, effectiveLanguage, t)}</dd></div>
                                       </dl>
                                     ) : null}
                                   </div>

@@ -160,9 +160,8 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   const { models: communityModels, loading: communityModelsLoading } = useShareCardCommunityModels();
   const rankGate = rankGateForStory(card, storyOption.value, liveRankState, t);
   const lockedRankPeriod = rankGate && rankStoryPeriod ? rankStoryPeriod : null;
-  // Korean share exports intentionally remain English; Spanish exports follow
-  // the new display language without changing that existing card contract.
-  const cardLanguage = effectiveLanguage === "es" ? "es" : "en";
+  // Preserve the established Korean-to-English export contract; other supported languages follow the UI.
+  const cardLanguage = effectiveLanguage === "ko" ? "en" : effectiveLanguage;
   // Only a non-member is asked to join; a member's rank is loading or not yet
   // published for this window.
   const lockedRankReason = rankGate?.action === "join" ? "join" : "pending";

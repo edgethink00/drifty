@@ -37,6 +37,7 @@ export interface CompactRingChartProps {
 function formatCompactRingLegendHours(totalSeconds: number, language: DisplayLanguage): string {
   if (language === "ko") return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
   const hours = Math.max(0, Math.floor((totalSeconds / 3600) * 10) / 10);
+  if (language !== "en" && language !== "es") return new Intl.NumberFormat(localeForDisplayLanguage(language), { style: "unit", unit: "hour", unitDisplay: "short", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(hours);
   if (language === "es") return `${new Intl.NumberFormat(localeForDisplayLanguage(language), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(hours)} h`;
   return `${hours.toFixed(1)}h`;
 }

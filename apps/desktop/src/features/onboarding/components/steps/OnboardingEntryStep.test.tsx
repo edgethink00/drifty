@@ -102,7 +102,7 @@ describe("OnboardingEntryStep language policy", () => {
 
     expect(screen.getByText("drifty에 오신 것을 환영합니다.")).toBeTruthy();
     expect(screen.getByText(/일하는 동안 앱과 웹사이트 사용 시간을 자동으로 기록하고/)).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "한국어" }).getAttribute("aria-checked")).toBe("true");
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("ko");
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
   });
 
@@ -110,9 +110,9 @@ describe("OnboardingEntryStep language policy", () => {
     render(<EntryHarness />);
 
     expect(screen.getByText("Welcome to drifty.")).toBeTruthy();
-    expect(screen.getByRole("radiogroup", { name: "Language" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "English" }).getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(screen.getByRole("radio", { name: "Español" }));
+    expect(screen.getByRole("combobox", { name: "Language" })).toBeTruthy();
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("en");
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "es" } });
     expect(screen.getByText("Te damos la bienvenida a drifty.")).toBeTruthy();
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("es");
   });
@@ -121,7 +121,7 @@ describe("OnboardingEntryStep language policy", () => {
     vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["es-US", "en-US"]);
     render(<EntryHarness />);
     expect(screen.getByText("Te damos la bienvenida a drifty.")).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Español" }).getAttribute("aria-checked")).toBe("true");
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("es");
     expect(document.querySelector(".onb-entry-demo")?.textContent).toContain("8 h");
     expect(document.querySelector(".onb-entry-demo")?.textContent).not.toMatch(/(?:8|11)am/);
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBeNull();
@@ -134,32 +134,28 @@ describe("OnboardingEntryStep language policy", () => {
     render(<EntryHarness />);
 
     expect(screen.getByText("Welcome to drifty.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: "한국어" }));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "ko" } });
 
     expect(screen.getByText("drifty에 오신 것을 환영합니다.")).toBeTruthy();
-    expect(screen.getByRole("radiogroup", { name: "언어" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "언어" })).toBeTruthy();
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
   });
 
-  it("supports the radio-group keyboard interaction pattern", () => {
+  it("keeps all languages reachable without losing keyboard focus", () => {
     vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["ko-KR", "en-US"]);
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
 
     render(<EntryHarness />);
 
-    const englishOption = screen.getByRole("radio", { name: "English" });
-    englishOption.focus();
-    fireEvent.keyDown(englishOption, { key: "ArrowRight" });
-
-    const koreanOption = screen.getByRole("radio", { name: "한국어" });
-    expect(koreanOption.getAttribute("aria-checked")).toBe("true");
-    expect(document.activeElement).toBe(koreanOption);
-
-    fireEvent.keyDown(koreanOption, { key: "Home" });
-
-    const englishOptionAfterReset = screen.getByRole("radio", { name: "English" });
-    expect(englishOptionAfterReset.getAttribute("aria-checked")).toBe("true");
-    expect(document.activeElement).toBe(englishOptionAfterReset);
+    const picker = screen.getByRole("combobox") as HTMLSelectElement;
+    picker.focus();
+    expect(screen.getAllByRole("option")).toHaveLength(8);
+    fireEvent.change(picker, { target: { value: "ja" } });
+    expect(picker.value).toBe("ja");
+    expect(document.activeElement).toBe(picker);
+    fireEvent.change(picker, { target: { value: "en" } });
+    expect(picker.value).toBe("en");
+    expect(document.activeElement).toBe(picker);
   });
 });
 

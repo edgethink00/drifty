@@ -168,6 +168,30 @@
   line-height: 1;
 }
 
+/* Long translated names need the expanded row's full width and a natural
+   second line. Keep the clipped, fixed label while the rail is collapsed. */
+.sidebar--settings:not(.sidebar--collapsed) .settings-nav-item {
+  width: 100%;
+  min-width: 0;
+  padding-block: 4px;
+}
+
+.sidebar--settings:not(.sidebar--collapsed) .settings-nav-item__label {
+  display: block;
+  height: auto;
+  min-height: 16px;
+  overflow: visible;
+  white-space: normal;
+  text-wrap: balance;
+  line-height: 1.2;
+}
+
+/* Do not start a wrapped Japanese name with punctuation or a long-vowel mark. */
+.sidebar--settings:not(.sidebar--collapsed) .settings-nav-item__label:lang(ja) {
+  word-break: normal;
+  line-break: strict;
+}
+
 /* A required item inside the section (for example a missing Accessibility
    grant in General) needs the user. The dot stays visible in every state,
    including the active row, so the warning does not disappear on arrival. */

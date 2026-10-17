@@ -1,3 +1,4 @@
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import type { DisplayLanguage } from "../localization/LocalizationContext";
 
 const KOREAN_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
@@ -107,9 +108,11 @@ const SPANISH_DOMAIN_LABELS: Readonly<Record<string, string>> = {
 };
 
 export function onboardingActivityLabel(value: string, language: DisplayLanguage): string {
+  if (isAdditionalDisplayLanguage(language)) return supplementalText(language, value);
   return language === "ko" ? KOREAN_ACTIVITY_LABELS[value] ?? value : language === "es" ? SPANISH_ACTIVITY_LABELS[value] ?? value : value;
 }
 
 export function onboardingDomainLabel(value: string, language: DisplayLanguage): string {
+  if (isAdditionalDisplayLanguage(language)) return supplementalText(language, value);
   return language === "ko" ? KOREAN_DOMAIN_LABELS[value] ?? value : language === "es" ? SPANISH_DOMAIN_LABELS[value] ?? value : value;
 }

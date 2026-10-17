@@ -234,11 +234,18 @@
   white-space: nowrap;
 }
 
+/* The dial already sets the row height. Stack values in its legend so long
+   category names can use the remaining width without reducing text size. */
 .flow-compact-productivity-circle .flow-compact-split-chart__legend-item {
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.34rem;
+  row-gap: 0.08rem;
   font-size: 0.79rem;
 }
 
 .flow-compact-productivity-circle .flow-compact-split-chart__legend-value {
+  grid-column: 2;
+  justify-self: start;
   font-size: 0.71rem;
 }
 

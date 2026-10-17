@@ -1,3 +1,4 @@
+import { formatLocalizedDuration } from "../../lib/formatting";
 import { useMemo, useState } from "react";
 import type { Project } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
@@ -60,7 +61,7 @@ export function ProjectsManager({
   const { effectiveLanguage, t } = useLocalization();
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const zeroLabel = effectiveLanguage === "ko" ? "0분" : "0m";
+  const zeroLabel = formatLocalizedDuration(0, effectiveLanguage);
 
   const matches = useMemo(() => {
     const trimmed = query.trim().toLowerCase();

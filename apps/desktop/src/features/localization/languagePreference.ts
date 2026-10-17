@@ -1,6 +1,7 @@
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 
-export type DisplayLanguage = "en" | "ko" | "es";
+import { displayLanguageForTag, isDisplayLanguage, type DisplayLanguage } from "./languageCatalog";
+export type { DisplayLanguage } from "./languageCatalog";
 
 // The unversioned key was once populated with "ko" even while the UI was English.
 // Keep using the safe namespace introduced by the original public-beta migration.
@@ -16,10 +17,7 @@ type SystemLanguagePreferences = {
 export function resolveSystemDisplayLanguage(preferences: SystemLanguagePreferences): DisplayLanguage {
   try {
     const primaryLanguage = preferences.languages?.[0] || preferences.language || "";
-    const primary = primaryLanguage.trim();
-    if (/^ko(?:[-_]|$)/iu.test(primary)) return "ko";
-    if (/^es(?:[-_]|$)/iu.test(primary)) return "es";
-    return "en";
+    return displayLanguageForTag(primaryLanguage) ?? "en";
   } catch {
     return "en";
   }
@@ -31,7 +29,7 @@ export function resolveInitialDisplayLanguage(
   if (typeof window === "undefined") return "en";
   try {
     const storedLanguage = window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY);
-    if (storedLanguage === "en" || storedLanguage === "ko" || storedLanguage === "es") return storedLanguage;
+    if (isDisplayLanguage(storedLanguage)) return storedLanguage;
 
     // English was never the implicit Korean-preview default and is safe to retain.
     // Unversioned "ko" has no provenance: fall back to the system unless opted in.
@@ -53,7 +51,7 @@ export function migrateLegacyDisplayLanguagePreference(): void {
   try {
     const storage = window.localStorage;
     const stored = storage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY);
-    if (stored !== "en" && stored !== "ko" && stored !== "es") {
+    if (!isDisplayLanguage(stored)) {
       if (storage.getItem(LEGACY_DISPLAY_LANGUAGE_STORAGE_KEY) === "en") {
         storage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
       } else if (
@@ -73,7 +71,7 @@ export function hasExplicitDisplayLanguagePreference(): boolean {
   if (typeof window === "undefined") return false;
   try {
     const stored = window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY);
-    return stored === "en" || stored === "ko" || stored === "es";
+    return isDisplayLanguage(stored);
   } catch {
     return false;
   }

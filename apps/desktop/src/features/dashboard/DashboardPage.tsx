@@ -1,3 +1,4 @@
+import { formatLocalizedDuration } from "../../lib/formatting";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { classifiedDashboardSegmentIds } from "./hasClassifiedDashboardResult";
 import { useMemo, useRef, useState, type ReactNode } from "react";
@@ -259,7 +260,7 @@ export function DashboardPage({
   const focusDuration = hasMeasuredActivity
     ? focusSeconds > 0
       ? formatLocalizedCompactDurationFromSeconds(focusSeconds, effectiveLanguage)
-      : effectiveLanguage === "ko" ? "0분" : effectiveLanguage === "es" ? "0 min" : "0m"
+      : formatLocalizedDuration(0, effectiveLanguage)
     : null;
   const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
   const dayProductivityRingEntries = withLevelRingEntries(
@@ -292,7 +293,7 @@ export function DashboardPage({
       return {
         kind: "week",
         data: buildShareWeekCardData({
-          language: "en",
+          language: effectiveLanguage === "ko" ? "en" : effectiveLanguage,
           startDay: dashboardRange.startDay,
           endDay: dashboardRange.endDay,
           totalSeconds,
@@ -310,7 +311,7 @@ export function DashboardPage({
     return {
       kind: "day",
       data: buildShareCardData({
-        language: "en",
+        language: effectiveLanguage === "ko" ? "en" : effectiveLanguage,
         day: selectedDay,
         totalSeconds,
         categoryTotals: dashboardCategoryTotals,
@@ -320,7 +321,7 @@ export function DashboardPage({
         isCurrentPeriod: selectedDay === logicalToday,
       }),
     };
-  }, [dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, logicalToday, selectedDay, shareCardOpen, summaryFlowBlocks, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
+  }, [effectiveLanguage, dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, logicalToday, selectedDay, shareCardOpen, summaryFlowBlocks, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
   const pageHead = (
     <DashboardPageHeader
       dashPeriod={dashPeriod}

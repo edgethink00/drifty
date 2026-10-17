@@ -40,22 +40,7 @@ pub struct NativeUpdateStatusResult {
     dismissed: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum NativeUpdateLanguage {
-    English,
-    Korean,
-    Spanish,
-}
-
-impl NativeUpdateLanguage {
-    fn from_tag(tag: Option<&str>) -> Self {
-        match tag {
-            Some("ko") => Self::Korean,
-            Some("es") => Self::Spanish,
-            _ => Self::English,
-        }
-    }
-}
+use crate::localization::NativeLanguage as NativeUpdateLanguage;
 
 #[cfg(target_os = "macos")]
 struct UpdatePromptButtonTargetIvars {
@@ -229,7 +214,7 @@ fn update_prompt_panel(
         } else if language == NativeUpdateLanguage::Spanish {
             format!("Actualización importante · Drifty {version}")
         } else {
-            format!("Important update · Drifty {version}")
+            format!("{} · Drifty {version}", language.text("Important update"))
         }
     } else {
         format!("Drifty {version}")
@@ -298,7 +283,13 @@ struct NativeUpdateCopy {
 }
 
 fn native_update_copy(language: NativeUpdateLanguage, urgent: bool) -> NativeUpdateCopy {
-    if language == NativeUpdateLanguage::Korean {
+    if language.is_additional() {
+        NativeUpdateCopy {
+            title: language.text(if urgent { "Important Drifty update" } else { "Drifty update" }),
+            fallback: language.text(if urgent { "This update includes an important stability or security fix." } else { "A new Drifty update is available." }),
+            automatic: language.text("Automatically update Drifty"), later: language.text("Later"), update: language.text("Update"), ok: language.text("OK"),
+        }
+    } else if language == NativeUpdateLanguage::Korean {
         NativeUpdateCopy {
             title: if urgent {
                 "Drifty 중요 업데이트"

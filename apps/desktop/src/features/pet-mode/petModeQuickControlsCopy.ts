@@ -1,3 +1,4 @@
+import { formatLocalizedTimeLabel } from "../../lib/formatting";
 import type { DisplayLanguage } from "../localization/languagePreference";
 import { type TranslationKey } from "../localization/translations";
 import { translateFor } from "../localization/translate";
@@ -23,6 +24,7 @@ export function formatAutomaticCloseResumeTime(
   language: DisplayLanguage,
 ): string {
   const date = new Date(endsAtMs);
+  if (language !== "en" && language !== "ko" && language !== "es") return formatLocalizedTimeLabel(date, language);
   const hour = date.getHours();
   const minute = String(date.getMinutes()).padStart(2, "0");
   const hour12 = hour % 12 || 12;

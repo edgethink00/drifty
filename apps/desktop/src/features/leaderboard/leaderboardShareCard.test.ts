@@ -4,6 +4,23 @@ import { buildLeaderboardShareCard, leaderboardShareStoryIds } from "./leaderboa
 const point = (day: string, focus: number) => ({ day, focus, drift: 0, neutral: 0 });
 
 describe("buildLeaderboardShareCard", () => {
+  it.each([
+    ["ja", "第"], ["pt-BR", "Semana"], ["zh-Hans", "第"], ["fr", "Semaine"], ["de", "Woche"],
+  ] as const)("assembles %s export labels in the selected language", (language, weekLabel) => {
+    const card = buildLeaderboardShareCard({ language, period: "weekly", windowEndDay: "2026-10-13", dailyProductivity: [] });
+    expect(card.data.language).toBe(language);
+    if (card.kind !== "week") throw new Error("Expected the weekly aggregate card");
+    expect(card.data.weekLabel).toContain(weekLabel);
+    expect(card.data.rangeLabel).not.toContain("Oct");
+  });
+
+  it("preserves English export labels for the Korean UI", () => {
+    const card = buildLeaderboardShareCard({ language: "ko", period: "daily", windowEndDay: "2026-10-13", dailyProductivity: [] });
+    expect(card.data.language).toBe("en");
+    if (card.kind !== "day") throw new Error("Expected the daily aggregate card");
+    expect(card.data.dateLabel).toBe("Oct 13");
+  });
+
   it("fills days without data in the weekly rank window with zero focus", () => {
     const card = buildLeaderboardShareCard({
       period: "weekly",

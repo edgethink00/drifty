@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { PageTabs, pageTabId } from "../../components/PageTabs";
@@ -18,7 +19,7 @@ const TAB_PREFIX = "friend-invite";
 type FriendInviteTab = "invite" | "friends" | "code";
 
 /** The existing drifty.so gift page reads the code from the fragment. */
-export function buildFriendInviteUrl(code: string, language: "en" | "ko" | "es"): string {
+export function buildFriendInviteUrl(code: string, language: DisplayLanguage): string {
   return GIFT_SITE_ORIGIN + (language === "ko" ? "/ko" : "") + "/gift/#pass=" + encodeURIComponent(code);
 }
 
@@ -338,7 +339,7 @@ function emphasize(text: string): ReactNode {
     : <Fragment key={index}>{part}</Fragment>));
 }
 
-function formatDate(value: string, language: "en" | "ko" | "es"): string {
+function formatDate(value: string, language: DisplayLanguage): string {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return value;
   return new Date(timestamp).toLocaleDateString(localeForDisplayLanguage(language), {

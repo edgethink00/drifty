@@ -1,3 +1,5 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivitySegment, Project, ProjectAssignmentRecord } from "@drifty/domain";
 import { shiftIsoDate } from "@drifty/domain";
@@ -46,7 +48,7 @@ function windowDaysFor(mode: TrendRangeMode): number {
   return 7;
 }
 
-function shortDate(iso: string, language: "en" | "ko" | "es"): string {
+function shortDate(iso: string, language: DisplayLanguage): string {
   const parsed = new Date(`${iso}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return iso;
   return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { month: "short", day: "numeric" }).format(parsed);
@@ -248,7 +250,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const atLatestWindow = windowOffset === 0;
   const relativeDayLabel = describeLocalizedRelativeDay(endDay, effectiveLanguage, props.startOfDayMinutes);
   const windowLabel = isDayMode
-    ? relativeDayLabel === (effectiveLanguage === "ko" ? "선택한 날짜" : effectiveLanguage === "es" ? "Día seleccionado" : "Selected day") ? shortDate(endDay, effectiveLanguage) : relativeDayLabel
+    ? relativeDayLabel === ((isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "Selected day") : effectiveLanguage === "ko" ? "선택한 날짜" : effectiveLanguage === "es" ? "Día seleccionado" : "Selected day")) ? shortDate(endDay, effectiveLanguage) : relativeDayLabel
     : `${shortDate(startDay, effectiveLanguage)} – ${shortDate(endDay, effectiveLanguage)}`;
 
   // Tell the shell which window to load trend segments/assignments for. A

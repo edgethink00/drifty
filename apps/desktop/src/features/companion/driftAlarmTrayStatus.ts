@@ -1,3 +1,5 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import type { DriftAlarmTrayStatus, SystemTransientActivity } from "@drifty/domain";
 import { formatCompactDurationFromSeconds, formatLocalizedTimeLabel, formatTimeLabel } from "../../lib/formatting";
 
@@ -21,7 +23,7 @@ export type DriftAlarmTrayStatusInput = {
   readonly checkedAt: Date | null;
   readonly result: DriftAlarmTrayResult;
   readonly trackerRunning?: boolean | null;
-  readonly locale?: "en" | "ko" | "es";
+  readonly locale?: DisplayLanguage;
 };
 
 /**
@@ -35,6 +37,24 @@ export type DriftAlarmTrayState = {
 };
 
 export function buildDriftAlarmTrayStatus(input: DriftAlarmTrayStatusInput): DriftAlarmTrayStatus {
+  const language = input.locale ?? "en";
+  if (isAdditionalDisplayLanguage(language)) {
+    const english = buildDriftAlarmTrayStatus({ ...input, locale: "en" });
+    const resultKeys = {
+      disabled: "Alerts disabled", not_today: "Waiting for today", tracker_paused: "Tracking paused",
+      no_candidate: "No drift detected", snoozed: "Alert snoozed", checking: "Checking with AI",
+      delivered: "Alert delivered", already_delivered: "Already shown", suppressed: "Suppressed",
+      deferred: "Deferred", error: "Check failed",
+    } as const;
+    return {
+      ...english,
+      statusLabel: supplementalText(language, english.statusLabel),
+      lastCheckedLabel: input.result.kind === "tracker_paused" ? supplementalText(language, "Not checking")
+        : input.checkedAt && Number.isFinite(input.checkedAt.getTime()) ? formatLocalizedTimeLabel(input.checkedAt, language)
+          : supplementalText(language, input.enabled ? "Never" : "Off"),
+      resultLabel: supplementalText(language, resultKeys[input.result.kind]),
+    };
+  }
   const checkedAt = input.result.kind === "tracker_paused" ? null : checkedAtOrNull(input.checkedAt);
   const ko = input.locale === "ko";
   const es = input.locale === "es";

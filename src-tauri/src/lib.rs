@@ -1,3 +1,4 @@
+mod localization;
 mod app_icons;
 mod app_menu;
 mod auth_session_store;

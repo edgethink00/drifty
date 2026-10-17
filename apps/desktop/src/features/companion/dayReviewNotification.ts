@@ -1,3 +1,5 @@
+import { formatLocalizedDuration } from "../../lib/formatting";
+import { formatLocalizedTimeLabel } from "../../lib/formatting";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { sendNativeNotification } from "../../lib/api/nativeNotificationClient";
 import { isQuietCloudPause } from "../classification/classificationAvailability";
@@ -42,7 +44,7 @@ export function buildDayReviewNotification(event: EndOfDayReviewEvent, language:
   const t = translateFor(language);
   /* The shared compact format prints a bare "0" for no time; the review always names the unit. */
   const duration = (seconds: number) => (seconds < 60
-    ? (language === "ko" ? "0분" : "0m")
+    ? (formatLocalizedDuration(0, language))
     : formatLocalizedCompactDurationFromSeconds(seconds, language));
   const totalSeconds = Math.max(0, event.totalSeconds);
   const pending = event.assessment?.state === "pending" ? event.assessment : null;
@@ -124,6 +126,7 @@ export async function sendDayReviewNotification(
  * the Korean day half reads the same in every runtime that builds the text.
  */
 function formatClock(date: Date, language: DisplayLanguage): string {
+  if (language !== "en" && language !== "ko" && language !== "es") return formatLocalizedTimeLabel(date, language);
   const hour = date.getHours();
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;

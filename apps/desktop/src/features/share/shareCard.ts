@@ -1,3 +1,7 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
+import { localizedCategoryLabel } from "../localization/activityTranslations";
+import { translateFor } from "../localization/translate";
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 // Pure data assembly for the shareable daily summary card.
 //
 // A share card only ever contains aggregates: focus totals, category durations,
@@ -36,7 +40,7 @@ export interface ShareCardProductivitySlice {
 }
 
 export interface ShareCardData {
-  readonly language?: "en" | "ko" | "es";
+  readonly language?: DisplayLanguage;
   /** ISO day, e.g. "2026-07-18". */
   readonly day: string;
   /** e.g. "Friday". */
@@ -63,7 +67,7 @@ export interface ShareCardData {
 }
 
 export interface BuildShareCardDataInput {
-  readonly language?: "en" | "ko" | "es";
+  readonly language?: DisplayLanguage;
   readonly day: string;
   readonly totalSeconds: number;
   readonly categoryTotals: readonly CategoryDuration[];
@@ -136,7 +140,7 @@ function buildProductivitySlices(
 function buildSlices(
   categoryTotals: readonly CategoryDuration[],
   trackedSeconds: number,
-  language: "en" | "ko" | "es" = "en",
+  language: DisplayLanguage = "en",
 ): ShareCardCategorySlice[] {
   const active = categoryTotals.filter((entry) => entry.totalSeconds > 0);
   // A user-added category's name stays on this device: the card counts it as Other.
@@ -163,7 +167,7 @@ function buildSlices(
     ratio: ratioOf(entry.totalSeconds),
   }));
   if (otherSeconds > 0) {
-    slices.push({ key: "other", label: language === "ko" ? "기타" : language === "es" ? "Otros" : "Other", seconds: otherSeconds, ratio: ratioOf(otherSeconds) });
+    slices.push({ key: "other", label: (isAdditionalDisplayLanguage(language) ? supplementalText(language, "Other") : language === "ko" ? "기타" : language === "es" ? "Otros" : "Other"), seconds: otherSeconds, ratio: ratioOf(otherSeconds) });
   }
   if (unknownSeconds > 0) {
     slices.push({
@@ -176,36 +180,8 @@ function buildSlices(
   return slices;
 }
 
-function localizedShareCategoryLabel(category: ActivityCategory, language: "en" | "ko" | "es"): string {
-  if (language === "en") return categoryLabel(category);
-  if (language === "es") {
-    const spanishLabels: Partial<Record<ActivityCategory, string>> = {
-      workspace: "Trabajo",
-      learning: "Aprendizaje",
-      communication: "Comunicación",
-      entertainment: "Entretenimiento",
-      utility: "Utilidades",
-      music: "Música",
-      game: "Juegos",
-      social_media: "Redes sociales",
-      shopping: "Compras",
-      unknown: "Sin clasificar",
-    };
-    return spanishLabels[category] ?? categoryLabel(category);
-  }
-  const koreanLabels: Partial<Record<ActivityCategory, string>> = {
-    workspace: "작업",
-    learning: "학습",
-    communication: "커뮤니케이션",
-    entertainment: "엔터테인먼트",
-    utility: "유틸리티",
-    music: "음악",
-    game: "게임",
-    social_media: "소셜 미디어",
-    shopping: "쇼핑",
-    unknown: "미분류",
-  };
-  return koreanLabels[category] ?? categoryLabel(category);
+function localizedShareCategoryLabel(category: ActivityCategory, language: DisplayLanguage): string {
+  return language === "en" ? categoryLabel(category) : localizedCategoryLabel(category, translateFor(language));
 }
 
 function buildHours(flowBlocks: readonly FlowBlock[]): ShareCardHour[] {
@@ -260,7 +236,7 @@ export interface ShareWeekCardDay {
 }
 
 export interface ShareWeekCardData {
-  readonly language?: "en" | "ko" | "es";
+  readonly language?: DisplayLanguage;
   readonly startDay: string;
   readonly endDay: string;
   /** e.g. "Week 29". */
@@ -288,7 +264,7 @@ export interface ShareWeekCardData {
 }
 
 export interface BuildShareWeekCardDataInput {
-  readonly language?: "en" | "ko" | "es";
+  readonly language?: DisplayLanguage;
   readonly startDay: string;
   readonly endDay: string;
   readonly totalSeconds: number;
@@ -332,7 +308,7 @@ export function buildShareWeekCardData({
       ? koreanDayLetters[new Date(`${row.day}T12:00:00`).getDay()] ?? "·"
       : language === "es"
         ? spanishDayLetters[new Date(`${row.day}T12:00:00`).getDay()] ?? "·"
-      : (row.dayName.charAt(0) || "·").toUpperCase(),
+      : new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: "narrow" }).format(new Date(`${row.day}T12:00:00`)),
     focusSeconds: row.focusSeconds,
     isBest: bestRow !== null && row.day === bestRow.day,
   }));
@@ -343,7 +319,7 @@ export function buildShareWeekCardData({
     language,
     startDay,
     endDay,
-    weekLabel: language === "ko" ? `${isoWeekNumber(startDay)}주차` : language === "es" ? `Semana ${isoWeekNumber(startDay)}` : `Week ${isoWeekNumber(startDay)}`,
+    weekLabel: (isAdditionalDisplayLanguage(language) ? supplementalText(language, "Week {{v0}}", { v0: isoWeekNumber(startDay) }) : language === "ko" ? `${isoWeekNumber(startDay)}주차` : language === "es" ? `Semana ${isoWeekNumber(startDay)}` : `Week ${isoWeekNumber(startDay)}`),
     rangeLabel: language === "en" ? formatDateRangeLabel(startDay, endDay) : formatLocalizedDateRangeLabel(startDay, endDay, language),
     totalSeconds: trackedSeconds,
     focusSeconds: focusEntry?.totalSeconds ?? 0,

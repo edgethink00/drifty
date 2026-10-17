@@ -3771,3 +3771,11 @@
 .content--dashboard .day-split__main[data-day-chart-density="compact"] .flow-breakdown-layout__chart .flow-cell {
   min-height: 0;
 }
+
+/* Long Latin metric names fit the compact rail with tighter tracking. Keep
+   the type size and wrap whole words instead of isolating their last letter. */
+:is(.week-v2-grid--day, .page--week-dashboard):is(:lang(es), :lang(pt), :lang(fr), :lang(de)) .week-v2-side__content .metric-tile .eyebrow {
+  letter-spacing: calc(0.04em * var(--caps-tracking-scale, 1));
+  overflow-wrap: normal;
+  word-break: normal;
+}

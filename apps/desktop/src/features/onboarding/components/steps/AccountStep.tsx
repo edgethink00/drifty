@@ -1,3 +1,4 @@
+import { localeCopy } from "../../../localization/localeCopy";
 import { useState } from "react";
 import type { OAuthCallbackStatus } from "../../../auth/AuthContext";
 import { useAuthConnectionStatus } from "../../../auth/AuthContext";
@@ -206,7 +207,7 @@ export function AccountStep({
         <p className="dc-onb-account__legal">
           {t("onboarding.account.legalPrefix")}{" "}
           <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("onboarding.account.terms")}</a>{" "}
-          {effectiveLanguage === "es" ? "y" : "&"} <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
+          {effectiveLanguage === "en" || effectiveLanguage === "ko" ? "&" : localeCopy(effectiveLanguage, "and")} <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>{effectiveLanguage === "ja" || effectiveLanguage === "zh-Hans" ? "。" : "."}
         </p>
       )}
     </div>

@@ -5,6 +5,8 @@ import type { ActivitySegment } from "@drifty/domain";
 import type { CompactHistoryLoad } from "../dashboard/compactHistoryCache";
 import { readAppStyles } from "../../test/readStyles";
 import { alignCalendarTooltip, FOCUS_CALENDAR_TOOLTIP_DELAY_MS, FocusCalendarCard } from "./FocusCalendarCard";
+import { LocalizationProvider } from "../localization/LocalizationContext";
+import { translateFor } from "../localization/translate";
 
 const emptyLoad = { materialized: { segments: [] } } as unknown as CompactHistoryLoad;
 const base = { endDay: "2026-09-09", endDayIsInProgress: true, startOfDayMinutes: 0, recentSegments: [], classificationOptions: {}, variant: "year" as const };
@@ -35,6 +37,17 @@ const focusedLoad = {
 
 describe("FocusCalendarCard", () => {
   afterEach(() => cleanup());
+  it("uses Chinese weekday headings instead of the English weekday initials", async () => {
+    const controller = { effectiveLanguage: "zh-Hans" as const, setDisplayLanguage: vi.fn(), t: translateFor("en") };
+    const { container } = render(
+      <LocalizationProvider controller={controller}>
+        <FocusCalendarCard {...base} loadHistory={vi.fn().mockResolvedValue(emptyLoad)} />
+      </LocalizationProvider>,
+    );
+    await waitFor(() => expect(container.querySelector(".contribution-grid__weekdays")).not.toBeNull());
+    expect([...container.querySelectorAll(".contribution-grid__weekdays span")].map(node => node.textContent))
+      .toEqual(["一", "", "三", "", "五", "", ""]);
+  });
   it("defaults to five months without requiring a review parameter", async () => {
     render(<FocusCalendarCard {...base} variant={undefined} loadHistory={vi.fn().mockResolvedValue(emptyLoad)} />);
     await waitFor(() => expect(document.querySelectorAll(".focus-calendar__cell")).toHaveLength(153));

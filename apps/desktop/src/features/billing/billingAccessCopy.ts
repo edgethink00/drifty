@@ -1,3 +1,4 @@
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import type { DisplayLanguage } from "../localization/LocalizationContext";
 import { localeForDisplayLanguage } from "../../lib/formatting";
 
@@ -25,6 +26,10 @@ export function formatOrganizationSeatAccessCopy(
   const name = organizationName.trim();
   if (!name) return null;
 
+  if (isAdditionalDisplayLanguage(language)) return Object.freeze({
+    title: supplementalText(language, "Team plan"),
+    summary: supplementalText(language, "Your Pro comes from the {{name}} team plan.", { name }),
+  });
   return Object.freeze(language === "es"
     ? {
       title: "Licencia de la organización",

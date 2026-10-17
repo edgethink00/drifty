@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Assert against the shipped tiers rather than copies of their values: this
 // test exists to prove the bridge forwards the resolved duration, not to pin
@@ -612,7 +613,7 @@ describe("pet quick-controls bridge", () => {
       automaticCloseEnabled: boolean;
       automaticCloseSavedEnabled: boolean;
       automaticCloseOverride: null | { enabled: boolean; kind: "15" | "60" | "today" | "forever"; endsAtMs: number | null };
-      language: "en" | "ko" | "es";
+      language: DisplayLanguage;
       theme: "light" | "dark";
     }> = [];
     tauriListen.listen.mockImplementationOnce(async (
@@ -630,7 +631,7 @@ describe("pet quick-controls bridge", () => {
       handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "es", theme: "light" } });
       handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ko", theme: "sepia" } });
       handler({ payload: { automaticCloseEnabled: "false", automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ko", theme: "light" } });
-      handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ja", theme: "light" } });
+      handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "xx", theme: "light" } });
       handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: null }, language: "ko", theme: "light" } });
       return vi.fn();
     });

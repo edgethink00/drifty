@@ -1,3 +1,4 @@
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
@@ -58,7 +59,7 @@ function formatShare(shareOfTotal: number): string {
   return `${Math.round(percent)}%`;
 }
 
-function formatLastUsed(endedAt: string | null, language: "en" | "ko" | "es", t: ReturnType<typeof useLocalization>["t"]): string {
+function formatLastUsed(endedAt: string | null, language: DisplayLanguage, t: ReturnType<typeof useLocalization>["t"]): string {
   if (!endedAt) return t("dashboard.today.lastUsedPending");
 
   const endedDate = new Date(endedAt);
@@ -80,7 +81,7 @@ function displayName(item: AppUsagePanelItem): string {
   return item.usageKind === "site" ? item.siteDomain ?? item.siteTitle ?? item.appName : item.appName;
 }
 
-function formatUsageContext(item: AppUsagePanelItem, language: "en" | "ko" | "es", t: ReturnType<typeof useLocalization>["t"]): string {
+function formatUsageContext(item: AppUsagePanelItem, language: DisplayLanguage, t: ReturnType<typeof useLocalization>["t"]): string {
   const lastUsed = formatLastUsed(item.lastEndedAt, language, t);
   if (item.usageKind !== "site") return lastUsed;
 

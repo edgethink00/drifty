@@ -577,7 +577,7 @@
      labels ("Not classified", "Confidence unavailable") were served as
      "Not classifie…". Keep four columns where they fit, fold to fewer in a
      narrow panel, and let a long value wrap rather than lose its own words. */
-  grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
   gap: var(--space-2);
 }
 
@@ -811,8 +811,20 @@
   min-width: 0;
 }
 
+/* These three system labels stay complete; wrap a long translated choice
+   onto the next row instead of truncating the decision it represents. */
 .classification-correction__palette--productivity {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.classification-correction__palette--productivity .classification-correction__chip {
+  flex: 1 0 auto;
+}
+
+.classification-correction__palette--productivity .classification-correction__chip > span {
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* One option button for both groups, quiet at rest like the Week inspector's

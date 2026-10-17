@@ -1,3 +1,4 @@
+import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import type { ClassificationSource } from "@drifty/domain";
 import { classificationSourceLabel } from "./classificationViewData";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
@@ -23,11 +24,11 @@ export function ClassificationSourceBadge({
   const userOwnedSource = source === "manual" || source === "rule";
   if (!userOwnedSource && !showAutomaticSources) return null;
   const isAi = Boolean(ai || source === "llm");
-  const label = language === "ko" ? koreanClassificationSourceLabel(source, ai, aiCached) : language === "es" ? spanishClassificationSourceLabel(source, ai, aiCached) : classificationSourceLabel(source, ai, aiCached);
+  const label = isAdditionalDisplayLanguage(language) ? supplementalText(language, classificationSourceLabel(source, ai, aiCached)) : language === "ko" ? koreanClassificationSourceLabel(source, ai, aiCached) : language === "es" ? spanishClassificationSourceLabel(source, ai, aiCached) : classificationSourceLabel(source, ai, aiCached);
 
   return (
     <span
-      aria-label={language === "ko" ? `분류 출처: ${label}` : language === "es" ? `Origen de clasificación: ${label}` : `Classification source: ${label}`}
+      aria-label={(isAdditionalDisplayLanguage(language) ? supplementalText(language, "Classification source: {{v0}}", { v0: label }) : language === "ko" ? `분류 출처: ${label}` : language === "es" ? `Origen de clasificación: ${label}` : `Classification source: ${label}`)}
       className={`hover-metadata-chip classification-source-badge${isAi ? " classification-source-badge--ai" : ""}`}
     >
       {label}

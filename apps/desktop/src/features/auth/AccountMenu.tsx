@@ -1,3 +1,4 @@
+import { DISPLAY_LANGUAGES, languageDisplayName } from "../localization/languageCatalog";
 import { AiMarkIcon } from "../../components/AiIcons";
 import { PetIcon } from "../../components/PetIcon";
 import { getAccountDisplayName } from "./accountDisplay";
@@ -438,11 +439,7 @@ export function AccountMenu({
     options[nextIndex]?.focus();
   };
 
-  const currentLanguageLabel = t(effectiveLanguage === "ko"
-    ? "settings.general.languageKorean"
-    : effectiveLanguage === "es"
-      ? "settings.general.languageSpanish"
-      : "settings.general.languageEnglish");
+  const currentLanguageLabel = languageDisplayName(effectiveLanguage, t);
 
   const avatarMark = (
     <span className={shouldShowUserAvatar ? "account-avatar" : "account-avatar account-avatar--placeholder"}>
@@ -548,36 +545,13 @@ export function AccountMenu({
             aria-label={t("settings.general.language")}
             onKeyDown={handleLanguageMenuKeyDown}
           >
-            <button
-              type="button"
-              className="account-menu-item account-menu-language-option"
-              role="menuitemradio"
-              aria-checked={effectiveLanguage === "en"}
-              onClick={() => selectLanguage("en")}
-            >
-              <span>{t("settings.general.languageEnglish")}</span>
-              <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
-            </button>
-            <button
-              type="button"
-              className="account-menu-item account-menu-language-option"
-              role="menuitemradio"
-              aria-checked={effectiveLanguage === "ko"}
-              onClick={() => selectLanguage("ko")}
-            >
-              <span>{t("settings.general.languageKorean")}</span>
-              <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
-            </button>
-            <button
-              type="button"
-              className="account-menu-item account-menu-language-option"
-              role="menuitemradio"
-              aria-checked={effectiveLanguage === "es"}
-              onClick={() => selectLanguage("es")}
-            >
-              <span>{t("settings.general.languageSpanish")}</span>
-              <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
-            </button>
+            {DISPLAY_LANGUAGES.map(({ value }) => (
+              <button key={value} type="button" className="account-menu-item account-menu-language-option"
+                role="menuitemradio" aria-checked={effectiveLanguage === value} onClick={() => selectLanguage(value)}>
+                <span>{languageDisplayName(value, t)}</span>
+                <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
+              </button>
+            ))}
           </div>
         ) : null}
       </div>

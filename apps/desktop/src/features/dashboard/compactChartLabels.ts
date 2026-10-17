@@ -1,3 +1,4 @@
+import { localeCopy } from "../localization/localeCopy";
 import { formatCompactDurationFromSeconds, formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import type { DisplayLanguage } from "../localization/LocalizationContext";
 
@@ -13,5 +14,5 @@ export function formatCompactBarLabel<TEntry extends CompactChartLabelEntry>(
   language: DisplayLanguage = "en",
 ) {
   const parts = entries.map((entry) => `${getLabel(entry)} ${language !== "en" ? formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, language) : formatCompactDurationFromSeconds(entry.totalSeconds)} ${Math.round(entry.ratio * 100)}%`);
-  return `${title} ${language === "ko" ? "분류" : language === "es" ? "clasificación" : "classification"}: ${parts.join(", ")}`;
+  return `${title} ${localeCopy(language, "classification")}: ${parts.join(", ")}`;
 }

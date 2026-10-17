@@ -149,7 +149,7 @@ export function EntryDayDemo() {
   }), [clock.minute, effectiveLanguage, fullFocusDriftChart]);
   const focusDuration = focusSeconds > 0
     ? formatLocalizedCompactDurationFromSeconds(focusSeconds, effectiveLanguage)
-    : effectiveLanguage === "ko" ? "0분" : effectiveLanguage === "es" ? "0 min" : "0m";
+    : effectiveLanguage === "en" ? "0m" : formatLocalizedCompactDurationFromSeconds(0, effectiveLanguage);
 
   useEffect(() => {
     rootRef.current?.setAttribute("inert", "");
