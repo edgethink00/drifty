@@ -34,7 +34,6 @@ export const FRENCH_PART_5 = {
   "dashboard.week.googleCalendarAllDay": "Toute la journée",
   "dashboard.week.googleCalendarEvent": "Événement prévu : {{title}}, {{time}}",
   "dashboard.week.openActivity": "Ouvrir les détails de l’activité",
-  "dashboard.week.timeScale": "Échelle de temps",
   "dashboard.week.currentTime": "Heure actuelle : {{time}}",
   "dashboard.week.breakdownAria": "Répartition du temps de la semaine",
   "dashboard.week.breakdownSubject": "répartition de la semaine",

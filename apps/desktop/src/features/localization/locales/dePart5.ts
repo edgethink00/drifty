@@ -34,7 +34,6 @@ export const GERMAN_PART_5 = {
   "dashboard.week.googleCalendarAllDay": "Ganztägig",
   "dashboard.week.googleCalendarEvent": "Geplanter Termin: {{title}}, {{time}}",
   "dashboard.week.openActivity": "Aktivitätsdetails öffnen",
-  "dashboard.week.timeScale": "Zeitskala",
   "dashboard.week.currentTime": "Aktuelle Uhrzeit {{time}}",
   "dashboard.week.breakdownAria": "Zeitaufteilung der Woche",
   "dashboard.week.breakdownSubject": "Wochenaufteilung",

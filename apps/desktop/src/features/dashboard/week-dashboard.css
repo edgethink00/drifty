@@ -3779,37 +3779,3 @@
   overflow-wrap: normal;
   word-break: normal;
 }
-
-
-/* Keep the mode/legend on the left and enlargement at the trailing edge.
-   The shared Day header uses row-reverse; its ordering is independent. */
-.week-v2-calendar__legend .week-v2-calendar__scale-actions {
-  flex-direction: row;
-}
-
-/* The optional time scale changes geometry, leaving the text and B grouping intact. */
-.week-v2-calendar__time-scale {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  flex: 0 0 auto;
-  color: var(--text-soft);
-}
-
-.week-v2-calendar__time-scale select {
-  min-height: 26px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 2px 4px;
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  cursor: pointer;
-}
-
-.week-v2-calendar__time-scale select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}

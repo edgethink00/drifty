@@ -34,7 +34,6 @@ export const BRAZILIAN_PORTUGUESE_PART_5 = {
   "dashboard.week.googleCalendarAllDay": "Dia inteiro",
   "dashboard.week.googleCalendarEvent": "Evento planejado: {{title}}, {{time}}",
   "dashboard.week.openActivity": "Abrir detalhes da atividade",
-  "dashboard.week.timeScale": "Escala de tempo",
   "dashboard.week.currentTime": "Horário atual: {{time}}",
   "dashboard.week.breakdownAria": "Distribuição do tempo da semana",
   "dashboard.week.breakdownSubject": "distribuição da semana",

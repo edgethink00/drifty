@@ -23,7 +23,6 @@ import {
   WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX,
   WEEK_CALENDAR_EVENT_RIGHT_INSET_PX,
 } from "./weekCalendarEventLayout";
-import { WEEK_TIME_SCALE_OPTIONS, type WeekTimeScale } from "./weekDashboardScalePreference";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { WeekCalendarBoard } from "./weekCalendarBoard";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
@@ -250,7 +249,6 @@ type WeekDashboardProps = {
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
   readonly axisScalePercent?: number;
-  readonly onAxisScalePercentChange?: (scale: WeekTimeScale) => void;
   /** Breakdown collapse state is owned by DashboardPage so Day and Week share
    *  one preference; standalone renders (tests) fall back to open. */
   readonly sideOpen?: boolean;
@@ -338,7 +336,6 @@ export function WeekDashboard({
   currentCalendarDay,
   currentMinuteOfDay,
   axisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
-  onAxisScalePercentChange,
   sideOpen: controlledSideOpen,
   onToggleSide,
   onSelectDay,
@@ -407,7 +404,6 @@ export function WeekDashboard({
     setCalendarBodyElement(element);
   }, []);
   const autoScrollKeyRef = useRef<string | null>(null);
-  const scaleAnchorRef = useRef<{ readonly range: string; readonly scale: number; readonly minute: number; readonly viewportOffset: number } | null>(null);
   const refreshStatusLabel = refreshStatus === "loading" ? t("dashboard.week.updating") : refreshStatus === "error" ? t("dashboard.week.updateFailed") : null;
   // Rendered inside the legend's control row rather than after it: as a sibling
   // of that row it was pushed onto a line of its own, which grew the legend by a
@@ -468,22 +464,6 @@ export function WeekDashboard({
   const calendarEndHour = 24;
   const effectiveAxisScalePercent = axisScalePercent;
   const calendarHourHeight = weekDashboardAxisScalePercentToHourHeight(effectiveAxisScalePercent);
-  const changeTimeScale = (scale: WeekTimeScale) => {
-    if (scale === effectiveAxisScalePercent || !onAxisScalePercentChange) return;
-    const scroller = calendarScrollerRef.current;
-    const body = calendarBodyRef.current;
-    if (scroller && body) {
-      const bodyTop = body.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-      const viewportOffset = scroller.clientHeight / 2;
-      scaleAnchorRef.current = {
-        range: `${startDay}:${endDay}:${startOfDayMinutes}`,
-        scale,
-        minute: (scroller.scrollTop + viewportOffset - bodyTop) / calendarHourHeight * 60,
-        viewportOffset,
-      };
-    }
-    onAxisScalePercentChange(scale);
-  };
   const calendarHours = Array.from({ length: calendarEndHour - calendarStartHour }, (_, index) => calendarStartHour + index);
   const calendarRows = rows;
   const canMountIdentityIcons = useDeferredWeekIdentityIcons({ endDay, startDay });
@@ -769,15 +749,6 @@ export function WeekDashboard({
     const body = calendarBodyRef.current;
     if (!scroller || !body) return;
 
-    const scaleAnchor = scaleAnchorRef.current;
-    if (scaleAnchor && scaleAnchor.range !== `${startDay}:${endDay}:${startOfDayMinutes}`) scaleAnchorRef.current = null;
-    if (scaleAnchorRef.current && scaleAnchor?.scale === effectiveAxisScalePercent) {
-      const bodyTop = body.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-      scroller.scrollTop = Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight,
-        bodyTop + scaleAnchor.minute / 60 * calendarHourHeight - scaleAnchor.viewportOffset));
-      scaleAnchorRef.current = null;
-      return;
-    }
     // Opening the current week scrolls to now once. A clock-minute change
     // while reading or opening details must not pull the user back there.
     const initialLiveTarget = !revealTarget && currentCalendarDay === undefined && realCurrentCalendarMinute !== null;
@@ -795,7 +766,7 @@ export function WeekDashboard({
 
     scroller.scrollTop = nextScrollTop;
     autoScrollKeyRef.current = scrollKey;
-  }, [autoScrollTargetMinute, calendarHourHeight, currentCalendarDay, effectiveAxisScalePercent, endDay, minCalendarMinute, realCurrentCalendarMinute, revealTarget, startDay, startOfDayMinutes]);
+  }, [autoScrollTargetMinute, calendarHourHeight, currentCalendarDay, endDay, minCalendarMinute, realCurrentCalendarMinute, revealTarget, startDay, startOfDayMinutes]);
 
   return (
     <section
@@ -818,7 +789,7 @@ export function WeekDashboard({
             {initialDataLoading ? (
               <WeekDashboardLoadingLegend trailing={refreshStatusChip} />
             ) : (
-              <div className={`flow-chart-head__actions${onAxisScalePercentChange ? " week-v2-calendar__scale-actions" : ""}`}>
+              <div className="flow-chart-head__actions">
                 <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
                   {colorModeOptions.map((option) => (
                     <button
@@ -847,21 +818,6 @@ export function WeekDashboard({
                   setHoveredLegend={setLegendHover}
                   onEdit={onEditCategories ? () => onEditCategories({ group: colorMode }) : undefined}
                 />
-                {onAxisScalePercentChange ? (
-                  <label className="week-v2-calendar__time-scale" title={t("dashboard.week.timeScale")}>
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.3" />
-                      <path d="m10 10 4 4M4 6.5h5M6.5 4v5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                    </svg>
-                    <select aria-label={t("dashboard.week.timeScale")} value={effectiveAxisScalePercent}
-                      onChange={event => {
-                        const scale = WEEK_TIME_SCALE_OPTIONS.find(option => option === Number(event.target.value));
-                        if (scale) changeTimeScale(scale);
-                      }}>
-                      {WEEK_TIME_SCALE_OPTIONS.map(scale => <option key={scale} value={scale}>{scale}%</option>)}
-                    </select>
-                  </label>
-                ) : null}
                 {googleCalendarStatusLabel ? (
                   <span className={`week-v2-calendar__calendar-key week-v2-calendar__calendar-key--${googleCalendarStatus}`} aria-live="polite">
                     <span aria-hidden="true" />
