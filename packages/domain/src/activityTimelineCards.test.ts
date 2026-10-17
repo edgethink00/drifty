@@ -166,6 +166,10 @@ describe("activity timeline cards", () => {
     expect(storedActivityTimelineCards([{ ...stored, promptVersion: "old" }], "en")).toEqual([]);
     // A window answered with no cards is still answered.
     expect(activityTimelineWindowAnswered(window, [{ ...stored, cards: [] }], "en")).toBe(true);
+    expect(activityTimelineWindowAnswered(window, [{ ...stored, cards: [], model: null, provider: "cloud" }], "en")).toBe(true);
+    // No model answered these: title evidence may now be available or enabled.
+    expect(activityTimelineWindowAnswered(window, [{ ...stored, cards: [], model: null, provider: null }], "en")).toBe(false);
+    expect(activityTimelineWindowAnswered(window, [{ ...stored, cards: [], model: undefined, provider: undefined }], "en")).toBe(false);
   });
 
   it("parses fenced answers and drops malformed cards", () => {

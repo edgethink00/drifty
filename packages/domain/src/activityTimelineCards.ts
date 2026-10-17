@@ -628,14 +628,20 @@ export function activityTimelineWindowSaveInput(
   };
 }
 
-/** True when this window was already answered in this language. */
+/**
+ * True when this window has cards or a model already answered in this language.
+ * Empty windows with neither provider nor model were skipped before inference;
+ * recheck their current evidence once per session rather than permanently
+ * treating titles disabled by privacy settings as an answered request.
+ */
 export function activityTimelineWindowAnswered(
   window: ActivityTimelineWindow,
   stored: readonly ActivityTimelineWindowRecord[],
   language: ActivityBlockLabelLanguage,
 ): boolean {
   return stored.some((record) => record.windowKey === window.key && record.language === language
-    && record.promptVersion === ACTIVITY_TIMELINE_CARD_PROMPT_VERSION);
+    && record.promptVersion === ACTIVITY_TIMELINE_CARD_PROMPT_VERSION
+    && (record.cards.length > 0 || Boolean(record.provider?.trim() || record.model?.trim())));
 }
 
 export type StoredActivityTimelineCard = {

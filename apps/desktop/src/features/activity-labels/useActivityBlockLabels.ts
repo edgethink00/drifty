@@ -133,8 +133,9 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   const mountedRef = useRef(true);
   const scopeRef = useRef("");
   const runningRef = useRef(false);
-  // Windows already tried in this session, keyed with the language they were tried in.
-  const attemptedRef = useRef(new Set<string>());
+  // Only successful saves settle a window for this session. No-model empty
+  // windows are checked once again when the allowed evidence changes.
+  const settledRef = useRef(new Set<string>());
   const backoffUntilRef = useRef(0);
   const nowRef = useRef(args.now);
   nowRef.current = args.now;
@@ -144,6 +145,11 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   const backgroundScopeRef = useRef("");
   backgroundScopeRef.current = backgroundScope;
   const [backgroundTick, setBackgroundTick] = useState(0);
+  const titlesEnabled = policy.windowTitle || policy.contentContext;
+
+  useEffect(() => {
+    settledRef.current.clear();
+  }, [policy.contentContext, policy.windowTitle]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -231,14 +237,12 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     isCurrent: () => boolean,
   ): Promise<"saved" | "stop"> => {
     const records = buildActivityTimelineRecords(window, recordsById, policy);
-    attemptedRef.current.add(window.key + "|" + language);
     let input = activityTimelineWindowSaveInput(window, [], language, {});
     // Too few titles, or only runs too short to list: nothing to ask about,
     // so the window is stored without cards and keeps its app display.
     const listed = listedActivityTimelineRecords(records);
     if (listed.length > 0 && activityTimelineTitleCoverage(records) >= ACTIVITY_TIMELINE_MIN_WINDOW_TITLE_COVERAGE) {
       if (!consumeActivityLabelRequest(analysisSetup.provider, localDay(Date.now()))) {
-        attemptedRef.current.delete(window.key + "|" + language);
         backoffUntilRef.current = Date.now() + BUDGET_BACKOFF_MS;
         return "stop";
       }
@@ -254,7 +258,12 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
       input = activityTimelineWindowSaveInput(window, cards, language, result.usage);
     }
     if (!isCurrent()) return "stop";
-    await tracker.saveActivityTimelineWindow?.(input);
+    const result = await tracker.saveActivityTimelineWindow!(input);
+    if (result.saved !== 1) {
+      backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
+      return "stop";
+    }
+    if (isCurrent()) settledRef.current.add(window.key + "|" + language);
     return "saved";
   }, [analysisSetup.provider, buildInference, language, policy, tracker]);
   // The background run calls the latest describeWindow through a ref so its
@@ -263,11 +272,11 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   describeWindowRef.current = describeWindow;
 
   useEffect(() => {
-    if (!active || !supported || !analysisConnected || labelState.key !== rangeKey) return;
+    if (!active || !supported || !analysisConnected || !titlesEnabled || labelState.key !== rangeKey) return;
     if (runningRef.current || Date.now() < backoffUntilRef.current) return;
     // Latest finished window first: closed by a later record or a long break.
     const window = windows
-      .filter((candidate) => !attemptedRef.current.has(candidate.key + "|" + language)
+      .filter((candidate) => !settledRef.current.has(candidate.key + "|" + language)
         && !activityTimelineWindowAnswered(candidate, storedWindows, language)
         && (candidate.followed || nowMs - candidate.endMs >= ACTIVITY_TIMELINE_SESSION_GAP_MS + ACTIVITY_LABEL_SETTLE_MS))
       .sort((left, right) => right.endMs - left.endMs)[0];
@@ -290,10 +299,13 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
       } finally {
         runningRef.current = false;
-        if (saved && mountedRef.current) setRevision((value) => value + 1);
+        if (mountedRef.current) {
+          if (saved || !isCurrent()) setRevision((value) => value + 1);
+          if (!isCurrent()) setBackgroundTick((value) => value + 1);
+        }
       }
     })();
-  }, [active, analysisConnected, describeWindow, labelState.key, language, nowMs, rangeKey, scope, segmentsById, startOfDayMinutes, storedWindows, supported, tracker, windows]);
+  }, [active, analysisConnected, describeWindow, labelState.key, language, nowMs, rangeKey, scope, segmentsById, startOfDayMinutes, storedWindows, supported, titlesEnabled, tracker, windows]);
 
   // Background: like the hourly project pass, cards for today's and
   // yesterday's finished windows are made whether or not Day or Week is open,
@@ -305,7 +317,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   }, [background]);
 
   useEffect(() => {
-    if (!background || !supported || !analysisConnected || !tracker.getActivityTimelineCards) return;
+    if (!background || !supported || !analysisConnected || !titlesEnabled || !tracker.getActivityTimelineCards) return;
     if (runningRef.current || Date.now() < backoffUntilRef.current) return;
     runningRef.current = true;
     const requestScope = backgroundScope;
@@ -329,7 +341,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
             const dayRange = getLogicalDayRange(day, day, startOfDayMinutes);
             return buildActivityTimelineWindows(day, recent, Date.parse(dayRange.start), Date.parse(dayRange.end));
           })
-          .filter((candidate) => !attemptedRef.current.has(candidate.key + "|" + language)
+          .filter((candidate) => !settledRef.current.has(candidate.key + "|" + language)
             && !activityTimelineWindowAnswered(candidate, stored, language)
             && (candidate.followed || now - candidate.endMs >= ACTIVITY_TIMELINE_SESSION_GAP_MS + ACTIVITY_LABEL_SETTLE_MS))
           .sort((left, right) => right.endMs - left.endMs);
@@ -342,10 +354,13 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
       } finally {
         runningRef.current = false;
-        if (saved && mountedRef.current) setRevision((value) => value + 1);
+        if (mountedRef.current) {
+          if (saved || !isCurrent()) setRevision((value) => value + 1);
+          if (!isCurrent()) setBackgroundTick((value) => value + 1);
+        }
       }
     })();
-  }, [analysisConnected, background, backgroundScope, backgroundTick, language, startOfDayMinutes, supported, tracker]);
+  }, [analysisConnected, background, backgroundScope, backgroundTick, language, startOfDayMinutes, supported, titlesEnabled, tracker]);
 
   // A legacy hidden block can now be several cards. Materialize its current
   // slices before changing one, so showing that card cannot unhide its siblings.

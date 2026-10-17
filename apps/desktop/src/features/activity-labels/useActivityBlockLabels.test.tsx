@@ -10,22 +10,23 @@ import type {
   ActivityTimelineWindowSaveInput,
   TrackerApi,
 } from "@drifty/domain";
-import { ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, activityBlockLabelKey } from "@drifty/domain";
+import { ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, activityBlockLabelKey, activityTimelineWindowSaveInput, buildActivityTimelineWindows } from "@drifty/domain";
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
-import { AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS } from "../settings/aiPrivacyRequestSettings";
+import { AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS } from "../settings/aiPrivacyRequestSettings";
 import { ACTIVITY_LABEL_REQUEST_BUDGET_STORAGE_KEY } from "./activityLabelBudget";
 import { useActivityBlockLabels, type UseActivityBlockLabelsArgs } from "./useActivityBlockLabels";
 
 type PromptRecord = [string, string, string, number, string, string | null, string | null];
 const inferenceCalls: string[] = [];
-const answerFor = vi.fn<(records: PromptRecord[]) => ActivityTimelineCardModelItem[]>();
+type ModelAnswer = ActivityTimelineCardModelItem[] | null;
+const answerFor = vi.fn<(records: PromptRecord[]) => ModelAnswer | Promise<ModelAnswer>>();
 
 vi.mock("./activityLabelInference", () => ({
   createActivityLabelInference: () => async (prompt: string) => {
     inferenceCalls.push(prompt);
     const lines = prompt.slice(prompt.indexOf("# Records") + "# Records".length).trim().split("\n");
     const records = lines.filter((line) => line.startsWith("[")).map((line) => JSON.parse(line) as PromptRecord);
-    return { output: answerFor(records), usage: { provider: "openai", model: "test-model" } };
+    return { output: await answerFor(records), usage: { provider: "openai", model: "test-model" } };
   },
 }));
 
@@ -126,9 +127,173 @@ beforeEach(() => {
     : [card("r1", "r2", "Drifty pricing review", ["r2"])]);
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+async function flushGeneration() {
+  for (let step = 0; step < 8; step += 1) {
+    await act(async () => { for (let turn = 0; turn < 8; turn += 1) await Promise.resolve(); });
+  }
+}
+
+async function advanceGeneration(milliseconds: number) {
+  await act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });
+  await flushGeneration();
+}
 
 describe("useActivityBlockLabels", () => {
+  it("retries a missing answer after backoff, then reuses the saved window across remounts", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(DAY + "T18:00:00"));
+    const { tracker } = fakeTracker();
+    tracker.getTimeline.mockResolvedValue(FULL_SEGMENTS.slice(0, 1));
+    answerFor.mockResolvedValueOnce(null);
+    const input = args(tracker, { segments: SEGMENTS.slice(0, 1), now: Date.now });
+    const first = renderHook(() => useActivityBlockLabels(input));
+    await flushGeneration();
+    expect(inferenceCalls).toHaveLength(1);
+    expect(tracker.saveActivityTimelineWindow).not.toHaveBeenCalled();
+    await advanceGeneration(14 * 60_000);
+    expect(inferenceCalls).toHaveLength(1);
+    await advanceGeneration(60_000);
+    expect(inferenceCalls).toHaveLength(2);
+    expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1);
+    expect(blockFor(first.result.current, ["11"])?.display?.title).toBe("Checkout retry review");
+    first.unmount();
+    renderHook(() => useActivityBlockLabels(input));
+    await advanceGeneration(20 * 60_000);
+    expect(inferenceCalls).toHaveLength(2);
+    expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["throws", "declines"] as const)("retries when storing an answer %s, without settling the unsaved window", async (failure) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(DAY + "T18:00:00"));
+    const { tracker } = fakeTracker();
+    tracker.getTimeline.mockResolvedValue(FULL_SEGMENTS.slice(0, 1));
+    if (failure === "throws") tracker.saveActivityTimelineWindow.mockRejectedValueOnce(new Error("Store temporarily unavailable"));
+    else tracker.saveActivityTimelineWindow.mockResolvedValueOnce({ saved: 0, replaced: 0, cards: 0 });
+    const input = args(tracker, { segments: SEGMENTS.slice(0, 1), now: Date.now });
+    const { result } = renderHook(() => useActivityBlockLabels(input));
+    await flushGeneration();
+    expect(inferenceCalls).toHaveLength(1);
+    expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1);
+    expect(blockFor(result.current, ["11"])?.display).toBeNull();
+    await advanceGeneration(15 * 60_000);
+    expect(inferenceCalls).toHaveLength(2);
+    expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(2);
+    expect(blockFor(result.current, ["11"])?.display?.title).toBe("Checkout retry review");
+  });
+
+  it("discards an answer after date navigation and describes the unfinished date on return", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(DAY + "T18:00:00"));
+    const { tracker } = fakeTracker();
+    tracker.getTimeline.mockResolvedValue(FULL_SEGMENTS.slice(0, 1));
+    let finishFirst: (answer: ModelAnswer) => void = () => { throw new Error("No request started"); };
+    answerFor.mockImplementationOnce(() => new Promise<ModelAnswer>((resolve) => { finishFirst = resolve; }));
+    const input = args(tracker, { segments: SEGMENTS.slice(0, 1), now: Date.now });
+    const { result, rerender } = renderHook((value) => useActivityBlockLabels(value), { initialProps: input });
+    await flushGeneration();
+    expect(inferenceCalls).toHaveLength(1);
+    rerender({ ...input, startDay: "2026-10-15", endDay: "2026-10-15", segments: [] });
+    await flushGeneration();
+    await act(async () => { finishFirst([card("r1", "r1", "Checkout retry review", ["r1"])]); });
+    await flushGeneration();
+    expect(tracker.saveActivityTimelineWindow).not.toHaveBeenCalled();
+    rerender(input);
+    await flushGeneration();
+    expect(inferenceCalls).toHaveLength(2);
+    expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1);
+    expect(blockFor(result.current, ["11"])?.display?.title).toBe("Checkout retry review");
+  });
+
+  it.each([true, false])("resumes after titles are enabled with active=%s, including an older no-model empty window", async (active) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(DAY + "T18:00:00"));
+    const { tracker } = fakeTracker();
+    const records = FULL_SEGMENTS.slice(0, 1);
+    tracker.getTimeline.mockResolvedValue(records);
+    const [windowToRecover] = buildActivityTimelineWindows(DAY, records, new Date(DAY + "T00:00:00").getTime(), new Date(DAY + "T23:59:59").getTime());
+    await tracker.saveActivityTimelineWindow(activityTimelineWindowSaveInput(windowToRecover, [], "en", {}));
+    tracker.saveActivityTimelineWindow.mockClear();
+    window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, JSON.stringify({
+      ...DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+      optional: { ...DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional, windowTitle: false, contentContext: false },
+    }));
+    const input = args(tracker, { segments: SEGMENTS.slice(0, 1), active, background: true, now: Date.now });
+    const { result } = renderHook(() => useActivityBlockLabels(input));
+    await advanceGeneration(11 * 60_000);
+    expect(inferenceCalls).toHaveLength(0);
+    expect(tracker.getTimeline).not.toHaveBeenCalled();
+    expect(tracker.saveActivityTimelineWindow).not.toHaveBeenCalled();
+    await act(async () => {
+      window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, JSON.stringify(DEFAULT_AI_PRIVACY_REQUEST_SETTINGS));
+      window.dispatchEvent(new Event(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT));
+    });
+    await flushGeneration();
+    expect(inferenceCalls).toHaveLength(1);
+    expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1);
+    expect(tracker.saveActivityTimelineWindow.mock.calls[0][0].cards[0].title).toBe("Checkout retry review");
+    if (active) expect(blockFor(result.current, ["11"])?.display?.title).toBe("Checkout retry review");
+    else expect(result.current).toBeNull();
+    await advanceGeneration(11 * 60_000);
+    expect(inferenceCalls).toHaveLength(1);
+  });
+
+  it("retries a failed background request on its next cadence after backoff", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(DAY + "T18:00:00"));
+    const { tracker } = fakeTracker();
+    tracker.getTimeline.mockResolvedValue(FULL_SEGMENTS.slice(0, 1));
+    answerFor.mockResolvedValueOnce(null);
+    renderHook(() => useActivityBlockLabels(args(tracker, {
+      segments: [], active: false, background: true, now: Date.now,
+    })));
+    await flushGeneration();
+    expect(inferenceCalls).toHaveLength(1);
+    expect(tracker.saveActivityTimelineWindow).not.toHaveBeenCalled();
+    await advanceGeneration(10 * 60_000);
+    expect(inferenceCalls).toHaveLength(1);
+    await advanceGeneration(10 * 60_000);
+    expect(inferenceCalls).toHaveLength(2);
+    expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask again for an empty answer from the model after remount", async () => {
+    const { tracker } = fakeTracker();
+    tracker.getTimeline.mockResolvedValue(FULL_SEGMENTS.slice(0, 1));
+    answerFor.mockReturnValue([]);
+    const input = args(tracker, { segments: SEGMENTS.slice(0, 1) });
+    const first = renderHook(() => useActivityBlockLabels(input));
+    await waitFor(() => expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1));
+    expect(inferenceCalls).toHaveLength(1);
+    first.unmount();
+    renderHook(() => useActivityBlockLabels(input));
+    await flushGeneration();
+    expect(inferenceCalls).toHaveLength(1);
+    expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks a genuinely untitled window once per mount without spending a model request", async () => {
+    const { tracker } = fakeTracker();
+    tracker.getTimeline.mockResolvedValue(FULL_SEGMENTS.slice(3));
+    const input = args(tracker, { segments: SEGMENTS.slice(3) });
+    const first = renderHook(() => useActivityBlockLabels(input));
+    await waitFor(() => expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(1));
+    first.rerender();
+    await flushGeneration();
+    expect(tracker.getTimeline).toHaveBeenCalledTimes(1);
+    expect(inferenceCalls).toHaveLength(0);
+    first.unmount();
+    renderHook(() => useActivityBlockLabels(input));
+    await waitFor(() => expect(tracker.saveActivityTimelineWindow).toHaveBeenCalledTimes(2));
+    expect(tracker.getTimeline).toHaveBeenCalledTimes(2);
+    expect(inferenceCalls).toHaveLength(0);
+  });
+
   it("describes finished activity windows from full records, keeps a loose card as partial, and skips untitled windows", async () => {
     const { tracker } = fakeTracker();
     const { result } = renderHook(() => useActivityBlockLabels(args(tracker)));
@@ -229,10 +394,12 @@ describe("useActivityBlockLabels", () => {
     }));
     const untitled = fakeTracker();
     renderHook(() => useActivityBlockLabels(args(untitled.tracker)));
-    // Cards have no switch of their own; with no title allowed, every window is settled on the device.
-    await waitFor(() => expect(untitled.tracker.saveActivityTimelineWindow).toHaveBeenCalled());
+    // No title allowed: pause generation without writing completed empty windows.
+    await waitFor(() => expect(untitled.tracker.getActivityTimelineCards).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(inferenceCalls).toHaveLength(0);
+    expect(untitled.tracker.getTimeline).not.toHaveBeenCalled();
+    expect(untitled.tracker.saveActivityTimelineWindow).not.toHaveBeenCalled();
     cleanup();
 
     window.localStorage.removeItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY);
