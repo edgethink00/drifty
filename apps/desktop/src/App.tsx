@@ -12197,7 +12197,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         />
       ) : null}</ModalPresence>
 
-      <ModalPresence>{categoryEditorTarget ? (
+      <ModalPresence explicitTabNavigation>{categoryEditorTarget ? (
         <CategoryEditorSheet
           initialTarget={categoryEditorTarget}
           intelligenceUnavailable={editorIntelligenceLocked}

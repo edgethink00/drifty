@@ -126,6 +126,7 @@ export function CloudDeviceManagementPanel({
       )}
       {actionError ? <p className="cloud-device-management__message" role="status">{localizeSettingsError(actionError, effectiveLanguage, t)}</p> : null}
       <ModalPresence
+        explicitTabNavigation
         onDismiss={() => setPendingRemovalDevice(null)}
         dismissDisabled={revokingId !== null}
       >

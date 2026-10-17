@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEventHandler, type ReactNode } from "react";
 import {
   CATEGORY_CUSTOM_NAME_MAX_LENGTH,
   CATEGORY_DESCRIPTION_MAX_LENGTH,
@@ -1324,7 +1324,10 @@ export function CategoryEditorSheet({
                 label={t("projects.deleteConfirm.delete")}
                 danger
                 disabled={locked || projectsBusy}
-                onClick={() => {
+                onClick={(event) => {
+                  // WebKit does not focus buttons on click; retain the opener
+                  // before the nested confirmation captures its return target.
+                  event.currentTarget.focus();
                   setDeleteError(null);
                   setPendingDelete(project);
                 }}
@@ -1567,7 +1570,7 @@ export function CategoryEditorSheet({
           </div>
         </div>
       </section>
-      <ModalPresence>
+      <ModalPresence explicitTabNavigation>
         {pendingDelete ? (
           <ProjectDeleteConfirmation
             project={pendingDelete}
@@ -1600,7 +1603,7 @@ function QuietButton({ icon, label, danger = false, disabled, onClick }: {
   readonly label: string;
   readonly danger?: boolean;
   readonly disabled?: boolean;
-  readonly onClick?: () => void;
+  readonly onClick?: MouseEventHandler<HTMLButtonElement>;
 }) {
   return (
     <button type="button" className={"category-editor__quiet" + (danger ? " is-danger" : "")} disabled={disabled} onClick={onClick}>

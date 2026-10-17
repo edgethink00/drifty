@@ -404,7 +404,7 @@ export function AiSetupPanel({
         </section>
       )}
 
-      <ModalPresence>
+      <ModalPresence explicitTabNavigation>
         {modelPickers.openRouterModelPickerOpen ? (
         <OpenRouterModelDialog
           customModel={modelPickers.openRouterCustomModel}

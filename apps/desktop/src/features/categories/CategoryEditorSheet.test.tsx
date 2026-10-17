@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CUSTOMIZABLE_CATEGORIES, MAX_CATEGORY_COUNT, type Project } from "@drifty/domain";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -468,6 +468,19 @@ describe("CategoryEditorSheet", () => {
     expect(within(pane()).getByRole("alert").textContent).toBe("database is locked");
     expect(props.onClose).not.toHaveBeenCalled();
     expect(screen.getByRole("region", { name: "Drifty 2.0" })).toBeTruthy();
+  });
+
+  it("returns focus to the delete opener when canceling its nested confirmation", async () => {
+    const props = renderSheet({ initialTarget: { group: "project", key: "p1" } });
+    const opener = within(pane()).getByRole("button", { name: "프로젝트 삭제" });
+    // fireEvent.click, like a WebKit mouse click, does not focus the button.
+    fireEvent.click(opener);
+    const confirmation = screen.getByRole("dialog", { name: /Drifty 출시/ });
+    const cancel = within(confirmation).getByRole("button", { name: /취소/ });
+    await waitFor(() => expect(document.activeElement).toBe(cancel));
+    fireEvent.click(cancel);
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+    expect(props.onDeleteProject).not.toHaveBeenCalled();
   });
 
   it("archives a project at once and deletes it only after confirming", async () => {
