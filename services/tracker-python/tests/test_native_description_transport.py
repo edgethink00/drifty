@@ -6,7 +6,6 @@ import sys
 import subprocess
 import tempfile
 import time
-import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -14,7 +13,7 @@ from unittest.mock import patch
 from app.tracker.browser_content import capture_browser_content
 from app.tracker.macos_capture import CommandScope
 from app.storage.db import TrackerDatabase
-from app.tracker.browser_content_policy import configure_settings, save_content_setting
+from app.tracker.browser_content_policy import configure_settings, policy_snapshot, save_content_setting
 
 
 def native_fixture_source():
@@ -60,14 +59,21 @@ class NativeDescriptionTransportTests(unittest.TestCase):
         self.scope=CommandScope(time.monotonic()+2);self.addCleanup(self.scope.close)
         self.arguments=dict(pid=42,bundle_id='com.google.Chrome',page_url='https://example.org/course',page_title='Course',observed_at='2026-10-07T00:00:00Z',helper_path=self.helper)
 
-    def run_capture(self, reader_code):
+    def run_capture(self, reader_code, *, on_reader_poll=None):
         reader=self.path/'reader.py'
         reader.write_text('import os,json,subprocess,sys,time\nfrom pathlib import Path\n'
                           "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
                           +'Path('+repr(str(self.trace))+').write_text(json.dumps({"pid":os.getpid(),"parent":os.getppid(),"group":os.getpgrp(),"descendant":child.pid}))\n'+reader_code)
         def run(command, **options):
             self.calls.append(command)
-            if command[0]!=str(self.helper):command=[sys.executable,str(reader)]
+            if command[0]!=str(self.helper):
+                command=[sys.executable,str(reader)]
+                if on_reader_poll is not None:
+                    cancelled=options['cancelled']
+                    def poll():
+                        on_reader_poll(cancelled)
+                        return cancelled()
+                    options['cancelled']=poll
             return self.scope.run(command, **options)
         return capture_browser_content(**self.arguments,run_command=run)
 
@@ -113,20 +119,37 @@ class NativeDescriptionTransportTests(unittest.TestCase):
     def test_cross_process_setting_off_on_during_lookup_cancels_both_helpers(self):
         database=TrackerDatabase(self.path/'settings.sqlite3',perform_maintenance=False)
         self.addCleanup(database.close);configure_settings(database.path);save_content_setting(database,True)
-        errors=[]
-        def switch():
-            try:
-                until=time.monotonic()+1
-                while not self.trace.exists() and time.monotonic()<until:time.sleep(.002)
-                other=TrackerDatabase(database.path,perform_maintenance=False)
-                try:
-                    save_content_setting(other,False);save_content_setting(other,True)
-                finally:other.close()
-            except Exception as error:errors.append(type(error).__name__)
-        thread=threading.Thread(target=switch);thread.start()
-        result=self.run_capture('time.sleep(.3);print(json.dumps({"description":"Late description"}))')
-        thread.join(2)
-        self.assertEqual(errors,[]);self.assertFalse(thread.is_alive());self.assertIsNone(result)
+        initial_policy=policy_snapshot()
+        transitions=[]
+        def switch(cancelled):
+            if transitions or not self.trace.exists():
+                return
+            # Only switch after both owned helpers and the reader descendant
+            # exist. Finish OFF -> ON before the next real cancellation check,
+            # so the test proves generation invalidation rather than seeing OFF.
+            self.assertEqual(len(self.scope._children),2)
+            writer=subprocess.run([sys.executable,'-c',
+                'import json,os,sys\nfrom pathlib import Path\n'
+                'from app.storage.db import TrackerDatabase\n'
+                'from app.tracker.browser_content_policy import configure_settings,policy_snapshot,save_content_setting\n'
+                'db=TrackerDatabase(Path(sys.argv[1]),perform_maintenance=False)\n'
+                'configure_settings(db.path)\n'
+                'try:\n'
+                ' save_content_setting(db,False)\n'
+                ' save_content_setting(db,True)\n'
+                ' print(json.dumps({"pid":os.getpid(),"revision":policy_snapshot()[1]}),flush=True)\n'
+                'finally: db.close()\n',str(database.path)],
+                check=True,capture_output=True,text=True,timeout=1,
+                env={**os.environ,'PYTHONPATH':os.pathsep.join(filter(None,(
+                    str(Path(__file__).resolve().parents[1]),os.environ.get('PYTHONPATH'))))})
+            transitions.append(json.loads(writer.stdout))
+            self.assertTrue(cancelled(),'The running transport must observe the committed OFF/ON revision')
+        result=self.run_capture('time.sleep(60)',on_reader_poll=switch)
+        self.assertEqual(len(transitions),1,'The reader must start and commit OFF/ON before cancellation')
+        self.assertNotEqual(transitions[0]['pid'],os.getpid())
+        self.assertNotEqual(transitions[0]['revision'],initial_policy[1])
+        self.assertIsNotNone(policy_snapshot(),'The final setting is ON; cancellation must use its revision')
+        self.assertIsNone(result)
         self.assert_stopped();self.assertFalse(self.scope._children)
 
     def test_opera_real_stdio_success_and_failed_reader_never_create_body_context(self):

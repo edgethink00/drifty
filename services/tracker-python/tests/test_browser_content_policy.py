@@ -41,17 +41,21 @@ class ContentPolicyTests(unittest.TestCase):
     def test_generation_change_during_native_read_discards_entire_clue(self):
         arguments = dict(pid=42, bundle_id="com.google.Chrome", page_url="https://example.org/course",
                          page_title="Course", observed_at="2026-10-07T00:00:00Z", helper_path=Path("/qa/helper"))
-        reply = dict(version=1, pid=42, bundleId="com.google.Chrome", pageUrl=arguments["page_url"],
+        frame = dict(version=1, pid=42, bundleId="com.google.Chrome", pageUrl=arguments["page_url"],
                      pageTitle="Course", clues={"description": "Public course summary", "headings": ["Week 2"]})
-        def run(command, *, cancelled, timeout):
+        calls = []
+        def run(command, *, cancelled, timeout, reply):
+            calls.append(command)
+            self.assertTrue(callable(reply))
             self.assertFalse(cancelled())
             policy.save_content_setting(self.db, False)
             policy.save_content_setting(self.db, True)
             self.assertTrue(cancelled())
-            return json.dumps(reply)
+            return json.dumps(frame)
         with patch("sys.platform", "darwin"):
             self.assertIsNone(capture_browser_content(**arguments, run_command=run))
-            self.assertIsNotNone(capture_browser_content(**arguments, run_command=lambda *a, **k: json.dumps(reply)))
+            self.assertEqual(len(calls), 1, "The transport must execute the OFF/ON transition")
+            self.assertIsNotNone(capture_browser_content(**arguments, run_command=lambda *a, **k: json.dumps(frame)))
 
     def test_settings_application_configures_actual_db_path(self):
         policy.configure_settings(None)
