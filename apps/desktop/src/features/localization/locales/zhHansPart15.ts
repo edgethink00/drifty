@@ -51,4 +51,13 @@ export const SIMPLIFIED_CHINESE_PART_15 = {
   "settings.privacy.excludedItemsEmpty": "尚未隐藏任何应用或网站。",
   "settings.aiPrivacy.timelineCards": "时间线卡片",
   "settings.aiPrivacy.timelineCardsReceipt": "连接智能分析模型后，Drifty 会将每段已结束的活动（最长三小时）整理为时间线卡片，显示在日视图和周视图中。此请求按时间顺序列出该活动区间的记录：每条包含应用、网站域名、开始和结束时刻、使用秒数，以及在“窗口标题”或“内容上下文”设置允许时提供的一个标题。发送前会移除标题中的地址、邮箱地址和长标识符。金融、健康、成人、赌博和登录页面的记录不发送标题或网站信息；即时通讯应用和个人资料页面的记录不发送标题。请求中不包含日期或其他活动区间的记录。如果同时关闭“窗口标题”和“内容上下文”，就没有可供描述的标题，因此也会停止发送此类请求。",
+  "dashboard.today.phoneTime": "iPhone",
+  "dashboard.today.phoneTimeDefaultGroup": "分心应用",
+  "dashboard.today.phoneTimeAbout": "约{{duration}}",
+  "dashboard.today.phoneTimeNote": "由你的 iPhone 发送的大致使用时间，不计入总时长。",
+  "dashboard.today.phoneTimeCell": "iPhone，{{label}}，{{range}}，约{{duration}}",
+  "dashboard.today.phoneTimeLegendDetail": "在没有电脑活动记录的时段显示的 iPhone 大致使用时间",
+  "history.openPage": "在默认浏览器中打开",
+  "history.openPageAria": "{{title}} — 在浏览器中打开",
+  "history.openPageError": "无法打开此页面，请重试。",
 } as const;

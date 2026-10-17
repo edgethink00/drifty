@@ -483,11 +483,18 @@ button.flow-cell:focus {
 }
 
 .phone-flow-hover-card__metric > span {
+  flex: 1 1 0;
   min-width: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--text-muted);
   font-size: 0.72rem;
-  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.phone-flow-hover-card .phone-flow-hover-card__metric > strong {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 

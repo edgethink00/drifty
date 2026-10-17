@@ -51,4 +51,13 @@ export const BRAZILIAN_PORTUGUESE_PART_15 = {
   "settings.privacy.excludedItemsEmpty": "Nenhum app ou site está oculto ainda.",
   "settings.aiPrivacy.timelineCards": "Cartões da linha do tempo",
   "settings.aiPrivacy.timelineCardsReceipt": "Com um modelo de Inteligência conectado, o Drifty descreve cada período de atividade concluído (de no máximo três horas) em cartões da linha do tempo para as visões diária e semanal. Essa solicitação lista os registros do período em ordem cronológica: para cada um, o app, o domínio do site, os horários de início e fim, o tempo de uso em segundos e um título quando a configuração Título da janela ou Contexto do conteúdo permitir. Endereços, endereços de e-mail e identificadores longos são removidos dos títulos. Páginas de finanças, saúde, conteúdo adulto, apostas e login são enviadas sem título nem site; apps de mensagens e páginas de perfis pessoais, sem título. A data e os registros de outros períodos não são enviados nessa solicitação. Com Título da janela e Contexto do conteúdo desativados, não há títulos para descrever, então essas solicitações param.",
+  "dashboard.today.phoneTime": "iPhone",
+  "dashboard.today.phoneTimeDefaultGroup": "Apps de distração",
+  "dashboard.today.phoneTimeAbout": "Cerca de {{duration}}",
+  "dashboard.today.phoneTimeNote": "Tempo aproximado enviado pelo seu iPhone. Não é somado aos seus totais.",
+  "dashboard.today.phoneTimeCell": "iPhone, {{label}}, {{range}}, cerca de {{duration}}",
+  "dashboard.today.phoneTimeLegendDetail": "Tempo aproximado do iPhone, exibido nos períodos sem atividade registrada por um computador",
+  "history.openPage": "Abrir no navegador padrão",
+  "history.openPageAria": "{{title}} — abrir no navegador",
+  "history.openPageError": "Não foi possível abrir esta página. Tente novamente.",
 } as const;

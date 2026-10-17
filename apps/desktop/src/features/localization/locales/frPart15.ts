@@ -51,4 +51,13 @@ export const FRENCH_PART_15 = {
   "settings.privacy.excludedItemsEmpty": "Aucune application ni aucun site n’est encore masqué.",
   "settings.aiPrivacy.timelineCards": "Cartes de la chronologie",
   "settings.aiPrivacy.timelineCardsReceipt": "Lorsqu’un modèle d’Intelligence est connecté, Drifty décrit chaque période d’activité terminée (trois heures au maximum) sous forme de cartes de la chronologie pour les vues quotidienne et hebdomadaire. La requête énumère les enregistrements de cette période dans l’ordre chronologique : pour chacun, l’application, le domaine du site, les heures de début et de fin, la durée en secondes et un titre si le réglage Titre de la fenêtre ou Contexte du contenu l’autorise. Les adresses, les adresses e-mail et les longs identifiants sont retirés des titres. Les pages de finances, de santé, de contenu pour adultes, de jeux d’argent et de connexion sont envoyées sans titre ni site ; les applications de messagerie et les pages de profils personnels, sans titre. La date et les enregistrements des autres périodes ne sont pas envoyés dans cette requête. Lorsque Titre de la fenêtre et Contexte du contenu sont tous deux désactivés, il n’y a plus de titres à décrire : ces requêtes s’arrêtent donc.",
+  "dashboard.today.phoneTime": "iPhone",
+  "dashboard.today.phoneTimeDefaultGroup": "Applications distrayantes",
+  "dashboard.today.phoneTimeAbout": "Environ {{duration}}",
+  "dashboard.today.phoneTimeNote": "Durée approximative envoyée par votre iPhone. Elle n’est pas ajoutée à vos totaux.",
+  "dashboard.today.phoneTimeCell": "iPhone, {{label}}, {{range}}, environ {{duration}}",
+  "dashboard.today.phoneTimeLegendDetail": "Durée approximative sur iPhone, affichée lorsqu’aucun ordinateur n’a enregistré d’activité",
+  "history.openPage": "Ouvrir dans le navigateur par défaut",
+  "history.openPageAria": "{{title}} — ouvrir dans le navigateur",
+  "history.openPageError": "Impossible d’ouvrir cette page. Réessayez.",
 } as const;

@@ -51,4 +51,13 @@ export const JAPANESE_PART_15 = {
   "settings.privacy.excludedItemsEmpty": "非表示にしたアプリやサイトはまだありません。",
   "settings.aiPrivacy.timelineCards": "タイムラインカード",
   "settings.aiPrivacy.timelineCardsReceipt": "インテリジェンスモデルを接続すると、終了した各活動区間（最大3時間）をもとに、Driftyが日別・週別のタイムラインカードを作成します。このリクエストには、その区間の記録が時系列で含まれます。各記録には、アプリ、サイトのドメイン、開始・終了時刻、利用時間（秒）が含まれ、「ウィンドウタイトル」または「コンテンツ情報」の設定で許可されていれば、タイトルも1つ含まれます。タイトル内のアドレス、メールアドレス、長い識別子は送信前に削除します。金融・健康・成人向け・ギャンブル・ログインのページはタイトルとサイト情報を除き、メッセージアプリと個人プロフィールのページはタイトルを除いて送信します。日付や、ほかの区間の記録は一緒に送信しません。「ウィンドウタイトル」と「コンテンツ情報」を両方オフにすると、説明に使えるタイトルがなくなるため、このリクエストも停止します。",
+  "dashboard.today.phoneTime": "iPhone",
+  "dashboard.today.phoneTimeDefaultGroup": "気晴らしアプリ",
+  "dashboard.today.phoneTimeAbout": "約{{duration}}",
+  "dashboard.today.phoneTimeNote": "iPhoneから送信されたおおよその利用時間です。合計には加算されません。",
+  "dashboard.today.phoneTimeCell": "iPhone、{{label}}、{{range}}、約{{duration}}",
+  "dashboard.today.phoneTimeLegendDetail": "コンピュータの記録がない時間帯に表示される、iPhoneのおおよその利用時間",
+  "history.openPage": "デフォルトのブラウザで開く",
+  "history.openPageAria": "{{title}} — ブラウザで開く",
+  "history.openPageError": "このページを開けませんでした。もう一度お試しください。",
 } as const;

@@ -51,4 +51,13 @@ export const GERMAN_PART_15 = {
   "settings.privacy.excludedItemsEmpty": "Noch keine Apps oder Websites ausgeblendet.",
   "settings.aiPrivacy.timelineCards": "Zeitleistenkarten",
   "settings.aiPrivacy.timelineCardsReceipt": "Wenn ein Intelligenzmodell verbunden ist, fasst Drifty jeden abgeschlossenen Aktivitätsabschnitt von höchstens drei Stunden als Zeitleistenkarten für die Tages- und Wochenansicht zusammen. Die Anfrage enthält die Aufzeichnungen dieses Abschnitts in zeitlicher Reihenfolge: jeweils die App, die Website-Domain, die Start- und Enduhrzeit, die Nutzungsdauer in Sekunden sowie einen Titel, sofern deine Einstellung für Fenstertitel oder Inhaltskontext dies erlaubt. Adressen, E-Mail-Adressen und lange Kennungen werden aus den Titeln entfernt. Bei Finanz-, Gesundheits-, Erotik-, Glücksspiel- und Anmeldeseiten werden weder Titel noch Website gesendet; bei Messenger-Apps und persönlichen Profilseiten wird kein Titel gesendet. Das Datum und die Aufzeichnungen anderer Abschnitte werden nicht mitgesendet. Wenn sowohl Fenstertitel als auch Inhaltskontext deaktiviert sind, gibt es keine Titel zu beschreiben. Deshalb werden diese Anfragen dann nicht mehr gesendet.",
+  "dashboard.today.phoneTime": "iPhone",
+  "dashboard.today.phoneTimeDefaultGroup": "Ablenkende Apps",
+  "dashboard.today.phoneTimeAbout": "Etwa {{duration}}",
+  "dashboard.today.phoneTimeNote": "Ungefähre Nutzungszeit, die dein iPhone gesendet hat. Sie wird nicht zu deinen Gesamtzeiten addiert.",
+  "dashboard.today.phoneTimeCell": "iPhone, {{label}}, {{range}}, etwa {{duration}}",
+  "dashboard.today.phoneTimeLegendDetail": "Ungefähre iPhone-Nutzungszeit, angezeigt für Zeiträume ohne aufgezeichnete Computeraktivität",
+  "history.openPage": "Im Standardbrowser öffnen",
+  "history.openPageAria": "{{title}} — im Browser öffnen",
+  "history.openPageError": "Diese Seite konnte nicht geöffnet werden. Versuche es erneut.",
 } as const;
