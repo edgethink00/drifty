@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SyncDeletionRecord, SyncedSegmentInput, SyncOutboxSegment } from "@drifty/domain";
 import { supabase } from "../../lib/supabase/client";
 import { readCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
+import type { PhoneTimeBlock } from "../phone-time/phoneFlowCells";
 import type { SyncDevicesResponse, SyncPurgeResponse, SyncPushResponse, SyncResumeResponse } from "./deviceSyncTypes";
 
 const SYNC_EDGE_FUNCTION = "sync-activity";
@@ -38,7 +39,7 @@ export class DeviceSyncHttpError extends Error {
 }
 
 async function postSyncAction<TResponse>(
-  action: "push" | "pull" | "purge" | "devices" | "resume",
+  action: "push" | "pull" | "purge" | "devices" | "resume" | "phone-range",
   expectedAccountId: string,
   extra: Record<string, unknown> = {},
 ): Promise<TResponse> {
@@ -54,8 +55,10 @@ async function postSyncAction<TResponse>(
   if (!sessionAccountId || sessionAccountId !== expectedAccountId) {
     throw new DeviceSyncHttpError(409, "The signed-in account changed during device sync.", null, "sync_account_changed");
   }
-  const cloudDevice = action === "purge" ? null : await readCloudDevicePayload();
-  if (action !== "purge" && !cloudDevice) {
+  // Purging and reading the iPhone's phone time never register this Mac.
+  const needsCloudDevice = action !== "purge" && action !== "phone-range";
+  const cloudDevice = needsCloudDevice ? await readCloudDevicePayload() : null;
+  if (needsCloudDevice && !cloudDevice) {
     throw new Error("Device identity is unavailable.");
   }
 
@@ -128,6 +131,37 @@ export async function resumeCloudSyncData(
 
 export async function fetchSyncDevices(expectedAccountId: string): Promise<SyncDevicesResponse> {
   return postSyncAction<SyncDevicesResponse>("devices", expectedAccountId);
+}
+
+type PhoneTimeRow = {
+  readonly started_at: string;
+  readonly ended_at: string;
+  readonly minutes: number;
+  readonly group_label: string;
+};
+
+/**
+ * The iPhone's approximate phone blocks for a window, read for the flow chart.
+ * Only times, minutes and the group label exist on the server; this Mac sends
+ * no device identity, so reading registers nothing.
+ */
+export async function fetchPhoneTimeBlocks(
+  expectedAccountId: string,
+  from: string,
+  to: string,
+): Promise<PhoneTimeBlock[]> {
+  const response = await postSyncAction<{ readonly rows?: readonly PhoneTimeRow[] }>("phone-range", expectedAccountId, { from, to });
+  return (response.rows ?? []).flatMap((row) => {
+    const startMs = Date.parse(row.started_at);
+    const endMs = Date.parse(row.ended_at);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
+    return [{
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      minutes: Number.isFinite(row.minutes) ? row.minutes : Math.round((endMs - startMs) / 60_000),
+      label: typeof row.group_label === "string" ? row.group_label : "",
+    }];
+  });
 }
 
 export type SyncedSegmentsPage = {

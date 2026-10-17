@@ -23,6 +23,8 @@ type FlowChartLegendBaseProps = {
   readonly ariaLabel?: string;
   /** Opens the category editor on whatever the legend is showing. */
   readonly onEdit?: () => void;
+  /** Names the hatched iPhone cells while the chart shows any. */
+  readonly hasPhoneTime?: boolean;
 };
 
 type FlowChartLegendProps = FlowChartLegendBaseProps & (
@@ -76,6 +78,7 @@ export function FlowChartLegend({
   getAppBreakdown,
   hasUnclassified,
   onEdit,
+  hasPhoneTime = false,
 }: FlowChartLegendProps) {
   const { t } = useLocalization();
   // Each category sits where it counts: the productivity or added level it
@@ -103,6 +106,14 @@ export function FlowChartLegend({
   const categoryGroupLabel = (categories: readonly ActivityCategory[]) => categories.map((category) => localizedCategoryLabel(category, t)).join(", ");
   const categoryText = (category: ActivityCategory) => localizedCategoryLabel(category, t);
   const resolvedAriaLabel = ariaLabel ?? t("dashboard.today.flowLegend");
+  const phoneLegend = hasPhoneTime ? (
+    <span className="flow-chart-legend__group flow-chart-legend__group--phone">
+      <span className="flow-chart-legend__parent flow-chart-legend__parent--tone" title={t("dashboard.today.phoneTimeLegendDetail")}>
+        <span className="flow-chart-legend__phone-swatch" aria-hidden="true" />
+        <span className="flow-chart-legend__label">{t("dashboard.today.phoneTime")}</span>
+      </span>
+    </span>
+  ) : null;
   if (colorMode === "project") {
     return (
       <div className="flow-chart-legend flow-chart-legend--project" aria-label={t("dashboard.today.flowProjectLegend")}>
@@ -117,6 +128,7 @@ export function FlowChartLegend({
             </span>
           );
         })}
+        {phoneLegend}
         {editPencil}
       </div>
     );
@@ -223,6 +235,7 @@ export function FlowChartLegend({
         );
       }) : null}
       {unclassifiedLegend}
+      {phoneLegend}
       {editPencil}
     </div>
   );

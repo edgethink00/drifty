@@ -1,5 +1,9 @@
-import { logicalMinuteOfDay, type FlowIntervalMinutes } from "@drifty/domain";
-import type { FlowBlockHoverGroup } from "./flowHoverGroups";
+import { logicalMinuteOfDay, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
+
+/** Any run of cells to outline: a Mac activity group or one iPhone block. */
+export type FlowHighlightedCells = {
+  readonly blocks: readonly Pick<FlowBlock, "minuteOfDay">[];
+};
 
 export type FlowHoverOverlaySegment = {
   readonly hourIndex: number;
@@ -20,7 +24,7 @@ function overlayCellForMinute(minuteOfDay: number, intervalMinutes: FlowInterval
   };
 }
 
-export function buildFlowHoverOverlaySegments(group: FlowBlockHoverGroup, intervalMinutes: FlowIntervalMinutes, startOfDayMinutes: number): readonly FlowHoverOverlaySegment[] {
+export function buildFlowHoverOverlaySegments(group: FlowHighlightedCells, intervalMinutes: FlowIntervalMinutes, startOfDayMinutes: number): readonly FlowHoverOverlaySegment[] {
   const cells = group.blocks
     .map((block) => overlayCellForMinute(block.minuteOfDay, intervalMinutes, startOfDayMinutes))
     .sort((left, right) => left.hourIndex - right.hourIndex || left.rowIndex - right.rowIndex);

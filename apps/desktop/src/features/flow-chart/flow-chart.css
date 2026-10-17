@@ -407,6 +407,90 @@ button.flow-cell:focus {
     color-mix(in srgb, var(--surface) 20%, transparent);
 }
 
+/* Approximate iPhone time: a quiet hatched ink, apart from every category
+   color, drawn only in cells the Mac left empty. */
+.flow-chart-card,
+.phone-flow-hover-card {
+  --flow-phone-tone: color-mix(in srgb, var(--text-soft) 64%, var(--surface));
+  --flow-phone-fill: color-mix(in srgb, var(--flow-phone-tone) 30%, var(--surface));
+  --flow-phone-hatch: repeating-linear-gradient(
+    -45deg,
+    var(--flow-phone-tone) 0,
+    var(--flow-phone-tone) 1.5px,
+    var(--flow-phone-fill) 1.5px,
+    var(--flow-phone-fill) 4px
+  );
+}
+
+.flow-cell--phone {
+  background: var(--flow-phone-fill);
+}
+
+.flow-cell--phone .flow-cell__mark {
+  background: var(--flow-phone-hatch);
+  box-shadow: none;
+}
+
+.flow-chart-legend__phone-swatch {
+  width: 0.546rem;
+  height: 0.546rem;
+  display: inline-block;
+  flex: 0 0 0.546rem;
+  border-radius: 2px;
+  background: var(--flow-phone-hatch);
+}
+
+/* The other chips are uppercase labels; a product name keeps its own case. */
+.flow-chart-legend__group--phone .flow-chart-legend__parent {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.phone-flow-hover-card {
+  width: min(17.5rem, calc(100vw - 2rem));
+}
+
+.phone-flow-hover-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.phone-flow-hover-card__head > span:last-child {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.phone-flow-hover-card__swatch {
+  width: 0.72rem;
+  height: 0.72rem;
+  flex: 0 0 auto;
+  border-radius: 3px;
+  background: var(--flow-phone-hatch);
+}
+
+.phone-flow-hover-card__metric {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-strong) 62%, transparent);
+}
+
+.phone-flow-hover-card__metric > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── 2026-07 dashboard redesign ──
    The head no longer carries a "flow chart" label: the legend hugs the left
    edge and the segment controls stay right (actions are row-reverse). */

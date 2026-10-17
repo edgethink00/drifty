@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import {
   logicalMinuteOfDay,
   normalizeStartOfDayMinutes,
@@ -29,12 +30,17 @@ import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "./flowHover
 import type { AnchoredFlowHoverState } from "./useFlowChartHoverDelegation";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
+import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
+import { moveFlowHoverCardToPointer } from "./FlowChartHoverCards";
+import { buildPhoneFlowCells, type PhoneFlowCell, type PhoneTimeBlock } from "../phone-time/phoneFlowCells";
+import { PhoneFlowHoverCard, type PhoneFlowHoverState } from "../phone-time/PhoneFlowHoverCard";
 
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
 const FLOW_CELL_BASE_MIN_HEIGHT_REM = 0.5;
 const FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM = 0.76;
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_ACTIVITY_SEGMENTS: readonly ActivitySegment[] = [];
+const EMPTY_PHONE_CELLS: ReadonlyMap<number, PhoneFlowCell> = new Map();
 /** How long a record sent from History may take to appear before it is dropped. */
 const FLOW_REVEAL_GIVE_UP_MS = 5000;
 
@@ -62,6 +68,7 @@ export function FlowChartView({
   onEditCategories,
   revealSegmentId = null,
   onRevealSettled,
+  phoneTime,
 }: {
   readonly classifiedResultIds?: ReadonlySet<string>;
   blocks: FlowBlock[];
@@ -96,6 +103,8 @@ export function FlowChartView({
   revealSegmentId?: string | null;
   /** Called once the card opens, or when the day holds no such record. */
   onRevealSettled?: () => void;
+  /** The iPhone's approximate time for the shown day, drawn where the Mac recorded nothing. */
+  phoneTime?: { readonly day: string; readonly blocks: readonly PhoneTimeBlock[] };
 }) {
   const { t } = useLocalization();
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
@@ -142,6 +151,16 @@ export function FlowChartView({
     for (const block of blocks) next.set(`${block.minuteOfDay}`, block);
     return next;
   }, [blocks]);
+  const phoneCellsByMinute = useMemo(() => (
+    phoneTime && phoneTime.blocks.length > 0
+      ? buildPhoneFlowCells(phoneTime.blocks, phoneTime.day, intervalMinutes, boundaryMinutes, (minute) => blockByCell.has(`${minute}`))
+      : EMPTY_PHONE_CELLS
+  ), [blockByCell, boundaryMinutes, intervalMinutes, phoneTime]);
+  const [phoneHover, setPhoneHover] = useState<PhoneFlowHoverState | null>(null);
+  const phoneHoverCardRef = useRef<HTMLDivElement>(null);
+  const phoneHoverCells = useMemo(() => (
+    phoneHover ? { blocks: [...phoneCellsByMinute.values()].filter((cell) => cell.block === phoneHover.block) } : null
+  ), [phoneCellsByMinute, phoneHover]);
   const segmentsById = useMemo(
     () => new Map(segments.map((segment) => [segment.id, segment])),
     [segments],
@@ -279,6 +298,29 @@ export function FlowChartView({
       t,
     );
   }, [activityActionsEnabled, activityInspector, inspectedSegments, t]);
+  // iPhone cells only describe themselves on hover; they never open the editor.
+  const activityInspectorOpen = activityInspector !== null;
+  useEffect(() => {
+    if (!flowGridElement || phoneCellsByMinute.size === 0 || activityInspectorOpen) return undefined;
+    const handlePointerMove = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-phone-minute]") : null;
+      const cell = target ? phoneCellsByMinute.get(Number(target.dataset.phoneMinute)) : undefined;
+      if (!cell) {
+        setPhoneHover((current) => (current ? null : current));
+        return;
+      }
+      setPhoneHover((current) => (current?.block === cell.block ? current : { block: cell.block, x: event.clientX, y: event.clientY }));
+      moveFlowHoverCardToPointer(phoneHoverCardRef.current, event.clientX, event.clientY);
+    };
+    const handlePointerLeave = () => setPhoneHover(null);
+    flowGridElement.addEventListener("pointermove", handlePointerMove);
+    flowGridElement.addEventListener("pointerleave", handlePointerLeave);
+    return () => {
+      flowGridElement.removeEventListener("pointermove", handlePointerMove);
+      flowGridElement.removeEventListener("pointerleave", handlePointerLeave);
+      setPhoneHover(null);
+    };
+  }, [activityInspectorOpen, flowGridElement, phoneCellsByMinute]);
   // The minute axis sits a hair under the shared 11px floor. It is the densest
   // repeated label in the app (up to 20 marks per hour), so at the full floor it
   // read heavier than everything around it; 3% back keeps it legible without
@@ -304,6 +346,7 @@ export function FlowChartView({
         projectModeAvailable={projectModeAvailable}
         projectLegend={projectLegend}
         onEditCategories={onEditCategories}
+        hasPhoneTime={phoneCellsByMinute.size > 0}
       />
 
       <FlowChartGrid
@@ -318,7 +361,15 @@ export function FlowChartView({
         setFlowGridElement={setFlowGridElement}
         onOpenActivity={openActivityInspector}
         inspectedGroup={activityInspector?.group ?? null}
+        phoneCellsByMinute={phoneCellsByMinute}
       />
+      {flowGridElement && phoneHoverCells && phoneHoverCells.blocks.length > 0
+        ? createPortal(
+            <FlowHoverGroupHighlights group={phoneHoverCells} intervalMinutes={intervalMinutes} boundaryMinutes={boundaryMinutes} />,
+            flowGridElement,
+          )
+        : null}
+      {phoneHover && !activityInspector ? <PhoneFlowHoverCard hover={phoneHover} cardRef={phoneHoverCardRef} /> : null}
 
       <FlowHoverLayer
         previewAnchorRef={previewAnchorRef}

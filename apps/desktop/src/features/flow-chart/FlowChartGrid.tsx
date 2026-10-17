@@ -10,6 +10,8 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import { levelFor } from "../productivity-levels/productivityLevelView";
 import { useProductivityLevels } from "../settings/categoryCustomizationStore";
+import type { PhoneFlowCell } from "../phone-time/phoneFlowCells";
+import { phoneTimeDurationLabel, phoneTimeRangeLabel } from "../phone-time/phoneTimeFormat";
 
 type FlowProjectCellStyle = CSSProperties & Record<"--flow-project-color", string>;
 
@@ -38,6 +40,11 @@ type FlowChartGridProps = {
    * painted cells are hidden from the accessibility tree.
    */
   readonly readOnlyPreview?: FlowChartReadOnlyPreview;
+  /**
+   * Approximate iPhone time drawn only in cells the Mac left empty. These
+   * cells are not activity: they open nothing and only describe themselves.
+   */
+  readonly phoneCellsByMinute?: ReadonlyMap<number, PhoneFlowCell>;
 };
 
 type FlowCurrentHourStyle = CSSProperties & Record<"--flow-current-hour", number>;
@@ -60,6 +67,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
   onOpenActivity,
   inspectedGroup = null,
   readOnlyPreview,
+  phoneCellsByMinute,
 }: FlowChartGridProps) {
   const productivityLevels = useProductivityLevels();
   const { effectiveLanguage, t } = useLocalization();
@@ -74,6 +82,18 @@ export const FlowChartGrid = memo(function FlowChartGrid({
     timeBlockPrefix: effectiveLanguage === "ko" ? "시간대" : effectiveLanguage === "es" ? "Franja horaria" : "Time block",
     durationPrefix: effectiveLanguage === "ko" ? "소요 시간" : effectiveLanguage === "es" ? "Duración" : "Duration",
   }), [effectiveLanguage, hoverGroupsByCell, productivityLevels, t]);
+  const phoneCellAriaLabels = useMemo(() => {
+    const labels = new Map<number, string>();
+    for (const cell of phoneCellsByMinute?.values() ?? []) {
+      if (!cell.isFirstOfBlock) continue;
+      labels.set(cell.minuteOfDay, t("dashboard.today.phoneTimeCell", {
+        label: cell.block.label.trim() || t("dashboard.today.phoneTimeDefaultGroup"),
+        range: phoneTimeRangeLabel(cell.block, effectiveLanguage),
+        duration: phoneTimeDurationLabel(cell.block, effectiveLanguage),
+      }));
+    }
+    return labels;
+  }, [effectiveLanguage, phoneCellsByMinute, t]);
   // The grid is one tab stop: only one cell is in the tab order and the arrow
   // keys move between cells, so the controls after the chart are one Tab away
   // instead of a hundred. It starts on the day's earliest cell.
@@ -188,6 +208,23 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                 const block = blockByCell.get(`${minuteOfDay}`);
                 const isCurrentHourCell = hour === currentHourIndex && minuteOffset === currentMinuteOffset;
                 if (!block) {
+                  const phoneCell = phoneCellsByMinute?.get(minuteOfDay);
+                  if (phoneCell) {
+                    const phoneLabel = phoneCellAriaLabels.get(minuteOfDay);
+                    return (
+                      <span
+                        className={`flow-cell flow-cell--phone${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
+                        key={minuteOfDay}
+                        role={phoneLabel ? "img" : undefined}
+                        aria-label={phoneLabel}
+                        aria-hidden={phoneLabel ? undefined : true}
+                        data-phone-minute={minuteOfDay}
+                        data-phone-block={phoneCell.blockIndex}
+                      >
+                        <span className="flow-cell__mark" aria-hidden="true" />
+                      </span>
+                    );
+                  }
                   return (
                     <span
                       className={`flow-cell flow-cell--empty${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}

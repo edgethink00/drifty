@@ -1,11 +1,10 @@
 import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import type { FlowIntervalMinutes } from "@drifty/domain";
-import { buildFlowHoverOverlaySegments } from "./flowHoverOverlay";
-import type { FlowBlockHoverGroup } from "./flowHoverGroups";
+import { buildFlowHoverOverlaySegments, type FlowHighlightedCells } from "./flowHoverOverlay";
 
 type FlowHoverGroupHighlightsProps = {
-  readonly group: FlowBlockHoverGroup;
+  readonly group: FlowHighlightedCells;
   readonly intervalMinutes: FlowIntervalMinutes;
   readonly boundaryMinutes: number;
   readonly variant?: "hover" | "pinned";

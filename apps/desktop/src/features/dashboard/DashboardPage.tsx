@@ -44,6 +44,7 @@ import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 import type { IndividualPricingQuote } from "../billing/individualPricing";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
+import type { PhoneTimeBlock } from "../phone-time/phoneFlowCells";
 
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
@@ -132,6 +133,8 @@ type DashboardPageProps = {
   /** A record opened from History; the Day or Week view opens its block's card. */
   readonly revealSegmentId?: string | null;
   readonly onRevealSettled?: () => void;
+  /** Approximate iPhone time for the selected day, shown only on the Day flow chart. */
+  readonly phoneTimeBlocks?: readonly PhoneTimeBlock[];
 };
 
 export function DashboardPage({
@@ -205,6 +208,7 @@ export function DashboardPage({
   onEditCategories,
   revealSegmentId = null,
   onRevealSettled,
+  phoneTimeBlocks,
 }: DashboardPageProps) {
   const { effectiveLanguage, t } = useLocalization();
   const productivityLevels = useProductivityLevels();
@@ -238,6 +242,10 @@ export function DashboardPage({
     initialDataLoading ? "page--loading-skeleton" : null,
   ].filter(Boolean).join(" ");
   const isDashboardReplayActive = dashboardReplay !== null;
+  const flowPhoneTime = useMemo(
+    () => (phoneTimeBlocks && phoneTimeBlocks.length > 0 && !isDashboardReplayActive ? { day: selectedDay, blocks: phoneTimeBlocks } : undefined),
+    [isDashboardReplayActive, phoneTimeBlocks, selectedDay],
+  );
   const hasMeasuredActivity = totalSeconds > 0 || hasTimelineData || isDashboardReplayActive;
   const logicalToday = logicalTodayIsoDate(startOfDayMinutes);
   const selectedDayDisplayLabel = effectiveLanguage !== "en" ? formatLocalizedDayLabel(selectedDay, effectiveLanguage) : selectedDayLabel;
@@ -475,6 +483,7 @@ export function DashboardPage({
                   classificationOptions={dashboardClassificationOptions}
                   revealSegmentId={revealSegmentId}
                   onRevealSettled={onRevealSettled}
+                  phoneTime={flowPhoneTime}
                 />
               </div>
             </div>

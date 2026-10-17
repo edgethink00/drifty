@@ -1253,3 +1253,39 @@ describe("FlowChartView keyboard", () => {
     expect(cell(840).tabIndex).toBe(-1);
   });
 });
+
+describe("FlowChartView iPhone time", () => {
+  const localIso = (hour: number, minute: number) => new Date(2026, 3, 6, hour, minute).toISOString();
+
+  it("draws approximate phone time only in empty cells, as a described, non-interactive layer", () => {
+    render(
+      <FlowChartView
+        blocks={[makeFlowBlock()]}
+        appIcons={{}}
+        intervalMinutes={4}
+        phoneTime={{ day: "2026-04-06", blocks: [{ startedAt: localIso(14, 0), endedAt: localIso(14, 12), minutes: 12, label: "SNS" }] }}
+      />,
+    );
+
+    const macCell = document.querySelector<HTMLElement>('[data-flow-minute="840"]');
+    expect(macCell?.tagName).toBe("BUTTON");
+    expect(macCell?.classList.contains("flow-cell--phone")).toBe(false);
+    const phoneCells = Array.from(document.querySelectorAll<HTMLElement>(".flow-cell--phone"));
+    expect(phoneCells.map((cell) => cell.dataset.phoneMinute)).toEqual(["844", "848"]);
+    expect(phoneCells.every((cell) => cell.tagName === "SPAN" && !cell.hasAttribute("tabindex"))).toBe(true);
+    expect(screen.getAllByRole("img", { name: /^iPhone, SNS, .*about 12m$/ })).toHaveLength(1);
+    expect(document.querySelector(".flow-chart-legend__group--phone")?.textContent).toBe("iPhone");
+
+    fireNativePointerMove(phoneCells[1], 120, 80);
+    const card = screen.getByRole("tooltip");
+    expect(card.textContent).toContain("SNS");
+    expect(card.textContent).toContain("It isn't added to your totals.");
+    expect(document.querySelectorAll(".flow-hover-group-highlight").length).toBeGreaterThan(0);
+  });
+
+  it("adds no iPhone legend or cells without phone time", () => {
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} />);
+    expect(document.querySelector(".flow-cell--phone")).toBeNull();
+    expect(document.querySelector(".flow-chart-legend__group--phone")).toBeNull();
+  });
+});

@@ -312,6 +312,7 @@ import {
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
 import { fetchFriendInvite } from "./features/billing/billingService";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
+import { usePhoneTimeBlocks } from "./features/phone-time/usePhoneTimeBlocks";
 import { buildRemoteDeviceLabels } from "./features/device-sync/deviceTimelineLabels";
 import { fetchSyncDevices, purgeCloudSyncData, resumeCloudSyncData } from "./features/device-sync/deviceSyncApi";
 import { resetAccountSyncIdentity } from "./features/device-sync/accountDeletionSyncReset";
@@ -2422,6 +2423,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // timeline never silently hides local history.
     if (!deviceSyncActive) setDeviceTimelineFilter("all");
   }, [deviceSyncActive]);
+  // The iPhone's approximate time for the Day flow chart. Device sync (Pro)
+  // must be on for this Mac; a single-device filter hides the phone.
+  const phoneTimeBlocks = usePhoneTimeBlocks({
+    active: deviceSyncActive && activeTab === "dashboard" && dashPeriod === "Today" && deviceTimelineFilter === "all",
+    accountId: deviceSyncAccountId,
+    day: selectedDay,
+    startOfDayMinutes,
+  });
   const [deviceSyncPurging, setDeviceSyncPurging] = useState(false);
   // Keep destructive confirmation inside the shared app modal system so its
   // hierarchy and keyboard behavior match the rest of the product.
@@ -11529,6 +11538,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onEditCategories={setCategoryEditorTarget}
             revealSegmentId={historyRecordReveal}
             onRevealSettled={clearHistoryRecordReveal}
+            phoneTimeBlocks={phoneTimeBlocks}
           />
           </ActivityLabelsContext.Provider>
         ) : null}

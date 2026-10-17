@@ -14,7 +14,7 @@ vi.mock("../../lib/supabase/client", () => ({
   supabase: { auth: { getSession: mocks.getSession } },
 }));
 
-import { fetchSyncedDeletionsPage, fetchSyncedSegmentsPage, purgeCloudSyncData } from "./deviceSyncApi";
+import { fetchPhoneTimeBlocks, fetchSyncedDeletionsPage, fetchSyncedSegmentsPage, purgeCloudSyncData } from "./deviceSyncApi";
 
 describe("device sync API purge", () => {
   beforeEach(() => {
@@ -85,5 +85,33 @@ describe("device sync API purge", () => {
     mocks.invoke.mockResolvedValue({ status: 402, body: JSON.stringify({ error: "Access expired" }) });
     await expect(fetchSyncedSegmentsPage(null, "device-1", "user-1", 3)).rejects.toMatchObject({ status: 402 });
     expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads the iPhone's phone time without registering this Mac", async () => {
+    mocks.invoke.mockResolvedValue({
+      status: 200,
+      body: JSON.stringify({
+        rows: [
+          { started_at: "2026-10-17T01:00:00Z", ended_at: "2026-10-17T01:25:00Z", minutes: 25, group_label: "SNS" },
+          { started_at: "2026-10-17T02:00:00Z", ended_at: "2026-10-17T02:00:00Z", minutes: 0, group_label: "SNS" },
+        ],
+        serverTime: "2026-10-17T03:00:00Z",
+      }),
+    });
+    await expect(fetchPhoneTimeBlocks("user-1", "2026-10-16T15:00:00.000Z", "2026-10-17T15:00:00.000Z")).resolves.toEqual([
+      { startedAt: "2026-10-17T01:00:00Z", endedAt: "2026-10-17T01:25:00Z", minutes: 25, label: "SNS" },
+    ]);
+    expect(mocks.readCloudDevicePayload).not.toHaveBeenCalled();
+    expect(mocks.invoke).toHaveBeenCalledWith("cloud_sync_http_post", {
+      request: expect.objectContaining({
+        bodyJson: {
+          action: "phone-range",
+          accountId: "user-1",
+          trialActivation: "explicit-v1",
+          from: "2026-10-16T15:00:00.000Z",
+          to: "2026-10-17T15:00:00.000Z",
+        },
+      }),
+    });
   });
 });

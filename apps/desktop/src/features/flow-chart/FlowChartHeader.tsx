@@ -17,6 +17,8 @@ type FlowChartHeaderProps = {
   readonly projectLegend?: readonly ProjectLegendEntry[];
   /** Opens the category editor on the group the chart is colored by. */
   readonly onEditCategories?: (target: CategoryEditorTarget) => void;
+  /** Whether the chart shows hatched iPhone time, which the legend then names. */
+  readonly hasPhoneTime?: boolean;
 };
 
 /** The editor group a flow color mode shows. */
@@ -33,6 +35,7 @@ export function FlowChartHeader({
   projectModeAvailable = false,
   projectLegend,
   onEditCategories,
+  hasPhoneTime = false,
 }: FlowChartHeaderProps) {
   const { t } = useLocalization();
   // Productivity, categories, projects: the category editor's tab order.
@@ -69,6 +72,7 @@ export function FlowChartHeader({
           setHoveredLegend={setHoveredLegend}
           projectLegend={projectLegend}
           onEdit={onEditCategories ? () => onEditCategories(categoryEditorGroupFor(colorMode)) : undefined}
+          hasPhoneTime={hasPhoneTime}
         />
       </div>
     </div>
