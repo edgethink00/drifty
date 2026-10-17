@@ -285,11 +285,24 @@ type WeekActivityInspectorState = {
   readonly sourceEventId: string;
   readonly sourceDay: string;
   readonly sourceSegmentIds: readonly string[];
+  /** Blocks holding the selected records when the card opened. */
+  readonly openedBlockCount: number;
   readonly regroupedBlockCount: number;
   readonly anchorElement: HTMLElement;
   readonly restoreFocusTarget: HTMLElement | null;
   readonly initialView: ActivityInspectorView;
 };
+
+/** The day's blocks that hold any of the selected records, with how many each holds. */
+function blocksHoldingRecords(events: readonly WeekCalendarEvent[] | undefined, segmentIds: readonly string[]) {
+  const sourceIds = new Set(segmentIds);
+  return (events ?? [])
+    .map((event) => ({
+      event,
+      overlap: event.segmentIds.reduce((count, segmentId) => count + (sourceIds.has(segmentId) ? 1 : 0), 0),
+    }))
+    .filter((candidate) => candidate.overlap > 0);
+}
 
 export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: WeekCalendarEventIdentity; appIcons: AppIconMap }) {
   const iconSrc = appIcons[identity.bundleId ?? identity.appName] ?? appIcons[identity.appName] ?? null;
@@ -638,19 +651,23 @@ export function WeekDashboard({
     const sourceDay = eventElement.closest<HTMLElement>(".week-v2-calendar__day-column")?.dataset.weekDay;
     if (!sourceDay) return;
     const restoreFocusTarget = eventElement.querySelector<HTMLElement>(".week-v2-calendar__event-open") ?? target;
+    const sourceSegmentIds = [...new Set(event.segmentIds)];
     activityInspectorSessionIdRef.current += 1;
     setActivityInspector({
       sessionId: activityInspectorSessionIdRef.current,
       event: buildWeekActivityInspectorEvent(event, segmentsById, projectBySegmentId, projectsById),
       sourceEventId: event.id,
       sourceDay,
-      sourceSegmentIds: [...new Set(event.segmentIds)],
+      sourceSegmentIds,
+      // A record can sit in two neighbouring blocks (a card boundary can cut
+      // it), so the notice below compares against this count rather than 1.
+      openedBlockCount: Math.max(1, blocksHoldingRecords(displayCalendarEvents.get(sourceDay), sourceSegmentIds).length),
       regroupedBlockCount: 1,
       anchorElement: eventElement,
       restoreFocusTarget,
       initialView,
     });
-  }, [projectBySegmentId, projectsById, segmentsById]);
+  }, [displayCalendarEvents, projectBySegmentId, projectsById, segmentsById]);
 
   // A direct classification can regroup the calendar event and therefore
   // change its generated id. Keep the pinned inspector on the event that still
@@ -659,13 +676,7 @@ export function WeekDashboard({
   useLayoutEffect(() => {
     setActivityInspector((current) => {
       if (!current) return current;
-      const sourceIds = new Set(current.sourceSegmentIds);
-      const candidates = (displayCalendarEvents.get(current.sourceDay) ?? [])
-        .map((candidate) => ({
-          event: candidate,
-          overlap: candidate.segmentIds.reduce((count, segmentId) => count + (sourceIds.has(segmentId) ? 1 : 0), 0),
-        }))
-        .filter((candidate) => candidate.overlap > 0);
+      const candidates = blocksHoldingRecords(displayCalendarEvents.get(current.sourceDay), current.sourceSegmentIds);
       const nextCandidate = candidates.reduce<(typeof candidates)[number] | null>((best, candidate) => {
         if (!best || candidate.overlap > best.overlap) return candidate;
         if (candidate.overlap < best.overlap) return best;
@@ -684,7 +695,10 @@ export function WeekDashboard({
       const nextAnchor = Array.from(calendarBodyRef.current?.querySelectorAll<HTMLElement>(".week-v2-calendar__event[data-event-id]") ?? [])
         .find((element) => element.dataset.eventId === nextEvent?.id) ?? null;
       if (!nextAnchor) return current;
-      const regroupedBlockCount = candidates.length;
+      // Only a change since the card opened is news; a refresh that leaves the
+      // selection in as many blocks (hiding a name, a new record elsewhere)
+      // says nothing.
+      const regroupedBlockCount = candidates.length === current.openedBlockCount ? 1 : candidates.length;
       return {
         ...current,
         // The rendered block is only the moving anchor. The inspector and Undo

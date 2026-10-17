@@ -888,6 +888,39 @@ describe("WeekDashboard activity inspector", () => {
     await waitFor(() => expect(onClassifyActivity).toHaveBeenCalledTimes(4));
   });
 
+  it("says the selection was regrouped only when its block count changed since the card opened", async () => {
+    // A card boundary can leave one record in two neighbouring blocks.
+    const neighbour = makeWeekCalendarEvent({
+      id: "event-neighbour",
+      appName: "Neighbour",
+      segmentIds: ["week-drift-browser"],
+      topMinutes: 10 * 60,
+      durationMinutes: 15,
+      activeDurationMinutes: 15,
+    });
+    const eventsFor = (events: WeekCalendarEvent[]) => new Map<string, WeekCalendarEvent[]>([["2024-01-03", events]]);
+    const { rerender } = renderWeekDashboard({ calendarEvents: eventsFor([groupedEvent, neighbour]), activityActionsEnabled: true });
+    const groupedBlock = document.querySelector<HTMLElement>('[data-event-id="event-grouped"]')!;
+    fireEvent.click(within(groupedBlock).getByRole("button", { name: /Open activity details/ }));
+    const inspector = screen.getByRole("dialog", { name: "Design review" });
+
+    // A refresh that keeps the selection in the same two blocks (hiding a name, say) is not news.
+    rerender(weekDashboardElement({ calendarEvents: eventsFor([{ ...groupedEvent }, { ...neighbour }]), activityActionsEnabled: true }));
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBe(inspector);
+    expect(within(inspector).queryByText(/Now shown as/)).toBeNull();
+
+    // Splitting it into three blocks is.
+    rerender(weekDashboardElement({
+      calendarEvents: eventsFor([
+        { ...groupedEvent, segmentIds: ["week-focus-code"], durationMinutes: 30 },
+        makeWeekCalendarEvent({ id: "event-split", segmentIds: ["week-focus-code"], topMinutes: 9 * 60 + 30, durationMinutes: 30 }),
+        neighbour,
+      ]),
+      activityActionsEnabled: true,
+    }));
+    await waitFor(() => expect(within(screen.getByRole("dialog", { name: "Design review" })).getByText(/Now shown as 3 blocks/)).toBeTruthy());
+  });
+
   it.each(["idle", "error"] as const)("closes a pinned week inspector when its source is missing after a %s refresh", async (refreshStatus) => {
     const baseOverrides: WeekDashboardRenderOverrides = {
       calendarEvents: groupedEvents,
