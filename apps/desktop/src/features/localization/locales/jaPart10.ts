@@ -27,7 +27,7 @@ export const JAPANESE_PART_10 = {
   "settings.pet.fastRunDescription": "初期設定ではオンです。ペットが自動で閉じる対象に向かうときに、前方へ走るアニメーションを使います。通常の散歩中や、実際の介入後に戻る際は、引き続き歩きます。",
   "settings.pet.toggleFastRun": "速く走るアニメーションを切り替える",
   "settings.pet.size": "ペットのサイズ",
-  "settings.pet.coat": "ペットの毛色",
+  "settings.pet.coat": "スキン",
   "settings.pet.coatIvory": "アイボリー",
   "settings.pet.coatCharcoal": "チャコール",
   "settings.pet.coatGrey": "グレー",

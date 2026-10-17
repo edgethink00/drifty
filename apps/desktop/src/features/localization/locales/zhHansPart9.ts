@@ -230,7 +230,7 @@ export const SIMPLIFIED_CHINESE_PART_9 = {
   "settings.proLooks.coatGuest": "登录即可免费试用所有毛色 7 天。",
   "settings.proLooks.trialAvailable": "开始试用后立即生效，所有 Pro 功能均可试用 7 天。",
   "settings.proLooks.iconUpgrade": "Pro 包含全部六款小猫图标。",
-  "settings.proLooks.coatUpgrade": "Pro 包含全部四种毛色。",
+  "settings.proLooks.coatUpgrade": "Pro 包含全部皮肤和自定义颜色。",
   "settings.proLooks.unavailable": "在账户设置中查看你的方案。",
   "settings.proLooks.checking": "正在检查你的方案，请稍后重试。",
   "settings.proLooks.iconPreviewHint": "关闭此预览以恢复你的图标。",

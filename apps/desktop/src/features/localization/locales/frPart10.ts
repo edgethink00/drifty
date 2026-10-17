@@ -27,7 +27,7 @@ export const FRENCH_PART_10 = {
   "settings.pet.fastRunDescription": "Activée par défaut. Utilise l’animation de course vers l’avant lorsque l’animal approche d’une cible de fermeture automatique. Les promenades ordinaires et les retours en fonctionnement normal se font toujours au pas.",
   "settings.pet.toggleFastRun": "Activer ou désactiver l’animation de course rapide",
   "settings.pet.size": "Taille de l’animal",
-  "settings.pet.coat": "Pelage de l’animal",
+  "settings.pet.coat": "Apparence",
   "settings.pet.coatIvory": "Ivoire",
   "settings.pet.coatCharcoal": "Anthracite",
   "settings.pet.coatGrey": "Gris",

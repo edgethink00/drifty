@@ -142,20 +142,23 @@ describe("pet coat picker", () => {
   beforeEach(() => window.localStorage.clear());
   afterEach(() => cleanup());
 
-  it("leaves Ivory and Grey free, locks the other coats, and tries a locked coat on the desktop pet", () => {
+  it("leaves Ivory and Grey free, offers five representatives and tries locked skins from More", async () => {
     const view = render(<CoatPicker access={{ state: "upgrade" }} />);
     expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual([
-      "Ivory", "Grey", "Charcoal · Pro", "Apricot · Pro", "Sage · Pro", "Plum · Pro",
+      "Ivory", "Grey", "Honey · Pro", "Mist Blue · Pro", "Plum · Pro",
     ]);
-    expect(view.container.querySelectorAll(".pro-look-lock")).toHaveLength(4);
+    expect(view.container.querySelectorAll(".pro-look-lock")).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const bubble = screen.getByRole("dialog", { name: "Skin" });
+    expect(within(bubble).getAllByRole("radio")).toHaveLength(31);
 
-    fireEvent.click(screen.getByRole("radio", { name: "Sage · Pro" }));
-    const bubble = screen.getByRole("dialog", { name: "Previewing the ‘Sage’ coat" });
-    expect(within(bubble).getByText("Pro includes all four coats.")).toBeTruthy();
+    fireEvent.click(within(bubble).getByRole("radio", { name: "Sage · Pro" }));
+    expect(within(bubble).getByText("Trying on")).toBeTruthy();
     expect(window.localStorage.getItem(PET_MODE_COAT_PREVIEW_STORAGE_KEY)).toBe("sage");
     expect(window.localStorage.getItem(PET_MODE_COAT_STORAGE_KEY)).not.toBe("sage");
 
-    fireEvent.click(within(bubble).getByRole("button", { name: "Go back" }));
+    fireEvent.click(within(bubble).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(window.localStorage.getItem(PET_MODE_COAT_PREVIEW_STORAGE_KEY)).toBeNull();
 
     fireEvent.click(screen.getByRole("radio", { name: "Grey" }));
@@ -167,9 +170,11 @@ describe("pet coat picker", () => {
     render(<CoatPicker access={{ state: "upgrade" }} />);
     expect(screen.getByRole("radio", { name: "Apricot" }).getAttribute("aria-checked")).toBe("true");
     fireEvent.click(screen.getByRole("radio", { name: "Ivory" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Apricot" }));
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Apricot" }).getAttribute("aria-checked")).toBe("true"));
-    expect(screen.getByRole("radio", { name: "Sage · Pro" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Skin" }));
+    fireEvent.click(dialog.getByRole("radio", { name: "Apricot" }));
+    await waitFor(() => expect(dialog.getByRole("radio", { name: "Apricot" }).getAttribute("aria-checked")).toBe("true"));
+    expect(dialog.getByRole("radio", { name: "Sage · Pro" })).toBeTruthy();
   });
 
   it("puts a Pro coat away when Pro is known to have ended", async () => {

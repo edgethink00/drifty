@@ -230,7 +230,7 @@ export const GERMAN_PART_9 = {
   "settings.proLooks.coatGuest": "Melde dich an, um alle Fellfarben 7 Tage lang kostenlos auszuprobieren.",
   "settings.proLooks.trialAvailable": "Starte die Testphase, und deine Auswahl wird sofort angewendet. Alle Pro-Funktionen stehen dir 7 Tage lang zur Verfügung.",
   "settings.proLooks.iconUpgrade": "Pro enthält alle sechs Katzensymbole.",
-  "settings.proLooks.coatUpgrade": "Pro enthält alle vier Fellfarben.",
+  "settings.proLooks.coatUpgrade": "Pro enthält alle Skins und eigene Farben.",
   "settings.proLooks.unavailable": "Prüfe deinen Tarif in den Kontoeinstellungen.",
   "settings.proLooks.checking": "Dein Tarif wird geprüft. Versuche es gleich erneut.",
   "settings.proLooks.iconPreviewHint": "Schließe die Vorschau, um zu deinem Symbol zurückzukehren.",

@@ -1,3 +1,4 @@
+import { PET_SKIN_PTBR } from "../petSkinTranslations";
 import type { TranslationKey } from "../translations";
 import { BRAZILIAN_PORTUGUESE_PART_1 } from "./ptBRPart1";
 import { BRAZILIAN_PORTUGUESE_PART_2 } from "./ptBRPart2";
@@ -16,6 +17,7 @@ import { BRAZILIAN_PORTUGUESE_PART_14 } from "./ptBRPart14";
 import { BRAZILIAN_PORTUGUESE_PART_15 } from "./ptBRPart15";
 
 export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
+  ...PET_SKIN_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,
   ...BRAZILIAN_PORTUGUESE_PART_2,
   ...BRAZILIAN_PORTUGUESE_PART_3,

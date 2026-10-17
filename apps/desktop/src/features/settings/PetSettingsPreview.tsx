@@ -1,3 +1,5 @@
+import { getPetModeCoatStyle } from "../pet-mode/petModeCoats";
+import { useProLooks } from "../pro-looks/useProLooksController";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
 import { PetModeCat } from "../pet-mode/PetModeCat";
@@ -13,10 +15,12 @@ export function PetSettingsPreview({ enabled, coat, size }: {
   const { t } = useLocalization();
   const [happy, setHappy] = useState(false);
   const wasEnabled = useRef(enabled);
-  const spec = getPetModeCoatSpec(coat);
+  const looks = useProLooks();
+  const shownCoat = looks?.preview?.kind === "coat" ? looks.preview.id : coat;
+  const spec = getPetModeCoatSpec(shownCoat);
   const previewLabel = t(enabled ? "settings.pet.preview" : "settings.pet.previewOff", {
     size,
-    coat: localizedPetCoatLabel(coat, t),
+    coat: localizedPetCoatLabel(shownCoat, t),
   });
 
   useEffect(() => {
@@ -37,13 +41,14 @@ export function PetSettingsPreview({ enabled, coat, size }: {
   return (
     <div className={`pet-settings-preview${enabled ? "" : " is-off"}`} role="img" aria-label={previewLabel}>
       <div className="pet-settings-preview__stage" aria-hidden="true" style={{
+        ...getPetModeCoatStyle(shownCoat),
         "--pet-fur": spec.fur,
         "--pet-ink": spec.ink,
-        "--pet-raster-filter": `url("#pet-mode-coat-${coat}")`,
+        "--pet-raster-filter": `url("#pet-mode-coat-${shownCoat}")`,
         "--pet-size-scale": size / 100,
       } as CSSProperties}>
         <div className="pet-settings-preview__cat">
-          <PetModeCat phase={enabled && happy ? "happy" : "idle"} facing="right" pawFrame={0}
+          <PetModeCat coat={shownCoat} phase={enabled && happy ? "happy" : "idle"} facing="right" pawFrame={0}
             publishHitRegion={false} decorative />
         </div>
       </div>

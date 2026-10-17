@@ -1,3 +1,4 @@
+import { PET_SKIN_JA } from "../petSkinTranslations";
 import type { TranslationKey } from "../translations";
 import { JAPANESE_PART_1 } from "./jaPart1";
 import { JAPANESE_PART_2 } from "./jaPart2";
@@ -16,6 +17,7 @@ import { JAPANESE_PART_14 } from "./jaPart14";
 import { JAPANESE_PART_15 } from "./jaPart15";
 
 export const JAPANESE_TRANSLATIONS = {
+  ...PET_SKIN_JA,
   ...JAPANESE_PART_1,
   ...JAPANESE_PART_2,
   ...JAPANESE_PART_3,

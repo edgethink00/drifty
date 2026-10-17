@@ -230,7 +230,7 @@ export const JAPANESE_PART_9 = {
   "settings.proLooks.coatGuest": "ログインすると、すべての毛色を7日間無料で試せます。",
   "settings.proLooks.trialAvailable": "トライアルを開始するとすぐに適用されます。すべてのPro機能を7日間利用できます。",
   "settings.proLooks.iconUpgrade": "Proには6種類すべての猫アイコンが含まれます。",
-  "settings.proLooks.coatUpgrade": "Proには4種類すべての毛色が含まれます。",
+  "settings.proLooks.coatUpgrade": "Proではすべてのスキンとカスタムカラーが使えます。",
   "settings.proLooks.unavailable": "アカウント設定でプランを確認してください。",
   "settings.proLooks.checking": "プランを確認中です。しばらくしてからもう一度お試しください。",
   "settings.proLooks.iconPreviewHint": "これを閉じると、元のアイコンに戻ります。",

@@ -230,7 +230,7 @@ export const BRAZILIAN_PORTUGUESE_PART_9 = {
   "settings.proLooks.coatGuest": "Entre para experimentar todas as pelagens grátis por 7 dias.",
   "settings.proLooks.trialAvailable": "Inicie o teste e a seleção será aplicada na hora. Você terá todos os recursos Pro por 7 dias.",
   "settings.proLooks.iconUpgrade": "O Pro inclui todos os seis ícones de gato.",
-  "settings.proLooks.coatUpgrade": "O Pro inclui todas as quatro pelagens.",
+  "settings.proLooks.coatUpgrade": "O Pro inclui todas as aparências e cores personalizadas.",
   "settings.proLooks.unavailable": "Confira seu plano em Configurações da conta.",
   "settings.proLooks.checking": "Verificando seu plano. Tente novamente em instantes.",
   "settings.proLooks.iconPreviewHint": "Feche esta prévia para voltar ao seu ícone.",

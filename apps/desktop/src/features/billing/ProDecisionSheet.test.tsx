@@ -44,7 +44,7 @@ describe("ProDecisionSheet", () => {
     const value = within(dialog).getByRole("list", { name: "Included with Pro" });
     expect(within(value).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "Cloud AI classification · Claude 5.5", "Project analysis · GPT-6", "Activity sync across 3 computers", "No downloads or API keys",
-      "4 pet coats and every accent color",
+      "Every pet skin and accent color",
     ]);
     expect(within(dialog).getByText("Cancel anytime.")).toBeTruthy();
     expect(within(dialog).queryByRole("button", { name: /local ai/i })).toBeNull();
@@ -181,7 +181,7 @@ describe("ProDecisionSheet opened from a locked Pro look", () => {
     expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
     const value = within(dialog).getByRole("list", { name: "Included with Pro" });
     const lines = within(value).getAllByRole("listitem");
-    expect(lines[lines.length - 1].textContent).toBe("4 pet coats, every app icon and accent color");
+    expect(lines[lines.length - 1].textContent).toBe("Every pet skin, app icon and accent color");
   });
 
   it("shows a coat on the desktop cat it would dress", () => {

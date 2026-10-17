@@ -1,3 +1,4 @@
+import { isPetModeCoat, PET_MODE_DEFAULT_COAT, type PetModeCoat } from "./petModeCoats";
 import type { ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import type { WatcherSnapshot } from "../companion/watcherData";
 
@@ -835,59 +836,9 @@ export function resolvePetModePresent(now = Date.now()): boolean {
 // side effect. `ivory` keeps the exact colors the current pet already ships.
 // Ivory and Grey are free; the rest are Pro looks (features/pro-looks), so the
 // free pair leads the picker.
-export const PET_MODE_COATS = ["ivory", "grey", "charcoal", "apricot", "sage", "plum"] as const;
-export type PetModeCoat = (typeof PET_MODE_COATS)[number];
-export const PET_MODE_DEFAULT_COAT: PetModeCoat = "ivory";
-
-export function isPetModeCoat(value: unknown): value is PetModeCoat {
-  return typeof value === "string" && (PET_MODE_COATS as readonly string[]).includes(value);
-}
-
-// One definition per coat, shared by the pet window and the Settings picker.
-// `fur` is the same value the CSS token carries, so the swatch always shows
-// the color the pet will actually be instead of a hand-maintained copy.
-export type PetModeCoatSpec = {
-  readonly value: PetModeCoat;
-  readonly fur: string;
-  readonly ink: string;
-};
-
-export const PET_MODE_COAT_SPECS: readonly PetModeCoatSpec[] = [
-  {
-    value: "ivory",
-    fur: "#e8e5da",
-    ink: "#171916",
-  },
-  {
-    value: "grey",
-    fur: "#a3a199",
-    ink: "#1a1b18",
-  },
-  {
-    value: "charcoal",
-    fur: "#33332f",
-    ink: "#f2f1ed",
-  },
-  {
-    value: "apricot",
-    fur: "#d9b18c",
-    ink: "#3c2b1c",
-  },
-  {
-    value: "sage",
-    fur: "#93a88e",
-    ink: "#1c241a",
-  },
-  {
-    value: "plum",
-    fur: "#7a5f6b",
-    ink: "#efe6ea",
-  },
-];
-
-export function getPetModeCoatSpec(coat: PetModeCoat): PetModeCoatSpec {
-  return PET_MODE_COAT_SPECS.find((spec) => spec.value === coat) ?? PET_MODE_COAT_SPECS[0];
-}
+export { PET_MODE_COATS, PET_MODE_QUICK_COATS, PET_MODE_COAT_FAMILIES, PET_MODE_COAT_SPECS,
+  PET_MODE_DEFAULT_COAT, getPetModeCoatSpec, isPetModeCoat,
+  type PetModeCoat, type PetModeCoatSpec } from "./petModeCoats";
 
 export const PET_MODE_SIZES = [50, 75, 100, 125] as const;
 export type PetModeSize = (typeof PET_MODE_SIZES)[number];

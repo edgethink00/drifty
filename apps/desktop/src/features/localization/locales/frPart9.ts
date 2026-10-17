@@ -230,7 +230,7 @@ export const FRENCH_PART_9 = {
   "settings.proLooks.coatGuest": "Connectez-vous pour essayer gratuitement tous les pelages pendant 7 jours.",
   "settings.proLooks.trialAvailable": "Démarrez l’essai pour l’appliquer immédiatement. Vous profiterez de toutes les fonctionnalités Pro pendant 7 jours.",
   "settings.proLooks.iconUpgrade": "Pro inclut les six icônes de chat.",
-  "settings.proLooks.coatUpgrade": "Pro inclut les quatre pelages.",
+  "settings.proLooks.coatUpgrade": "Pro inclut toutes les apparences et couleurs personnalisées.",
   "settings.proLooks.unavailable": "Vérifiez votre formule dans les réglages du compte.",
   "settings.proLooks.checking": "Vérification de votre formule. Réessayez dans un instant.",
   "settings.proLooks.iconPreviewHint": "Fermez cet aperçu pour retrouver votre icône.",

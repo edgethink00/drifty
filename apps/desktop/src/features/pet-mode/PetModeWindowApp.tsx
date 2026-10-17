@@ -1,5 +1,6 @@
+import { getPetModeCoatStyle } from "./petModeCoats";
 import { useAppTheme } from "../settings/useAppTheme";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { PET_MODE_DRIFT_REACTION_ENABLED } from "../../appFeatureSwitches";
@@ -134,7 +135,6 @@ import {
   type PetModePostDropReaction,
   type PetModePreviewAction,
   type PetModeSnapshot,
-  type PetModeCoat,
   type PetModeSize,
 } from "./petModeData";
 import {
@@ -248,6 +248,7 @@ export function PetModeWindowApp() {
   // refuses the flip, so keep the last one for when the sleepwalk begins.
   const heldSleepFacingRef = useRef<"left" | "right" | null>(null);
   const initialPhase: PetModeCatPhase = timedPauseUntil !== null ? "sleep" : initialAppearance.phase;
+  const [shownCoat, setShownCoat] = useState(resolvePetModeCoatShown);
   const [phase, setPhase] = useState<PetModeCatPhase>(initialPhase);
   const [dragPickupPose, setDragPickupPose] = useState<PetModeRestPose>("idle");
   const [dragReleasePose, setDragReleasePose] = useState<PetModeRestPose>("idle");
@@ -1390,21 +1391,23 @@ export function PetModeWindowApp() {
   // every *other* document, which is exactly the cross-window direction needed
   // here. Applying the coat as a `data-` attribute means the swap is a pure
   // style recalculation: no remount, no `src` change, no animation restart.
-  useEffect(() => {
-    const applyCoat = (coat: PetModeCoat) => {
-      document.documentElement.dataset.petCoat = coat;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.dataset.petCoat = shownCoat;
+    Object.entries(getPetModeCoatStyle(shownCoat)).forEach(([name, value]) => root.style.setProperty(name, value));
+    return () => {
+      delete root.dataset.petCoat;
+      Object.keys(getPetModeCoatStyle("custom-18-74")).forEach(name => root.style.removeProperty(name));
     };
-    // A Pro coat tried on from Settings wins over the saved coat while it lasts.
-    applyCoat(resolvePetModeCoatShown());
+  }, [shownCoat]);
+
+  useEffect(() => {
+    setShownCoat(resolvePetModeCoatShown());
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== PET_MODE_COAT_STORAGE_KEY && event.key !== PET_MODE_COAT_PREVIEW_STORAGE_KEY) return;
-      applyCoat(resolvePetModeCoatShown());
+      if (event.key === null || event.key === PET_MODE_COAT_STORAGE_KEY || event.key === PET_MODE_COAT_PREVIEW_STORAGE_KEY) setShownCoat(resolvePetModeCoatShown());
     };
     window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      delete document.documentElement.dataset.petCoat;
-    };
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   // Size arrives through shared storage, but the main webview resizes the
@@ -3531,6 +3534,7 @@ export function PetModeWindowApp() {
           aria-label="Pet Drifty cat. Drag to move. Right-click for options."
         >
           <PetModeCat
+            coat={shownCoat}
             suspended={!petModeEnabled || !petVisible}
             phase={phase}
             facing={facing}

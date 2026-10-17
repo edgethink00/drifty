@@ -135,7 +135,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "settings.pet.coat",
     section: "pet",
     titleKey: "settings.pet.coat",
-    keywords: "고양이 털 색상 무늬 cat fur coat color",
+    keywords: "고양이 털 색상 스킨 직접 선택 cat fur coat color skin custom",
   },
   {
     id: "settings.pet.size",

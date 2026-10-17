@@ -27,7 +27,7 @@ export const GERMAN_PART_10 = {
   "settings.pet.fastRunDescription": "Standardmäßig aktiviert. Nutzt die Animation für schnelles Vorwärtslaufen, wenn sich dein Haustier einem Ziel für automatisches Schließen nähert. Beim normalen Umherstreifen und auf Rückwegen im regulären Betrieb geht es weiterhin im Schritttempo.",
   "settings.pet.toggleFastRun": "Animation für schnelles Laufen ein- oder ausschalten",
   "settings.pet.size": "Haustiergröße",
-  "settings.pet.coat": "Fellfarbe",
+  "settings.pet.coat": "Skin",
   "settings.pet.coatIvory": "Elfenbein",
   "settings.pet.coatCharcoal": "Anthrazit",
   "settings.pet.coatGrey": "Grau",

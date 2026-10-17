@@ -1,0 +1,118 @@
+// Skin names already stored by earlier versions stay valid; custom skins add a
+// bounded, canonical hue/lightness string in the same local preference.
+export const PET_MODE_COATS = ["ivory", "grey", "oat", "fog", "taupe", "peach", "apricot", "honey", "ginger", "biscuit", "clay", "terracotta", "cocoa", "matcha", "sage", "eucalyptus", "moss", "mist", "denim", "teal", "dusk", "lavender", "wisteria", "mauve", "plum", "mulberry", "indigo", "charcoal", "espresso", "navy", "forest"] as const;
+export type PetModePresetCoat = (typeof PET_MODE_COATS)[number];
+export type PetModeCoat = PetModePresetCoat | `custom-${number}-${number}`;
+export const PET_MODE_DEFAULT_COAT: PetModeCoat = "ivory";
+export const PET_MODE_QUICK_COATS: readonly PetModePresetCoat[] = ["ivory", "grey", "honey", "mist", "plum"];
+export const PET_MODE_COAT_FAMILIES = ["neutral", "warm", "green", "blue", "dusk", "deep"] as const;
+export type PetModeCoatFamily = typeof PET_MODE_COAT_FAMILIES[number];
+export type PetModeCoatSpec = {
+  readonly value: PetModeCoat;
+  readonly fur: string;
+  readonly ink: string;
+  readonly family: PetModeCoatFamily | "custom";
+};
+export const PET_MODE_COAT_SPECS: readonly PetModeCoatSpec[] = [
+  { value: "ivory", fur: "#e8e5da", ink: "#171916", family: "neutral" },
+  { value: "grey", fur: "#a3a199", ink: "#1a1b18", family: "neutral" },
+  { value: "oat", fur: "#d9cdb4", ink: "#2a241b", family: "neutral" },
+  { value: "fog", fur: "#c3c6c9", ink: "#1b1e22", family: "neutral" },
+  { value: "taupe", fur: "#a89a8b", ink: "#251e18", family: "neutral" },
+  { value: "peach", fur: "#efcdb9", ink: "#43271b", family: "warm" },
+  { value: "apricot", fur: "#d9b18c", ink: "#3c2b1c", family: "warm" },
+  { value: "honey", fur: "#deb760", ink: "#3b2c0f", family: "warm" },
+  { value: "ginger", fur: "#d78f58", ink: "#3a200f", family: "warm" },
+  { value: "biscuit", fur: "#c4a07a", ink: "#33241a", family: "warm" },
+  { value: "clay", fur: "#c79a94", ink: "#3a1f20", family: "warm" },
+  { value: "terracotta", fur: "#b66a4e", ink: "#fbebe3", family: "warm" },
+  { value: "cocoa", fur: "#6b5042", ink: "#f3e6db", family: "warm" },
+  { value: "matcha", fur: "#a8b87e", ink: "#222a12", family: "green" },
+  { value: "sage", fur: "#93a88e", ink: "#1c241a", family: "green" },
+  { value: "eucalyptus", fur: "#8eaaa1", ink: "#12262a", family: "green" },
+  { value: "moss", fur: "#6e8560", ink: "#edf3e4", family: "green" },
+  { value: "mist", fur: "#aabdcf", ink: "#16212d", family: "blue" },
+  { value: "denim", fur: "#6d87a4", ink: "#edf2f8", family: "blue" },
+  { value: "teal", fur: "#517577", ink: "#e6f2f1", family: "blue" },
+  { value: "dusk", fur: "#475a73", ink: "#e7eef7", family: "blue" },
+  { value: "lavender", fur: "#b6adc4", ink: "#241d30", family: "dusk" },
+  { value: "wisteria", fur: "#9b8dbd", ink: "#1d1730", family: "dusk" },
+  { value: "mauve", fur: "#a7829a", ink: "#2c1823", family: "dusk" },
+  { value: "plum", fur: "#7a5f6b", ink: "#efe6ea", family: "dusk" },
+  { value: "mulberry", fur: "#6b4961", ink: "#f6e8f0", family: "dusk" },
+  { value: "indigo", fur: "#3e4260", ink: "#eaebf7", family: "dusk" },
+  { value: "charcoal", fur: "#33332f", ink: "#f2f1ed", family: "deep" },
+  { value: "espresso", fur: "#3b2e29", ink: "#f0e4da", family: "deep" },
+  { value: "navy", fur: "#2b3447", ink: "#e6ecf6", family: "deep" },
+  { value: "forest", fur: "#2f4439", ink: "#e5f0e8", family: "deep" },
+];
+
+export function parsePetModeCustomCoat(value: unknown): { hue: number; lightness: number } | null {
+  if (typeof value !== "string") return null;
+  const match = /^custom-(\d{1,3})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const hue = Number(match[1]), lightness = Number(match[2]);
+  return hue <= 359 && lightness >= 30 && lightness <= 92 && value === `custom-${hue}-${lightness}`
+    ? { hue, lightness } : null;
+}
+export function createPetModeCustomCoat(hue: number, lightness: number): PetModeCoat {
+  const h = Math.round(Math.max(0, Math.min(359, Number.isFinite(hue) ? hue : 18)));
+  const l = Math.round(Math.max(30, Math.min(92, Number.isFinite(lightness) ? lightness : 74)));
+  return `custom-${h}-${l}`;
+}
+export function isPetModeCoat(value: unknown): value is PetModeCoat {
+  return typeof value === "string" && ((PET_MODE_COATS as readonly string[]).includes(value) || parsePetModeCustomCoat(value) !== null);
+}
+
+// Gamut-map by lowering chroma, preserving the reviewed hue and lightness.
+// The custom editor fixes chroma at .06 and lightness to .30–.92.
+export function petSkinOklchHex(lightness: number, chroma: number, hue: number): string {
+  const angle = hue * Math.PI / 180;
+  for (let c = chroma; c >= -0.0001; c -= .002) {
+    const a = Math.max(0, c) * Math.cos(angle), b = Math.max(0, c) * Math.sin(angle);
+    const l = (lightness + .3963377774 * a + .2158037573 * b) ** 3;
+    const m = (lightness - .1055613458 * a - .0638541728 * b) ** 3;
+    const s = (lightness - .0894841775 * a - 1.291485548 * b) ** 3;
+    const rgb = [4.0767416621*l-3.3077115913*m+.2309699292*s, -1.2684380046*l+2.6097574011*m-.3413193965*s, -.0041960863*l-.7034186147*m+1.707614701*s];
+    if (rgb.every(v => v >= -.0005 && v <= 1.0005)) return "#" + rgb.map(v => {
+      const n = Math.max(0, Math.min(1, v));
+      return Math.round(255 * (n <= .0031308 ? 12.92*n : 1.055*n**(1/2.4)-.055)).toString(16).padStart(2,"0");
+    }).join("");
+  }
+  return "#808080";
+}
+export function getPetModeCoatSpec(coat: PetModeCoat): PetModeCoatSpec {
+  const custom = parsePetModeCustomCoat(coat);
+  if (custom) {
+    const l = custom.lightness / 100;
+    return { value: coat, family: "custom", fur: petSkinOklchHex(l, .06, custom.hue), ink: petSkinOklchHex(l < .58 ? .95 : .22, l < .58 ? .015 : .025, custom.hue) };
+  }
+  return PET_MODE_COAT_SPECS.find(spec => spec.value === coat) ?? PET_MODE_COAT_SPECS[0];
+}
+
+// The shipped six retain their original CSS grounding. Added/custom skins
+// derive their grounding from the same colors used by the picker and filter.
+const SHIPPED = new Set<string>(["ivory", "grey", "charcoal", "apricot", "sage", "plum"]);
+export function getPetModeCoatStyle(coat: PetModeCoat): Record<string, string> {
+  const { fur, ink } = getPetModeCoatSpec(coat);
+  const style: Record<string, string> = {
+    "--pet-fur": fur, "--pet-ink": ink,
+    "--pet-raster-filter": `url("#pet-mode-coat-${coat}")`,
+    "--pet-drag-raster-filter": `url("#pet-mode-coat-${coat}")`,
+  };
+  if (!SHIPPED.has(coat)) {
+    const dark = [1,3,5].reduce((sum, i) => sum + parseInt(fur.slice(i,i+2),16),0) / 3 < 144;
+    style["--pet-contact-shadow"] = dark ? "rgba(0,0,0,.26)" : "rgba(0,0,0,.18)";
+    style["--pet-drop-shadow"] = dark ? "drop-shadow(0 0 1px rgba(255,255,255,.4)) drop-shadow(0 5px 5px rgba(0,0,0,.23))" : "drop-shadow(0 5px 5px rgba(0,0,0,.15))";
+  }
+  return style;
+}
+
+export function petModeCoatRamp(coat: PetModeCoat): readonly string[] {
+  const spec = getPetModeCoatSpec(coat);
+  return [1,3,5].map(offset => {
+    const ink = parseInt(spec.ink.slice(offset,offset+2),16)/255;
+    const fur = parseInt(spec.fur.slice(offset,offset+2),16)/255;
+    return Array.from({length:18},(_,n) => (ink+(fur-ink)*Math.min(1,Math.max(0,(n-2)/13))+1e-6).toFixed(8)).join(" ");
+  });
+}

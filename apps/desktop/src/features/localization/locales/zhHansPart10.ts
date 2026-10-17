@@ -27,7 +27,7 @@ export const SIMPLIFIED_CHINESE_PART_10 = {
   "settings.pet.fastRunDescription": "默认开启。宠物接近自动关闭目标时，会使用向前奔跑的动画。日常漫步和正常返回时仍会步行。",
   "settings.pet.toggleFastRun": "切换快跑动画开关",
   "settings.pet.size": "宠物大小",
-  "settings.pet.coat": "宠物毛色",
+  "settings.pet.coat": "皮肤",
   "settings.pet.coatIvory": "象牙白",
   "settings.pet.coatCharcoal": "炭灰",
   "settings.pet.coatGrey": "灰色",

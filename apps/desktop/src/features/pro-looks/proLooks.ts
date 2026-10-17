@@ -11,7 +11,7 @@ import {
 
 /**
  * Pro looks: every Dock icon except Classic and Midnight (so Plum, Flow, Retro
- * and the cats), four of the six pet coats, and every accent color except Moss
+ * and the cats), all pet skins except Ivory and Grey, and every accent color except Moss
  * and Charcoal (custom colors included) are Pro. Classic, Midnight, the Ivory
  * and Grey coats, Moss and Charcoal stay free for everyone. A 7-day trial, an
  * individual plan and an organization seat all open every look.

@@ -46,20 +46,8 @@ export const APP_ICON_LABEL_KEYS: Readonly<Record<AppIconVariantId, TranslationK
   "cat-plum": "settings.appearance.appIconCatPlum",
 };
 
-const PET_COAT_LABEL_KEYS: Readonly<Record<PetModeCoat, TranslationKey>> = {
-  ivory: "settings.pet.coatIvory",
-  charcoal: "settings.pet.coatCharcoal",
-  grey: "settings.pet.coatGrey",
-  apricot: "settings.pet.coatApricot",
-  sage: "settings.pet.coatSage",
-  plum: "settings.pet.coatPlum",
-};
-
-export function localizedPetCoatLabel(
-  coat: PetModeCoat,
-  t: LocalizationController["t"],
-): string {
-  return t(PET_COAT_LABEL_KEYS[coat]);
+export function localizedPetCoatLabel(coat: PetModeCoat, t: LocalizationController["t"]): string {
+  return t(coat.startsWith("custom-") ? "settings.pet.skinCustom" : `settings.pet.skinNames.${coat}` as TranslationKey);
 }
 
 /** A palette accent's own name; any other color is the person's own. */

@@ -1,3 +1,4 @@
+import { PET_SKIN_DE } from "../petSkinTranslations";
 import type { TranslationKey } from "../translations";
 import { GERMAN_PART_1 } from "./dePart1";
 import { GERMAN_PART_2 } from "./dePart2";
@@ -16,6 +17,7 @@ import { GERMAN_PART_14 } from "./dePart14";
 import { GERMAN_PART_15 } from "./dePart15";
 
 export const GERMAN_TRANSLATIONS = {
+  ...PET_SKIN_DE,
   ...GERMAN_PART_1,
   ...GERMAN_PART_2,
   ...GERMAN_PART_3,

@@ -1,3 +1,4 @@
+import { PET_SKIN_ZHHANS } from "../petSkinTranslations";
 import type { TranslationKey } from "../translations";
 import { SIMPLIFIED_CHINESE_PART_1 } from "./zhHansPart1";
 import { SIMPLIFIED_CHINESE_PART_2 } from "./zhHansPart2";
@@ -16,6 +17,7 @@ import { SIMPLIFIED_CHINESE_PART_14 } from "./zhHansPart14";
 import { SIMPLIFIED_CHINESE_PART_15 } from "./zhHansPart15";
 
 export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
+  ...PET_SKIN_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,
   ...SIMPLIFIED_CHINESE_PART_2,
   ...SIMPLIFIED_CHINESE_PART_3,

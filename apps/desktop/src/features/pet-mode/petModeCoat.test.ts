@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PetModeCoatFilter } from "./PetModeCoatFilter";
+import { getPetModeCoatStyle, PET_MODE_QUICK_COATS, type PetModeCoat } from "./petModeCoats";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -12,6 +16,8 @@ import {
 } from "./petModeData";
 
 const css = readFileSync("src/features/pet-mode/petMode.css", "utf8");
+const filterMarkup = (coat: PetModeCoat) => renderToStaticMarkup(createElement(PetModeCoatFilter, { coat }));
+const SHIPPED = ["ivory", "grey", "charcoal", "apricot", "sage", "plum"];
 const cat = readFileSync("src/features/pet-mode/PetModeCat.tsx", "utf8");
 
 describe("pet mode coat selection", () => {
@@ -31,15 +37,16 @@ describe("pet mode coat selection", () => {
     expect(isPetModeCoat("tabby")).toBe(false);
   });
 
-  it("offers the six shipped coats with the free pair (ivory, grey) first", () => {
-    expect([...PET_MODE_COATS]).toEqual(["ivory", "grey", "charcoal", "apricot", "sage", "plum"]);
+  it("offers 31 presets with the free pair first and all shipped names retained", () => {
+    expect(PET_MODE_COATS).toHaveLength(31);
+    expect(PET_MODE_COATS.slice(0,2)).toEqual(["ivory", "grey"]);
+    expect(PET_MODE_COATS).toEqual(expect.arrayContaining(SHIPPED));
     expect(PET_MODE_COATS[0]).toBe(PET_MODE_DEFAULT_COAT);
   });
 
   it("keeps the picker to a single row", () => {
-    // The row-based layout is sized for six chips. Adding a seventh needs a
-    // deliberate layout decision rather than silently shrinking every chip.
-    expect(PET_MODE_COATS.length).toBeLessThanOrEqual(6);
+    // Five representative skins leave the sixth slot for More.
+    expect(PET_MODE_QUICK_COATS).toEqual(["ivory", "grey", "honey", "mist", "plum"]);
   });
 
   it("specifies every coat exactly once, in the same order", () => {
@@ -54,6 +61,11 @@ describe("pet mode coat selection", () => {
     // from the CSS custom properties. If the two drift, Settings advertises a
     // color the pet will not actually wear.
     for (const spec of PET_MODE_COAT_SPECS) {
+      if (!SHIPPED.includes(spec.value)) {
+        expect(getPetModeCoatStyle(spec.value)["--pet-fur"]).toBe(spec.fur);
+        expect(getPetModeCoatStyle(spec.value)["--pet-ink"]).toBe(spec.ink);
+        continue;
+      }
       const selector = spec.value === PET_MODE_DEFAULT_COAT
         ? ':root[data-surface="pet-mode"] {'
         : `[data-pet-coat="${spec.value}"]`;
@@ -88,12 +100,18 @@ describe("pet mode coat rendering contract", () => {
     // ivory's shadow treatment and reads as a half-applied theme.
     for (const coat of PET_MODE_COATS.filter((value) => value !== PET_MODE_DEFAULT_COAT)) {
       const start = css.indexOf(`[data-pet-coat="${coat}"]`);
+      if (!SHIPPED.includes(coat)) {
+        const style = getPetModeCoatStyle(coat);
+        for (const token of ["--pet-fur", "--pet-ink", "--pet-raster-filter", "--pet-drag-raster-filter", "--pet-contact-shadow", "--pet-drop-shadow"]) expect(style[token]).toBeTruthy();
+        expect(filterMarkup(coat)).toContain(`id="pet-mode-coat-${coat}"`);
+        continue;
+      }
       expect(start, `${coat} has no CSS block`).toBeGreaterThan(-1);
       const block = css.slice(start, css.indexOf("}", start));
       for (const token of ["--pet-fur", "--pet-ink", "--pet-raster-filter", "--pet-drag-raster-filter", "--pet-contact-shadow", "--pet-drop-shadow"]) {
         expect(block, `${coat} is missing ${token}`).toContain(token);
       }
-      expect(cat, `${coat} has no filter definition`).toContain(`id="pet-mode-coat-${coat}"`);
+      expect(filterMarkup(coat), `${coat} has no filter definition`).toContain(`id="pet-mode-coat-${coat}"`);
     }
   });
 
@@ -119,17 +137,9 @@ describe("pet mode coat rendering contract", () => {
     // drift, baked frames and the walk/sleep vectors render as two different
     // colors, which reads as the cat changing color mid-animation.
     for (const coat of PET_MODE_COATS) {
-      // Ivory declares its tokens on the base surface rule; the others each
-      // add a `[data-pet-coat]` override.
-      const cssStart = coat === PET_MODE_DEFAULT_COAT
-        ? css.indexOf(':root[data-surface="pet-mode"] {')
-        : css.indexOf(`[data-pet-coat="${coat}"]`);
-      const fur = /--pet-fur:\s*#([0-9a-f]{6})/i.exec(css.slice(cssStart, css.indexOf("}", cssStart)));
-      expect(fur, `${coat} declares no --pet-fur`).not.toBeNull();
-      const furChannels = [0, 2, 4].map((offset) => parseInt(fur![1].slice(offset, offset + 2), 16) / 255);
-
-      const start = cat.indexOf(`id="pet-mode-coat-${coat}"`);
-      const block = cat.slice(start, cat.indexOf("</filter>", start));
+      const spec = getPetModeCoatSpec(coat);
+      const furChannels = [1,3,5].map(offset => parseInt(spec.fur.slice(offset,offset+2),16)/255);
+      const block = filterMarkup(coat);
       const channels = [...block.matchAll(/tableValues="([^"]+)"/g)]
         .map((match) => match[1].trim().split(/\s+/).map(Number));
       expect(channels, `${coat} needs one table per channel`).toHaveLength(3);
@@ -146,8 +156,7 @@ describe("pet mode coat rendering contract", () => {
     // Without this, per-channel drift in the generated frames survives the
     // recolor and the pet visibly changes tone between phases.
     for (const coat of PET_MODE_COATS) {
-      const start = cat.indexOf(`id="pet-mode-coat-${coat}"`);
-      const block = cat.slice(start, cat.indexOf("</filter>", start));
+      const block = filterMarkup(coat);
       expect(block, `${coat} does not flatten luminance`).toContain("feColorMatrix");
       expect(block.indexOf("feColorMatrix")).toBeLessThan(block.indexOf("feComponentTransfer"));
     }
@@ -166,9 +175,8 @@ describe("pet mode coat rendering contract", () => {
 
   it("keeps alpha untouched so silhouettes and edges survive the recolor", () => {
     for (const coat of PET_MODE_COATS) {
-      const start = cat.indexOf(`id="pet-mode-coat-${coat}"`);
-      const block = cat.slice(start, cat.indexOf("</filter>", start));
-      expect(block, `${coat} alters alpha`).toContain('<feFuncA type="identity" />');
+      const block = filterMarkup(coat);
+      expect(block, `${coat} alters alpha`).toContain('<feFuncA type="identity">');
     }
   });
 

@@ -27,7 +27,7 @@ export const BRAZILIAN_PORTUGUESE_PART_10 = {
   "settings.pet.fastRunDescription": "Ativada por padrão. Usa a animação de corrida para a frente quando o mascote se aproxima de um alvo do Fechamento automático. Nos passeios normais e nos retornos em produção, ele continua caminhando.",
   "settings.pet.toggleFastRun": "Ativar ou desativar a animação de corrida rápida",
   "settings.pet.size": "Tamanho do mascote",
-  "settings.pet.coat": "Pelagem do mascote",
+  "settings.pet.coat": "Aparência",
   "settings.pet.coatIvory": "Marfim",
   "settings.pet.coatCharcoal": "Carvão",
   "settings.pet.coatGrey": "Cinza",

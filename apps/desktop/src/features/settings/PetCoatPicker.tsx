@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { isLookPending } from "../pro-looks/proLooks";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ModalPresence } from "../../components/ModalPresence";
+import { PET_MODE_QUICK_COATS, createPetModeCustomCoat } from "../pet-mode/petModeCoats";
+import { PetSkinDialog, PetSkinSwatch, petSkinRadioKey } from "./PetSkinDialog";
 import { Toggle } from "../../components/Toggle";
 import { SettingsSelect } from "./SettingsSelect";
 import {
-  PET_MODE_COAT_SPECS,
   PET_MODE_SIZES,
   type PetModeCoat,
   type PetModeSize,
@@ -10,10 +14,8 @@ import {
 import { usePetPresenceMode, type PetPresenceMode } from "../pet-mode/petPresenceMode";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
-import { localizedPetCoatLabel } from "../pro-looks/proLookCatalog";
-import { ProLookLockBadge, ProLookPopover, ProLookRowNote } from "../pro-looks/ProLookViews";
+import { ProLookRowNote } from "../pro-looks/ProLookViews";
 import { useProLooks } from "../pro-looks/useProLooksController";
-import { PetCoatSwatchCat } from "./PetCoatSwatchCat";
 
 export { localizedPetCoatLabel } from "../pro-looks/proLookCatalog";
 export { PetCoatSwatchCat } from "./PetCoatSwatchCat";
@@ -128,62 +130,52 @@ function PetSizePicker({
   );
 }
 
-// A coat picker that shows plain color chips would make the user translate
-// "Grey" into a mental image of the pet. These swatches draw the actual
-// silhouette in the actual fur and ink, so the choice is visible rather than
-// named. The grid wraps, so adding coats does not require touching layout.
-// Ivory and Grey are free; the other coats are Pro looks (features/pro-looks):
-// a locked coat is tried on the desktop pet while its bubble is open.
-export function PetCoatPicker({
-  value,
-  onChange,
-  disabled = false,
-}: {
+// Five representative skins plus More keep the row stable as the catalog grows.
+// Picking a skin outside the representatives replaces only the fifth slot.
+export function PetCoatPicker({ value, onChange, disabled = false }: {
   readonly value: PetModeCoat;
   readonly onChange: (coat: PetModeCoat) => void;
   readonly disabled?: boolean;
 }) {
   const { t } = useLocalization();
   const looks = useProLooks();
-  const [row, setRow] = useState<HTMLDivElement | null>(null);
+  const latestLooks = useRef(looks);
+  latestLooks.current = looks;
+  useEffect(() => () => {
+    const current = latestLooks.current;
+    if (current?.popover?.look.kind === "coat") current.closePopover();
+  }, []);
+  const [open, setOpen] = useState(false);
+  const [custom, setCustom] = useState<PetModeCoat>(() => value.startsWith("custom-") ? value : createPetModeCustomCoat(18,74));
+  useEffect(() => {
+    if (value.startsWith("custom-")) setCustom(value);
+  }, [value]);
+  // The pending account/Pro flow now owns the try-on; close only the picker.
+  const unlock = () => { looks?.unlock(); setOpen(false); };
+  const slots: PetModeCoat[] = [...PET_MODE_QUICK_COATS];
+  if (!slots.includes(value)) slots[4] = value;
+  const pick = (coat: PetModeCoat) => looks ? looks.pick({ kind: "coat", id: coat }) : onChange(coat);
+  const close = () => { looks?.closePopover(); setOpen(false); };
   return (
-    <div ref={setRow} data-setting-id="settings.pet.coat" className={`settings-row settings-row--pet-coat${disabled ? " settings-row--disabled" : ""}`}>
-      <div>
-        <div className="lbl">{t("settings.pet.coat")}</div>
-      </div>
+    <div data-setting-id="settings.pet.coat" className={`settings-row settings-row--pet-coat${disabled ? " settings-row--disabled" : ""}`}>
+      <div><div className="lbl">{t("settings.pet.coat")}</div></div>
       <div className="ctrl">
-        <div className="pet-coat-picker" role="radiogroup" aria-label={t("settings.pet.coat")} aria-disabled={disabled}>
-          {PET_MODE_COAT_SPECS.map((spec) => {
-            const look = { kind: "coat", id: spec.value } as const;
-            const name = localizedPetCoatLabel(spec.value, t);
-            const locked = looks?.isLocked(look) ?? false;
-            const label = locked ? t("settings.proLooks.lockedLabel", { name }) : name;
-            const tryingOn = looks?.preview?.kind === "coat" && looks.preview.id === spec.value;
-            return (
-            <button
-              key={spec.value}
-              type="button"
-              className={"pet-coat-swatch" + (spec.value === value ? " is-selected" : "") + (tryingOn ? " is-trying-on" : "")}
-              style={{ "--pet-coat-fur": spec.fur, "--pet-coat-ink": spec.ink } as React.CSSProperties}
-              role="radio"
-              aria-checked={spec.value === value}
-              aria-label={label}
-              aria-haspopup={locked ? "dialog" : undefined}
-              title={label}
-              disabled={disabled}
-              data-pro-look={"coat:" + spec.value}
-              onClick={() => (looks ? looks.pick(look) : onChange(spec.value))}
-            >
-              <PetCoatSwatchCat />
-              <span className="pet-coat-swatch__label">{name}</span>
-              {locked ? <ProLookLockBadge /> : null}
-            </button>
-            );
-          })}
+        <div className="pet-skin-quick-row">
+          <div className="pet-coat-picker" role="radiogroup" aria-label={t("settings.pet.coat")} aria-disabled={disabled} onKeyDown={petSkinRadioKey}>
+            {slots.map(coat => {
+              const locked = looks?.isLocked({ kind: "coat", id: coat }) ?? false;
+              return <PetSkinSwatch key={coat} coat={coat} selected={value === coat} trying={false} locked={locked} disabled={disabled}
+                tabIndex={value === coat ? 0 : -1}
+                onPick={() => { pick(coat); if (locked || (looks && isLookPending({ kind: "coat", id: coat }, looks.access) && coat !== value && coat !== looks.keptCoat)) setOpen(true); }} />;
+            })}
+          </div>
+          <button type="button" className="pet-skin-more" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen(true)}>
+            <span aria-hidden="true">···</span><span>{t("settings.pet.skinMore")}</span>
+          </button>
         </div>
         {looks ? <ProLookRowNote looks={looks} kind="coat" /> : null}
       </div>
-      {looks ? <ProLookPopover looks={looks} kind="coat" container={row} /> : null}
+      {createPortal(<ModalPresence>{open ? <PetSkinDialog value={value} custom={custom} onCustomChange={setCustom} onPick={pick} onClose={close} onUnlock={unlock} looks={looks} /> : null}</ModalPresence>, document.body)}
     </div>
   );
 }
