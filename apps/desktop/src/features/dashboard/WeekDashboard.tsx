@@ -374,11 +374,11 @@ export function WeekDashboard({
     calendarEvents, startDay, endDay, startOfDayMinutes,
     noProjectLabel: t("projects.chart.noProject"), unavailableProjectLabel: t("dashboard.week.inspector.unavailableProject"),
   }) : null, [colorMode, segments, projectAssignments, projectWindowAssignments, projectOptions, calendarEvents, startDay, endDay, startOfDayMinutes, t]);
-  const renderedCalendarEvents = projectView?.calendarEvents ?? calendarEvents;
+  const activityLabels = useActivityLabels();
+  const renderedCalendarEvents = projectView?.calendarEvents ?? activityLabels?.weekCalendarEvents ?? calendarEvents;
   // With timeline cards the Week draws one block per card and folds short
   // blocks into their neighbours (weekCardBlocks.ts). Project mode keeps its
   // per-project slices and lanes.
-  const activityLabels = useActivityLabels();
   const cardBlocks = useMemo(() => activityLabels && colorMode !== "project"
     ? arrangeWeekCardBlocks(renderedCalendarEvents, activityLabels.index, { startOfDayMinutes, keepSegmentId: revealSegmentId })
     : null, [activityLabels, colorMode, renderedCalendarEvents, revealSegmentId, startOfDayMinutes]);
@@ -918,7 +918,7 @@ export function WeekDashboard({
                       const cardName = cardBlocks?.names.get(event.id);
                       const workLabel = cardBlocks
                         ? cardName?.label?.display ?? null
-                        : activityLabels?.index.forSegments(row.day, event.segmentIds)?.display ?? null;
+                        : activityLabels?.index.forSegments(row.day, event.segmentIds, event)?.display ?? null;
                       // With timeline cards a block is drawn no taller than the space
                       // before the next one, so blocks never overlap.
                       const nextTopMinutes = cardBlocks ? weekNextBlockTopMinutes(events, event) : null;
@@ -927,7 +927,6 @@ export function WeekDashboard({
                       const drawnClipped = drawnHeight < eventLayout.eventHeight;
                       const drawnCompact = eventLayout.isCompactEvent || drawnClipped;
                       const drawnTiny = eventLayout.isTinyEvent || drawnHeight < 12;
-                      // A name needs a block the size of 30 minutes.
                       // The icon and name show together wherever both fit whole; a
                       // thinner block shows its colour alone (the hover still names it).
                       const showsWorkName = Boolean(workLabel) && drawnHeight >= weekWorkNameMinHeight(rootFontSizePx);
@@ -1079,7 +1078,8 @@ export function WeekDashboard({
             classificationOptions={classificationOptions}
             activityLabel={cardLabels?.has(activityInspector.sourceEventId)
               ? cardLabels.get(activityInspector.sourceEventId) ?? null
-              : activityLabelForWeekEvent(activityLabels, activityInspector.sourceDay, activityInspector.sourceSegmentIds)}
+              : activityLabelForWeekEvent(activityLabels, activityInspector.sourceDay, activityInspector.sourceSegmentIds,
+                displayCalendarEvents.get(activityInspector.sourceDay)?.find(event => event.id === activityInspector.sourceEventId))}
             onEditCategories={onEditCategories}
           />
         ) : null}

@@ -1,5 +1,5 @@
 import { logicalMinuteOfDay } from "@drifty/domain";
-import type { ActivityLabelBlock, ActivityLabelDisplay } from "./activityLabelBlocks";
+import type { ActivityLabelBlock, ActivityLabelDisplay, ActivityLabelSourceEvent } from "./activityLabelBlocks";
 import type { ActivityLabelsController } from "./useActivityBlockLabels";
 
 /** What the hover card and the pinned editor show for one block. */
@@ -23,9 +23,10 @@ export function activityLabelForWeekEvent(
   controller: ActivityLabelsController | null,
   day: string | null | undefined,
   segmentIds: readonly string[],
+  range?: Pick<ActivityLabelSourceEvent, "topMinutes" | "durationMinutes">,
 ): ActivityInspectorLabel | null {
   if (!controller || !day) return null;
-  return labelFromBlock(controller.index.forSegments(day, segmentIds), "block");
+  return labelFromBlock(controller.index.forSegments(day, segmentIds, range), "block");
 }
 
 /** Day view: hover groups are per app/site slices of a longer work block. */

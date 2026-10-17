@@ -332,6 +332,7 @@ export function WeekCalendarHoverLayer({
         activityLabels,
         hover.anchorElement.closest<HTMLElement>(".week-v2-calendar__day-column")?.dataset.weekDay,
         hover.event.segmentIds,
+        hover.event,
       )
     : null;
   return !disabled && hover ? (

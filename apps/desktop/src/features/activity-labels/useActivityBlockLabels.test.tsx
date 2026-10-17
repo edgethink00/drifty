@@ -10,6 +10,7 @@ import type {
   ActivityTimelineWindowSaveInput,
   TrackerApi,
 } from "@drifty/domain";
+import { ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, activityBlockLabelKey } from "@drifty/domain";
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
 import { AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS } from "../settings/aiPrivacyRequestSettings";
 import { ACTIVITY_LABEL_REQUEST_BUDGET_STORAGE_KEY } from "./activityLabelBudget";
@@ -81,7 +82,7 @@ function fakeTracker() {
     }),
     deleteActivityBlockUserLabel: vi.fn(async (blockKey: string) => ({ deleted: store.delete("user|" + blockKey) ? 1 : 0 })),
   };
-  return { tracker, store };
+  return { tracker, store, windows };
 }
 
 function args(tracker: ReturnType<typeof fakeTracker>["tracker"], overrides: Partial<UseActivityBlockLabelsArgs> = {}): UseActivityBlockLabelsArgs {
@@ -173,6 +174,41 @@ describe("useActivityBlockLabels", () => {
       await result.current!.resetUserLabel(blockFor(result.current, ["11"])!);
     });
     await waitFor(() => expect(blockFor(result.current, ["11"])?.display?.title).toBe("Checkout retry review"));
+  });
+
+  it("restores one slice of a hidden legacy block without unhiding its sibling, and survives reload", async () => {
+    const { tracker, store, windows } = fakeTracker();
+    const records = [segment("a", "09:00", "09:30", {}), segment("b", "09:30", "10:00", {})];
+    const at = (time: string) => new Date(DAY + "T" + time + ":00").toISOString();
+    const oldKey = activityBlockLabelKey(DAY, ["a", "b"]);
+    store.set("user|" + oldKey, {
+      blockKey: oldKey, logicalDay: DAY, source: "user", status: "hidden", title: "", description: "",
+      segmentIds: ["a", "b"], blockStartedAt: at("09:00"), blockEndedAt: at("10:00"),
+    });
+    windows.set("saved", {
+      windowKey: "saved", logicalDay: DAY, language: "en", promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION,
+      startedAt: at("09:00"), endedAt: at("10:00"), createdAt: at("18:00"),
+      cards: ["Checkout review", "Figure review"].map((title, position) => ({
+        position, title, description: "", status: "ready", variant: "strict", segmentIds: [position ? "b" : "a"],
+        startedAt: at(position ? "09:30" : "09:00"), endedAt: at(position ? "10:00" : "09:30"),
+      })),
+    });
+    const input = args(tracker, { segments: records, analysisConnected: false });
+    const { result, unmount } = renderHook(() => useActivityBlockLabels(input));
+    const first = () => result.current!.index.forRange(DAY, 540, 570, ["a"])!;
+    const second = () => result.current!.index.forRange(DAY, 570, 600, ["b"])!;
+    await waitFor(() => expect(result.current?.weekCalendarEvents?.get(DAY)).toHaveLength(2));
+    expect(first().display).toBeNull();
+    expect(second().display).toBeNull();
+    await act(async () => { await result.current!.resetUserLabel(first()); });
+    await waitFor(() => expect(first().display?.title).toBe("Checkout review"));
+    expect(second().display).toBeNull();
+    expect(store.has("user|" + oldKey)).toBe(false);
+    unmount();
+    const reloaded = renderHook(() => useActivityBlockLabels(input));
+    await waitFor(() => expect(reloaded.result.current!.index.forRange(DAY, 540, 570, ["a"])?.display?.title).toBe("Checkout review"));
+    expect(reloaded.result.current!.index.forRange(DAY, 570, 600, ["b"])?.display).toBeNull();
+    expect(inferenceCalls).toHaveLength(0);
   });
 
   it("does not call the model for an open window, with both title switches off, or past the daily budget", async () => {

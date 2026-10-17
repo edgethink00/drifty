@@ -12,6 +12,7 @@ import {
   decideActivityTimelineCards,
   listedActivityTimelineRecords,
   logicalDayIsoDateForDate,
+  storedActivityTimelineCards,
   shiftIsoDate,
   type ActivityBlockLabelLanguage,
   type ActivityBlockLabelRecord,
@@ -23,6 +24,7 @@ import {
 } from "@drifty/domain";
 import { buildIsoDayList, getLogicalDayRange } from "../../lib/formatting";
 import { buildWeekDashboardDayModel } from "../dashboard/weekDashboardModel";
+import { buildWeekTimelineEvents } from "../dashboard/weekTimelineEvents";
 import type { WeekCalendarEvent } from "../dashboard/weekCalendar";
 import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
@@ -33,7 +35,6 @@ import {
   buildActivityLabelIndex,
   type ActivityLabelBlock,
   type ActivityLabelIndex,
-  type ActivityLabelSourceEvent,
 } from "./activityLabelBlocks";
 import { consumeActivityLabelRequest } from "./activityLabelBudget";
 import { createActivityLabelInference, type ActivityLabelInference } from "./activityLabelInference";
@@ -48,6 +49,8 @@ const EMPTY_WINDOWS: readonly ActivityTimelineWindowRecord[] = [];
 
 export type ActivityLabelsController = {
   readonly index: ActivityLabelIndex;
+  /** Stored-card boundaries before B; absent on older/standalone controllers. */
+  readonly weekCalendarEvents?: ReadonlyMap<string, readonly WeekCalendarEvent[]>;
   readonly editingEnabled: boolean;
   readonly saveUserLabel: (block: ActivityLabelBlock, title: string, description: string) => Promise<void>;
   readonly resetUserLabel: (block: ActivityLabelBlock) => Promise<void>;
@@ -175,7 +178,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   }, [active, reload, segmentCount, revision]);
 
   const segmentsById = useMemo(() => new Map(segments.map((segment) => [segment.id, segment])), [segments]);
-  const eventsByDay = useMemo<ReadonlyMap<string, readonly ActivityLabelSourceEvent[]>>(() => {
+  const eventsByDay = useMemo<ReadonlyMap<string, readonly WeekCalendarEvent[]>>(() => {
     if (!active) return new Map();
     if (weekCalendarEvents && weekCalendarEvents.size > 0) return weekCalendarEvents;
     return new Map(buildIsoDayList(startDay, endDay).map((day) => [
@@ -186,11 +189,14 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
 
   const labels = labelState.key === rangeKey ? labelState.labels : EMPTY_LABELS;
   const storedWindows = labelState.key === rangeKey ? labelState.windows : EMPTY_WINDOWS;
+  const timelineEvents = useMemo(() => buildWeekTimelineEvents(eventsByDay, segments, storedActivityTimelineCards(storedWindows, language), {
+    startOfDayMinutes, classificationOptions,
+  }), [classificationOptions, eventsByDay, language, segments, startOfDayMinutes, storedWindows]);
   const blocks = useMemo(
-    () => buildActivityLabelBlocks(eventsByDay, { startOfDayMinutes, segmentsById, labels, windows: storedWindows, language, nowMs }),
-    [eventsByDay, labels, language, nowMs, segmentsById, startOfDayMinutes, storedWindows],
+    () => buildActivityLabelBlocks(timelineEvents, { startOfDayMinutes, segmentsById, labels, windows: storedWindows, language, nowMs }),
+    [timelineEvents, labels, language, nowMs, segmentsById, startOfDayMinutes, storedWindows],
   );
-  const index = useMemo(() => buildActivityLabelIndex(blocks), [blocks]);
+  const index = useMemo(() => buildActivityLabelIndex(blocks, segmentsById), [blocks, segmentsById]);
 
   // Window boundaries depend only on record times, so the Week view's compact
   // payload finds the same windows as the Day view.
@@ -341,9 +347,37 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     })();
   }, [analysisConnected, background, backgroundScope, backgroundTick, language, startOfDayMinutes, supported, tracker]);
 
-  const saveUserLabel = useCallback(async (block: ActivityLabelBlock, title: string, description: string) => {
+  // A legacy hidden block can now be several cards. Materialize its current
+  // slices before changing one, so showing that card cannot unhide its siblings.
+  // Fresh rows and serialized writes also handle the hide/show loop of a B group.
+  const choiceQueueRef = useRef(Promise.resolve());
+  const queueChoice = useCallback((operation: () => Promise<void>) => {
+    const next = choiceQueueRef.current.then(operation);
+    choiceQueueRef.current = next.catch(() => undefined);
+    return next;
+  }, []);
+  const materializeCarriedChoice = useCallback(async (block: ActivityLabelBlock) => {
+    if (block.resolution.kind !== "user" || !block.resolution.carried) return;
+    const originalKey = block.resolution.record.blockKey;
+    const fresh = await tracker.getActivityBlockLabels!({ start: range.start, end: range.end });
+    const current = buildActivityLabelBlocks(timelineEvents, {
+      startOfDayMinutes, segmentsById, labels: fresh, windows: storedWindows, language, nowMs,
+    });
+    for (const sibling of current) {
+      if (sibling.resolution.kind !== "user" || sibling.resolution.record.blockKey !== originalKey) continue;
+      const record = sibling.resolution.record;
+      await tracker.saveActivityBlockUserLabel!({
+        blockKey: sibling.key, logicalDay: sibling.day, blockStartedAt: new Date(sibling.startMs).toISOString(),
+        blockEndedAt: new Date(sibling.endMs).toISOString(), segmentIds: sibling.segmentIds,
+        title: record.status === "hidden" ? "" : record.title, description: record.description,
+      });
+    }
+    await tracker.deleteActivityBlockUserLabel!(originalKey);
+  }, [language, nowMs, range.end, range.start, segmentsById, startOfDayMinutes, storedWindows, timelineEvents, tracker]);
+
+  const saveUserLabel = useCallback((block: ActivityLabelBlock, title: string, description: string) => queueChoice(async () => {
     if (!tracker.saveActivityBlockUserLabel) throw new Error("Block labels are unavailable.");
-    const previousBlockKey = block.resolution.kind === "user" && block.resolution.carried ? block.resolution.record.blockKey : null;
+    await materializeCarriedChoice(block);
     await tracker.saveActivityBlockUserLabel({
       blockKey: block.key,
       logicalDay: block.day,
@@ -352,23 +386,25 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
       segmentIds: block.segmentIds,
       title: title.trim(),
       description: description.trim(),
-    }, previousBlockKey);
+    });
     if (mountedRef.current) setRevision((value) => value + 1);
-  }, [tracker]);
+  }), [materializeCarriedChoice, queueChoice, tracker]);
 
-  const resetUserLabel = useCallback(async (block: ActivityLabelBlock) => {
+  const resetUserLabel = useCallback((block: ActivityLabelBlock) => queueChoice(async () => {
     if (block.resolution.kind !== "user" || !tracker.deleteActivityBlockUserLabel) return;
-    await tracker.deleteActivityBlockUserLabel(block.resolution.record.blockKey);
+    await materializeCarriedChoice(block);
+    await tracker.deleteActivityBlockUserLabel(block.key);
     if (mountedRef.current) setRevision((value) => value + 1);
-  }, [tracker]);
+  }), [materializeCarriedChoice, queueChoice, tracker]);
 
   return useMemo(() => {
     if (!active || !supported) return null;
     return {
       index,
+      weekCalendarEvents: timelineEvents,
       editingEnabled: Boolean(tracker.saveActivityBlockUserLabel),
       saveUserLabel,
       resetUserLabel,
     };
-  }, [active, index, resetUserLabel, saveUserLabel, supported, tracker.saveActivityBlockUserLabel]);
+  }, [active, index, resetUserLabel, saveUserLabel, supported, timelineEvents, tracker.saveActivityBlockUserLabel]);
 }

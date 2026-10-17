@@ -27,7 +27,10 @@ function card(key: string, from: number, to: number): ActivityLabelBlockCard {
 function index(entries: Record<string, { card: ActivityLabelBlockCard | null; hidden?: boolean }>): ActivityLabelIndex {
   const blocks = new Map(Object.entries(entries).map(([id, value]) => [id, {
     key: DAY + ":" + id, day: DAY, startMs: 0, endMs: 0, startMinute: 0, endMinute: 0, segmentIds: [id], recordedSeconds: 600,
-    resolution: { kind: "none", needsGeneration: false },
+    resolution: value.hidden ? { kind: "user", carried: false, record: {
+      blockKey: DAY + ":" + id, logicalDay: DAY, source: "user", status: "hidden", title: "", description: "",
+      blockStartedAt: "", blockEndedAt: "", segmentIds: [id],
+    } } : { kind: "none", needsGeneration: false },
     display: value.card && !value.hidden ? { title: value.card.title, description: "", origin: "ai", status: "ready" } : null,
     card: value.card, otherCards: [], generation: "resolved",
   } as ActivityLabelBlock]));
@@ -56,6 +59,13 @@ describe("Week blocks with timeline cards", () => {
     expect(result.eventsByDay.get(DAY)).toHaveLength(2);
     expect(result.names.get(first.id)?.label?.display?.title).toBe("review title");
     expect(result.names.get(second.id)?.label?.display?.title).toBe("review title");
+  });
+
+  it("does not restore a hidden name when a longer visible piece of the same card joins it", () => {
+    const result = arrange([event("a", 540, 20), event("b", 560, 60)], index({ a: { card: review, hidden: true }, b: { card: review } }));
+    const [merged] = result.eventsByDay.get(DAY)!;
+    expect(result.names.get(merged.id)?.label?.display).toBeNull();
+    expect(result.names.get(merged.id)?.label?.members).toHaveLength(2);
   });
 
   it("folds a short block into the neighbour it touches, keeping that block's name and colour and listing its card", () => {

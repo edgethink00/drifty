@@ -2094,7 +2094,7 @@ describe("WeekDashboard block work names", () => {
       language: "en",
       nowMs: Date.parse("2024-01-08T00:00:00"),
     });
-    return { index: buildActivityLabelIndex(blocks), editingEnabled: true, saveUserLabel, resetUserLabel: vi.fn(async () => undefined) };
+    return { index: buildActivityLabelIndex(blocks, new Map(weekSegments.map(s => [s.id, s]))), editingEnabled: true, saveUserLabel, resetUserLabel: vi.fn(async () => undefined) };
   }
 
   const userLabel = (title: string): ActivityBlockLabelRecord => ({
@@ -2109,7 +2109,7 @@ describe("WeekDashboard block work names", () => {
     description: title ? "Client A" : "",
   });
 
-  function renderWithLabels(value: ReturnType<typeof controller> | null) {
+  function renderWithLabels(value: (ReturnType<typeof controller> & { weekCalendarEvents?: Map<string, WeekCalendarEvent[]> }) | null) {
     return render(
       <ActivityLabelsContext.Provider value={value}>
         {weekDashboardElement({ calendarEvents: events, activityActionsEnabled: true })}
@@ -2126,6 +2126,14 @@ describe("WeekDashboard block work names", () => {
 
     renderWithLabels(controller([userLabel("")]));
     expect(document.querySelector(".week-v2-calendar__event strong")?.textContent).toBe("Visual Studio Code");
+  });
+
+  it("draws the controller's card-time events rather than the old calendar boundaries", () => {
+    const exact = { ...namedEvent, id: "exact-card", topMinutes: 571, durationMinutes: 29 };
+    renderWithLabels({ ...controller([userLabel("Checkout review")]), weekCalendarEvents: new Map([[day, [exact]]]) });
+    const block = document.querySelector<HTMLElement>(".week-v2-calendar__event")!;
+    expect(block.dataset.eventId).toBe("exact-card");
+    expect(document.querySelector('[data-event-id="event-named"]')).toBeNull();
   });
 
   it("puts the dominant icon and work name in a grouped block's icon row and keeps the icons without one", () => {
@@ -2148,7 +2156,7 @@ describe("WeekDashboard block work names", () => {
         language: "en",
         nowMs: Date.parse("2024-01-08T00:00:00"),
       });
-      return { index: buildActivityLabelIndex(blocks), editingEnabled: true, saveUserLabel: vi.fn(async () => undefined), resetUserLabel: vi.fn(async () => undefined) };
+      return { index: buildActivityLabelIndex(blocks, new Map(weekSegments.map(s => [s.id, s]))), editingEnabled: true, saveUserLabel: vi.fn(async () => undefined), resetUserLabel: vi.fn(async () => undefined) };
     })();
     const { unmount } = render(
       <ActivityLabelsContext.Provider value={value}>
@@ -2219,7 +2227,7 @@ describe("WeekDashboard block work names", () => {
       nowMs: Date.parse("2024-01-08T00:00:00"),
     });
     const value = {
-      index: buildActivityLabelIndex(blocks),
+      index: buildActivityLabelIndex(blocks, new Map(weekSegments.map(s => [s.id, s]))),
       editingEnabled: true,
       saveUserLabel: vi.fn<(block: ActivityLabelBlock, title: string, description: string) => Promise<void>>(async () => undefined),
       resetUserLabel: vi.fn(async () => undefined),

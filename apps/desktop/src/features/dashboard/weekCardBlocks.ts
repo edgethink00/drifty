@@ -126,7 +126,8 @@ function mergeEvents(core: readonly WeekCalendarEvent[], extra: readonly WeekCal
 }
 
 function mergedLabel(group: Group, core: readonly Entry[], extra: readonly Entry[]): ActivityInspectorLabel | null {
-  const host = [...core].sort((a, b) => b.event.activeDurationMinutes - a.event.activeDurationMinutes)[0]?.block ?? null;
+  const ordered = [...core].sort((a, b) => b.event.activeDurationMinutes - a.event.activeDurationMinutes);
+  const host = ordered.find(entry => entry.block?.resolution.kind === "user" && !entry.block.display)?.block ?? ordered[0]?.block ?? null;
   if (!host) return null;
   const members = [...new Map(core.flatMap((entry) => entry.block ? [[entry.block.key, entry.block] as const] : [])).values()];
   const others = new Map<string, ActivityLabelOtherCard>();
@@ -153,7 +154,7 @@ function arrangeDay(day: string, events: readonly WeekCalendarEvent[], index: Ac
   const sorted = [...events].sort((a, b) => a.topMinutes - b.topMinutes || b.durationMinutes - a.durationMinutes);
   const groups: Group[] = [];
   for (const event of sorted) {
-    const block = index.forSegments(day, event.segmentIds);
+    const block = index.forSegments(day, event.segmentIds, event);
     const entry: Entry = { event, block, card: block?.card ?? null };
     const last = groups[groups.length - 1];
     if (last && event.topMinutes - groupEnd(last) <= WEEK_CARD_MERGE_GAP_MINUTES) {

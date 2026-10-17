@@ -83,7 +83,7 @@ describe("activity label blocks", () => {
   });
 
   it("finds the work block around a Day hover slice and says when it covers more", () => {
-    const controller = { index: buildActivityLabelIndex(blocks([user])), editingEnabled: true, saveUserLabel: async () => undefined, resetUserLabel: async () => undefined };
+    const controller = { index: buildActivityLabelIndex(blocks([user]), new Map(segments.map(s => [s.id, s]))), editingEnabled: true, saveUserLabel: async () => undefined, resetUserLabel: async () => undefined };
     const slice = activityLabelForFlowRange(controller, DAY, 9 * 60 + 30, 10 * 60, 0, ["2"]);
     expect(slice).toMatchObject({ scope: "range", display: { title: "Checkout retry review" } });
     expect(activityLabelForFlowRange(controller, DAY, 9 * 60, 10 * 60 + 30, 0, ["1", "2"])?.scope).toBe("block");
@@ -97,7 +97,7 @@ describe("activity label blocks", () => {
   };
 
   it("keeps the Day card's own app in the header and adds the block's name beneath it", () => {
-    const controller = { index: buildActivityLabelIndex(blocks([user])), editingEnabled: true, saveUserLabel: async () => undefined, resetUserLabel: async () => undefined };
+    const controller = { index: buildActivityLabelIndex(blocks([user]), new Map(segments.map(s => [s.id, s]))), editingEnabled: true, saveUserLabel: async () => undefined, resetUserLabel: async () => undefined };
     const label = activityLabelForFlowRange(controller, DAY, 9 * 60 + 30, 10 * 60, 0, ["2"]);
     const anchor = document.createElement("button");
     document.body.append(anchor);
@@ -127,7 +127,7 @@ describe("activity label blocks", () => {
     const saveUserLabel = vi.fn(async () => undefined);
     const resetUserLabel = vi.fn(async () => undefined);
     const renderPinned = (labels: ActivityBlockLabelRecord[]) => {
-      const controller = { index: buildActivityLabelIndex(blocks(labels)), editingEnabled: true, saveUserLabel, resetUserLabel };
+      const controller = { index: buildActivityLabelIndex(blocks(labels), new Map(segments.map(s => [s.id, s]))), editingEnabled: true, saveUserLabel, resetUserLabel };
       const anchor = document.createElement("button");
       document.body.append(anchor);
       return render(

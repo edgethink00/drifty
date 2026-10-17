@@ -51,6 +51,9 @@ export type WeekCalendarEventIdentity = WeekCalendarIdentity & {
 };
 
 export type WeekCalendarEvent = {
+  /** Range-specific label identity when one captured record spans several cards. */
+  activityLabelKey?: string;
+  timelineCardKey?: string;
   /** Dominant project color metadata on an unchanged calendar block; null is No project. */
   projectId?: string | null;
   projectName?: string;
