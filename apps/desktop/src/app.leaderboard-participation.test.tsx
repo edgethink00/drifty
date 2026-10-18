@@ -187,6 +187,14 @@ async function openSocialLeaderboard() {
   await screen.findByRole("region", { name: /^leaderboard$/i });
 }
 
+/** Leave lives in the profile card's menu and asks first. */
+async function leaveFromMenu() {
+  fireEvent.click(await screen.findByRole("button", { name: /more actions/i }));
+  fireEvent.click(screen.getByRole("menuitem", { name: /^leave leaderboard$/i }));
+  const dialog = await screen.findByRole("dialog", { name: /leave the leaderboard\?/i });
+  fireEvent.click(within(dialog).getByRole("button", { name: /^leave leaderboard$/i }));
+}
+
 /** Profile is a Dev-mode beta surface — call before render(<App/>) to expose it. */
 function enableProfileBetaGate() {
   window.localStorage.setItem("drifty.dev.mode", "1");
@@ -959,7 +967,7 @@ describe("App leaderboard participation", () => {
 
     expect(screen.queryByText(/loading leaderboard/i)).toBeNull();
     expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("weekly");
-    expect(await screen.findByRole("button", { name: /^leave leaderboard$/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /more actions/i })).toBeTruthy();
     await openSocialProfile();
     expect(await screen.findByRole("button", { name: /edit profile/i })).toBeTruthy();
     expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ timezone, is_public: true }));
@@ -1254,7 +1262,7 @@ describe("App leaderboard participation", () => {
     fireEvent.click(await screen.findByRole("button", { name: /show previous day/i }));
     await openSocialLeaderboard();
 
-    expect(await screen.findByRole("searchbox", { name: /search leaderboard/i })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: /^global leaderboard$/i })).toBeTruthy();
     expect(screen.queryByText(formatDayLabel(previousDay))).toBeNull();
 
     const joinButton = await screen.findByRole("button", { name: /join leaderboard/i });
@@ -1298,8 +1306,7 @@ describe("App leaderboard participation", () => {
     });
 
     await openSocialLeaderboard();
-    const leaveButton = await screen.findByRole("button", { name: /^leave leaderboard$/i });
-    fireEvent.click(leaveButton);
+    await leaveFromMenu();
 
     await waitFor(() => {
       expect(optOutLeaderboard).toHaveBeenCalledTimes(3);
@@ -1342,7 +1349,7 @@ describe("App leaderboard participation", () => {
     expect(profileButtonDuringRefresh).toBeTruthy();
     expect(profileNameDuringRefresh).toBeTruthy();
     expect(compactRefreshStatus).toBeTruthy();
-    expect(compactRefreshStatus?.classList.contains("leaderboard-refresh-status")).toBe(true);
+    expect(compactRefreshStatus?.getAttribute("data-tone")).toBe("neutral");
     expect(compactRefreshStatus?.closest(".capture-recency--error")).toBeNull();
   });
 
@@ -1491,7 +1498,7 @@ describe("App leaderboard participation", () => {
 
     expect(await screen.findByRole("button", { name: /view alex profile/i })).toBeTruthy();
     expect(screen.getByText("Calculating your local focus totals…")).toBeTruthy();
-    expect(within(screen.getByLabelText("Focus totals")).getAllByText("—")).toHaveLength(3);
+    expect(screen.getByRole("region", { name: /^your profile$/i }).querySelector(".lb7-pv8__weekcopy strong")?.textContent).toBe("—");
 
     deferredTimeline.resolve([]);
     await waitFor(() => {
@@ -1511,7 +1518,7 @@ describe("App leaderboard participation", () => {
     expect(await screen.findByRole("button", { name: /view alex profile/i })).toBeTruthy();
     expect(await screen.findByText("Local focus totals are unavailable.")).toBeTruthy();
     expect(screen.queryByText("Unable to load leaderboard")).toBeNull();
-    expect(within(screen.getByLabelText("Focus totals")).getAllByText("—")).toHaveLength(3);
+    expect(screen.getByRole("region", { name: /^your profile$/i }).querySelector(".lb7-pv8__weekcopy strong")?.textContent).toBe("—");
   });
 
   it("clears joined controls after opt-out even when the follow-up refresh fails", async () => {
@@ -1536,16 +1543,16 @@ describe("App leaderboard participation", () => {
 
     await openSocialLeaderboard();
 
-    fireEvent.click(await screen.findByRole("button", { name: /^leave leaderboard$/i }));
+    await leaveFromMenu();
 
     await waitFor(() => {
       expect(optOutLeaderboard).toHaveBeenCalledTimes(3);
     });
     expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^leave leaderboard$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /more actions/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /view profile/i })).toBeNull();
-    // Rank embed remains discoverable after opting out, but stays locked until rejoining.
-    expect(screen.getByRole("button", { name: /^embed$/i })).toBeTruthy();
+    // Before joining there is nothing to share, embed or leave: the profile menu and Share are gone.
+    expect(screen.queryByRole("button", { name: /^embed$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
     expect(JSON.parse(window.localStorage.getItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY) ?? "[]")).toEqual([]);
     expect((await screen.findAllByRole("status")).some((item) => /network unavailable/i.test(item.textContent ?? ""))).toBe(true);
@@ -1594,7 +1601,7 @@ describe("App leaderboard participation", () => {
     render(<App />);
 
     await openSocialLeaderboard();
-    expect(await screen.findByRole("searchbox", { name: /search leaderboard/i })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: /^global leaderboard$/i })).toBeTruthy();
 
     await openSocialProfile();
     fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));

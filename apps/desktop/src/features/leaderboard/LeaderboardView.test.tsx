@@ -107,6 +107,12 @@ function makePublicProfile(overrides: Partial<NonNullable<TestProps["publicProfi
   };
 }
 
+/** Leave and Embed live in the profile card's menu. */
+function openMenuItem(name: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
+  fireEvent.click(screen.getByRole("menuitem", { name }));
+}
+
 describe("LeaderboardView", () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -119,52 +125,54 @@ describe("LeaderboardView", () => {
     expect(screen.getByText(/supabase is not configured for this workspace/i)).toBeTruthy();
   });
 
-  it("renders a signed-out join state", () => {
-    const onSignIn = vi.fn();
-    renderView({ isSignedIn: false, isOptedIn: false, onSignIn });
+  it("renders an error state when the fetch fails", () => {
+    renderView({ error: "RPC exploded" });
 
-    expect(screen.queryByText(/nothing is published until you join/i)).toBeNull();
-    const hero = screen.getByLabelText(/your leaderboard participation/i);
-    const heroJoin = within(hero).getByRole("button", { name: /join leaderboard/i });
-    const privacyNote = within(hero).getByText(/only focus totals are shared/i);
-    expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
-    expect(heroJoin.getAttribute("aria-describedby")).toBe(privacyNote.id);
-
-    fireEvent.click(heroJoin);
-
-    expect(onSignIn).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/unable to load leaderboard/i)).toBeTruthy();
+    expect(screen.getByText("RPC exploded")).toBeTruthy();
   });
 
-  it("does not present stale rank or focus values before joining", () => {
+  it("calls the opt-in callback from the opted-out state", () => {
+    const onOptIn = vi.fn();
+    renderView({ isOptedIn: false, onOptIn });
+
+    fireEvent.click(screen.getByRole("button", { name: /join leaderboard/i }));
+
+    expect(onOptIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the opt-in button and shows an action error while joining", () => {
+    renderView({ isOptedIn: false, isActionLoading: true, actionError: "Publish failed" });
+
+    expect((screen.getByRole("button", { name: /joining…/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Publish failed")).toBeTruthy();
+  });
+
+  it("switches the leaderboard period from the segmented control", () => {
+    const onPeriodChange = vi.fn();
+    renderView({ activePeriod: "weekly", onPeriodChange });
+
+    expect(screen.getByRole("button", { name: /^weekly$/i }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: /^monthly$/i }));
+
+    expect(onPeriodChange).toHaveBeenCalledWith("monthly");
+  });
+
+  it("falls back to the email prefix in the opted-out preview when no profile name is provided", () => {
     renderView({
       isOptedIn: false,
-      ownRank: 6,
-      profileDisplayName: "Alex",
-      leaderboard: [makeLeaderboardRow({ rank: 6, display_name: "Alex", focus_seconds: 3120 })],
-      publicProfile: makePublicProfile(),
+      profileDisplayName: "   ",
+      email: "focus-mode@example.com",
     });
 
-    const participation = screen.getByLabelText(/your leaderboard participation/i);
-    expect(within(participation).queryByText("#6")).toBeNull();
-    expect(within(participation).queryByText("52m")).toBeNull();
-    expect(within(participation).getByRole("button", { name: /join leaderboard/i }).getAttribute("title")).toMatch(/public profile page/i);
-  });
-
-  it("uses the authenticated entry total even when the user is outside the visible board slice", () => {
-    renderView({ isOptedIn: true, ownFocusSeconds: 5430, ownRank: 117, leaderboard: [], publicProfile: makePublicProfile() });
-
-    const participation = screen.getByLabelText(/your leaderboard participation/i);
-    expect(within(participation).getByText("#117")).toBeTruthy();
-    expect(within(participation).queryByText(/on the board · #117/i)).toBeNull();
-    fireEvent.click(within(participation).getByRole("button", { name: /^embed$/i }));
-    expect(within(screen.getByRole("dialog", { name: /^rank embed$/i })).getByText("1h 31m")).toBeTruthy();
+    expect(screen.getAllByText(/^focus-mode$/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("keeps the rank embed locked until the selected period has a public rank", () => {
     renderView({ isOptedIn: true, ownFocusSeconds: 5430, ownRank: null, leaderboard: [], publicProfile: makePublicProfile() });
 
-    const participation = screen.getByLabelText(/your leaderboard participation/i);
-    fireEvent.click(within(participation).getByRole("button", { name: /^embed$/i }));
+    openMenuItem(/^embed$/i);
     const modal = screen.getByRole("dialog", { name: /^rank embed$/i });
     expect(within(modal).getByRole("note").textContent).toMatch(/not public yet/i);
     for (const snippetInput of within(modal).getAllByRole("textbox")) {
@@ -172,76 +180,11 @@ describe("LeaderboardView", () => {
     }
   });
 
-  it("does not infer the current user from a duplicate display name", () => {
-    renderView({
-      isOptedIn: true,
-      ownRank: null,
-      ownFocusSeconds: null,
-      profileDisplayName: "Alex",
-      leaderboard: [makeLeaderboardRow({
-        rank: 4,
-        display_name: "Alex",
-        focus_seconds: 7200,
-      })],
-      publicProfile: makePublicProfile({ focusSeconds7d: 0 }),
-    });
-
-    const participation = screen.getByLabelText(/your leaderboard participation/i);
-    expect(within(participation).queryByText("#4")).toBeNull();
-    expect(within(participation).queryByText("2h")).toBeNull();
-    expect(within(participation).getByText("On the board")).toBeTruthy();
-  });
-
-  it("keeps the existing participation hero and board as sibling blocks", () => {
-    renderView({
-      leaderboard: [makeLeaderboardRow({ display_name: "Alex", focus_seconds_7d: 7200 })],
-      profileDisplayName: "Alex",
-      ownRank: 1,
-    });
-
-    const participationBlock = screen.getByLabelText(/^leaderboard participation$/i);
-    const boardBlock = screen.getByLabelText(/^global leaderboard$/i);
-
-    expect(participationBlock.contains(boardBlock)).toBe(false);
-    expect(boardBlock.contains(participationBlock)).toBe(false);
-    expect(within(participationBlock).getByText("#1")).toBeTruthy();
-    expect(within(participationBlock).queryByText(/on the board · #1/i)).toBeNull();
-    expect(within(participationBlock).getByLabelText(/your leaderboard participation/i).classList.contains("leaderboard-hero")).toBe(true);
-    expect(within(boardBlock).getByRole("group", { name: /leaderboard period/i })).toBeTruthy();
-    expect(within(boardBlock).getByRole("list", { name: /global focus leaderboard rankings/i })).toBeTruthy();
-  });
-
-  it("restores the existing profile actions in the leaderboard hero", () => {
-    const onEditProfile = vi.fn();
-    renderView({
-      profileDisplayName: "Alex",
-      publicProfile: makePublicProfile({
-        draft: {
-          displayName: "Alex",
-          bio: "Building quiet tools.",
-          avatarUrl: "data:image/png;base64,avatar",
-          websiteUrl: "https://drifty.so",
-          githubUrl: "",
-          linkedinUrl: "",
-          isPublic: true,
-        },
-        onEditProfile,
-      }),
-    });
-
-    const participation = screen.getByLabelText(/your leaderboard participation/i);
-    fireEvent.click(within(participation).getByRole("button", { name: /edit public profile/i }));
-    expect(within(participation).getByRole("link", { name: /drifty\.so/i })).toBeTruthy();
-    expect(within(participation).getByRole("button", { name: /^embed$/i })).toBeTruthy();
-    expect(onEditProfile).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens a rank-only embed from the leaderboard strip", () => {
+  it("opens a rank-only embed from the profile menu", () => {
     const card = mockCard({ enabled: true });
     renderView({ profileDisplayName: "Alex", publicProfile: makePublicProfile({ card }) });
 
-    const strip = screen.getByLabelText(/your leaderboard participation/i);
-    fireEvent.click(within(strip).getByRole("button", { name: /^embed$/i }));
+    openMenuItem(/^embed$/i);
 
     const modal = screen.getByRole("dialog", { name: /^rank embed$/i });
     const [htmlSnippet, markdownSnippet] = within(modal).getAllByRole("textbox") as HTMLInputElement[];
@@ -276,7 +219,7 @@ describe("LeaderboardView", () => {
       }),
     });
 
-    fireEvent.click(within(screen.getByLabelText(/your leaderboard participation/i)).getByRole("button", { name: /^embed$/i }));
+    openMenuItem(/^embed$/i);
     const modal = screen.getByRole("dialog", { name: /^rank embed$/i });
     fireEvent.click(within(modal).getByRole("button", { name: /^card$/i }));
     const cardAvatar = modal.querySelector<HTMLImageElement>(".rank-embed-preview__avatar > img");
@@ -303,7 +246,7 @@ describe("LeaderboardView", () => {
       }),
     });
 
-    fireEvent.click(within(screen.getByLabelText(/your leaderboard participation/i)).getByRole("button", { name: /^embed$/i }));
+    openMenuItem(/^embed$/i);
     const modal = screen.getByRole("dialog", { name: /^rank embed$/i });
     fireEvent.click(within(modal).getByRole("button", { name: /^card$/i }));
     const avatar = modal.querySelector(".rank-embed-preview__avatar");
@@ -436,496 +379,243 @@ describe("LeaderboardView", () => {
     expect(within(dialog).queryByText(/no public bio yet/i)).toBeNull();
   });
 
-  it("renders a loading state while leaderboard data is being fetched", () => {
-    renderView({ isLoading: true });
+  it("leads the ranked card with the Top %, the time to the next rank, and the rank at the end of the position bar", () => {
+    const leaderboard = Array.from({ length: 20 }, (_, index) => makeLeaderboardRow({
+      rank: index + 1,
+      public_id: "profile-" + (index + 1),
+      display_name: "Person " + (index + 1),
+      focus_seconds: (40 - index) * 3600,
+      participant_count: 103,
+    }));
+    // #16 has 25h; the member has 24h 36m, so 24m stands between them.
+    renderView({ leaderboard, ownRank: 17, ownParticipantCount: 103, ownFocusSeconds: 24 * 3600 + 36 * 60, profileDisplayName: "Person 17", publicProfile: makePublicProfile() });
 
-    const panel = screen.getByLabelText(/^leaderboard$/i);
-    // The list header and the toolbar both carry the status; CSS shows one per width.
-    const statuses = within(panel).getAllByRole("status");
-    const status = statuses[0];
-    const loadingHero = panel.querySelector(".leaderboard-hero");
-    const loadingList = panel.querySelector(".leaderboard-list-frame");
-
-    expect(panel.getAttribute("aria-busy")).toBe("true");
-    expect(statuses.every((item) => item.textContent === "Loading latest rankings…")).toBe(true);
-    expect(status.getAttribute("aria-live")).toBe("polite");
-    expect(loadingHero?.closest('[aria-hidden="true"]')).not.toBeNull();
-    // The frame stays readable for the status; only the placeholder rows are hidden.
-    expect(loadingList?.querySelector(".leaderboard-list")?.getAttribute("aria-hidden")).toBe("true");
-    expect(panel.querySelector(".leaderboard-toolbar")).not.toBeNull();
-    expect(panel.querySelectorAll(".leaderboard-loading-shell__row")).toHaveLength(5);
-    expect(within(panel).getByRole("button", { name: "Weekly", hidden: true }).hasAttribute("disabled")).toBe(true);
-    expect(panel.querySelector(".leaderboard-search input")?.hasAttribute("disabled")).toBe(true);
-    expect(screen.queryByText(/checking the latest opt-in rankings/i)).toBeNull();
+    const card = screen.getByRole("region", { name: /^your profile$/i });
+    expect(card.textContent).toMatch(/Top\s*16\.5%/);
+    expect(within(card).getByText((_, element) => element?.classList.contains("lb7-next__text") === true && element.textContent === "24m to #16")).toBeTruthy();
+    expect(within(card).getByText("#17 of 103").closest(".lb7-pv8__track")).not.toBeNull();
+    expect(within(card).queryByText("#1")).toBeNull();
+    expect(within(card).queryByText("#103")).toBeNull();
   });
 
-  it("keeps local focus metrics quiet while they are loading", () => {
-    renderView({ publicProfile: makePublicProfile({ localMetricsStatus: "loading", focusSeconds7d: 0 }) });
+  it("leads with the rank on a small board and shows the lead over #2 at the top", () => {
+    const leaderboard = [3, 2, 1].map((hours, index) => makeLeaderboardRow({ rank: index + 1, public_id: "p" + index, display_name: "P" + index, focus_seconds: hours * 3600, participant_count: 3 }));
+    renderView({ leaderboard, ownRank: 1, ownParticipantCount: 3, ownFocusSeconds: 3 * 3600, publicProfile: makePublicProfile() });
 
-    const totals = screen.getByLabelText(/focus totals/i);
-    expect(within(totals).getAllByText("—")).toHaveLength(3);
-    expect(within(totals).queryByText("0m")).toBeNull();
-    expect(screen.getByRole("status").textContent).toBe("Calculating your local focus totals…");
+    const card = screen.getByRole("region", { name: /^your profile$/i });
+    expect(within(card).getByText("#1")).toBeTruthy();
+    expect(within(card).getByText("of 3")).toBeTruthy();
+    expect(card.textContent).toContain("1h ahead of #2");
+    expect(card.textContent).not.toMatch(/Top\s*\d/);
   });
 
-  it("marks local focus metrics unavailable without showing zero totals", () => {
-    renderView({ publicProfile: makePublicProfile({ localMetricsStatus: "error", focusSeconds7d: 0 }) });
+  it("shows the rank alone when the participant total is unknown", () => {
+    renderView({ isOptedIn: true, ownFocusSeconds: 5430, ownRank: 117, leaderboard: [], publicProfile: makePublicProfile() });
 
-    const totals = screen.getByLabelText(/focus totals/i);
-    expect(within(totals).getAllByText("—")).toHaveLength(3);
-    expect(within(totals).queryByText("0m")).toBeNull();
-    expect(screen.getByRole("status").textContent).toBe("Local focus totals are unavailable.");
+    const card = screen.getByRole("region", { name: /^your profile$/i });
+    expect(within(card).getByText("#117")).toBeTruthy();
+    expect(card.textContent).not.toMatch(/of 0/);
   });
 
-  it("shows ready weekly totals without inventing a 30-day zero", () => {
-    renderView({ publicProfile: makePublicProfile({ focusSeconds7d: 3600 }) });
-
-    const totals = screen.getByLabelText(/focus totals/i);
-    expect(within(totals).getByText("1h")).toBeTruthy();
-    expect(within(totals).getByText("—")).toBeTruthy();
-    expect(within(totals).queryByText("0m")).toBeNull();
-    expect(screen.getByRole("status").textContent).toBe("Calculating your 30-day focus total…");
-  });
-
-  it("renders background refresh status as a non-error toolbar status", () => {
+  it("says Not ranked yet for a joined member without a published rank, and never infers it from a matching name", () => {
     renderView({
-      actionError: null,
-      leaderboard: [makeLeaderboardRow({ display_name: "Alex", focus_seconds_7d: 7200 })],
-      statusMessage: "Refreshing leaderboard",
-      statusTone: "neutral",
+      isOptedIn: true,
+      ownRank: null,
+      ownFocusSeconds: null,
+      profileDisplayName: "Alex",
+      leaderboard: [makeLeaderboardRow({ rank: 4, display_name: "Alex", focus_seconds: 7200 })],
+      publicProfile: makePublicProfile({ focusSeconds7d: 0 }),
     });
 
-    const toolbar = screen.getByLabelText(/global leaderboard/i).querySelector(".leaderboard-toolbar");
-    const statusSlot = toolbar?.querySelector(".leaderboard-toolbar__status-slot");
-    if (!(statusSlot instanceof HTMLElement)) throw new Error("Expected leaderboard toolbar status slot");
-    const refreshStatus = within(statusSlot).getByRole("status");
-
-    expect(refreshStatus.textContent).toBe("Refreshing leaderboard");
-    expect(refreshStatus.classList.contains("leaderboard-refresh-status")).toBe(true);
-    expect(refreshStatus.classList.contains("capture-recency--error")).toBe(false);
-    expect(refreshStatus.getAttribute("data-tone")).toBe("neutral");
-    expect(refreshStatus.closest(".capture-recency")).toBeNull();
-    expect(refreshStatus.closest(".leaderboard-toolbar__status-slot")).toBe(statusSlot);
+    const card = screen.getByRole("region", { name: /^your profile$/i });
+    expect(within(card).getByText("Not ranked yet")).toBeTruthy();
+    expect(within(card).getByText(/your rank shows up once your focus is published/i)).toBeTruthy();
+    expect(within(card).queryByText("#4")).toBeNull();
+    const list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
+    expect(within(list).queryByText("You")).toBeNull();
   });
 
-  it("omits the idle refresh sentence so the toolbar stays empty until there is a real status", () => {
-    renderView({
-      leaderboard: [makeLeaderboardRow({ display_name: "Alex", focus_seconds_7d: 7200 })],
-    });
+  it("keeps the standing blank instead of saying Not ranked yet while a joined board loads", () => {
+    renderView({ isOptedIn: true, isLoading: true, ownRank: null, publicProfile: makePublicProfile() });
 
-    const toolbar = screen.getByLabelText(/global leaderboard/i).querySelector(".leaderboard-toolbar");
-    expect(toolbar?.querySelector(".leaderboard-refresh-status--idle")).toBeNull();
-    expect(screen.queryByText(/scores refresh throughout the day/i)).toBeNull();
+    expect(screen.getByLabelText(/^leaderboard$/i).getAttribute("aria-busy")).toBe("true");
+    expect(screen.queryByText("Not ranked yet")).toBeNull();
+    expect(screen.getByRole("button", { name: /^weekly$/i }).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("list", { name: /global focus leaderboard rankings/i })).toBeNull();
   });
 
-  it("renders an error state when the fetch fails", () => {
-    renderView({ error: "RPC exploded" });
+  it("shows who is on the board and Join before joining, without stale rank, Share or the menu", () => {
+    const leaderboard = Array.from({ length: 8 }, (_, index) => makeLeaderboardRow({ rank: index + 1, public_id: "p" + index, display_name: "Person " + (index + 1), focus_seconds: (10 - index) * 3600, participant_count: 102 }));
+    renderView({ isOptedIn: false, ownRank: 6, ownParticipantCount: 102, profileDisplayName: "  Alex Kim  ", email: "alex@example.com", leaderboard, publicProfile: makePublicProfile() });
 
-    expect(screen.getByText(/unable to load leaderboard/i)).toBeTruthy();
-    expect(screen.getByText("RPC exploded")).toBeTruthy();
-  });
-
-  it("keeps the stable loading frame ahead of a stale fetch error", () => {
-    renderView({ error: "Previous RPC error", isLoading: true });
-
-    expect(screen.getAllByRole("status").every((item) => item.textContent === "Loading latest rankings…")).toBe(true);
-    expect(screen.queryByText(/unable to load leaderboard/i)).toBeNull();
-  });
-
-  it("renders an opted-out state with the exact trimmed public-name preview", () => {
-    renderView({
-      isOptedIn: false,
-      profileDisplayName: "  Alex Kim  ",
-      email: "alex@example.com",
-    });
-
-    expect(screen.getByText(/not on the board yet/i)).toBeTruthy();
-    expect(within(screen.getByLabelText(/your leaderboard participation/i)).getByRole("button", { name: /join leaderboard/i })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
-    expect(screen.queryByText(/joining shares|join the public leaderboard to share/i)).toBeNull();
-    expect(screen.getAllByText(/^Alex Kim$/).length).toBeGreaterThanOrEqual(1);
+    const card = screen.getByRole("region", { name: /^your profile$/i });
+    expect(within(card).getByText(/^Alex Kim$/)).toBeTruthy();
+    expect(within(card).getByText("Join to see where you stand")).toBeTruthy();
+    expect(within(card).getByText("Only focus totals are shared.")).toBeTruthy();
+    expect(within(card).getByText("102 people on this board")).toBeTruthy();
+    expect(within(card).getByRole("button", { name: /join leaderboard/i }).getAttribute("title")).toMatch(/public profile page/i);
+    expect(within(card).queryByText("#6")).toBeNull();
+    expect(card.textContent).not.toMatch(/Top\s*\d/);
+    expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /more actions/i })).toBeNull();
     expect(screen.queryByText("alex@example.com")).toBeNull();
   });
 
-  it("renders join and leave participation controls in the same hero action slot", () => {
-    const { rerender } = renderView({
-      isOptedIn: false,
-      profileDisplayName: "Alex",
-      email: "alex@example.com",
-      onOptOut: vi.fn(),
-    });
-
-    const optedOutHero = screen.getByLabelText(/your leaderboard participation/i);
-    const joinButton = within(optedOutHero).getByRole("button", { name: /join leaderboard/i });
-    const joinSlot = joinButton.closest(".leaderboard-hero__participation-slot");
-    const joinRail = joinSlot?.closest(".leaderboard-hero__rail-actions");
-
-    expect(joinSlot).not.toBeNull();
-    expect(joinSlot?.contains(joinButton)).toBe(true);
-    expect(joinRail).not.toBeNull();
-
-    rerender(
-      <LeaderboardView
-        isSupabaseEnabled
-        isSignedIn
-        isLoading={false}
-        error={null}
-        isOptedIn
-        activePeriod="weekly"
-        leaderboard={[]}
-        profileDisplayName="Alex"
-        email="alex@example.com"
-        isActionLoading={false}
-        actionError={null}
-        onOptIn={vi.fn()}
-        onOptOut={vi.fn()}
-      />,
-    );
-
-    const optedInHero = screen.getByLabelText(/your leaderboard participation/i);
-    const leaveButton = within(optedInHero).getByRole("button", { name: /leave leaderboard/i });
-    const leaveSlot = leaveButton.closest(".leaderboard-hero__participation-slot");
-    const leaveRail = leaveSlot?.closest(".leaderboard-hero__rail-actions");
-
-    expect(leaveSlot).not.toBeNull();
-    expect(leaveSlot?.contains(leaveButton)).toBe(true);
-    expect(joinSlot?.className).toBe(leaveSlot?.className);
-    expect(joinRail?.className).toBe(leaveRail?.className);
-  });
-
-  it("falls back to the email prefix in the opted-out preview when no profile name is provided", () => {
-    renderView({
-      isOptedIn: false,
-      profileDisplayName: "   ",
-      email: "focus-mode@example.com",
-    });
-
-    expect(screen.getAllByText(/^focus-mode$/).length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("renders an empty opted-in state when no eligible participants are ranked yet", () => {
-    renderView({ isOptedIn: true, leaderboard: [] });
-
-    expect(screen.getByText(/no ranked participants yet/i)).toBeTruthy();
-    expect(screen.getByText(/once someone opts in, rankings will appear here/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /leave leaderboard/i })).toBeTruthy();
-  });
-
-  it("calls the opt-in callback from the opted-out state", () => {
+  it("signs in first when a signed-out user joins", () => {
+    const onSignIn = vi.fn();
     const onOptIn = vi.fn();
-    renderView({ isOptedIn: false, onOptIn });
+    renderView({ isSignedIn: false, isOptedIn: false, onSignIn, onOptIn });
 
     fireEvent.click(screen.getByRole("button", { name: /join leaderboard/i }));
 
-    expect(onOptIn).toHaveBeenCalledTimes(1);
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+    expect(onOptIn).not.toHaveBeenCalled();
   });
 
-  it("disables the opt-in button and shows an action error while joining", () => {
-    renderView({ isOptedIn: false, isActionLoading: true, actionError: "Publish failed" });
+  it("asks before leaving and leaves only from the confirmation", () => {
+    const onOptOut = vi.fn();
+    renderView({ isOptedIn: true, ownRank: 5, onOptOut, publicProfile: makePublicProfile() });
 
-    expect((screen.getByRole("button", { name: /joining…/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Publish failed")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^leave leaderboard$/i })).toBeNull();
+    openMenuItem(/^leave leaderboard$/i);
+    let dialog = screen.getByRole("dialog", { name: /leave the leaderboard\?/i });
+    expect(dialog.textContent).toMatch(/public profile page is turned off/i);
+    expect(dialog.textContent).toMatch(/nothing local is deleted/i);
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+    expect(onOptOut).not.toHaveBeenCalled();
+
+    openMenuItem(/^leave leaderboard$/i);
+    dialog = screen.getByRole("dialog", { name: /leave the leaderboard\?/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^leave leaderboard$/i }));
+    expect(onOptOut).toHaveBeenCalledOnce();
   });
 
-  it("switches the leaderboard period from the segmented control", () => {
-    const onPeriodChange = vi.fn();
-    renderView({ activePeriod: "weekly", onPeriodChange });
+  it("keeps a failed leave inside the confirmation", () => {
+    const view = renderView({ isOptedIn: true, ownRank: 5, publicProfile: makePublicProfile() });
+    openMenuItem(/^leave leaderboard$/i);
+    view.rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn ownRank={5} activePeriod="weekly" leaderboard={[]} actionError="Could not leave" onOptOut={vi.fn()} publicProfile={makePublicProfile()} />);
 
-    expect(screen.getByRole("button", { name: /^weekly$/i }).getAttribute("aria-pressed")).toBe("true");
-
-    fireEvent.click(screen.getByRole("button", { name: /^monthly$/i }));
-
-    expect(onPeriodChange).toHaveBeenCalledWith("monthly");
+    const dialog = screen.getByRole("dialog", { name: /leave the leaderboard\?/i });
+    expect(within(dialog).getByRole("alert").textContent).toBe("Could not leave");
+    expect(within(screen.getByRole("region", { name: /^your profile$/i })).queryByText("Could not leave")).toBeNull();
   });
 
-  it("uses single-line period controls and omits row subtitles", () => {
-    renderView({
-      activePeriod: "monthly",
-      leaderboard: [makeLeaderboardRow({ period: "monthly", focus_seconds: 7200, focus_seconds_7d: 7200 })],
-    });
+  it("lists the board from #4 with only safe public fields and marks the member's row", () => {
+    const leaderboard = Array.from({ length: 6 }, (_, index) => makeLeaderboardRow({
+      rank: index + 1,
+      public_id: "profile-" + (index + 1),
+      display_name: ["Alex", "Sam", "Rin", "Mo", "Kai", "Lee"][index],
+      focus_seconds: (6 - index) * 3600 + 60,
+    }));
+    renderView({ leaderboard, ownRank: 5, profileDisplayName: "Kai" });
 
-    const periodControl = screen.getByRole("group", { name: /leaderboard period/i });
-    expect(within(periodControl).getByRole("button", { name: /^monthly$/i })).toBeTruthy();
-    expect(within(periodControl).queryByText(/today/i)).toBeNull();
-    expect(within(periodControl).queryByText(/7 days/i)).toBeNull();
-    expect(within(periodControl).queryByText(/30 days/i)).toBeNull();
-    expect(screen.queryByText(/rolling 7-day focus total/i)).toBeNull();
-    expect(screen.queryByText(/rolling 30-day focus total/i)).toBeNull();
-  });
-
-  it("shows a simple daily average for weekly and monthly periods", () => {
-    renderView({
-      activePeriod: "monthly",
-      leaderboard: [makeLeaderboardRow({ period: "monthly", focus_seconds: 108000, focus_seconds_7d: 108000 })],
-    });
-
-    expect(screen.getAllByText(/daily avg/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("1h").length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("does not show daily average for daily periods", () => {
-    renderView({
-      activePeriod: "daily",
-      leaderboard: [makeLeaderboardRow({ period: "daily", focus_seconds: 3600, focus_seconds_7d: 3600 })],
-    });
-
-    expect(within(screen.getByLabelText(/^global leaderboard$/i)).queryByText(/daily avg/i)).toBeNull();
-  });
-
-  it("renders a populated ranked list with only safe public fields", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-04-07T13:00:00.000Z"));
-
-    const leaderboard: LeaderboardRow[] = [
-      makeLeaderboardRow({
-        rank: 1,
-        public_id: "profile-1",
-        display_name: "Alex",
-        focus_seconds_7d: 7260,
-        updated_at: "2026-04-07T12:00:00.000Z",
-      }),
-      makeLeaderboardRow({
-        rank: 2,
-        public_id: "profile-2",
-        display_name: "Sam",
-        focus_seconds_7d: 3600,
-        updated_at: "2026-04-07T12:55:00.000Z",
-      }),
-    ];
-
-    renderView({ leaderboard, profileDisplayName: "Sam", ownRank: 2 });
-
+    const hall = screen.getByRole("region", { name: /top 3/i });
+    expect(within(hall).getByText("Alex")).toBeTruthy();
+    expect(within(hall).getByText("6h 1m")).toBeTruthy();
     const list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
-    const boardBlock = screen.getByLabelText(/^global leaderboard$/i);
     const rows = within(list).getAllByRole("listitem");
-
-    expect(rows).toHaveLength(2);
-    expect(within(boardBlock).getByText("Focus time")).toBeTruthy();
-    expect(within(boardBlock).getByText("Daily avg")).toBeTruthy();
-    expect(within(rows[0]).getByText("#1")).toBeTruthy();
-    expect(within(rows[0]).getByText("Alex")).toBeTruthy();
-    expect(within(rows[0]).getByText("2h 1m")).toBeTruthy();
-    expect(within(rows[0]).queryByText(/focus time/i)).toBeNull();
-    expect(within(rows[0]).queryByText(/daily avg/i)).toBeNull();
-    expect(within(rows[0]).queryByText(/1h ago/i)).toBeNull();
-
-    expect(within(rows[1]).getByText("#2")).toBeTruthy();
-    expect(within(rows[1]).getByText("Sam")).toBeTruthy();
-    expect(within(rows[1]).queryByText(/your published period total/i)).toBeNull();
-    expect(within(rows[1]).getByText("1h")).toBeTruthy();
-    expect(within(rows[1]).queryByText(/5m ago/i)).toBeNull();
-    expect(screen.getAllByText("#2").length).toBeGreaterThanOrEqual(1);
-
+    expect(rows.map((row) => row.querySelector(".lb7-row__rank")?.textContent)).toEqual(["#4", "#5", "#6"]);
+    expect(within(rows[1]).getByText("You")).toBeTruthy();
+    expect(rows[1].classList.contains("is-self")).toBe(true);
+    expect(screen.queryByText(/profile-\d/)).toBeNull();
     expect(screen.queryByText("2026-04-01")).toBeNull();
-    expect(screen.queryByText("2026-04-07")).toBeNull();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(screen.queryByRole("navigation", { name: /leaderboard pages/i })).toBeNull();
   });
 
-  it("filters leaderboard rows by search text", () => {
-    const leaderboard: LeaderboardRow[] = [
-      makeLeaderboardRow({
-        rank: 1,
-        public_id: "profile-1",
-        display_name: "Alex",
-        focus_seconds_7d: 7260,
-        updated_at: "2026-04-07T12:00:00.000Z",
-      }),
-      makeLeaderboardRow({
-        rank: 2,
-        public_id: "profile-2",
-        display_name: "Sam",
-        focus_seconds_7d: 3600,
-        updated_at: "2026-04-07T12:55:00.000Z",
-      }),
-    ];
-
-    renderView({ leaderboard });
-    fireEvent.change(screen.getByRole("searchbox", { name: /search leaderboard/i }), { target: { value: "sam" } });
+  it("adds the member's own row after the loaded slice when the rank is further down", () => {
+    const leaderboard = Array.from({ length: 25 }, (_, index) => makeLeaderboardRow({ rank: index + 1, public_id: "p" + index, display_name: "Person " + (index + 1), focus_seconds: (30 - index) * 3600, participant_count: 140 }));
+    renderView({ leaderboard, ownRank: 117, ownParticipantCount: 140, ownFocusSeconds: 5430, profileDisplayName: "Alex" });
 
     const list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
-    expect(within(list).getByText("Sam")).toBeTruthy();
-    expect(within(list).queryByText("Alex")).toBeNull();
-    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 1–1 of 1 matches from the ranked participants/i);
+    expect(within(list).getByText("Beyond the top 25")).toBeTruthy();
+    const own = list.querySelector('[data-rank="117"]');
+    expect(own?.textContent).toContain("Alex");
+    expect(own?.textContent).toContain("1h 31m");
   });
 
-  it("names the searched participants in the no-match hint", () => {
-    renderView({ leaderboard: [makeLeaderboardRow({ rank: 1, display_name: "Alex", focus_seconds_7d: 7200 })] });
-    fireEvent.change(screen.getByRole("searchbox", { name: /search leaderboard/i }), { target: { value: "zzz" } });
-
-    expect(screen.getByText("Try a name or rank number from the ranked participants.")).toBeTruthy();
-  });
-
-  it("keeps refresh status out of the row flow when a list is shown", () => {
-    const { container, rerender } = render(
-      <LeaderboardView
-        isSupabaseEnabled
-        isSignedIn
-        isOptedIn={false}
-        leaderboard={[makeLeaderboardRow({ rank: 1, display_name: "Alex", focus_seconds_7d: 7200 })]}
-        statusMessage="Leaderboard update failed: request timed out"
-        statusTone="error"
-      />,
-    );
-
-    const listHeadStatus = container.querySelector(".leaderboard-list-head__status .leaderboard-refresh-status");
-    expect(listHeadStatus?.getAttribute("title")).toBe("Leaderboard update failed: request timed out");
-    expect(listHeadStatus?.closest('[aria-hidden="true"]')).toBeNull();
-    expect(container.querySelector(".leaderboard-toolbar__status-slot--list-backed")).not.toBeNull();
-
-    rerender(
-      <LeaderboardView
-        isSupabaseEnabled
-        isSignedIn
-        isOptedIn={false}
-        leaderboard={[]}
-        statusMessage="Refreshing leaderboard"
-      />,
-    );
-
-    expect(container.querySelector(".leaderboard-list-head__status")).toBeNull();
-    expect(container.querySelector(".leaderboard-toolbar__status-slot--list-backed")).toBeNull();
-    expect(within(container.querySelector(".leaderboard-toolbar__status-slot") as HTMLElement).getByRole("status").textContent).toBe("Refreshing leaderboard");
-    expect((screen.getByRole("searchbox", { name: /search leaderboard/i }) as HTMLInputElement).disabled).toBe(true);
-  });
-
-  it("keeps a leftover search clearable when the next period's board is empty", () => {
-    const { rerender } = renderView({ leaderboard: [makeLeaderboardRow({ rank: 1, display_name: "Alex", focus_seconds_7d: 7200 })] });
-    fireEvent.change(screen.getByRole("searchbox", { name: /search leaderboard/i }), { target: { value: "ale" } });
-
-    rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn activePeriod="daily" leaderboard={[]} />);
-
-    const search = screen.getByRole("searchbox", { name: /search leaderboard/i }) as HTMLInputElement;
-    expect(search.value).toBe("ale");
-    expect(search.disabled).toBe(false);
-    fireEvent.change(search, { target: { value: "" } });
-    expect(search.disabled).toBe(true);
-  });
-
-  it("labels the loaded top slice separately from the full participant count", () => {
-    const leaderboard = Array.from({ length: 100 }, (_, index) => makeLeaderboardRow({
-      rank: index + 1,
-      participant_count: 2_858,
-      public_id: `profile-${index + 1}`,
-      display_name: `Person ${index + 1}`,
-      focus_seconds: (100 - index) * 600,
-      updated_at: `2026-04-07T12:${String(index % 60).padStart(2, "0")}:00.000Z`,
-    }));
-
-    renderView({ leaderboard, ownParticipantCount: 2_858, ownRank: 117 });
-
-    const scope = screen.getByLabelText(/leaderboard scope/i);
-    expect(within(scope).getByText("2,858")).toBeTruthy();
-    expect(within(scope).getByText("Top 100 focus")).toBeTruthy();
-    expect(screen.getByRole("searchbox", { name: /search leaderboard/i }).getAttribute("placeholder")).toBe("Search top 100…");
-  });
-
-  it("does not invent a participant total when count metadata is missing or inconsistent", () => {
-    const leaderboard = Array.from({ length: 100 }, (_, index) => makeLeaderboardRow({
-      rank: index + 1,
-      participant_count: null,
-      public_id: `profile-${index + 1}`,
-      display_name: `Person ${index + 1}`,
-      updated_at: `2026-04-07T12:${String(index % 60).padStart(2, "0")}:00.000Z`,
-    }));
-
-    renderView({ leaderboard, ownParticipantCount: 90, ownRank: 117 });
-
-    const scope = screen.getByLabelText(/leaderboard scope/i);
-    expect(within(scope).getByText("—")).toBeTruthy();
-    expect(within(scope).getByText("Top 100 focus")).toBeTruthy();
-    expect(screen.getByRole("searchbox", { name: /search leaderboard/i }).getAttribute("placeholder")).toBe("Search top 100…");
-  });
-
-  it("rejects a participant total below the highest observed rank", () => {
-    const leaderboard = Array.from({ length: 31 }, (_, index) => makeLeaderboardRow({
-      display_name: `Person ${index + 1}`,
-      participant_count: 5,
-      rank: index + 1,
-    }));
-
-    renderView({ leaderboard, ownParticipantCount: 5, ownRank: null });
-
-    const scope = screen.getByLabelText("Leaderboard scope");
-    expect(within(scope).getByText("—")).toBeTruthy();
-    expect(within(scope).getByText("Total focus")).toBeTruthy();
-  });
-
-  it("keeps an explicit zero participant total for an empty board", () => {
-    renderView({ leaderboard: [], ownParticipantCount: 0 });
-
-    const scope = screen.getByLabelText("Leaderboard scope");
-    expect(within(scope).getByText("0")).toBeTruthy();
-  });
-
-  it("paginates the loaded board in groups of 25", () => {
-    const leaderboard = Array.from({ length: 60 }, (_, index) => makeLeaderboardRow({
-      rank: index + 1,
-      public_id: `profile-${index + 1}`,
-      display_name: `Person ${index + 1}`,
-      focus_seconds: (60 - index) * 600,
-      updated_at: `2026-04-07T12:${String(index % 60).padStart(2, "0")}:00.000Z`,
-    }));
-
-    renderView({ leaderboard });
-
-    let list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(25);
-    expect(within(list).getByText("#1")).toBeTruthy();
-    expect(within(list).queryByText("#26")).toBeNull();
-    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 1–25 of 60/i);
-
-    fireEvent.click(screen.getByRole("button", { name: /next leaderboard page/i }));
-
-    list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(25);
-    expect(within(list).getByText("#26")).toBeTruthy();
-    expect(within(list).queryByText("#1")).toBeNull();
-    expect(screen.getByText(/page 2 of 3/i)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: /next leaderboard page/i }));
-
-    list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(10);
-    expect(within(list).getByText("#60")).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 51–60 of 60/i);
-    expect((screen.getByRole("button", { name: /next leaderboard page/i }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("returns to the first page when search scope changes", () => {
-    const leaderboard = Array.from({ length: 40 }, (_, index) => makeLeaderboardRow({
-      rank: index + 1,
-      public_id: `profile-${index + 1}`,
-      display_name: `Person ${index + 1}`,
-      updated_at: `2026-04-07T12:${String(index % 60).padStart(2, "0")}:00.000Z`,
-    }));
-
-    renderView({ leaderboard });
-    fireEvent.click(screen.getByRole("button", { name: /next leaderboard page/i }));
-    expect(screen.getByText(/page 2 of 2/i)).toBeTruthy();
-
-    fireEvent.change(screen.getByRole("searchbox", { name: /search leaderboard/i }), { target: { value: "Person 3" } });
-
-    expect(screen.getByText(/page 1 of 1/i)).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 1–11 of 11 matches/i);
-  });
-
-  it("opens the selected participant profile from a ranked row", () => {
+  it("opens a participant's profile from the Top 3 and from a ranked row", () => {
     const onSelectProfile = vi.fn();
-    const leaderboard: LeaderboardRow[] = [
-      makeLeaderboardRow({
-        rank: 1,
-        public_id: "profile-1",
-        display_name: "Alex",
-        focus_seconds_7d: 7260,
-        updated_at: "2026-04-07T12:00:00.000Z",
-      }),
-    ];
-
+    const leaderboard = Array.from({ length: 4 }, (_, index) => makeLeaderboardRow({ rank: index + 1, public_id: "p" + index, display_name: ["Alex", "Sam", "Rin", "Mo"][index], focus_seconds: (5 - index) * 3600 }));
     renderView({ leaderboard, onSelectProfile });
 
     fireEvent.click(screen.getByRole("button", { name: /view alex profile/i }));
+    fireEvent.click(screen.getByRole("button", { name: /view mo profile/i }));
 
-    expect(onSelectProfile).toHaveBeenCalledWith(leaderboard[0]);
+    expect(onSelectProfile).toHaveBeenNthCalledWith(1, leaderboard[0]);
+    expect(onSelectProfile).toHaveBeenNthCalledWith(2, leaderboard[3]);
+  });
+
+  it("says when no one is ranked yet and when everyone fits in the Top 3", () => {
+    const { rerender } = renderView({ isOptedIn: true, leaderboard: [] });
+    expect(screen.getByText(/no ranked participants yet/i)).toBeTruthy();
+    expect(screen.getByText(/once someone opts in, rankings will appear here/i)).toBeTruthy();
+
+    rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn activePeriod="weekly" leaderboard={[makeLeaderboardRow({ rank: 1, display_name: "Alex", focus_seconds: 3600 })]} />);
+    expect(screen.getByText(/everyone on this board is in the top 3/i)).toBeTruthy();
+  });
+
+  it("counts participants in the header only when the total is trustworthy", () => {
+    const rows = (count: number | null, length: number) => Array.from({ length }, (_, index) => makeLeaderboardRow({ rank: index + 1, public_id: "p" + index, display_name: "P" + index, participant_count: count }));
+    const { rerender } = renderView({ leaderboard: rows(2_858, 100), ownParticipantCount: 2_858, ownRank: 117, totalFocusSeconds7d: 3600 });
+    expect(screen.getByText(/2,858 participants · 1h total/)).toBeTruthy();
+
+    rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn activePeriod="weekly" leaderboard={rows(5, 31)} ownParticipantCount={5} />);
+    expect(screen.queryByText(/participants ·/)).toBeNull();
+
+    rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn activePeriod="weekly" leaderboard={[]} ownParticipantCount={0} />);
+    expect(screen.getByText(/ · 0 participants · /)).toBeTruthy();
+  });
+
+  it("puts one status beside the period switch: refresh first, then what needs action, then quiet progress", () => {
+    const status = () => screen.getByRole("status");
+    const base = { isSupabaseEnabled: true, isSignedIn: true, isOptedIn: true, activePeriod: "weekly" as const, leaderboard: [] };
+    const { rerender } = render(<LeaderboardView {...base} statusMessage="Refreshing leaderboard" statusTone="neutral" publicProfile={makePublicProfile({ profileError: "Unable to save profile" })} />);
+    expect(status().textContent).toBe("Refreshing leaderboard");
+    expect(status().getAttribute("data-tone")).toBe("neutral");
+
+    rerender(<LeaderboardView {...base} publicProfile={makePublicProfile({ profileError: "Unable to save profile" })} />);
+    expect(status().textContent).toBe("Unable to save profile");
+    expect(status().getAttribute("data-tone")).toBe("error");
+
+    rerender(<LeaderboardView {...base} publiclyValid={false} publicProfile={makePublicProfile()} />);
+    expect(status().textContent).toBe("Validation failed · check date & time");
+
+    rerender(<LeaderboardView {...base} publicProfile={makePublicProfile({ localMetricsStatus: "error", focusSeconds7d: 0 })} />);
+    expect(status().textContent).toBe("Local focus totals are unavailable.");
+    expect(status().getAttribute("data-tone")).toBe("neutral");
+    expect(screen.getByRole("region", { name: /^your profile$/i }).querySelector(".lb7-pv8__weekcopy strong")?.textContent).toBe("—");
+
+    rerender(<LeaderboardView {...base} />);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("keeps the loading frame ahead of a stale fetch error", () => {
+    renderView({ error: "Previous RPC error", isLoading: true });
+
+    expect(screen.queryByText(/unable to load leaderboard/i)).toBeNull();
+    expect(screen.getByLabelText(/^leaderboard$/i).getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("shows the profile's edit control and links", () => {
+    const onEditProfile = vi.fn();
+    renderView({ profileDisplayName: "Alex", publicProfile: makePublicProfile({ onEditProfile }) });
+
+    const card = screen.getByRole("region", { name: /^your profile$/i });
+    fireEvent.click(within(card).getByRole("button", { name: /^edit profile$/i }));
+    expect(within(card).getByRole("link", { name: /drifty\.so/i }).getAttribute("href")).toMatch(/^https:\/\/drifty\.so\/?$/);
+    expect(within(card).getByText("Building quiet tools.")).toBeTruthy();
+    expect(onEditProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("titles the page with one shared page-header h1, also when the board cannot load", () => {
+    const { rerender } = renderView();
+    const heading = screen.getByRole("heading", { level: 1, name: /^leaderboard$/i });
+    expect(heading.closest(".pg-head")).not.toBeNull();
+    expect(screen.getAllByRole("heading", { name: /^leaderboard$/i })).toHaveLength(1);
+
+    rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn activePeriod="weekly" leaderboard={[]} error="RPC exploded" />);
+    expect(screen.getByRole("heading", { level: 1, name: /^leaderboard$/i }).closest(".pg-head")).not.toBeNull();
   });
 
   // Regression: a joined account used to render as a confident "not joined" while
@@ -938,298 +628,47 @@ describe("LeaderboardView", () => {
       publicProfile: makePublicProfile(),
     });
 
-    it("shows neither the join nor the leave control", () => {
+    it("shows neither Join nor Share nor the menu, and announces the check", () => {
       renderView(pendingProps());
 
       expect(screen.queryByRole("button", { name: /join leaderboard/i })).toBeNull();
-      expect(screen.queryByRole("button", { name: /^leave leaderboard$/i })).toBeNull();
-    });
-
-    it("does not claim the account is off the board", () => {
-      renderView(pendingProps());
-
-      expect(screen.queryByText(/not on the board yet/i)).toBeNull();
-      expect(screen.getByText(/checking your status/i)).toBeTruthy();
-    });
-
-    it("withholds Share but holds its footprint so the hero does not reflow", () => {
-      const { container } = renderView(pendingProps());
-
       expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
-      // Two placeholders: one for the participation control, one for Share.
-      expect(container.querySelectorAll(".leaderboard-hero__participation-placeholder").length).toBe(2);
-    });
-
-    it("announces the pending participation check to assistive tech", () => {
-      renderView(pendingProps());
-
+      expect(screen.queryByRole("button", { name: /more actions/i })).toBeNull();
+      expect(screen.queryByText("Join to see where you stand")).toBeNull();
       expect(screen.getByRole("status", { name: /checking your leaderboard participation/i })).toBeTruthy();
     });
 
-    it("keeps the participation slot neutral even while the board is loading", () => {
+    it("stays neutral even while the board is loading", () => {
       renderView({ ...pendingProps(), isLoading: true });
 
       expect(screen.queryByRole("button", { name: /join leaderboard/i })).toBeNull();
-      expect(screen.queryByRole("button", { name: /^leave leaderboard$/i })).toBeNull();
+      expect(screen.queryByText("Join to see where you stand")).toBeNull();
     });
 
     it("restores the joined controls once participation resolves", () => {
       const { rerender } = renderView(pendingProps());
 
-      expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
-
-      rerender(
-        <LeaderboardView
-          isSupabaseEnabled
-          isSignedIn
-          isLoading={false}
-          error={null}
-          isOptedIn
-          isParticipationResolved
-          activePeriod="weekly"
-          leaderboard={[]}
-          profileDisplayName={null}
-          email={null}
-          isActionLoading={false}
-          actionError={null}
-          publicProfile={makePublicProfile()}
-          onOptIn={vi.fn()}
-          onOptOut={vi.fn()}
-        />,
-      );
+      rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn isParticipationResolved activePeriod="weekly" leaderboard={[]} publicProfile={makePublicProfile()} onOptOut={vi.fn()} />);
 
       expect(screen.getByRole("button", { name: /^share$/i })).toBeTruthy();
-      expect(screen.getByRole("button", { name: /^leave leaderboard$/i })).toBeTruthy();
-      expect(screen.queryByText(/checking your status/i)).toBeNull();
+      openMenuItem(/^leave leaderboard$/i);
+      expect(screen.getByRole("dialog", { name: /leave the leaderboard\?/i })).toBeTruthy();
     });
+  });
 
-    it("renders a disabled Catching up button with notice when AI is catching up on recent activity", () => {
-      const { rerender } = renderView({
-        isSupabaseEnabled: true,
-        isSignedIn: true,
-        isOptedIn: false,
-        isCatchingUp: true,
-      });
+  it("disables Join with a Catching up label and says why while AI catches up", () => {
+    const { rerender } = renderView({ isOptedIn: false, isCatchingUp: true });
 
-      const catchingUpButton = screen.getByRole("button", { name: /^catching up…$/i });
-      expect(catchingUpButton).toBeTruthy();
-      expect(catchingUpButton.hasAttribute("disabled")).toBe(true);
-      expect(catchingUpButton.getAttribute("title")).toMatch(/catching up on recent activity/i);
-      expect(screen.getByText(/AI is catching up on recent activity/i)).toBeTruthy();
+    const button = screen.getByRole("button", { name: /^catching up…$/i });
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(button.getAttribute("title")).toMatch(/catching up on recent activity/i);
+    expect(screen.getByRole("status").textContent).toMatch(/AI is catching up on recent activity/i);
 
-      rerender(
-        <LeaderboardView
-          isSupabaseEnabled
-          isSignedIn
-          isLoading={false}
-          error={null}
-          isOptedIn={false}
-          isCatchingUp={false}
-          activePeriod="weekly"
-          leaderboard={[]}
-          profileDisplayName={null}
-          email={null}
-          isActionLoading={false}
-          actionError={null}
-          onOptIn={vi.fn()}
-          onOptOut={vi.fn()}
-        />,
-      );
-
-      const joinButton = screen.getByRole("button", { name: /join leaderboard/i });
-      expect(joinButton).toBeTruthy();
-    expect(joinButton.hasAttribute("disabled")).toBe(false);
+    rerender(<LeaderboardView isSupabaseEnabled isSignedIn isOptedIn={false} isCatchingUp={false} activePeriod="weekly" leaderboard={[]} onOptIn={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /join leaderboard/i }).hasAttribute("disabled")).toBe(false);
     expect(screen.queryByText(/AI is catching up on recent activity/i)).toBeNull();
   });
-});
 
-  it("explains a failed public validation in the rank slot", () => {
-    renderView({ isOptedIn: true, publiclyValid: false, ownRank: null, publicProfile: makePublicProfile() });
-    expect(screen.getByText("Validation failed · check date & time")).toBeTruthy();
-    expect(screen.queryByText(/score failed public validation/i)).toBeNull();
-  });
-
-  it("leaves immediately, including when the public page is on", () => {
-    const onOptOut = vi.fn();
-    renderView({ isOptedIn: true, onOptOut, publicProfile: makePublicProfile() });
-    fireEvent.click(screen.getByRole("button", { name: /leave leaderboard/i }));
-    expect(screen.queryByRole("dialog", { name: /leave the leaderboard/i })).toBeNull();
-    expect(onOptOut).toHaveBeenCalledOnce();
-  });
-
-  it("leaves immediately when the public profile is off", () => {
-    const onOptOut = vi.fn();
-    const publicProfile = makePublicProfile();
-    renderView({
-      isOptedIn: true,
-      onOptOut,
-      publicProfile: { ...publicProfile, draft: { ...publicProfile.draft, isPublic: false } },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /leave leaderboard/i }));
-    expect(screen.queryByRole("dialog", { name: /leave the leaderboard/i })).toBeNull();
-    expect(onOptOut).toHaveBeenCalledOnce();
-  });
-
-  it("shows the week sparkline in the profile rail", () => {
-    const days = [
-      { day: "2026-09-14", focus: 3200, drift: 0, neutral: 0 },
-      { day: "2026-09-15", focus: 2800, drift: 0, neutral: 0 },
-      { day: "2026-09-16", focus: 4100, drift: 0, neutral: 0 },
-      { day: "2026-09-17", focus: 3500, drift: 0, neutral: 0 },
-      { day: "2026-09-18", focus: 4800, drift: 0, neutral: 0 },
-      { day: "2026-09-19", focus: 3000, drift: 0, neutral: 0 },
-      { day: "2026-09-20", focus: 3600, drift: 0, neutral: 0 },
-    ];
-    renderView({ publicProfile: makePublicProfile({ dailyProductivity: days }) });
-    expect(screen.getByRole("img", { name: /daily focus for the last 7 days/i })).toBeTruthy();
-  });
-
-  it("renders the 2-column split layout with expanded profile details", () => {
-    const days = [
-      { day: "2026-09-14", focus: 3200, drift: 0, neutral: 0 },
-      { day: "2026-09-15", focus: 2800, drift: 0, neutral: 0 },
-      { day: "2026-09-16", focus: 4100, drift: 0, neutral: 0 },
-      { day: "2026-09-17", focus: 3500, drift: 0, neutral: 0 },
-      { day: "2026-09-18", focus: 4800, drift: 0, neutral: 0 },
-      { day: "2026-09-19", focus: 3000, drift: 0, neutral: 0 },
-      { day: "2026-09-20", focus: 3600, drift: 0, neutral: 0 },
-    ];
-    const { container } = renderView({
-      isOptedIn: true,
-      ownRank: 6,
-      ownParticipantCount: 50,
-      publicProfile: makePublicProfile({
-        dailyProductivity: days,
-        draft: {
-          displayName: "member",
-          avatarUrl: "",
-          bio: "깊게 몰입하고, 매일 조금씩 더 나은 흐름을 만듭니다.",
-          websiteUrl: "member.dev",
-          githubUrl: "github.com/member",
-          linkedinUrl: "",
-          isPublic: true,
-        },
-      }),
-    });
-
-    expect(container.querySelector(".leaderboard-split.lb-v2")).toBeTruthy();
-    expect(screen.getByText("깊게 몰입하고, 매일 조금씩 더 나은 흐름을 만듭니다.")).toBeTruthy();
-    expect(screen.getByText("member.dev")).toBeTruthy();
-    expect(screen.getByText("@member")).toBeTruthy();
-    expect(screen.getAllByText("#6").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("TOP 12%")).toBeTruthy();
-    expect(screen.getByText("50 participants")).toBeTruthy();
-    expect(screen.queryByText("TOP 0.001%")).toBeNull();
-    expect(screen.getByRole("img", { name: /daily focus for the last 7 days/i })).toBeTruthy();
-  });
-
-  it("does not invent profile copy or rank stats in the split layout", () => {
-    renderView({
-      isOptedIn: true,
-      ownRank: 3,
-      ownParticipantCount: 200,
-      publicProfile: makePublicProfile({
-        dailyProductivity: [
-          { day: "2026-09-19", focus: 3600, drift: 0, neutral: 0 },
-          { day: "2026-09-20", focus: 1800, drift: 0, neutral: 0 },
-        ],
-        draft: {
-          displayName: "Alex",
-          avatarUrl: "",
-          bio: "",
-          websiteUrl: "",
-          githubUrl: "",
-          linkedinUrl: "",
-          isPublic: true,
-        },
-      }),
-    });
-
-    expect(screen.queryByText(/member\.dev/i)).toBeNull();
-    expect(screen.queryByText(/깊게 몰입하고/)).toBeNull();
-    expect(screen.queryByText("TOP 0.001%")).toBeNull();
-    expect(screen.getByText("TOP 1.5%")).toBeTruthy();
-    expect(screen.getByText("Weekly #3")).toBeTruthy();
-  });
-
-  it("keeps split-rail errors, daily rank, and loading totals honest", () => {
-    const { unmount } = renderView({
-      isOptedIn: true,
-      ownRank: 2,
-      ownParticipantCount: 2858,
-      activePeriod: "daily",
-      actionError: "Publish failed",
-      profileDisplayName: "Alexandria-the-unreasonably-long-display-name",
-      publicProfile: makePublicProfile({
-        localMetricsStatus: "ready",
-        draft: {
-          displayName: "Alexandria-the-unreasonably-long-display-name",
-          avatarUrl: "",
-          bio: "",
-          websiteUrl: "",
-          githubUrl: "",
-          linkedinUrl: "",
-          isPublic: true,
-        },
-      }),
-    });
-
-    expect(screen.getByText("Publish failed")).toBeTruthy();
-    expect(screen.getByText("Daily #2")).toBeTruthy();
-    expect(screen.getByText("2,858 participants")).toBeTruthy();
-    expect(screen.getByText("Alexandria-the-unreasonably-long-display-name")).toBeTruthy();
-    unmount();
-
-    renderView({
-      isOptedIn: false,
-      isCatchingUp: true,
-      publicProfile: makePublicProfile({
-        localMetricsStatus: "loading",
-        focusSeconds7d: 0,
-        dailyProductivity: null,
-      }),
-    });
-    expect(screen.getByText(/calculating your local focus totals/i)).toBeTruthy();
-    expect(screen.getByText(/AI is catching up on recent activity/i)).toBeTruthy();
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-  });
-
-  it("keeps the leaderboard free of decorative titles (the page h1 stays screen-reader only)", () => {
-    const { container } = renderView();
-    expect(container.querySelector(".lb-v2")).toBeTruthy();
-    expect(container.querySelector(".lb-v2__inline-title")).toBeNull();
-    expect(container.querySelector(".lb-v2__eyebrow")).toBeNull();
-  });
-  it("holds the week chart space in the split rail until the 30-day series arrives", () => {
-    const series = Array.from({ length: 7 }, (_, index) => ({ day: "2026-04-0" + (index + 1), focus: (index + 1) * 600, drift: 0, neutral: 0 }));
-
-    const pending = renderView({ publicProfile: makePublicProfile({ dailyProductivity: null }) });
-    expect(pending.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeTruthy();
-    cleanup();
-
-    const loaded = renderView({ publicProfile: makePublicProfile({ dailyProductivity: series }) });
-    expect(loaded.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeNull();
-    expect(loaded.container.querySelector("svg.leaderboard-sparkline__plot")).toBeTruthy();
-    cleanup();
-
-    const failed = renderView({ publicProfile: makePublicProfile({ dailyProductivity: null, localMetricsStatus: "error" }) });
-    expect(failed.container.querySelector(".leaderboard-sparkline__plot--pending")).toBeNull();
-  });
-
-  it("keeps the standing slot blank instead of saying unranked while a joined board loads", () => {
-    const loading = renderView({
-      isOptedIn: true,
-      isLoading: true,
-      ownRank: null,
-      publicProfile: makePublicProfile(),
-    });
-    expect(screen.queryByText(/not ranked/i)).toBeNull();
-    expect(loading.container.querySelector(".leaderboard-v5-achievement")).toBeTruthy();
-    cleanup();
-
-    renderView({ isOptedIn: true, isLoading: false, ownRank: null, publicProfile: makePublicProfile() });
-    expect(screen.getByText(/not ranked/i)).toBeTruthy();
-  });
 });
 
 describe("LeaderboardView share card", () => {

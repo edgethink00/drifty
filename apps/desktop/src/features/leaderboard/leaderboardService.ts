@@ -3,6 +3,7 @@ import { isSupabaseEnabled, supabase } from "../../lib/supabase/client";
 import { shouldUseLeaderboardPreview, shouldUsePreviewData } from "../../lib/api/previewData";
 import { localDateKey } from "../../lib/formatting";
 import { fallbackDisplayName } from "../profile/profileService";
+import { previewScenarioOwnEntry, previewScenarioRows, readLeaderboardPreviewScenario } from "./leaderboardPreviewScenario";
 
 export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
 export type LeaderboardPeriod = typeof LEADERBOARD_PERIODS[number];
@@ -98,6 +99,8 @@ export { shouldUseLeaderboardPreview };
 
 export function previewLeaderboardRows(period: LeaderboardPeriod, limit: number): LeaderboardRow[] {
   const today = localDateKey(new Date());
+  const scenario = readLeaderboardPreviewScenario();
+  if (scenario) return previewScenarioRows(scenario, period, limit, today);
   const windowStart = period === "daily" ? today : shiftDay(today, period === "monthly" ? -29 : -6);
   const names = ["Testing1", "arishin220", "minji_kim", "junseo", "haruka", "drifty", "soonjae", "yuki"];
   const focusSeconds = [141_540, 9_960, 8_520, 6_240, 4_520, 3_120, 2_400, 1_830];
@@ -405,7 +408,10 @@ export async function fetchOwnLeaderboardEntry(
 ): Promise<LeaderboardResult<OwnLeaderboardEntry | null>> {
   const period = typeof periodOrClient === "string" ? periodOrClient : DEFAULT_LEADERBOARD_PERIOD;
   const client = typeof periodOrClient === "string" ? maybeClient : periodOrClient;
-  if (shouldUseLeaderboardPreview()) return { success: true, error: null, data: null };
+  if (shouldUseLeaderboardPreview()) {
+    const scenario = readLeaderboardPreviewScenario();
+    return { success: true, error: null, data: scenario ? previewScenarioOwnEntry(scenario, period, localDateKey(new Date())) : null };
+  }
   const resolvedClient = resolveClient(client);
   if (!resolvedClient) {
     return { success: false, error: "Supabase is not configured" };

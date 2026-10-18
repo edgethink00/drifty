@@ -27,6 +27,7 @@ const animatedModalPanelFiles = [
   "./features/feedback/FeedbackModal.tsx",
   "./features/history/HistoryExcludeConfirmation.tsx",
   "./features/history/HistoryView.tsx",
+  "./features/leaderboard/LeaderboardScreen.tsx",
   "./features/leaderboard/RankEmbedsModal.tsx",
   "./features/onboarding/AutomaticCloseConfirmDialog.tsx",
   "./features/profile/ProfileEmbedsModal.tsx",
@@ -67,6 +68,7 @@ const sharedModalSurfaces = [
   ["Public profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal" data-modal-variant="standard"/],
   ["Edit profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace"/],
   ["Profile embed", "./features/profile/ProfileEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal profile-embeds-modal"\s+data-modal-variant="workspace"/],
+  ["Leave leaderboard", "./features/leaderboard/LeaderboardScreen.tsx", /className="auth-modal modal-shell lb7-leave"\s+data-modal-variant="compact"/],
   ["Rank embed", "./features/leaderboard/RankEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal rank-embeds-modal"\s+data-modal-variant="workspace"/],
   ["Delete project", "./features/projects/ProjectDeleteConfirmation.tsx", /className="auth-modal modal-shell project-delete-modal"\s+data-modal-variant="compact"/],
   ["Debug log", "./features/settings/DebugLogModal.tsx", /className="auth-modal modal-shell debug-log-modal"\s+data-modal-variant="workspace"/],
@@ -185,7 +187,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(34);
+    expect(sharedModalSurfaces).toHaveLength(35);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -319,6 +321,7 @@ describe("dialog key hints", () => {
     ["./features/billing/PromoHandoffAccountDialog.tsx", ["escape"]],
     ["./features/updates/AvailableUpdateDialog.tsx", ["escape"]],
     ["./features/projects/ProjectDeleteConfirmation.tsx", ["escape"]],
+    ["./features/leaderboard/LeaderboardScreen.tsx", ["escape"]],
     ["./features/history/HistoryExcludeConfirmation.tsx", ["escape"]],
     ["./features/history/HistoryView.tsx", ["escape"]],
     ["./features/settings/DeleteHistoryModal.tsx", ["escape", "modEnter"]],

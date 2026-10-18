@@ -48,6 +48,7 @@ import {
 } from "./leaderboardAutoPublishState";
 import { LEADERBOARD_PUBLIC_RESULT_LIMIT } from "./leaderboardConfig";
 import { getLeaderboardWindowStartDay } from "./leaderboardWindow";
+import { readLeaderboardPreviewScenario, setLeaderboardPreviewParticipation, type LeaderboardPreviewScenario } from "./leaderboardPreviewScenario";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
   LEADERBOARD_PERIODS,
@@ -123,6 +124,8 @@ type UseLeaderboardProfileControllerResult = {
   readonly leaderboardProfileLinkedinUrl: string;
   readonly leaderboardProfileWebsiteUrl: string;
   readonly leaderboardSegments: ActivitySegment[];
+  /** Review fixture for the browser preview (`?lbFixture=review`); null otherwise. */
+  readonly leaderboardPreviewScenario: LeaderboardPreviewScenario | null;
   readonly leaderboardUsesPreviewProfile: boolean;
   readonly leaderboardWindowEndDay: string;
   readonly leaderboardWindowStartDay: string;
@@ -548,7 +551,27 @@ export function useLeaderboardProfileController({
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const leaderboardOwnEntryScopeKey = isPolicySignedIn ? getLeaderboardUserScopeKey(user) : "signed-out";
   const scopedOwnLeaderboardEntry = leaderboardOwnEntryScopeRef.current === leaderboardOwnEntryScopeKey ? ownLeaderboardEntry : null;
-  const isLeaderboardOptedIn = leaderboardUsesPreviewProfile || scopedOwnLeaderboardEntry?.opted_in === true;
+  const [previewParticipationRevision, setPreviewParticipationRevision] = useState(0);
+  const leaderboardPreviewScenario = useMemo(
+    () => (leaderboardUsesPreviewProfile && previewParticipationRevision >= 0 ? readLeaderboardPreviewScenario() : null),
+    [leaderboardUsesPreviewProfile, previewParticipationRevision],
+  );
+  /** Dev preview only: simulates the server round trip for leave / join so the flow can be reviewed end to end. */
+  const simulatePreviewParticipation = useCallback(async (joined: boolean) => {
+    setLeaderboardActionLoading(true);
+    setLeaderboardActionError(null);
+    await new Promise((resolve) => window.setTimeout(resolve, 700));
+    if (!joined && new URLSearchParams(window.location.search).get("lbLeaveFail") === "1") {
+      setLeaderboardActionError(t("leaderboard.error.leaveFailed"));
+    } else {
+      setLeaderboardPreviewParticipation(joined);
+      setPreviewParticipationRevision((value) => value + 1);
+    }
+    setLeaderboardActionLoading(false);
+  }, [t]);
+  const isLeaderboardOptedIn = leaderboardUsesPreviewProfile
+    ? !leaderboardPreviewScenario || leaderboardPreviewScenario.ownRank !== null || leaderboardPreviewScenario.unranked
+    : scopedOwnLeaderboardEntry?.opted_in === true;
   // Participation is only "known" once the account is settled and this scope's own
   // entry has actually been fetched. While a persisted session is still being
   // restored the scope key is "signed-out" and the own-entry request is skipped,
@@ -1174,6 +1197,11 @@ export function useLeaderboardProfileController({
   }, []);
 
   const handleLeaderboardOptIn = useCallback(async () => {
+    if (leaderboardPreviewScenario) {
+      await simulatePreviewParticipation(true);
+      await refreshLeaderboardData();
+      return;
+    }
     const assessmentRevision = classificationAssessmentRevisionRef.current;
     setLeaderboardActionLoading(true);
     leaderboardManualActionInFlightRef.current = true;
@@ -1350,9 +1378,14 @@ export function useLeaderboardProfileController({
       leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
-  }, [activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, builtInHeuristicsUnavailableSince, classificationAssessmentReady, effectiveLanguage, t, hasRequiredAccountAuth, includeBuiltInHeuristics, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
+  }, [simulatePreviewParticipation, leaderboardPreviewScenario, activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, builtInHeuristicsUnavailableSince, classificationAssessmentReady, effectiveLanguage, t, hasRequiredAccountAuth, includeBuiltInHeuristics, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
 
   const handleLeaderboardOptOut = useCallback(async () => {
+    if (leaderboardPreviewScenario) {
+      await simulatePreviewParticipation(false);
+      await refreshLeaderboardData();
+      return;
+    }
     setLeaderboardActionLoading(true);
     leaderboardManualActionInFlightRef.current = true;
     setLeaderboardActionError(null);
@@ -1415,7 +1448,7 @@ export function useLeaderboardProfileController({
       leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
-  }, [activeLeaderboardPeriod, authMetadataAvatarUrl, leaderboardOwnEntryScopeKey, leaderboardTimezone, profileDraft, refreshLeaderboardData, t, user]);
+  }, [simulatePreviewParticipation, leaderboardPreviewScenario, activeLeaderboardPeriod, authMetadataAvatarUrl, leaderboardOwnEntryScopeKey, leaderboardTimezone, profileDraft, refreshLeaderboardData, t, user]);
 
   const saveProfileDraft = useCallback(async (nextDraft: ProfileDraft) => {
     setProfileSaving(true);
@@ -1593,6 +1626,7 @@ export function useLeaderboardProfileController({
     leaderboardProfileLinkedinUrl,
     leaderboardProfileWebsiteUrl,
     leaderboardSegments,
+    leaderboardPreviewScenario,
     leaderboardUsesPreviewProfile,
     leaderboardWindowEndDay,
     leaderboardWindowStartDay,

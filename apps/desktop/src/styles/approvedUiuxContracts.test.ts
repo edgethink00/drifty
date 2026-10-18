@@ -155,17 +155,15 @@ describe("approved UI polish contracts", () => {
     expect(band).not.toContain("font-size:");
   });
 
-  it("aligns the Projects and Leaderboard search fields to the 2rem control row", () => {
+  it("aligns the Projects search field to the 2rem control row", () => {
     const projectSearch = ruleBody(projects, ".projects-page .projects-search .settings-input");
     expect(projectSearch).toContain("height: 2rem;");
-    expect(ruleBody(leaderboard, ".leaderboard-search {")).toContain("min-height: 2rem;");
 
-    // All three search fields read at one size, taken from the Settings field
-    // that already shipped it. 0.86rem and the mono default were the outliers.
+    // Search fields read at one size, taken from the Settings field that
+    // already shipped it. 0.86rem and the mono default were the outliers.
     const searchSize = "font-size: 0.8125rem;";
     expect(ruleBody(settingsSearch, ".settings-search__field input")).toContain(searchSize);
     expect(projectSearch).toContain(searchSize);
-    expect(ruleBody(leaderboard, ".leaderboard-search input")).toContain(searchSize);
   });
 
   it("keeps the account language submenu solid and anchored to prevent background bleed", () => {

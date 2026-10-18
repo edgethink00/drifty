@@ -58,6 +58,13 @@ import { IDLE_PROJECT_AUTO_ANALYSIS, projectsAwaitingAutoAnalysis, projectsBlock
 import { NO_PROJECT_MATCH_COOLDOWN, resolveProjectMatchCooldown } from "./features/projects/projectMatchCooldown";
 import { PROJECT_LIBRARY_WINDOW_DAYS } from "./features/projects/projectDates";
 import { fetchOwnLeaderboardCheckpoint } from "./features/leaderboard/leaderboardService";
+import {
+  previewScenarioOwnFocusSeconds,
+  previewScenarioOwnRank,
+  previewScenarioParticipantCount,
+  previewScenarioSeries,
+  previewScenarioWeekFocusSeconds,
+} from "./features/leaderboard/leaderboardPreviewScenario";
 import type { SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
@@ -706,7 +713,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     entries: [{
       tabId: devSettingsReviewSubsection
         ? "settings"
-        : import.meta.env.DEV && readDayNotePreview()?.place === "insights" ? "trends" : "dashboard",
+        : import.meta.env.DEV && readDayNotePreview()?.place === "insights" ? "trends"
+          // Leaderboard review links (?lbFixture=review) open straight onto the board.
+          : import.meta.env.DEV && ["review", "live"].includes(new URLSearchParams(window.location.search).get("lbFixture") ?? "") ? "leaderboard" : "dashboard",
       dashPeriod: initialNavigationRefreshEnabled ? resolveInitialDashboardPeriod() : "Today",
     }],
     index: 0,
@@ -2597,6 +2606,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     leaderboardStatusMessage,
     leaderboardStatusTone,
     leaderboardSegments,
+    leaderboardPreviewScenario,
     leaderboardUsesPreviewProfile,
     leaderboardWindowEndDay,
     localRollingFocusSeconds,
@@ -2692,6 +2702,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [profileDailyProductivity]);
   const effectiveDailyProductivity = useMemo(() => {
     if (!leaderboardUsesPreviewProfile) return profileDailyProductivity;
+    if (leaderboardPreviewScenario) return previewScenarioSeries(leaderboardWindowEndDay, leaderboardPreviewScenario);
     // A browser preview has no tracker, so its series arrives as zeros; the
     // sample week keeps the rail and share card readable there.
     if (profileDailyProductivity && profileDailyProductivity.length >= 2 && profileDailyProductivity.some((point) => point.focus > 0)) return profileDailyProductivity;
@@ -2710,7 +2721,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       });
     }
     return points;
-  }, [leaderboardUsesPreviewProfile, leaderboardWindowEndDay, profileDailyProductivity]);
+  }, [leaderboardPreviewScenario, leaderboardUsesPreviewProfile, leaderboardWindowEndDay, profileDailyProductivity]);
   // Stable while the sheet is open, so the card does not re-render on every tracker tick.
   const leaderboardShareCardContext = useMemo(() => ({
     accountScope: shareAccountScope,
@@ -11745,22 +11756,30 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             isSignedIn={isPolicySignedIn}
             isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
             leaderboard={leaderboardRows}
-            ownFocusSeconds={leaderboardUsesPreviewProfile
+            ownFocusSeconds={leaderboardPreviewScenario
+              ? previewScenarioOwnFocusSeconds(leaderboardPreviewScenario, activeLeaderboardPeriod)
+              : leaderboardUsesPreviewProfile
               ? leaderboardRows.find((row) => row.rank === 6)?.focus_seconds ?? 90360
               : ownLeaderboardEntry?.focus_seconds ?? null}
-            ownParticipantCount={leaderboardUsesPreviewProfile
+            ownParticipantCount={leaderboardPreviewScenario
+              ? previewScenarioParticipantCount(leaderboardPreviewScenario, activeLeaderboardPeriod)
+              : leaderboardUsesPreviewProfile
               ? leaderboardRows.length || 50
               : ownLeaderboardEntry?.participant_count ?? null}
-            ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
+            ownRank={leaderboardPreviewScenario
+              ? previewScenarioOwnRank(leaderboardPreviewScenario, activeLeaderboardPeriod)
+              : leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
             publiclyValid={leaderboardUsesPreviewProfile ? true : ownLeaderboardEntry?.publicly_valid ?? null}
-            profileDisplayName={leaderboardProfileDisplayName}
+            profileDisplayName={leaderboardPreviewScenario?.displayName ?? leaderboardProfileDisplayName}
             publicProfile={{
               card: focusCard,
               dailyProductivity: effectiveDailyProductivity,
               // The preview renders a joined user (#6), and joining publishes the
               // page, so its draft is public like a real participant's.
-              draft: leaderboardUsesPreviewProfile ? { ...profileDraft, isPublic: true } : profileDraft,
-              focusSeconds7d: localRollingFocusSeconds,
+              draft: leaderboardPreviewScenario
+                ? { ...profileDraft, isPublic: true, ...leaderboardPreviewScenario.profile }
+                : leaderboardUsesPreviewProfile ? { ...profileDraft, isPublic: true } : profileDraft,
+              focusSeconds7d: leaderboardPreviewScenario ? previewScenarioWeekFocusSeconds(leaderboardPreviewScenario) : localRollingFocusSeconds,
               localMetricsStatus: leaderboardLocalMetricsStatus,
               isPreviewProfile: leaderboardUsesPreviewProfile,
               profileError: isProfileEditorOpen ? null : profileError,

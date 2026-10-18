@@ -1,7 +1,6 @@
 import { LeaderboardView } from "./LeaderboardView";
 import type { LeaderboardPublicProfileControls } from "./LeaderboardView";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
-import { useLocalization } from "../localization/LocalizationContext";
 
 export type LeaderboardPageProps = {
   actionError?: string | null;
@@ -60,12 +59,8 @@ export function LeaderboardPage({
   onSelectProfile,
   onSignIn,
 }: LeaderboardPageProps) {
-  const { t } = useLocalization();
   return (
-    <div className="page page--lb-flush">
-      {/* Both panels start at the top, so the page title stays available to screen readers only. */}
-      <h1 className="sr-only">{t("leaderboard.title")}</h1>
-
+    <div className="page">
       <div className="leaderboard-page-layout">
         <LeaderboardView
           isSupabaseEnabled={isSupabaseEnabled}
